@@ -523,7 +523,8 @@ function renderSlotDetail(slot) {
     `;
   }
 
-  const occupancy = currentOccupancy(slot.id) ?? emptyOccupancy(slot.id);
+  const current = currentOccupancy(slot.id);
+  const occupancy = current ?? emptyOccupancy(slot.id);
   const history = state.occupancies.filter((item) => item.slotId === slot.id);
 
   return `
@@ -590,7 +591,7 @@ function renderSlotDetail(slot) {
         }
         <button type="button" class="ghost" id="clearSlot">${iconSvg("trash")}设为空</button>
       </div>
-      ${occupancy.status === "active" && state.samplingMode === "single" ? renderSamplingPanel("single", current?.endDate || today) : ""}
+      ${occupancy.status === "active" && state.samplingMode === "single" ? renderSamplingPanel("single", occupancy.endDate || today) : ""}
     </form>
 
     <datalist id="iacucOptions">
