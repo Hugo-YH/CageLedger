@@ -73,7 +73,21 @@ npm run check
 
 ## Docker 部署
 
-群晖上建议使用 Docker Compose：
+群晖上建议使用 Docker Compose。示例目录：
+
+```bash
+mkdir -p /volume1/docker/cageledger
+cd /volume1/docker/cageledger
+git clone https://github.com/Hugo-YH/CageLedger.git .
+```
+
+首次部署前，建议修改 `docker-compose.yml` 中的默认管理员密码：
+
+```yaml
+CAGELEDGER_ADMIN_PASSWORD=更强的密码
+```
+
+启动：
 
 ```bash
 docker compose up -d --build
@@ -93,6 +107,8 @@ http://群晖IP:5173
 
 建议定期备份 `data/cageledger.sqlite`。
 
+如果需要 IACUC 自动回填，请同时准备 `src/iacuc-data.local.json`。该文件包含真实项目负责人和实验负责人信息，默认不提交到 Git，需要在群晖项目目录中手动放置，或用下方脚本从汇总表生成后再构建镜像。
+
 ## 同步 IACUC 汇总表
 
 真实 IACUC 索引会生成到 `src/iacuc-data.local.json`，该文件已被 Git 忽略，避免把项目负责人、实验负责人等真实业务数据提交到远程仓库。
@@ -103,7 +119,11 @@ http://群晖IP:5173
 python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 ```
 
-如果使用 Docker，需要在构建镜像前把 `src/iacuc-data.local.json` 放在项目目录中，或者进入容器外的项目目录重新构建镜像。
+如果使用 Docker，需要在构建镜像前把 `src/iacuc-data.local.json` 放在项目目录中，或者进入容器外的项目目录重新构建镜像：
+
+```bash
+docker compose up -d --build
+```
 
 ## 后续建议
 
@@ -119,6 +139,8 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `users`
 - `sessions`
 - `audit_events`
+- `billing_rules`
+- `billing_adjustments`
 
 前端读取数据时已经通过实体级 GET API 组装状态；写入操作暂时仍通过兼容接口 `PUT /api/state` 保存完整状态，后端负责拆表保存和组装返回。当前实体级 API 如下：
 

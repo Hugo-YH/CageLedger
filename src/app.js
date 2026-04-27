@@ -637,7 +637,7 @@ function renderSlotDetail(slot) {
     </form>
 
     <datalist id="iacucOptions">
-      ${iacucOptions()
+      ${iacucOptions(occupancy.iacuc)
         .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
         .join("")}
     </datalist>
@@ -762,7 +762,7 @@ function renderBatchSlotDetail(slots) {
     </form>
 
     <datalist id="iacucOptions">
-      ${iacucOptions()
+      ${iacucOptions(draft.iacuc)
         .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
         .join("")}
     </datalist>
@@ -883,7 +883,7 @@ function renderBillingView() {
         </div>
 
         <datalist id="billingIacucOptions">
-          ${iacucOptions()
+          ${iacucOptions(state.billingIacuc)
             .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
             .join("")}
         </datalist>
@@ -1231,9 +1231,11 @@ function bindEvents() {
     render();
   });
   document.querySelector("#slotForm")?.addEventListener("submit", handleSlotSubmit);
+  document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("change", autofillIacucFields);
   document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("blur", autofillIacucFields);
   document.querySelector("#batchSlotForm")?.addEventListener("submit", handleBatchSlotSubmit);
+  document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("change", autofillIacucFields);
   document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("blur", autofillIacucFields);
   document.querySelector("#openSampleSlot")?.addEventListener("click", () => openSampling("single"));
@@ -1253,6 +1255,7 @@ function bindEvents() {
   document.querySelector("#billingIacuc")?.addEventListener("change", (event) => {
     updateBillingIacuc(event.target.value);
   });
+  document.querySelector("#billingIacuc")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#billingIacuc")?.addEventListener("blur", (event) => {
     updateBillingIacuc(event.target.value);
   });
@@ -1493,6 +1496,16 @@ function autofillIacucFields(event) {
   if (piInput && match.pi) piInput.value = match.pi;
   if (ownerInput && match.owner) ownerInput.value = match.owner;
   event.target.value = match.iacuc;
+}
+
+function updateIacucOptions(event) {
+  const listId = event.target.getAttribute("list");
+  if (!listId) return;
+  const datalist = document.getElementById(listId);
+  if (!datalist) return;
+  datalist.innerHTML = iacucOptions(event.target.value)
+    .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
+    .join("");
 }
 
 function clearSelectedSlot() {
@@ -1841,7 +1854,7 @@ function uniqueIacucs() {
   return [...new Set(values)].sort();
 }
 
-function iacucOptions() {
+function iacucOptions(currentValue = "") {
   const fromIndex = IACUC_INDEX.map((item) => ({
     iacuc: item.iacuc,
     project: item.project,
@@ -1854,8 +1867,10 @@ function iacucOptions() {
       project: item.project,
       pi: item.pi,
     }));
+  const typedValue = String(currentValue || "").trim();
+  const fromCurrentValue = typedValue ? [{ iacuc: typedValue, project: "", pi: "" }] : [];
   const byNumber = new Map();
-  [...fromIndex, ...fromOccupancies].forEach((item) => {
+  [...fromIndex, ...fromOccupancies, ...fromCurrentValue].forEach((item) => {
     const key = normalizeIacucNumber(item.iacuc);
     if (!byNumber.has(key)) byNumber.set(key, item);
   });
