@@ -13,6 +13,9 @@ node_modules
 dist
 dist-ssr
 *.local
+data/
+*.sqlite
+*.sqlite-*
 src/iacuc-data.local.json
 
 # Editor directories and files

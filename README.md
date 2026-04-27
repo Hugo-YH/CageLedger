@@ -1,6 +1,9 @@
 # CageLedger 实验动物笼位与饲养费核算系统
 
-这是一个从 0 搭建的本地 MVP，直接用浏览器打开 `index.html` 即可运行，不依赖构建工具或后端服务。
+这是一个从 0 搭建的 MVP。当前支持两种运行方式：
+
+- 静态模式：只打开前端页面，数据保存在当前浏览器 `localStorage`。
+- 共享模式：通过 `server.py` 启动后端服务，数据保存在 SQLite 数据库，适合群晖内网测试。
 
 ## 已实现功能
 
@@ -18,11 +21,11 @@
 - 计费规则：基础单价可配置，默认 4.5 元/笼/天。
 - 减免扩展：示例数据内置 IACUC 维度折扣规则，计费函数已预留扩展点。
 - CSV 导出：结算单可导出为 CSV。
-- 本地持久化：数据保存在浏览器 `localStorage`。
+- 共享持久化：通过后端 API 保存到 SQLite；无后端时回退到浏览器 `localStorage`。
 
-## 运行方式
+## 本地运行
 
-启动本地静态服务：
+启动共享模式：
 
 ```bash
 npm run dev
@@ -34,11 +37,45 @@ npm run dev
 http://localhost:5173
 ```
 
+SQLite 数据库默认保存在：
+
+```text
+data/cageledger.sqlite
+```
+
+如果只想用纯静态模式：
+
+```bash
+npm run static
+```
+
 ## 检查脚本
 
 ```bash
 npm run check
 ```
+
+## Docker 部署
+
+群晖上建议使用 Docker Compose：
+
+```bash
+docker compose up -d --build
+```
+
+访问：
+
+```text
+http://群晖IP:5173
+```
+
+数据会持久化在宿主机：
+
+```text
+./data/cageledger.sqlite
+```
+
+建议定期备份 `data/cageledger.sqlite`。
 
 ## 同步 IACUC 汇总表
 
@@ -50,9 +87,11 @@ npm run check
 python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 ```
 
+如果使用 Docker，需要在构建镜像前把 `src/iacuc-data.local.json` 放在项目目录中，或者进入容器外的项目目录重新构建镜像。
+
 ## 后续建议
 
-下一步可以把 `src/app.js` 里的数据访问层替换成后端 API，并使用 PostgreSQL 保存：
+当前共享模式使用 SQLite 保存完整应用状态，适合内网测试和需求验证。正式长期使用时，建议进一步拆分为业务表，并迁移到 PostgreSQL：
 
 - `rooms`
 - `racks`

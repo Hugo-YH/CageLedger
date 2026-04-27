@@ -1,7 +1,11 @@
-const STORAGE_KEY = "lahcas.v1";
+const STORAGE_KEY = "cageledger.v1";
+const LEGACY_STORAGE_KEY = "lahcas.v1";
+const API_STATE_URL = "/api/state";
 const IACUC_DATA_URL = "./src/iacuc-data.local.json";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
+let remotePersistence = false;
+let remoteSaveTimer = null;
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -124,10 +128,10 @@ const seedData = {
   ],
 };
 
-let state = normalize(loadState());
+let state = normalize(structuredClone(seedData));
 
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!raw) return structuredClone(seedData);
 
   try {
@@ -139,6 +143,42 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  scheduleRemoteSave();
+}
+
+async function loadPersistedState() {
+  try {
+    const response = await fetch(API_STATE_URL, { cache: "no-store" });
+    if (response.ok) {
+      remotePersistence = true;
+      const payload = await response.json();
+      if (payload.state) {
+        state = normalize(payload.state);
+        return;
+      }
+    }
+  } catch {
+    remotePersistence = false;
+  }
+
+  state = normalize(loadState());
+}
+
+function scheduleRemoteSave() {
+  if (!remotePersistence) return;
+  window.clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = window.setTimeout(async () => {
+    try {
+      const response = await fetch(API_STATE_URL, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state }),
+      });
+      if (!response.ok) remotePersistence = false;
+    } catch {
+      remotePersistence = false;
+    }
+  }, 250);
 }
 
 function normalize(data) {
@@ -1014,6 +1054,7 @@ function bindEvents() {
   });
   document.querySelector("#resetDemo")?.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     state = normalize(structuredClone(seedData));
     render();
   });
@@ -1600,7 +1641,7 @@ function iconSvg(name) {
 initialize();
 
 async function initialize() {
-  await loadIacucIndex();
+  await Promise.all([loadIacucIndex(), loadPersistedState()]);
   render();
 }
 

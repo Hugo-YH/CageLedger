@@ -1,0 +1,11 @@
+name: cageledger
+
+services:
+  cageledger:
+    build: .
+    container_name: cageledger
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./data:/app/data
