@@ -191,6 +191,7 @@ docker compose up -d --build
 - 将饲养间、笼架、笼位配置修改迁移到 `rooms`、`racks`、`cage-slots` 实体 API。
 - 将计费规则和减免规则修改迁移到 `billing-rules`、`billing-adjustments` 实体 API。
 - 增加独立设置接口，保存 `billingMonth`、`billingIacuc` 等用户界面偏好，避免依赖 `/api/state`。
+- 增加管理员上传动物实验申请汇总表功能，解析 `动物伦理编号`、`动物实验名称`、`项目负责人`、`实验负责人`，生成持久化 IACUC 索引供前端自动回填。
 - 前端写入完全迁移后，将 `/api/state` 降级为兼容、导入导出或调试接口。
 - 正式长期使用时，迁移到 PostgreSQL。
 
