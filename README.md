@@ -22,6 +22,7 @@
 - 减免扩展：示例数据内置 IACUC 维度折扣规则，计费函数已预留扩展点。
 - CSV 导出：结算单可导出为 CSV。
 - 共享持久化：通过后端 API 保存到 SQLite；无后端时回退到浏览器 `localStorage`。
+- 拆表存储：SQLite 内按饲养间、笼架、笼位、占用记录、计费规则、减免和日志分表保存。
 
 ## 本地运行
 
@@ -91,7 +92,7 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 
 ## 后续建议
 
-当前共享模式使用 SQLite 保存完整应用状态，适合内网测试和需求验证。正式长期使用时，建议进一步拆分为业务表，并迁移到 PostgreSQL：
+当前共享模式已经在 SQLite 中拆分为业务表：
 
 - `rooms`
 - `racks`
@@ -99,7 +100,14 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `occupancies`
 - `billing_rules`
 - `billing_adjustments`
-- `billing_statements`
-- `billing_daily_details`
+- `audit_logs`
+
+前端目前仍通过兼容接口 `/api/state` 读写完整状态，后端负责拆表保存和组装返回。正式长期使用时，建议继续演进为实体级 API，并迁移到 PostgreSQL：
+
+- `GET /api/rooms`
+- `POST /api/occupancies`
+- `POST /api/occupancies/:id/sample`
+- `GET /api/billing/statements`
+- `POST /api/billing/statements/:id/confirm`
 
 结算单正式化时建议增加“草稿、确认、导出、作废”状态，并在确认后保存快照，避免历史数据修改影响已确认账单。
