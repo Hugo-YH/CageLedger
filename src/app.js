@@ -1,11 +1,17 @@
 const STORAGE_KEY = "cageledger.v1";
 const LEGACY_STORAGE_KEY = "lahcas.v1";
 const API_STATE_URL = "/api/state";
+const API_AUTH_ME_URL = "/api/auth/me";
+const API_LOGIN_URL = "/api/auth/login";
+const API_LOGOUT_URL = "/api/auth/logout";
+const API_USERS_URL = "/api/users";
 const IACUC_DATA_URL = "./src/iacuc-data.local.json";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let remotePersistence = false;
 let remoteSaveTimer = null;
+let currentUser = null;
+let users = [];
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -174,7 +180,21 @@ function scheduleRemoteSave() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ state }),
       });
+      if (response.status === 401) {
+        currentUser = null;
+        render();
+        return;
+      }
+      if (response.status === 403) {
+        const payload = await response.json().catch(() => ({}));
+        alert(payload.error || "当前账号没有权限保存这些修改");
+        return;
+      }
       if (!response.ok) remotePersistence = false;
+      const payload = await response.json().catch(() => ({}));
+      if (Array.isArray(payload.auditLogs) && payload.auditLogs.length) {
+        state.auditLogs = mergeAuditLogs(payload.auditLogs, state.auditLogs || []);
+      }
     } catch {
       remotePersistence = false;
     }
@@ -263,6 +283,15 @@ function updateSlotStatuses(targetState = state) {
 }
 
 function render() {
+  if (remotePersistence && !currentUser) {
+    document.querySelector("#app").innerHTML = renderLoginView();
+    bindAuthEvents();
+    return;
+  }
+  if (currentUser?.role !== "admin" && state.activeView === "settings") {
+    state.activeView = "cages";
+  }
+
   saveState();
   document.querySelector("#app").innerHTML = `
     <div class="shell">
@@ -272,6 +301,7 @@ function render() {
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
         ${state.activeView === "settings" ? renderSettingsView() : ""}
+        ${state.activeView === "logs" ? renderAuditView() : ""}
       </main>
     </div>
   `;
@@ -283,7 +313,8 @@ function renderSidebar() {
   const navItems = [
     ["cages", "笼位图", "grid"],
     ["billing", "饲养费核算", "receipt"],
-    ["settings", "基础配置", "settings"],
+    ...(currentUser?.role === "admin" ? [["settings", "基础配置", "settings"]] : []),
+    ["logs", "操作日志", "receipt"],
   ];
 
   return `
@@ -316,6 +347,35 @@ function renderSidebar() {
   `;
 }
 
+function renderLoginView() {
+  return `
+    <main class="login-page">
+      <section class="login-card">
+        <div class="brand login-brand">
+          <div class="brand-mark">CL</div>
+          <div>
+            <strong>CageLedger</strong>
+            <span>实验动物笼位与饲养费核算系统</span>
+          </div>
+        </div>
+        <form id="loginForm" class="form">
+          <label>
+            用户名
+            <input name="username" autocomplete="username" required />
+          </label>
+          <label>
+            密码
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="login-error" id="loginError"></p>
+          <button class="primary" type="submit">${iconSvg("save")}登录</button>
+        </form>
+        <p class="muted">首次部署默认管理员：admin / admin123。请登录后创建房间管理员账号。</p>
+      </section>
+    </main>
+  `;
+}
+
 function renderTopbar() {
   const total = state.slots.length;
   const active = state.slots.filter((slot) => slot.status === "active").length;
@@ -328,6 +388,7 @@ function renderTopbar() {
         <h1>实验动物饲养费核算系统</h1>
         <p>以笼位占用时间线作为计费依据，按 IACUC 生成月度结算。</p>
       </div>
+      ${renderUserMenu()}
       <div class="metrics">
         ${metric("总笼位", total, "neutral")}
         ${metric("在用", active, "active")}
@@ -335,6 +396,17 @@ function renderTopbar() {
         ${metric("空", empty, "empty")}
       </div>
     </header>
+  `;
+}
+
+function renderUserMenu() {
+  if (!currentUser) return "";
+  return `
+    <div class="user-menu">
+      <span>${escapeText(currentUser.displayName)}</span>
+      <strong>${currentUser.role === "admin" ? "管理员" : "房间管理员"}</strong>
+      <button id="logoutButton" class="secondary" type="button">退出</button>
+    </div>
   `;
 }
 
@@ -806,13 +878,19 @@ function renderBillingView() {
             <p>当前实现基础费率，代码已按规则函数拆分。</p>
           </div>
         </div>
-        <form id="rateForm" class="form">
-          <label>
-            基础单价 元/笼/天
-            <input type="number" min="0" step="0.01" name="baseRate" value="${state.baseRate}" />
-          </label>
-          <button class="primary" type="submit">${iconSvg("save")}保存规则</button>
-        </form>
+        ${
+          currentUser?.role === "admin"
+            ? `
+              <form id="rateForm" class="form">
+                <label>
+                  基础单价 元/笼/天
+                  <input type="number" min="0" step="0.01" name="baseRate" value="${state.baseRate}" />
+                </label>
+                <button class="primary" type="submit">${iconSvg("save")}保存规则</button>
+              </form>
+            `
+            : `<p class="muted">当前账号只能查看计费规则，不能修改基础费率。</p>`
+        }
         <div class="rule-list">
           ${state.adjustments.map(renderAdjustment).join("")}
         </div>
@@ -900,8 +978,105 @@ function renderSettingsView() {
           </label>
           <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
         </form>
+        ${currentUser?.role === "admin" ? renderUserAdminPanel() : ""}
       </div>
     </section>
+  `;
+}
+
+function renderUserAdminPanel() {
+  return `
+    <div class="section-divider"></div>
+    <div class="panel-head compact">
+      <div>
+        <h2>账号管理</h2>
+        <p>为各饲养间管理员创建独立账号。</p>
+      </div>
+    </div>
+    <form id="userForm" class="form">
+      <label>
+        用户名
+        <input name="username" required placeholder="如 room_a_admin" />
+      </label>
+      <label>
+        显示姓名
+        <input name="displayName" required placeholder="如 SPF A 管理员" />
+      </label>
+      <label>
+        初始密码
+        <input name="password" type="password" required />
+      </label>
+      <label>
+        角色
+        <select name="role">
+          <option value="room_admin">房间管理员</option>
+          <option value="admin">系统管理员</option>
+        </select>
+      </label>
+      <div class="room-checkboxes">
+        ${state.rooms
+          .map(
+            (room) => `
+              <label>
+                <input type="checkbox" name="roomIds" value="${escapeAttr(room.id)}" />
+                ${escapeText(room.name)}
+              </label>
+            `,
+          )
+          .join("")}
+      </div>
+      <button class="primary" type="submit">${iconSvg("plus")}创建账号</button>
+    </form>
+    <div class="user-list">
+      ${users.map(renderUserRow).join("") || `<p class="muted">暂无账号。</p>`}
+    </div>
+  `;
+}
+
+function renderUserRow(user) {
+  const roomNames = user.role === "admin" ? "全部饲养间" : user.roomIds.map(roomNameById).filter(Boolean).join("、") || "未分配";
+  return `
+    <div class="user-row">
+      <div>
+        <strong>${escapeText(user.displayName)}</strong>
+        <p>${escapeText(user.username)} · ${user.role === "admin" ? "系统管理员" : "房间管理员"}</p>
+      </div>
+      <span>${escapeText(roomNames)}</span>
+    </div>
+  `;
+}
+
+function renderAuditView() {
+  const logs = state.auditLogs || [];
+  return `
+    <section class="panel large">
+      <div class="panel-head">
+        <div>
+          <h2>操作日志</h2>
+          <p>记录账号、动作、笼位和时间，便于追溯。</p>
+        </div>
+      </div>
+      <div class="audit-list">
+        ${
+          logs.length
+            ? logs.map(renderAuditLog).join("")
+            : `<div class="empty-state">${iconSvg("receipt")}<h2>暂无操作日志</h2></div>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderAuditLog(log) {
+  const actor = log.actorDisplayName || "未记录账号";
+  return `
+    <div class="audit-row">
+      <div>
+        <strong>${escapeText(log.message || "操作记录")}</strong>
+        <p>${escapeText(actor)} · ${escapeText(log.action || "manual")}</p>
+      </div>
+      <time>${escapeText(formatLogTime(log.at))}</time>
+    </div>
   `;
 }
 
@@ -959,6 +1134,7 @@ function renderRackTreeItem(room, rack) {
 }
 
 function bindEvents() {
+  document.querySelector("#logoutButton")?.addEventListener("click", logout);
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeView = button.dataset.view;
@@ -1046,6 +1222,7 @@ function bindEvents() {
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
+  document.querySelector("#userForm")?.addEventListener("submit", handleUserSubmit);
   document.querySelectorAll("[data-delete-room]").forEach((button) => {
     button.addEventListener("click", () => deleteRoom(button.dataset.deleteRoom));
   });
@@ -1060,6 +1237,10 @@ function bindEvents() {
   });
 }
 
+function bindAuthEvents() {
+  document.querySelector("#loginForm")?.addEventListener("submit", login);
+}
+
 function toggleBatchSlot(slotId) {
   state.selectedSlotId = slotId;
   if (state.selectedSlotIds.includes(slotId)) {
@@ -1067,6 +1248,99 @@ function toggleBatchSlot(slotId) {
   } else {
     state.selectedSlotIds = [...state.selectedSlotIds, slotId];
   }
+}
+
+async function login(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const error = document.querySelector("#loginError");
+  if (error) error.textContent = "";
+  try {
+    const response = await fetch(API_LOGIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.get("username"),
+        password: form.get("password"),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      if (error) error.textContent = payload.error || "登录失败";
+      return;
+    }
+    currentUser = payload.user;
+    await Promise.all([loadPersistedState(), loadUsers()]);
+    render();
+  } catch {
+    if (error) error.textContent = "无法连接后端服务";
+  }
+}
+
+async function logout() {
+  await fetch(API_LOGOUT_URL, { method: "POST" }).catch(() => {});
+  currentUser = null;
+  users = [];
+  render();
+}
+
+async function loadCurrentUser() {
+  try {
+    const response = await fetch(API_AUTH_ME_URL, { cache: "no-store" });
+    if (response.ok) {
+      remotePersistence = true;
+      const payload = await response.json();
+      currentUser = payload.user;
+      return;
+    }
+    if (response.status === 401) {
+      remotePersistence = true;
+      currentUser = null;
+      return;
+    }
+  } catch {
+    remotePersistence = false;
+    currentUser = null;
+  }
+}
+
+async function loadUsers() {
+  if (!currentUser || currentUser.role !== "admin") {
+    users = [];
+    return;
+  }
+  try {
+    const response = await fetch(API_USERS_URL, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    users = payload.users || [];
+  } catch {
+    users = [];
+  }
+}
+
+async function handleUserSubmit(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const roomIds = form.getAll("roomIds");
+  const response = await fetch(API_USERS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: form.get("username"),
+      displayName: form.get("displayName"),
+      password: form.get("password"),
+      role: form.get("role"),
+      roomIds,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    alert(payload.error || "创建账号失败");
+    return;
+  }
+  await loadUsers();
+  render();
 }
 
 function selectVisibleSlots() {
@@ -1462,6 +1736,10 @@ function getSelectedRoom() {
   return state.rooms.find((room) => room.id === state.selectedRoomId) ?? state.rooms[0];
 }
 
+function roomNameById(roomId) {
+  return state.rooms.find((room) => room.id === roomId)?.name || roomId;
+}
+
 function getSelectedRack(racks) {
   return racks.find((rack) => rack.id === state.selectedRackId) ?? racks[0];
 }
@@ -1603,6 +1881,24 @@ function formatLocalDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function formatLogTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function mergeAuditLogs(incoming, existing) {
+  const seen = new Set();
+  const merged = [];
+  [...incoming, ...existing].forEach((item) => {
+    if (!item?.id || seen.has(item.id)) return;
+    seen.add(item.id);
+    merged.push(item);
+  });
+  return merged.slice(0, 500);
+}
+
 function slugify(value) {
   return String(value)
     .trim()
@@ -1641,7 +1937,11 @@ function iconSvg(name) {
 initialize();
 
 async function initialize() {
-  await Promise.all([loadIacucIndex(), loadPersistedState()]);
+  await Promise.all([loadIacucIndex(), loadCurrentUser()]);
+  if (!remotePersistence || currentUser) {
+    await loadPersistedState();
+    await loadUsers();
+  }
   render();
 }
 

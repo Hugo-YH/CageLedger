@@ -23,6 +23,8 @@
 - CSV 导出：结算单可导出为 CSV。
 - 共享持久化：通过后端 API 保存到 SQLite；无后端时回退到浏览器 `localStorage`。
 - 拆表存储：SQLite 内按饲养间、笼架、笼位、占用记录、计费规则、减免和日志分表保存。
+- 账号登录：支持系统管理员和房间管理员账号，编辑操作必须登录。
+- 操作审计：服务端记录账号、动作、笼位、时间和变更前后数据。
 
 ## 本地运行
 
@@ -42,6 +44,19 @@ SQLite 数据库默认保存在：
 
 ```text
 data/cageledger.sqlite
+```
+
+首次启动会自动创建默认管理员：
+
+```text
+用户名：admin
+密码：admin123
+```
+
+内网长期测试时，建议通过环境变量覆盖默认管理员密码：
+
+```bash
+CAGELEDGER_ADMIN_USERNAME=admin CAGELEDGER_ADMIN_PASSWORD=更强的密码 npm run dev
 ```
 
 如果只想用纯静态模式：
@@ -101,13 +116,28 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `billing_rules`
 - `billing_adjustments`
 - `audit_logs`
+- `users`
+- `sessions`
+- `audit_events`
 
-前端目前仍通过兼容接口 `/api/state` 读写完整状态，后端负责拆表保存和组装返回。正式长期使用时，建议继续演进为实体级 API，并迁移到 PostgreSQL：
+前端主要仍通过兼容接口 `/api/state` 读写完整状态，后端负责拆表保存和组装返回。当前已经提供部分只读实体级 API，方便后续逐步替换前端数据访问：
 
 - `GET /api/rooms`
-- `POST /api/occupancies`
-- `POST /api/occupancies/:id/sample`
-- `GET /api/billing/statements`
-- `POST /api/billing/statements/:id/confirm`
+- `GET /api/racks`
+- `GET /api/cage-slots`
+- `GET /api/occupancies`
+- `GET /api/billing-rules`
+- `GET /api/billing-adjustments`
+- `GET /api/audit-events`
+
+账号相关 API：
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/users`
+- `POST /api/users`
+
+正式长期使用时，建议继续补齐写入型实体 API，并迁移到 PostgreSQL。
 
 结算单正式化时建议增加“草稿、确认、导出、作废”状态，并在确认后保存快照，避免历史数据修改影响已确认账单。
