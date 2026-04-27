@@ -5,6 +5,15 @@ const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
 const API_LOGOUT_URL = "/api/auth/logout";
 const API_USERS_URL = "/api/users";
+const ENTITY_API_URLS = {
+  rooms: "/api/rooms",
+  racks: "/api/racks",
+  slots: "/api/cage-slots",
+  occupancies: "/api/occupancies",
+  billingRules: "/api/billing-rules",
+  adjustments: "/api/billing-adjustments",
+  auditLogs: "/api/audit-events",
+};
 const IACUC_DATA_URL = "./src/iacuc-data.local.json";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
@@ -154,20 +163,54 @@ function saveState() {
 
 async function loadPersistedState() {
   try {
-    const response = await fetch(API_STATE_URL, { cache: "no-store" });
-    if (response.ok) {
-      remotePersistence = true;
-      const payload = await response.json();
-      if (payload.state) {
-        state = normalize(payload.state);
-        return;
-      }
-    }
+    const entityState = await loadEntityState();
+    remotePersistence = true;
+    state = normalize(entityState);
+    selectFirstAvailableCage();
+    return;
   } catch {
     remotePersistence = false;
   }
 
   state = normalize(loadState());
+}
+
+async function loadEntityState() {
+  const localState = loadState();
+  const entries = await Promise.all(
+    Object.entries(ENTITY_API_URLS).map(async ([key, url]) => {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Failed to load ${url}`);
+      const payload = await response.json();
+      return [key, payload.items || []];
+    }),
+  );
+  const entityData = Object.fromEntries(entries);
+  if (!entityData.rooms?.length) throw new Error("No persisted entity state");
+
+  const billingRules = entityData.billingRules || [];
+  const firstIacuc = entityData.occupancies?.find((item) => item.iacuc)?.iacuc || "";
+  const knownIacucs = new Set((entityData.occupancies || []).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean));
+  const localBillingIacuc = knownIacucs.has(normalizeIacucNumber(localState.billingIacuc)) ? localState.billingIacuc : "";
+
+  return {
+    ...structuredClone(seedData),
+    activeView: localState.activeView || seedData.activeView,
+    selectedRoomId: localState.selectedRoomId || "",
+    selectedRackId: localState.selectedRackId || "",
+    selectedSlotId: localState.selectedSlotId || "",
+    billingMonth: localState.billingMonth || today.slice(0, 7),
+    billingIacuc: localBillingIacuc || firstIacuc,
+    slotFilter: localState.slotFilter || "all",
+    baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
+    rooms: entityData.rooms || [],
+    racks: entityData.racks || [],
+    slots: entityData.slots || [],
+    occupancies: entityData.occupancies || [],
+    billingRules,
+    adjustments: entityData.adjustments || [],
+    auditLogs: entityData.auditLogs || [],
+  };
 }
 
 function scheduleRemoteSave() {
@@ -594,7 +637,7 @@ function renderSlotDetail(slot) {
     </form>
 
     <datalist id="iacucOptions">
-      ${iacucOptions()
+      ${iacucOptions(occupancy.iacuc)
         .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
         .join("")}
     </datalist>
@@ -719,7 +762,7 @@ function renderBatchSlotDetail(slots) {
     </form>
 
     <datalist id="iacucOptions">
-      ${iacucOptions()
+      ${iacucOptions(draft.iacuc)
         .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
         .join("")}
     </datalist>
@@ -840,7 +883,7 @@ function renderBillingView() {
         </div>
 
         <datalist id="billingIacucOptions">
-          ${iacucOptions()
+          ${iacucOptions(state.billingIacuc)
             .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
             .join("")}
         </datalist>
@@ -1188,9 +1231,11 @@ function bindEvents() {
     render();
   });
   document.querySelector("#slotForm")?.addEventListener("submit", handleSlotSubmit);
+  document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("change", autofillIacucFields);
   document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("blur", autofillIacucFields);
   document.querySelector("#batchSlotForm")?.addEventListener("submit", handleBatchSlotSubmit);
+  document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("change", autofillIacucFields);
   document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("blur", autofillIacucFields);
   document.querySelector("#openSampleSlot")?.addEventListener("click", () => openSampling("single"));
@@ -1210,6 +1255,7 @@ function bindEvents() {
   document.querySelector("#billingIacuc")?.addEventListener("change", (event) => {
     updateBillingIacuc(event.target.value);
   });
+  document.querySelector("#billingIacuc")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#billingIacuc")?.addEventListener("blur", (event) => {
     updateBillingIacuc(event.target.value);
   });
@@ -1450,6 +1496,16 @@ function autofillIacucFields(event) {
   if (piInput && match.pi) piInput.value = match.pi;
   if (ownerInput && match.owner) ownerInput.value = match.owner;
   event.target.value = match.iacuc;
+}
+
+function updateIacucOptions(event) {
+  const listId = event.target.getAttribute("list");
+  if (!listId) return;
+  const datalist = document.getElementById(listId);
+  if (!datalist) return;
+  datalist.innerHTML = iacucOptions(event.target.value)
+    .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
+    .join("");
 }
 
 function clearSelectedSlot() {
@@ -1798,7 +1854,7 @@ function uniqueIacucs() {
   return [...new Set(values)].sort();
 }
 
-function iacucOptions() {
+function iacucOptions(currentValue = "") {
   const fromIndex = IACUC_INDEX.map((item) => ({
     iacuc: item.iacuc,
     project: item.project,
@@ -1811,8 +1867,10 @@ function iacucOptions() {
       project: item.project,
       pi: item.pi,
     }));
+  const typedValue = String(currentValue || "").trim();
+  const fromCurrentValue = typedValue ? [{ iacuc: typedValue, project: "", pi: "" }] : [];
   const byNumber = new Map();
-  [...fromIndex, ...fromOccupancies].forEach((item) => {
+  [...fromIndex, ...fromOccupancies, ...fromCurrentValue].forEach((item) => {
     const key = normalizeIacucNumber(item.iacuc);
     if (!byNumber.has(key)) byNumber.set(key, item);
   });
