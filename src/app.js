@@ -320,10 +320,10 @@ function renderSidebar() {
   return `
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">LA</div>
+        <div class="brand-mark">CL</div>
         <div>
           <strong>CageLedger</strong>
-          <span>实验动物计费</span>
+          <span>实验动物笼位管理与计费系统</span>
         </div>
       </div>
       <nav class="nav">
@@ -355,7 +355,7 @@ function renderLoginView() {
           <div class="brand-mark">CL</div>
           <div>
             <strong>CageLedger</strong>
-            <span>实验动物笼位与饲养费核算系统</span>
+            <span>实验动物笼位管理与计费系统</span>
           </div>
         </div>
         <form id="loginForm" class="form">
@@ -370,7 +370,6 @@ function renderLoginView() {
           <p class="login-error" id="loginError"></p>
           <button class="primary" type="submit">${iconSvg("save")}登录</button>
         </form>
-        <p class="muted">首次部署默认管理员：admin / admin123。请登录后创建房间管理员账号。</p>
       </section>
     </main>
   `;
@@ -385,7 +384,7 @@ function renderTopbar() {
   return `
     <header class="topbar">
       <div>
-        <h1>实验动物饲养费核算系统</h1>
+        <h1>实验动物笼位管理与计费系统</h1>
         <p>以笼位占用时间线作为计费依据，按 IACUC 生成月度结算。</p>
       </div>
       ${renderUserMenu()}
