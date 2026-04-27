@@ -120,7 +120,7 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `sessions`
 - `audit_events`
 
-前端主要仍通过兼容接口 `/api/state` 读写完整状态，后端负责拆表保存和组装返回。当前已经提供实体级 API，方便后续逐步替换前端数据访问：
+前端读取数据时已经通过实体级 GET API 组装状态；写入操作暂时仍通过兼容接口 `PUT /api/state` 保存完整状态，后端负责拆表保存和组装返回。当前实体级 API 如下：
 
 - `GET /api/rooms`
 - `GET /api/racks`
@@ -161,6 +161,15 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `GET /api/users`
 - `POST /api/users`
 
-正式长期使用时，建议继续把前端从 `/api/state` 整体读写逐步迁移到实体级 API，并迁移到 PostgreSQL。
+后续迁移待办：
+
+- 将单笼保存迁移到 `POST/PUT /api/occupancies`。
+- 将“已取材”“设为空”迁移到 `PUT /api/occupancies/{id}`。
+- 将批量录入、批量已取材、批量设空迁移为多次实体写入，或补充后端批量 API。
+- 将饲养间、笼架、笼位配置修改迁移到 `rooms`、`racks`、`cage-slots` 实体 API。
+- 将计费规则和减免规则修改迁移到 `billing-rules`、`billing-adjustments` 实体 API。
+- 增加独立设置接口，保存 `billingMonth`、`billingIacuc` 等用户界面偏好，避免依赖 `/api/state`。
+- 前端写入完全迁移后，将 `/api/state` 降级为兼容、导入导出或调试接口。
+- 正式长期使用时，迁移到 PostgreSQL。
 
 结算单正式化时建议增加“草稿、确认、导出、作废”状态，并在确认后保存快照，避免历史数据修改影响已确认账单。

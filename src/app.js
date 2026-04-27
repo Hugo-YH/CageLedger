@@ -5,6 +5,15 @@ const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
 const API_LOGOUT_URL = "/api/auth/logout";
 const API_USERS_URL = "/api/users";
+const ENTITY_API_URLS = {
+  rooms: "/api/rooms",
+  racks: "/api/racks",
+  slots: "/api/cage-slots",
+  occupancies: "/api/occupancies",
+  billingRules: "/api/billing-rules",
+  adjustments: "/api/billing-adjustments",
+  auditLogs: "/api/audit-events",
+};
 const IACUC_DATA_URL = "./src/iacuc-data.local.json";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
@@ -154,20 +163,54 @@ function saveState() {
 
 async function loadPersistedState() {
   try {
-    const response = await fetch(API_STATE_URL, { cache: "no-store" });
-    if (response.ok) {
-      remotePersistence = true;
-      const payload = await response.json();
-      if (payload.state) {
-        state = normalize(payload.state);
-        return;
-      }
-    }
+    const entityState = await loadEntityState();
+    remotePersistence = true;
+    state = normalize(entityState);
+    selectFirstAvailableCage();
+    return;
   } catch {
     remotePersistence = false;
   }
 
   state = normalize(loadState());
+}
+
+async function loadEntityState() {
+  const localState = loadState();
+  const entries = await Promise.all(
+    Object.entries(ENTITY_API_URLS).map(async ([key, url]) => {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Failed to load ${url}`);
+      const payload = await response.json();
+      return [key, payload.items || []];
+    }),
+  );
+  const entityData = Object.fromEntries(entries);
+  if (!entityData.rooms?.length) throw new Error("No persisted entity state");
+
+  const billingRules = entityData.billingRules || [];
+  const firstIacuc = entityData.occupancies?.find((item) => item.iacuc)?.iacuc || "";
+  const knownIacucs = new Set((entityData.occupancies || []).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean));
+  const localBillingIacuc = knownIacucs.has(normalizeIacucNumber(localState.billingIacuc)) ? localState.billingIacuc : "";
+
+  return {
+    ...structuredClone(seedData),
+    activeView: localState.activeView || seedData.activeView,
+    selectedRoomId: localState.selectedRoomId || "",
+    selectedRackId: localState.selectedRackId || "",
+    selectedSlotId: localState.selectedSlotId || "",
+    billingMonth: localState.billingMonth || today.slice(0, 7),
+    billingIacuc: localBillingIacuc || firstIacuc,
+    slotFilter: localState.slotFilter || "all",
+    baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
+    rooms: entityData.rooms || [],
+    racks: entityData.racks || [],
+    slots: entityData.slots || [],
+    occupancies: entityData.occupancies || [],
+    billingRules,
+    adjustments: entityData.adjustments || [],
+    auditLogs: entityData.auditLogs || [],
+  };
 }
 
 function scheduleRemoteSave() {
