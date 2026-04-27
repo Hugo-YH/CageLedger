@@ -1821,7 +1821,21 @@ function iacucOptions() {
 }
 
 function findIacucInfo(value) {
-  return IACUC_BY_NUMBER.get(normalizeIacucNumber(value));
+  const key = normalizeIacucNumber(value);
+  if (!key) return null;
+
+  const indexed = IACUC_BY_NUMBER.get(key);
+  if (indexed) return indexed;
+
+  const occupancy = state.occupancies.find((item) => normalizeIacucNumber(item.iacuc) === key);
+  if (!occupancy) return null;
+
+  return {
+    iacuc: occupancy.iacuc,
+    project: occupancy.project,
+    pi: occupancy.pi,
+    owner: occupancy.owner,
+  };
 }
 
 function normalizeIacucNumber(value) {

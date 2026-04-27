@@ -11,7 +11,7 @@ from email.utils import format_datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
@@ -41,6 +41,14 @@ ENTITY_ENDPOINTS = {
     "/api/billing-rules": "billing_rules",
     "/api/billing-adjustments": "billing_adjustments",
     "/api/audit-events": "audit_events",
+}
+WRITABLE_ENTITY_ENDPOINTS = {
+    "/api/rooms": {"collection": "rooms", "id_prefix": "room"},
+    "/api/racks": {"collection": "racks", "id_prefix": "rack"},
+    "/api/cage-slots": {"collection": "slots", "id_prefix": "slot"},
+    "/api/occupancies": {"collection": "occupancies", "id_prefix": "occ"},
+    "/api/billing-rules": {"collection": "billingRules", "id_prefix": "rule"},
+    "/api/billing-adjustments": {"collection": "adjustments", "id_prefix": "adj"},
 }
 
 
@@ -239,6 +247,166 @@ def write_state(state, actor):
         write_audit_events(conn, events)
         conn.commit()
     return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
+
+
+def write_entity_state(endpoint, method, item_id, payload, actor):
+    spec = WRITABLE_ENTITY_ENDPOINTS[endpoint]
+    collection = spec["collection"]
+    current = read_state()
+    state = current.get("state") or empty_state()
+
+    item = normalize_entity_payload(collection, payload, item_id, method, spec["id_prefix"])
+    status = HTTPStatus.OK
+    if method == "POST":
+        insert_entity(state, collection, item)
+        status = HTTPStatus.CREATED
+    elif method == "PUT":
+        replace_entity(state, collection, item_id, item)
+    elif method == "DELETE":
+        item = delete_entity(state, collection, item_id)
+    else:
+        raise ValueError("Unsupported entity write method")
+
+    if collection == "occupancies":
+        sync_slot_statuses(state)
+
+    result = write_state(state, actor)
+    return {"item": item, "updatedAt": result["updatedAt"], "auditLogs": result["auditLogs"]}, status
+
+
+def empty_state():
+    return {
+        "baseRate": 4.5,
+        "billingMonth": "",
+        "billingIacuc": "",
+        "rooms": [],
+        "racks": [],
+        "slots": [],
+        "occupancies": [],
+        "billingRules": [],
+        "adjustments": [],
+        "auditLogs": [],
+    }
+
+
+def normalize_entity_payload(collection, payload, item_id, method, id_prefix):
+    if method == "DELETE":
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
+
+    item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
+    if method == "POST":
+        item["id"] = str(item.get("id") or new_id(id_prefix))
+    else:
+        if not item_id:
+            raise ValueError("Entity id is required")
+        item["id"] = item_id
+
+    validate_entity_payload(collection, item)
+    return item
+
+
+def validate_entity_payload(collection, item):
+    if not item.get("id"):
+        raise ValueError("实体 id 不能为空")
+    if collection == "rooms":
+        require_text(item, "name", "饲养间名称不能为空")
+    elif collection == "racks":
+        require_text(item, "roomId", "笼架必须关联饲养间")
+        require_text(item, "name", "笼架名称不能为空")
+    elif collection == "slots":
+        require_text(item, "rackId", "笼位必须关联笼架")
+        status = item.get("status", "empty")
+        if status not in ("empty", "reserved", "active"):
+            raise ValueError("笼位状态只能是 empty、reserved 或 active")
+    elif collection == "occupancies":
+        require_text(item, "slotId", "占用记录必须关联笼位")
+        status = item.get("status")
+        if status not in ("reserved", "active", "ended"):
+            raise ValueError("占用状态只能是 reserved、active 或 ended")
+    elif collection == "billingRules":
+        require_text(item, "unit", "计费规则单位不能为空")
+    elif collection == "adjustments":
+        require_text(item, "targetType", "减免规则目标类型不能为空")
+        require_text(item, "targetId", "减免规则目标不能为空")
+
+
+def require_text(item, key, message):
+    if not str(item.get(key, "")).strip():
+        raise ValueError(message)
+
+
+def insert_entity(state, collection, item):
+    items = state.setdefault(collection, [])
+    if any(existing.get("id") == item["id"] for existing in items):
+        raise sqlite3.IntegrityError(f"Duplicate id: {item['id']}")
+    validate_entity_references(state, collection, item)
+    items.append(item)
+
+
+def replace_entity(state, collection, item_id, item):
+    items = state.setdefault(collection, [])
+    for index, existing in enumerate(items):
+        if existing.get("id") == item_id:
+            validate_entity_references(state, collection, item)
+            items[index] = item
+            return
+    raise LookupError("实体不存在")
+
+
+def delete_entity(state, collection, item_id):
+    items = state.setdefault(collection, [])
+    deleted = None
+    kept = []
+    for item in items:
+        if item.get("id") == item_id:
+            deleted = item
+        else:
+            kept.append(item)
+    if deleted is None:
+        raise LookupError("实体不存在")
+    state[collection] = kept
+
+    if collection == "rooms":
+        rack_ids = {rack.get("id") for rack in state.get("racks", []) if rack.get("roomId") == item_id}
+        slot_ids = {slot.get("id") for slot in state.get("slots", []) if slot.get("rackId") in rack_ids}
+        state["racks"] = [rack for rack in state.get("racks", []) if rack.get("roomId") != item_id]
+        state["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") not in rack_ids]
+        state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") not in slot_ids]
+    elif collection == "racks":
+        slot_ids = {slot.get("id") for slot in state.get("slots", []) if slot.get("rackId") == item_id}
+        state["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") != item_id]
+        state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") not in slot_ids]
+    elif collection == "slots":
+        state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") != item_id]
+
+    return deleted
+
+
+def validate_entity_references(state, collection, item):
+    if collection == "racks" and not entity_exists(state, "rooms", item.get("roomId")):
+        raise ValueError("关联的饲养间不存在")
+    if collection == "slots" and not entity_exists(state, "racks", item.get("rackId")):
+        raise ValueError("关联的笼架不存在")
+    if collection == "occupancies" and not entity_exists(state, "slots", item.get("slotId")):
+        raise ValueError("关联的笼位不存在")
+
+
+def entity_exists(state, collection, item_id):
+    return any(item.get("id") == item_id for item in state.get(collection, []))
+
+
+def sync_slot_statuses(state):
+    status_by_slot = {
+        item.get("slotId"): item.get("status")
+        for item in state.get("occupancies", [])
+        if item.get("status") in ("active", "reserved")
+    }
+    state["slots"] = [
+        {**slot, "status": status_by_slot.get(slot.get("id"), "empty")}
+        for slot in state.get("slots", [])
+    ]
 
 
 def migrate_legacy_state(conn):
@@ -800,7 +968,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
@@ -863,33 +1031,60 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+        if path in WRITABLE_ENTITY_ENDPOINTS:
+            self.handle_entity_write("POST", path, None)
+            return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PUT(self):
         path = urlparse(self.path).path
-        if path != "/api/state":
-            self.send_error(HTTPStatus.NOT_FOUND)
-            return
-        user = self.require_user()
-        if not user:
+        if path == "/api/state":
+            user = self.require_user()
+            if not user:
+                return
+
+            try:
+                body = self.read_json_body()
+                state = body.get("state")
+                if not isinstance(state, dict):
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Request body must contain a state object")
+                    return
+                self.send_json(write_state(state, user))
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
 
-        try:
-            body = self.read_json_body()
-            state = body.get("state")
-            if not isinstance(state, dict):
-                self.send_error(HTTPStatus.BAD_REQUEST, "Request body must contain a state object")
-                return
-            self.send_json(write_state(state, user))
-        except PermissionError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        except ValueError as exc:
-            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+        endpoint, item_id = self.entity_route(path)
+        if endpoint and item_id:
+            self.handle_entity_write("PUT", endpoint, item_id)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_DELETE(self):
+        endpoint, item_id = self.entity_route(urlparse(self.path).path)
+        if endpoint and item_id:
+            self.handle_entity_write("DELETE", endpoint, item_id)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
 
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
             raise ValueError("Missing request body")
+        if length > MAX_BODY_BYTES:
+            raise ValueError("Request body is too large")
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("Invalid JSON body") from exc
+
+    def read_optional_json_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            return {}
         if length > MAX_BODY_BYTES:
             raise ValueError("Request body is too large")
         raw = self.rfile.read(length)
@@ -973,6 +1168,32 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             else:
                 rows = conn.execute(f"SELECT payload FROM {table} ORDER BY rowid").fetchall()
         self.send_json({"items": [json.loads(row["payload"]) for row in rows]})
+
+    def entity_route(self, path):
+        for endpoint in WRITABLE_ENTITY_ENDPOINTS:
+            prefix = endpoint + "/"
+            if path.startswith(prefix):
+                item_id = unquote(path[len(prefix) :])
+                if "/" not in item_id and item_id:
+                    return endpoint, item_id
+        return None, None
+
+    def handle_entity_write(self, method, endpoint, item_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_optional_json_body() if method == "DELETE" else self.read_json_body()
+            payload, status = write_entity_state(endpoint, method, item_id, body, user)
+            self.send_json(payload, status)
+        except sqlite3.IntegrityError:
+            self.send_json({"error": "实体 id 已存在"}, HTTPStatus.CONFLICT)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
 
 def main():

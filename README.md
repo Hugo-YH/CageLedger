@@ -120,7 +120,7 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `sessions`
 - `audit_events`
 
-前端主要仍通过兼容接口 `/api/state` 读写完整状态，后端负责拆表保存和组装返回。当前已经提供部分只读实体级 API，方便后续逐步替换前端数据访问：
+前端主要仍通过兼容接口 `/api/state` 读写完整状态，后端负责拆表保存和组装返回。当前已经提供实体级 API，方便后续逐步替换前端数据访问：
 
 - `GET /api/rooms`
 - `GET /api/racks`
@@ -130,6 +130,29 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `GET /api/billing-adjustments`
 - `GET /api/audit-events`
 
+写入型实体 API：
+
+- `POST /api/rooms`
+- `PUT /api/rooms/{id}`
+- `DELETE /api/rooms/{id}`
+- `POST /api/racks`
+- `PUT /api/racks/{id}`
+- `DELETE /api/racks/{id}`
+- `POST /api/cage-slots`
+- `PUT /api/cage-slots/{id}`
+- `DELETE /api/cage-slots/{id}`
+- `POST /api/occupancies`
+- `PUT /api/occupancies/{id}`
+- `DELETE /api/occupancies/{id}`
+- `POST /api/billing-rules`
+- `PUT /api/billing-rules/{id}`
+- `DELETE /api/billing-rules/{id}`
+- `POST /api/billing-adjustments`
+- `PUT /api/billing-adjustments/{id}`
+- `DELETE /api/billing-adjustments/{id}`
+
+这些接口与 `/api/state` 共用同一套权限校验和审计逻辑。管理员可以维护配置、计费规则和减免规则；房间管理员只能修改授权饲养间内的笼位占用信息。删除饲养间、笼架或笼位时，会级联删除下级笼架、笼位和占用记录。
+
 账号相关 API：
 
 - `POST /api/auth/login`
@@ -138,6 +161,6 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `GET /api/users`
 - `POST /api/users`
 
-正式长期使用时，建议继续补齐写入型实体 API，并迁移到 PostgreSQL。
+正式长期使用时，建议继续把前端从 `/api/state` 整体读写逐步迁移到实体级 API，并迁移到 PostgreSQL。
 
 结算单正式化时建议增加“草稿、确认、导出、作废”状态，并在确认后保存快照，避免历史数据修改影响已确认账单。
