@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">CageLedger icon</title>
+  <desc id="desc">A cage grid combined with a ledger mark for animal cage management and billing.</desc>
+  <path d="M15 11h25l10 10v31H15z" fill="#f7fbfa" stroke="#d7ebe7" stroke-width="2"/>
+  <path d="M40 13v10h9" fill="#d7ebe7"/>
+  <path d="M40 13v10h9" fill="none" stroke="#0f514d" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M23 28h22M23 37h22M30 22v24M38 22v24" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="22" y="22" width="24" height="24" rx="3" fill="none" stroke="#0f514d" stroke-width="3"/>
+  <circle cx="24" cy="47" r="6" fill="#f2b84b" stroke="#0f514d" stroke-width="2.5"/>
+  <path d="M24 43v8M21 46h6" stroke="#0f514d" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -428,7 +428,7 @@ function renderSidebar() {
   return `
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">CL</div>
+        <div class="brand-mark"><img src="./assets/cageledger-icon.svg" alt="" /></div>
         <div>
           <strong>CageLedger</strong>
           <span>实验动物笼位管理与计费系统</span>
@@ -466,7 +466,7 @@ function renderLoginView() {
     <main class="login-page">
       <section class="login-card">
         <div class="brand login-brand">
-          <div class="brand-mark">CL</div>
+          <div class="brand-mark"><img src="./assets/cageledger-icon.svg" alt="" /></div>
           <div>
             <strong>CageLedger</strong>
             <span>实验动物笼位管理与计费系统</span>
