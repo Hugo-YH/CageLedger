@@ -337,7 +337,7 @@ function generateRackInfrastructure(room, rackIndex, rows, cols, rackId = rackId
   const rack = {
     id: rackId,
     roomId: room.id,
-    name: `${room.name} ${rackIndex} 号笼架`,
+    name: `${room.name} ${rackCode(rackIndex)} 号笼架`,
     rows: Number(rows),
     cols: Number(cols),
     index: rackIndex,
@@ -708,14 +708,14 @@ function renderCageView() {
         <div class="panel-head">
           <div>
             <h2>动态笼位图</h2>
-            <p>${selectedRoom.name} · ${selectedRack.name}</p>
+            <p>${selectedRoom.name} · ${rackDisplayName(selectedRack, selectedRoom)}</p>
           </div>
           <div class="toolbar">
             <select id="roomSelect">
               ${state.rooms.map((room) => `<option value="${room.id}" ${room.id === selectedRoom.id ? "selected" : ""}>${room.name}</option>`).join("")}
             </select>
             <select id="rackSelect">
-              ${racks.map((rack) => `<option value="${rack.id}" ${rack.id === selectedRack.id ? "selected" : ""}>${rack.name}</option>`).join("")}
+              ${racks.map((rack) => `<option value="${rack.id}" ${rack.id === selectedRack.id ? "selected" : ""}>${escapeText(rackDisplayName(rack, selectedRoom))}</option>`).join("")}
             </select>
           </div>
         </div>
@@ -763,7 +763,7 @@ function filterButton(value, label) {
 function renderSlot(slot) {
   const occupancy = currentOccupancy(slot.id);
   const isSelected = slot.id === state.selectedSlotId || state.selectedSlotIds.includes(slot.id);
-  const slotCode = slotPositionCode(slot);
+  const slotCode = cageCodeForSlot(slot.id);
   const title = occupancy
     ? `${slotCode} ${occupancy.iacuc || ""} ${occupancy.pi || ""} ${occupancy.owner || ""} ${occupancy.startDate || ""}`
     : `${slotCode} 空`;
@@ -1550,14 +1550,14 @@ function renderRackTreeItem(room, rack) {
     <div class="rack-tree-item">
       <div class="rack-name">
         <span class="tree-branch"></span>
-        <strong>笼架 ${rack.index}</strong>
+        <strong>笼架 ${rackCode(rack)}</strong>
         <small>${rack.rows} 行 * ${rack.cols} 列</small>
       </div>
       <div class="tree-actions">
         <span>${slots.length} 笼位</span>
         <span>${active} 在用</span>
         <span>${reserved} 预约</span>
-        <button type="button" class="icon-danger" data-delete-rack="${rack.id}" title="删除笼架" aria-label="删除 ${room.name} 笼架 ${rack.index}">
+        <button type="button" class="icon-danger" data-delete-rack="${rack.id}" title="删除笼架" aria-label="删除 ${room.name} 笼架 ${rackCode(rack)}">
           ${iconSvg("trash")}
         </button>
       </div>
@@ -2230,7 +2230,7 @@ async function handleRackSubmit(event) {
     state.selectedRackId = generated.rack.id;
     state.selectedSlotId = generated.slots[0]?.id;
     state.activeView = "cages";
-    pushLog(`新增${room.name} 笼架 ${rackIndex}`);
+    pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
     render();
   } catch (error) {
     reportSaveError(error);
@@ -2285,7 +2285,7 @@ async function deleteRack(rackId) {
   const slots = state.slots.filter((slot) => slot.rackId === rackId);
   const slotIds = new Set(slots.map((slot) => slot.id));
   const occupancyCount = state.occupancies.filter((item) => slotIds.has(item.slotId)).length;
-  const rackLabel = `${room?.name ?? "饲养间"} 笼架 ${rack.index}`;
+  const rackLabel = `${room?.name ?? "饲养间"} 笼架 ${rackCode(rack)}`;
   const message = occupancyCount
     ? `确定删除 ${rackLabel}？这会同时删除 ${slots.length} 个笼位和 ${occupancyCount} 条占用记录。`
     : `确定删除 ${rackLabel}？这会同时删除 ${slots.length} 个笼位。`;
@@ -2317,7 +2317,7 @@ function renumberRoomRacks(room) {
   const roomRacks = state.racks.filter((item) => item.roomId === room.id);
   roomRacks.forEach((item, index) => {
     item.index = index + 1;
-    item.name = `${room.name} ${item.index} 号笼架`;
+    item.name = `${room.name} ${rackCode(item)} 号笼架`;
   });
   room.rackCount = roomRacks.length;
 }
@@ -2550,6 +2550,18 @@ function slotPositionCode(slot) {
   return `${columnLabel(Number(slot.col))}${Number(slot.row)}`;
 }
 
+function rackCode(rackOrIndex) {
+  const value = typeof rackOrIndex === "object" ? rackOrIndex?.index : rackOrIndex;
+  const index = Number(value);
+  return Number.isFinite(index) && index > 0 ? String(index).padStart(2, "0") : String(value || "");
+}
+
+function rackDisplayName(rack, room) {
+  if (!rack) return "";
+  const roomName = room?.name || roomNameById(rack.roomId);
+  return `${roomName} ${rackCode(rack)} 号笼架`;
+}
+
 function columnLabel(index) {
   let value = Number(index);
   let label = "";
@@ -2569,7 +2581,7 @@ function cageCodeForSlot(slotId) {
   const room = rack ? state.rooms.find((item) => item.id === rack.roomId) : null;
   if (!rack || !room) return slotPositionCode(slot);
 
-  return `${room.name}-${rack.index}-${slotPositionCode(slot)}`;
+  return `${room.name}-${rackCode(rack)}-${slotPositionCode(slot)}`;
 }
 
 function currentOccupancy(slotId) {

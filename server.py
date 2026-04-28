@@ -1006,7 +1006,9 @@ def slot_label_map(state):
     for slot in state.get("slots", []):
         rack = rack_by_id.get(slot.get("rackId"), {})
         room = room_by_id.get(rack.get("roomId"), {})
-        labels[slot.get("id")] = f"{room.get('name', '')}-{rack.get('index', '')}-{slot.get('code', '')}".strip("-")
+        rack_index = rack.get("index", "")
+        rack_code = str(rack_index).zfill(2) if str(rack_index).isdigit() else str(rack_index)
+        labels[slot.get("id")] = f"{room.get('name', '')}-{rack_code}-{slot.get('code', '')}".strip("-")
     return labels
 
 

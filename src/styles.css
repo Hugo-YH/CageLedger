@@ -755,8 +755,10 @@ textarea:focus {
 
 .slot-code {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .slot-iacuc {
