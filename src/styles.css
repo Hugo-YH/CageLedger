@@ -22,10 +22,17 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  overflow: hidden;
 }
 
 .login-page {
@@ -75,9 +82,10 @@ svg {
 }
 
 .shell {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 264px 1fr;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -87,6 +95,8 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 28px;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .brand {
@@ -140,24 +150,40 @@ svg {
   color: #ffffff;
 }
 
-.sidebar-foot {
+.sidebar-account {
   margin-top: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   padding-top: 18px;
   color: #a8c2c0;
-  display: flex;
+  display: grid;
   gap: 6px;
-  align-items: baseline;
+  min-width: 0;
 }
 
-.sidebar-foot strong {
+.sidebar-account strong {
   color: #ffffff;
-  font-size: 24px;
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account span,
+.sidebar-account small {
+  font-size: 12px;
+}
+
+.sidebar-account .secondary {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
 }
 
 .workspace {
   min-width: 0;
   padding: 26px;
+  height: 100vh;
+  overflow: auto;
 }
 
 .topbar {
@@ -199,28 +225,6 @@ h3 {
   display: grid;
   grid-template-columns: repeat(4, minmax(86px, 1fr));
   gap: 10px;
-}
-
-.user-menu {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px;
-  display: grid;
-  gap: 4px;
-  min-width: 140px;
-}
-
-.user-menu span,
-.user-menu strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-menu strong {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .metric {
@@ -891,6 +895,7 @@ tr:last-child td {
 @media (max-width: 1180px) {
   .shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
   .sidebar {
@@ -900,6 +905,8 @@ tr:last-child td {
     flex-direction: row;
     align-items: center;
     padding: 14px 16px;
+    height: auto;
+    overflow-x: auto;
   }
 
   .nav {
@@ -907,8 +914,17 @@ tr:last-child td {
     margin-left: auto;
   }
 
-  .sidebar-foot {
-    display: none;
+  .sidebar-account {
+    margin-top: 0;
+    border-top: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    padding-top: 0;
+    padding-left: 14px;
+    min-width: 132px;
+  }
+
+  .sidebar-account .secondary {
+    padding: 6px 10px;
   }
 
   .content-grid,
@@ -918,8 +934,24 @@ tr:last-child td {
 }
 
 @media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .sidebar {
+    overflow-x: auto;
+  }
+
   .workspace {
     padding: 16px;
+    height: auto;
+    overflow: visible;
   }
 
   .topbar,

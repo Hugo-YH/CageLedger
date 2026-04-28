@@ -435,11 +435,7 @@ function renderSidebar() {
           )
           .join("")}
       </nav>
-      <div class="sidebar-foot">
-        <span>本地 MVP</span>
-        <strong>${state.rooms.length}</strong>
-        <span>个饲养间</span>
-      </div>
+      ${renderSidebarAccount()}
     </aside>
   `;
 }
@@ -484,7 +480,6 @@ function renderTopbar() {
         <h1>实验动物笼位管理与计费系统</h1>
         <p>以笼位占用时间线作为计费依据，按 IACUC 生成月度结算。</p>
       </div>
-      ${renderUserMenu()}
       <div class="metrics">
         ${metric("总笼位", total, "neutral")}
         ${metric("在用", active, "active")}
@@ -495,12 +490,22 @@ function renderTopbar() {
   `;
 }
 
-function renderUserMenu() {
-  if (!currentUser) return "";
+function renderSidebarAccount() {
+  if (!currentUser) {
+    return `
+      <div class="sidebar-account">
+        <span>运行模式</span>
+        <strong>静态模式</strong>
+        <small>${state.rooms.length} 个饲养间</small>
+      </div>
+    `;
+  }
+
   return `
-    <div class="user-menu">
-      <span>${escapeText(currentUser.displayName)}</span>
-      <strong>${currentUser.role === "admin" ? "管理员" : "房间管理员"}</strong>
+    <div class="sidebar-account">
+      <span>当前账号</span>
+      <strong title="${escapeAttr(currentUser.displayName)}">${escapeText(currentUser.displayName)}</strong>
+      <small>${currentUser.role === "admin" ? "管理员" : "房间管理员"} · ${state.rooms.length} 个饲养间</small>
       <button id="logoutButton" class="secondary" type="button">退出</button>
     </div>
   `;
