@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -16,6 +19,8 @@ from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("CAGELEDGER_DB", ROOT / "data" / "cageledger.sqlite"))
+IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DB_PATH.parent / "iacuc-index.json"))
+LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
 HOST = os.environ.get("CAGELEDGER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))
 MAX_BODY_BYTES = 10 * 1024 * 1024
@@ -953,6 +958,140 @@ def format_http_date(value):
     return format_datetime(value, usegmt=True)
 
 
+def read_iacuc_index():
+    path = IACUC_INDEX_PATH if IACUC_INDEX_PATH.exists() else LEGACY_IACUC_INDEX_PATH
+    if not path.exists():
+        return {"items": [], "count": 0, "updatedAt": None, "source": None}
+
+    items = json.loads(path.read_text(encoding="utf-8"))
+    stat = path.stat()
+    return {
+        "items": items,
+        "count": len(items),
+        "updatedAt": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+        "source": "data" if path == IACUC_INDEX_PATH else "legacy",
+    }
+
+
+def save_iacuc_index(items):
+    IACUC_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+    IACUC_INDEX_PATH.write_text(json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def parse_iacuc_csv(raw):
+    text = decode_csv_bytes(raw)
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise ValueError("CSV 文件缺少表头")
+
+    field_by_name = {clean_text(name): name for name in reader.fieldnames if clean_text(name)}
+    required = {
+        "iacuc": "动物伦理编号",
+        "project": "动物实验名称",
+        "pi": "项目负责人",
+        "owner": "实验负责人",
+    }
+    missing = [label for label in required.values() if label not in field_by_name]
+    if missing:
+        raise ValueError(f"CSV 缺少必要列：{', '.join(missing)}")
+
+    records_by_iacuc = {}
+    duplicate_count = 0
+    row_count = 0
+    empty_iacuc_count = 0
+    for row in reader:
+        row_count += 1
+        raw_iacuc = clean_text(row.get(field_by_name[required["iacuc"]], ""))
+        iacuc = normalize_iacuc_number(raw_iacuc)
+        if not iacuc:
+            empty_iacuc_count += 1
+            continue
+        if not is_valid_iacuc_number(iacuc):
+            empty_iacuc_count += 1
+            continue
+        if iacuc in records_by_iacuc:
+            duplicate_count += 1
+        records_by_iacuc[iacuc] = {
+            "iacuc": iacuc,
+            "rawIacuc": raw_iacuc,
+            "project": clean_text(row.get(field_by_name[required["project"]], "")),
+            "pi": clean_text(row.get(field_by_name[required["pi"]], "")),
+            "owner": clean_text(row.get(field_by_name[required["owner"]], "")),
+        }
+
+    items = sorted(records_by_iacuc.values(), key=lambda item: item["iacuc"])
+    return {
+        "items": items,
+        "summary": {
+            "rowCount": row_count,
+            "count": len(items),
+            "emptyIacucCount": empty_iacuc_count,
+            "duplicateCount": duplicate_count,
+        },
+    }
+
+
+def decode_csv_bytes(raw):
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("CSV 编码无法识别，请使用 UTF-8 或 GB18030")
+
+
+def clean_text(value):
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value).strip())
+
+
+def normalize_iacuc_number(value):
+    text = clean_text(value)
+    text = re.sub(r"（.*?）", "", text)
+    text = re.sub(r"\(.*?\)", "", text)
+    return text.strip()
+
+
+def is_valid_iacuc_number(value):
+    return bool(re.search(r"\d", value))
+
+
+def parse_multipart_upload(content_type, raw):
+    if "multipart/form-data" not in content_type:
+        raise ValueError("请使用 multipart/form-data 上传 CSV 文件")
+    boundary = multipart_boundary(content_type)
+    delimiter = b"--" + boundary
+    for part in raw.split(delimiter):
+        part = part.strip(b"\r\n")
+        if not part or part == b"--" or b"\r\n\r\n" not in part:
+            continue
+        header_blob, body = part.split(b"\r\n\r\n", 1)
+        headers = header_blob.decode("utf-8", errors="replace")
+        disposition = next((line for line in headers.split("\r\n") if line.lower().startswith("content-disposition:")), "")
+        if 'name="file"' not in disposition:
+            continue
+        filename = multipart_filename(disposition)
+        return filename, body.rstrip(b"\r\n")
+    raise ValueError("没有找到上传字段 file")
+
+
+def multipart_boundary(content_type):
+    for segment in content_type.split(";"):
+        segment = segment.strip()
+        if segment.startswith("boundary="):
+            value = segment.split("=", 1)[1].strip()
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            return value.encode("utf-8")
+    raise ValueError("上传请求缺少 multipart boundary")
+
+
+def multipart_filename(disposition):
+    match = re.search(r'filename="([^"]*)"', disposition)
+    return match.group(1) if match else ""
+
+
 class CageLedgerHandler(SimpleHTTPRequestHandler):
     server_version = "CageLedger/0.2"
 
@@ -989,6 +1128,17 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             self.send_json(read_state())
             return
+        if path == "/api/iacuc-index":
+            if not self.require_user():
+                return
+            self.send_json(read_iacuc_index())
+            return
+        if path == "/api/iacuc-index/status":
+            if not self.require_user():
+                return
+            payload = read_iacuc_index()
+            self.send_json({key: payload[key] for key in ("count", "updatedAt", "source")})
+            return
         if path == "/api/users":
             user = self.require_user()
             if not user:
@@ -1013,6 +1163,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/auth/logout":
             self.handle_logout()
+            return
+        if path == "/api/iacuc-index/upload":
+            self.handle_iacuc_upload()
             return
         if path == "/api/users":
             user = self.require_user()
@@ -1081,6 +1234,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         except json.JSONDecodeError as exc:
             raise ValueError("Invalid JSON body") from exc
 
+    def read_raw_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            raise ValueError("Missing request body")
+        if length > MAX_BODY_BYTES:
+            raise ValueError("Request body is too large")
+        return self.rfile.read(length)
+
     def read_optional_json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
@@ -1139,6 +1300,49 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
         self.end_headers()
         self.wfile.write(body)
+
+    def handle_iacuc_upload(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+
+        try:
+            raw = self.read_raw_body()
+            filename, file_body = parse_multipart_upload(self.headers.get("Content-Type", ""), raw)
+            if filename and not filename.lower().endswith(".csv"):
+                raise ValueError("目前只支持上传 CSV 文件")
+            parsed = parse_iacuc_csv(file_body)
+            save_iacuc_index(parsed["items"])
+            now = now_iso()
+            event = audit_event(
+                user,
+                "iacuc_index.uploaded",
+                "iacuc_index",
+                "iacuc-index",
+                f"{user['displayName']} 上传 IACUC 索引 {len(parsed['items'])} 条",
+                [],
+                now,
+                None,
+                {"filename": filename, **parsed["summary"]},
+            )
+            with connect_db() as conn:
+                write_audit_events(conn, [event])
+                conn.commit()
+            self.send_json(
+                {
+                    "ok": True,
+                    "filename": filename,
+                    "updatedAt": now,
+                    **parsed["summary"],
+                    "items": parsed["items"],
+                    "auditLogs": merge_audit_logs([], [event]),
+                }
+            )
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def current_user(self):
         with connect_db() as conn:

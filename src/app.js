@@ -4,6 +4,8 @@ const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
 const API_LOGOUT_URL = "/api/auth/logout";
 const API_USERS_URL = "/api/users";
+const API_IACUC_INDEX_URL = "/api/iacuc-index";
+const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
 const ENTITY_API_URLS = {
   rooms: "/api/rooms",
   racks: "/api/racks",
@@ -13,9 +15,9 @@ const ENTITY_API_URLS = {
   adjustments: "/api/billing-adjustments",
   auditLogs: "/api/audit-events",
 };
-const IACUC_DATA_URL = "./src/iacuc-data.local.json";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
+let iacucIndexMeta = null;
 let remotePersistence = false;
 let currentUser = null;
 let users = [];
@@ -288,6 +290,7 @@ function upsertById(items, item) {
 
 function normalize(data) {
   const next = { ...structuredClone(seedData), ...data };
+  if (next.activeView === "settings") next.activeView = "rooms";
   next.selectedSlotIds = Array.isArray(next.selectedSlotIds) ? next.selectedSlotIds : [];
   next.batchMode = Boolean(next.batchMode);
   next.samplingMode = next.samplingMode || "";
@@ -373,7 +376,8 @@ function render() {
     bindAuthEvents();
     return;
   }
-  if (currentUser?.role !== "admin" && state.activeView === "settings") {
+  const adminViews = new Set(["rooms", "data", "users"]);
+  if (currentUser?.role !== "admin" && adminViews.has(state.activeView)) {
     state.activeView = "cages";
   }
 
@@ -385,7 +389,9 @@ function render() {
         ${renderTopbar()}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
-        ${state.activeView === "settings" ? renderSettingsView() : ""}
+        ${state.activeView === "rooms" ? renderRoomManagementView() : ""}
+        ${state.activeView === "data" ? renderDataManagementView() : ""}
+        ${state.activeView === "users" ? renderUserManagementView() : ""}
         ${state.activeView === "logs" ? renderAuditView() : ""}
       </main>
     </div>
@@ -398,7 +404,13 @@ function renderSidebar() {
   const navItems = [
     ["cages", "笼位图", "grid"],
     ["billing", "饲养费核算", "receipt"],
-    ...(currentUser?.role === "admin" ? [["settings", "基础配置", "settings"]] : []),
+    ...(currentUser?.role === "admin"
+      ? [
+          ["rooms", "房间管理", "grid"],
+          ["data", "数据管理", "database"],
+          ["users", "账号管理", "users"],
+        ]
+      : []),
     ["logs", "操作日志", "receipt"],
   ];
 
@@ -1016,7 +1028,7 @@ function renderAdjustment(item) {
   `;
 }
 
-function renderSettingsView() {
+function renderRoomManagementView() {
   return `
     <section class="content-grid">
       <div class="panel large">
@@ -1063,58 +1075,112 @@ function renderSettingsView() {
           </label>
           <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
         </form>
-        ${currentUser?.role === "admin" ? renderUserAdminPanel() : ""}
       </div>
     </section>
   `;
 }
 
-function renderUserAdminPanel() {
+function renderUserManagementView() {
   return `
-    <div class="section-divider"></div>
+    <section class="content-grid">
+      <div class="panel large">
+        <div class="panel-head">
+          <div>
+            <h2>账号管理</h2>
+            <p>查看系统管理员和房间管理员账号。</p>
+          </div>
+        </div>
+        <div class="user-list">
+          ${users.map(renderUserRow).join("") || `<p class="muted">暂无账号。</p>`}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head compact">
+          <div>
+            <h2>创建账号</h2>
+            <p>为各饲养间管理员创建独立账号。</p>
+          </div>
+        </div>
+        <form id="userForm" class="form">
+          <label>
+            用户名
+            <input name="username" required placeholder="如 room_a_admin" />
+          </label>
+          <label>
+            显示姓名
+            <input name="displayName" required placeholder="如 SPF A 管理员" />
+          </label>
+          <label>
+            初始密码
+            <input name="password" type="password" required />
+          </label>
+          <label>
+            角色
+            <select name="role">
+              <option value="room_admin">房间管理员</option>
+              <option value="admin">系统管理员</option>
+            </select>
+          </label>
+          <div class="room-checkboxes">
+            ${state.rooms
+              .map(
+                (room) => `
+                  <label>
+                    <input type="checkbox" name="roomIds" value="${escapeAttr(room.id)}" />
+                    ${escapeText(room.name)}
+                  </label>
+                `,
+              )
+              .join("")}
+          </div>
+          <button class="primary" type="submit">${iconSvg("plus")}创建账号</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function renderDataManagementView() {
+  return `
+    <section class="content-grid">
+      <div class="panel large">
+        <div class="panel-head">
+          <div>
+            <h2>数据管理</h2>
+            <p>维护系统外部数据源和后续导入导出任务。</p>
+          </div>
+        </div>
+        <div class="rule-card">
+          <strong>IACUC 索引</strong>
+          <span>${IACUC_INDEX.length} 条记录</span>
+          <p>${iacucIndexMeta?.updatedAt ? `最后更新：${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : "尚未上传索引文件。"}</p>
+        </div>
+      </div>
+      <div class="panel">
+        ${renderIacucAdminPanel()}
+      </div>
+    </section>
+  `;
+}
+
+function renderIacucAdminPanel() {
+  return `
     <div class="panel-head compact">
       <div>
-        <h2>账号管理</h2>
-        <p>为各饲养间管理员创建独立账号。</p>
+        <h2>IACUC 索引</h2>
+        <p>上传 CSV 汇总表后，用于自动回填项目名称、项目负责人和实验负责人。</p>
       </div>
     </div>
-    <form id="userForm" class="form">
+    <form id="iacucUploadForm" class="form">
       <label>
-        用户名
-        <input name="username" required placeholder="如 room_a_admin" />
+        动物实验申请汇总表 CSV
+        <input name="file" type="file" accept=".csv,text/csv" required />
       </label>
-      <label>
-        显示姓名
-        <input name="displayName" required placeholder="如 SPF A 管理员" />
-      </label>
-      <label>
-        初始密码
-        <input name="password" type="password" required />
-      </label>
-      <label>
-        角色
-        <select name="role">
-          <option value="room_admin">房间管理员</option>
-          <option value="admin">系统管理员</option>
-        </select>
-      </label>
-      <div class="room-checkboxes">
-        ${state.rooms
-          .map(
-            (room) => `
-              <label>
-                <input type="checkbox" name="roomIds" value="${escapeAttr(room.id)}" />
-                ${escapeText(room.name)}
-              </label>
-            `,
-          )
-          .join("")}
-      </div>
-      <button class="primary" type="submit">${iconSvg("plus")}创建账号</button>
+      <button class="primary" type="submit">${iconSvg("upload")}上传并生成索引</button>
     </form>
-    <div class="user-list">
-      ${users.map(renderUserRow).join("") || `<p class="muted">暂无账号。</p>`}
-    </div>
+    <p class="muted iacuc-index-status">
+      当前索引：${IACUC_INDEX.length} 条${iacucIndexMeta?.updatedAt ? ` · ${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : ""}
+    </p>
   `;
 }
 
@@ -1311,6 +1377,7 @@ function bindEvents() {
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
   document.querySelector("#userForm")?.addEventListener("submit", handleUserSubmit);
+  document.querySelector("#iacucUploadForm")?.addEventListener("submit", handleIacucUpload);
   document.querySelectorAll("[data-delete-room]").forEach((button) => {
     button.addEventListener("click", () => deleteRoom(button.dataset.deleteRoom));
   });
@@ -1362,7 +1429,7 @@ async function login(event) {
       return;
     }
     currentUser = payload.user;
-    await Promise.all([loadPersistedState(), loadUsers()]);
+    await Promise.all([loadIacucIndex(), loadPersistedState(), loadUsers()]);
     render();
   } catch {
     if (error) error.textContent = "无法连接后端服务";
@@ -1433,6 +1500,37 @@ async function handleUserSubmit(event) {
   }
   await loadUsers();
   render();
+}
+
+async function handleIacucUpload(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const file = form.get("file");
+  if (!file || !file.name) return;
+
+  try {
+    const response = await fetch(API_IACUC_UPLOAD_URL, {
+      method: "POST",
+      body: form,
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      alert(payload.error || "上传失败");
+      return;
+    }
+    IACUC_INDEX = payload.items || [];
+    IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
+    iacucIndexMeta = {
+      count: payload.count,
+      updatedAt: payload.updatedAt,
+      source: "data",
+    };
+    mergeServerAuditLogs(payload);
+    alert(`已生成 IACUC 索引 ${payload.count} 条，重复编号 ${payload.duplicateCount || 0} 条。`);
+    render();
+  } catch {
+    alert("上传失败，请检查网络或文件格式");
+  }
 }
 
 function selectVisibleSlots() {
@@ -2139,9 +2237,12 @@ function iconSvg(name) {
   const icons = {
     grid: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`,
     receipt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zm2 5h6v2H9zm0 4h6v2H9z"/></svg>`,
+    database: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3zm0 2C8.2 5 6 6 6 6s2.2 1 6 1 6-1 6-1-2.2-1-6-1zM6 9v3c.8.5 2.9 1 6 1s5.2-.5 6-1V9c-1.4.6-3.5 1-6 1s-4.6-.4-6-1zm0 6v3c.8.5 2.9 1 6 1s5.2-.5 6-1v-3c-1.4.6-3.5 1-6 1s-4.6-.4-6-1z"/></svg>`,
+    users: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z"/></svg>`,
     settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.9 7.9 0 0 0 .1-1.5 7.9 7.9 0 0 0-.1-1.5l2-1.5-2-3.4-2.4 1a7.7 7.7 0 0 0-2.5-1.4L14.2 3h-4.4l-.4 2.2A7.7 7.7 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5A7.9 7.9 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.4 2.4-1a7.7 7.7 0 0 0 2.5 1.4l.4 2.2h4.4l.4-2.2a7.7 7.7 0 0 0 2.5-1.4l2.4 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>`,
     save: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5zM8 5v5h8V5zm1 11h6v3H9z"/></svg>`,
     trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l1 2h4v2H3V6h4zm1 6h2v8H9zm4 0h2v8h-2z"/></svg>`,
+    upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16h2V7l3 3 1.4-1.4L12 3.2 6.6 8.6 8 10l3-3zM5 18h14v2H5z"/></svg>`,
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z"/></svg>`,
     plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>`,
@@ -2152,22 +2253,28 @@ function iconSvg(name) {
 initialize();
 
 async function initialize() {
-  await Promise.all([loadIacucIndex(), loadCurrentUser()]);
+  await loadCurrentUser();
   if (!remotePersistence || currentUser) {
-    await loadPersistedState();
-    await loadUsers();
+    await Promise.all([loadIacucIndex(), loadPersistedState(), loadUsers()]);
   }
   render();
 }
 
 async function loadIacucIndex() {
   try {
-    const response = await fetch(IACUC_DATA_URL, { cache: "no-store" });
+    const response = await fetch(API_IACUC_INDEX_URL, { cache: "no-store" });
     if (!response.ok) return;
-    IACUC_INDEX = await response.json();
+    const payload = await response.json();
+    IACUC_INDEX = payload.items || [];
+    iacucIndexMeta = {
+      count: payload.count,
+      updatedAt: payload.updatedAt,
+      source: payload.source,
+    };
     IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
   } catch {
     IACUC_INDEX = [];
     IACUC_BY_NUMBER = new Map();
+    iacucIndexMeta = null;
   }
 }
