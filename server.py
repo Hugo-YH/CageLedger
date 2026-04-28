@@ -764,6 +764,65 @@ def create_user(conn, payload):
     return sanitize_user(row)
 
 
+def update_user(conn, actor, user_id, payload):
+    if user_id == actor["id"]:
+        raise PermissionError("不能在账号管理中修改当前登录账号")
+
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row:
+        raise LookupError("账号不存在")
+
+    username = str(payload.get("username", row["username"])).strip()
+    display_name = str(payload.get("displayName", row["display_name"])).strip() or username
+    password = str(payload.get("password", ""))
+    role = payload.get("role", row["role"])
+    room_ids = payload.get("roomIds", json.loads(row["room_ids"] or "[]"))
+
+    if not username:
+        raise ValueError("用户名不能为空")
+    if role not in ("admin", "room_admin"):
+        raise ValueError("角色只能是 admin 或 room_admin")
+    if not isinstance(room_ids, list):
+        raise ValueError("roomIds 必须是数组")
+
+    now = now_iso()
+    if password:
+        conn.execute(
+            """
+            UPDATE users
+            SET username = ?, display_name = ?, password_hash = ?, role = ?, room_ids = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (username, display_name, hash_password(password), role, dump_json(room_ids), now, user_id),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE users
+            SET username = ?, display_name = ?, role = ?, room_ids = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (username, display_name, role, dump_json(room_ids), now, user_id),
+        )
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    conn.commit()
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return sanitize_user(row)
+
+
+def delete_user(conn, actor, user_id):
+    if user_id == actor["id"]:
+        raise PermissionError("不能删除当前登录账号")
+
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row:
+        raise LookupError("账号不存在")
+
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+
+
 def validate_state_write_permission(conn, actor, old_state, new_state):
     if actor["role"] == "admin":
         return
@@ -1096,6 +1155,7 @@ def parse_iacuc_csv(raw):
     missing = [label for label in required.values() if label not in field_by_name]
     if missing:
         raise ValueError(f"CSV 缺少必要列：{', '.join(missing)}")
+    funding_field = field_by_name.get("项目来源")
 
     records_by_iacuc = {}
     duplicate_count = 0
@@ -1119,6 +1179,7 @@ def parse_iacuc_csv(raw):
             "project": clean_text(row.get(field_by_name[required["project"]], "")),
             "pi": clean_text(row.get(field_by_name[required["pi"]], "")),
             "owner": clean_text(row.get(field_by_name[required["owner"]], "")),
+            "funding": clean_text(row.get(funding_field, "")) if funding_field else "",
         }
 
     items = sorted(records_by_iacuc.values(), key=lambda item: item["iacuc"])
@@ -1323,6 +1384,29 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
 
+        user_id = self.user_route(path)
+        if user_id:
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            try:
+                body = self.read_json_body()
+                with connect_db() as conn:
+                    updated = update_user(conn, user, user_id, body)
+                self.send_json({"user": updated})
+            except sqlite3.IntegrityError:
+                self.send_json({"error": "用户名已存在"}, HTTPStatus.CONFLICT)
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+
         endpoint, item_id = self.entity_route(path)
         if endpoint and item_id:
             self.handle_entity_write("PUT", endpoint, item_id)
@@ -1330,7 +1414,26 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self):
-        endpoint, item_id = self.entity_route(urlparse(self.path).path)
+        path = urlparse(self.path).path
+        user_id = self.user_route(path)
+        if user_id:
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            try:
+                with connect_db() as conn:
+                    delete_user(conn, user, user_id)
+                self.send_json({"ok": True})
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
+
+        endpoint, item_id = self.entity_route(path)
         if endpoint and item_id:
             self.handle_entity_write("DELETE", endpoint, item_id)
             return
@@ -1495,6 +1598,15 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 if "/" not in item_id and item_id:
                     return endpoint, item_id
         return None, None
+
+    def user_route(self, path):
+        prefix = "/api/users/"
+        if not path.startswith(prefix):
+            return None
+        user_id = unquote(path[len(prefix) :])
+        if "/" in user_id or not user_id:
+            return None
+        return user_id
 
     def handle_entity_write(self, method, endpoint, item_id):
         user = self.require_user()

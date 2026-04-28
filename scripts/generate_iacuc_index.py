@@ -49,6 +49,7 @@ def main():
     missing = [label for label in required.values() if label not in column_by_name]
     if missing:
         raise SystemExit(f"Missing required columns: {', '.join(missing)}")
+    funding_column = column_by_name.get("项目来源")
 
     records_by_iacuc = {}
     for row in sheet.iter_rows(min_row=2, values_only=True):
@@ -63,6 +64,7 @@ def main():
             "project": clean(row[column_by_name[required["project"]]]),
             "pi": clean(row[column_by_name[required["pi"]]]),
             "owner": clean(row[column_by_name[required["owner"]]]),
+            "funding": clean(row[funding_column]) if funding_column is not None else "",
         }
         records_by_iacuc[iacuc] = record
 

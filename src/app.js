@@ -1118,7 +1118,8 @@ function renderBillingView() {
           <div class="toolbar">
             <input id="billingMonth" type="month" value="${state.billingMonth}" />
             <input id="billingIacuc" type="text" value="${escapeAttr(state.billingIacuc)}" list="billingIacucOptions" placeholder="输入 IACUC 编号" />
-            <button id="exportBilling" class="secondary">${iconSvg("download")}导出 CSV</button>
+            <button id="exportBilling" class="secondary">${iconSvg("download")}导出饲养明细 CSV</button>
+            <button id="exportSettlementPdf" class="primary">${iconSvg("download")}导出结算单 PDF</button>
           </div>
         </div>
 
@@ -1131,6 +1132,8 @@ function renderBillingView() {
         <div class="statement-summary">
           ${summaryTile("IACUC", state.billingIacuc)}
           ${summaryTile("项目负责人", billingInfo?.pi || "-")}
+          ${summaryTile("实验负责人", billingInfo?.owner || "-")}
+          ${summaryTile("支撑经费", billingInfo?.funding || "-")}
           ${summaryTile("累计笼日", statement.totalCageDays)}
           ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
         </div>
@@ -1424,15 +1427,54 @@ function renderIacucAdminPanel() {
 }
 
 function renderUserRow(user) {
-  const roomNames = user.role === "admin" ? "全部饲养间" : user.roomIds.map(roomNameById).filter(Boolean).join("、") || "未分配";
+  const isCurrent = currentUser?.id === user.id;
   return `
-    <div class="user-row">
-      <div>
-        <strong>${escapeText(user.displayName)}</strong>
-        <p>${escapeText(user.username)} · ${user.role === "admin" ? "系统管理员" : "房间管理员"}</p>
+    <form class="user-row user-edit-form" data-user-id="${escapeAttr(user.id)}">
+      <div class="user-fields">
+        <label>
+          登录名
+          <input name="username" value="${escapeAttr(user.username)}" ${isCurrent ? "disabled" : "required"} />
+        </label>
+        <label>
+          显示姓名
+          <input name="displayName" value="${escapeAttr(user.displayName)}" ${isCurrent ? "disabled" : "required"} />
+        </label>
+        <label>
+          新密码
+          <input name="password" type="password" placeholder="留空不修改" ${isCurrent ? "disabled" : ""} />
+        </label>
+        <label>
+          角色
+          <select name="role" ${isCurrent ? "disabled" : ""}>
+            <option value="room_admin" ${user.role === "room_admin" ? "selected" : ""}>房间管理员</option>
+            <option value="admin" ${user.role === "admin" ? "selected" : ""}>系统管理员</option>
+          </select>
+        </label>
       </div>
-      <span>${escapeText(roomNames)}</span>
-    </div>
+      <div class="user-room-access">
+        ${state.rooms
+          .map(
+            (room) => `
+              <label>
+                <input type="checkbox" name="roomIds" value="${escapeAttr(room.id)}" ${user.roomIds.includes(room.id) ? "checked" : ""} ${isCurrent || user.role === "admin" ? "disabled" : ""} />
+                ${escapeText(room.name)}
+              </label>
+            `,
+          )
+          .join("")}
+        <p>${user.role === "admin" ? "系统管理员默认拥有全部饲养间权限。" : "房间管理员仅可编辑勾选饲养间。"}</p>
+      </div>
+      <div class="user-row-actions">
+        ${
+          isCurrent
+            ? `<span class="muted">当前账号</span>`
+            : `
+              <button class="secondary" type="submit">${iconSvg("save")}保存</button>
+              <button class="icon-danger" type="button" data-delete-user="${escapeAttr(user.id)}" aria-label="删除 ${escapeAttr(user.displayName)}">${iconSvg("trash")}</button>
+            `
+        }
+      </div>
+    </form>
   `;
 }
 
@@ -1617,12 +1659,26 @@ function bindEvents() {
     }
   });
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
+  document.querySelector("#exportSettlementPdf")?.addEventListener("click", exportSettlementPdf);
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
   document.querySelector("#rackForm")?.addEventListener("submit", handleRackSubmit);
   document.querySelector("#userForm")?.addEventListener("submit", handleUserSubmit);
+  document.querySelectorAll(".user-edit-form").forEach((form) => {
+    form.addEventListener("submit", handleUserUpdate);
+    form.querySelector("select[name='role']")?.addEventListener("change", (event) => {
+      const isAdmin = event.target.value === "admin";
+      form.querySelectorAll("input[name='roomIds']").forEach((input) => {
+        input.disabled = isAdmin;
+      });
+      form.querySelector(".user-room-access p").textContent = isAdmin ? "系统管理员默认拥有全部饲养间权限。" : "房间管理员仅可编辑勾选饲养间。";
+    });
+  });
   document.querySelector("#iacucUploadForm")?.addEventListener("submit", handleIacucUpload);
   document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
+  document.querySelectorAll("[data-delete-user]").forEach((button) => {
+    button.addEventListener("click", () => deleteUser(button.dataset.deleteUser));
+  });
   document.querySelectorAll("[data-delete-room]").forEach((button) => {
     button.addEventListener("click", () => deleteRoom(button.dataset.deleteRoom));
   });
@@ -1741,6 +1797,49 @@ async function handleUserSubmit(event) {
   const payload = await response.json();
   if (!response.ok) {
     alert(payload.error || "创建账号失败");
+    return;
+  }
+  await loadUsers();
+  render();
+}
+
+async function handleUserUpdate(event) {
+  event.preventDefault();
+  const formElement = event.target;
+  const userId = formElement.dataset.userId;
+  const form = new FormData(formElement);
+  const role = form.get("role");
+  const response = await fetch(`${API_USERS_URL}/${encodeURIComponent(userId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: form.get("username"),
+      displayName: form.get("displayName"),
+      password: form.get("password"),
+      role,
+      roomIds: role === "admin" ? [] : form.getAll("roomIds"),
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    alert(payload.error || "保存账号失败");
+    return;
+  }
+  await loadUsers();
+  render();
+}
+
+async function deleteUser(userId) {
+  const user = users.find((item) => item.id === userId);
+  if (!user) return;
+  if (!confirm(`确认删除账号“${user.displayName}”？该账号将无法继续登录。`)) return;
+
+  const response = await fetch(`${API_USERS_URL}/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    alert(payload.error || "删除账号失败");
     return;
   }
   await loadUsers();
@@ -2316,9 +2415,108 @@ function exportBillingCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${state.billingIacuc}-${state.billingMonth}-饲养费结算单.csv`;
+  link.download = `${state.billingIacuc}-${state.billingMonth}-饲养明细.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function exportSettlementPdf() {
+  const statement = buildStatement(state.billingIacuc, state.billingMonth);
+  const info = findIacucInfo(state.billingIacuc) || {};
+  const rowsWithCages = statement.rows.filter((row) => row.cageCount > 0);
+  const nonZeroRows = rowsWithCages.length ? rowsWithCages : statement.rows;
+  const opened = window.open("", "_blank");
+  if (!opened) {
+    alert("浏览器阻止了弹出窗口，请允许弹出窗口后重试。");
+    return;
+  }
+
+  opened.document.write(settlementHtml(statement, info, nonZeroRows));
+  opened.document.close();
+  opened.focus();
+  opened.print();
+}
+
+function settlementHtml(statement, info, rows) {
+  const generatedAt = new Date().toLocaleString("zh-CN", { hour12: false });
+  const project = info.project || "-";
+  const funding = info.funding || "-";
+  const pi = info.pi || "-";
+  const owner = info.owner || "-";
+  const rowsHtml = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeText(row.date)}</td>
+          <td>${row.cageCount}</td>
+          <td>${MONEY_FORMAT.format(row.unitPrice)}</td>
+          <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
+          <td>${MONEY_FORMAT.format(row.amount)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+
+  return `
+    <!doctype html>
+    <html lang="zh-CN">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeText(state.billingIacuc)}-${escapeText(state.billingMonth)}-饲养费结算单</title>
+        <style>
+          @page { size: A4; margin: 18mm; }
+          body { color: #1f2a2e; font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; font-size: 12px; line-height: 1.5; }
+          h1 { text-align: center; font-size: 22px; margin: 0 0 18px; }
+          .meta { color: #66757c; text-align: right; margin-bottom: 10px; }
+          .section { margin-top: 14px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #cfd8dc; border-bottom: 0; border-right: 0; }
+          .cell { min-height: 34px; border-right: 1px solid #cfd8dc; border-bottom: 1px solid #cfd8dc; padding: 7px 9px; }
+          .cell.full { grid-column: 1 / -1; }
+          .label { color: #66757c; display: inline-block; min-width: 84px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 1px solid #cfd8dc; padding: 7px 8px; text-align: right; }
+          th:first-child, td:first-child { text-align: left; }
+          th { background: #eef4f3; color: #1f2a2e; }
+          .total { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+          .total div { border: 1px solid #cfd8dc; padding: 9px; }
+          .total strong { display: block; font-size: 18px; margin-top: 4px; }
+          .sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 34px; }
+          .sign div { border-top: 1px solid #1f2a2e; padding-top: 8px; color: #66757c; }
+        </style>
+      </head>
+      <body>
+        <h1>实验动物饲养费结算单</h1>
+        <div class="meta">生成时间：${escapeText(generatedAt)}</div>
+        <div class="section grid">
+          <div class="cell"><span class="label">结算月份</span>${escapeText(statement.month)}</div>
+          <div class="cell"><span class="label">IACUC编号</span>${escapeText(statement.iacuc || "-")}</div>
+          <div class="cell full"><span class="label">项目名称</span>${escapeText(project)}</div>
+          <div class="cell"><span class="label">项目负责人</span>${escapeText(pi)}</div>
+          <div class="cell"><span class="label">实验负责人</span>${escapeText(owner)}</div>
+          <div class="cell full"><span class="label">支撑经费</span>${escapeText(funding)}</div>
+        </div>
+        <div class="section total">
+          <div><span class="label">累计笼日</span><strong>${statement.totalCageDays}</strong></div>
+          <div><span class="label">基础单价</span><strong>${MONEY_FORMAT.format(statement.unitPrice)} 元/笼/天</strong></div>
+          <div><span class="label">应收金额</span><strong>${MONEY_FORMAT.format(statement.totalAmount)} 元</strong></div>
+        </div>
+        <div class="section">
+          <strong>饲养费明细</strong>
+          <table>
+            <thead>
+              <tr><th>日期</th><th>在养笼数</th><th>单价</th><th>减免</th><th>当日费用</th></tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        <div class="sign">
+          <div>项目负责人确认</div>
+          <div>动物房审核</div>
+          <div>财务审核</div>
+        </div>
+      </body>
+    </html>
+  `;
 }
 
 function datesInMonth(month) {
@@ -2403,6 +2601,8 @@ function iacucOptions(currentValue = "") {
     iacuc: item.iacuc,
     project: item.project,
     pi: item.pi,
+    owner: item.owner,
+    funding: item.funding,
   }));
   const fromOccupancies = state.occupancies
     .filter((item) => item.iacuc)
@@ -2410,9 +2610,11 @@ function iacucOptions(currentValue = "") {
       iacuc: item.iacuc,
       project: item.project,
       pi: item.pi,
+      owner: item.owner,
+      funding: "",
     }));
   const typedValue = String(currentValue || "").trim();
-  const fromCurrentValue = typedValue ? [{ iacuc: typedValue, project: "", pi: "" }] : [];
+  const fromCurrentValue = typedValue ? [{ iacuc: typedValue, project: "", pi: "", owner: "", funding: "" }] : [];
   const byNumber = new Map();
   [...fromIndex, ...fromOccupancies, ...fromCurrentValue].forEach((item) => {
     const key = normalizeIacucNumber(item.iacuc);
@@ -2436,6 +2638,7 @@ function findIacucInfo(value) {
     project: occupancy.project,
     pi: occupancy.pi,
     owner: occupancy.owner,
+    funding: "",
   };
 }
 
