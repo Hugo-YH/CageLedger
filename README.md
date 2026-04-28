@@ -9,7 +9,7 @@
 
 - 首页概览：集中展示系统名称、总笼位、在用、已预约、空笼位，并用图表展示状态分布。
 - 动态笼位图：按饲养间、笼架、行、列生成 IVC 笼位。
-- 房间管理：按“饲养间 -> 笼架”树形展示，支持删除饲养间和笼架。
+- 房间管理：按“饲养间 -> 笼架”树形展示，支持给已有饲养间新增不同规格笼架，也支持删除饲养间和笼架。
 - 笼位状态：支持空、已预约、在用、结束占用。
 - 笼位绑定：支持 IACUC 编号、项目负责人、实验负责人、项目名称、笼盒编号、备注。
 - 笼盒编号：按“饲养间-笼架号-列行号”自动生成，例如 `SPF 小鼠饲养间 A-1-A1`。
@@ -23,6 +23,7 @@
 - 减免扩展：示例数据内置 IACUC 维度折扣规则，计费函数已预留扩展点。
 - CSV 导出：结算单可导出为 CSV。
 - 数据管理：管理员可上传动物实验申请汇总表 CSV，生成 IACUC 自动匹配索引。
+- 更新检查：管理员可在数据管理页面检查 GitHub `main` 分支最新提交。
 - 账号管理：管理员可创建系统管理员和房间管理员账号。
 - 共享持久化：通过后端 API 保存到 SQLite；无后端时回退到浏览器 `localStorage`。
 - 拆表存储：SQLite 内按饲养间、笼架、笼位、占用记录、计费规则、减免和日志分表保存。
@@ -93,7 +94,7 @@ CAGELEDGER_ADMIN_PASSWORD=更强的密码
 启动：
 
 ```bash
-docker compose up -d --build
+CAGELEDGER_VERSION=$(git rev-parse HEAD) docker compose up -d --build
 ```
 
 访问：
@@ -111,6 +112,8 @@ http://群晖IP:5173
 建议定期备份 `data/cageledger.sqlite` 和 `data/iacuc-index.json`。
 
 如果需要 IACUC 自动回填，管理员登录系统后可在“数据管理 -> IACUC 索引”上传动物实验申请汇总表 CSV。系统会生成 `data/iacuc-index.json`，该文件随 `./data:/app/data` 挂载持久化。
+
+“数据管理 -> 系统更新”只负责检查 GitHub 最新提交，不会从网页自动拉取并运行新代码。更新代码仍建议在群晖项目目录执行 `git pull origin main` 后重新构建容器；构建时传入 `CAGELEDGER_VERSION=$(git rev-parse HEAD)` 后，页面才能准确判断当前运行版本是否落后。
 
 ## 同步 IACUC 汇总表
 

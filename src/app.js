@@ -6,6 +6,7 @@ const API_LOGOUT_URL = "/api/auth/logout";
 const API_USERS_URL = "/api/users";
 const API_IACUC_INDEX_URL = "/api/iacuc-index";
 const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
+const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
 const ENTITY_API_URLS = {
   rooms: "/api/rooms",
   racks: "/api/racks",
@@ -18,6 +19,7 @@ const ENTITY_API_URLS = {
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let iacucIndexMeta = null;
+let systemUpdateInfo = null;
 let remotePersistence = false;
 let currentUser = null;
 let users = [];
@@ -320,32 +322,38 @@ function generateInfrastructure(rooms) {
 
   rooms.forEach((room) => {
     for (let rackIndex = 1; rackIndex <= Number(room.rackCount); rackIndex += 1) {
-      const rackId = rackIdFor(room.id, rackIndex);
-      racks.push({
-        id: rackId,
-        roomId: room.id,
-        name: `${room.name} ${rackIndex} 号笼架`,
-        rows: Number(room.rows),
-        cols: Number(room.cols),
-        index: rackIndex,
-      });
-
-      for (let row = 1; row <= Number(room.rows); row += 1) {
-        for (let col = 1; col <= Number(room.cols); col += 1) {
-          slots.push({
-            id: slotIdFor(room.id, rackIndex, row, col),
-            rackId,
-            row,
-            col,
-            code: `${columnLabel(col)}${row}`,
-            status: "empty",
-          });
-        }
-      }
+      const generated = generateRackInfrastructure(room, rackIndex, Number(room.rows), Number(room.cols));
+      racks.push(generated.rack);
+      slots.push(...generated.slots);
     }
   });
 
   return { racks, slots };
+}
+
+function generateRackInfrastructure(room, rackIndex, rows, cols, rackId = rackIdFor(room.id, rackIndex)) {
+  const rack = {
+    id: rackId,
+    roomId: room.id,
+    name: `${room.name} ${rackIndex} 号笼架`,
+    rows: Number(rows),
+    cols: Number(cols),
+    index: rackIndex,
+  };
+  const slots = [];
+  for (let row = 1; row <= Number(rows); row += 1) {
+    for (let col = 1; col <= Number(cols); col += 1) {
+      slots.push({
+        id: slotIdForRack(rackId, row, col),
+        rackId,
+        row,
+        col,
+        code: `${columnLabel(col)}${row}`,
+        status: "empty",
+      });
+    }
+  }
+  return { rack, slots };
 }
 
 function rackIdFor(roomId, rackIndex) {
@@ -353,9 +361,9 @@ function rackIdFor(roomId, rackIndex) {
   return `rack-${suffix}-${rackIndex}`;
 }
 
-function slotIdFor(roomId, rackIndex, row, col) {
-  const suffix = roomId.replace(/^room-/, "");
-  return `slot-${suffix}-${rackIndex}-${row}-${col}`;
+function slotIdForRack(rackId, row, col) {
+  const suffix = rackId.replace(/^rack-/, "");
+  return `slot-${suffix}-${row}-${col}`;
 }
 
 function updateSlotStatuses(targetState = state) {
@@ -1207,7 +1215,7 @@ function renderRoomManagementView() {
         <div class="panel-head">
           <div>
             <h2>饲养间与笼架</h2>
-            <p>按 IVC 笼架参数自动生成 X 行 * Y 列 * Z 个笼架。</p>
+            <p>饲养间下可维护多个笼架，每个笼架可设置独立行列数。</p>
           </div>
           <button id="resetDemo" class="secondary">${iconSvg("refresh")}重置示例数据</button>
         </div>
@@ -1219,7 +1227,7 @@ function renderRoomManagementView() {
         <div class="panel-head compact">
           <div>
             <h2>新增饲养间</h2>
-            <p>保存后自动生成笼架与笼位。</p>
+            <p>保存后按下方规格生成初始笼架；不同规格笼架可继续单独新增。</p>
           </div>
         </div>
         <form id="roomForm" class="form">
@@ -1246,6 +1254,32 @@ function renderRoomManagementView() {
             <input type="number" name="cols" min="1" value="6" required />
           </label>
           <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
+        </form>
+        <div class="section-divider"></div>
+        <div class="panel-head compact">
+          <div>
+            <h2>新增笼架</h2>
+            <p>给已创建饲养间添加一个独立规格的笼架。</p>
+          </div>
+        </div>
+        <form id="rackForm" class="form">
+          <label>
+            所属饲养间
+            <select name="roomId" required>
+              ${state.rooms.map((room) => `<option value="${escapeAttr(room.id)}">${escapeText(room.name)}</option>`).join("")}
+            </select>
+          </label>
+          <div class="form-row">
+            <label>
+              行数 X
+              <input type="number" name="rows" min="1" value="5" required />
+            </label>
+            <label>
+              列数 Y
+              <input type="number" name="cols" min="1" value="6" required />
+            </label>
+          </div>
+          <button class="primary" type="submit">${iconSvg("plus")}新增笼架</button>
         </form>
       </div>
     </section>
@@ -1327,12 +1361,39 @@ function renderDataManagementView() {
           <span>${IACUC_INDEX.length} 条记录</span>
           <p>${iacucIndexMeta?.updatedAt ? `最后更新：${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : "尚未上传索引文件。"}</p>
         </div>
+        ${renderSystemUpdateCard()}
       </div>
       <div class="panel">
         ${renderIacucAdminPanel()}
       </div>
     </section>
   `;
+}
+
+function renderSystemUpdateCard() {
+  const info = systemUpdateInfo;
+  const statusText = updateStatusText(info);
+
+  return `
+    <div class="rule-card update-card">
+      <strong>系统更新</strong>
+      <span>${escapeText(statusText)}</span>
+      ${info?.latestShort ? `<p>GitHub 最新版本：${escapeText(info.latestShort)}${info.latestMessage ? ` · ${escapeText(info.latestMessage)}` : ""}</p>` : ""}
+      ${info?.currentShort ? `<p>当前运行版本：${escapeText(info.currentShort)}</p>` : ""}
+      ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
+      ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
+      <button id="checkSystemUpdate" class="secondary" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
+    </div>
+  `;
+}
+
+function updateStatusText(info) {
+  if (!info) return "尚未检查 GitHub 最新版本。";
+  if (info.loading) return "正在检查 GitHub 最新版本。";
+  if (info.error) return "检查失败";
+  if (info.updateAvailable === true) return "发现新版本";
+  if (info.updateAvailable === false) return "当前已是最新版本";
+  return "已获取远端版本，当前运行版本未知";
 }
 
 function renderIacucAdminPanel() {
@@ -1414,7 +1475,7 @@ function renderRoomCard(room) {
       <div class="room-tree-head">
         <div>
           <h3>${room.name}</h3>
-          <p>${room.area || "未设置区域"} · ${racks.length} 个笼架 · ${room.rows} 行 * ${room.cols} 列</p>
+          <p>${room.area || "未设置区域"} · ${racks.length} 个笼架 · ${slots.length} 个笼位</p>
         </div>
         <div class="tree-actions">
           <span>${slots.length} 笼位</span>
@@ -1548,8 +1609,10 @@ function bindEvents() {
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
+  document.querySelector("#rackForm")?.addEventListener("submit", handleRackSubmit);
   document.querySelector("#userForm")?.addEventListener("submit", handleUserSubmit);
   document.querySelector("#iacucUploadForm")?.addEventListener("submit", handleIacucUpload);
+  document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
   document.querySelectorAll("[data-delete-room]").forEach((button) => {
     button.addEventListener("click", () => deleteRoom(button.dataset.deleteRoom));
   });
@@ -1702,6 +1765,26 @@ async function handleIacucUpload(event) {
     render();
   } catch {
     alert("上传失败，请检查网络或文件格式");
+  }
+}
+
+async function checkSystemUpdate() {
+  systemUpdateInfo = { loading: true };
+  render();
+
+  try {
+    const response = await fetch(API_SYSTEM_UPDATE_URL, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      systemUpdateInfo = { error: payload.error || "检查更新失败" };
+      render();
+      return;
+    }
+    systemUpdateInfo = payload;
+    render();
+  } catch {
+    systemUpdateInfo = { error: "无法连接后端服务" };
+    render();
   }
 }
 
@@ -1970,9 +2053,10 @@ function updateBillingIacuc(value) {
 async function handleRoomSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
+  const name = form.get("name").trim();
   const room = {
-    id: `room-${slugify(form.get("name"))}-${Date.now()}`,
-    name: form.get("name").trim(),
+    id: `room-${slugify(name)}-${Date.now()}`,
+    name,
     area: form.get("area").trim(),
     rackCount: Number(form.get("rackCount")),
     rows: Number(form.get("rows")),
@@ -2000,6 +2084,44 @@ async function handleRoomSubmit(event) {
     state.selectedSlotId = generated.slots[0].id;
     state.activeView = "cages";
     pushLog(`新增饲养间 ${room.name}`);
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
+}
+
+async function handleRackSubmit(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const room = state.rooms.find((item) => item.id === form.get("roomId"));
+  if (!room) {
+    alert("请选择有效的饲养间。");
+    return;
+  }
+
+  const roomRacks = state.racks.filter((item) => item.roomId === room.id);
+  const rackIndex = roomRacks.length + 1;
+  const rows = Number(form.get("rows"));
+  const cols = Number(form.get("cols"));
+  const rackId = `rack-${room.id.replace(/^room-/, "")}-${Date.now()}`;
+  const generated = generateRackInfrastructure(room, rackIndex, rows, cols, rackId);
+
+  try {
+    const rackResponse = await createEntity("racks", generated.rack);
+    const slotResponses = [];
+    for (const slot of generated.slots) {
+      slotResponses.push(await createEntity("slots", slot));
+    }
+
+    state.racks.push(rackResponse.item || generated.rack);
+    state.slots.push(...slotResponses.map((response, index) => response.item || generated.slots[index]));
+    room.rackCount = roomRacks.length + 1;
+    await updateEntity("rooms", room.id, room);
+    state.selectedRoomId = room.id;
+    state.selectedRackId = generated.rack.id;
+    state.selectedSlotId = generated.slots[0]?.id;
+    state.activeView = "cages";
+    pushLog(`新增${room.name} 笼架 ${rackIndex}`);
     render();
   } catch (error) {
     reportSaveError(error);

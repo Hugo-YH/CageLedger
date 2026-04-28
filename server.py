@@ -14,7 +14,9 @@ from email.utils import format_datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent
@@ -28,6 +30,9 @@ SESSION_COOKIE = "cageledger_session"
 SESSION_TTL_DAYS = 14
 DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")
+CAGELEDGER_VERSION = os.environ.get("CAGELEDGER_VERSION", "").strip()
+CAGELEDGER_REPOSITORY = os.environ.get("CAGELEDGER_REPOSITORY", "Hugo-YH/CageLedger")
+CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
 TABLES = (
     "audit_logs",
     "billing_adjustments",
@@ -978,6 +983,103 @@ def save_iacuc_index(items):
     IACUC_INDEX_PATH.write_text(json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def system_update_status():
+    current = current_revision()
+    latest = latest_github_revision()
+    latest_sha = latest.get("sha") or ""
+    update_available = None
+    if current and latest_sha:
+        update_available = not revisions_match(current, latest_sha)
+
+    return {
+        "repository": CAGELEDGER_REPOSITORY,
+        "branch": CAGELEDGER_BRANCH,
+        "current": current or None,
+        "currentShort": short_revision(current),
+        "latest": latest_sha or None,
+        "latestShort": short_revision(latest_sha),
+        "latestUrl": latest.get("url"),
+        "latestMessage": latest.get("message"),
+        "latestDate": latest.get("date"),
+        "updateAvailable": update_available,
+        "checkedAt": now_iso(),
+    }
+
+
+def current_revision():
+    if CAGELEDGER_VERSION:
+        return CAGELEDGER_VERSION
+    return read_git_revision(ROOT)
+
+
+def read_git_revision(root):
+    git_dir = root / ".git"
+    if git_dir.is_file():
+        content = git_dir.read_text(encoding="utf-8", errors="replace").strip()
+        if content.startswith("gitdir:"):
+            git_dir = (git_dir.parent / content.split(":", 1)[1].strip()).resolve()
+    if not git_dir.exists():
+        return ""
+
+    head_path = git_dir / "HEAD"
+    if not head_path.exists():
+        return ""
+    head = head_path.read_text(encoding="utf-8", errors="replace").strip()
+    if head.startswith("ref:"):
+        ref = head.split(":", 1)[1].strip()
+        ref_path = git_dir / ref
+        if ref_path.exists():
+            return ref_path.read_text(encoding="utf-8", errors="replace").strip()
+        packed_refs = git_dir / "packed-refs"
+        if packed_refs.exists():
+            for line in packed_refs.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line or line.startswith("#") or line.startswith("^"):
+                    continue
+                sha, _, packed_ref = line.partition(" ")
+                if packed_ref == ref:
+                    return sha.strip()
+        return ""
+    return head
+
+
+def latest_github_revision():
+    url = f"https://api.github.com/repos/{CAGELEDGER_REPOSITORY}/commits/{CAGELEDGER_BRANCH}"
+    request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "CageLedger"})
+    try:
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise ValueError(f"GitHub 返回错误：HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise ValueError(f"无法连接 GitHub：{exc.reason}") from exc
+    except TimeoutError as exc:
+        raise ValueError("连接 GitHub 超时") from exc
+
+    commit = payload.get("commit") or {}
+    author = commit.get("author") or {}
+    return {
+        "sha": payload.get("sha", ""),
+        "url": payload.get("html_url", ""),
+        "message": first_line(commit.get("message", "")),
+        "date": author.get("date", ""),
+    }
+
+
+def revisions_match(current, latest):
+    current = str(current or "").strip()
+    latest = str(latest or "").strip()
+    return bool(current and latest and (current.startswith(latest) or latest.startswith(current)))
+
+
+def short_revision(value):
+    value = str(value or "").strip()
+    return value[:7] if value else None
+
+
+def first_line(value):
+    return str(value or "").splitlines()[0] if value else ""
+
+
 def parse_iacuc_csv(raw):
     text = decode_csv_bytes(raw)
     reader = csv.DictReader(io.StringIO(text))
@@ -1138,6 +1240,18 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             payload = read_iacuc_index()
             self.send_json({key: payload[key] for key in ("count", "updatedAt", "source")})
+            return
+        if path == "/api/system/update-check":
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            try:
+                self.send_json(system_update_status())
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_GATEWAY)
             return
         if path == "/api/users":
             user = self.require_user()

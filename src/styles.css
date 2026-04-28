@@ -1012,6 +1012,14 @@ tr:last-child td {
   font-size: 13px;
 }
 
+.update-card .secondary {
+  margin-top: 10px;
+}
+
+.rule-card .error-text {
+  color: var(--danger);
+}
+
 .room-list {
   display: grid;
   gap: 12px;
