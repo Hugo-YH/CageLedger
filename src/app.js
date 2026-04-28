@@ -29,7 +29,7 @@ const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
 const today = formatLocalDate(new Date());
 
 const seedData = {
-  activeView: "cages",
+  activeView: "dashboard",
   selectedRoomId: "room-spf-a",
   selectedRackId: "rack-spf-a-1",
   selectedSlotId: "slot-spf-a-1-1-1",
@@ -386,7 +386,8 @@ function render() {
     <div class="shell">
       ${renderSidebar()}
       <main class="workspace">
-        ${renderTopbar()}
+        ${state.activeView === "dashboard" ? "" : renderTopbar()}
+        ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
         ${state.activeView === "rooms" ? renderRoomManagementView() : ""}
@@ -402,6 +403,7 @@ function render() {
 
 function renderSidebar() {
   const navItems = [
+    ["dashboard", "首页", "home"],
     ["cages", "笼位图", "grid"],
     ["billing", "饲养费核算", "receipt"],
     ...(currentUser?.role === "admin"
@@ -469,25 +471,48 @@ function renderLoginView() {
 }
 
 function renderTopbar() {
-  const total = state.slots.length;
-  const active = state.slots.filter((slot) => slot.status === "active").length;
-  const reserved = state.slots.filter((slot) => slot.status === "reserved").length;
-  const empty = total - active - reserved;
+  const page = pageMeta(state.activeView);
 
   return `
     <header class="topbar">
       <div>
-        <h1>实验动物笼位管理与计费系统</h1>
-        <p>以笼位占用时间线作为计费依据，按 IACUC 生成月度结算。</p>
-      </div>
-      <div class="metrics">
-        ${metric("总笼位", total, "neutral")}
-        ${metric("在用", active, "active")}
-        ${metric("已预约", reserved, "reserved")}
-        ${metric("空", empty, "empty")}
+        <h1>${page.title}</h1>
+        <p>${page.description}</p>
       </div>
     </header>
   `;
+}
+
+function pageMeta(view) {
+  return {
+    cages: {
+      title: "笼位图",
+      description: "按饲养间和笼架查看、录入和维护笼位占用。",
+    },
+    billing: {
+      title: "饲养费核算",
+      description: "按 IACUC 和月份生成笼位占用费用。",
+    },
+    rooms: {
+      title: "房间管理",
+      description: "维护饲养间、笼架和笼位基础结构。",
+    },
+    data: {
+      title: "数据管理",
+      description: "维护 IACUC 索引和外部数据源。",
+    },
+    users: {
+      title: "账号管理",
+      description: "维护系统管理员和房间管理员账号。",
+    },
+    logs: {
+      title: "操作日志",
+      description: "查看系统写入操作和审计记录。",
+    },
+  }[view] || {
+    title: "CageLedger",
+    description: "实验动物笼位管理与计费系统。",
+  };
 }
 
 function renderSidebarAccount() {
@@ -516,6 +541,148 @@ function metric(label, value, tone) {
     <div class="metric ${tone}">
       <span>${label}</span>
       <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function renderDashboardView() {
+  const counts = slotStatusCounts();
+  const occupied = counts.active + counts.reserved;
+  const activePct = percent(counts.active, counts.total);
+  const reservedPct = percent(counts.reserved, counts.total);
+  const emptyPct = percent(counts.empty, counts.total);
+  const occupiedPct = percent(occupied, counts.total);
+
+  return `
+    <section class="dashboard-view">
+      <div class="dashboard-hero">
+        <div>
+          <span class="dashboard-kicker">CageLedger · CL</span>
+          <h1>实验动物笼位管理与计费系统</h1>
+          <p>以笼位占用时间线作为计费依据，集中管理笼位状态、IACUC 项目归属和饲养费核算。</p>
+        </div>
+        <div class="dashboard-hero-stat">
+          <span>总笼位</span>
+          <strong>${counts.total}</strong>
+          <small>${state.rooms.length} 个饲养间 · ${state.racks.length} 个笼架</small>
+        </div>
+      </div>
+
+      <div class="dashboard-metrics">
+        ${metric("总笼位", counts.total, "neutral")}
+        ${metric("在用", counts.active, "active")}
+        ${metric("已预约", counts.reserved, "reserved")}
+        ${metric("空", counts.empty, "empty")}
+      </div>
+
+      <div class="dashboard-grid">
+        <section class="panel">
+          <div class="panel-head compact">
+            <div>
+              <h2>笼位状态分布</h2>
+              <p>按当前笼位状态统计，便于快速判断资源占用情况。</p>
+            </div>
+          </div>
+          <div class="status-chart">
+            <div
+              class="donut-chart"
+              style="--active:${activePct}; --reserved:${reservedPct}; --empty:${emptyPct};"
+              aria-label="笼位状态分布图"
+            >
+              <span>${occupiedPct}%</span>
+              <small>占用/预约</small>
+            </div>
+            <div class="chart-legend">
+              ${chartLegend("active", "在用", counts.active, activePct)}
+              ${chartLegend("reserved", "已预约", counts.reserved, reservedPct)}
+              ${chartLegend("empty", "空", counts.empty, emptyPct)}
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head compact">
+            <div>
+              <h2>饲养间使用情况</h2>
+              <p>按饲养间展示在用、已预约和空笼位，便于比较各房间容量。</p>
+            </div>
+          </div>
+          <div class="room-capacity-list">
+            ${roomCapacityRows().map(renderRoomCapacityRow).join("")}
+          </div>
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function slotStatusCounts() {
+  const total = state.slots.length;
+  const active = state.slots.filter((slot) => slot.status === "active").length;
+  const reserved = state.slots.filter((slot) => slot.status === "reserved").length;
+  const empty = Math.max(total - active - reserved, 0);
+  return { total, active, reserved, empty };
+}
+
+function roomCapacityRows() {
+  return state.rooms.map((room) => {
+    const rackIds = new Set(state.racks.filter((rack) => rack.roomId === room.id).map((rack) => rack.id));
+    const slots = state.slots.filter((slot) => rackIds.has(slot.rackId));
+    const total = slots.length;
+    const active = slots.filter((slot) => slot.status === "active").length;
+    const reserved = slots.filter((slot) => slot.status === "reserved").length;
+    const empty = Math.max(total - active - reserved, 0);
+    return {
+      id: room.id,
+      name: room.name,
+      area: room.area,
+      total,
+      active,
+      reserved,
+      empty,
+    };
+  });
+}
+
+function percent(value, total) {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function chartLegend(tone, label, value, pct) {
+  return `
+    <div class="chart-legend-item">
+      <span class="status-dot ${tone}"></span>
+      <strong>${label}</strong>
+      <small>${value} 笼 · ${pct}%</small>
+    </div>
+  `;
+}
+
+function renderRoomCapacityRow(room) {
+  const activePct = percent(room.active, room.total);
+  const reservedPct = percent(room.reserved, room.total);
+  const emptyPct = percent(room.empty, room.total);
+  const occupiedPct = percent(room.active + room.reserved, room.total);
+  return `
+    <div class="room-capacity-row">
+      <div class="room-capacity-head">
+        <div>
+          <strong>${escapeText(room.name)}</strong>
+          <span>${escapeText(room.area || "未设置区域")} · ${room.total} 笼</span>
+        </div>
+        <em>${occupiedPct}% 占用/预约</em>
+      </div>
+      <div class="stacked-capacity-track" aria-label="${escapeAttr(room.name)} 笼位使用情况">
+        <i class="active" style="width:${activePct}%"></i>
+        <i class="reserved" style="width:${reservedPct}%"></i>
+        <i class="empty" style="width:${emptyPct}%"></i>
+      </div>
+      <div class="room-capacity-meta">
+        <span>在用 ${room.active}</span>
+        <span>已预约 ${room.reserved}</span>
+        <span>空 ${room.empty}</span>
+      </div>
     </div>
   `;
 }
@@ -2240,6 +2407,7 @@ function escapeText(value = "") {
 
 function iconSvg(name) {
   const icons = {
+    home: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>`,
     grid: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`,
     receipt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zm2 5h6v2H9zm0 4h6v2H9z"/></svg>`,
     database: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3zm0 2C8.2 5 6 6 6 6s2.2 1 6 1 6-1 6-1-2.2-1-6-1zM6 9v3c.8.5 2.9 1 6 1s5.2-.5 6-1V9c-1.4.6-3.5 1-6 1s-4.6-.4-6-1zm0 6v3c.8.5 2.9 1 6 1s5.2-.5 6-1v-3c-1.4.6-3.5 1-6 1s-4.6-.4-6-1z"/></svg>`,

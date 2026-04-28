@@ -227,6 +227,74 @@ h3 {
   gap: 10px;
 }
 
+.dashboard-view {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-hero {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 24px;
+  align-items: end;
+}
+
+.dashboard-kicker {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-hero h1 {
+  margin-top: 10px;
+  font-size: 30px;
+}
+
+.dashboard-hero p {
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.6;
+  max-width: 720px;
+}
+
+.dashboard-hero-stat {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 18px;
+}
+
+.dashboard-hero-stat span,
+.dashboard-hero-stat small {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+}
+
+.dashboard-hero-stat strong {
+  display: block;
+  font-size: 42px;
+  line-height: 1;
+  margin: 10px 0;
+}
+
+.dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.85fr);
+  gap: 18px;
+}
+
 .metric {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -259,6 +327,160 @@ h3 {
 
 .metric.empty strong {
   color: var(--gray);
+}
+
+.status-chart {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.donut-chart {
+  width: 220px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, var(--panel) 0 54%, transparent 55%),
+    conic-gradient(
+      var(--green) 0 calc(var(--active) * 1%),
+      var(--blue) calc(var(--active) * 1%) calc((var(--active) + var(--reserved)) * 1%),
+      #c7d1d5 calc((var(--active) + var(--reserved)) * 1%) 100%
+    );
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.donut-chart span,
+.donut-chart small {
+  grid-area: 1 / 1;
+}
+
+.donut-chart span {
+  font-size: 30px;
+  font-weight: 800;
+  transform: translateY(-8px);
+}
+
+.donut-chart small {
+  color: var(--muted);
+  font-size: 12px;
+  transform: translateY(22px);
+}
+
+.chart-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.chart-legend-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.chart-legend-item small {
+  color: var(--muted);
+}
+
+.room-capacity-list {
+  display: grid;
+  gap: 14px;
+}
+
+.room-capacity-row {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.room-capacity-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.room-capacity-head strong,
+.room-capacity-head span,
+.room-capacity-head em {
+  display: block;
+}
+
+.room-capacity-head span,
+.room-capacity-head em,
+.room-capacity-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.room-capacity-head em {
+  white-space: nowrap;
+}
+
+.stacked-capacity-track {
+  height: 13px;
+  border-radius: 99px;
+  background: #edf2f3;
+  overflow: hidden;
+  display: flex;
+}
+
+.stacked-capacity-track i {
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+
+.stacked-capacity-track i.active {
+  background: var(--green);
+}
+
+.stacked-capacity-track i.reserved {
+  background: var(--blue);
+}
+
+.stacked-capacity-track i.empty {
+  background: #c7d1d5;
+}
+
+.room-capacity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.capacity-track {
+  height: 12px;
+  border-radius: 99px;
+  background: #edf2f3;
+  overflow: hidden;
+}
+
+.capacity-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.capacity-track i.active {
+  background: var(--green);
+}
+
+.capacity-track i.reserved {
+  background: var(--blue);
+}
+
+.capacity-track i.empty {
+  background: #a8b5ba;
 }
 
 .content-grid,
@@ -928,7 +1150,8 @@ tr:last-child td {
   }
 
   .content-grid,
-  .billing-layout {
+  .billing-layout,
+  .dashboard-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -962,8 +1185,24 @@ tr:last-child td {
   }
 
   .metrics,
+  .dashboard-metrics,
   .statement-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-hero,
+  .status-chart {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-hero h1 {
+    font-size: 25px;
+  }
+
+  .dashboard-hero-stat,
+  .donut-chart {
+    width: 100%;
+    max-width: 260px;
   }
 
   .rack-grid {
