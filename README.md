@@ -139,10 +139,8 @@ docker compose up -d --build
 - `users`
 - `sessions`
 - `audit_events`
-- `billing_rules`
-- `billing_adjustments`
 
-前端读取数据时已经通过实体级 GET API 组装状态；写入操作暂时仍通过兼容接口 `PUT /api/state` 保存完整状态，后端负责拆表保存和组装返回。当前实体级 API 如下：
+前端读取数据已经通过实体级 GET API 组装状态；笼位占用、批量录入、取材/设空、饲养间/笼架配置和基础计费规则写入也已迁移到实体级 API。`/api/state` 目前保留为兼容、导入导出或调试接口。
 
 - `GET /api/rooms`
 - `GET /api/racks`
@@ -183,16 +181,12 @@ docker compose up -d --build
 - `GET /api/users`
 - `POST /api/users`
 
-后续迁移待办：
+后续待办：
 
-- 将单笼保存迁移到 `POST/PUT /api/occupancies`。
-- 将“已取材”“设为空”迁移到 `PUT /api/occupancies/{id}`。
-- 将批量录入、批量已取材、批量设空迁移为多次实体写入，或补充后端批量 API。
-- 将饲养间、笼架、笼位配置修改迁移到 `rooms`、`racks`、`cage-slots` 实体 API。
-- 将计费规则和减免规则修改迁移到 `billing-rules`、`billing-adjustments` 实体 API。
-- 增加独立设置接口，保存 `billingMonth`、`billingIacuc` 等用户界面偏好，避免依赖 `/api/state`。
+- 增加独立设置接口，服务端保存 `billingMonth`、`billingIacuc` 等用户界面偏好，避免只保存在浏览器 `localStorage`。
 - 增加管理员上传动物实验申请汇总表功能，解析 `动物伦理编号`、`动物实验名称`、`项目负责人`、`实验负责人`，生成持久化 IACUC 索引供前端自动回填。
-- 前端写入完全迁移后，将 `/api/state` 降级为兼容、导入导出或调试接口。
+- 补充后端批量 API，减少批量录入、批量取材和批量设空时的多次顺序请求。
+- 将减免规则管理 UI 接入 `billing-adjustments` 实体 API。
 - 正式长期使用时，迁移到 PostgreSQL。
 
 结算单正式化时建议增加“草稿、确认、导出、作废”状态，并在确认后保存快照，避免历史数据修改影响已确认账单。

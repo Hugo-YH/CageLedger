@@ -1,6 +1,5 @@
 const STORAGE_KEY = "cageledger.v1";
 const LEGACY_STORAGE_KEY = "lahcas.v1";
-const API_STATE_URL = "/api/state";
 const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
 const API_LOGOUT_URL = "/api/auth/logout";
@@ -18,7 +17,6 @@ const IACUC_DATA_URL = "./src/iacuc-data.local.json";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let remotePersistence = false;
-let remoteSaveTimer = null;
 let currentUser = null;
 let users = [];
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
@@ -158,13 +156,12 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  scheduleRemoteSave();
 }
 
 async function loadPersistedState() {
   try {
-    const entityState = await loadEntityState();
     remotePersistence = true;
+    const entityState = await loadEntityState();
     state = normalize(entityState);
     selectFirstAvailableCage();
     return;
@@ -186,7 +183,7 @@ async function loadEntityState() {
     }),
   );
   const entityData = Object.fromEntries(entries);
-  if (!entityData.rooms?.length) throw new Error("No persisted entity state");
+  if (!entityData.rooms?.length) return bootstrapEntityState();
 
   const billingRules = entityData.billingRules || [];
   const firstIacuc = entityData.occupancies?.find((item) => item.iacuc)?.iacuc || "";
@@ -213,35 +210,80 @@ async function loadEntityState() {
   };
 }
 
-function scheduleRemoteSave() {
-  if (!remotePersistence) return;
-  window.clearTimeout(remoteSaveTimer);
-  remoteSaveTimer = window.setTimeout(async () => {
-    try {
-      const response = await fetch(API_STATE_URL, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state }),
-      });
-      if (response.status === 401) {
-        currentUser = null;
-        render();
-        return;
-      }
-      if (response.status === 403) {
-        const payload = await response.json().catch(() => ({}));
-        alert(payload.error || "当前账号没有权限保存这些修改");
-        return;
-      }
-      if (!response.ok) remotePersistence = false;
-      const payload = await response.json().catch(() => ({}));
-      if (Array.isArray(payload.auditLogs) && payload.auditLogs.length) {
-        state.auditLogs = mergeAuditLogs(payload.auditLogs, state.auditLogs || []);
-      }
-    } catch {
-      remotePersistence = false;
-    }
-  }, 250);
+async function bootstrapEntityState() {
+  const initialState = normalize(structuredClone(seedData));
+  for (const room of initialState.rooms) {
+    await createEntity("rooms", room);
+  }
+  for (const rack of initialState.racks) {
+    await createEntity("racks", rack);
+  }
+  for (const slot of initialState.slots) {
+    await createEntity("slots", slot);
+  }
+  for (const rule of initialState.billingRules) {
+    await createEntity("billingRules", rule);
+  }
+  for (const adjustment of initialState.adjustments) {
+    await createEntity("adjustments", adjustment);
+  }
+  for (const occupancy of initialState.occupancies) {
+    await createEntity("occupancies", occupancy);
+  }
+  return initialState;
+}
+
+async function entityRequest(collection, method, item = null, itemId = "") {
+  if (!remotePersistence) return { item, auditLogs: [] };
+
+  const baseUrl = ENTITY_API_URLS[collection];
+  const url = itemId ? `${baseUrl}/${encodeURIComponent(itemId)}` : baseUrl;
+  const options = { method, headers: { "Content-Type": "application/json" } };
+  if (method !== "DELETE") options.body = JSON.stringify(item);
+
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "保存失败");
+  }
+  mergeServerAuditLogs(payload);
+  return payload;
+}
+
+async function createEntity(collection, item) {
+  return entityRequest(collection, "POST", item);
+}
+
+async function updateEntity(collection, itemId, item) {
+  return entityRequest(collection, "PUT", item, itemId);
+}
+
+async function deleteEntityRequest(collection, itemId) {
+  return entityRequest(collection, "DELETE", null, itemId);
+}
+
+function mergeServerAuditLogs(payload) {
+  if (Array.isArray(payload?.auditLogs) && payload.auditLogs.length) {
+    state.auditLogs = mergeAuditLogs(payload.auditLogs, state.auditLogs || []);
+  }
+}
+
+function reportSaveError(error) {
+  alert(error?.message || "保存失败");
+}
+
+function upsertById(items, item) {
+  const index = items.findIndex((existing) => existing.id === item.id);
+  if (index >= 0) {
+    items[index] = item;
+  } else {
+    items.push(item);
+  }
 }
 
 function normalize(data) {
@@ -1276,6 +1318,10 @@ function bindEvents() {
     button.addEventListener("click", () => deleteRack(button.dataset.deleteRack));
   });
   document.querySelector("#resetDemo")?.addEventListener("click", () => {
+    if (remotePersistence) {
+      alert("共享模式下不支持重置示例数据。");
+      return;
+    }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     state = normalize(structuredClone(seedData));
@@ -1400,7 +1446,7 @@ function selectVisibleSlots() {
   render();
 }
 
-function handleSlotSubmit(event) {
+async function handleSlotSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
   const slotId = form.get("slotId");
@@ -1408,12 +1454,16 @@ function handleSlotSubmit(event) {
   const current = currentOccupancy(slotId);
 
   if (status === "empty") {
-    closeOccupancy(slotId, form.get("endDate") || today);
-    render();
+    try {
+      await closeOccupancy(slotId, form.get("endDate") || today);
+    } catch (error) {
+      reportSaveError(error);
+    }
     return;
   }
 
   const payload = {
+    id: current?.id || crypto.randomUUID(),
     slotId,
     cageCode: form.get("cageCode").trim() || cageCodeForSlot(slotId),
     status,
@@ -1427,19 +1477,20 @@ function handleSlotSubmit(event) {
     updatedAt: today,
   };
 
-  if (current) {
-    Object.assign(current, payload);
-    pushLog(`更新笼位 ${slotId} 为 ${statusLabel(status)}`);
-  } else {
-    state.occupancies.push({ id: crypto.randomUUID(), ...payload });
-    pushLog(`新增笼位 ${slotId} ${statusLabel(status)}`);
+  try {
+    const response = current
+      ? await updateEntity("occupancies", current.id, payload)
+      : await createEntity("occupancies", payload);
+    upsertById(state.occupancies, response.item || payload);
+    pushLog(`${current ? "更新" : "新增"}笼位 ${slotId} ${statusLabel(status)}`);
+    updateSlotStatuses();
+    render();
+  } catch (error) {
+    reportSaveError(error);
   }
-
-  updateSlotStatuses();
-  render();
 }
 
-function handleBatchSlotSubmit(event) {
+async function handleBatchSlotSubmit(event) {
   event.preventDefault();
   if (!state.selectedSlotIds.length) return;
 
@@ -1463,24 +1514,28 @@ function handleBatchSlotSubmit(event) {
     updatedAt: today,
   };
 
-  state.selectedSlotIds.forEach((slotId) => {
-    const current = currentOccupancy(slotId);
-    const next = {
-      ...payload,
-      slotId,
-      cageCode: current?.cageCode || cageCodeForSlot(slotId),
-    };
-
-    if (current) {
-      Object.assign(current, next);
-    } else {
-      state.occupancies.push({ id: crypto.randomUUID(), ...next });
+  try {
+    const savedItems = [];
+    for (const slotId of state.selectedSlotIds) {
+      const current = currentOccupancy(slotId);
+      const next = {
+        id: current?.id || crypto.randomUUID(),
+        ...payload,
+        slotId,
+        cageCode: current?.cageCode || cageCodeForSlot(slotId),
+      };
+      const response = current
+        ? await updateEntity("occupancies", current.id, next)
+        : await createEntity("occupancies", next);
+      savedItems.push(response.item || next);
     }
-  });
-
-  pushLog(`批量更新 ${state.selectedSlotIds.length} 个笼位为 ${statusLabel(payload.status)}`);
-  updateSlotStatuses();
-  render();
+    savedItems.forEach((item) => upsertById(state.occupancies, item));
+    pushLog(`批量更新 ${state.selectedSlotIds.length} 个笼位为 ${statusLabel(payload.status)}`);
+    updateSlotStatuses();
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
 function autofillIacucFields(event) {
@@ -1508,10 +1563,14 @@ function updateIacucOptions(event) {
     .join("");
 }
 
-function clearSelectedSlot() {
-  closeOccupancy(state.selectedSlotId, today, "cleared");
-  state.samplingMode = "";
-  render();
+async function clearSelectedSlot() {
+  try {
+    await closeOccupancy(state.selectedSlotId, today, "cleared", { renderAfterSave: false });
+    state.samplingMode = "";
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
 function openSampling(mode) {
@@ -1519,7 +1578,7 @@ function openSampling(mode) {
   render();
 }
 
-function sampleSelectedSlot() {
+async function sampleSelectedSlot() {
   const current = currentOccupancy(state.selectedSlotId);
   if (!current || current.status !== "active") return;
 
@@ -1527,12 +1586,16 @@ function sampleSelectedSlot() {
   if (!sampledDate) return;
   if (!validateEndDate(current, sampledDate)) return;
 
-  closeOccupancy(state.selectedSlotId, sampledDate, "sampled");
-  state.samplingMode = "";
-  render();
+  try {
+    await closeOccupancy(state.selectedSlotId, sampledDate, "sampled", { renderAfterSave: false });
+    state.samplingMode = "";
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
-function sampleBatchSlots() {
+async function sampleBatchSlots() {
   const selectedSlots = state.slots.filter((slot) => state.selectedSlotIds.includes(slot.id));
   const activeItems = selectedActiveOccupancies(selectedSlots);
   if (!activeItems.length) return;
@@ -1542,41 +1605,89 @@ function sampleBatchSlots() {
   if (activeItems.some((item) => !validateEndDate(item, sampledDate))) return;
   if (!confirm(`确定将 ${activeItems.length} 笼标记为已取材，并以 ${sampledDate} 作为最后计费日期？`)) return;
 
-  activeItems.forEach((item) => closeOccupancy(item.slotId, sampledDate, "sampled"));
-  pushLog(`批量标记已取材 ${activeItems.length} 个笼位，最后计费日期 ${sampledDate}`);
-  state.samplingMode = "";
-  render();
+  try {
+    const savedItems = [];
+    for (const item of activeItems) {
+      savedItems.push(await closeOccupancy(item.slotId, sampledDate, "sampled", { renderAfterSave: false }));
+    }
+    savedItems.filter(Boolean).forEach((item) => upsertById(state.occupancies, item));
+    pushLog(`批量标记已取材 ${activeItems.length} 个笼位，最后计费日期 ${sampledDate}`);
+    state.samplingMode = "";
+    updateSlotStatuses();
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
-function clearBatchSlots() {
+async function clearBatchSlots() {
   if (!state.selectedSlotIds.length) return;
   if (!confirm(`确定将已选择的 ${state.selectedSlotIds.length} 个笼位全部设为空？`)) return;
 
-  state.selectedSlotIds.forEach((slotId) => closeOccupancy(slotId, today, "cleared"));
-  pushLog(`批量设空 ${state.selectedSlotIds.length} 个笼位`);
-  state.samplingMode = "";
-  render();
-}
-
-function closeOccupancy(slotId, endDate, reason = "cleared") {
-  const current = currentOccupancy(slotId);
-  if (current) {
-    current.status = "ended";
-    current.endDate = endDate;
-    current.endReason = reason;
-    current.updatedAt = today;
-    pushLog(`${reason === "sampled" ? "已取材" : "设为空"}：结束笼位 ${slotId} 占用，最后计费日期 ${endDate}`);
+  try {
+    const savedItems = [];
+    for (const slotId of state.selectedSlotIds) {
+      savedItems.push(await closeOccupancy(slotId, today, "cleared", { renderAfterSave: false }));
+    }
+    savedItems.filter(Boolean).forEach((item) => upsertById(state.occupancies, item));
+    pushLog(`批量设空 ${state.selectedSlotIds.length} 个笼位`);
+    state.samplingMode = "";
+    updateSlotStatuses();
+    render();
+  } catch (error) {
+    reportSaveError(error);
   }
-  updateSlotStatuses();
 }
 
-function handleRateSubmit(event) {
+async function closeOccupancy(slotId, endDate, reason = "cleared", options = {}) {
+  const { renderAfterSave = true } = options;
+  const current = currentOccupancy(slotId);
+  if (!current) {
+    if (renderAfterSave) render();
+    return null;
+  }
+
+  const next = {
+    ...current,
+    status: "ended",
+    endDate,
+    endReason: reason,
+    updatedAt: today,
+  };
+
+  const response = await updateEntity("occupancies", current.id, next);
+  const saved = response.item || next;
+  upsertById(state.occupancies, saved);
+  pushLog(`${reason === "sampled" ? "已取材" : "设为空"}：结束笼位 ${slotId} 占用，最后计费日期 ${endDate}`);
+  updateSlotStatuses();
+  if (renderAfterSave) render();
+  return saved;
+}
+
+async function handleRateSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
-  state.baseRate = Number(form.get("baseRate")) || 0;
-  state.billingRules[0].price = state.baseRate;
-  pushLog(`更新基础费率为 ${state.baseRate}`);
-  render();
+  const baseRate = Number(form.get("baseRate")) || 0;
+  const currentRule = state.billingRules[0] || {
+    id: crypto.randomUUID(),
+    name: "小鼠 IVC 基础饲养费",
+    unit: "cage_day",
+    effectiveStart: today,
+    effectiveEnd: "",
+  };
+  const nextRule = { ...currentRule, price: baseRate };
+
+  try {
+    const response = state.billingRules.some((item) => item.id === nextRule.id)
+      ? await updateEntity("billingRules", nextRule.id, nextRule)
+      : await createEntity("billingRules", nextRule);
+    state.baseRate = baseRate;
+    upsertById(state.billingRules, response.item || nextRule);
+    pushLog(`更新基础费率为 ${state.baseRate}`);
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
 function updateBillingIacuc(value) {
@@ -1586,7 +1697,7 @@ function updateBillingIacuc(value) {
   render();
 }
 
-function handleRoomSubmit(event) {
+async function handleRoomSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
   const room = {
@@ -1599,18 +1710,33 @@ function handleRoomSubmit(event) {
   };
 
   const generated = generateInfrastructure([room]);
-  state.rooms.push(room);
-  state.racks.push(...generated.racks);
-  state.slots.push(...generated.slots);
-  state.selectedRoomId = room.id;
-  state.selectedRackId = generated.racks[0].id;
-  state.selectedSlotId = generated.slots[0].id;
-  state.activeView = "cages";
-  pushLog(`新增饲养间 ${room.name}`);
-  render();
+
+  try {
+    const roomResponse = await createEntity("rooms", room);
+    const rackResponses = [];
+    for (const rack of generated.racks) {
+      rackResponses.push(await createEntity("racks", rack));
+    }
+    const slotResponses = [];
+    for (const slot of generated.slots) {
+      slotResponses.push(await createEntity("slots", slot));
+    }
+
+    state.rooms.push(roomResponse.item || room);
+    state.racks.push(...rackResponses.map((response, index) => response.item || generated.racks[index]));
+    state.slots.push(...slotResponses.map((response, index) => response.item || generated.slots[index]));
+    state.selectedRoomId = room.id;
+    state.selectedRackId = generated.racks[0].id;
+    state.selectedSlotId = generated.slots[0].id;
+    state.activeView = "cages";
+    pushLog(`新增饲养间 ${room.name}`);
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
-function deleteRoom(roomId) {
+async function deleteRoom(roomId) {
   const room = state.rooms.find((item) => item.id === roomId);
   if (!room) return;
 
@@ -1629,17 +1755,22 @@ function deleteRoom(roomId) {
 
   if (!confirm(message)) return;
 
-  state.rooms = state.rooms.filter((item) => item.id !== roomId);
-  state.racks = state.racks.filter((rack) => rack.roomId !== roomId);
-  state.slots = state.slots.filter((slot) => !slotIds.has(slot.id));
-  state.occupancies = state.occupancies.filter((item) => !slotIds.has(item.slotId));
-  pushLog(`删除饲养间 ${room.name}`);
-  selectFirstAvailableCage();
-  updateSlotStatuses();
-  render();
+  try {
+    await deleteEntityRequest("rooms", roomId);
+    state.rooms = state.rooms.filter((item) => item.id !== roomId);
+    state.racks = state.racks.filter((rack) => rack.roomId !== roomId);
+    state.slots = state.slots.filter((slot) => !slotIds.has(slot.id));
+    state.occupancies = state.occupancies.filter((item) => !slotIds.has(item.slotId));
+    pushLog(`删除饲养间 ${room.name}`);
+    selectFirstAvailableCage();
+    updateSlotStatuses();
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
-function deleteRack(rackId) {
+async function deleteRack(rackId) {
   const rack = state.racks.find((item) => item.id === rackId);
   if (!rack) return;
 
@@ -1660,14 +1791,25 @@ function deleteRack(rackId) {
 
   if (!confirm(message)) return;
 
-  state.racks = state.racks.filter((item) => item.id !== rackId);
-  state.slots = state.slots.filter((slot) => slot.rackId !== rackId);
-  state.occupancies = state.occupancies.filter((item) => !slotIds.has(item.slotId));
-  if (room) renumberRoomRacks(room);
-  pushLog(`删除${rackLabel}`);
-  selectFirstAvailableCage();
-  updateSlotStatuses();
-  render();
+  try {
+    await deleteEntityRequest("racks", rackId);
+    state.racks = state.racks.filter((item) => item.id !== rackId);
+    state.slots = state.slots.filter((slot) => slot.rackId !== rackId);
+    state.occupancies = state.occupancies.filter((item) => !slotIds.has(item.slotId));
+    if (room) {
+      renumberRoomRacks(room);
+      await updateEntity("rooms", room.id, room);
+      for (const item of state.racks.filter((rackItem) => rackItem.roomId === room.id)) {
+        await updateEntity("racks", item.id, item);
+      }
+    }
+    pushLog(`删除${rackLabel}`);
+    selectFirstAvailableCage();
+    updateSlotStatuses();
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
 function renumberRoomRacks(room) {
@@ -1932,6 +2074,7 @@ function validateEndDate(occupancy, endDate) {
 }
 
 function pushLog(message) {
+  if (remotePersistence) return;
   state.auditLogs.unshift({
     id: crypto.randomUUID(),
     message,
