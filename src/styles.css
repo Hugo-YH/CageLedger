@@ -805,6 +805,10 @@ textarea:focus {
 
 .cage-editor {
   align-self: stretch;
+  max-height: calc(100vh - 52px);
+  overflow: auto;
+  position: sticky;
+  top: 26px;
 }
 
 .cage-editor .form {
@@ -1311,6 +1315,13 @@ tr:last-child td {
   .cage-layout,
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cage-editor {
+    max-height: none;
+    overflow: visible;
+    position: static;
+    top: auto;
   }
 }
 
