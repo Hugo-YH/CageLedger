@@ -38,6 +38,7 @@ const seedData = {
   selectedSlotIds: [],
   batchMode: false,
   samplingMode: "",
+  sidebarCollapsed: false,
   billingMonth: today.slice(0, 7),
   billingIacuc: "IACUC-2026-001",
   slotFilter: "all",
@@ -295,6 +296,7 @@ function normalize(data) {
   if (next.activeView === "settings") next.activeView = "rooms";
   next.selectedSlotIds = Array.isArray(next.selectedSlotIds) ? next.selectedSlotIds : [];
   next.batchMode = Boolean(next.batchMode);
+  next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
 
   if (!next.racks.length || !next.slots.length) {
@@ -391,10 +393,9 @@ function render() {
 
   saveState();
   document.querySelector("#app").innerHTML = `
-    <div class="shell">
+    <div class="shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       ${renderSidebar()}
       <main class="workspace">
-        ${state.activeView === "dashboard" ? "" : renderTopbar()}
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
@@ -433,11 +434,21 @@ function renderSidebar() {
           <span>实验动物笼位管理与计费系统</span>
         </div>
       </div>
+      <button
+        class="nav-toggle"
+        id="sidebarToggle"
+        type="button"
+        title="${state.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}"
+        aria-label="${state.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}"
+      >
+        ${iconSvg(state.sidebarCollapsed ? "chevronRight" : "chevronLeft")}
+        <span>${state.sidebarCollapsed ? "展开" : "隐藏导航栏"}</span>
+      </button>
       <nav class="nav">
         ${navItems
           .map(
             ([view, label, icon]) => `
-              <button class="nav-item ${state.activeView === view ? "active" : ""}" data-view="${view}">
+              <button class="nav-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
                 ${iconSvg(icon)}
                 <span>${label}</span>
               </button>
@@ -475,19 +486,6 @@ function renderLoginView() {
         </form>
       </section>
     </main>
-  `;
-}
-
-function renderTopbar() {
-  const page = pageMeta(state.activeView);
-
-  return `
-    <header class="topbar">
-      <div>
-        <h1>${page.title}</h1>
-        <p>${page.description}</p>
-      </div>
-    </header>
   `;
 }
 
@@ -705,8 +703,8 @@ function renderCageView() {
   const selectedBatchSlots = slots.filter((slot) => state.selectedSlotIds.includes(slot.id));
 
   return `
-    <section class="content-grid">
-      <div class="panel large">
+    <section class="cage-layout">
+      <div class="panel large cage-preview">
         <div class="panel-head">
           <div>
             <h2>动态笼位图</h2>
@@ -747,7 +745,7 @@ function renderCageView() {
           ${visibleSlots.map((slot) => renderSlot(slot)).join("")}
         </div>
       </div>
-      <div class="panel detail-panel">
+      <div class="panel detail-panel cage-editor">
         ${state.batchMode ? renderBatchSlotDetail(selectedBatchSlots) : renderSlotDetail(selectedSlot)}
       </div>
     </section>
@@ -812,29 +810,33 @@ function renderSlotDetail(slot) {
       <span class="pill ${slot.status}">${statusLabel(slot.status)}</span>
     </div>
 
-    <form id="slotForm" class="form">
+    <form id="slotForm" class="form compact-slot-form">
       <input type="hidden" name="slotId" value="${slot.id}" />
-      <label>
-        状态
-        <select name="status">
-          ${statusOption("empty", occupancy.status)}
-          ${statusOption("reserved", occupancy.status)}
-          ${statusOption("active", occupancy.status)}
-        </select>
-      </label>
-      <label>
-        笼盒编号
-        <input name="cageCode" value="${escapeAttr(occupancy.cageCode)}" placeholder="如 M-A001" />
-      </label>
-      <label>
-        IACUC 编号
-        <input name="iacuc" value="${escapeAttr(occupancy.iacuc)}" placeholder="IACUC-2026-001" list="iacucOptions" />
-      </label>
-      <label>
-        项目名称
-        <input name="project" value="${escapeAttr(occupancy.project)}" placeholder="项目或课题名称" />
-      </label>
-      <div class="form-row">
+      <div class="compact-form-row two-one">
+        <label>
+          状态
+          <select name="status">
+            ${statusOption("empty", occupancy.status)}
+            ${statusOption("reserved", occupancy.status)}
+            ${statusOption("active", occupancy.status)}
+          </select>
+        </label>
+        <label>
+          笼盒编号
+          <input name="cageCode" value="${escapeAttr(occupancy.cageCode)}" placeholder="如 M-A001" />
+        </label>
+      </div>
+      <div class="compact-form-row half">
+        <label>
+          IACUC 编号
+          <input name="iacuc" value="${escapeAttr(occupancy.iacuc)}" placeholder="IACUC-2026-001" list="iacucOptions" />
+        </label>
+        <label>
+          项目名称
+          <textarea name="project" rows="2" placeholder="项目或课题名称">${escapeText(occupancy.project)}</textarea>
+        </label>
+      </div>
+      <div class="compact-form-row half">
         <label>
           项目负责人
           <input name="pi" value="${escapeAttr(occupancy.pi)}" placeholder="PI" />
@@ -844,7 +846,7 @@ function renderSlotDetail(slot) {
           <input name="owner" value="${escapeAttr(occupancy.owner)}" placeholder="实验负责人" />
         </label>
       </div>
-      <div class="form-row">
+      <div class="compact-form-row half">
         <label>
           开始日期
           <input type="date" name="startDate" value="${occupancy.startDate || today}" />
@@ -854,7 +856,7 @@ function renderSlotDetail(slot) {
           <input type="date" name="endDate" value="${occupancy.endDate}" />
         </label>
       </div>
-      <label>
+      <label class="full-field">
         备注
         <textarea name="notes" rows="3" placeholder="品系、周龄、特殊饲养要求">${escapeText(occupancy.notes)}</textarea>
       </label>
@@ -943,23 +945,27 @@ function renderBatchSlotDetail(slots) {
       ${slots.map((slot) => `<span>${slotPositionCode(slot)}</span>`).join("")}
     </div>
 
-    <form id="batchSlotForm" class="form">
-      <label>
-        状态
-        <select name="status">
-          ${statusOption("active", draft.status)}
-          ${statusOption("reserved", draft.status)}
-        </select>
-      </label>
-      <label>
-        IACUC 编号
-        <input name="iacuc" value="${escapeAttr(draft.iacuc)}" placeholder="输入后自动匹配项目和负责人" list="iacucOptions" />
-      </label>
-      <label>
-        项目名称
-        <input name="project" value="${escapeAttr(draft.project)}" placeholder="项目或课题名称" />
-      </label>
-      <div class="form-row">
+    <form id="batchSlotForm" class="form compact-slot-form">
+      <div class="compact-form-row third">
+        <label>
+          状态
+          <select name="status">
+            ${statusOption("active", draft.status)}
+            ${statusOption("reserved", draft.status)}
+          </select>
+        </label>
+      </div>
+      <div class="compact-form-row half">
+        <label>
+          IACUC 编号
+          <input name="iacuc" value="${escapeAttr(draft.iacuc)}" placeholder="输入后自动匹配项目和负责人" list="iacucOptions" />
+        </label>
+        <label>
+          项目名称
+          <textarea name="project" rows="2" placeholder="项目或课题名称">${escapeText(draft.project)}</textarea>
+        </label>
+      </div>
+      <div class="compact-form-row half">
         <label>
           项目负责人
           <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="PI" />
@@ -969,7 +975,7 @@ function renderBatchSlotDetail(slots) {
           <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="实验负责人" />
         </label>
       </div>
-      <div class="form-row">
+      <div class="compact-form-row half">
         <label>
           开始日期
           <input type="date" name="startDate" value="${draft.startDate}" />
@@ -979,7 +985,7 @@ function renderBatchSlotDetail(slots) {
           <input type="date" name="endDate" value="${draft.endDate}" />
         </label>
       </div>
-      <label>
+      <label class="full-field">
         备注
         <textarea name="notes" rows="3" placeholder="批量备注，笼盒编号请单笼维护">${escapeText(draft.notes)}</textarea>
       </label>
@@ -1519,6 +1525,10 @@ function renderRackTreeItem(room, rack) {
 
 function bindEvents() {
   document.querySelector("#logoutButton")?.addEventListener("click", logout);
+  document.querySelector("#sidebarToggle")?.addEventListener("click", () => {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    render();
+  });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeView = button.dataset.view;
@@ -2540,6 +2550,8 @@ function iconSvg(name) {
     upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16h2V7l3 3 1.4-1.4L12 3.2 6.6 8.6 8 10l3-3zM5 18h14v2H5z"/></svg>`,
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z"/></svg>`,
+    chevronLeft: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3-1.4-1.4L6.2 12l7.1 7.1 1.4-1.4L10 13h8v-2h-8z"/></svg>`,
+    chevronRight: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.3 17.7 1.4 1.4 7.1-7.1-7.1-7.1-1.4 1.4L14 11H6v2h8z"/></svg>`,
     plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>`,
   };
   return icons[name] ?? "";

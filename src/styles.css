@@ -88,6 +88,10 @@ svg {
   overflow: hidden;
 }
 
+.shell.sidebar-collapsed {
+  grid-template-columns: 76px 1fr;
+}
+
 .sidebar {
   background: #102326;
   color: #eff7f6;
@@ -103,6 +107,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -127,6 +132,23 @@ svg {
   margin-top: 2px;
 }
 
+.nav-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #bdd2d0;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.nav-toggle:hover {
+  color: #ffffff;
+  background: #1d393c;
+}
+
 .nav {
   display: grid;
   gap: 8px;
@@ -142,6 +164,56 @@ svg {
   gap: 10px;
   padding: 12px 14px;
   text-align: left;
+}
+
+.shell.sidebar-collapsed .sidebar {
+  padding: 18px 12px;
+  align-items: center;
+}
+
+.shell.sidebar-collapsed .brand {
+  justify-content: center;
+}
+
+.shell.sidebar-collapsed .brand-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.shell.sidebar-collapsed .brand > div:not(.brand-mark),
+.shell.sidebar-collapsed .nav-item span,
+.shell.sidebar-collapsed .nav-toggle span,
+.shell.sidebar-collapsed .sidebar-account span,
+.shell.sidebar-collapsed .sidebar-account strong,
+.shell.sidebar-collapsed .sidebar-account small {
+  display: none;
+}
+
+.shell.sidebar-collapsed .nav,
+.shell.sidebar-collapsed .nav-item,
+.shell.sidebar-collapsed .nav-toggle {
+  width: 100%;
+}
+
+.shell.sidebar-collapsed .nav-item,
+.shell.sidebar-collapsed .nav-toggle {
+  justify-content: center;
+  padding: 12px;
+}
+
+.shell.sidebar-collapsed .sidebar-account {
+  width: 100%;
+  padding-top: 14px;
+}
+
+.shell.sidebar-collapsed .sidebar-account .secondary {
+  padding: 10px;
+  font-size: 0;
+}
+
+.shell.sidebar-collapsed .sidebar-account .secondary::before {
+  content: "退";
+  font-size: 13px;
 }
 
 .nav-item.active,
@@ -490,6 +562,13 @@ h3 {
   gap: 18px;
 }
 
+.cage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  align-items: start;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -615,7 +694,7 @@ textarea:focus {
 
 .rack-grid {
   display: grid;
-  grid-template-columns: repeat(var(--cols), minmax(118px, 1fr));
+  grid-template-columns: repeat(var(--cols), minmax(96px, 1fr));
   gap: 10px;
 }
 
@@ -722,6 +801,64 @@ textarea:focus {
 
 .detail-panel {
   align-self: start;
+}
+
+.cage-editor {
+  align-self: stretch;
+}
+
+.cage-editor .form {
+  max-width: none;
+}
+
+.compact-slot-form {
+  gap: 10px;
+}
+
+.compact-form-row {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-form-row.half {
+  grid-template-columns: 1fr;
+}
+
+.compact-form-row.two-one {
+  grid-template-columns: 1fr;
+}
+
+.compact-form-row.third {
+  grid-template-columns: 1fr;
+}
+
+.compact-slot-form label {
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+}
+
+.compact-slot-form .full-field {
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: start;
+}
+
+.compact-slot-form input,
+.compact-slot-form select,
+.compact-slot-form textarea {
+  padding: 8px 10px;
+}
+
+.compact-slot-form textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.compact-slot-form textarea[name="notes"] {
+  min-height: 72px;
+}
+
+.cage-preview {
+  overflow-x: auto;
 }
 
 .pill {
@@ -1123,7 +1260,8 @@ tr:last-child td {
 }
 
 @media (max-width: 1180px) {
-  .shell {
+  .shell,
+  .shell.sidebar-collapsed {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
@@ -1144,6 +1282,17 @@ tr:last-child td {
     margin-left: auto;
   }
 
+  .shell.sidebar-collapsed .sidebar {
+    padding: 14px 16px;
+    align-items: center;
+  }
+
+  .shell.sidebar-collapsed .brand > div:not(.brand-mark),
+  .shell.sidebar-collapsed .nav-toggle span,
+  .shell.sidebar-collapsed .nav-item span {
+    display: none;
+  }
+
   .sidebar-account {
     margin-top: 0;
     border-top: 0;
@@ -1159,6 +1308,7 @@ tr:last-child td {
 
   .content-grid,
   .billing-layout,
+  .cage-layout,
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
@@ -1214,10 +1364,21 @@ tr:last-child td {
   }
 
   .rack-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--cols), minmax(84px, 1fr));
   }
 
   .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-form-row.half,
+  .compact-form-row.two-one,
+  .compact-form-row.third {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-slot-form label,
+  .compact-slot-form .full-field {
     grid-template-columns: 1fr;
   }
 
