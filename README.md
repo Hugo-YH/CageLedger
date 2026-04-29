@@ -156,6 +156,17 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 
 开源协议正文见 `LICENSE`，归属和版权说明见 `NOTICE`。如部署环境需要覆盖显示信息，可使用 `CAGELEDGER_ORGANIZATION`、`CAGELEDGER_DEPARTMENT`、`CAGELEDGER_DEVELOPER`、`CAGELEDGER_CONTACT_EMAIL`、`CAGELEDGER_COPYRIGHT` 和 `CAGELEDGER_LICENSE` 环境变量。
 
+## GitHub Packages
+
+容器镜像发布到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/hugo-yh/cageledger:latest
+docker pull ghcr.io/hugo-yh/cageledger:0.2.1
+```
+
+仓库内的 `Publish container package` GitHub Actions 工作流会在发布 Release 时推送镜像，也可以手动指定 Git ref 和镜像标签重新发布。
+
 ## 后续建议
 
 当前共享模式已经在 SQLite 中拆分为业务表：
