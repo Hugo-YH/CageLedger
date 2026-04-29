@@ -95,7 +95,14 @@ CAGELEDGER_ADMIN_PASSWORD=更强的密码
 启动：
 
 ```bash
-CAGELEDGER_VERSION=$(git rev-parse HEAD) docker compose up -d --build
+docker compose pull
+docker compose up -d
+```
+
+默认使用 GHCR 的 `latest` 镜像。如果希望固定到某个发布版本：
+
+```bash
+CAGELEDGER_IMAGE_TAG=0.2.1 docker compose up -d
 ```
 
 访问：
@@ -114,7 +121,7 @@ http://群晖IP:5173
 
 如果需要 IACUC 自动回填，管理员登录系统后可在“数据管理 -> IACUC 索引”上传动物实验申请汇总表 CSV。系统会重建 SQLite 中的实验申请汇总表，并同步生成 `data/iacuc-index.json` 兼容文件。
 
-“数据管理 -> 系统更新”只负责检查 GitHub 最新提交，不会从网页自动拉取并运行新代码。更新代码仍建议在群晖项目目录执行 `git pull origin main` 后重新构建容器；构建时传入 `CAGELEDGER_VERSION=$(git rev-parse HEAD)` 后，页面才能准确判断当前运行版本是否落后。
+“数据管理 -> 系统更新”只负责检查 GitHub 最新提交，不会从网页自动拉取并运行新代码。更新代码建议在群晖项目目录执行 `git pull origin main`，然后运行 `docker compose pull && docker compose up -d` 拉取最新 GHCR 镜像并重启容器。
 
 ## 同步 IACUC 汇总表
 

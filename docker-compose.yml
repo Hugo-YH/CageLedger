@@ -2,10 +2,7 @@ name: cageledger
 
 services:
   cageledger:
-    build:
-      context: .
-      args:
-        CAGELEDGER_VERSION: ${CAGELEDGER_VERSION:-unknown}
+    image: ghcr.io/hugo-yh/cageledger:${CAGELEDGER_IMAGE_TAG:-latest}
     container_name: cageledger
     restart: unless-stopped
     ports:
