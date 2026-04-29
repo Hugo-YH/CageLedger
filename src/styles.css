@@ -655,6 +655,11 @@ h3 {
   grid-column: span 2;
 }
 
+.quantity-sheet-fields .month-opening-field {
+  grid-column: span 1;
+  grid-row: 4;
+}
+
 .quantity-entry-wrap {
   margin-bottom: 12px;
 }
@@ -1657,6 +1662,10 @@ tr:last-child td {
     grid-column: auto;
   }
 
+  .quantity-sheet-fields .month-opening-field {
+    grid-row: auto;
+  }
+
   .user-fields {
     grid-template-columns: 1fr;
   }
@@ -1673,6 +1682,10 @@ tr:last-child td {
 
   .quantity-sheet-fields {
     grid-template-columns: 1fr;
+  }
+
+  .quantity-sheet-fields .month-opening-field {
+    grid-row: auto;
   }
 
   .compact-slot-form label,

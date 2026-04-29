@@ -1364,15 +1364,15 @@ function renderQuantitySheetBillingView() {
               支撑经费
               <input name="funding" value="${escapeAttr(draft.funding)}" />
             </label>
-            <label>
+            <label class="month-opening-field">
               月初结余动物数
               <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" />
             </label>
-            <label>
+            <label class="month-opening-field">
               月初结余笼数
               <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" />
             </label>
-            <label>
+            <label class="month-opening-field">
               计费口径
               <select name="billingUnit">
                 <option value="cage_day" ${draft.billingUnit !== "animal_day" ? "selected" : ""}>笼/天</option>
