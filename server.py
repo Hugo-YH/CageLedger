@@ -1455,7 +1455,14 @@ def parse_iacuc_csv(raw):
     missing = [label for label in required.values() if label not in field_by_name]
     if missing:
         raise ValueError(f"CSV 缺少必要列：{', '.join(missing)}")
-    funding_field = field_by_name.get("项目来源")
+    funding_field = next(
+        (
+            field_by_name[label]
+            for label in ("项目来源", "支撑经费", "经费来源", "课题来源", "经费项目")
+            if label in field_by_name
+        ),
+        None,
+    )
 
     records_by_iacuc = {}
     duplicate_count = 0
