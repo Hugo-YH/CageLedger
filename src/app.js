@@ -21,6 +21,11 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.0",
+    title: "数量统计表结算",
+    items: ["新增数量统计表录入与保存", "支持按纸质统计表生成饲养费明细和结算单", "完善表单提示和 IACUC 支撑经费回填"],
+  },
+  {
     version: "0.2.1",
     title: "离线部署和文档整理",
     items: ["支持 NAS 离线源码包构建", "README 拆分为入口文档、API 文档和部署文档", "补充环境变量模板和 Docker 构建忽略规则"],
@@ -50,7 +55,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.2.1",
+  version: "0.3.0",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
