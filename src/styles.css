@@ -674,6 +674,12 @@ h3 {
   min-width: 86px;
 }
 
+.quantity-entry-table input[required] {
+  border-color: #b7791f;
+  box-shadow: inset 3px 0 0 #d69e2e;
+  background: #fffdf7;
+}
+
 .quantity-preview-section {
   border-top: 1px solid var(--line);
   margin-top: 18px;
@@ -1013,6 +1019,41 @@ textarea:focus {
   color: #47565c;
   font-size: 13px;
   font-weight: 700;
+}
+
+.field-required input,
+.field-required select,
+.field-required textarea {
+  border-color: #b7791f;
+  box-shadow: inset 3px 0 0 #d69e2e;
+  background: #fffdf7;
+}
+
+.field-required::after {
+  content: "必填";
+  color: #9a5b00;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-auto input,
+.field-auto select,
+.field-auto textarea {
+  border-style: dashed;
+  border-color: #7aa7a1;
+  background: #f7fbfa;
+}
+
+.field-auto::after {
+  content: "自动匹配，可手动覆盖";
+  color: #5f7378;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compact-slot-form label.field-required::after,
+.compact-slot-form label.field-auto::after {
+  grid-column: 2;
 }
 
 .form-row {

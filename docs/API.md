@@ -63,7 +63,7 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 
 ## 数量统计表结算
 
-用于兼容纸质《实验动物数量统计表》工作流。房间管理员可录入月底统计表，系统按变更行展开每日结余数量并生成结算单。
+用于兼容纸质《实验动物数量统计表》工作流。房间管理员可录入月底统计表，系统按变更行展开每日结余数量；生成结算单时会按同月同项目负责人汇总多个 IACUC。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -78,10 +78,15 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 - 表头：`month`、`roomId`、`roomName`、`manager`、`iacuc`、`project`、`pi`、`owner`、`funding`、`billingUnit`、`initialAnimalCount`、`initialCageCount`
 - 明细行：`date`、`addedCount`、`addedType`、`removedCount`、`removedType`、`animalCount`、`cageCount`、`notes`
 
-`billingUnit` 支持：
+当前核算单位固定为：
 
 - `cage_day`：按笼/天计费。
-- `animal_day`：按只/天计费。
+
+结算规则：
+
+- 结算维度：按项目负责人和月份汇总，同一项目负责人名下多个 IACUC 合并出具饲养费明细和结算单。
+- 免费额度：按项目负责人每日合计笼数抵扣。负责人类型为 PI 时免费 20 笼/天，独立科研人员免费 10 笼/天；负责人身份保存在 `principal_identities` 表中，未编辑的负责人默认按独立科研人员计算。
+- 阶梯计价：每日合计笼数先切分价格区间，前 160 笼为 4.5 元/笼/天，超过 160 笼部分为 6.5 元/笼/天；免费额度优先抵扣首单元。
 
 `/api/state` 仍保留为兼容、导入导出或调试接口。前端正常读写已迁移到实体级 API。
 
@@ -92,6 +97,8 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 | `GET` | `/api/iacuc-index` | 读取兼容索引文件 |
 | `GET` | `/api/iacuc-index/status` | 查看索引状态 |
 | `POST` | `/api/iacuc-index/upload` | 上传 CSV 并重建实验申请表 |
+| `GET` | `/api/principal-identities` | 项目负责人身份列表 |
+| `PUT` | `/api/principal-identities/{pi}` | 更新项目负责人身份 |
 
 CSV 必须包含：
 
@@ -113,6 +120,7 @@ CSV 必须包含：
 - `cage_slots`
 - `occupancies`
 - `experiment_applications`
+- `principal_identities`
 - `billing_rules`
 - `billing_adjustments`
 - `quantity_sheets`
