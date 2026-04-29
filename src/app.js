@@ -512,11 +512,11 @@ function renderLoginView() {
         <form id="loginForm" class="form">
           <label>
             用户名
-            <input name="username" autocomplete="username" required />
+            <input name="username" autocomplete="username" placeholder="请输入用户名" required />
           </label>
           <label>
             密码
-            <input name="password" type="password" autocomplete="current-password" required />
+            <input name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required />
           </label>
           <p class="login-error" id="loginError"></p>
           <button class="primary" type="submit">${iconSvg("save")}登录</button>
@@ -914,42 +914,42 @@ function renderSlotDetail(slot) {
         </label>
         <label>
           笼盒编号
-          <input name="cageCode" value="${escapeAttr(occupancy.cageCode)}" placeholder="如 M-A001" />
+          <input name="cageCode" value="${escapeAttr(occupancy.cageCode)}" placeholder="请输入笼盒编号，如 M-A001" />
         </label>
       </div>
       <div class="compact-form-row half">
         <label>
           IACUC 编号
-          <input name="iacuc" value="${escapeAttr(occupancy.iacuc)}" placeholder="IACUC-2026-001" list="iacucOptions" />
+          <input name="iacuc" value="${escapeAttr(occupancy.iacuc)}" placeholder="请输入或选择 IACUC 编号" list="iacucOptions" />
         </label>
         <label>
           项目名称
-          <textarea name="project" rows="2" placeholder="项目或课题名称">${escapeText(occupancy.project)}</textarea>
+          <textarea name="project" rows="2" placeholder="选择 IACUC 后自动填充，也可手动输入">${escapeText(occupancy.project)}</textarea>
         </label>
       </div>
       <div class="compact-form-row half">
         <label>
           项目负责人
-          <input name="pi" value="${escapeAttr(occupancy.pi)}" placeholder="PI" />
+          <input name="pi" value="${escapeAttr(occupancy.pi)}" placeholder="选择 IACUC 后自动填充" />
         </label>
         <label>
           实验负责人
-          <input name="owner" value="${escapeAttr(occupancy.owner)}" placeholder="实验负责人" />
+          <input name="owner" value="${escapeAttr(occupancy.owner)}" placeholder="选择 IACUC 后自动填充" />
         </label>
       </div>
       <div class="compact-form-row half">
         <label>
           开始日期
-          <input type="date" name="startDate" value="${occupancy.startDate || today}" />
+          <input type="date" name="startDate" value="${occupancy.startDate || today}" placeholder="请选择开始日期" />
         </label>
         <label>
           结束/最后计费日期
-          <input type="date" name="endDate" value="${occupancy.endDate}" />
+          <input type="date" name="endDate" value="${occupancy.endDate}" placeholder="请选择结束日期" />
         </label>
       </div>
       <label class="full-field">
         备注
-        <textarea name="notes" rows="3" placeholder="品系、周龄、特殊饲养要求">${escapeText(occupancy.notes)}</textarea>
+        <textarea name="notes" rows="3" placeholder="请输入品系、周龄、特殊饲养要求等备注">${escapeText(occupancy.notes)}</textarea>
       </label>
       <div class="form-actions">
         <button type="submit" class="primary">${iconSvg("save")}保存笼位</button>
@@ -1049,36 +1049,36 @@ function renderBatchSlotDetail(slots) {
       <div class="compact-form-row half">
         <label>
           IACUC 编号
-          <input name="iacuc" value="${escapeAttr(draft.iacuc)}" placeholder="输入后自动匹配项目和负责人" list="iacucOptions" />
+          <input name="iacuc" value="${escapeAttr(draft.iacuc)}" placeholder="请输入或选择 IACUC 编号" list="iacucOptions" />
         </label>
         <label>
           项目名称
-          <textarea name="project" rows="2" placeholder="项目或课题名称">${escapeText(draft.project)}</textarea>
+          <textarea name="project" rows="2" placeholder="选择 IACUC 后自动填充，也可手动输入">${escapeText(draft.project)}</textarea>
         </label>
       </div>
       <div class="compact-form-row half">
         <label>
           项目负责人
-          <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="PI" />
+          <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="选择 IACUC 后自动填充" />
         </label>
         <label>
           实验负责人
-          <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="实验负责人" />
+          <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
         </label>
       </div>
       <div class="compact-form-row half">
         <label>
           开始日期
-          <input type="date" name="startDate" value="${draft.startDate}" />
+          <input type="date" name="startDate" value="${draft.startDate}" placeholder="请选择开始日期" />
         </label>
         <label>
           结束/最后计费日期
-          <input type="date" name="endDate" value="${draft.endDate}" />
+          <input type="date" name="endDate" value="${draft.endDate}" placeholder="请选择结束日期" />
         </label>
       </div>
       <label class="full-field">
         备注
-        <textarea name="notes" rows="3" placeholder="批量备注，笼盒编号请单笼维护">${escapeText(draft.notes)}</textarea>
+        <textarea name="notes" rows="3" placeholder="请输入批量备注，笼盒编号请单笼维护">${escapeText(draft.notes)}</textarea>
       </label>
       <div class="form-actions">
         <button type="submit" class="primary">${iconSvg("save")}批量保存</button>
@@ -1109,7 +1109,7 @@ function renderSamplingPanel(mode, defaultDate, count = 1) {
     <div class="sampling-panel" data-sampling-mode="${mode}">
       <label>
         取材日期（最后计费日期）
-        <input type="date" id="${mode === "batch" ? "batchSampleDate" : "sampleDate"}" value="${defaultDate || today}" />
+        <input type="date" id="${mode === "batch" ? "batchSampleDate" : "sampleDate"}" value="${defaultDate || today}" placeholder="请选择取材日期" />
       </label>
       <div class="form-actions compact-actions">
         <button type="button" class="primary" id="${mode === "batch" ? "confirmSampleBatchSlots" : "confirmSampleSlot"}">
@@ -1218,8 +1218,8 @@ function renderCageMapBillingView() {
             <p>按每天实际在养笼数计算，已预约默认不计费。</p>
           </div>
           <div class="toolbar">
-            <input id="billingMonth" type="month" value="${state.billingMonth}" />
-            <input id="billingIacuc" type="text" value="${escapeAttr(state.billingIacuc)}" list="billingIacucOptions" placeholder="输入 IACUC 编号" />
+            <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
+            <input id="billingIacuc" type="text" value="${escapeAttr(state.billingIacuc)}" list="billingIacucOptions" placeholder="请输入或选择 IACUC 编号" />
             <button id="exportBilling" class="secondary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
             <button id="exportSettlementPdf" class="primary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
           </div>
@@ -1277,7 +1277,7 @@ function renderCageMapBillingView() {
               <form id="rateForm" class="form">
                 <label>
                   基础单价 元/笼/天
-                  <input type="number" min="0" step="0.01" name="baseRate" value="${state.baseRate}" />
+                  <input type="number" min="0" step="0.01" name="baseRate" value="${state.baseRate}" placeholder="请输入基础单价" />
                 </label>
                 <button class="primary" type="submit">${iconSvg("save")}保存规则</button>
               </form>
@@ -1308,7 +1308,7 @@ function renderQuantitySheetBillingView() {
             </div>
             <div class="toolbar">
               <select id="quantitySheetSelect" aria-label="选择数量统计表">
-                <option value="">新建统计表</option>
+                <option value="">请选择统计表或新建</option>
                 ${state.quantitySheets
                   .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
                   .join("")}
@@ -1323,54 +1323,54 @@ function renderQuantitySheetBillingView() {
           <div class="quantity-sheet-fields">
             <label>
               结算月份
-              <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" required />
+              <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
             </label>
             <label>
               饲养间
               <select name="roomId">
-                <option value="">手动填写房间号</option>
+                <option value="">请选择饲养间或手动填写房间号</option>
                 ${state.rooms.map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === draft.roomId ? "selected" : ""}>${escapeText(room.name)}</option>`).join("")}
               </select>
             </label>
             <label>
               房间号
-              <input name="roomName" value="${escapeAttr(draft.roomName)}" placeholder="如 8101" />
+              <input name="roomName" value="${escapeAttr(draft.roomName)}" placeholder="请输入房间号，如 8101" />
             </label>
             <label>
               管理员
-              <input name="manager" value="${escapeAttr(draft.manager)}" />
+              <input name="manager" value="${escapeAttr(draft.manager)}" placeholder="请输入管理员姓名" />
             </label>
             <label>
               IACUC 编号
-              <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" required />
+              <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" placeholder="请输入或选择 IACUC 编号" required />
             </label>
             <label>
               项目负责人
-              <input name="pi" value="${escapeAttr(draft.pi)}" />
+              <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="选择 IACUC 后自动填充" />
             </label>
             <label>
               实验负责人
-              <input name="owner" value="${escapeAttr(draft.owner)}" />
+              <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
             </label>
             <label>
               联系电话
-              <input name="contact" value="${escapeAttr(draft.contact)}" />
+              <input name="contact" value="${escapeAttr(draft.contact)}" placeholder="请输入联系电话" />
             </label>
             <label class="wide">
               项目名称
-              <input name="project" value="${escapeAttr(draft.project)}" />
+              <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
             </label>
             <label>
               支撑经费
-              <input name="funding" value="${escapeAttr(draft.funding)}" />
+              <input name="funding" value="${escapeAttr(draft.funding)}" placeholder="选择 IACUC 后自动填充" />
             </label>
             <label class="month-opening-field">
               月初结余动物数
-              <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" />
+              <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" placeholder="请输入月初动物数" />
             </label>
             <label class="month-opening-field">
               月初结余笼数
-              <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" />
+              <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" placeholder="请输入月初笼数" />
             </label>
             <label class="month-opening-field">
               计费口径
@@ -1459,22 +1459,22 @@ function renderBillingRow(row) {
 function renderQuantitySheetRow(row, index) {
   return `
     <tr data-quantity-row="${index}">
-      <td><input name="rowDate" type="date" value="${escapeAttr(row.date)}" required /></td>
-      <td><input name="addedCount" type="number" min="0" value="${row.addedCount ?? ""}" /></td>
+      <td><input name="rowDate" type="date" value="${escapeAttr(row.date)}" placeholder="请选择日期" required /></td>
+      <td><input name="addedCount" type="number" min="0" value="${row.addedCount ?? ""}" placeholder="请输入" /></td>
       <td>
         <select name="addedType">
-          ${["", "购入", "转入", "分笼"].map((value) => `<option value="${value}" ${row.addedType === value ? "selected" : ""}>${value || "-"}</option>`).join("")}
+          ${["", "购入", "转入", "分笼"].map((value) => `<option value="${value}" ${row.addedType === value ? "selected" : ""}>${value || "请选择"}</option>`).join("")}
         </select>
       </td>
-      <td><input name="removedCount" type="number" min="0" value="${row.removedCount ?? ""}" /></td>
+      <td><input name="removedCount" type="number" min="0" value="${row.removedCount ?? ""}" placeholder="请输入" /></td>
       <td>
         <select name="removedType">
-          ${["", "取材", "死亡", "转出"].map((value) => `<option value="${value}" ${row.removedType === value ? "selected" : ""}>${value || "-"}</option>`).join("")}
+          ${["", "取材", "死亡", "转出"].map((value) => `<option value="${value}" ${row.removedType === value ? "selected" : ""}>${value || "请选择"}</option>`).join("")}
         </select>
       </td>
-      <td><input name="animalCount" type="number" min="0" value="${row.animalCount ?? ""}" /></td>
-      <td><input name="cageCount" type="number" min="0" value="${row.cageCount ?? ""}" /></td>
-      <td><input name="notes" value="${escapeAttr(row.notes)}" /></td>
+      <td><input name="animalCount" type="number" min="0" value="${row.animalCount ?? ""}" placeholder="请输入" /></td>
+      <td><input name="cageCount" type="number" min="0" value="${row.cageCount ?? ""}" placeholder="请输入" /></td>
+      <td><input name="notes" value="${escapeAttr(row.notes)}" placeholder="请输入备注" /></td>
       <td><button class="icon-danger" type="button" data-remove-qrow="${index}" title="删除行">${iconSvg("trash")}</button></td>
     </tr>
   `;
@@ -1526,25 +1526,25 @@ function renderRoomManagementView() {
         <form id="roomForm" class="form">
           <label>
             饲养间名称
-            <input name="name" required placeholder="如 SPF 小鼠饲养间 C" />
+            <input name="name" required placeholder="请输入饲养间名称，如 SPF 小鼠饲养间 C" />
           </label>
           <label>
             区域
-            <input name="area" placeholder="如 屏障区" />
+            <input name="area" placeholder="请输入区域，如 屏障区" />
           </label>
           <div class="form-row">
             <label>
               笼架数 Z
-              <input type="number" name="rackCount" min="1" value="1" required />
+              <input type="number" name="rackCount" min="1" value="1" placeholder="请输入笼架数" required />
             </label>
             <label>
               行数 X
-              <input type="number" name="rows" min="1" value="5" required />
+              <input type="number" name="rows" min="1" value="5" placeholder="请输入行数" required />
             </label>
           </div>
           <label>
             列数 Y
-            <input type="number" name="cols" min="1" value="6" required />
+            <input type="number" name="cols" min="1" value="6" placeholder="请输入列数" required />
           </label>
           <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
         </form>
@@ -1559,17 +1559,18 @@ function renderRoomManagementView() {
           <label>
             所属饲养间
             <select name="roomId" required>
+              <option value="" disabled ${state.rooms.length ? "" : "selected"}>请选择饲养间</option>
               ${state.rooms.map((room) => `<option value="${escapeAttr(room.id)}">${escapeText(room.name)}</option>`).join("")}
             </select>
           </label>
           <div class="form-row">
             <label>
               行数 X
-              <input type="number" name="rows" min="1" value="5" required />
+              <input type="number" name="rows" min="1" value="5" placeholder="请输入行数" required />
             </label>
             <label>
               列数 Y
-              <input type="number" name="cols" min="1" value="6" required />
+              <input type="number" name="cols" min="1" value="6" placeholder="请输入列数" required />
             </label>
           </div>
           <button class="primary" type="submit">${iconSvg("plus")}新增笼架</button>
@@ -1603,15 +1604,15 @@ function renderUserManagementView() {
         <form id="userForm" class="form">
           <label>
             用户名
-            <input name="username" required placeholder="如 room_a_admin" />
+            <input name="username" required placeholder="请输入登录名，如 room_a_admin" />
           </label>
           <label>
             显示姓名
-            <input name="displayName" required placeholder="如 SPF A 管理员" />
+            <input name="displayName" required placeholder="请输入显示姓名，如 SPF A 管理员" />
           </label>
           <label>
             初始密码
-            <input name="password" type="password" required />
+            <input name="password" type="password" placeholder="请输入初始密码" required />
           </label>
           <label>
             角色
@@ -1825,15 +1826,15 @@ function renderUserRow(user) {
       <div class="user-fields">
         <label>
           登录名
-          <input name="username" value="${escapeAttr(user.username)}" ${isCurrent ? "disabled" : "required"} />
+          <input name="username" value="${escapeAttr(user.username)}" placeholder="请输入登录名" ${isCurrent ? "disabled" : "required"} />
         </label>
         <label>
           显示姓名
-          <input name="displayName" value="${escapeAttr(user.displayName)}" ${isCurrent ? "disabled" : "required"} />
+          <input name="displayName" value="${escapeAttr(user.displayName)}" placeholder="请输入显示姓名" ${isCurrent ? "disabled" : "required"} />
         </label>
         <label>
           新密码
-          <input name="password" type="password" placeholder="留空不修改" ${isCurrent ? "disabled" : ""} />
+          <input name="password" type="password" placeholder="请输入新密码，留空不修改" ${isCurrent ? "disabled" : ""} />
         </label>
         <label>
           角色
