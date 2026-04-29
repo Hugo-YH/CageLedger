@@ -1397,7 +1397,6 @@ function renderQuantitySheetBillingView() {
                   <th>减少类型</th>
                   <th>结余总数</th>
                   <th>结余笼数</th>
-                  <th>经手人</th>
                   <th>备注</th>
                   <th></th>
                 </tr>
@@ -1475,7 +1474,6 @@ function renderQuantitySheetRow(row, index) {
       </td>
       <td><input name="animalCount" type="number" min="0" value="${row.animalCount ?? ""}" /></td>
       <td><input name="cageCount" type="number" min="0" value="${row.cageCount ?? ""}" /></td>
-      <td><input name="handler" value="${escapeAttr(row.handler)}" /></td>
       <td><input name="notes" value="${escapeAttr(row.notes)}" /></td>
       <td><button class="icon-danger" type="button" data-remove-qrow="${index}" title="删除行">${iconSvg("trash")}</button></td>
     </tr>
@@ -2668,7 +2666,6 @@ function readQuantitySheetForm(form) {
       removedType: row.querySelector("[name='removedType']")?.value || "",
       animalCount: numericOrNull(row.querySelector("[name='animalCount']")?.value),
       cageCount: numericOrNull(row.querySelector("[name='cageCount']")?.value),
-      handler: row.querySelector("[name='handler']")?.value.trim() || "",
       notes: row.querySelector("[name='notes']")?.value.trim() || "",
     }))
     .filter((row) => row.date || row.addedCount || row.removedCount || row.animalCount !== null || row.cageCount !== null);
@@ -2722,7 +2719,6 @@ function makeQuantitySheetRow(month = today.slice(0, 7)) {
     removedType: "",
     animalCount: null,
     cageCount: null,
-    handler: "",
     notes: "",
   };
 }
@@ -2759,7 +2755,6 @@ function normalizeQuantitySheetDraftRow(row, month) {
     removedType: row?.removedType || "",
     animalCount: numericOrNull(row?.animalCount),
     cageCount: numericOrNull(row?.cageCount),
-    handler: row?.handler || "",
     notes: row?.notes || "",
   };
 }

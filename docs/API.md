@@ -76,7 +76,7 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 数量统计表包含表头信息和变更行。核心字段：
 
 - 表头：`month`、`roomId`、`roomName`、`manager`、`iacuc`、`project`、`pi`、`owner`、`funding`、`billingUnit`、`initialAnimalCount`、`initialCageCount`
-- 明细行：`date`、`addedCount`、`addedType`、`removedCount`、`removedType`、`animalCount`、`cageCount`、`handler`、`notes`
+- 明细行：`date`、`addedCount`、`addedType`、`removedCount`、`removedType`、`animalCount`、`cageCount`、`notes`
 
 `billingUnit` 支持：
 

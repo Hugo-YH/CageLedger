@@ -1666,7 +1666,6 @@ def normalize_quantity_sheet_row(row, month):
         "removedType": clean_text(row.get("removedType", "")),
         "animalCount": as_int(row.get("animalCount")),
         "cageCount": as_int(row.get("cageCount")),
-        "handler": clean_text(row.get("handler", "")),
         "notes": clean_text(row.get("notes", "")),
     }
 
