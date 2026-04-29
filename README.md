@@ -1,54 +1,32 @@
-# CageLedger 实验动物笼位管理与计费系统
+# CageLedger
 
-这是一个从 0 搭建的 MVP。当前支持两种运行方式：
+实验动物笼位管理与饲养费核算系统。当前版本是面向内网试用的轻量级 MVP：前端使用原生 HTML/CSS/JavaScript，后端使用 Python 标准库提供 HTTP API，数据默认保存到 SQLite。
 
-- 静态模式：只打开前端页面，数据保存在当前浏览器 `localStorage`。
-- 共享模式：通过 `server.py` 启动后端服务，数据保存在 SQLite 数据库，适合群晖内网测试。
+## 核心能力
 
-## 已实现功能
+- 笼位管理：按饲养间、笼架、行列生成 IVC 笼位图，支持新增/删除饲养间和笼架。
+- 占用登记：支持空笼、预约、在用、取材结束和批量录入。
+- 项目绑定：按 IACUC 编号绑定项目名称、项目负责人、实验负责人、笼盒编号和备注。
+- IACUC 回填：管理员上传动物实验申请汇总表 CSV 后，录入 IACUC 编号可自动带出项目信息。
+- 饲养费核算：按 IACUC 和月份生成每日笼数、当日费用、累计费用，并支持 CSV/打印导出。
+- 权限控制：支持系统管理员和房间管理员，房间管理员只能编辑授权饲养间。
+- 审计记录：服务端记录关键写操作的账号、对象、时间和变更前后数据。
+- 更新检查：管理员可在数据管理页检查 GitHub `main` 分支最新提交。
 
-- 首页概览：集中展示系统名称、总笼位、在用、已预约、空笼位，并用图表展示状态分布。
-- 动态笼位图：按饲养间、笼架、行、列生成 IVC 笼位。
-- 房间管理：按“饲养间 -> 笼架”树形展示，支持给已有饲养间新增不同规格笼架，也支持删除饲养间和笼架。
-- 笼位状态：支持空、已预约、在用、结束占用。
-- 笼位绑定：支持 IACUC 编号、项目负责人、实验负责人、项目名称、笼盒编号、备注。
-- 笼盒编号：按“饲养间-笼架号-列行号”自动生成，例如 `SPF 小鼠饲养间 A-1-A1`。
-- 笼位录入：空笼位默认按“在用”录入，可单个或批量设为空。
-- 取材结束：在用笼位可标记“已取材”，选择取材日期作为最后计费日期，笼位随后回到空状态。
-- 批量录入：支持多选笼位后批量写入相同 IACUC、项目、负责人、日期和备注。
-- IACUC 自动匹配：基于动物实验申请汇总表生成索引，输入 IACUC 编号后自动回填项目名称、项目负责人和实验负责人。
-- 占用历史：结束占用后保留历史记录，用于回溯计费。
-- 饲养费核算：按 IACUC 和月份生成每日笼数、当日费用、累计费用。
-- 计费规则：基础单价可配置，默认 4.5 元/笼/天。
-- 减免扩展：示例数据内置 IACUC 维度折扣规则，计费函数已预留扩展点。
-- 饲养明细导出：每日笼数和费用明细可导出为 CSV。
-- 结算单导出：按 IACUC 和月份生成财务结算单，可通过浏览器打印/另存为 PDF。
-- 数据管理：管理员可上传动物实验申请汇总表 CSV，生成 IACUC 自动匹配索引。
-- 更新检查：管理员可在数据管理页面检查 GitHub `main` 分支最新提交。
-- 账号管理：管理员可创建、编辑和删除系统管理员或房间管理员账号。
-- 共享持久化：通过后端 API 保存到 SQLite；无后端时回退到浏览器 `localStorage`。
-- 拆表存储：SQLite 内按饲养间、笼架、笼位、占用记录、计费规则、减免和日志分表保存。
-- 账号登录：支持系统管理员和房间管理员账号，编辑操作必须登录。
-- 操作审计：服务端记录账号、动作、笼位、时间和变更前后数据。
+## 运行方式
 
-## 本地运行
+### 共享模式
 
-启动共享模式：
+共享模式会启动后端 API，并把数据写入 SQLite，适合本机或内网多人试用。
 
 ```bash
 npm run dev
 ```
 
-然后访问：
+访问：
 
 ```text
 http://localhost:5173
-```
-
-SQLite 数据库默认保存在：
-
-```text
-data/cageledger.sqlite
 ```
 
 首次启动会自动创建默认管理员：
@@ -58,110 +36,126 @@ data/cageledger.sqlite
 密码：admin123
 ```
 
-内网长期测试时，建议通过环境变量覆盖默认管理员密码：
+长期使用前建议通过环境变量覆盖默认密码：
 
 ```bash
 CAGELEDGER_ADMIN_USERNAME=admin CAGELEDGER_ADMIN_PASSWORD=更强的密码 npm run dev
 ```
 
-如果只想用纯静态模式：
+数据库默认路径：
+
+```text
+data/cageledger.sqlite
+```
+
+### 静态模式
+
+静态模式不启动后端，数据只保存在当前浏览器 `localStorage`，适合界面预览或临时演示。
 
 ```bash
 npm run static
 ```
 
-## 检查脚本
+## 常用命令
 
 ```bash
-npm run check
+npm run dev              # 启动 Python 后端和静态页面
+npm run static           # 仅启动静态文件服务
+npm run check            # 检查前端 JS 语法和 Python 编译
+npm run package:offline  # 生成 NAS 离线源码包
 ```
 
-## Docker 部署
-
-群晖上建议使用 Docker Compose。示例目录：
-
-```bash
-mkdir -p /volume1/docker/cageledger
-cd /volume1/docker/cageledger
-git clone https://github.com/Hugo-YH/CageLedger.git .
-```
-
-首次部署前，建议修改 `docker-compose.yml` 中的默认管理员密码：
-
-```yaml
-CAGELEDGER_ADMIN_PASSWORD=更强的密码
-```
-
-启动：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-默认使用 GHCR 的 `latest` 镜像。如果希望固定到某个发布版本：
-
-```bash
-CAGELEDGER_IMAGE_TAG=0.2.1 docker compose up -d
-```
-
-访问：
+## 项目结构
 
 ```text
-http://群晖IP:5173
+.
+├── index.html                    # 前端入口
+├── server.py                     # 后端 API、SQLite 存储、权限和审计
+├── src/
+│   ├── app.js                    # 前端应用逻辑
+│   └── styles.css                # 前端样式
+├── assets/
+│   └── cageledger-icon.svg       # 站点图标
+├── scripts/
+│   ├── generate_iacuc_index.py   # 旧版 XLSX 索引生成脚本
+│   └── package_offline.sh        # 离线源码包脚本
+├── docs/
+│   ├── API.md                    # API 和数据模型说明
+│   └── DEPLOYMENT.md             # Docker、NAS 和离线部署说明
+├── data/                         # 本地运行数据，已被 Git 忽略
+├── Dockerfile
+├── docker-compose.yml
+└── docker-compose.offline.yml
 ```
 
-数据默认持久化在 Docker 命名卷 `cageledger-data` 中，避免群晖首次启动时报本地目录不存在。
+## 配置
 
-如果希望改成宿主机目录挂载，可以把 `docker-compose.yml` 中的卷改为 `./data:/app/data`，并先创建目录：
+可复制 `.env.example` 作为部署时的环境变量参考。常用配置如下：
 
-```bash
-mkdir -p /volume1/docker/CageLedger/data
-```
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `CAGELEDGER_HOST` | `0.0.0.0` | 后端监听地址 |
+| `CAGELEDGER_PORT` | `5173` | 后端监听端口 |
+| `CAGELEDGER_DB` | `data/cageledger.sqlite` | SQLite 数据库路径 |
+| `CAGELEDGER_IACUC_INDEX` | `data/iacuc-index.json` | 兼容索引文件路径 |
+| `CAGELEDGER_ADMIN_USERNAME` | `admin` | 初始管理员账号 |
+| `CAGELEDGER_ADMIN_PASSWORD` | `admin123` | 初始管理员密码 |
+| `CAGELEDGER_REPOSITORY` | `Hugo-YH/CageLedger` | 更新检查使用的 GitHub 仓库 |
+| `CAGELEDGER_BRANCH` | `main` | 更新检查使用的分支 |
 
-数据库文件路径：
+页面展示的单位、科室、开发者、联系邮箱、版权和协议也可通过 `CAGELEDGER_ORGANIZATION`、`CAGELEDGER_DEPARTMENT`、`CAGELEDGER_DEVELOPER`、`CAGELEDGER_CONTACT_EMAIL`、`CAGELEDGER_COPYRIGHT` 和 `CAGELEDGER_LICENSE` 覆盖。
 
-```text
-/app/data/cageledger.sqlite
-```
+## IACUC 汇总表
 
-建议定期备份 `cageledger.sqlite`。`iacuc-index.json` 仍会作为兼容文件生成，但实验申请汇总表的后端数据以 SQLite 中的 `experiment_applications` 表为准。
-
-如果需要 IACUC 自动回填，管理员登录系统后可在“数据管理 -> IACUC 索引”上传动物实验申请汇总表 CSV。系统会重建 SQLite 中的实验申请汇总表，并同步生成 `data/iacuc-index.json` 兼容文件。
-
-“数据管理 -> 系统更新”只负责检查 GitHub 最新提交，不会从网页自动拉取并运行新代码。更新代码建议在群晖项目目录执行 `git pull origin main`，然后运行 `docker compose pull && docker compose up -d` 拉取最新 GHCR 镜像并重启容器。
-
-## 同步 IACUC 汇总表
-
-系统支持管理员在“数据管理”页面上传 CSV 汇总表并生成 IACUC 索引。CSV 必须包含以下列：
+管理员可在「数据管理 -> IACUC 索引」上传 CSV 汇总表。CSV 必须包含：
 
 - `动物伦理编号`
 - `动物实验名称`
 - `项目负责人`
 - `实验负责人`
 
-如需在结算单中自动带出支撑经费，CSV 建议同时包含：
+如果希望结算单自动带出支撑经费，建议同时包含：
 
 - `项目来源`
 
-上传后汇总表会保存到 SQLite，并同步生成兼容索引文件：
+上传后系统会重建 SQLite 中的 `experiment_applications` 表，并同步生成兼容文件：
 
 ```text
-data/cageledger.sqlite
 data/iacuc-index.json
 ```
 
-如果需要离线生成旧版本地索引，也可以使用脚本：
+旧版本地 XLSX 生成脚本仍保留：
 
 ```bash
 python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 ```
 
-真实 IACUC 索引包含项目负责人、实验负责人等业务数据，`data/` 和 `src/iacuc-data.local.json` 均已被 Git 忽略，避免提交到远程仓库。
+该脚本需要本机 Python 环境安装 `openpyxl`。真实 IACUC 数据包含业务敏感信息，`data/` 和 `src/iacuc-data.local.json` 已被 Git 忽略。
 
-## 版本与版权
+## Docker 和 NAS 部署
 
-系统版本号维护在 `package.json` 的 `version` 字段中，页面加载资源、后端 `/api/system/info` 和 UI 版本展示会读取同一版本号。每次发布功能更新时，建议同步提升版本号。
+常规 Docker Compose、群晖部署、离线源码包构建和镜像发布说明见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
+最简启动：
+
+```bash
+docker compose up -d
+```
+
+默认访问：
+
+```text
+http://服务器IP:5173
+```
+
+## 开发者参考
+
+- API 与主要数据表见 [docs/API.md](docs/API.md)。
+- 版本号维护在 `package.json` 的 `version` 字段中。
+- 页面资源版本、后端 `/api/system/info` 和 UI 版本展示都读取同一版本信息。
+- 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应 GitHub Release。
+
+## 版权
 
 - 所属单位：中山大学中山眼科中心
 - 所属科室：实验动物中心
@@ -169,118 +163,4 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - 联系邮箱：info@cellnucle.us
 - 开源协议：Apache License 2.0
 
-开源协议正文见 `LICENSE`，归属和版权说明见 `NOTICE`。如部署环境需要覆盖显示信息，可使用 `CAGELEDGER_ORGANIZATION`、`CAGELEDGER_DEPARTMENT`、`CAGELEDGER_DEVELOPER`、`CAGELEDGER_CONTACT_EMAIL`、`CAGELEDGER_COPYRIGHT` 和 `CAGELEDGER_LICENSE` 环境变量。
-
-## GitHub Packages
-
-容器镜像发布到 GitHub Container Registry：
-
-```bash
-docker pull ghcr.io/hugo-yh/cageledger:latest
-docker pull ghcr.io/hugo-yh/cageledger:0.2.1
-```
-
-仓库内的 `Publish container package` GitHub Actions 工作流会在发布 Release 时推送镜像，也可以手动指定 Git ref 和镜像标签重新发布。
-
-## NAS 离线源码构建
-
-如果 NAS 无法连接外网，可以在本机打包源码，拖到 NAS 后本地构建镜像。
-
-在本机项目目录生成离线包：
-
-```bash
-./scripts/package_offline.sh
-```
-
-脚本会生成类似文件：
-
-```text
-dist/CageLedger-offline-v0.2.1.tar.gz
-```
-
-把这个文件拖到 NAS，例如 `/volume1/docker/`。然后在 NAS 的 SSH 终端执行：
-
-```bash
-cd /volume1/docker
-tar -xzf CageLedger-offline-v0.2.1.tar.gz
-cd CageLedger
-docker compose -f docker-compose.offline.yml up -d --build
-```
-
-离线构建会使用 `docker-compose.offline.yml`，不需要访问 GHCR。数据仍保存在 Docker 命名卷 `cageledger-data` 中。
-
-## 后续建议
-
-当前共享模式已经在 SQLite 中拆分为业务表：
-
-- `rooms`
-- `racks`
-- `cage_slots`
-- `occupancies`
-- `experiment_applications`
-- `billing_rules`
-- `billing_adjustments`
-- `billing_statements`
-- `billing_statement_lines`
-- `audit_logs`
-- `users`
-- `sessions`
-- `audit_events`
-
-实验申请汇总表由管理员上传 CSV 重建，以 IACUC 编号作为业务主键。笼位图只表示当前结构和当前状态；占用记录作为历史流水保留，不再随饲养间、笼架或笼位删除而级联删除；饲养费结算单由占用记录生成，并保存项目、人员、经费和每日明细快照。
-
-前端读取数据已经通过实体级 GET API 组装状态；笼位占用、批量录入、取材/设空、饲养间/笼架配置和基础计费规则写入也已迁移到实体级 API。`/api/state` 目前保留为兼容、导入导出或调试接口。
-
-- `GET /api/rooms`
-- `GET /api/racks`
-- `GET /api/cage-slots`
-- `GET /api/occupancies`
-- `GET /api/experiment-applications`
-- `GET /api/billing-rules`
-- `GET /api/billing-adjustments`
-- `GET /api/billing-statements`
-- `GET /api/billing-statement-lines`
-- `GET /api/audit-events`
-
-写入型实体 API：
-
-- `POST /api/rooms`
-- `PUT /api/rooms/{id}`
-- `DELETE /api/rooms/{id}`
-- `POST /api/racks`
-- `PUT /api/racks/{id}`
-- `DELETE /api/racks/{id}`
-- `POST /api/cage-slots`
-- `PUT /api/cage-slots/{id}`
-- `DELETE /api/cage-slots/{id}`
-- `POST /api/occupancies`
-- `PUT /api/occupancies/{id}`
-- `DELETE /api/occupancies/{id}`
-- `POST /api/billing-rules`
-- `PUT /api/billing-rules/{id}`
-- `DELETE /api/billing-rules/{id}`
-- `POST /api/billing-adjustments`
-- `PUT /api/billing-adjustments/{id}`
-- `DELETE /api/billing-adjustments/{id}`
-- `POST /api/billing-statements/generate`
-
-这些接口与 `/api/state` 共用同一套权限校验和审计逻辑。管理员可以维护配置、计费规则和减免规则；房间管理员只能修改授权饲养间内的笼位占用信息。删除饲养间或笼架时，会删除下级笼架和笼位，但保留占用记录作为历史计费依据。
-
-账号相关 API：
-
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `GET /api/users`
-- `POST /api/users`
-- `PUT /api/users/{id}`
-- `DELETE /api/users/{id}`
-
-后续待办：
-
-- 增加独立设置接口，服务端保存 `billingMonth`、`billingIacuc` 等用户界面偏好，避免只保存在浏览器 `localStorage`。
-- 补充后端批量 API，减少批量录入、批量取材和批量设空时的多次顺序请求。
-- 将减免规则管理 UI 接入 `billing-adjustments` 实体 API。
-- 正式长期使用时，迁移到 PostgreSQL。
-
-结算单正式化时建议增加“草稿、确认、导出、作废”状态，并在确认后保存快照，避免历史数据修改影响已确认账单。
+开源协议正文见 [LICENSE](LICENSE)，归属和版权说明见 [NOTICE](NOTICE)。

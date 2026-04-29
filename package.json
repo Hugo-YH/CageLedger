@@ -6,8 +6,10 @@
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
   "scripts": {
+    "start": "python3 server.py",
     "dev": "python3 server.py",
     "static": "python3 -m http.server 5173",
-    "check": "node --check src/app.js && python3 -m py_compile server.py scripts/generate_iacuc_index.py"
+    "check": "node --check src/app.js && python3 -m py_compile server.py scripts/generate_iacuc_index.py",
+    "package:offline": "bash scripts/package_offline.sh"
   }
 }
