@@ -11,4 +11,7 @@ services:
       - CAGELEDGER_ADMIN_USERNAME=admin
       - CAGELEDGER_ADMIN_PASSWORD=admin123
     volumes:
-      - ./data:/app/data
+      - cageledger-data:/app/data
+
+volumes:
+  cageledger-data:

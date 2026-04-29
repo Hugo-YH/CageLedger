@@ -111,13 +111,21 @@ CAGELEDGER_IMAGE_TAG=0.2.1 docker compose up -d
 http://群晖IP:5173
 ```
 
-数据会持久化在宿主机：
+数据默认持久化在 Docker 命名卷 `cageledger-data` 中，避免群晖首次启动时报本地目录不存在。
 
-```text
-./data/cageledger.sqlite
+如果希望改成宿主机目录挂载，可以把 `docker-compose.yml` 中的卷改为 `./data:/app/data`，并先创建目录：
+
+```bash
+mkdir -p /volume1/docker/CageLedger/data
 ```
 
-建议定期备份 `data/cageledger.sqlite`。`data/iacuc-index.json` 仍会作为兼容文件生成，但实验申请汇总表的后端数据以 SQLite 中的 `experiment_applications` 表为准。
+数据库文件路径：
+
+```text
+/app/data/cageledger.sqlite
+```
+
+建议定期备份 `cageledger.sqlite`。`iacuc-index.json` 仍会作为兼容文件生成，但实验申请汇总表的后端数据以 SQLite 中的 `experiment_applications` 表为准。
 
 如果需要 IACUC 自动回填，管理员登录系统后可在“数据管理 -> IACUC 索引”上传动物实验申请汇总表 CSV。系统会重建 SQLite 中的实验申请汇总表，并同步生成 `data/iacuc-index.json` 兼容文件。
 
