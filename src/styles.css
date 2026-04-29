@@ -641,7 +641,7 @@ h3 {
 }
 
 .quantity-billing-layout {
-  grid-template-columns: minmax(0, 1fr) 430px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .quantity-sheet-fields {
@@ -669,12 +669,18 @@ h3 {
   min-width: 86px;
 }
 
+.quantity-preview-section {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
 .compact-summary {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .mini-statement table {
-  min-width: 420px;
+  min-width: 640px;
 }
 
 .cage-layout {

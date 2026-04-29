@@ -1409,26 +1409,26 @@ function renderQuantitySheetBillingView() {
           </div>
           <button id="addQuantitySheetRow" class="secondary" type="button">${iconSvg("plus")}添加变更行</button>
         </form>
-      </div>
 
-      <div class="panel">
-        <div class="panel-head compact">
-          <div>
-            <h2>结算预览</h2>
-            <p>预览会按已录入的结余笼数展开到整月。</p>
+        <div class="quantity-preview-section">
+          <div class="panel-head compact">
+            <div>
+              <h2>结算预览</h2>
+              <p>预览会按已录入的结余笼数展开到整月。</p>
+            </div>
           </div>
-        </div>
-        <div class="statement-summary compact-summary">
-          ${summaryTile("IACUC", draft.iacuc || "-")}
-          ${summaryTile("累计笼日", statement.totalCageDays)}
-          ${summaryTile("累计只日", statement.totalAnimalDays)}
-          ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
-        </div>
-        <div class="table-wrap mini-statement">
-          <table>
-            <thead><tr><th>日期</th><th>动物数</th><th>笼数</th><th>费用</th></tr></thead>
-            <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="4">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
-          </table>
+          <div class="statement-summary compact-summary">
+            ${summaryTile("IACUC", draft.iacuc || "-")}
+            ${summaryTile("累计笼日", statement.totalCageDays)}
+            ${summaryTile("累计只日", statement.totalAnimalDays)}
+            ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
+          </div>
+          <div class="table-wrap mini-statement">
+            <table>
+              <thead><tr><th>日期</th><th>动物数</th><th>笼数</th><th>费用</th></tr></thead>
+              <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="4">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
