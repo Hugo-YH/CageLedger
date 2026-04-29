@@ -17,6 +17,29 @@ const ENTITY_API_URLS = {
   adjustments: "/api/billing-adjustments",
   auditLogs: "/api/audit-events",
 };
+const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.2.1",
+    title: "离线部署和文档整理",
+    items: ["支持 NAS 离线源码包构建", "README 拆分为入口文档、API 文档和部署文档", "补充环境变量模板和 Docker 构建忽略规则"],
+  },
+  {
+    version: "0.2.0",
+    title: "共享模式和权限基础",
+    items: ["SQLite 拆表存储", "系统管理员和房间管理员账号", "IACUC CSV 上传、审计日志和系统更新检查"],
+  },
+];
+const SYSTEM_DOC_LINKS = [
+  { title: "API 和数据模型", href: "./docs/API.md", description: "接口路径、账号权限、实体 API、IACUC 索引和主要数据表。" },
+  { title: "部署说明", href: "./docs/DEPLOYMENT.md", description: "Docker Compose、群晖、离线源码包和 GHCR 镜像发布。" },
+  { title: "环境变量模板", href: "./.env.example", description: "后端监听、数据库路径、初始管理员、单位信息和更新检查配置。" },
+];
+const SYSTEM_API_GROUPS = [
+  { title: "认证与账号", endpoints: ["POST /api/auth/login", "POST /api/auth/logout", "GET /api/auth/me", "GET /api/users", "POST /api/users"] },
+  { title: "笼位与设施", endpoints: ["GET /api/rooms", "GET /api/racks", "GET /api/cage-slots", "GET /api/occupancies"] },
+  { title: "计费与审计", endpoints: ["GET /api/billing-rules", "GET /api/billing-statements", "POST /api/billing-statements/generate", "GET /api/audit-events"] },
+  { title: "系统与数据", endpoints: ["GET /api/health", "GET /api/system/info", "GET /api/system/update-check", "POST /api/iacuc-index/upload"] },
+];
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let iacucIndexMeta = null;
@@ -399,7 +422,7 @@ function render() {
     bindAuthEvents();
     return;
   }
-  const adminViews = new Set(["rooms", "data", "users"]);
+  const adminViews = new Set(["rooms", "data", "system", "users"]);
   if (currentUser?.role !== "admin" && adminViews.has(state.activeView)) {
     state.activeView = "cages";
   }
@@ -414,6 +437,7 @@ function render() {
         ${state.activeView === "billing" ? renderBillingView() : ""}
         ${state.activeView === "rooms" ? renderRoomManagementView() : ""}
         ${state.activeView === "data" ? renderDataManagementView() : ""}
+        ${state.activeView === "system" ? renderSystemManagementView() : ""}
         ${state.activeView === "users" ? renderUserManagementView() : ""}
         ${state.activeView === "logs" ? renderAuditView() : ""}
         ${renderWorkspaceFooter()}
@@ -428,12 +452,17 @@ function renderSidebar() {
   const navItems = [
     ["dashboard", "首页", "home"],
     ["cages", "笼位图", "grid"],
+    ...(currentUser?.role === "admin"
+      ? [
+          ["rooms", "房间管理", "building"],
+        ]
+      : []),
     ["billing", "饲养费核算", "receipt"],
     ...(currentUser?.role === "admin"
       ? [
-          ["rooms", "房间管理", "grid"],
           ["data", "数据管理", "database"],
           ["users", "账号管理", "users"],
+          ["system", "系统管理", "settings"],
         ]
       : []),
     ["logs", "操作日志", "receipt"],
@@ -521,6 +550,10 @@ function pageMeta(view) {
     data: {
       title: "数据管理",
       description: "维护 IACUC 索引和外部数据源。",
+    },
+    system: {
+      title: "系统管理",
+      description: "查看系统版本、更新状态、更新记录和接口文档。",
     },
     users: {
       title: "账号管理",
@@ -1401,17 +1434,48 @@ function renderDataManagementView() {
             <p>维护系统外部数据源和后续导入导出任务。</p>
           </div>
         </div>
-        <div class="rule-card">
-          <strong>IACUC 索引</strong>
-          <span>${IACUC_INDEX.length} 条记录</span>
-          <p>${iacucIndexMeta?.updatedAt ? `最后更新：${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : "尚未上传索引文件。"}</p>
-        </div>
-        ${renderSystemUpdateCard()}
+        ${renderIacucStatusCard()}
       </div>
       <div class="panel">
         ${renderIacucAdminPanel()}
       </div>
     </section>
+  `;
+}
+
+function renderSystemManagementView() {
+  return `
+    <section class="system-layout">
+      <div class="panel large">
+        <div class="panel-head">
+          <div>
+            <h2>系统管理</h2>
+            <p>查看系统状态、版本更新和项目说明文档。</p>
+          </div>
+        </div>
+        ${renderSystemUpdateCard()}
+        ${renderReleaseNotes()}
+      </div>
+      <div class="system-side">
+        <div class="panel">
+          ${renderSystemDocsPanel()}
+        </div>
+        <div class="panel">
+          ${renderApiReferencePanel()}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderIacucStatusCard() {
+  return `
+    <div class="rule-card">
+      <strong>IACUC 索引</strong>
+      <span>${IACUC_INDEX.length} 条记录</span>
+      <p>${iacucIndexMeta?.updatedAt ? `最后更新：${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : "尚未上传索引文件。"}</p>
+      <p>索引用于录入笼位和生成结算单时自动匹配项目名称、项目负责人、实验负责人和支撑经费。</p>
+    </div>
   `;
 }
 
@@ -1433,6 +1497,78 @@ function renderSystemUpdateCard() {
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
       ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
       <button id="checkSystemUpdate" class="secondary" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
+    </div>
+  `;
+}
+
+function renderReleaseNotes() {
+  return `
+    <div class="system-section">
+      <div class="panel-head compact">
+        <div>
+          <h2>更新记录</h2>
+          <p>记录当前系统主要版本变化。</p>
+        </div>
+      </div>
+      <div class="release-list">
+        ${SYSTEM_RELEASE_NOTES.map(renderReleaseNote).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderReleaseNote(note) {
+  return `
+    <article class="release-card">
+      <div>
+        <strong>v${escapeText(note.version)}</strong>
+        <span>${escapeText(note.title)}</span>
+      </div>
+      <ul>
+        ${note.items.map((item) => `<li>${escapeText(item)}</li>`).join("")}
+      </ul>
+    </article>
+  `;
+}
+
+function renderSystemDocsPanel() {
+  return `
+    <div class="panel-head compact">
+      <div>
+        <h2>说明文档</h2>
+        <p>系统维护相关文档入口。</p>
+      </div>
+    </div>
+    <div class="doc-link-list">
+      ${SYSTEM_DOC_LINKS.map(
+        (doc) => `
+          <a class="doc-link" href="${escapeAttr(doc.href)}" target="_blank" rel="noreferrer">
+            <strong>${escapeText(doc.title)}</strong>
+            <span>${escapeText(doc.description)}</span>
+          </a>
+        `,
+      ).join("")}
+    </div>
+  `;
+}
+
+function renderApiReferencePanel() {
+  return `
+    <div class="panel-head compact">
+      <div>
+        <h2>API 概览</h2>
+        <p>后端常用接口分组。</p>
+      </div>
+    </div>
+    <div class="api-group-list">
+      ${SYSTEM_API_GROUPS.map(
+        (group) => `
+          <div class="api-group">
+            <strong>${escapeText(group.title)}</strong>
+            <code>${group.endpoints.map(escapeText).join("<br />")}</code>
+          </div>
+        `,
+      ).join("")}
     </div>
   `;
 }
@@ -2796,6 +2932,7 @@ function iconSvg(name) {
     home: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>`,
     grid: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`,
     receipt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zm2 5h6v2H9zm0 4h6v2H9z"/></svg>`,
+    building: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3 8 3v16h-6v-5h-4v5zm3-3h2v-2H7zm0-4h2v-2H7zm0-4h2V8H7zm4 4h2v-2h-2zm0-4h2V8h-2zm4 4h2v-2h-2zm0-4h2V8h-2z"/></svg>`,
     database: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3zm0 2C8.2 5 6 6 6 6s2.2 1 6 1 6-1 6-1-2.2-1-6-1zM6 9v3c.8.5 2.9 1 6 1s5.2-.5 6-1V9c-1.4.6-3.5 1-6 1s-4.6-.4-6-1zm0 6v3c.8.5 2.9 1 6 1s5.2-.5 6-1v-3c-1.4.6-3.5 1-6 1s-4.6-.4-6-1z"/></svg>`,
     users: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z"/></svg>`,
     settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.9 7.9 0 0 0 .1-1.5 7.9 7.9 0 0 0-.1-1.5l2-1.5-2-3.4-2.4 1a7.7 7.7 0 0 0-2.5-1.4L14.2 3h-4.4l-.4 2.2A7.7 7.7 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5A7.9 7.9 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.4 2.4-1a7.7 7.7 0 0 0 2.5 1.4l.4 2.2h4.4l.4-2.2a7.7 7.7 0 0 0 2.5-1.4l2.4 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>`,
