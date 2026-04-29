@@ -6,6 +6,7 @@ const API_LOGOUT_URL = "/api/auth/logout";
 const API_USERS_URL = "/api/users";
 const API_IACUC_INDEX_URL = "/api/iacuc-index";
 const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
+const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
 const ENTITY_API_URLS = {
   rooms: "/api/rooms",
@@ -20,6 +21,18 @@ let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let iacucIndexMeta = null;
 let systemUpdateInfo = null;
+let systemInfo = {
+  name: "CageLedger",
+  title: "CageLedger 实验动物笼位管理与计费系统",
+  description: "实验动物笼位管理与计费系统",
+  version: "0.2.1",
+  organization: "中山大学中山眼科中心",
+  department: "实验动物中心",
+  developer: "Hugo",
+  contactEmail: "info@cellnucle.us",
+  license: "Apache-2.0",
+  copyright: "© 2026 中山大学中山眼科中心 实验动物中心. Licensed under Apache-2.0.",
+};
 let remotePersistence = false;
 let currentUser = null;
 let users = [];
@@ -403,6 +416,7 @@ function render() {
         ${state.activeView === "data" ? renderDataManagementView() : ""}
         ${state.activeView === "users" ? renderUserManagementView() : ""}
         ${state.activeView === "logs" ? renderAuditView() : ""}
+        ${renderWorkspaceFooter()}
       </main>
     </div>
   `;
@@ -484,6 +498,7 @@ function renderLoginView() {
           <p class="login-error" id="loginError"></p>
           <button class="primary" type="submit">${iconSvg("save")}登录</button>
         </form>
+        ${renderVersionMeta("login-version")}
       </section>
     </main>
   `;
@@ -528,6 +543,7 @@ function renderSidebarAccount() {
         <span>运行模式</span>
         <strong>静态模式</strong>
         <small>${state.rooms.length} 个饲养间</small>
+        ${renderVersionMeta("sidebar-version")}
       </div>
     `;
   }
@@ -538,6 +554,26 @@ function renderSidebarAccount() {
       <strong title="${escapeAttr(currentUser.displayName)}">${escapeText(currentUser.displayName)}</strong>
       <small>${currentUser.role === "admin" ? "管理员" : "房间管理员"} · ${state.rooms.length} 个饲养间</small>
       <button id="logoutButton" class="secondary" type="button">退出</button>
+      ${renderVersionMeta("sidebar-version")}
+    </div>
+  `;
+}
+
+function renderWorkspaceFooter() {
+  return `
+    <footer class="workspace-footer">
+      ${renderVersionMeta("workspace-version")}
+    </footer>
+  `;
+}
+
+function renderVersionMeta(className) {
+  const version = systemInfo.version ? `v${systemInfo.version}` : "版本未设置";
+  return `
+    <div class="version-meta ${className}">
+      <span>${escapeText(systemInfo.name || "CageLedger")} ${escapeText(version)}</span>
+      <small>${escapeText([systemInfo.organization, systemInfo.department].filter(Boolean).join(" · "))}</small>
+      <small>${escapeText(systemInfo.copyright || "")}</small>
     </div>
   `;
 }
@@ -1387,6 +1423,11 @@ function renderSystemUpdateCard() {
     <div class="rule-card update-card">
       <strong>系统更新</strong>
       <span>${escapeText(statusText)}</span>
+      <p>系统版本：${escapeText(systemInfo.version ? `v${systemInfo.version}` : "未设置")}</p>
+      <p>所属单位：${escapeText(systemInfo.organization || "-")} · ${escapeText(systemInfo.department || "-")}</p>
+      <p>开发人员：${escapeText(systemInfo.developer || "-")} · ${escapeText(systemInfo.contactEmail || "-")}</p>
+      <p>开源协议：${escapeText(systemInfo.license || "-")}</p>
+      <p>版权信息：${escapeText(systemInfo.copyright || "-")}</p>
       ${info?.latestShort ? `<p>GitHub 最新版本：${escapeText(info.latestShort)}${info.latestMessage ? ` · ${escapeText(info.latestMessage)}` : ""}</p>` : ""}
       ${info?.currentShort ? `<p>当前运行版本：${escapeText(info.currentShort)}</p>` : ""}
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
@@ -2251,7 +2292,7 @@ async function deleteRoom(roomId) {
   const slotIds = new Set(state.slots.filter((slot) => rackIds.has(slot.rackId)).map((slot) => slot.id));
   const occupancyCount = state.occupancies.filter((item) => slotIds.has(item.slotId)).length;
   const message = occupancyCount
-    ? `确定删除 ${room.name}？这会同时删除 ${racks.length} 个笼架、${slotIds.size} 个笼位和 ${occupancyCount} 条占用记录。`
+    ? `确定删除 ${room.name}？这会删除 ${racks.length} 个笼架和 ${slotIds.size} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
     : `确定删除 ${room.name}？这会同时删除 ${racks.length} 个笼架和 ${slotIds.size} 个笼位。`;
 
   if (!confirm(message)) return;
@@ -2261,7 +2302,6 @@ async function deleteRoom(roomId) {
     state.rooms = state.rooms.filter((item) => item.id !== roomId);
     state.racks = state.racks.filter((rack) => rack.roomId !== roomId);
     state.slots = state.slots.filter((slot) => !slotIds.has(slot.id));
-    state.occupancies = state.occupancies.filter((item) => !slotIds.has(item.slotId));
     pushLog(`删除饲养间 ${room.name}`);
     selectFirstAvailableCage();
     updateSlotStatuses();
@@ -2287,7 +2327,7 @@ async function deleteRack(rackId) {
   const occupancyCount = state.occupancies.filter((item) => slotIds.has(item.slotId)).length;
   const rackLabel = `${room?.name ?? "饲养间"} 笼架 ${rackCode(rack)}`;
   const message = occupancyCount
-    ? `确定删除 ${rackLabel}？这会同时删除 ${slots.length} 个笼位和 ${occupancyCount} 条占用记录。`
+    ? `确定删除 ${rackLabel}？这会删除 ${slots.length} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
     : `确定删除 ${rackLabel}？这会同时删除 ${slots.length} 个笼位。`;
 
   if (!confirm(message)) return;
@@ -2296,7 +2336,6 @@ async function deleteRack(rackId) {
     await deleteEntityRequest("racks", rackId);
     state.racks = state.racks.filter((item) => item.id !== rackId);
     state.slots = state.slots.filter((slot) => slot.rackId !== rackId);
-    state.occupancies = state.occupancies.filter((item) => !slotIds.has(item.slotId));
     if (room) {
       renumberRoomRacks(room);
       await updateEntity("rooms", room.id, room);
@@ -2775,11 +2814,23 @@ function iconSvg(name) {
 initialize();
 
 async function initialize() {
+  await loadSystemInfo();
   await loadCurrentUser();
   if (!remotePersistence || currentUser) {
     await Promise.all([loadIacucIndex(), loadPersistedState(), loadUsers()]);
   }
   render();
+}
+
+async function loadSystemInfo() {
+  try {
+    const response = await fetch(API_SYSTEM_INFO_URL, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    systemInfo = { ...systemInfo, ...payload };
+  } catch {
+    // Keep the bundled metadata fallback for static or offline runs.
+  }
 }
 
 async function loadIacucIndex() {

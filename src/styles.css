@@ -187,7 +187,8 @@ svg {
 .shell.sidebar-collapsed .nav-toggle span,
 .shell.sidebar-collapsed .sidebar-account span,
 .shell.sidebar-collapsed .sidebar-account strong,
-.shell.sidebar-collapsed .sidebar-account small {
+.shell.sidebar-collapsed .sidebar-account small,
+.shell.sidebar-collapsed .sidebar-version {
   display: none;
 }
 
@@ -251,6 +252,46 @@ svg {
   width: 100%;
   justify-content: center;
   margin-top: 6px;
+}
+
+.version-meta {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.version-meta span {
+  font-weight: 700;
+}
+
+.version-meta small {
+  font-size: 11px;
+}
+
+.sidebar-version {
+  color: #8fb0ad;
+  margin-top: 6px;
+}
+
+.login-version {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.workspace-footer {
+  margin-top: 22px;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--line);
+}
+
+.workspace-version {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
 }
 
 .workspace {

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+import calendar
 import csv
 import hashlib
 import hmac
@@ -31,6 +32,16 @@ SESSION_TTL_DAYS = 14
 DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")
 CAGELEDGER_VERSION = os.environ.get("CAGELEDGER_VERSION", "").strip()
+CAGELEDGER_APP_VERSION = os.environ.get("CAGELEDGER_APP_VERSION", "").strip()
+CAGELEDGER_ORGANIZATION = os.environ.get("CAGELEDGER_ORGANIZATION", "中山大学中山眼科中心").strip()
+CAGELEDGER_DEPARTMENT = os.environ.get("CAGELEDGER_DEPARTMENT", "实验动物中心").strip()
+CAGELEDGER_DEVELOPER = os.environ.get("CAGELEDGER_DEVELOPER", "Hugo").strip()
+CAGELEDGER_CONTACT_EMAIL = os.environ.get("CAGELEDGER_CONTACT_EMAIL", "info@cellnucle.us").strip()
+CAGELEDGER_LICENSE = os.environ.get("CAGELEDGER_LICENSE", "Apache-2.0").strip()
+CAGELEDGER_COPYRIGHT = os.environ.get(
+    "CAGELEDGER_COPYRIGHT",
+    f"© 2026 {CAGELEDGER_ORGANIZATION} {CAGELEDGER_DEPARTMENT}. Licensed under Apache-2.0.",
+).strip()
 CAGELEDGER_REPOSITORY = os.environ.get("CAGELEDGER_REPOSITORY", "Hugo-YH/CageLedger")
 CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
 TABLES = (
@@ -50,7 +61,21 @@ ENTITY_ENDPOINTS = {
     "/api/occupancies": "occupancies",
     "/api/billing-rules": "billing_rules",
     "/api/billing-adjustments": "billing_adjustments",
+    "/api/experiment-applications": "experiment_applications",
+    "/api/billing-statements": "billing_statements",
+    "/api/billing-statement-lines": "billing_statement_lines",
     "/api/audit-events": "audit_events",
+}
+ENTITY_ORDER_BY = {
+    "rooms": "rowid",
+    "racks": "room_id, index_no, rowid",
+    "cage_slots": "rack_id, row_no, col_no, rowid",
+    "occupancies": "start_date, rowid",
+    "billing_rules": "rowid",
+    "billing_adjustments": "rowid",
+    "experiment_applications": "iacuc",
+    "billing_statements": "month DESC, iacuc, rowid DESC",
+    "billing_statement_lines": "statement_id, line_date, rowid",
 }
 WRITABLE_ENTITY_ENDPOINTS = {
     "/api/rooms": {"collection": "rooms", "id_prefix": "room"},
@@ -134,20 +159,37 @@ def initialize_schema(conn):
         """
         CREATE TABLE IF NOT EXISTS occupancies (
             id TEXT PRIMARY KEY,
-            slot_id TEXT NOT NULL,
+            slot_id TEXT,
             cage_code TEXT,
             status TEXT NOT NULL,
             iacuc TEXT,
             project TEXT,
             pi TEXT,
             owner TEXT,
+            funding TEXT,
+            room_name TEXT,
+            rack_name TEXT,
+            slot_code TEXT,
             start_date TEXT,
             end_date TEXT,
             end_reason TEXT,
             notes TEXT,
             updated_at TEXT,
-            payload TEXT NOT NULL,
-            FOREIGN KEY(slot_id) REFERENCES cage_slots(id) ON DELETE CASCADE
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS experiment_applications (
+            iacuc TEXT PRIMARY KEY,
+            raw_iacuc TEXT,
+            project TEXT,
+            pi TEXT,
+            owner TEXT,
+            funding TEXT,
+            imported_at TEXT NOT NULL,
+            payload TEXT NOT NULL
         )
         """
     )
@@ -176,6 +218,42 @@ def initialize_schema(conn):
             effective_start TEXT,
             effective_end TEXT,
             payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS billing_statements (
+            id TEXT PRIMARY KEY,
+            iacuc TEXT NOT NULL,
+            month TEXT NOT NULL,
+            project TEXT,
+            pi TEXT,
+            owner TEXT,
+            funding TEXT,
+            total_cage_days INTEGER,
+            total_amount REAL,
+            status TEXT NOT NULL,
+            generated_at TEXT NOT NULL,
+            locked_at TEXT,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS billing_statement_lines (
+            id TEXT PRIMARY KEY,
+            statement_id TEXT NOT NULL,
+            line_date TEXT NOT NULL,
+            cage_count INTEGER,
+            unit_price REAL,
+            discount_percent REAL,
+            amount REAL,
+            cumulative REAL,
+            occupancy_ids TEXT,
+            payload TEXT NOT NULL,
+            FOREIGN KEY(statement_id) REFERENCES billing_statements(id) ON DELETE CASCADE
         )
         """
     )
@@ -232,8 +310,89 @@ def initialize_schema(conn):
         )
         """
     )
+    migrate_schema(conn)
     conn.commit()
     ensure_default_admin(conn)
+
+
+def migrate_schema(conn):
+    ensure_occupancies_history_schema(conn)
+
+
+def ensure_occupancies_history_schema(conn):
+    columns = table_columns(conn, "occupancies")
+    foreign_keys = conn.execute("PRAGMA foreign_key_list(occupancies)").fetchall()
+    slot_not_null = bool(columns.get("slot_id", {}).get("notnull"))
+    required_columns = {"funding", "room_name", "rack_name", "slot_code"}
+    if not foreign_keys and not slot_not_null and required_columns.issubset(columns):
+        return
+
+    conn.execute("ALTER TABLE occupancies RENAME TO occupancies_legacy")
+    conn.execute(
+        """
+        CREATE TABLE occupancies (
+            id TEXT PRIMARY KEY,
+            slot_id TEXT,
+            cage_code TEXT,
+            status TEXT NOT NULL,
+            iacuc TEXT,
+            project TEXT,
+            pi TEXT,
+            owner TEXT,
+            funding TEXT,
+            room_name TEXT,
+            rack_name TEXT,
+            slot_code TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            end_reason TEXT,
+            notes TEXT,
+            updated_at TEXT,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    rows = conn.execute("SELECT * FROM occupancies_legacy").fetchall()
+    for row in rows:
+        payload = json.loads(row["payload"])
+        conn.execute(
+            """
+            INSERT INTO occupancies (
+                id, slot_id, cage_code, status, iacuc, project, pi, owner, funding,
+                room_name, rack_name, slot_code, start_date, end_date, end_reason,
+                notes, updated_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["id"],
+                row["slot_id"],
+                row["cage_code"],
+                row["status"],
+                row["iacuc"],
+                row["project"],
+                row["pi"],
+                row["owner"],
+                payload.get("funding", ""),
+                payload.get("roomName", ""),
+                payload.get("rackName", ""),
+                payload.get("slotCode", ""),
+                row["start_date"],
+                row["end_date"],
+                row["end_reason"],
+                row["notes"],
+                row["updated_at"],
+                dump_json(payload),
+            ),
+        )
+    conn.execute("DROP TABLE occupancies_legacy")
+
+
+def table_columns(conn, table):
+    return {
+        row["name"]: {"type": row["type"], "notnull": bool(row["notnull"])}
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
 
 
 def read_state():
@@ -380,16 +539,10 @@ def delete_entity(state, collection, item_id):
 
     if collection == "rooms":
         rack_ids = {rack.get("id") for rack in state.get("racks", []) if rack.get("roomId") == item_id}
-        slot_ids = {slot.get("id") for slot in state.get("slots", []) if slot.get("rackId") in rack_ids}
         state["racks"] = [rack for rack in state.get("racks", []) if rack.get("roomId") != item_id]
         state["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") not in rack_ids]
-        state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") not in slot_ids]
     elif collection == "racks":
-        slot_ids = {slot.get("id") for slot in state.get("slots", []) if slot.get("rackId") == item_id}
         state["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") != item_id]
-        state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") not in slot_ids]
-    elif collection == "slots":
-        state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") != item_id]
 
     return deleted
 
@@ -432,6 +585,7 @@ def write_normalized_state(conn, state, updated_at):
     for table in TABLES:
         conn.execute(f"DELETE FROM {table}")
 
+    applications_by_iacuc = read_applications_by_iacuc(conn)
     set_setting(conn, "baseRate", state.get("baseRate", 4.5), updated_at)
     set_setting(conn, "billingMonth", state.get("billingMonth", ""), updated_at)
     set_setting(conn, "billingIacuc", state.get("billingIacuc", ""), updated_at)
@@ -487,14 +641,16 @@ def write_normalized_state(conn, state, updated_at):
             ),
         )
 
-    for occupancy in state.get("occupancies", []):
+    for occupancy_item in state.get("occupancies", []):
+        occupancy = occupancy_with_snapshots(occupancy_item, state, applications_by_iacuc)
         conn.execute(
             """
             INSERT INTO occupancies (
-                id, slot_id, cage_code, status, iacuc, project, pi, owner,
+                id, slot_id, cage_code, status, iacuc, project, pi, owner, funding,
+                room_name, rack_name, slot_code,
                 start_date, end_date, end_reason, notes, updated_at, payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 occupancy.get("id"),
@@ -505,6 +661,10 @@ def write_normalized_state(conn, state, updated_at):
                 occupancy.get("project", ""),
                 occupancy.get("pi", ""),
                 occupancy.get("owner", ""),
+                occupancy.get("funding", ""),
+                occupancy.get("roomName", ""),
+                occupancy.get("rackName", ""),
+                occupancy.get("slotCode", ""),
                 occupancy.get("startDate", ""),
                 occupancy.get("endDate", ""),
                 occupancy.get("endReason", ""),
@@ -564,7 +724,7 @@ def write_normalized_state(conn, state, updated_at):
 
 
 def assemble_state(conn):
-    if not table_has_rows(conn, "rooms"):
+    if not any(table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies")):
         return None
 
     return {
@@ -584,6 +744,45 @@ def assemble_state(conn):
 def read_payloads(conn, table, order_by):
     rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {order_by}").fetchall()
     return [json.loads(row["payload"]) for row in rows]
+
+
+def read_applications_by_iacuc(conn):
+    rows = conn.execute("SELECT payload FROM experiment_applications").fetchall()
+    return {
+        normalize_iacuc_number(item.get("iacuc", "")): item
+        for item in (json.loads(row["payload"]) for row in rows)
+        if normalize_iacuc_number(item.get("iacuc", ""))
+    }
+
+
+def occupancy_with_snapshots(occupancy, state, applications_by_iacuc):
+    item = dict(occupancy)
+    iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+    if iacuc:
+        item["iacuc"] = iacuc
+    application = applications_by_iacuc.get(iacuc, {})
+    for key in ("project", "pi", "owner", "funding"):
+        if not item.get(key) and application.get(key):
+            item[key] = application.get(key, "")
+
+    slot_context = slot_snapshot_context(state, item.get("slotId"))
+    for key, value in slot_context.items():
+        if value and not item.get(key):
+            item[key] = value
+    return item
+
+
+def slot_snapshot_context(state, slot_id):
+    slot = next((item for item in state.get("slots", []) if item.get("id") == slot_id), None)
+    if not slot:
+        return {}
+    rack = next((item for item in state.get("racks", []) if item.get("id") == slot.get("rackId")), None)
+    room = next((item for item in state.get("rooms", []) if item.get("id") == (rack or {}).get("roomId")), None)
+    return {
+        "roomName": (room or {}).get("name", ""),
+        "rackName": (rack or {}).get("name", ""),
+        "slotCode": slot.get("code", ""),
+    }
 
 
 def set_setting(conn, key, value, updated_at):
@@ -1025,6 +1224,18 @@ def format_http_date(value):
 
 
 def read_iacuc_index():
+    with connect_db() as conn:
+        rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY iacuc").fetchall()
+        if rows:
+            items = [json.loads(row["payload"]) for row in rows]
+            updated_at = max(row["imported_at"] for row in rows)
+            return {
+                "items": items,
+                "count": len(items),
+                "updatedAt": updated_at,
+                "source": "database",
+            }
+
     path = IACUC_INDEX_PATH if IACUC_INDEX_PATH.exists() else LEGACY_IACUC_INDEX_PATH
     if not path.exists():
         return {"items": [], "count": 0, "updatedAt": None, "source": None}
@@ -1039,7 +1250,46 @@ def read_iacuc_index():
     }
 
 
-def save_iacuc_index(items):
+def write_experiment_applications(conn, items, imported_at):
+    conn.execute("DELETE FROM experiment_applications")
+    for item in items:
+        normalized = application_payload(item, imported_at)
+        conn.execute(
+            """
+            INSERT INTO experiment_applications (
+                iacuc, raw_iacuc, project, pi, owner, funding, imported_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalized["iacuc"],
+                normalized.get("rawIacuc", ""),
+                normalized.get("project", ""),
+                normalized.get("pi", ""),
+                normalized.get("owner", ""),
+                normalized.get("funding", ""),
+                imported_at,
+                dump_json(normalized),
+            ),
+        )
+
+
+def application_payload(item, imported_at):
+    normalized = {
+        "iacuc": normalize_iacuc_number(item.get("iacuc", "")),
+        "rawIacuc": clean_text(item.get("rawIacuc", "")),
+        "project": clean_text(item.get("project", "")),
+        "pi": clean_text(item.get("pi", "")),
+        "owner": clean_text(item.get("owner", "")),
+        "funding": clean_text(item.get("funding", "")),
+        "importedAt": imported_at,
+    }
+    if not normalized["rawIacuc"]:
+        normalized["rawIacuc"] = normalized["iacuc"]
+    return normalized
+
+
+def save_iacuc_index_file(items):
     IACUC_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
     IACUC_INDEX_PATH.write_text(json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -1055,6 +1305,7 @@ def system_update_status():
     return {
         "repository": CAGELEDGER_REPOSITORY,
         "branch": CAGELEDGER_BRANCH,
+        "appVersion": app_version(),
         "current": current or None,
         "currentShort": short_revision(current),
         "latest": latest_sha or None,
@@ -1065,6 +1316,35 @@ def system_update_status():
         "updateAvailable": update_available,
         "checkedAt": now_iso(),
     }
+
+
+def system_info():
+    return {
+        "name": "CageLedger",
+        "title": "CageLedger 实验动物笼位管理与计费系统",
+        "description": "实验动物笼位管理与计费系统",
+        "version": app_version(),
+        "organization": CAGELEDGER_ORGANIZATION,
+        "department": CAGELEDGER_DEPARTMENT,
+        "developer": CAGELEDGER_DEVELOPER,
+        "contactEmail": CAGELEDGER_CONTACT_EMAIL,
+        "license": CAGELEDGER_LICENSE,
+        "copyright": CAGELEDGER_COPYRIGHT,
+        "repository": CAGELEDGER_REPOSITORY,
+        "branch": CAGELEDGER_BRANCH,
+        "revision": current_revision() or None,
+        "revisionShort": short_revision(current_revision()),
+    }
+
+
+def app_version():
+    if CAGELEDGER_APP_VERSION:
+        return CAGELEDGER_APP_VERSION
+    package_path = ROOT / "package.json"
+    try:
+        return json.loads(package_path.read_text(encoding="utf-8")).get("version", "")
+    except (OSError, json.JSONDecodeError):
+        return ""
 
 
 def current_revision():
@@ -1222,6 +1502,201 @@ def is_valid_iacuc_number(value):
     return bool(re.search(r"\d", value))
 
 
+def generate_billing_statement(conn, payload, actor):
+    iacuc = normalize_iacuc_number(payload.get("iacuc", ""))
+    month = clean_text(payload.get("month", ""))
+    status = clean_text(payload.get("status", "draft")) or "draft"
+    if not iacuc:
+        raise ValueError("IACUC 编号不能为空")
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise ValueError("结算月份格式应为 YYYY-MM")
+    if status not in ("draft", "locked"):
+        raise ValueError("结算单状态只能是 draft 或 locked")
+
+    applications_by_iacuc = read_applications_by_iacuc(conn)
+    occupancies = read_payloads(conn, "occupancies", "start_date, rowid")
+    rules = read_payloads(conn, "billing_rules", "rowid")
+    adjustments = read_payloads(conn, "billing_adjustments", "rowid")
+    dates = dates_in_month(month)
+    generated_at = now_iso()
+    cumulative = 0
+    lines = []
+
+    for date in dates:
+        active_items = [
+            item
+            for item in occupancies
+            if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and occupancy_active_on_date(item, date)
+        ]
+        unit_price = billing_unit_price_for(rules, date)
+        discount_percent = billing_discount_for(adjustments, iacuc, date)
+        amount = len(active_items) * unit_price * (1 - discount_percent / 100)
+        cumulative += amount
+        line = {
+            "id": new_id("line"),
+            "date": date,
+            "cageCount": len(active_items),
+            "unitPrice": unit_price,
+            "discountPercent": discount_percent,
+            "amount": amount,
+            "cumulative": cumulative,
+            "occupancyIds": [item.get("id") for item in active_items if item.get("id")],
+        }
+        lines.append(line)
+
+    application = statement_application_snapshot(iacuc, applications_by_iacuc, occupancies)
+    statement = {
+        "id": new_id("stmt"),
+        "iacuc": iacuc,
+        "month": month,
+        "project": application.get("project", ""),
+        "pi": application.get("pi", ""),
+        "owner": application.get("owner", ""),
+        "funding": application.get("funding", ""),
+        "totalCageDays": sum(line["cageCount"] for line in lines),
+        "totalAmount": cumulative,
+        "status": status,
+        "generatedAt": generated_at,
+        "lockedAt": generated_at if status == "locked" else "",
+    }
+    for line in lines:
+        line["statementId"] = statement["id"]
+
+    if payload.get("replaceDraft", True):
+        replace_existing_draft_statement(conn, iacuc, month)
+
+    insert_billing_statement(conn, statement, lines)
+    event = audit_event(
+        actor,
+        "billing_statement.generated",
+        "billing_statement",
+        statement["id"],
+        f"{actor['displayName']} 生成 {iacuc} {month} 饲养费结算单",
+        [],
+        generated_at,
+        None,
+        statement,
+    )
+    write_audit_events(conn, [event])
+    return statement, lines, merge_audit_logs([], [event])
+
+
+def dates_in_month(month):
+    year, month_no = [int(part) for part in month.split("-")]
+    day_count = calendar.monthrange(year, month_no)[1]
+    return [f"{year:04d}-{month_no:02d}-{day:02d}" for day in range(1, day_count + 1)]
+
+
+def occupancy_active_on_date(item, date):
+    if item.get("status") not in ("active", "ended"):
+        return False
+    if not item.get("startDate") or item.get("startDate") > date:
+        return False
+    if item.get("endDate") and item.get("endDate") < date:
+        return False
+    return True
+
+
+def billing_unit_price_for(rules, date):
+    for rule in rules:
+        after_start = not rule.get("effectiveStart") or rule.get("effectiveStart") <= date
+        before_end = not rule.get("effectiveEnd") or rule.get("effectiveEnd") >= date
+        if rule.get("unit") == "cage_day" and after_start and before_end:
+            return float(rule.get("price") or 0)
+    return 4.5
+
+
+def billing_discount_for(adjustments, iacuc, date):
+    for adjustment in adjustments:
+        in_range = (
+            (not adjustment.get("effectiveStart") or adjustment.get("effectiveStart") <= date)
+            and (not adjustment.get("effectiveEnd") or adjustment.get("effectiveEnd") >= date)
+        )
+        if (
+            adjustment.get("targetType") == "iacuc"
+            and normalize_iacuc_number(adjustment.get("targetId", "")) == iacuc
+            and adjustment.get("type") == "discount"
+            and in_range
+        ):
+            return float(adjustment.get("value") or 0)
+    return 0
+
+
+def statement_application_snapshot(iacuc, applications_by_iacuc, occupancies):
+    application = applications_by_iacuc.get(iacuc)
+    if application:
+        return application
+    for item in occupancies:
+        if normalize_iacuc_number(item.get("iacuc", "")) == iacuc:
+            return {
+                "project": item.get("project", ""),
+                "pi": item.get("pi", ""),
+                "owner": item.get("owner", ""),
+                "funding": item.get("funding", ""),
+            }
+    return {}
+
+
+def replace_existing_draft_statement(conn, iacuc, month):
+    rows = conn.execute(
+        "SELECT id FROM billing_statements WHERE iacuc = ? AND month = ? AND status = ?",
+        (iacuc, month, "draft"),
+    ).fetchall()
+    ids = [row["id"] for row in rows]
+    for statement_id in ids:
+        conn.execute("DELETE FROM billing_statement_lines WHERE statement_id = ?", (statement_id,))
+        conn.execute("DELETE FROM billing_statements WHERE id = ?", (statement_id,))
+
+
+def insert_billing_statement(conn, statement, lines):
+    conn.execute(
+        """
+        INSERT INTO billing_statements (
+            id, iacuc, month, project, pi, owner, funding, total_cage_days,
+            total_amount, status, generated_at, locked_at, payload
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            statement["id"],
+            statement["iacuc"],
+            statement["month"],
+            statement.get("project", ""),
+            statement.get("pi", ""),
+            statement.get("owner", ""),
+            statement.get("funding", ""),
+            as_int(statement.get("totalCageDays")),
+            as_float(statement.get("totalAmount")),
+            statement["status"],
+            statement["generatedAt"],
+            statement.get("lockedAt", ""),
+            dump_json(statement),
+        ),
+    )
+    for line in lines:
+        conn.execute(
+            """
+            INSERT INTO billing_statement_lines (
+                id, statement_id, line_date, cage_count, unit_price, discount_percent,
+                amount, cumulative, occupancy_ids, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                line["id"],
+                line["statementId"],
+                line["date"],
+                as_int(line.get("cageCount")),
+                as_float(line.get("unitPrice")),
+                as_float(line.get("discountPercent")),
+                as_float(line.get("amount")),
+                as_float(line.get("cumulative")),
+                dump_json(line.get("occupancyIds", [])),
+                dump_json(line),
+            ),
+        )
+
+
 def parse_multipart_upload(content_type, raw):
     if "multipart/form-data" not in content_type:
         raise ValueError("请使用 multipart/form-data 上传 CSV 文件")
@@ -1279,7 +1754,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/health":
-            self.send_json({"ok": True, "database": str(DB_PATH)})
+            self.send_json({"ok": True, "database": str(DB_PATH), "system": system_info()})
+            return
+        if path == "/api/system/info":
+            self.send_json(system_info())
             return
         if path == "/api/auth/me":
             user = self.current_user()
@@ -1343,6 +1821,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/iacuc-index/upload":
             self.handle_iacuc_upload()
+            return
+        if path == "/api/billing-statements/generate":
+            self.handle_billing_statement_generate()
             return
         if path == "/api/users":
             user = self.require_user()
@@ -1534,8 +2015,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             if filename and not filename.lower().endswith(".csv"):
                 raise ValueError("目前只支持上传 CSV 文件")
             parsed = parse_iacuc_csv(file_body)
-            save_iacuc_index(parsed["items"])
             now = now_iso()
+            file_items = [application_payload(item, now) for item in parsed["items"]]
+            save_iacuc_index_file(file_items)
             event = audit_event(
                 user,
                 "iacuc_index.uploaded",
@@ -1548,6 +2030,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 {"filename": filename, **parsed["summary"]},
             )
             with connect_db() as conn:
+                write_experiment_applications(conn, parsed["items"], now)
                 write_audit_events(conn, [event])
                 conn.commit()
             self.send_json(
@@ -1556,10 +2039,26 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                     "filename": filename,
                     "updatedAt": now,
                     **parsed["summary"],
-                    "items": parsed["items"],
+                    "items": file_items,
                     "auditLogs": merge_audit_logs([], [event]),
                 }
             )
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_billing_statement_generate(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                statement, lines, audit_logs = generate_billing_statement(conn, body, user)
+                conn.commit()
+            self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -1589,7 +2088,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             if table == "audit_events":
                 rows = conn.execute("SELECT payload FROM audit_events ORDER BY at DESC, rowid DESC LIMIT 500").fetchall()
             else:
-                rows = conn.execute(f"SELECT payload FROM {table} ORDER BY rowid").fetchall()
+                rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {ENTITY_ORDER_BY.get(table, 'rowid')}").fetchall()
         self.send_json({"items": [json.loads(row["payload"]) for row in rows]})
 
     def entity_route(self, path):

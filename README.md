@@ -110,9 +110,9 @@ http://群晖IP:5173
 ./data/cageledger.sqlite
 ```
 
-建议定期备份 `data/cageledger.sqlite` 和 `data/iacuc-index.json`。
+建议定期备份 `data/cageledger.sqlite`。`data/iacuc-index.json` 仍会作为兼容文件生成，但实验申请汇总表的后端数据以 SQLite 中的 `experiment_applications` 表为准。
 
-如果需要 IACUC 自动回填，管理员登录系统后可在“数据管理 -> IACUC 索引”上传动物实验申请汇总表 CSV。系统会生成 `data/iacuc-index.json`，该文件随 `./data:/app/data` 挂载持久化。
+如果需要 IACUC 自动回填，管理员登录系统后可在“数据管理 -> IACUC 索引”上传动物实验申请汇总表 CSV。系统会重建 SQLite 中的实验申请汇总表，并同步生成 `data/iacuc-index.json` 兼容文件。
 
 “数据管理 -> 系统更新”只负责检查 GitHub 最新提交，不会从网页自动拉取并运行新代码。更新代码仍建议在群晖项目目录执行 `git pull origin main` 后重新构建容器；构建时传入 `CAGELEDGER_VERSION=$(git rev-parse HEAD)` 后，页面才能准确判断当前运行版本是否落后。
 
@@ -129,9 +129,10 @@ http://群晖IP:5173
 
 - `项目来源`
 
-上传后索引会保存到：
+上传后汇总表会保存到 SQLite，并同步生成兼容索引文件：
 
 ```text
+data/cageledger.sqlite
 data/iacuc-index.json
 ```
 
@@ -143,6 +144,18 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 
 真实 IACUC 索引包含项目负责人、实验负责人等业务数据，`data/` 和 `src/iacuc-data.local.json` 均已被 Git 忽略，避免提交到远程仓库。
 
+## 版本与版权
+
+系统版本号维护在 `package.json` 的 `version` 字段中，页面加载资源、后端 `/api/system/info` 和 UI 版本展示会读取同一版本号。每次发布功能更新时，建议同步提升版本号。
+
+- 所属单位：中山大学中山眼科中心
+- 所属科室：实验动物中心
+- 开发人员：Hugo
+- 联系邮箱：info@cellnucle.us
+- 开源协议：Apache License 2.0
+
+开源协议正文见 `LICENSE`，归属和版权说明见 `NOTICE`。如部署环境需要覆盖显示信息，可使用 `CAGELEDGER_ORGANIZATION`、`CAGELEDGER_DEPARTMENT`、`CAGELEDGER_DEVELOPER`、`CAGELEDGER_CONTACT_EMAIL`、`CAGELEDGER_COPYRIGHT` 和 `CAGELEDGER_LICENSE` 环境变量。
+
 ## 后续建议
 
 当前共享模式已经在 SQLite 中拆分为业务表：
@@ -151,12 +164,17 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `racks`
 - `cage_slots`
 - `occupancies`
+- `experiment_applications`
 - `billing_rules`
 - `billing_adjustments`
+- `billing_statements`
+- `billing_statement_lines`
 - `audit_logs`
 - `users`
 - `sessions`
 - `audit_events`
+
+实验申请汇总表由管理员上传 CSV 重建，以 IACUC 编号作为业务主键。笼位图只表示当前结构和当前状态；占用记录作为历史流水保留，不再随饲养间、笼架或笼位删除而级联删除；饲养费结算单由占用记录生成，并保存项目、人员、经费和每日明细快照。
 
 前端读取数据已经通过实体级 GET API 组装状态；笼位占用、批量录入、取材/设空、饲养间/笼架配置和基础计费规则写入也已迁移到实体级 API。`/api/state` 目前保留为兼容、导入导出或调试接口。
 
@@ -164,8 +182,11 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `GET /api/racks`
 - `GET /api/cage-slots`
 - `GET /api/occupancies`
+- `GET /api/experiment-applications`
 - `GET /api/billing-rules`
 - `GET /api/billing-adjustments`
+- `GET /api/billing-statements`
+- `GET /api/billing-statement-lines`
 - `GET /api/audit-events`
 
 写入型实体 API：
@@ -188,8 +209,9 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 - `POST /api/billing-adjustments`
 - `PUT /api/billing-adjustments/{id}`
 - `DELETE /api/billing-adjustments/{id}`
+- `POST /api/billing-statements/generate`
 
-这些接口与 `/api/state` 共用同一套权限校验和审计逻辑。管理员可以维护配置、计费规则和减免规则；房间管理员只能修改授权饲养间内的笼位占用信息。删除饲养间、笼架或笼位时，会级联删除下级笼架、笼位和占用记录。
+这些接口与 `/api/state` 共用同一套权限校验和审计逻辑。管理员可以维护配置、计费规则和减免规则；房间管理员只能修改授权饲养间内的笼位占用信息。删除饲养间或笼架时，会删除下级笼架和笼位，但保留占用记录作为历史计费依据。
 
 账号相关 API：
 
