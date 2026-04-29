@@ -74,6 +74,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 svg {
   width: 18px;
   height: 18px;
@@ -627,6 +632,49 @@ h3 {
 .system-side {
   display: grid;
   gap: 18px;
+}
+
+.billing-source-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.quantity-billing-layout {
+  grid-template-columns: minmax(0, 1fr) 430px;
+}
+
+.quantity-sheet-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.quantity-sheet-fields .wide {
+  grid-column: span 2;
+}
+
+.quantity-entry-wrap {
+  margin-bottom: 12px;
+}
+
+.quantity-entry-table {
+  min-width: 1120px;
+}
+
+.quantity-entry-table input,
+.quantity-entry-table select {
+  width: 100%;
+  min-width: 86px;
+}
+
+.compact-summary {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.mini-statement table {
+  min-width: 420px;
 }
 
 .cage-layout {
@@ -1512,6 +1560,7 @@ tr:last-child td {
 
   .content-grid,
   .billing-layout,
+  .quantity-billing-layout,
   .system-layout,
   .cage-layout,
   .dashboard-grid {
@@ -1594,6 +1643,14 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
+  .quantity-sheet-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quantity-sheet-fields .wide {
+    grid-column: auto;
+  }
+
   .user-fields {
     grid-template-columns: 1fr;
   }
@@ -1605,6 +1662,10 @@ tr:last-child td {
   .compact-form-row.half,
   .compact-form-row.two-one,
   .compact-form-row.third {
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-sheet-fields {
     grid-template-columns: 1fr;
   }
 

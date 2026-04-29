@@ -8,6 +8,8 @@ const API_IACUC_INDEX_URL = "/api/iacuc-index";
 const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
 const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
+const API_BILLING_STATEMENT_GENERATE_URL = "/api/billing-statements/generate";
+const API_QUANTITY_SHEETS_URL = "/api/quantity-sheets";
 const ENTITY_API_URLS = {
   rooms: "/api/rooms",
   racks: "/api/racks",
@@ -75,8 +77,12 @@ const seedData = {
   batchMode: false,
   samplingMode: "",
   sidebarCollapsed: false,
+  billingSource: "cage_map",
   billingMonth: today.slice(0, 7),
   billingIacuc: "IACUC-2026-001",
+  selectedQuantitySheetId: "",
+  quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
+  quantitySheets: [],
   slotFilter: "all",
   baseRate: 4.5,
   rooms: [
@@ -223,13 +229,17 @@ async function loadEntityState() {
       return [key, payload.items || []];
     }),
   );
+  const quantityResponse = await fetch(API_QUANTITY_SHEETS_URL, { cache: "no-store" });
+  if (!quantityResponse.ok) throw new Error(`Failed to load ${API_QUANTITY_SHEETS_URL}`);
+  const quantityPayload = await quantityResponse.json();
+  const quantitySheets = quantityPayload.items || [];
   const entityData = Object.fromEntries(entries);
-  if (!entityData.rooms?.length) return bootstrapEntityState();
 
   const billingRules = entityData.billingRules || [];
   const firstIacuc = entityData.occupancies?.find((item) => item.iacuc)?.iacuc || "";
   const knownIacucs = new Set((entityData.occupancies || []).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean));
   const localBillingIacuc = knownIacucs.has(normalizeIacucNumber(localState.billingIacuc)) ? localState.billingIacuc : "";
+  const selectedQuantitySheet = quantitySheets.find((sheet) => sheet.id === localState.selectedQuantitySheetId) || quantitySheets[0];
 
   return {
     ...structuredClone(seedData),
@@ -237,8 +247,12 @@ async function loadEntityState() {
     selectedRoomId: localState.selectedRoomId || "",
     selectedRackId: localState.selectedRackId || "",
     selectedSlotId: localState.selectedSlotId || "",
+    billingSource: localState.billingSource || seedData.billingSource,
     billingMonth: localState.billingMonth || today.slice(0, 7),
     billingIacuc: localBillingIacuc || firstIacuc,
+    selectedQuantitySheetId: selectedQuantitySheet?.id || "",
+    quantitySheetDraft: selectedQuantitySheet || makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
+    quantitySheets,
     slotFilter: localState.slotFilter || "all",
     baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
     rooms: entityData.rooms || [],
@@ -249,29 +263,6 @@ async function loadEntityState() {
     adjustments: entityData.adjustments || [],
     auditLogs: entityData.auditLogs || [],
   };
-}
-
-async function bootstrapEntityState() {
-  const initialState = normalize(structuredClone(seedData));
-  for (const room of initialState.rooms) {
-    await createEntity("rooms", room);
-  }
-  for (const rack of initialState.racks) {
-    await createEntity("racks", rack);
-  }
-  for (const slot of initialState.slots) {
-    await createEntity("slots", slot);
-  }
-  for (const rule of initialState.billingRules) {
-    await createEntity("billingRules", rule);
-  }
-  for (const adjustment of initialState.adjustments) {
-    await createEntity("adjustments", adjustment);
-  }
-  for (const occupancy of initialState.occupancies) {
-    await createEntity("occupancies", occupancy);
-  }
-  return initialState;
 }
 
 async function entityRequest(collection, method, item = null, itemId = "") {
@@ -331,6 +322,9 @@ function normalize(data) {
   const next = { ...structuredClone(seedData), ...data };
   if (next.activeView === "settings") next.activeView = "rooms";
   next.selectedSlotIds = Array.isArray(next.selectedSlotIds) ? next.selectedSlotIds : [];
+  next.quantitySheets = Array.isArray(next.quantitySheets) ? next.quantitySheets : [];
+  next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
+  next.billingSource = next.billingSource === "quantity_sheet" ? "quantity_sheet" : "cage_map";
   next.batchMode = Boolean(next.batchMode);
   next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
@@ -764,8 +758,36 @@ function renderRoomCapacityRow(room) {
 
 function renderCageView() {
   const selectedRoom = getSelectedRoom();
+  if (!selectedRoom) {
+    return `
+      <section class="content-grid">
+        <div class="panel large">
+          <div class="empty-state">
+            ${iconSvg("grid")}
+            <h2>尚未创建饲养间</h2>
+            <p>先在饲养间管理中创建饲养间和笼架，再录入笼位占用信息。</p>
+            ${currentUser?.role === "admin" ? `<button class="primary" type="button" data-view="rooms">${iconSvg("plus")}新增饲养间</button>` : ""}
+          </div>
+        </div>
+      </section>
+    `;
+  }
   const racks = state.racks.filter((rack) => rack.roomId === selectedRoom.id);
   const selectedRack = getSelectedRack(racks);
+  if (!selectedRack) {
+    return `
+      <section class="content-grid">
+        <div class="panel large">
+          <div class="empty-state">
+            ${iconSvg("grid")}
+            <h2>尚未创建笼架</h2>
+            <p>当前饲养间还没有笼架，请先添加笼架后再录入笼位。</p>
+            ${currentUser?.role === "admin" ? `<button class="primary" type="button" data-view="rooms">${iconSvg("plus")}新增笼架</button>` : ""}
+          </div>
+        </div>
+      </section>
+    `;
+  }
   const slots = state.slots.filter((slot) => slot.rackId === selectedRack.id);
   const visibleSlots = state.slotFilter === "all" ? slots : slots.filter((slot) => slot.status === state.slotFilter);
   const selectedSlot = getSelectedSlot(visibleSlots, slots);
@@ -1173,8 +1195,19 @@ function renderHistoryItem(item) {
 }
 
 function renderBillingView() {
+  return `
+    <section class="billing-source-tabs" role="tablist" aria-label="饲养费核算方式">
+      <button class="segmented ${state.billingSource === "cage_map" ? "active" : ""}" type="button" data-billing-source="cage_map">动态笼位图</button>
+      <button class="segmented ${state.billingSource === "quantity_sheet" ? "active" : ""}" type="button" data-billing-source="quantity_sheet">数量统计表</button>
+    </section>
+    ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
+  `;
+}
+
+function renderCageMapBillingView() {
   const statement = buildStatement(state.billingIacuc, state.billingMonth);
   const billingInfo = findIacucInfo(state.billingIacuc);
+  const canGenerateStatement = !remotePersistence || currentUser?.role === "admin";
 
   return `
     <section class="billing-layout">
@@ -1187,8 +1220,8 @@ function renderBillingView() {
           <div class="toolbar">
             <input id="billingMonth" type="month" value="${state.billingMonth}" />
             <input id="billingIacuc" type="text" value="${escapeAttr(state.billingIacuc)}" list="billingIacucOptions" placeholder="输入 IACUC 编号" />
-            <button id="exportBilling" class="secondary">${iconSvg("download")}导出饲养明细 CSV</button>
-            <button id="exportSettlementPdf" class="primary">${iconSvg("download")}导出结算单 PDF</button>
+            <button id="exportBilling" class="secondary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+            <button id="exportSettlementPdf" class="primary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
           </div>
         </div>
 
@@ -1224,6 +1257,11 @@ function renderBillingView() {
             </tbody>
           </table>
         </div>
+        ${
+          canGenerateStatement
+            ? ""
+            : `<p class="muted">共享模式下只有系统管理员可以生成和导出正式结算单。</p>`
+        }
       </div>
 
       <div class="panel">
@@ -1254,6 +1292,149 @@ function renderBillingView() {
   `;
 }
 
+function renderQuantitySheetBillingView() {
+  const draft = state.quantitySheetDraft || makeQuantitySheetDraft(state.billingMonth);
+  const statement = buildQuantitySheetStatement(draft);
+  const canGenerateStatement = !remotePersistence || Boolean(currentUser);
+
+  return `
+    <section class="billing-layout quantity-billing-layout">
+      <div class="panel large">
+        <form id="quantitySheetForm">
+          <div class="panel-head">
+            <div>
+              <h2>数量统计表结算</h2>
+              <p>录入纸质数量统计表中的变更行，系统按每日结余笼数展开明细。</p>
+            </div>
+            <div class="toolbar">
+              <select id="quantitySheetSelect" aria-label="选择数量统计表">
+                <option value="">新建统计表</option>
+                ${state.quantitySheets
+                  .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
+                  .join("")}
+              </select>
+              <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
+              <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
+              <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+              <button id="exportSettlementPdf" class="primary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+            </div>
+          </div>
+
+          <div class="quantity-sheet-fields">
+            <label>
+              结算月份
+              <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" required />
+            </label>
+            <label>
+              饲养间
+              <select name="roomId">
+                <option value="">手动填写房间号</option>
+                ${state.rooms.map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === draft.roomId ? "selected" : ""}>${escapeText(room.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label>
+              房间号
+              <input name="roomName" value="${escapeAttr(draft.roomName)}" placeholder="如 8101" />
+            </label>
+            <label>
+              管理员
+              <input name="manager" value="${escapeAttr(draft.manager)}" />
+            </label>
+            <label>
+              IACUC 编号
+              <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" required />
+            </label>
+            <label>
+              项目负责人
+              <input name="pi" value="${escapeAttr(draft.pi)}" />
+            </label>
+            <label>
+              实验负责人
+              <input name="owner" value="${escapeAttr(draft.owner)}" />
+            </label>
+            <label>
+              联系电话
+              <input name="contact" value="${escapeAttr(draft.contact)}" />
+            </label>
+            <label class="wide">
+              项目名称
+              <input name="project" value="${escapeAttr(draft.project)}" />
+            </label>
+            <label>
+              支撑经费
+              <input name="funding" value="${escapeAttr(draft.funding)}" />
+            </label>
+            <label>
+              月初结余动物数
+              <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" />
+            </label>
+            <label>
+              月初结余笼数
+              <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" />
+            </label>
+            <label>
+              计费口径
+              <select name="billingUnit">
+                <option value="cage_day" ${draft.billingUnit !== "animal_day" ? "selected" : ""}>笼/天</option>
+                <option value="animal_day" ${draft.billingUnit === "animal_day" ? "selected" : ""}>只/天</option>
+              </select>
+            </label>
+          </div>
+          <datalist id="quantityIacucOptions">
+            ${iacucOptions(draft.iacuc)
+              .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
+              .join("")}
+          </datalist>
+
+          <div class="table-wrap quantity-entry-wrap">
+            <table class="quantity-entry-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>新增</th>
+                  <th>新增类型</th>
+                  <th>减少</th>
+                  <th>减少类型</th>
+                  <th>结余总数</th>
+                  <th>结余笼数</th>
+                  <th>经手人</th>
+                  <th>备注</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${draft.rows.map((row, index) => renderQuantitySheetRow(row, index)).join("")}
+              </tbody>
+            </table>
+          </div>
+          <button id="addQuantitySheetRow" class="secondary" type="button">${iconSvg("plus")}添加变更行</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head compact">
+          <div>
+            <h2>结算预览</h2>
+            <p>预览会按已录入的结余笼数展开到整月。</p>
+          </div>
+        </div>
+        <div class="statement-summary compact-summary">
+          ${summaryTile("IACUC", draft.iacuc || "-")}
+          ${summaryTile("累计笼日", statement.totalCageDays)}
+          ${summaryTile("累计只日", statement.totalAnimalDays)}
+          ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
+        </div>
+        <div class="table-wrap mini-statement">
+          <table>
+            <thead><tr><th>日期</th><th>动物数</th><th>笼数</th><th>费用</th></tr></thead>
+            <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="4">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function summaryTile(label, value) {
   return `
     <div class="summary-tile">
@@ -1272,6 +1453,42 @@ function renderBillingRow(row) {
       <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
       <td>¥${MONEY_FORMAT.format(row.amount)}</td>
       <td>¥${MONEY_FORMAT.format(row.cumulative)}</td>
+    </tr>
+  `;
+}
+
+function renderQuantitySheetRow(row, index) {
+  return `
+    <tr data-quantity-row="${index}">
+      <td><input name="rowDate" type="date" value="${escapeAttr(row.date)}" required /></td>
+      <td><input name="addedCount" type="number" min="0" value="${row.addedCount ?? ""}" /></td>
+      <td>
+        <select name="addedType">
+          ${["", "购入", "转入", "分笼"].map((value) => `<option value="${value}" ${row.addedType === value ? "selected" : ""}>${value || "-"}</option>`).join("")}
+        </select>
+      </td>
+      <td><input name="removedCount" type="number" min="0" value="${row.removedCount ?? ""}" /></td>
+      <td>
+        <select name="removedType">
+          ${["", "取材", "死亡", "转出"].map((value) => `<option value="${value}" ${row.removedType === value ? "selected" : ""}>${value || "-"}</option>`).join("")}
+        </select>
+      </td>
+      <td><input name="animalCount" type="number" min="0" value="${row.animalCount ?? ""}" /></td>
+      <td><input name="cageCount" type="number" min="0" value="${row.cageCount ?? ""}" /></td>
+      <td><input name="handler" value="${escapeAttr(row.handler)}" /></td>
+      <td><input name="notes" value="${escapeAttr(row.notes)}" /></td>
+      <td><button class="icon-danger" type="button" data-remove-qrow="${index}" title="删除行">${iconSvg("trash")}</button></td>
+    </tr>
+  `;
+}
+
+function renderQuantityPreviewRow(row) {
+  return `
+    <tr>
+      <td>${row.date}</td>
+      <td>${row.animalCount}</td>
+      <td>${row.cageCount}</td>
+      <td>¥${MONEY_FORMAT.format(row.amount)}</td>
     </tr>
   `;
 }
@@ -1818,6 +2035,13 @@ function bindEvents() {
   });
   document.querySelector("#clearSlot")?.addEventListener("click", clearSelectedSlot);
   document.querySelector("#clearBatchSlots")?.addEventListener("click", clearBatchSlots);
+  document.querySelectorAll("[data-billing-source]").forEach((button) => {
+    button.addEventListener("click", () => {
+      captureQuantitySheetDraft();
+      state.billingSource = button.dataset.billingSource;
+      render();
+    });
+  });
   document.querySelector("#billingMonth")?.addEventListener("change", (event) => {
     state.billingMonth = event.target.value;
     render();
@@ -1837,6 +2061,17 @@ function bindEvents() {
   });
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
   document.querySelector("#exportSettlementPdf")?.addEventListener("click", exportSettlementPdf);
+  document.querySelector("#quantitySheetForm")?.addEventListener("submit", handleQuantitySheetSubmit);
+  document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
+  document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
+  document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
+  document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
+    button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
+  });
+  document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
+  document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("change", autofillQuantitySheetIacucFields);
+  document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("blur", autofillQuantitySheetIacucFields);
+  document.querySelector("#quantitySheetForm select[name='roomId']")?.addEventListener("change", syncQuantitySheetRoomName);
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
   document.querySelector("#rackForm")?.addEventListener("submit", handleRackSubmit);
@@ -2076,8 +2311,10 @@ async function checkSystemUpdate() {
 
 function selectVisibleSlots() {
   const selectedRoom = getSelectedRoom();
+  if (!selectedRoom) return;
   const racks = state.racks.filter((rack) => rack.roomId === selectedRoom.id);
   const selectedRack = getSelectedRack(racks);
+  if (!selectedRack) return;
   const slots = state.slots.filter((slot) => slot.rackId === selectedRack.id);
   const visibleSlots = state.slotFilter === "all" ? slots : slots.filter((slot) => slot.status === state.slotFilter);
   state.selectedSlotIds = visibleSlots.map((slot) => slot.id);
@@ -2336,6 +2573,222 @@ function updateBillingIacuc(value) {
   render();
 }
 
+async function handleQuantitySheetSubmit(event) {
+  event.preventDefault();
+  try {
+    const sheet = await saveQuantitySheetDraft();
+    pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
+}
+
+function handleQuantitySheetSelect(event) {
+  captureQuantitySheetDraft();
+  const sheet = state.quantitySheets.find((item) => item.id === event.target.value);
+  state.selectedQuantitySheetId = sheet?.id || "";
+  state.quantitySheetDraft = normalizeQuantitySheetDraft(sheet || makeQuantitySheetDraft(state.billingMonth));
+  state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
+  state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
+  render();
+}
+
+function newQuantitySheetDraft() {
+  captureQuantitySheetDraft();
+  state.selectedQuantitySheetId = "";
+  state.quantitySheetDraft = makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
+  render();
+}
+
+function addQuantitySheetRow() {
+  captureQuantitySheetDraft();
+  state.quantitySheetDraft.rows.push(makeQuantitySheetRow(state.quantitySheetDraft.month));
+  render();
+}
+
+function removeQuantitySheetRow(index) {
+  captureQuantitySheetDraft();
+  state.quantitySheetDraft.rows.splice(index, 1);
+  render();
+}
+
+function captureQuantitySheetDraft() {
+  const form = document.querySelector("#quantitySheetForm");
+  if (!form) return;
+  state.quantitySheetDraft = readQuantitySheetForm(form);
+  state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
+  state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
+}
+
+async function saveQuantitySheetDraft() {
+  const form = document.querySelector("#quantitySheetForm");
+  if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
+  const sheet = normalizeQuantitySheetDraft(state.quantitySheetDraft);
+  if (!remotePersistence) {
+    upsertById(state.quantitySheets, sheet);
+    state.selectedQuantitySheetId = sheet.id;
+    state.quantitySheetDraft = sheet;
+    return sheet;
+  }
+
+  const exists = state.quantitySheets.some((item) => item.id === sheet.id);
+  const response = await fetch(exists ? `${API_QUANTITY_SHEETS_URL}/${encodeURIComponent(sheet.id)}` : API_QUANTITY_SHEETS_URL, {
+    method: exists ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sheet }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "保存数量统计表失败");
+  }
+  mergeServerAuditLogs(payload);
+  upsertById(state.quantitySheets, payload.item || sheet);
+  state.selectedQuantitySheetId = (payload.item || sheet).id;
+  state.quantitySheetDraft = payload.item || sheet;
+  return state.quantitySheetDraft;
+}
+
+function readQuantitySheetForm(form) {
+  const data = new FormData(form);
+  const room = state.rooms.find((item) => item.id === data.get("roomId"));
+  const month = data.get("month") || state.billingMonth || today.slice(0, 7);
+  const rows = [...form.querySelectorAll("[data-quantity-row]")]
+    .map((row) => ({
+      id: state.quantitySheetDraft?.rows?.[Number(row.dataset.quantityRow)]?.id || crypto.randomUUID(),
+      date: row.querySelector("[name='rowDate']")?.value || "",
+      addedCount: numericOrNull(row.querySelector("[name='addedCount']")?.value),
+      addedType: row.querySelector("[name='addedType']")?.value || "",
+      removedCount: numericOrNull(row.querySelector("[name='removedCount']")?.value),
+      removedType: row.querySelector("[name='removedType']")?.value || "",
+      animalCount: numericOrNull(row.querySelector("[name='animalCount']")?.value),
+      cageCount: numericOrNull(row.querySelector("[name='cageCount']")?.value),
+      handler: row.querySelector("[name='handler']")?.value.trim() || "",
+      notes: row.querySelector("[name='notes']")?.value.trim() || "",
+    }))
+    .filter((row) => row.date || row.addedCount || row.removedCount || row.animalCount !== null || row.cageCount !== null);
+
+  return normalizeQuantitySheetDraft({
+    id: state.quantitySheetDraft?.id || crypto.randomUUID(),
+    month,
+    roomId: data.get("roomId") || "",
+    roomName: data.get("roomName")?.trim() || room?.name || "",
+    manager: data.get("manager")?.trim() || "",
+    iacuc: normalizeIacucNumber(data.get("iacuc") || ""),
+    project: data.get("project")?.trim() || "",
+    pi: data.get("pi")?.trim() || "",
+    owner: data.get("owner")?.trim() || "",
+    contact: data.get("contact")?.trim() || "",
+    funding: data.get("funding")?.trim() || "",
+    billingUnit: data.get("billingUnit") || "cage_day",
+    initialAnimalCount: numericOrZero(data.get("initialAnimalCount")),
+    initialCageCount: numericOrZero(data.get("initialCageCount")),
+    rows,
+  });
+}
+
+function makeQuantitySheetDraft(month = today.slice(0, 7)) {
+  return normalizeQuantitySheetDraft({
+    id: crypto.randomUUID(),
+    month,
+    roomId: "",
+    roomName: "",
+    manager: currentUser?.displayName || "",
+    iacuc: "",
+    project: "",
+    pi: "",
+    owner: "",
+    contact: "",
+    funding: "",
+    billingUnit: "cage_day",
+    initialAnimalCount: 0,
+    initialCageCount: 0,
+    rows: [makeQuantitySheetRow(month)],
+  });
+}
+
+function makeQuantitySheetRow(month = today.slice(0, 7)) {
+  return {
+    id: crypto.randomUUID(),
+    date: `${month}-01`,
+    addedCount: null,
+    addedType: "",
+    removedCount: null,
+    removedType: "",
+    animalCount: null,
+    cageCount: null,
+    handler: "",
+    notes: "",
+  };
+}
+
+function normalizeQuantitySheetDraft(sheet) {
+  const month = sheet?.month || today.slice(0, 7);
+  return {
+    id: sheet?.id || crypto.randomUUID(),
+    month,
+    roomId: sheet?.roomId || "",
+    roomName: sheet?.roomName || "",
+    manager: sheet?.manager || "",
+    iacuc: normalizeIacucNumber(sheet?.iacuc || ""),
+    project: sheet?.project || "",
+    pi: sheet?.pi || "",
+    owner: sheet?.owner || "",
+    contact: sheet?.contact || "",
+    funding: sheet?.funding || "",
+    billingUnit: sheet?.billingUnit === "animal_day" ? "animal_day" : "cage_day",
+    initialAnimalCount: numericOrZero(sheet?.initialAnimalCount),
+    initialCageCount: numericOrZero(sheet?.initialCageCount),
+    rows: Array.isArray(sheet?.rows) ? sheet.rows.map((row) => normalizeQuantitySheetDraftRow(row, month)) : [],
+    updatedAt: sheet?.updatedAt || "",
+  };
+}
+
+function normalizeQuantitySheetDraftRow(row, month) {
+  return {
+    id: row?.id || crypto.randomUUID(),
+    date: row?.date || `${month}-01`,
+    addedCount: numericOrNull(row?.addedCount),
+    addedType: row?.addedType || "",
+    removedCount: numericOrNull(row?.removedCount),
+    removedType: row?.removedType || "",
+    animalCount: numericOrNull(row?.animalCount),
+    cageCount: numericOrNull(row?.cageCount),
+    handler: row?.handler || "",
+    notes: row?.notes || "",
+  };
+}
+
+function autofillQuantitySheetIacucFields(event) {
+  const form = event.target.form;
+  const match = findIacucInfo(event.target.value);
+  if (!form || !match) return;
+  if (form.elements.project && match.project) form.elements.project.value = match.project;
+  if (form.elements.pi && match.pi) form.elements.pi.value = match.pi;
+  if (form.elements.owner && match.owner) form.elements.owner.value = match.owner;
+  if (form.elements.funding && match.funding) form.elements.funding.value = match.funding;
+  event.target.value = match.iacuc;
+}
+
+function syncQuantitySheetRoomName(event) {
+  const room = state.rooms.find((item) => item.id === event.target.value);
+  const roomNameInput = event.target.form?.elements.roomName;
+  if (room && roomNameInput && !roomNameInput.value) roomNameInput.value = room.name;
+}
+
+function numericOrNull(value) {
+  return value === null || value === undefined || value === "" ? null : Number(value);
+}
+
+function numericOrZero(value) {
+  return Number(value || 0);
+}
+
 async function handleRoomSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
@@ -2513,6 +2966,61 @@ function selectFirstAvailableCage() {
   state.selectedSlotIds = state.selectedSlotIds.filter((id) => state.slots.some((slotItem) => slotItem.id === id));
 }
 
+function buildQuantitySheetStatement(sheet) {
+  const dates = datesInMonth(sheet.month || state.billingMonth);
+  const rowsByDate = new Map();
+  for (const row of sheet.rows || []) {
+    if (!row.date) continue;
+    rowsByDate.set(row.date, [...(rowsByDate.get(row.date) || []), row]);
+  }
+
+  let animalCount = numericOrZero(sheet.initialAnimalCount);
+  let cageCount = numericOrZero(sheet.initialCageCount);
+  let cumulative = 0;
+  const rows = dates.map((date) => {
+    const dayRows = rowsByDate.get(date) || [];
+    for (const row of dayRows) {
+      animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(animalCount + numericOrZero(row.addedCount) - numericOrZero(row.removedCount), 0);
+      if (row.cageCount !== null) cageCount = numericOrZero(row.cageCount);
+    }
+    const unitPrice = unitPriceFor(date);
+    const discountPercent = discountFor(sheet.iacuc, date);
+    const billableCount = sheet.billingUnit === "animal_day" ? animalCount : cageCount;
+    const amount = billableCount * unitPrice * (1 - discountPercent / 100);
+    cumulative += amount;
+    return {
+      date,
+      animalCount,
+      cageCount,
+      billableCount,
+      unitPrice,
+      discountPercent,
+      amount,
+      cumulative,
+      quantitySheetRowIds: dayRows.map((row) => row.id),
+    };
+  });
+
+  return {
+    iacuc: sheet.iacuc,
+    month: sheet.month,
+    project: sheet.project,
+    pi: sheet.pi,
+    owner: sheet.owner,
+    funding: sheet.funding,
+    roomName: sheet.roomName,
+    manager: sheet.manager,
+    sourceType: "quantity_sheet",
+    sourceId: sheet.id,
+    billingUnit: sheet.billingUnit,
+    unitPrice: unitPriceFor(`${sheet.month}-01`),
+    rows,
+    totalCageDays: rows.reduce((sum, row) => sum + row.cageCount, 0),
+    totalAnimalDays: rows.reduce((sum, row) => sum + row.animalCount, 0),
+    totalAmount: cumulative,
+  };
+}
+
 function buildStatement(iacuc, month) {
   const dates = datesInMonth(month);
   let cumulative = 0;
@@ -2572,12 +3080,19 @@ function discountFor(iacuc, date) {
   return Number(adjustment?.value ?? 0);
 }
 
-function exportBillingCsv() {
-  const statement = buildStatement(state.billingIacuc, state.billingMonth);
-  const header = ["日期", "在养笼数", "单价", "减免百分比", "当日费用", "累计费用"];
+async function exportBillingCsv() {
+  const { statement } = await statementForExport().catch((error) => {
+    reportSaveError(error);
+    return {};
+  });
+  if (!statement) return;
+  const isQuantitySheet = statement.sourceType === "quantity_sheet";
+  const header = isQuantitySheet
+    ? ["日期", "结余动物数", "结余笼数", "计费数量", "单价", "减免百分比", "当日费用", "累计费用"]
+    : ["日期", "在养笼数", "单价", "减免百分比", "当日费用", "累计费用"];
   const rows = statement.rows.map((row) => [
     row.date,
-    row.cageCount,
+    ...(isQuantitySheet ? [row.animalCount, row.cageCount, row.billableCount ?? row.cageCount] : [row.cageCount]),
     row.unitPrice,
     row.discountPercent,
     row.amount.toFixed(2),
@@ -2595,16 +3110,23 @@ function exportBillingCsv() {
   URL.revokeObjectURL(url);
 }
 
-function exportSettlementPdf() {
-  const statement = buildStatement(state.billingIacuc, state.billingMonth);
-  const info = findIacucInfo(state.billingIacuc) || {};
-  const rowsWithCages = statement.rows.filter((row) => row.cageCount > 0);
-  const nonZeroRows = rowsWithCages.length ? rowsWithCages : statement.rows;
+async function exportSettlementPdf() {
   const opened = window.open("", "_blank");
   if (!opened) {
     alert("浏览器阻止了弹出窗口，请允许弹出窗口后重试。");
     return;
   }
+
+  const exportData = await statementForExport().catch((error) => {
+    opened.close();
+    reportSaveError(error);
+    return null;
+  });
+  if (!exportData) return;
+
+  const { statement, info } = exportData;
+  const rowsWithCages = statement.rows.filter((row) => row.cageCount > 0);
+  const nonZeroRows = rowsWithCages.length ? rowsWithCages : statement.rows;
 
   opened.document.write(settlementHtml(statement, info, nonZeroRows));
   opened.document.close();
@@ -2612,25 +3134,155 @@ function exportSettlementPdf() {
   opened.print();
 }
 
+async function statementForExport() {
+  if (state.billingSource === "quantity_sheet") {
+    return quantitySheetStatementForExport();
+  }
+  if (!state.billingIacuc || !state.billingMonth) {
+    throw new Error("请先选择 IACUC 编号和结算月份");
+  }
+  if (!remotePersistence) {
+    const statement = buildStatement(state.billingIacuc, state.billingMonth);
+    return { statement, info: findIacucInfo(state.billingIacuc) || {} };
+  }
+  if (currentUser?.role !== "admin") {
+    throw new Error("共享模式下只有系统管理员可以生成和导出正式结算单");
+  }
+
+  const response = await fetch(API_BILLING_STATEMENT_GENERATE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      iacuc: state.billingIacuc,
+      month: state.billingMonth,
+      status: "draft",
+      replaceDraft: true,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "生成结算单失败");
+  }
+  if (!payload.statement) {
+    throw new Error("生成结算单失败：服务端未返回结算单");
+  }
+
+  mergeServerAuditLogs(payload);
+  const statement = statementPayloadForExport(payload.statement, payload.lines || []);
+  pushLog(`生成结算单：${statement.iacuc} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
+  render();
+  return { statement, info: statementInfoForExport(statement) };
+}
+
+async function quantitySheetStatementForExport() {
+  const sheet = await saveQuantitySheetDraft();
+  if (!sheet.iacuc || !sheet.month) {
+    throw new Error("请先填写 IACUC 编号和结算月份");
+  }
+  if (!remotePersistence) {
+    const statement = buildQuantitySheetStatement(sheet);
+    return { statement, info: statementInfoForExport(statement) };
+  }
+
+  const response = await fetch(`${API_QUANTITY_SHEETS_URL}/${encodeURIComponent(sheet.id)}/generate-statement`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "draft", replaceDraft: true }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "根据数量统计表生成结算单失败");
+  }
+  if (!payload.statement) {
+    throw new Error("生成结算单失败：服务端未返回结算单");
+  }
+
+  mergeServerAuditLogs(payload);
+  const statement = statementPayloadForExport(payload.statement, payload.lines || []);
+  pushLog(`根据数量统计表生成结算单：${statement.iacuc} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
+  render();
+  return { statement, info: statementInfoForExport(statement) };
+}
+
+function statementPayloadForExport(statement, lines) {
+  const rows = lines.map((line) => ({
+    date: line.date,
+    animalCount: Number(line.animalCount || 0),
+    cageCount: Number(line.cageCount || 0),
+    billableCount: Number(line.billableCount ?? line.cageCount ?? 0),
+    unitPrice: Number(line.unitPrice || 0),
+    discountPercent: Number(line.discountPercent || 0),
+    amount: Number(line.amount || 0),
+    cumulative: Number(line.cumulative || 0),
+  }));
+  return {
+    ...statement,
+    unitPrice: rows.find((row) => row.unitPrice)?.unitPrice ?? unitPriceFor(`${statement.month}-01`),
+    rows,
+    totalCageDays: Number(statement.totalCageDays || 0),
+    totalAnimalDays: Number(statement.totalAnimalDays || 0),
+    totalAmount: Number(statement.totalAmount || 0),
+  };
+}
+
+function statementInfoForExport(statement) {
+  const indexed = findIacucInfo(statement.iacuc) || {};
+  return {
+    project: statement.project || indexed.project || "",
+    funding: statement.funding || indexed.funding || "",
+    pi: statement.pi || indexed.pi || "",
+    owner: statement.owner || indexed.owner || "",
+  };
+}
+
 function settlementHtml(statement, info, rows) {
-  const generatedAt = new Date().toLocaleString("zh-CN", { hour12: false });
+  const generatedAt = statement.generatedAt
+    ? formatLogTime(statement.generatedAt)
+    : new Date().toLocaleString("zh-CN", { hour12: false });
+  const isQuantitySheet = statement.sourceType === "quantity_sheet";
   const project = info.project || "-";
   const funding = info.funding || "-";
   const pi = info.pi || "-";
   const owner = info.owner || "-";
   const rowsHtml = rows
     .map(
-      (row) => `
-        <tr>
-          <td>${escapeText(row.date)}</td>
-          <td>${row.cageCount}</td>
-          <td>${MONEY_FORMAT.format(row.unitPrice)}</td>
-          <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
-          <td>${MONEY_FORMAT.format(row.amount)}</td>
-        </tr>
-      `,
+      (row) =>
+        isQuantitySheet
+          ? `
+            <tr>
+              <td>${escapeText(row.date)}</td>
+              <td>${row.animalCount ?? 0}</td>
+              <td>${row.cageCount}</td>
+              <td>${row.billableCount ?? row.cageCount}</td>
+              <td>${MONEY_FORMAT.format(row.unitPrice)}</td>
+              <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
+              <td>${MONEY_FORMAT.format(row.amount)}</td>
+            </tr>
+          `
+          : `
+            <tr>
+              <td>${escapeText(row.date)}</td>
+              <td>${row.cageCount}</td>
+              <td>${MONEY_FORMAT.format(row.unitPrice)}</td>
+              <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
+              <td>${MONEY_FORMAT.format(row.amount)}</td>
+            </tr>
+          `,
     )
     .join("");
+  const billableTotalLabel = statement.billingUnit === "animal_day" ? "累计只日" : "累计笼日";
+  const unitLabel = statement.billingUnit === "animal_day" ? "元/只/天" : "元/笼/天";
+  const billableTotal = statement.billingUnit === "animal_day" ? statement.totalAnimalDays : statement.totalCageDays;
 
   return `
     <!doctype html>
@@ -2665,21 +3317,26 @@ function settlementHtml(statement, info, rows) {
         <div class="section grid">
           <div class="cell"><span class="label">结算月份</span>${escapeText(statement.month)}</div>
           <div class="cell"><span class="label">IACUC编号</span>${escapeText(statement.iacuc || "-")}</div>
+          ${isQuantitySheet ? `<div class="cell"><span class="label">数据来源</span>数量统计表</div><div class="cell"><span class="label">房间/管理员</span>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</div>` : ""}
           <div class="cell full"><span class="label">项目名称</span>${escapeText(project)}</div>
           <div class="cell"><span class="label">项目负责人</span>${escapeText(pi)}</div>
           <div class="cell"><span class="label">实验负责人</span>${escapeText(owner)}</div>
           <div class="cell full"><span class="label">支撑经费</span>${escapeText(funding)}</div>
         </div>
         <div class="section total">
-          <div><span class="label">累计笼日</span><strong>${statement.totalCageDays}</strong></div>
-          <div><span class="label">基础单价</span><strong>${MONEY_FORMAT.format(statement.unitPrice)} 元/笼/天</strong></div>
+          <div><span class="label">${billableTotalLabel}</span><strong>${billableTotal}</strong></div>
+          <div><span class="label">基础单价</span><strong>${MONEY_FORMAT.format(statement.unitPrice)} ${unitLabel}</strong></div>
           <div><span class="label">应收金额</span><strong>${MONEY_FORMAT.format(statement.totalAmount)} 元</strong></div>
         </div>
         <div class="section">
           <strong>饲养费明细</strong>
           <table>
             <thead>
-              <tr><th>日期</th><th>在养笼数</th><th>单价</th><th>减免</th><th>当日费用</th></tr>
+              ${
+                isQuantitySheet
+                  ? `<tr><th>日期</th><th>动物数</th><th>笼数</th><th>计费数量</th><th>单价</th><th>减免</th><th>当日费用</th></tr>`
+                  : `<tr><th>日期</th><th>在养笼数</th><th>单价</th><th>减免</th><th>当日费用</th></tr>`
+              }
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>

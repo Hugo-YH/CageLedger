@@ -223,6 +223,24 @@ def initialize_schema(conn):
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS quantity_sheets (
+            id TEXT PRIMARY KEY,
+            month TEXT NOT NULL,
+            iacuc TEXT NOT NULL,
+            room_id TEXT,
+            room_name TEXT,
+            manager TEXT,
+            project TEXT,
+            pi TEXT,
+            owner TEXT,
+            funding TEXT,
+            updated_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS billing_statements (
             id TEXT PRIMARY KEY,
             iacuc TEXT NOT NULL,
@@ -1502,6 +1520,275 @@ def is_valid_iacuc_number(value):
     return bool(re.search(r"\d", value))
 
 
+def list_quantity_sheets(conn):
+    rows = conn.execute("SELECT payload FROM quantity_sheets ORDER BY month DESC, iacuc, updated_at DESC").fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def get_quantity_sheet(conn, sheet_id):
+    row = conn.execute("SELECT payload FROM quantity_sheets WHERE id = ?", (sheet_id,)).fetchone()
+    if not row:
+        raise LookupError("数量统计表不存在")
+    return json.loads(row["payload"])
+
+
+def save_quantity_sheet(conn, payload, actor, sheet_id=None):
+    now = now_iso()
+    sheet = normalize_quantity_sheet(payload, sheet_id, now)
+    validate_quantity_sheet_permission(actor, sheet)
+    exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
+    if exists:
+        conn.execute(
+            """
+            UPDATE quantity_sheets
+            SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
+                project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
+            WHERE id = ?
+            """,
+            quantity_sheet_db_values(sheet) + (sheet["id"],),
+        )
+        action = "quantity_sheet.updated"
+        message = f"{actor['displayName']} 更新 {sheet['iacuc']} {sheet['month']} 数量统计表"
+        status = HTTPStatus.OK
+    else:
+        conn.execute(
+            """
+            INSERT INTO quantity_sheets (
+                month, iacuc, room_id, room_name, manager, project, pi, owner,
+                funding, updated_at, payload, id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            quantity_sheet_db_values(sheet) + (sheet["id"],),
+        )
+        action = "quantity_sheet.created"
+        message = f"{actor['displayName']} 创建 {sheet['iacuc']} {sheet['month']} 数量统计表"
+        status = HTTPStatus.CREATED
+
+    event = audit_event(actor, action, "quantity_sheet", sheet["id"], message, [], now, None, sheet)
+    write_audit_events(conn, [event])
+    return sheet, merge_audit_logs([], [event]), status
+
+
+def delete_quantity_sheet(conn, actor, sheet_id):
+    sheet = get_quantity_sheet(conn, sheet_id)
+    validate_quantity_sheet_permission(actor, sheet)
+    now = now_iso()
+    conn.execute("DELETE FROM quantity_sheets WHERE id = ?", (sheet_id,))
+    event = audit_event(
+        actor,
+        "quantity_sheet.deleted",
+        "quantity_sheet",
+        sheet_id,
+        f"{actor['displayName']} 删除 {sheet.get('iacuc', '')} {sheet.get('month', '')} 数量统计表",
+        [],
+        now,
+        sheet,
+        None,
+    )
+    write_audit_events(conn, [event])
+    return merge_audit_logs([], [event])
+
+
+def quantity_sheet_db_values(sheet):
+    return (
+        sheet["month"],
+        sheet["iacuc"],
+        sheet.get("roomId", ""),
+        sheet.get("roomName", ""),
+        sheet.get("manager", ""),
+        sheet.get("project", ""),
+        sheet.get("pi", ""),
+        sheet.get("owner", ""),
+        sheet.get("funding", ""),
+        sheet["updatedAt"],
+        dump_json(sheet),
+    )
+
+
+def normalize_quantity_sheet(payload, sheet_id, updated_at):
+    source = payload.get("sheet") if isinstance(payload, dict) and isinstance(payload.get("sheet"), dict) else payload
+    if not isinstance(source, dict):
+        raise ValueError("数量统计表必须是 JSON 对象")
+
+    month = clean_text(source.get("month", ""))
+    iacuc = normalize_iacuc_number(source.get("iacuc", ""))
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise ValueError("结算月份格式应为 YYYY-MM")
+    if not iacuc:
+        raise ValueError("IACUC 编号不能为空")
+
+    rows = source.get("rows", [])
+    if not isinstance(rows, list):
+        raise ValueError("统计表明细必须是数组")
+
+    sheet = {
+        "id": clean_text(sheet_id or source.get("id") or new_id("qsheet")),
+        "month": month,
+        "roomId": clean_text(source.get("roomId", "")),
+        "roomName": clean_text(source.get("roomName", "")),
+        "manager": clean_text(source.get("manager", "")),
+        "iacuc": iacuc,
+        "project": clean_text(source.get("project", "")),
+        "pi": clean_text(source.get("pi", "")),
+        "owner": clean_text(source.get("owner", "")),
+        "contact": clean_text(source.get("contact", "")),
+        "funding": clean_text(source.get("funding", "")),
+        "billingUnit": clean_text(source.get("billingUnit", "cage_day")) or "cage_day",
+        "initialAnimalCount": as_int(source.get("initialAnimalCount")),
+        "initialCageCount": as_int(source.get("initialCageCount")),
+        "rows": [normalize_quantity_sheet_row(row, month) for row in rows],
+        "updatedAt": updated_at,
+    }
+    if sheet["billingUnit"] not in ("cage_day", "animal_day"):
+        raise ValueError("计费口径只能是 cage_day 或 animal_day")
+    sheet["rows"] = sorted(sheet["rows"], key=lambda item: (item["date"], item["id"]))
+    return sheet
+
+
+def normalize_quantity_sheet_row(row, month):
+    if not isinstance(row, dict):
+        raise ValueError("统计表明细行必须是 JSON 对象")
+    date = normalize_sheet_date(row.get("date", ""), month)
+    return {
+        "id": clean_text(row.get("id", "")) or new_id("qrow"),
+        "date": date,
+        "addedCount": as_int(row.get("addedCount")),
+        "addedType": clean_text(row.get("addedType", "")),
+        "removedCount": as_int(row.get("removedCount")),
+        "removedType": clean_text(row.get("removedType", "")),
+        "animalCount": as_int(row.get("animalCount")),
+        "cageCount": as_int(row.get("cageCount")),
+        "handler": clean_text(row.get("handler", "")),
+        "notes": clean_text(row.get("notes", "")),
+    }
+
+
+def normalize_sheet_date(value, month):
+    text = clean_text(value)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        date = text
+    elif re.fullmatch(r"\d{1,2}[./-]\d{1,2}", text):
+        year = month.split("-", 1)[0]
+        month_no, day = [int(part) for part in re.split(r"[./-]", text)]
+        date = f"{int(year):04d}-{month_no:02d}-{day:02d}"
+    elif re.fullmatch(r"\d{1,2}", text):
+        date = f"{month}-{int(text):02d}"
+    else:
+        raise ValueError("统计表日期格式应为 YYYY-MM-DD、M.D 或当月日期")
+    if not date.startswith(month + "-"):
+        raise ValueError("统计表明细日期必须属于结算月份")
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("统计表明细日期无效") from exc
+    return date
+
+
+def validate_quantity_sheet_permission(actor, sheet):
+    if actor["role"] == "admin":
+        return
+    room_id = sheet.get("roomId", "")
+    allowed_rooms = set(actor.get("roomIds", []))
+    if room_id and room_id not in allowed_rooms:
+        raise PermissionError("不能维护未授权饲养间的数量统计表")
+
+
+def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
+    sheet = get_quantity_sheet(conn, sheet_id)
+    validate_quantity_sheet_permission(actor, sheet)
+    status = clean_text(payload.get("status", "draft")) or "draft"
+    if status not in ("draft", "locked"):
+        raise ValueError("结算单状态只能是 draft 或 locked")
+
+    rules = read_payloads(conn, "billing_rules", "rowid")
+    adjustments = read_payloads(conn, "billing_adjustments", "rowid")
+    lines = quantity_sheet_statement_lines(sheet, rules, adjustments)
+    generated_at = now_iso()
+    statement = {
+        "id": new_id("stmt"),
+        "iacuc": sheet["iacuc"],
+        "month": sheet["month"],
+        "project": sheet.get("project", ""),
+        "pi": sheet.get("pi", ""),
+        "owner": sheet.get("owner", ""),
+        "funding": sheet.get("funding", ""),
+        "sourceType": "quantity_sheet",
+        "sourceId": sheet["id"],
+        "sourceLabel": "数量统计表",
+        "roomName": sheet.get("roomName", ""),
+        "manager": sheet.get("manager", ""),
+        "billingUnit": sheet.get("billingUnit", "cage_day"),
+        "totalCageDays": sum(line["cageCount"] for line in lines),
+        "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
+        "totalAmount": lines[-1]["cumulative"] if lines else 0,
+        "status": status,
+        "generatedAt": generated_at,
+        "lockedAt": generated_at if status == "locked" else "",
+    }
+    for line in lines:
+        line["statementId"] = statement["id"]
+
+    if payload.get("replaceDraft", True):
+        replace_existing_draft_statement(conn, sheet["iacuc"], sheet["month"])
+    insert_billing_statement(conn, statement, lines)
+    event = audit_event(
+        actor,
+        "billing_statement.generated_from_quantity_sheet",
+        "billing_statement",
+        statement["id"],
+        f"{actor['displayName']} 根据数量统计表生成 {sheet['iacuc']} {sheet['month']} 饲养费结算单",
+        [],
+        generated_at,
+        sheet,
+        statement,
+    )
+    write_audit_events(conn, [event])
+    return statement, lines, merge_audit_logs([], [event])
+
+
+def quantity_sheet_statement_lines(sheet, rules, adjustments):
+    rows_by_date = {}
+    for row in sheet.get("rows", []):
+        rows_by_date.setdefault(row["date"], []).append(row)
+
+    animal_count = sheet.get("initialAnimalCount") or 0
+    cage_count = sheet.get("initialCageCount") or 0
+    cumulative = 0
+    lines = []
+    for date in dates_in_month(sheet["month"]):
+        day_rows = rows_by_date.get(date, [])
+        for row in day_rows:
+            if row.get("animalCount") is not None:
+                animal_count = row.get("animalCount") or 0
+            else:
+                animal_count = max(animal_count + (row.get("addedCount") or 0) - (row.get("removedCount") or 0), 0)
+            if row.get("cageCount") is not None:
+                cage_count = row.get("cageCount") or 0
+
+        unit_price = billing_unit_price_for(rules, date)
+        discount_percent = billing_discount_for(adjustments, sheet["iacuc"], date)
+        billable_count = animal_count if sheet.get("billingUnit") == "animal_day" else cage_count
+        amount = billable_count * unit_price * (1 - discount_percent / 100)
+        cumulative += amount
+        lines.append(
+            {
+                "id": new_id("line"),
+                "date": date,
+                "animalCount": animal_count,
+                "cageCount": cage_count,
+                "billableCount": billable_count,
+                "unitPrice": unit_price,
+                "discountPercent": discount_percent,
+                "amount": amount,
+                "cumulative": cumulative,
+                "quantitySheetRowIds": [row["id"] for row in day_rows],
+                "occupancyIds": [],
+            }
+        )
+    return lines
+
+
 def generate_billing_statement(conn, payload, actor):
     iacuc = normalize_iacuc_number(payload.get("iacuc", ""))
     month = clean_text(payload.get("month", ""))
@@ -1804,6 +2091,12 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 self.send_json({"users": list_users(conn)})
             return
+        if path == "/api/quantity-sheets":
+            if not self.require_user():
+                return
+            with connect_db() as conn:
+                self.send_json({"items": list_quantity_sheets(conn)})
+            return
         if path in ENTITY_ENDPOINTS:
             if not self.require_user():
                 return
@@ -1824,6 +2117,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/billing-statements/generate":
             self.handle_billing_statement_generate()
+            return
+        sheet_id = self.quantity_sheet_generate_route(path)
+        if sheet_id:
+            self.handle_quantity_sheet_statement_generate(sheet_id)
+            return
+        if path == "/api/quantity-sheets":
+            self.handle_quantity_sheet_save(None)
             return
         if path == "/api/users":
             user = self.require_user()
@@ -1894,6 +2194,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if endpoint and item_id:
             self.handle_entity_write("PUT", endpoint, item_id)
             return
+        sheet_id = self.quantity_sheet_route(path)
+        if sheet_id:
+            self.handle_quantity_sheet_save(sheet_id)
+            return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self):
@@ -1919,6 +2223,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         endpoint, item_id = self.entity_route(path)
         if endpoint and item_id:
             self.handle_entity_write("DELETE", endpoint, item_id)
+            return
+        sheet_id = self.quantity_sheet_route(path)
+        if sheet_id:
+            self.handle_quantity_sheet_delete(sheet_id)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -2109,6 +2417,25 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return None
         return user_id
 
+    def quantity_sheet_route(self, path):
+        prefix = "/api/quantity-sheets/"
+        if not path.startswith(prefix):
+            return None
+        sheet_id = unquote(path[len(prefix) :])
+        if "/" in sheet_id or not sheet_id:
+            return None
+        return sheet_id
+
+    def quantity_sheet_generate_route(self, path):
+        prefix = "/api/quantity-sheets/"
+        suffix = "/generate-statement"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        sheet_id = unquote(path[len(prefix) : -len(suffix)])
+        if "/" in sheet_id or not sheet_id:
+            return None
+        return sheet_id
+
     def handle_entity_write(self, method, endpoint, item_id):
         user = self.require_user()
         if not user:
@@ -2119,6 +2446,54 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             self.send_json(payload, status)
         except sqlite3.IntegrityError:
             self.send_json({"error": "实体 id 已存在"}, HTTPStatus.CONFLICT)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_quantity_sheet_save(self, sheet_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                sheet, audit_logs, status = save_quantity_sheet(conn, body, user, sheet_id)
+                conn.commit()
+            self.send_json({"item": sheet, "auditLogs": audit_logs}, status)
+        except sqlite3.IntegrityError:
+            self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_quantity_sheet_delete(self, sheet_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                audit_logs = delete_quantity_sheet(conn, user, sheet_id)
+                conn.commit()
+            self.send_json({"ok": True, "auditLogs": audit_logs})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+
+    def handle_quantity_sheet_statement_generate(self, sheet_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_optional_json_body()
+            with connect_db() as conn:
+                statement, lines, audit_logs = generate_quantity_sheet_statement(conn, sheet_id, body, user)
+                conn.commit()
+            self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:

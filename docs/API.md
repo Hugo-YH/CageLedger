@@ -61,6 +61,28 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 | `POST` | `/api/billing-statements/generate` | 生成结算单 |
 | `GET` | `/api/audit-events` | 审计事件 |
 
+## 数量统计表结算
+
+用于兼容纸质《实验动物数量统计表》工作流。房间管理员可录入月底统计表，系统按变更行展开每日结余数量并生成结算单。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/quantity-sheets` | 数量统计表列表 |
+| `POST` | `/api/quantity-sheets` | 创建数量统计表 |
+| `PUT` | `/api/quantity-sheets/{id}` | 更新数量统计表 |
+| `DELETE` | `/api/quantity-sheets/{id}` | 删除数量统计表 |
+| `POST` | `/api/quantity-sheets/{id}/generate-statement` | 按数量统计表生成结算单 |
+
+数量统计表包含表头信息和变更行。核心字段：
+
+- 表头：`month`、`roomId`、`roomName`、`manager`、`iacuc`、`project`、`pi`、`owner`、`funding`、`billingUnit`、`initialAnimalCount`、`initialCageCount`
+- 明细行：`date`、`addedCount`、`addedType`、`removedCount`、`removedType`、`animalCount`、`cageCount`、`handler`、`notes`
+
+`billingUnit` 支持：
+
+- `cage_day`：按笼/天计费。
+- `animal_day`：按只/天计费。
+
 `/api/state` 仍保留为兼容、导入导出或调试接口。前端正常读写已迁移到实体级 API。
 
 ## IACUC 索引
@@ -91,6 +113,7 @@ CSV 必须包含：
 - `experiment_applications`
 - `billing_rules`
 - `billing_adjustments`
+- `quantity_sheets`
 - `billing_statements`
 - `billing_statement_lines`
 - `audit_logs`
