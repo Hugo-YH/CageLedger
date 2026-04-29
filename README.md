@@ -182,6 +182,33 @@ docker pull ghcr.io/hugo-yh/cageledger:0.2.1
 
 仓库内的 `Publish container package` GitHub Actions 工作流会在发布 Release 时推送镜像，也可以手动指定 Git ref 和镜像标签重新发布。
 
+## NAS 离线源码构建
+
+如果 NAS 无法连接外网，可以在本机打包源码，拖到 NAS 后本地构建镜像。
+
+在本机项目目录生成离线包：
+
+```bash
+./scripts/package_offline.sh
+```
+
+脚本会生成类似文件：
+
+```text
+dist/CageLedger-offline-v0.2.1.tar.gz
+```
+
+把这个文件拖到 NAS，例如 `/volume1/docker/`。然后在 NAS 的 SSH 终端执行：
+
+```bash
+cd /volume1/docker
+tar -xzf CageLedger-offline-v0.2.1.tar.gz
+cd CageLedger
+docker compose -f docker-compose.offline.yml up -d --build
+```
+
+离线构建会使用 `docker-compose.offline.yml`，不需要访问 GHCR。数据仍保存在 Docker 命名卷 `cageledger-data` 中。
+
 ## 后续建议
 
 当前共享模式已经在 SQLite 中拆分为业务表：

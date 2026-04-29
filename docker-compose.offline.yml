@@ -1,0 +1,20 @@
+name: cageledger
+
+services:
+  cageledger:
+    build:
+      context: .
+      args:
+        CAGELEDGER_VERSION: ${CAGELEDGER_VERSION:-local}
+    container_name: cageledger
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - CAGELEDGER_ADMIN_USERNAME=admin
+      - CAGELEDGER_ADMIN_PASSWORD=admin123
+    volumes:
+      - cageledger-data:/app/data
+
+volumes:
+  cageledger-data:
