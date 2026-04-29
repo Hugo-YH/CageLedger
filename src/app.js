@@ -6,6 +6,7 @@ const API_LOGOUT_URL = "/api/auth/logout";
 const API_USERS_URL = "/api/users";
 const API_IACUC_INDEX_URL = "/api/iacuc-index";
 const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
+const API_PRINCIPAL_IDENTITIES_URL = "/api/principal-identities";
 const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
 const API_BILLING_STATEMENT_GENERATE_URL = "/api/billing-statements/generate";
@@ -20,6 +21,11 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.3.1",
+    title: "项目负责人汇总计费",
+    items: ["按项目负责人汇总多个 IACUC 结算", "新增项目负责人身份管理和 20/10 笼免费额度", "支持阶梯计价、离线包和 Release 自动发布"],
+  },
   {
     version: "0.3.0",
     title: "数量统计表结算",
@@ -49,13 +55,15 @@ const SYSTEM_API_GROUPS = [
 ];
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
+let PRINCIPAL_IDENTITIES = [];
+let PRINCIPAL_IDENTITY_BY_NAME = new Map();
 let iacucIndexMeta = null;
 let systemUpdateInfo = null;
 let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.0",
+  version: "0.3.1",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -70,6 +78,14 @@ const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const BILLING_PRINCIPAL_PI = "pi";
+const BILLING_PRINCIPAL_INDEPENDENT = "independent";
+const FREE_CAGES_PI = 20;
+const FREE_CAGES_INDEPENDENT = 10;
+const FREE_CAGES_DEFAULT = FREE_CAGES_PI;
+const BILLING_TIER_LIMIT = 160;
+const BILLING_TIER_BASE_PRICE = 4.5;
+const BILLING_TIER_OVER_PRICE = 6.5;
 
 const today = formatLocalDate(new Date());
 
@@ -85,9 +101,13 @@ const seedData = {
   billingSource: "cage_map",
   billingMonth: today.slice(0, 7),
   billingIacuc: "IACUC-2026-001",
+  billingPi: "张教授",
+  billingPrincipalType: BILLING_PRINCIPAL_PI,
+  freeCageAllowance: FREE_CAGES_DEFAULT,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
+  principalIdentityFilter: "",
   slotFilter: "all",
   baseRate: 4.5,
   rooms: [
@@ -242,8 +262,11 @@ async function loadEntityState() {
 
   const billingRules = entityData.billingRules || [];
   const firstIacuc = entityData.occupancies?.find((item) => item.iacuc)?.iacuc || "";
+  const firstPi = entityData.occupancies?.find((item) => item.pi)?.pi || "";
   const knownIacucs = new Set((entityData.occupancies || []).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean));
   const localBillingIacuc = knownIacucs.has(normalizeIacucNumber(localState.billingIacuc)) ? localState.billingIacuc : "";
+  const knownPis = new Set([...(entityData.occupancies || []).map((item) => normalizePersonName(item.pi)), ...quantitySheets.map((item) => normalizePersonName(item.pi))].filter(Boolean));
+  const localBillingPi = knownPis.has(normalizePersonName(localState.billingPi)) ? localState.billingPi : "";
   const selectedQuantitySheet = quantitySheets.find((sheet) => sheet.id === localState.selectedQuantitySheetId) || quantitySheets[0];
 
   return {
@@ -255,9 +278,13 @@ async function loadEntityState() {
     billingSource: localState.billingSource || seedData.billingSource,
     billingMonth: localState.billingMonth || today.slice(0, 7),
     billingIacuc: localBillingIacuc || firstIacuc,
+    billingPi: localBillingPi || selectedQuantitySheet?.pi || firstPi,
+    billingPrincipalType: principalTypeForPi(localBillingPi || selectedQuantitySheet?.pi || firstPi),
+    freeCageAllowance: Number(localState.freeCageAllowance ?? seedData.freeCageAllowance),
     selectedQuantitySheetId: selectedQuantitySheet?.id || "",
     quantitySheetDraft: selectedQuantitySheet || makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
     quantitySheets,
+    principalIdentityFilter: localState.principalIdentityFilter || "",
     slotFilter: localState.slotFilter || "all",
     baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
     rooms: entityData.rooms || [],
@@ -323,6 +350,23 @@ function upsertById(items, item) {
   }
 }
 
+function upsertPrincipalIdentity(item) {
+  const normalized = {
+    ...item,
+    pi: String(item.pi || "").trim(),
+    principalType: normalizePrincipalType(item.principalType),
+    freeCageAllowance: freeCageAllowanceForPrincipalType(item.principalType),
+  };
+  if (!normalized.pi) return;
+  const index = PRINCIPAL_IDENTITIES.findIndex((existing) => normalizePersonName(existing.pi) === normalizePersonName(normalized.pi));
+  if (index >= 0) {
+    PRINCIPAL_IDENTITIES[index] = normalized;
+  } else {
+    PRINCIPAL_IDENTITIES.push(normalized);
+  }
+  PRINCIPAL_IDENTITY_BY_NAME = new Map(PRINCIPAL_IDENTITIES.map((item) => [normalizePersonName(item.pi), item]));
+}
+
 function normalize(data) {
   const next = { ...structuredClone(seedData), ...data };
   if (next.activeView === "settings") next.activeView = "rooms";
@@ -330,6 +374,10 @@ function normalize(data) {
   next.quantitySheets = Array.isArray(next.quantitySheets) ? next.quantitySheets : [];
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
   next.billingSource = next.billingSource === "quantity_sheet" ? "quantity_sheet" : "cage_map";
+  next.billingPi = next.billingPi || piForIacuc(next.billingIacuc) || next.quantitySheetDraft.pi || "";
+  next.billingPrincipalType = principalTypeForPi(next.billingPi);
+  next.freeCageAllowance = Number(next.freeCageAllowance ?? FREE_CAGES_DEFAULT);
+  next.principalIdentityFilter = String(next.principalIdentityFilter || "");
   next.batchMode = Boolean(next.batchMode);
   next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
@@ -540,7 +588,7 @@ function pageMeta(view) {
     },
     billing: {
       title: "饲养费核算",
-      description: "按 IACUC 和月份生成笼位占用费用。",
+      description: "按项目负责人和月份汇总多个 IACUC 的饲养费用。",
     },
     rooms: {
       title: "房间管理",
@@ -909,7 +957,7 @@ function renderSlotDetail(slot) {
     <form id="slotForm" class="form compact-slot-form">
       <input type="hidden" name="slotId" value="${slot.id}" />
       <div class="compact-form-row two-one">
-        <label>
+        <label class="field-required">
           状态
           <select name="status">
             ${statusOption("empty", occupancy.status)}
@@ -923,27 +971,27 @@ function renderSlotDetail(slot) {
         </label>
       </div>
       <div class="compact-form-row half">
-        <label>
+        <label class="field-required">
           IACUC 编号
           <input name="iacuc" value="${escapeAttr(occupancy.iacuc)}" placeholder="请输入或选择 IACUC 编号" list="iacucOptions" />
         </label>
-        <label>
+        <label class="field-auto">
           项目名称
           <textarea name="project" rows="2" placeholder="选择 IACUC 后自动填充，也可手动输入">${escapeText(occupancy.project)}</textarea>
         </label>
       </div>
       <div class="compact-form-row half">
-        <label>
+        <label class="field-auto">
           项目负责人
           <input name="pi" value="${escapeAttr(occupancy.pi)}" placeholder="选择 IACUC 后自动填充" />
         </label>
-        <label>
+        <label class="field-auto">
           实验负责人
           <input name="owner" value="${escapeAttr(occupancy.owner)}" placeholder="选择 IACUC 后自动填充" />
         </label>
       </div>
       <div class="compact-form-row half">
-        <label>
+        <label class="field-required">
           开始日期
           <input type="date" name="startDate" value="${occupancy.startDate || today}" placeholder="请选择开始日期" />
         </label>
@@ -1043,7 +1091,7 @@ function renderBatchSlotDetail(slots) {
 
     <form id="batchSlotForm" class="form compact-slot-form">
       <div class="compact-form-row third">
-        <label>
+        <label class="field-required">
           状态
           <select name="status">
             ${statusOption("active", draft.status)}
@@ -1052,27 +1100,27 @@ function renderBatchSlotDetail(slots) {
         </label>
       </div>
       <div class="compact-form-row half">
-        <label>
+        <label class="field-required">
           IACUC 编号
           <input name="iacuc" value="${escapeAttr(draft.iacuc)}" placeholder="请输入或选择 IACUC 编号" list="iacucOptions" />
         </label>
-        <label>
+        <label class="field-auto">
           项目名称
           <textarea name="project" rows="2" placeholder="选择 IACUC 后自动填充，也可手动输入">${escapeText(draft.project)}</textarea>
         </label>
       </div>
       <div class="compact-form-row half">
-        <label>
+        <label class="field-auto">
           项目负责人
           <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="选择 IACUC 后自动填充" />
         </label>
-        <label>
+        <label class="field-auto">
           实验负责人
           <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
         </label>
       </div>
       <div class="compact-form-row half">
-        <label>
+        <label class="field-required">
           开始日期
           <input type="date" name="startDate" value="${draft.startDate}" placeholder="请选择开始日期" />
         </label>
@@ -1210,9 +1258,10 @@ function renderBillingView() {
 }
 
 function renderCageMapBillingView() {
-  const statement = buildStatement(state.billingIacuc, state.billingMonth);
-  const billingInfo = findIacucInfo(state.billingIacuc);
+  const statement = buildStatement(state.billingPi, state.billingMonth);
+  const billingInfo = statementInfoForExport(statement);
   const canGenerateStatement = !remotePersistence || currentUser?.role === "admin";
+  const principalType = principalTypeForPi(state.billingPi);
 
   return `
     <section class="billing-layout">
@@ -1224,24 +1273,25 @@ function renderCageMapBillingView() {
           </div>
           <div class="toolbar">
             <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
-            <input id="billingIacuc" type="text" value="${escapeAttr(state.billingIacuc)}" list="billingIacucOptions" placeholder="请输入或选择 IACUC 编号" />
+            <input id="billingPi" type="text" value="${escapeAttr(state.billingPi)}" list="billingPiOptions" placeholder="请输入或选择项目负责人" />
             <button id="exportBilling" class="secondary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
             <button id="exportSettlementPdf" class="primary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
           </div>
         </div>
 
-        <datalist id="billingIacucOptions">
-          ${iacucOptions(state.billingIacuc)
-            .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
+        <datalist id="billingPiOptions">
+          ${piOptions(state.billingPi)
+            .map((item) => `<option value="${escapeAttr(item.pi)}" label="${escapeAttr(item.iacucs.join("、"))}"></option>`)
             .join("")}
         </datalist>
 
         <div class="statement-summary">
-          ${summaryTile("IACUC", state.billingIacuc)}
-          ${summaryTile("项目负责人", billingInfo?.pi || "-")}
-          ${summaryTile("实验负责人", billingInfo?.owner || "-")}
-          ${summaryTile("支撑经费", billingInfo?.funding || "-")}
+          ${summaryTile("项目负责人", state.billingPi || "-")}
+          ${summaryTile("伦理编号", statement.iacucs.length ? statement.iacucs.join("、") : "-")}
+          ${summaryTile("项目数量", statement.iacucs.length)}
+          ${summaryTile("免费笼数/天", statement.freeCageAllowance)}
           ${summaryTile("累计笼日", statement.totalCageDays)}
+          ${summaryTile("收费笼日", statement.totalBillableCageDays)}
           ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
         </div>
 
@@ -1250,9 +1300,11 @@ function renderCageMapBillingView() {
             <thead>
               <tr>
                 <th>日期</th>
-                <th>在养笼数</th>
-                <th>单价</th>
-                <th>减免</th>
+                <th>合计笼数</th>
+                <th>免费笼数</th>
+                <th>收费笼数</th>
+                <th>4.5元笼数</th>
+                <th>6.5元笼数</th>
                 <th>当日费用</th>
                 <th>累计费用</th>
               </tr>
@@ -1273,7 +1325,7 @@ function renderCageMapBillingView() {
         <div class="panel-head compact">
           <div>
             <h2>计费规则</h2>
-            <p>当前实现基础费率，代码已按规则函数拆分。</p>
+            <p>按项目负责人每日合计笼数计费，免费额度优先抵扣首单元。</p>
           </div>
         </div>
         ${
@@ -1281,14 +1333,25 @@ function renderCageMapBillingView() {
             ? `
               <form id="rateForm" class="form">
                 <label>
-                  基础单价 元/笼/天
-                  <input type="number" min="0" step="0.01" name="baseRate" value="${state.baseRate}" placeholder="请输入基础单价" />
+                  负责人类型
+                  <select name="principalType">
+                    <option value="${BILLING_PRINCIPAL_PI}" ${principalType === BILLING_PRINCIPAL_PI ? "selected" : ""}>PI（20 笼/天免费）</option>
+                    <option value="${BILLING_PRINCIPAL_INDEPENDENT}" ${principalType === BILLING_PRINCIPAL_INDEPENDENT ? "selected" : ""}>独立科研人员（10 笼/天免费）</option>
+                  </select>
                 </label>
-                <button class="primary" type="submit">${iconSvg("save")}保存规则</button>
+                <label>
+                  当前免费笼数/天
+                  <input type="number" value="${statement.freeCageAllowance}" readonly />
+                </label>
+                <button class="primary" type="submit">${iconSvg("save")}保存项目负责人减免</button>
               </form>
             `
-            : `<p class="muted">当前账号只能查看计费规则，不能修改基础费率。</p>`
+            : `<p class="muted">当前账号只能查看计费规则，不能修改免费笼数。</p>`
         }
+        <div class="rule-list">
+          <div class="rule-item"><strong>首单元</strong><span>前 ${BILLING_TIER_LIMIT} 笼按 ¥${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)} /笼/天</span></div>
+          <div class="rule-item"><strong>超额单元</strong><span>超过 ${BILLING_TIER_LIMIT} 笼按 ¥${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)} /笼/天</span></div>
+        </div>
         <div class="rule-list">
           ${state.adjustments.map(renderAdjustment).join("")}
         </div>
@@ -1326,7 +1389,7 @@ function renderQuantitySheetBillingView() {
           </div>
 
           <div class="quantity-sheet-fields">
-            <label>
+            <label class="field-required">
               结算月份
               <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
             </label>
@@ -1345,15 +1408,15 @@ function renderQuantitySheetBillingView() {
               管理员
               <input name="manager" value="${escapeAttr(draft.manager)}" placeholder="请输入管理员姓名" />
             </label>
-            <label>
+            <label class="field-required">
               IACUC 编号
               <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" placeholder="请输入或选择 IACUC 编号" required />
             </label>
-            <label>
+            <label class="field-auto">
               项目负责人
               <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="选择 IACUC 后自动填充" />
             </label>
-            <label>
+            <label class="field-auto">
               实验负责人
               <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
             </label>
@@ -1361,11 +1424,11 @@ function renderQuantitySheetBillingView() {
               联系电话
               <input name="contact" value="${escapeAttr(draft.contact)}" placeholder="请输入联系电话" />
             </label>
-            <label class="wide">
+            <label class="wide field-auto">
               项目名称
               <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
             </label>
-            <label>
+            <label class="field-auto">
               支撑经费
               <input name="funding" value="${escapeAttr(draft.funding)}" placeholder="选择 IACUC 后自动填充" />
             </label>
@@ -1373,15 +1436,14 @@ function renderQuantitySheetBillingView() {
               月初结余动物数
               <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" placeholder="请输入月初动物数" />
             </label>
-            <label class="month-opening-field">
+            <label class="month-opening-field field-required">
               月初结余笼数
               <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" placeholder="请输入月初笼数" />
             </label>
             <label class="month-opening-field">
               计费口径
               <select name="billingUnit">
-                <option value="cage_day" ${draft.billingUnit !== "animal_day" ? "selected" : ""}>笼/天</option>
-                <option value="animal_day" ${draft.billingUnit === "animal_day" ? "selected" : ""}>只/天</option>
+                <option value="cage_day" selected>笼/天</option>
               </select>
             </label>
           </div>
@@ -1418,19 +1480,21 @@ function renderQuantitySheetBillingView() {
           <div class="panel-head compact">
             <div>
               <h2>结算预览</h2>
-              <p>预览会按已录入的结余笼数展开到整月。</p>
+              <p>预览会按同月同项目负责人名下全部统计表汇总展开。</p>
             </div>
           </div>
           <div class="statement-summary compact-summary">
-            ${summaryTile("IACUC", draft.iacuc || "-")}
+            ${summaryTile("项目负责人", statement.pi || draft.pi || "-")}
+            ${summaryTile("伦理编号", statement.iacucs.length ? statement.iacucs.join("、") : "-")}
+            ${summaryTile("免费笼数/天", statement.freeCageAllowance)}
             ${summaryTile("累计笼日", statement.totalCageDays)}
-            ${summaryTile("累计只日", statement.totalAnimalDays)}
+            ${summaryTile("收费笼日", statement.totalBillableCageDays)}
             ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
           </div>
           <div class="table-wrap mini-statement">
             <table>
-              <thead><tr><th>日期</th><th>动物数</th><th>笼数</th><th>费用</th></tr></thead>
-              <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="4">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
+              <thead><tr><th>日期</th><th>动物数</th><th>笼数</th><th>收费笼数</th><th>费用</th></tr></thead>
+              <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="5">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
             </table>
           </div>
         </div>
@@ -1453,8 +1517,10 @@ function renderBillingRow(row) {
     <tr>
       <td>${row.date}</td>
       <td>${row.cageCount}</td>
-      <td>¥${MONEY_FORMAT.format(row.unitPrice)}</td>
-      <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
+      <td>${row.freeCages}</td>
+      <td>${row.billableCages}</td>
+      <td>${row.tier1BillableCages}</td>
+      <td>${row.tier2BillableCages}</td>
       <td>¥${MONEY_FORMAT.format(row.amount)}</td>
       <td>¥${MONEY_FORMAT.format(row.cumulative)}</td>
     </tr>
@@ -1491,16 +1557,18 @@ function renderQuantityPreviewRow(row) {
       <td>${row.date}</td>
       <td>${row.animalCount}</td>
       <td>${row.cageCount}</td>
+      <td>${row.billableCages}</td>
       <td>¥${MONEY_FORMAT.format(row.amount)}</td>
     </tr>
   `;
 }
 
 function renderAdjustment(item) {
+  const valueLabel = item.type === "free_cages" ? `${principalTypeLabel(item.principalType)} · ${item.value} 笼/天免费` : item.type === "discount" ? `${item.value}% 减免` : item.value;
   return `
     <div class="rule-card">
       <strong>${item.targetId}</strong>
-      <span>${item.type === "discount" ? `${item.value}% 减免` : item.value}</span>
+      <span>${valueLabel}</span>
       <p>${item.reason}</p>
     </div>
   `;
@@ -1529,7 +1597,7 @@ function renderRoomManagementView() {
           </div>
         </div>
         <form id="roomForm" class="form">
-          <label>
+          <label class="field-required">
             饲养间名称
             <input name="name" required placeholder="请输入饲养间名称，如 SPF 小鼠饲养间 C" />
           </label>
@@ -1538,16 +1606,16 @@ function renderRoomManagementView() {
             <input name="area" placeholder="请输入区域，如 屏障区" />
           </label>
           <div class="form-row">
-            <label>
+            <label class="field-required">
               笼架数 Z
               <input type="number" name="rackCount" min="1" value="1" placeholder="请输入笼架数" required />
             </label>
-            <label>
+            <label class="field-required">
               行数 X
               <input type="number" name="rows" min="1" value="5" placeholder="请输入行数" required />
             </label>
           </div>
-          <label>
+          <label class="field-required">
             列数 Y
             <input type="number" name="cols" min="1" value="6" placeholder="请输入列数" required />
           </label>
@@ -1561,7 +1629,7 @@ function renderRoomManagementView() {
           </div>
         </div>
         <form id="rackForm" class="form">
-          <label>
+          <label class="field-required">
             所属饲养间
             <select name="roomId" required>
               <option value="" disabled ${state.rooms.length ? "" : "selected"}>请选择饲养间</option>
@@ -1569,11 +1637,11 @@ function renderRoomManagementView() {
             </select>
           </label>
           <div class="form-row">
-            <label>
+            <label class="field-required">
               行数 X
               <input type="number" name="rows" min="1" value="5" placeholder="请输入行数" required />
             </label>
-            <label>
+            <label class="field-required">
               列数 Y
               <input type="number" name="cols" min="1" value="6" placeholder="请输入列数" required />
             </label>
@@ -1607,15 +1675,15 @@ function renderUserManagementView() {
           </div>
         </div>
         <form id="userForm" class="form">
-          <label>
+          <label class="field-required">
             用户名
             <input name="username" required placeholder="请输入登录名，如 room_a_admin" />
           </label>
-          <label>
+          <label class="field-required">
             显示姓名
             <input name="displayName" required placeholder="请输入显示姓名，如 SPF A 管理员" />
           </label>
-          <label>
+          <label class="field-required">
             初始密码
             <input name="password" type="password" placeholder="请输入初始密码" required />
           </label>
@@ -1656,6 +1724,7 @@ function renderDataManagementView() {
           </div>
         </div>
         ${renderIacucStatusCard()}
+        ${renderPrincipalIdentityPanel()}
       </div>
       <div class="panel">
         ${renderIacucAdminPanel()}
@@ -1697,6 +1766,65 @@ function renderIacucStatusCard() {
       <p>${iacucIndexMeta?.updatedAt ? `最后更新：${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : "尚未上传索引文件。"}</p>
       <p>索引用于录入笼位和生成结算单时自动匹配项目名称、项目负责人、实验负责人和支撑经费。</p>
     </div>
+  `;
+}
+
+function renderPrincipalIdentityPanel() {
+  const allItems = principalIdentityRows();
+  const items = filteredPrincipalIdentityRows(allItems);
+  return `
+    <div class="system-section">
+      <div class="panel-head compact">
+        <div>
+          <h2>项目负责人身份</h2>
+          <p>默认按独立科研人员计算 10 笼/天免费；需要减免 20 笼/天的负责人改为 PI。</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input id="principalIdentityFilter" type="search" value="${escapeAttr(state.principalIdentityFilter)}" placeholder="检索姓名、PI、独立科研人员、10 或 20" />
+        <button id="applyPrincipalIdentityFilter" class="secondary" type="button">${iconSvg("search")}检索</button>
+        <button id="clearPrincipalIdentityFilter" class="secondary" type="button">清空</button>
+        <span class="muted">${items.length} / ${allItems.length} 人</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>项目负责人</th>
+              <th>IACUC 数</th>
+              <th>负责人身份</th>
+              <th>免费笼数/天</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              items.length
+                ? items.map(renderPrincipalIdentityRow).join("")
+                : `<tr><td colspan="5">${allItems.length ? "没有匹配的项目负责人。" : "上传 IACUC 汇总表后显示项目负责人。"}</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderPrincipalIdentityRow(item) {
+  const principalType = normalizePrincipalType(item.principalType);
+  return `
+    <tr>
+      <td>${escapeText(item.pi)}</td>
+      <td>${item.iacucCount}</td>
+      <td>
+        <select data-principal-type="${escapeAttr(item.pi)}">
+          <option value="${BILLING_PRINCIPAL_INDEPENDENT}" ${principalType === BILLING_PRINCIPAL_INDEPENDENT ? "selected" : ""}>独立科研人员</option>
+          <option value="${BILLING_PRINCIPAL_PI}" ${principalType === BILLING_PRINCIPAL_PI ? "selected" : ""}>PI</option>
+        </select>
+      </td>
+      <td>${freeCageAllowanceForPrincipalType(principalType)}</td>
+      <td><button class="secondary" type="button" data-save-principal="${escapeAttr(item.pi)}">${iconSvg("save")}保存</button></td>
+    </tr>
   `;
 }
 
@@ -1812,8 +1940,8 @@ function renderIacucAdminPanel() {
       </div>
     </div>
     <form id="iacucUploadForm" class="form">
-      <label>
-        动物实验申请汇总表 CSV
+          <label class="field-required">
+            动物实验申请汇总表 CSV
         <input name="file" type="file" accept=".csv,text/csv" required />
       </label>
       <button class="primary" type="submit">${iconSvg("upload")}上传并生成索引</button>
@@ -2050,17 +2178,16 @@ function bindEvents() {
     state.billingMonth = event.target.value;
     render();
   });
-  document.querySelector("#billingIacuc")?.addEventListener("change", (event) => {
-    updateBillingIacuc(event.target.value);
+  document.querySelector("#billingPi")?.addEventListener("change", (event) => {
+    updateBillingPi(event.target.value);
   });
-  document.querySelector("#billingIacuc")?.addEventListener("input", updateIacucOptions);
-  document.querySelector("#billingIacuc")?.addEventListener("blur", (event) => {
-    updateBillingIacuc(event.target.value);
+  document.querySelector("#billingPi")?.addEventListener("blur", (event) => {
+    updateBillingPi(event.target.value);
   });
-  document.querySelector("#billingIacuc")?.addEventListener("keydown", (event) => {
+  document.querySelector("#billingPi")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      updateBillingIacuc(event.target.value);
+      updateBillingPi(event.target.value);
     }
   });
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
@@ -2091,6 +2218,24 @@ function bindEvents() {
     });
   });
   document.querySelector("#iacucUploadForm")?.addEventListener("submit", handleIacucUpload);
+  document.querySelector("#principalIdentityFilter")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyPrincipalIdentityFilter();
+    }
+  });
+  document.querySelector("#applyPrincipalIdentityFilter")?.addEventListener("click", applyPrincipalIdentityFilter);
+  document.querySelector("#clearPrincipalIdentityFilter")?.addEventListener("click", () => {
+    state.principalIdentityFilter = "";
+    render();
+  });
+  document.querySelectorAll("[data-save-principal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const pi = button.dataset.savePrincipal;
+      const select = document.querySelector(`[data-principal-type="${cssEscape(pi)}"]`);
+      savePrincipalIdentityFromTable(pi, select?.value);
+    });
+  });
   document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
   document.querySelectorAll("[data-delete-user]").forEach((button) => {
     button.addEventListener("click", () => deleteUser(button.dataset.deleteUser));
@@ -2280,6 +2425,7 @@ async function handleIacucUpload(event) {
     }
     IACUC_INDEX = payload.items || [];
     IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
+    await loadPrincipalIdentities();
     iacucIndexMeta = {
       count: payload.count,
       updatedAt: payload.updatedAt,
@@ -2291,6 +2437,52 @@ async function handleIacucUpload(event) {
   } catch {
     alert("上传失败，请检查网络或文件格式");
   }
+}
+
+async function savePrincipalIdentityFromTable(pi, principalType) {
+  try {
+    const item = await savePrincipalIdentity(pi, normalizePrincipalType(principalType));
+    pushLog(`更新 ${item.pi} 负责人身份为 ${principalTypeLabel(item.principalType)}`);
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
+}
+
+function applyPrincipalIdentityFilter() {
+  const input = document.querySelector("#principalIdentityFilter");
+  state.principalIdentityFilter = input?.value || "";
+  render();
+}
+
+async function savePrincipalIdentity(pi, principalType) {
+  const normalizedType = normalizePrincipalType(principalType);
+  const item = {
+    pi,
+    principalType: normalizedType,
+    freeCageAllowance: freeCageAllowanceForPrincipalType(normalizedType),
+  };
+  if (!remotePersistence) {
+    upsertPrincipalIdentity(item);
+    return item;
+  }
+  const response = await fetch(`${API_PRINCIPAL_IDENTITIES_URL}/${encodeURIComponent(pi)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(item),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "保存项目负责人身份失败");
+  }
+  mergeServerAuditLogs(payload);
+  upsertPrincipalIdentity(payload.item || item);
+  return payload.item || item;
 }
 
 async function checkSystemUpdate() {
@@ -2547,33 +2739,30 @@ async function closeOccupancy(slotId, endDate, reason = "cleared", options = {})
 async function handleRateSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
-  const baseRate = Number(form.get("baseRate")) || 0;
-  const currentRule = state.billingRules[0] || {
-    id: crypto.randomUUID(),
-    name: "小鼠 IVC 基础饲养费",
-    unit: "cage_day",
-    effectiveStart: today,
-    effectiveEnd: "",
-  };
-  const nextRule = { ...currentRule, price: baseRate };
-
+  const principalType = normalizePrincipalType(form.get("principalType"));
+  const freeCageAllowance = freeCageAllowanceForPrincipalType(principalType);
+  const targetPi = state.billingPi || state.quantitySheetDraft?.pi || "";
+  if (!targetPi) {
+    alert("请先选择项目负责人。");
+    return;
+  }
   try {
-    const response = state.billingRules.some((item) => item.id === nextRule.id)
-      ? await updateEntity("billingRules", nextRule.id, nextRule)
-      : await createEntity("billingRules", nextRule);
-    state.baseRate = baseRate;
-    upsertById(state.billingRules, response.item || nextRule);
-    pushLog(`更新基础费率为 ${state.baseRate}`);
+    await savePrincipalIdentity(targetPi, principalType);
+    state.freeCageAllowance = freeCageAllowance;
+    state.billingPrincipalType = principalType;
+    pushLog(`更新 ${targetPi} 负责人类型为 ${principalTypeLabel(principalType)}，免费笼数 ${freeCageAllowance}`);
     render();
   } catch (error) {
     reportSaveError(error);
   }
 }
 
-function updateBillingIacuc(value) {
+function updateBillingPi(value) {
   const trimmed = value.trim();
-  const match = findIacucInfo(trimmed);
-  state.billingIacuc = match?.iacuc || trimmed;
+  const match = piOptions(trimmed).find((item) => normalizePersonName(item.pi) === normalizePersonName(trimmed));
+  state.billingPi = match?.pi || trimmed;
+  state.billingPrincipalType = principalTypeForPi(state.billingPi);
+  state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
   render();
 }
 
@@ -2595,6 +2784,9 @@ function handleQuantitySheetSelect(event) {
   state.quantitySheetDraft = normalizeQuantitySheetDraft(sheet || makeQuantitySheetDraft(state.billingMonth));
   state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
   state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
+  state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
+  state.billingPrincipalType = principalTypeForPi(state.billingPi);
+  state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
   render();
 }
 
@@ -2623,6 +2815,9 @@ function captureQuantitySheetDraft() {
   state.quantitySheetDraft = readQuantitySheetForm(form);
   state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
   state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
+  state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
+  state.billingPrincipalType = principalTypeForPi(state.billingPi);
+  state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
 }
 
 async function saveQuantitySheetDraft() {
@@ -2743,7 +2938,7 @@ function normalizeQuantitySheetDraft(sheet) {
     owner: sheet?.owner || "",
     contact: sheet?.contact || "",
     funding: sheet?.funding || "",
-    billingUnit: sheet?.billingUnit === "animal_day" ? "animal_day" : "cage_day",
+    billingUnit: "cage_day",
     initialAnimalCount: numericOrZero(sheet?.initialAnimalCount),
     initialCageCount: numericOrZero(sheet?.initialCageCount),
     rows: Array.isArray(sheet?.rows) ? sheet.rows.map((row) => normalizeQuantitySheetDraftRow(row, month)) : [],
@@ -2968,89 +3163,141 @@ function selectFirstAvailableCage() {
 }
 
 function buildQuantitySheetStatement(sheet) {
-  const dates = datesInMonth(sheet.month || state.billingMonth);
-  const rowsByDate = new Map();
-  for (const row of sheet.rows || []) {
-    if (!row.date) continue;
-    rowsByDate.set(row.date, [...(rowsByDate.get(row.date) || []), row]);
-  }
+  const normalizedSheet = normalizeQuantitySheetDraft(sheet);
+  const month = normalizedSheet.month || state.billingMonth;
+  const pi = normalizedSheet.pi || state.billingPi || "";
+  const sheets = quantitySheetsForStatement(normalizedSheet, month, pi);
+  const dates = datesInMonth(month);
+  const sheetStates = sheets.map((item) => {
+    const rowsByDate = new Map();
+    for (const row of item.rows || []) {
+      if (!row.date) continue;
+      rowsByDate.set(row.date, [...(rowsByDate.get(row.date) || []), row]);
+    }
+    return {
+      sheet: item,
+      rowsByDate,
+      animalCount: numericOrZero(item.initialAnimalCount),
+      cageCount: numericOrZero(item.initialCageCount),
+    };
+  });
 
-  let animalCount = numericOrZero(sheet.initialAnimalCount);
-  let cageCount = numericOrZero(sheet.initialCageCount);
+  const freeCageAllowance = freeCageAllowanceForPi(pi);
   let cumulative = 0;
   const rows = dates.map((date) => {
-    const dayRows = rowsByDate.get(date) || [];
-    for (const row of dayRows) {
-      animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(animalCount + numericOrZero(row.addedCount) - numericOrZero(row.removedCount), 0);
-      if (row.cageCount !== null) cageCount = numericOrZero(row.cageCount);
+    let animalCount = 0;
+    let cageCount = 0;
+    const quantitySheetRowIds = [];
+    const iacucBreakdown = [];
+    for (const item of sheetStates) {
+      const dayRows = item.rowsByDate.get(date) || [];
+      for (const row of dayRows) {
+        item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + numericOrZero(row.addedCount) - numericOrZero(row.removedCount), 0);
+        if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
+      }
+      animalCount += item.animalCount;
+      cageCount += item.cageCount;
+      quantitySheetRowIds.push(...dayRows.map((row) => row.id));
+      if (item.cageCount || item.animalCount) {
+        iacucBreakdown.push({
+          iacuc: item.sheet.iacuc,
+          project: item.sheet.project,
+          animalCount: item.animalCount,
+          cageCount: item.cageCount,
+        });
+      }
     }
-    const unitPrice = unitPriceFor(date);
-    const discountPercent = discountFor(sheet.iacuc, date);
-    const billableCount = sheet.billingUnit === "animal_day" ? animalCount : cageCount;
-    const amount = billableCount * unitPrice * (1 - discountPercent / 100);
+    const charge = tieredDailyCharge(cageCount, freeCageAllowance);
+    const amount = charge.amount;
     cumulative += amount;
     return {
       date,
       animalCount,
       cageCount,
-      billableCount,
-      unitPrice,
-      discountPercent,
+      ...charge,
       amount,
       cumulative,
-      quantitySheetRowIds: dayRows.map((row) => row.id),
+      iacucBreakdown,
+      quantitySheetRowIds,
     };
   });
 
+  const iacucs = [...new Set(sheets.map((item) => item.iacuc).filter(Boolean))].sort();
   return {
-    iacuc: sheet.iacuc,
-    month: sheet.month,
-    project: sheet.project,
-    pi: sheet.pi,
-    owner: sheet.owner,
-    funding: sheet.funding,
-    roomName: sheet.roomName,
-    manager: sheet.manager,
+    iacuc: iacucs.join("、") || normalizedSheet.iacuc,
+    iacucs,
+    month,
+    project: uniqueJoined(sheets.map((item) => item.project)),
+    pi,
+    owner: uniqueJoined(sheets.map((item) => item.owner)),
+    funding: uniqueJoined(sheets.map((item) => item.funding)),
+    roomName: uniqueJoined(sheets.map((item) => item.roomName)),
+    manager: uniqueJoined(sheets.map((item) => item.manager)),
     sourceType: "quantity_sheet",
-    sourceId: sheet.id,
-    billingUnit: sheet.billingUnit,
-    unitPrice: unitPriceFor(`${sheet.month}-01`),
+    sourceId: normalizedSheet.id,
+    sourceIds: sheets.map((item) => item.id),
+    billingUnit: "cage_day",
+    unitPrice: BILLING_TIER_BASE_PRICE,
+    baseUnitPrice: BILLING_TIER_BASE_PRICE,
+    overageUnitPrice: BILLING_TIER_OVER_PRICE,
+    tierLimit: BILLING_TIER_LIMIT,
+    freeCageAllowance,
     rows,
     totalCageDays: rows.reduce((sum, row) => sum + row.cageCount, 0),
     totalAnimalDays: rows.reduce((sum, row) => sum + row.animalCount, 0),
+    totalFreeCageDays: rows.reduce((sum, row) => sum + row.freeCages, 0),
+    totalBillableCageDays: rows.reduce((sum, row) => sum + row.billableCages, 0),
+    totalTier1CageDays: rows.reduce((sum, row) => sum + row.tier1BillableCages, 0),
+    totalTier2CageDays: rows.reduce((sum, row) => sum + row.tier2BillableCages, 0),
     totalAmount: cumulative,
   };
 }
 
-function buildStatement(iacuc, month) {
+function buildStatement(pi, month) {
   const dates = datesInMonth(month);
   let cumulative = 0;
-  const normalizedIacuc = normalizeIacucNumber(iacuc);
+  const normalizedPi = normalizePersonName(pi);
+  const freeCageAllowance = freeCageAllowanceForPi(pi);
 
   const rows = dates.map((date) => {
-    const activeItems = activeOccupanciesOnDate(date).filter((item) => normalizeIacucNumber(item.iacuc) === normalizedIacuc);
-    const unitPrice = unitPriceFor(date);
-    const discountPercent = discountFor(iacuc, date);
-    const gross = activeItems.length * unitPrice;
-    const amount = gross * (1 - discountPercent / 100);
+    const activeItems = activeOccupanciesOnDate(date).filter((item) => normalizePersonName(item.pi) === normalizedPi);
+    const charge = tieredDailyCharge(activeItems.length, freeCageAllowance);
+    const amount = charge.amount;
     cumulative += amount;
 
     return {
       date,
       cageCount: activeItems.length,
-      unitPrice,
-      discountPercent,
+      ...charge,
       amount,
       cumulative,
+      iacucBreakdown: occupancyBreakdown(activeItems),
     };
   });
 
+  const iacucs = [...new Set(state.occupancies.filter((item) => normalizePersonName(item.pi) === normalizedPi).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean))].sort();
+  const info = piInfo(pi);
   return {
-    iacuc,
+    iacuc: iacucs.join("、"),
+    iacucs,
     month,
-    unitPrice: unitPriceFor(`${month}-01`),
+    project: info.project,
+    pi,
+    owner: info.owner,
+    funding: info.funding,
+    sourceType: "cage_map",
+    billingUnit: "cage_day",
+    unitPrice: BILLING_TIER_BASE_PRICE,
+    baseUnitPrice: BILLING_TIER_BASE_PRICE,
+    overageUnitPrice: BILLING_TIER_OVER_PRICE,
+    tierLimit: BILLING_TIER_LIMIT,
+    freeCageAllowance,
     rows,
     totalCageDays: rows.reduce((sum, row) => sum + row.cageCount, 0),
+    totalFreeCageDays: rows.reduce((sum, row) => sum + row.freeCages, 0),
+    totalBillableCageDays: rows.reduce((sum, row) => sum + row.billableCages, 0),
+    totalTier1CageDays: rows.reduce((sum, row) => sum + row.tier1BillableCages, 0),
+    totalTier2CageDays: rows.reduce((sum, row) => sum + row.tier2BillableCages, 0),
     totalAmount: cumulative,
   };
 }
@@ -3062,6 +3309,131 @@ function activeOccupanciesOnDate(date) {
     if (item.endDate && item.endDate < date) return false;
     return true;
   });
+}
+
+function tieredDailyCharge(cageCount, freeCageAllowance) {
+  const totalCages = Math.max(numericOrZero(cageCount), 0);
+  const freeCages = Math.min(Math.max(numericOrZero(freeCageAllowance), 0), totalCages);
+  const tier1Cages = Math.min(totalCages, BILLING_TIER_LIMIT);
+  const tier2Cages = Math.max(totalCages - BILLING_TIER_LIMIT, 0);
+  const tier1Free = Math.min(freeCages, tier1Cages);
+  const tier2Free = Math.min(Math.max(freeCages - tier1Free, 0), tier2Cages);
+  const tier1BillableCages = Math.max(tier1Cages - tier1Free, 0);
+  const tier2BillableCages = Math.max(tier2Cages - tier2Free, 0);
+  return {
+    freeCages,
+    billableCages: tier1BillableCages + tier2BillableCages,
+    tier1Cages,
+    tier2Cages,
+    tier1BillableCages,
+    tier2BillableCages,
+    unitPrice: BILLING_TIER_BASE_PRICE,
+    overageUnitPrice: BILLING_TIER_OVER_PRICE,
+    discountPercent: 0,
+    amount: tier1BillableCages * BILLING_TIER_BASE_PRICE + tier2BillableCages * BILLING_TIER_OVER_PRICE,
+  };
+}
+
+function quantitySheetsForStatement(currentSheet, month, pi) {
+  const normalizedPi = normalizePersonName(pi);
+  const byId = new Map();
+  [...state.quantitySheets, currentSheet].forEach((sheet) => {
+    const normalized = normalizeQuantitySheetDraft(sheet);
+    if (normalized.month === month && normalizePersonName(normalized.pi) === normalizedPi) byId.set(normalized.id, normalized);
+  });
+  return [...byId.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
+}
+
+function occupancyBreakdown(items) {
+  const byIacuc = new Map();
+  items.forEach((item) => {
+    const iacuc = normalizeIacucNumber(item.iacuc);
+    if (!iacuc) return;
+    const current = byIacuc.get(iacuc) || { iacuc, project: item.project || "", cageCount: 0 };
+    current.cageCount += 1;
+    byIacuc.set(iacuc, current);
+  });
+  return [...byIacuc.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
+}
+
+function freeCageAllowanceForPi(pi) {
+  return freeCageAllowanceForPrincipalType(principalTypeForPi(pi));
+}
+
+function principalTypeForPi(pi) {
+  const normalizedPi = normalizePersonName(pi);
+  const identity = PRINCIPAL_IDENTITY_BY_NAME.get(normalizedPi);
+  if (identity?.principalType) return normalizePrincipalType(identity.principalType);
+  return BILLING_PRINCIPAL_INDEPENDENT;
+}
+
+function normalizePrincipalType(value) {
+  return value === BILLING_PRINCIPAL_INDEPENDENT ? BILLING_PRINCIPAL_INDEPENDENT : BILLING_PRINCIPAL_PI;
+}
+
+function freeCageAllowanceForPrincipalType(value) {
+  return normalizePrincipalType(value) === BILLING_PRINCIPAL_INDEPENDENT ? FREE_CAGES_INDEPENDENT : FREE_CAGES_PI;
+}
+
+function principalTypeLabel(value) {
+  return normalizePrincipalType(value) === BILLING_PRINCIPAL_INDEPENDENT ? "独立科研人员" : "PI";
+}
+
+function principalIdentityRows() {
+  const byPi = new Map();
+  const add = (pi, iacuc = "") => {
+    const name = String(pi || "").trim();
+    if (!name) return;
+    const key = normalizePersonName(name);
+    const current = byPi.get(key) || {
+      pi: name,
+      iacucs: new Set(),
+      principalType: principalTypeForPi(name),
+    };
+    if (iacuc) current.iacucs.add(normalizeIacucNumber(iacuc));
+    byPi.set(key, current);
+  };
+  IACUC_INDEX.forEach((item) => add(item.pi, item.iacuc));
+  state.occupancies.forEach((item) => add(item.pi, item.iacuc));
+  state.quantitySheets.forEach((item) => add(item.pi, item.iacuc));
+  PRINCIPAL_IDENTITIES.forEach((item) => add(item.pi));
+  return [...byPi.values()]
+    .map((item) => ({
+      pi: item.pi,
+      principalType: principalTypeForPi(item.pi),
+      iacucCount: [...item.iacucs].filter(Boolean).length,
+    }))
+    .sort((a, b) => a.pi.localeCompare(b.pi, "zh-CN"));
+}
+
+function filteredPrincipalIdentityRows(items) {
+  const keyword = normalizeSearchText(state.principalIdentityFilter);
+  if (!keyword) return items;
+  return items.filter((item) => {
+    const typeLabel = principalTypeLabel(item.principalType);
+    const freeCages = String(freeCageAllowanceForPrincipalType(item.principalType));
+    return normalizeSearchText(`${item.pi} ${typeLabel} ${item.principalType} ${freeCages}`).includes(keyword);
+  });
+}
+
+function normalizeSearchText(value) {
+  return String(value || "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function piInfo(pi) {
+  const normalizedPi = normalizePersonName(pi);
+  const applications = IACUC_INDEX.filter((item) => normalizePersonName(item.pi) === normalizedPi);
+  const occupancies = state.occupancies.filter((item) => normalizePersonName(item.pi) === normalizedPi);
+  return {
+    project: uniqueJoined([...applications.map((item) => item.project), ...occupancies.map((item) => item.project)]),
+    pi,
+    owner: uniqueJoined([...applications.map((item) => item.owner), ...occupancies.map((item) => item.owner)]),
+    funding: uniqueJoined([...applications.map((item) => item.funding), ...occupancies.map((item) => item.funding)]),
+  };
+}
+
+function uniqueJoined(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN")).join("、");
 }
 
 function unitPriceFor(date) {
@@ -3089,15 +3461,18 @@ async function exportBillingCsv() {
   if (!statement) return;
   const isQuantitySheet = statement.sourceType === "quantity_sheet";
   const header = isQuantitySheet
-    ? ["日期", "结余动物数", "结余笼数", "计费数量", "单价", "减免百分比", "当日费用", "累计费用"]
-    : ["日期", "在养笼数", "单价", "减免百分比", "当日费用", "累计费用"];
+    ? ["日期", "结余动物数", "合计笼数", "免费笼数", "收费笼数", "4.5元笼数", "6.5元笼数", "当日费用", "累计费用", "伦理明细"]
+    : ["日期", "合计笼数", "免费笼数", "收费笼数", "4.5元笼数", "6.5元笼数", "当日费用", "累计费用", "伦理明细"];
   const rows = statement.rows.map((row) => [
     row.date,
-    ...(isQuantitySheet ? [row.animalCount, row.cageCount, row.billableCount ?? row.cageCount] : [row.cageCount]),
-    row.unitPrice,
-    row.discountPercent,
+    ...(isQuantitySheet ? [row.animalCount, row.cageCount] : [row.cageCount]),
+    row.freeCages,
+    row.billableCages,
+    row.tier1BillableCages,
+    row.tier2BillableCages,
     row.amount.toFixed(2),
     row.cumulative.toFixed(2),
+    (row.iacucBreakdown || []).map((item) => `${item.iacuc}:${item.cageCount}笼`).join("；"),
   ]);
   const csv = [header, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
@@ -3106,7 +3481,7 @@ async function exportBillingCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${state.billingIacuc}-${state.billingMonth}-饲养明细.csv`;
+  link.download = `${statement.pi || state.billingPi || state.billingIacuc}-${statement.month || state.billingMonth}-饲养明细.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -3139,12 +3514,12 @@ async function statementForExport() {
   if (state.billingSource === "quantity_sheet") {
     return quantitySheetStatementForExport();
   }
-  if (!state.billingIacuc || !state.billingMonth) {
-    throw new Error("请先选择 IACUC 编号和结算月份");
+  if (!state.billingPi || !state.billingMonth) {
+    throw new Error("请先选择项目负责人和结算月份");
   }
   if (!remotePersistence) {
-    const statement = buildStatement(state.billingIacuc, state.billingMonth);
-    return { statement, info: findIacucInfo(state.billingIacuc) || {} };
+    const statement = buildStatement(state.billingPi, state.billingMonth);
+    return { statement, info: statementInfoForExport(statement) };
   }
   if (currentUser?.role !== "admin") {
     throw new Error("共享模式下只有系统管理员可以生成和导出正式结算单");
@@ -3154,7 +3529,7 @@ async function statementForExport() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      iacuc: state.billingIacuc,
+      pi: state.billingPi,
       month: state.billingMonth,
       status: "draft",
       replaceDraft: true,
@@ -3175,7 +3550,7 @@ async function statementForExport() {
 
   mergeServerAuditLogs(payload);
   const statement = statementPayloadForExport(payload.statement, payload.lines || []);
-  pushLog(`生成结算单：${statement.iacuc} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
+  pushLog(`生成结算单：${statement.pi} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
   render();
   return { statement, info: statementInfoForExport(statement) };
 }
@@ -3210,7 +3585,7 @@ async function quantitySheetStatementForExport() {
 
   mergeServerAuditLogs(payload);
   const statement = statementPayloadForExport(payload.statement, payload.lines || []);
-  pushLog(`根据数量统计表生成结算单：${statement.iacuc} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
+  pushLog(`根据数量统计表生成结算单：${statement.pi || statement.iacuc} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
   render();
   return { statement, info: statementInfoForExport(statement) };
 }
@@ -3220,11 +3595,16 @@ function statementPayloadForExport(statement, lines) {
     date: line.date,
     animalCount: Number(line.animalCount || 0),
     cageCount: Number(line.cageCount || 0),
-    billableCount: Number(line.billableCount ?? line.cageCount ?? 0),
+    freeCages: Number(line.freeCages || 0),
+    billableCages: Number(line.billableCages ?? line.billableCount ?? line.cageCount ?? 0),
+    tier1BillableCages: Number(line.tier1BillableCages || 0),
+    tier2BillableCages: Number(line.tier2BillableCages || 0),
     unitPrice: Number(line.unitPrice || 0),
+    overageUnitPrice: Number(line.overageUnitPrice || 0),
     discountPercent: Number(line.discountPercent || 0),
     amount: Number(line.amount || 0),
     cumulative: Number(line.cumulative || 0),
+    iacucBreakdown: Array.isArray(line.iacucBreakdown) ? line.iacucBreakdown : [],
   }));
   return {
     ...statement,
@@ -3232,6 +3612,10 @@ function statementPayloadForExport(statement, lines) {
     rows,
     totalCageDays: Number(statement.totalCageDays || 0),
     totalAnimalDays: Number(statement.totalAnimalDays || 0),
+    totalFreeCageDays: Number(statement.totalFreeCageDays || 0),
+    totalBillableCageDays: Number(statement.totalBillableCageDays || 0),
+    totalTier1CageDays: Number(statement.totalTier1CageDays || 0),
+    totalTier2CageDays: Number(statement.totalTier2CageDays || 0),
     totalAmount: Number(statement.totalAmount || 0),
   };
 }
@@ -3264,9 +3648,10 @@ function settlementHtml(statement, info, rows) {
               <td>${escapeText(row.date)}</td>
               <td>${row.animalCount ?? 0}</td>
               <td>${row.cageCount}</td>
-              <td>${row.billableCount ?? row.cageCount}</td>
-              <td>${MONEY_FORMAT.format(row.unitPrice)}</td>
-              <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
+              <td>${row.freeCages}</td>
+              <td>${row.billableCages}</td>
+              <td>${row.tier1BillableCages}</td>
+              <td>${row.tier2BillableCages}</td>
               <td>${MONEY_FORMAT.format(row.amount)}</td>
             </tr>
           `
@@ -3274,23 +3659,24 @@ function settlementHtml(statement, info, rows) {
             <tr>
               <td>${escapeText(row.date)}</td>
               <td>${row.cageCount}</td>
-              <td>${MONEY_FORMAT.format(row.unitPrice)}</td>
-              <td>${row.discountPercent ? `${row.discountPercent}%` : "-"}</td>
+              <td>${row.freeCages}</td>
+              <td>${row.billableCages}</td>
+              <td>${row.tier1BillableCages}</td>
+              <td>${row.tier2BillableCages}</td>
               <td>${MONEY_FORMAT.format(row.amount)}</td>
             </tr>
           `,
     )
     .join("");
-  const billableTotalLabel = statement.billingUnit === "animal_day" ? "累计只日" : "累计笼日";
-  const unitLabel = statement.billingUnit === "animal_day" ? "元/只/天" : "元/笼/天";
-  const billableTotal = statement.billingUnit === "animal_day" ? statement.totalAnimalDays : statement.totalCageDays;
+  const billableTotalLabel = "收费笼日";
+  const billableTotal = statement.totalBillableCageDays ?? statement.totalCageDays;
 
   return `
     <!doctype html>
     <html lang="zh-CN">
       <head>
         <meta charset="utf-8" />
-        <title>${escapeText(state.billingIacuc)}-${escapeText(state.billingMonth)}-饲养费结算单</title>
+        <title>${escapeText(statement.pi || state.billingPi || state.billingIacuc)}-${escapeText(statement.month || state.billingMonth)}-饲养费结算单</title>
         <style>
           @page { size: A4; margin: 18mm; }
           body { color: #1f2a2e; font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; font-size: 12px; line-height: 1.5; }
@@ -3317,7 +3703,8 @@ function settlementHtml(statement, info, rows) {
         <div class="meta">生成时间：${escapeText(generatedAt)}</div>
         <div class="section grid">
           <div class="cell"><span class="label">结算月份</span>${escapeText(statement.month)}</div>
-          <div class="cell"><span class="label">IACUC编号</span>${escapeText(statement.iacuc || "-")}</div>
+          <div class="cell"><span class="label">项目负责人</span>${escapeText(statement.pi || "-")}</div>
+          <div class="cell full"><span class="label">IACUC编号</span>${escapeText(statement.iacuc || "-")}</div>
           ${isQuantitySheet ? `<div class="cell"><span class="label">数据来源</span>数量统计表</div><div class="cell"><span class="label">房间/管理员</span>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</div>` : ""}
           <div class="cell full"><span class="label">项目名称</span>${escapeText(project)}</div>
           <div class="cell"><span class="label">项目负责人</span>${escapeText(pi)}</div>
@@ -3326,7 +3713,7 @@ function settlementHtml(statement, info, rows) {
         </div>
         <div class="section total">
           <div><span class="label">${billableTotalLabel}</span><strong>${billableTotal}</strong></div>
-          <div><span class="label">基础单价</span><strong>${MONEY_FORMAT.format(statement.unitPrice)} ${unitLabel}</strong></div>
+          <div><span class="label">阶梯价格</span><strong>${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)} / ${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)} 元</strong></div>
           <div><span class="label">应收金额</span><strong>${MONEY_FORMAT.format(statement.totalAmount)} 元</strong></div>
         </div>
         <div class="section">
@@ -3335,8 +3722,8 @@ function settlementHtml(statement, info, rows) {
             <thead>
               ${
                 isQuantitySheet
-                  ? `<tr><th>日期</th><th>动物数</th><th>笼数</th><th>计费数量</th><th>单价</th><th>减免</th><th>当日费用</th></tr>`
-                  : `<tr><th>日期</th><th>在养笼数</th><th>单价</th><th>减免</th><th>当日费用</th></tr>`
+                  ? `<tr><th>日期</th><th>动物数</th><th>合计笼数</th><th>免费笼数</th><th>收费笼数</th><th>4.5元笼数</th><th>6.5元笼数</th><th>当日费用</th></tr>`
+                  : `<tr><th>日期</th><th>合计笼数</th><th>免费笼数</th><th>收费笼数</th><th>4.5元笼数</th><th>6.5元笼数</th><th>当日费用</th></tr>`
               }
             </thead>
             <tbody>${rowsHtml}</tbody>
@@ -3468,6 +3855,34 @@ function iacucOptions(currentValue = "") {
   return [...byNumber.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
 }
 
+function piOptions(currentValue = "") {
+  const fromIndex = IACUC_INDEX.map((item) => ({
+    pi: item.pi,
+    iacuc: item.iacuc,
+  }));
+  const fromOccupancies = state.occupancies.map((item) => ({
+    pi: item.pi,
+    iacuc: item.iacuc,
+  }));
+  const fromSheets = state.quantitySheets.map((item) => ({
+    pi: item.pi,
+    iacuc: item.iacuc,
+  }));
+  const typedValue = String(currentValue || "").trim();
+  const fromCurrentValue = typedValue ? [{ pi: typedValue, iacuc: "" }] : [];
+  const byPi = new Map();
+  [...fromIndex, ...fromOccupancies, ...fromSheets, ...fromCurrentValue].forEach((item) => {
+    const key = normalizePersonName(item.pi);
+    if (!key) return;
+    const current = byPi.get(key) || { pi: item.pi, iacucs: [] };
+    if (item.iacuc) current.iacucs.push(normalizeIacucNumber(item.iacuc));
+    byPi.set(key, current);
+  });
+  return [...byPi.values()]
+    .map((item) => ({ ...item, iacucs: [...new Set(item.iacucs)].sort() }))
+    .sort((a, b) => a.pi.localeCompare(b.pi, "zh-CN"));
+}
+
 function findIacucInfo(value) {
   const key = normalizeIacucNumber(value);
   if (!key) return null;
@@ -3487,6 +3902,11 @@ function findIacucInfo(value) {
   };
 }
 
+function piForIacuc(value) {
+  const info = findIacucInfo(value);
+  return info?.pi || "";
+}
+
 function normalizeIacucNumber(value) {
   return String(value ?? "")
     .trim()
@@ -3494,6 +3914,15 @@ function normalizeIacucNumber(value) {
     .replace(/\(.*?\)/g, "")
     .replace(/\s+/g, "")
     .toUpperCase();
+}
+
+function normalizePersonName(value) {
+  return String(value ?? "").trim().replace(/\s+/g, "");
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function statusLabel(status) {
@@ -3598,6 +4027,7 @@ function iconSvg(name) {
     trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l1 2h4v2H3V6h4zm1 6h2v8H9zm4 0h2v8h-2z"/></svg>`,
     upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16h2V7l3 3 1.4-1.4L12 3.2 6.6 8.6 8 10l3-3zM5 18h14v2H5z"/></svg>`,
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
+    search: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 10.5l4 4-1.4 1.4-4-4A6.5 6.5 0 1 1 10.5 4zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z"/></svg>`,
     chevronLeft: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3-1.4-1.4L6.2 12l7.1 7.1 1.4-1.4L10 13h8v-2h-8z"/></svg>`,
     chevronRight: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.3 17.7 1.4 1.4 7.1-7.1-7.1-7.1-1.4 1.4L14 11H6v2h8z"/></svg>`,
@@ -3612,7 +4042,7 @@ async function initialize() {
   await loadSystemInfo();
   await loadCurrentUser();
   if (!remotePersistence || currentUser) {
-    await Promise.all([loadIacucIndex(), loadPersistedState(), loadUsers()]);
+    await Promise.all([loadIacucIndex(), loadPrincipalIdentities(), loadPersistedState(), loadUsers()]);
   }
   render();
 }
@@ -3644,5 +4074,27 @@ async function loadIacucIndex() {
     IACUC_INDEX = [];
     IACUC_BY_NUMBER = new Map();
     iacucIndexMeta = null;
+  }
+}
+
+async function loadPrincipalIdentities() {
+  if (!remotePersistence && !currentUser) {
+    PRINCIPAL_IDENTITIES = [];
+    PRINCIPAL_IDENTITY_BY_NAME = new Map();
+    return;
+  }
+  try {
+    const response = await fetch(API_PRINCIPAL_IDENTITIES_URL, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    PRINCIPAL_IDENTITIES = (payload.items || []).map((item) => ({
+      ...item,
+      principalType: normalizePrincipalType(item.principalType),
+      freeCageAllowance: freeCageAllowanceForPrincipalType(item.principalType),
+    }));
+    PRINCIPAL_IDENTITY_BY_NAME = new Map(PRINCIPAL_IDENTITIES.map((item) => [normalizePersonName(item.pi), item]));
+  } catch {
+    PRINCIPAL_IDENTITIES = [];
+    PRINCIPAL_IDENTITY_BY_NAME = new Map();
   }
 }

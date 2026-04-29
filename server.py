@@ -29,6 +29,14 @@ PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))
 MAX_BODY_BYTES = 10 * 1024 * 1024
 SESSION_COOKIE = "cageledger_session"
 SESSION_TTL_DAYS = 14
+BILLING_PRINCIPAL_PI = "pi"
+BILLING_PRINCIPAL_INDEPENDENT = "independent"
+FREE_CAGES_PI = 20
+FREE_CAGES_INDEPENDENT = 10
+FREE_CAGES_DEFAULT = FREE_CAGES_PI
+BILLING_TIER_LIMIT = 160
+BILLING_TIER_BASE_PRICE = 4.5
+BILLING_TIER_OVER_PRICE = 6.5
 DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")
 CAGELEDGER_VERSION = os.environ.get("CAGELEDGER_VERSION", "").strip()
@@ -189,6 +197,16 @@ def initialize_schema(conn):
             owner TEXT,
             funding TEXT,
             imported_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS principal_identities (
+            pi TEXT PRIMARY KEY,
+            principal_type TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
             payload TEXT NOT NULL
         )
         """
@@ -1055,7 +1073,7 @@ def validate_state_write_permission(conn, actor, old_state, new_state):
     if comparable_items(old_state.get("billingRules", [])) != comparable_items(new_state.get("billingRules", [])):
         raise PermissionError("房间管理员不能修改计费规则")
     if old_state.get("baseRate") != new_state.get("baseRate"):
-        raise PermissionError("房间管理员不能修改基础费率")
+        raise PermissionError("房间管理员不能修改计费规则")
     if comparable_items(old_state.get("adjustments", [])) != comparable_items(new_state.get("adjustments", [])):
         raise PermissionError("房间管理员不能修改减免规则")
 
@@ -1290,6 +1308,79 @@ def write_experiment_applications(conn, items, imported_at):
                 dump_json(normalized),
             ),
         )
+
+
+def list_principal_identities(conn):
+    rows = conn.execute("SELECT payload FROM principal_identities").fetchall()
+    identity_by_pi = {
+        clean_text(item.get("pi", "")): item
+        for item in (json.loads(row["payload"]) for row in rows)
+        if clean_text(item.get("pi", ""))
+    }
+    principal_names = {
+        clean_text(row["pi"])
+        for row in conn.execute("SELECT DISTINCT pi FROM experiment_applications WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
+    }
+    principal_names.update(
+        clean_text(row["pi"])
+        for row in conn.execute("SELECT DISTINCT pi FROM quantity_sheets WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
+    )
+    principal_names.update(
+        clean_text(row["pi"])
+        for row in conn.execute("SELECT DISTINCT pi FROM occupancies WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
+    )
+    principal_names.update(identity_by_pi.keys())
+    items = []
+    for pi_name in sorted((name for name in principal_names if name), key=lambda value: value.lower()):
+        saved = identity_by_pi.get(pi_name, {})
+        principal_type = normalize_principal_type(saved.get("principalType", BILLING_PRINCIPAL_INDEPENDENT))
+        items.append(
+            {
+                "pi": pi_name,
+                "principalType": principal_type,
+                "freeCageAllowance": free_cages_for_principal_type(principal_type),
+                "updatedAt": saved.get("updatedAt", ""),
+            }
+        )
+    return items
+
+
+def save_principal_identity(conn, payload, actor, pi_name):
+    pi_name = clean_text(pi_name or payload.get("pi", ""))
+    if not pi_name:
+        raise ValueError("项目负责人不能为空")
+    principal_type = normalize_principal_type(payload.get("principalType", ""))
+    now = now_iso()
+    item = {
+        "pi": pi_name,
+        "principalType": principal_type,
+        "freeCageAllowance": free_cages_for_principal_type(principal_type),
+        "updatedAt": now,
+    }
+    conn.execute(
+        """
+        INSERT INTO principal_identities (pi, principal_type, updated_at, payload)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(pi) DO UPDATE SET
+            principal_type = excluded.principal_type,
+            updated_at = excluded.updated_at,
+            payload = excluded.payload
+        """,
+        (pi_name, principal_type, now, dump_json(item)),
+    )
+    event = audit_event(
+        actor,
+        "principal_identity.updated",
+        "principal_identity",
+        pi_name,
+        f"{actor['displayName']} 更新项目负责人 {pi_name} 身份为 {principal_type_label(principal_type)}",
+        [],
+        now,
+        None,
+        item,
+    )
+    write_audit_events(conn, [event])
+    return item, merge_audit_logs([], [event])
 
 
 def application_payload(item, imported_at):
@@ -1641,14 +1732,12 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "owner": clean_text(source.get("owner", "")),
         "contact": clean_text(source.get("contact", "")),
         "funding": clean_text(source.get("funding", "")),
-        "billingUnit": clean_text(source.get("billingUnit", "cage_day")) or "cage_day",
+        "billingUnit": "cage_day",
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
         "initialCageCount": as_int(source.get("initialCageCount")),
         "rows": [normalize_quantity_sheet_row(row, month) for row in rows],
         "updatedAt": updated_at,
     }
-    if sheet["billingUnit"] not in ("cage_day", "animal_day"):
-        raise ValueError("计费口径只能是 cage_day 或 animal_day")
     sheet["rows"] = sorted(sheet["rows"], key=lambda item: (item["date"], item["id"]))
     return sheet
 
@@ -1707,25 +1796,49 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     if status not in ("draft", "locked"):
         raise ValueError("结算单状态只能是 draft 或 locked")
 
-    rules = read_payloads(conn, "billing_rules", "rowid")
-    adjustments = read_payloads(conn, "billing_adjustments", "rowid")
-    lines = quantity_sheet_statement_lines(sheet, rules, adjustments)
+    sheets = [
+        item
+        for item in list_quantity_sheets(conn)
+        if item.get("month") == sheet["month"] and clean_text(item.get("pi", "")) == clean_text(sheet.get("pi", ""))
+    ]
+    for item in sheets:
+        validate_quantity_sheet_permission(actor, item)
+    if not clean_text(sheet.get("pi", "")):
+        sheets = [sheet]
+
+    pi_name = clean_text(sheet.get("pi", ""))
+    principal_type_by_pi = read_principal_type_by_pi(conn)
+    principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
+    free_cages = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
+    lines = quantity_sheet_statement_lines(sheets, free_cages)
     generated_at = now_iso()
+    iacucs = sorted({item["iacuc"] for item in sheets if item.get("iacuc")})
     statement = {
         "id": new_id("stmt"),
-        "iacuc": sheet["iacuc"],
+        "iacuc": "、".join(iacucs) or sheet["iacuc"],
+        "iacucs": iacucs,
         "month": sheet["month"],
-        "project": sheet.get("project", ""),
-        "pi": sheet.get("pi", ""),
+        "project": "、".join(sorted({item.get("project", "") for item in sheets if item.get("project")})),
+        "pi": pi_name,
         "owner": sheet.get("owner", ""),
-        "funding": sheet.get("funding", ""),
+        "funding": "、".join(sorted({item.get("funding", "") for item in sheets if item.get("funding")})),
         "sourceType": "quantity_sheet",
         "sourceId": sheet["id"],
+        "sourceIds": [item["id"] for item in sheets],
         "sourceLabel": "数量统计表",
-        "roomName": sheet.get("roomName", ""),
-        "manager": sheet.get("manager", ""),
-        "billingUnit": sheet.get("billingUnit", "cage_day"),
+        "roomName": "、".join(sorted({item.get("roomName", "") for item in sheets if item.get("roomName")})),
+        "manager": "、".join(sorted({item.get("manager", "") for item in sheets if item.get("manager")})),
+        "billingUnit": "cage_day",
+        "principalType": principal_type,
+        "freeCageAllowance": free_cages,
+        "tierLimit": BILLING_TIER_LIMIT,
+        "baseUnitPrice": BILLING_TIER_BASE_PRICE,
+        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
         "totalCageDays": sum(line["cageCount"] for line in lines),
+        "totalFreeCageDays": sum(line.get("freeCages", 0) for line in lines),
+        "totalBillableCageDays": sum(line.get("billableCages", 0) for line in lines),
+        "totalTier1CageDays": sum(line.get("tier1BillableCages", 0) for line in lines),
+        "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
         "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
         "totalAmount": lines[-1]["cumulative"] if lines else 0,
         "status": status,
@@ -1736,14 +1849,14 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
         line["statementId"] = statement["id"]
 
     if payload.get("replaceDraft", True):
-        replace_existing_draft_statement(conn, sheet["iacuc"], sheet["month"])
+        replace_existing_draft_statement(conn, statement["iacuc"], sheet["month"])
     insert_billing_statement(conn, statement, lines)
     event = audit_event(
         actor,
         "billing_statement.generated_from_quantity_sheet",
         "billing_statement",
         statement["id"],
-        f"{actor['displayName']} 根据数量统计表生成 {sheet['iacuc']} {sheet['month']} 饲养费结算单",
+        f"{actor['displayName']} 根据数量统计表生成 {pi_name or sheet['iacuc']} {sheet['month']} 饲养费结算单",
         [],
         generated_at,
         sheet,
@@ -1753,42 +1866,70 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     return statement, lines, merge_audit_logs([], [event])
 
 
-def quantity_sheet_statement_lines(sheet, rules, adjustments):
-    rows_by_date = {}
-    for row in sheet.get("rows", []):
-        rows_by_date.setdefault(row["date"], []).append(row)
+def quantity_sheet_statement_lines(sheets, free_cages):
+    if not sheets:
+        return []
 
-    animal_count = sheet.get("initialAnimalCount") or 0
-    cage_count = sheet.get("initialCageCount") or 0
+    sheet_states = []
+    month = sheets[0]["month"]
+    for sheet in sheets:
+        rows_by_date = {}
+        for row in sheet.get("rows", []):
+            rows_by_date.setdefault(row["date"], []).append(row)
+        sheet_states.append(
+            {
+                "sheet": sheet,
+                "rowsByDate": rows_by_date,
+                "animalCount": sheet.get("initialAnimalCount") or 0,
+                "cageCount": sheet.get("initialCageCount") or 0,
+            }
+        )
+
     cumulative = 0
     lines = []
-    for date in dates_in_month(sheet["month"]):
-        day_rows = rows_by_date.get(date, [])
-        for row in day_rows:
-            if row.get("animalCount") is not None:
-                animal_count = row.get("animalCount") or 0
-            else:
-                animal_count = max(animal_count + (row.get("addedCount") or 0) - (row.get("removedCount") or 0), 0)
-            if row.get("cageCount") is not None:
-                cage_count = row.get("cageCount") or 0
+    for date in dates_in_month(month):
+        breakdown = []
+        animal_count = 0
+        cage_count = 0
+        quantity_row_ids = []
+        for state in sheet_states:
+            day_rows = state["rowsByDate"].get(date, [])
+            for row in day_rows:
+                if row.get("animalCount") is not None:
+                    state["animalCount"] = row.get("animalCount") or 0
+                else:
+                    state["animalCount"] = max(
+                        state["animalCount"] + (row.get("addedCount") or 0) - (row.get("removedCount") or 0),
+                        0,
+                    )
+                if row.get("cageCount") is not None:
+                    state["cageCount"] = row.get("cageCount") or 0
+            sheet = state["sheet"]
+            animal_count += state["animalCount"]
+            cage_count += state["cageCount"]
+            quantity_row_ids.extend(row["id"] for row in day_rows)
+            if state["cageCount"] or state["animalCount"]:
+                breakdown.append(
+                    {
+                        "iacuc": sheet.get("iacuc", ""),
+                        "project": sheet.get("project", ""),
+                        "animalCount": state["animalCount"],
+                        "cageCount": state["cageCount"],
+                    }
+                )
 
-        unit_price = billing_unit_price_for(rules, date)
-        discount_percent = billing_discount_for(adjustments, sheet["iacuc"], date)
-        billable_count = animal_count if sheet.get("billingUnit") == "animal_day" else cage_count
-        amount = billable_count * unit_price * (1 - discount_percent / 100)
-        cumulative += amount
+        charges = tiered_daily_charge(cage_count, free_cages)
+        cumulative += charges["amount"]
         lines.append(
             {
                 "id": new_id("line"),
                 "date": date,
                 "animalCount": animal_count,
                 "cageCount": cage_count,
-                "billableCount": billable_count,
-                "unitPrice": unit_price,
-                "discountPercent": discount_percent,
-                "amount": amount,
+                **charges,
                 "cumulative": cumulative,
-                "quantitySheetRowIds": [row["id"] for row in day_rows],
+                "iacucBreakdown": breakdown,
+                "quantitySheetRowIds": quantity_row_ids,
                 "occupancyIds": [],
             }
         )
@@ -1797,10 +1938,9 @@ def quantity_sheet_statement_lines(sheet, rules, adjustments):
 
 def generate_billing_statement(conn, payload, actor):
     iacuc = normalize_iacuc_number(payload.get("iacuc", ""))
+    requested_pi = clean_text(payload.get("pi", ""))
     month = clean_text(payload.get("month", ""))
     status = clean_text(payload.get("status", "draft")) or "draft"
-    if not iacuc:
-        raise ValueError("IACUC 编号不能为空")
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise ValueError("结算月份格式应为 YYYY-MM")
     if status not in ("draft", "locked"):
@@ -1808,45 +1948,78 @@ def generate_billing_statement(conn, payload, actor):
 
     applications_by_iacuc = read_applications_by_iacuc(conn)
     occupancies = read_payloads(conn, "occupancies", "start_date, rowid")
-    rules = read_payloads(conn, "billing_rules", "rowid")
-    adjustments = read_payloads(conn, "billing_adjustments", "rowid")
     dates = dates_in_month(month)
     generated_at = now_iso()
     cumulative = 0
     lines = []
+    pi_name = requested_pi or pi_for_iacuc(iacuc, applications_by_iacuc, occupancies)
+    if not pi_name:
+        raise ValueError("项目负责人不能为空")
+    principal_type_by_pi = read_principal_type_by_pi(conn)
+    principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
+    free_cages = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
+    iacucs = sorted({
+        normalize_iacuc_number(item.get("iacuc", ""))
+        for item in occupancies
+        if clean_text(item.get("pi", "")) == pi_name and normalize_iacuc_number(item.get("iacuc", ""))
+    })
 
     for date in dates:
         active_items = [
             item
             for item in occupancies
-            if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and occupancy_active_on_date(item, date)
+            if clean_text(item.get("pi", "")) == pi_name and occupancy_active_on_date(item, date)
         ]
-        unit_price = billing_unit_price_for(rules, date)
-        discount_percent = billing_discount_for(adjustments, iacuc, date)
-        amount = len(active_items) * unit_price * (1 - discount_percent / 100)
+        charges = tiered_daily_charge(len(active_items), free_cages)
+        amount = charges["amount"]
         cumulative += amount
+        breakdown = []
+        for item in active_items:
+            item_iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+            found = next((entry for entry in breakdown if entry["iacuc"] == item_iacuc), None)
+            if not found:
+                found = {
+                    "iacuc": item_iacuc,
+                    "project": item.get("project", ""),
+                    "cageCount": 0,
+                }
+                breakdown.append(found)
+            found["cageCount"] += 1
         line = {
             "id": new_id("line"),
             "date": date,
             "cageCount": len(active_items),
-            "unitPrice": unit_price,
-            "discountPercent": discount_percent,
+            **charges,
             "amount": amount,
             "cumulative": cumulative,
+            "iacucBreakdown": breakdown,
             "occupancyIds": [item.get("id") for item in active_items if item.get("id")],
         }
         lines.append(line)
 
-    application = statement_application_snapshot(iacuc, applications_by_iacuc, occupancies)
+    application = statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies)
     statement = {
         "id": new_id("stmt"),
-        "iacuc": iacuc,
+        "iacuc": "、".join(iacucs) or iacuc,
+        "iacucs": iacucs,
         "month": month,
         "project": application.get("project", ""),
         "pi": application.get("pi", ""),
         "owner": application.get("owner", ""),
         "funding": application.get("funding", ""),
+        "sourceType": "cage_map",
+        "sourceLabel": "动态笼位图",
+        "billingUnit": "cage_day",
+        "principalType": principal_type,
+        "freeCageAllowance": free_cages,
+        "tierLimit": BILLING_TIER_LIMIT,
+        "baseUnitPrice": BILLING_TIER_BASE_PRICE,
+        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
         "totalCageDays": sum(line["cageCount"] for line in lines),
+        "totalFreeCageDays": sum(line.get("freeCages", 0) for line in lines),
+        "totalBillableCageDays": sum(line.get("billableCages", 0) for line in lines),
+        "totalTier1CageDays": sum(line.get("tier1BillableCages", 0) for line in lines),
+        "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
         "totalAmount": cumulative,
         "status": status,
         "generatedAt": generated_at,
@@ -1856,7 +2029,7 @@ def generate_billing_statement(conn, payload, actor):
         line["statementId"] = statement["id"]
 
     if payload.get("replaceDraft", True):
-        replace_existing_draft_statement(conn, iacuc, month)
+        replace_existing_draft_statement(conn, statement["iacuc"], month)
 
     insert_billing_statement(conn, statement, lines)
     event = audit_event(
@@ -1864,7 +2037,7 @@ def generate_billing_statement(conn, payload, actor):
         "billing_statement.generated",
         "billing_statement",
         statement["id"],
-        f"{actor['displayName']} 生成 {iacuc} {month} 饲养费结算单",
+        f"{actor['displayName']} 生成 {pi_name} {month} 饲养费结算单",
         [],
         generated_at,
         None,
@@ -1878,6 +2051,30 @@ def dates_in_month(month):
     year, month_no = [int(part) for part in month.split("-")]
     day_count = calendar.monthrange(year, month_no)[1]
     return [f"{year:04d}-{month_no:02d}-{day:02d}" for day in range(1, day_count + 1)]
+
+
+def tiered_daily_charge(cage_count, free_cages):
+    cage_count = max(as_int(cage_count) or 0, 0)
+    free_cages = min(max(as_int(free_cages) or 0, 0), cage_count)
+    tier1_cages = min(cage_count, BILLING_TIER_LIMIT)
+    tier2_cages = max(cage_count - BILLING_TIER_LIMIT, 0)
+    tier1_free = min(free_cages, tier1_cages)
+    tier2_free = min(max(free_cages - tier1_free, 0), tier2_cages)
+    tier1_billable = max(tier1_cages - tier1_free, 0)
+    tier2_billable = max(tier2_cages - tier2_free, 0)
+    amount = tier1_billable * BILLING_TIER_BASE_PRICE + tier2_billable * BILLING_TIER_OVER_PRICE
+    return {
+        "freeCages": free_cages,
+        "billableCages": tier1_billable + tier2_billable,
+        "tier1Cages": tier1_cages,
+        "tier2Cages": tier2_cages,
+        "tier1BillableCages": tier1_billable,
+        "tier2BillableCages": tier2_billable,
+        "unitPrice": BILLING_TIER_BASE_PRICE,
+        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
+        "discountPercent": 0,
+        "amount": amount,
+    }
 
 
 def occupancy_active_on_date(item, date):
@@ -1915,6 +2112,56 @@ def billing_discount_for(adjustments, iacuc, date):
     return 0
 
 
+def billing_free_cages_for(adjustments, pi_name):
+    for adjustment in adjustments:
+        if (
+            adjustment.get("targetType") == "pi"
+            and clean_text(adjustment.get("targetId", "")) == pi_name
+            and adjustment.get("type") == "free_cages"
+        ):
+            if adjustment.get("principalType"):
+                return free_cages_for_principal_type(adjustment.get("principalType"))
+            return max(as_int(adjustment.get("value")) or 0, 0)
+    return FREE_CAGES_DEFAULT
+
+
+def read_principal_type_by_pi(conn):
+    rows = conn.execute("SELECT payload FROM principal_identities").fetchall()
+    return {
+        clean_text(item.get("pi", "")): normalize_principal_type(item.get("principalType", ""))
+        for item in (json.loads(row["payload"]) for row in rows)
+        if clean_text(item.get("pi", ""))
+    }
+
+
+def billing_free_cages_for_pi(principal_type_by_pi, pi_name):
+    return free_cages_for_principal_type(principal_type_by_pi.get(clean_text(pi_name), BILLING_PRINCIPAL_INDEPENDENT))
+
+
+def normalize_principal_type(value):
+    return BILLING_PRINCIPAL_PI if value == BILLING_PRINCIPAL_PI else BILLING_PRINCIPAL_INDEPENDENT
+
+
+def free_cages_for_principal_type(value):
+    return FREE_CAGES_PI if normalize_principal_type(value) == BILLING_PRINCIPAL_PI else FREE_CAGES_INDEPENDENT
+
+
+def principal_type_label(value):
+    return "PI" if normalize_principal_type(value) == BILLING_PRINCIPAL_PI else "独立科研人员"
+
+
+def pi_for_iacuc(iacuc, applications_by_iacuc, occupancies):
+    if not iacuc:
+        return ""
+    application = applications_by_iacuc.get(iacuc)
+    if application and application.get("pi"):
+        return clean_text(application.get("pi", ""))
+    for item in occupancies:
+        if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and item.get("pi"):
+            return clean_text(item.get("pi", ""))
+    return ""
+
+
 def statement_application_snapshot(iacuc, applications_by_iacuc, occupancies):
     application = applications_by_iacuc.get(iacuc)
     if application:
@@ -1928,6 +2175,28 @@ def statement_application_snapshot(iacuc, applications_by_iacuc, occupancies):
                 "funding": item.get("funding", ""),
             }
     return {}
+
+
+def statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies):
+    projects = []
+    owners = []
+    fundings = []
+    for application in applications_by_iacuc.values():
+        if clean_text(application.get("pi", "")) == pi_name:
+            projects.append(application.get("project", ""))
+            owners.append(application.get("owner", ""))
+            fundings.append(application.get("funding", ""))
+    for item in occupancies:
+        if clean_text(item.get("pi", "")) == pi_name:
+            projects.append(item.get("project", ""))
+            owners.append(item.get("owner", ""))
+            fundings.append(item.get("funding", ""))
+    return {
+        "project": "、".join(sorted({value for value in projects if value})),
+        "pi": pi_name,
+        "owner": "、".join(sorted({value for value in owners if value})),
+        "funding": "、".join(sorted({value for value in fundings if value})),
+    }
 
 
 def replace_existing_draft_statement(conn, iacuc, month):
@@ -2103,6 +2372,16 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 self.send_json({"items": list_quantity_sheets(conn)})
             return
+        if path == "/api/principal-identities":
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            with connect_db() as conn:
+                self.send_json({"items": list_principal_identities(conn)})
+            return
         if path in ENTITY_ENDPOINTS:
             if not self.require_user():
                 return
@@ -2199,6 +2478,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         endpoint, item_id = self.entity_route(path)
         if endpoint and item_id:
             self.handle_entity_write("PUT", endpoint, item_id)
+            return
+        principal_name = self.principal_identity_route(path)
+        if principal_name:
+            self.handle_principal_identity_save(principal_name)
             return
         sheet_id = self.quantity_sheet_route(path)
         if sheet_id:
@@ -2432,6 +2715,15 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return None
         return sheet_id
 
+    def principal_identity_route(self, path):
+        prefix = "/api/principal-identities/"
+        if not path.startswith(prefix):
+            return None
+        pi_name = unquote(path[len(prefix) :])
+        if "/" in pi_name or not pi_name:
+            return None
+        return pi_name
+
     def quantity_sheet_generate_route(self, path):
         prefix = "/api/quantity-sheets/"
         suffix = "/generate-statement"
@@ -2473,6 +2765,22 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
         except PermissionError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_principal_identity_save(self, pi_name):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                item, audit_logs = save_principal_identity(conn, body, user, pi_name)
+                conn.commit()
+            self.send_json({"item": item, "auditLogs": audit_logs})
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
