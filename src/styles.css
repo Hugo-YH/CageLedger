@@ -228,13 +228,14 @@ svg {
 }
 
 .shell.sidebar-collapsed .sidebar-account .secondary {
-  padding: 10px;
-  font-size: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin-inline: auto;
 }
 
-.shell.sidebar-collapsed .sidebar-account .secondary::before {
-  content: "退";
-  font-size: 13px;
+.shell.sidebar-collapsed .logout-button span {
+  display: none;
 }
 
 .nav-item.active,
@@ -270,6 +271,10 @@ svg {
   width: 100%;
   justify-content: center;
   margin-top: 6px;
+}
+
+.logout-button {
+  min-height: 38px;
 }
 
 .version-meta {
@@ -1487,6 +1492,7 @@ tr:last-child td {
   background: #ffffff;
   padding: 10px 12px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 14px;
   align-items: center;
@@ -1528,6 +1534,37 @@ tr:last-child td {
   font-size: 13px;
 }
 
+.compact-action {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.rack-edit-form {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(90px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding-left: 26px;
+}
+
+.rack-edit-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rack-edit-form input {
+  width: 100%;
+}
+
+.rack-edit-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .icon-danger {
   width: 34px;
   height: 34px;
@@ -1565,36 +1602,61 @@ tr:last-child td {
     z-index: 5;
     flex-direction: row;
     align-items: center;
-    padding: 14px 16px;
-    height: auto;
+    gap: 10px;
+    padding: 10px 14px;
+    min-height: 68px;
+    height: 68px;
     overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .nav-toggle,
   .shell.sidebar-collapsed .nav-toggle {
-    position: static;
-    width: 34px;
-    height: 34px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    box-shadow: none;
-    flex: 0 0 auto;
+    display: none;
   }
 
   .nav {
     grid-auto-flow: column;
+    gap: 4px;
     margin-left: 0;
   }
 
+  .nav,
+  .shell.sidebar-collapsed .nav {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
   .shell.sidebar-collapsed .sidebar {
-    padding: 14px 16px;
+    padding: 10px 14px;
     align-items: center;
   }
 
+  .brand > div:not(.brand-mark),
   .shell.sidebar-collapsed .brand > div:not(.brand-mark),
   .shell.sidebar-collapsed .nav-toggle span,
-  .shell.sidebar-collapsed .nav-item span {
+  .shell.sidebar-collapsed .nav-item span,
+  .nav-item span,
+  .sidebar-account span,
+  .sidebar-account strong,
+  .sidebar-account small,
+  .sidebar-version {
     display: none;
+  }
+
+  .brand-mark,
+  .shell.sidebar-collapsed .brand-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .nav-item,
+  .shell.sidebar-collapsed .nav-item {
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    justify-content: center;
+    flex: 0 0 48px;
   }
 
   .sidebar-account {
@@ -1602,12 +1664,23 @@ tr:last-child td {
     border-top: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.12);
     padding-top: 0;
-    padding-left: 14px;
-    min-width: 132px;
+    padding-left: 8px;
+    min-width: 0;
+    width: auto;
+    flex: 0 0 auto;
   }
 
-  .sidebar-account .secondary {
-    padding: 6px 10px;
+  .sidebar-account .secondary,
+  .shell.sidebar-collapsed .sidebar-account .secondary {
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    padding: 0;
+    margin: 0;
+  }
+
+  .logout-button span {
+    display: none;
   }
 
   .content-grid,
@@ -1691,6 +1764,15 @@ tr:last-child td {
     grid-template-columns: repeat(var(--cols), minmax(84px, 1fr));
   }
 
+  .rack-edit-form {
+    grid-template-columns: 1fr;
+    padding-left: 0;
+  }
+
+  .rack-edit-actions {
+    justify-content: stretch;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }
@@ -1743,7 +1825,11 @@ tr:last-child td {
     width: 100%;
   }
 
-  .nav-item span,
+  .sidebar .secondary,
+  .shell.sidebar-collapsed .sidebar .secondary {
+    width: 48px;
+  }
+
   .brand span {
     display: none;
   }

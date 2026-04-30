@@ -11,6 +11,7 @@ const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
 const API_BILLING_STATEMENT_GENERATE_URL = "/api/billing-statements/generate";
 const API_QUANTITY_SHEETS_URL = "/api/quantity-sheets";
+const API_INFRASTRUCTURE_URL = "/api/infrastructure";
 const ENTITY_API_URLS = {
   rooms: "/api/rooms",
   racks: "/api/racks",
@@ -21,6 +22,11 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.3.2",
+    title: "自动发布",
+    items: ["同步版本号、GitHub Release、离线源码包和容器镜像"],
+  },
   {
     version: "0.3.1",
     title: "项目负责人汇总计费",
@@ -63,7 +69,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.1",
+  version: "0.3.2",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -323,6 +329,27 @@ async function createEntity(collection, item) {
   return entityRequest(collection, "POST", item);
 }
 
+async function createInfrastructure(payload) {
+  if (!remotePersistence) return { ...payload, auditLogs: [] };
+
+  const response = await fetch(API_INFRASTRUCTURE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(result.error || "保存失败");
+  }
+  mergeServerAuditLogs(result);
+  return result;
+}
+
 async function updateEntity(collection, itemId, item) {
   return entityRequest(collection, "PUT", item, itemId);
 }
@@ -381,6 +408,7 @@ function normalize(data) {
   next.batchMode = Boolean(next.batchMode);
   next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
+  next.editingRackId = next.editingRackId || "";
 
   if (!next.racks.length || !next.slots.length) {
     const generated = generateInfrastructure(next.rooms);
@@ -633,7 +661,10 @@ function renderSidebarAccount() {
       <span>当前账号</span>
       <strong title="${escapeAttr(currentUser.displayName)}">${escapeText(currentUser.displayName)}</strong>
       <small>${currentUser.role === "admin" ? "管理员" : "房间管理员"} · ${state.rooms.length} 个饲养间</small>
-      <button id="logoutButton" class="secondary" type="button">退出</button>
+      <button id="logoutButton" class="secondary logout-button" type="button" title="退出登录" aria-label="退出登录">
+        ${iconSvg("logout")}
+        <span>退出</span>
+      </button>
       ${renderVersionMeta("sidebar-version")}
     </div>
   `;
@@ -1575,6 +1606,7 @@ function renderAdjustment(item) {
 }
 
 function renderRoomManagementView() {
+  const rackFormRoomId = state.selectedRoomId || state.rooms[0]?.id || "";
   return `
     <section class="content-grid">
       <div class="panel large">
@@ -1593,7 +1625,7 @@ function renderRoomManagementView() {
         <div class="panel-head compact">
           <div>
             <h2>新增饲养间</h2>
-            <p>保存后按下方规格生成初始笼架；不同规格笼架可继续单独新增。</p>
+            <p>先建立饲养间，再按实际摆放新增笼架。</p>
           </div>
         </div>
         <form id="roomForm" class="form">
@@ -1604,20 +1636,6 @@ function renderRoomManagementView() {
           <label>
             区域
             <input name="area" placeholder="请输入区域，如 屏障区" />
-          </label>
-          <div class="form-row">
-            <label class="field-required">
-              笼架数 Z
-              <input type="number" name="rackCount" min="1" value="1" placeholder="请输入笼架数" required />
-            </label>
-            <label class="field-required">
-              行数 X
-              <input type="number" name="rows" min="1" value="5" placeholder="请输入行数" required />
-            </label>
-          </div>
-          <label class="field-required">
-            列数 Y
-            <input type="number" name="cols" min="1" value="6" placeholder="请输入列数" required />
           </label>
           <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
         </form>
@@ -1633,8 +1651,14 @@ function renderRoomManagementView() {
             所属饲养间
             <select name="roomId" required>
               <option value="" disabled ${state.rooms.length ? "" : "selected"}>请选择饲养间</option>
-              ${state.rooms.map((room) => `<option value="${escapeAttr(room.id)}">${escapeText(room.name)}</option>`).join("")}
+              ${state.rooms
+                .map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === rackFormRoomId ? "selected" : ""}>${escapeText(room.name)}</option>`)
+                .join("")}
             </select>
+          </label>
+          <label class="field-required">
+            笼架编号
+            <input type="number" name="index" min="1" value="${suggestedRackIndex(rackFormRoomId)}" placeholder="请输入笼架编号" required />
           </label>
           <div class="form-row">
             <label class="field-required">
@@ -2083,11 +2107,39 @@ function renderRackTreeItem(room, rack) {
         <span>${slots.length} 笼位</span>
         <span>${active} 在用</span>
         <span>${reserved} 预约</span>
+        <button type="button" class="secondary compact-action" data-edit-rack="${rack.id}" title="编辑笼架" aria-label="编辑 ${room.name} 笼架 ${rackCode(rack)}">
+          ${iconSvg("edit")}编辑
+        </button>
         <button type="button" class="icon-danger" data-delete-rack="${rack.id}" title="删除笼架" aria-label="删除 ${room.name} 笼架 ${rackCode(rack)}">
           ${iconSvg("trash")}
         </button>
       </div>
+      ${state.editingRackId === rack.id ? renderRackEditForm(room, rack) : ""}
     </div>
+  `;
+}
+
+function renderRackEditForm(room, rack) {
+  return `
+    <form class="rack-edit-form" data-rack-edit-form="${escapeAttr(rack.id)}">
+      <input type="hidden" name="rackId" value="${escapeAttr(rack.id)}" />
+      <label class="field-required">
+        编号
+        <input type="number" name="index" min="1" value="${escapeAttr(rack.index)}" required />
+      </label>
+      <label class="field-required">
+        行数 X
+        <input type="number" name="rows" min="1" value="${escapeAttr(rack.rows)}" required />
+      </label>
+      <label class="field-required">
+        列数 Y
+        <input type="number" name="cols" min="1" value="${escapeAttr(rack.cols)}" required />
+      </label>
+      <div class="rack-edit-actions">
+        <button class="primary" type="submit">${iconSvg("save")}保存</button>
+        <button class="secondary" type="button" data-cancel-rack-edit="${escapeAttr(rack.id)}">取消</button>
+      </div>
+    </form>
   `;
 }
 
@@ -2206,6 +2258,22 @@ function bindEvents() {
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
   document.querySelector("#rackForm")?.addEventListener("submit", handleRackSubmit);
+  document.querySelector("#rackForm select[name='roomId']")?.addEventListener("change", syncRackFormIndex);
+  document.querySelectorAll("[data-edit-rack]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.editingRackId = button.dataset.editRack;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-cancel-rack-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (state.editingRackId === button.dataset.cancelRackEdit) state.editingRackId = "";
+      render();
+    });
+  });
+  document.querySelectorAll("[data-rack-edit-form]").forEach((form) => {
+    form.addEventListener("submit", handleRackEditSubmit);
+  });
   document.querySelector("#userForm")?.addEventListener("submit", handleUserSubmit);
   document.querySelectorAll(".user-edit-form").forEach((form) => {
     form.addEventListener("submit", handleUserUpdate);
@@ -2985,6 +3053,11 @@ function numericOrZero(value) {
   return Number(value || 0);
 }
 
+function syncRackFormIndex(event) {
+  const indexInput = event.target.form?.elements.index;
+  if (indexInput) indexInput.value = suggestedRackIndex(event.target.value);
+}
+
 async function handleRoomSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
@@ -2993,31 +3066,21 @@ async function handleRoomSubmit(event) {
     id: `room-${slugify(name)}-${Date.now()}`,
     name,
     area: form.get("area").trim(),
-    rackCount: Number(form.get("rackCount")),
-    rows: Number(form.get("rows")),
-    cols: Number(form.get("cols")),
+    rackCount: 0,
+    rows: 0,
+    cols: 0,
   };
 
-  const generated = generateInfrastructure([room]);
-
   try {
-    const roomResponse = await createEntity("rooms", room);
-    const rackResponses = [];
-    for (const rack of generated.racks) {
-      rackResponses.push(await createEntity("racks", rack));
-    }
-    const slotResponses = [];
-    for (const slot of generated.slots) {
-      slotResponses.push(await createEntity("slots", slot));
-    }
+    const response = await createInfrastructure({
+      rooms: [room],
+    });
 
-    state.rooms.push(roomResponse.item || room);
-    state.racks.push(...rackResponses.map((response, index) => response.item || generated.racks[index]));
-    state.slots.push(...slotResponses.map((response, index) => response.item || generated.slots[index]));
+    state.rooms.push(...(response.rooms || [room]));
     state.selectedRoomId = room.id;
-    state.selectedRackId = generated.racks[0].id;
-    state.selectedSlotId = generated.slots[0].id;
-    state.activeView = "cages";
+    state.selectedRackId = "";
+    state.selectedSlotId = "";
+    state.activeView = "rooms";
     pushLog(`新增饲养间 ${room.name}`);
     render();
   } catch (error) {
@@ -3035,28 +3098,89 @@ async function handleRackSubmit(event) {
   }
 
   const roomRacks = state.racks.filter((item) => item.roomId === room.id);
-  const rackIndex = roomRacks.length + 1;
+  const rackIndex = Number(form.get("index"));
+  if (roomRacks.some((item) => Number(item.index) === rackIndex)) {
+    alert("同一饲养间内笼架编号不能重复。");
+    return;
+  }
   const rows = Number(form.get("rows"));
   const cols = Number(form.get("cols"));
   const rackId = `rack-${room.id.replace(/^room-/, "")}-${Date.now()}`;
   const generated = generateRackInfrastructure(room, rackIndex, rows, cols, rackId);
+  const updatedRoom = { ...room, rackCount: roomRacks.length + 1 };
 
   try {
-    const rackResponse = await createEntity("racks", generated.rack);
-    const slotResponses = [];
-    for (const slot of generated.slots) {
-      slotResponses.push(await createEntity("slots", slot));
-    }
+    const response = await createInfrastructure({
+      roomUpdates: [updatedRoom],
+      racks: [generated.rack],
+      slots: generated.slots,
+    });
 
-    state.racks.push(rackResponse.item || generated.rack);
-    state.slots.push(...slotResponses.map((response, index) => response.item || generated.slots[index]));
-    room.rackCount = roomRacks.length + 1;
-    await updateEntity("rooms", room.id, room);
+    Object.assign(room, (response.roomUpdates || [updatedRoom])[0]);
+    state.racks.push(...(response.racks || [generated.rack]));
+    state.slots.push(...(response.slots || generated.slots));
     state.selectedRoomId = room.id;
     state.selectedRackId = generated.rack.id;
     state.selectedSlotId = generated.slots[0]?.id;
     state.activeView = "cages";
     pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
+}
+
+async function handleRackEditSubmit(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const rackId = form.get("rackId");
+  const rack = state.racks.find((item) => item.id === rackId);
+  if (!rack) return;
+
+  const room = state.rooms.find((item) => item.id === rack.roomId);
+  if (!room) {
+    alert("笼架关联的饲养间不存在。");
+    return;
+  }
+
+  const rackIndex = Number(form.get("index"));
+  const duplicate = state.racks.some((item) => item.roomId === room.id && item.id !== rack.id && Number(item.index) === rackIndex);
+  if (duplicate) {
+    alert("同一饲养间内笼架编号不能重复。");
+    return;
+  }
+
+  const rows = Number(form.get("rows"));
+  const cols = Number(form.get("cols"));
+  const generated = generateRackInfrastructure(room, rackIndex, rows, cols, rack.id);
+  const existingSlots = state.slots.filter((slot) => slot.rackId === rack.id);
+  const nextSlots = generated.slots;
+  const nextPositions = new Set(nextSlots.map(slotPositionKey));
+  const existingPositions = new Set(existingSlots.map(slotPositionKey));
+  const slotCreates = nextSlots.filter((slot) => !existingPositions.has(slotPositionKey(slot)));
+  const slotDeletes = existingSlots.filter((slot) => !nextPositions.has(slotPositionKey(slot)));
+  const activeDeleted = slotDeletes.filter((slot) => currentOccupancy(slot.id));
+  if (activeDeleted.length) {
+    alert(`缩小行列范围会移除 ${activeDeleted.length} 个在用或预约笼位，请先处理这些笼位。`);
+    return;
+  }
+
+  try {
+    const response = await createInfrastructure({
+      rackUpdates: [generated.rack],
+      slots: slotCreates,
+      slotDeletes: slotDeletes.map((slot) => slot.id),
+    });
+
+    Object.assign(rack, (response.rackUpdates || [generated.rack])[0]);
+    state.slots.push(...(response.slots || slotCreates));
+    const deletedIds = new Set(response.slotDeletes || slotDeletes.map((slot) => slot.id));
+    state.slots = state.slots.filter((slot) => !deletedIds.has(slot.id));
+    state.selectedSlotIds = state.selectedSlotIds.filter((slotId) => !deletedIds.has(slotId));
+    state.editingRackId = "";
+    state.selectedRackId = rack.id;
+    state.selectedSlotId = state.slots.find((slot) => slot.rackId === rack.id)?.id || "";
+    pushLog(`更新${room.name} 笼架 ${rackCode(rack)}`);
     render();
   } catch (error) {
     reportSaveError(error);
@@ -3087,6 +3211,8 @@ async function deleteRoom(roomId) {
     state.rooms = state.rooms.filter((item) => item.id !== roomId);
     state.racks = state.racks.filter((rack) => rack.roomId !== roomId);
     state.slots = state.slots.filter((slot) => !slotIds.has(slot.id));
+    state.selectedSlotIds = state.selectedSlotIds.filter((slotId) => !slotIds.has(slotId));
+    if (racks.some((rack) => rack.id === state.editingRackId)) state.editingRackId = "";
     pushLog(`删除饲养间 ${room.name}`);
     selectFirstAvailableCage();
     updateSlotStatuses();
@@ -3102,11 +3228,6 @@ async function deleteRack(rackId) {
 
   const room = state.rooms.find((item) => item.id === rack.roomId);
   const roomRacks = state.racks.filter((item) => item.roomId === rack.roomId);
-  if (roomRacks.length <= 1) {
-    alert("每个饲养间至少需要保留一个笼架。");
-    return;
-  }
-
   const slots = state.slots.filter((slot) => slot.rackId === rackId);
   const slotIds = new Set(slots.map((slot) => slot.id));
   const occupancyCount = state.occupancies.filter((item) => slotIds.has(item.slotId)).length;
@@ -3118,15 +3239,17 @@ async function deleteRack(rackId) {
   if (!confirm(message)) return;
 
   try {
-    await deleteEntityRequest("racks", rackId);
+    const updatedRoom = room ? { ...room, rackCount: Math.max(roomRacks.length - 1, 0) } : null;
+    await createInfrastructure({
+      roomUpdates: updatedRoom ? [updatedRoom] : [],
+      rackDeletes: [rackId],
+    });
     state.racks = state.racks.filter((item) => item.id !== rackId);
     state.slots = state.slots.filter((slot) => slot.rackId !== rackId);
+    state.selectedSlotIds = state.selectedSlotIds.filter((slotId) => !slotIds.has(slotId));
+    if (state.editingRackId === rackId) state.editingRackId = "";
     if (room) {
-      renumberRoomRacks(room);
-      await updateEntity("rooms", room.id, room);
-      for (const item of state.racks.filter((rackItem) => rackItem.roomId === room.id)) {
-        await updateEntity("racks", item.id, item);
-      }
+      Object.assign(room, updatedRoom);
     }
     pushLog(`删除${rackLabel}`);
     selectFirstAvailableCage();
@@ -3137,13 +3260,16 @@ async function deleteRack(rackId) {
   }
 }
 
-function renumberRoomRacks(room) {
-  const roomRacks = state.racks.filter((item) => item.roomId === room.id);
-  roomRacks.forEach((item, index) => {
-    item.index = index + 1;
-    item.name = `${room.name} ${rackCode(item)} 号笼架`;
-  });
-  room.rackCount = roomRacks.length;
+function suggestedRackIndex(roomId) {
+  const indexes = state.racks
+    .filter((item) => item.roomId === roomId)
+    .map((item) => Number(item.index))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return indexes.length ? Math.max(...indexes) + 1 : 1;
+}
+
+function slotPositionKey(slot) {
+  return `${Number(slot.row)}:${Number(slot.col)}`;
 }
 
 function selectFirstAvailableCage() {
@@ -4024,6 +4150,8 @@ function iconSvg(name) {
     users: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z"/></svg>`,
     settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.9 7.9 0 0 0 .1-1.5 7.9 7.9 0 0 0-.1-1.5l2-1.5-2-3.4-2.4 1a7.7 7.7 0 0 0-2.5-1.4L14.2 3h-4.4l-.4 2.2A7.7 7.7 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5A7.9 7.9 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.4 2.4-1a7.7 7.7 0 0 0 2.5 1.4l.4 2.2h4.4l.4-2.2a7.7 7.7 0 0 0 2.5-1.4l2.4 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>`,
     save: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5zM8 5v5h8V5zm1 11h6v3H9z"/></svg>`,
+    edit: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5L17.8 8.7l-2.5-2.5zM19.7 6.8a1 1 0 0 0 0-1.4l-1.1-1.1a1 1 0 0 0-1.4 0l-.8.8 2.5 2.5z"/></svg>`,
+    logout: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9v2H7v12h7v2H5zm11.6 4.6L20 12l-3.4 3.4-1.4-1.4 1-1H10v-2h6.2l-1-1z"/></svg>`,
     trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l1 2h4v2H3V6h4zm1 6h2v8H9zm4 0h2v8h-2z"/></svg>`,
     upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16h2V7l3 3 1.4-1.4L12 3.2 6.6 8.6 8 10l3-3zM5 18h14v2H5z"/></svg>`,
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,

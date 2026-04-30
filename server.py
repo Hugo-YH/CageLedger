@@ -347,6 +347,7 @@ def initialize_schema(conn):
         """
     )
     migrate_schema(conn)
+    repair_missing_cage_slots(conn)
     conn.commit()
     ensure_default_admin(conn)
 
@@ -431,6 +432,57 @@ def table_columns(conn, table):
     }
 
 
+def repair_missing_cage_slots(conn):
+    racks = conn.execute("SELECT id, rows, cols FROM racks").fetchall()
+    if not racks:
+        return
+
+    existing_rows = conn.execute("SELECT rack_id, row_no, col_no FROM cage_slots").fetchall()
+    existing_positions = {
+        (row["rack_id"], int(row["row_no"] or 0), int(row["col_no"] or 0))
+        for row in existing_rows
+    }
+    for rack in racks:
+        rows = max(as_int(rack["rows"]) or 0, 0)
+        cols = max(as_int(rack["cols"]) or 0, 0)
+        for row_no in range(1, rows + 1):
+            for col_no in range(1, cols + 1):
+                position = (rack["id"], row_no, col_no)
+                if position in existing_positions:
+                    continue
+                slot = {
+                    "id": slot_id_for_rack(rack["id"], row_no, col_no),
+                    "rackId": rack["id"],
+                    "row": row_no,
+                    "col": col_no,
+                    "code": f"{column_label(col_no)}{row_no}",
+                    "status": "empty",
+                }
+                conn.execute(
+                    """
+                    INSERT INTO cage_slots (id, rack_id, row_no, col_no, code, status, payload)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (slot["id"], slot["rackId"], slot["row"], slot["col"], slot["code"], slot["status"], dump_json(slot)),
+                )
+                existing_positions.add(position)
+
+
+def slot_id_for_rack(rack_id, row_no, col_no):
+    suffix = str(rack_id).removeprefix("rack-")
+    return f"slot-{suffix}-{row_no}-{col_no}"
+
+
+def column_label(index):
+    value = int(index)
+    label = ""
+    while value > 0:
+        value -= 1
+        label = chr(65 + (value % 26)) + label
+        value //= 26
+    return label or "A"
+
+
 def read_state():
     with connect_db() as conn:
         migrate_legacy_state(conn)
@@ -477,6 +529,89 @@ def write_entity_state(endpoint, method, item_id, payload, actor):
 
     result = write_state(state, actor)
     return {"item": item, "updatedAt": result["updatedAt"], "auditLogs": result["auditLogs"]}, status
+
+
+def write_infrastructure_state(payload, actor):
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
+
+    current = read_state()
+    state = current.get("state") or empty_state()
+    created_rooms = normalize_entity_batch("rooms", payload.get("rooms", []), "POST")
+    updated_rooms = normalize_entity_batch("rooms", payload.get("roomUpdates", []), "PUT")
+    created_racks = normalize_entity_batch("racks", payload.get("racks", []), "POST")
+    updated_racks = normalize_entity_batch("racks", payload.get("rackUpdates", []), "PUT")
+    deleted_rack_ids = normalize_id_batch(payload.get("rackDeletes", []), "rackDeletes")
+    created_slots = normalize_entity_batch("slots", payload.get("slots", []), "POST")
+    deleted_slot_ids = normalize_id_batch(payload.get("slotDeletes", []), "slotDeletes")
+
+    for room in created_rooms:
+        insert_entity(state, "rooms", room)
+    for room in updated_rooms:
+        replace_entity(state, "rooms", room["id"], room)
+    for rack in created_racks:
+        insert_entity(state, "racks", rack)
+    for rack in updated_racks:
+        replace_entity(state, "racks", rack["id"], rack)
+    for slot in created_slots:
+        insert_entity(state, "slots", slot)
+    validate_infrastructure_slot_deletes(state, deleted_slot_ids)
+    for slot_id in deleted_slot_ids:
+        delete_entity(state, "slots", slot_id)
+    for rack_id in deleted_rack_ids:
+        delete_entity(state, "racks", rack_id)
+
+    result = write_state(state, actor)
+    return {
+        "rooms": created_rooms,
+        "roomUpdates": updated_rooms,
+        "racks": created_racks,
+        "rackUpdates": updated_racks,
+        "rackDeletes": deleted_rack_ids,
+        "slots": created_slots,
+        "slotDeletes": deleted_slot_ids,
+        "updatedAt": result["updatedAt"],
+        "auditLogs": result["auditLogs"],
+    }
+
+
+def normalize_entity_batch(collection, items, method):
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError("批量保存内容必须是数组")
+
+    spec = {
+        "rooms": {"id_prefix": "room"},
+        "racks": {"id_prefix": "rack"},
+        "slots": {"id_prefix": "slot"},
+    }[collection]
+    normalized = []
+    for item in items:
+        item_id = item.get("id") if isinstance(item, dict) else None
+        normalized.append(normalize_entity_payload(collection, item, item_id, method, spec["id_prefix"]))
+    return normalized
+
+
+def normalize_id_batch(items, label):
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError(f"{label} 必须是数组")
+    return [str(item) for item in items if str(item).strip()]
+
+
+def validate_infrastructure_slot_deletes(state, slot_ids):
+    if not slot_ids:
+        return
+    deleting = set(slot_ids)
+    active = [
+        item
+        for item in state.get("occupancies", [])
+        if item.get("slotId") in deleting and item.get("status") in ("active", "reserved")
+    ]
+    if active:
+        raise ValueError("不能移除仍在用或已预约的笼位")
 
 
 def empty_state():
@@ -2403,6 +2538,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if path == "/api/billing-statements/generate":
             self.handle_billing_statement_generate()
             return
+        if path == "/api/infrastructure":
+            self.handle_infrastructure_write()
+            return
         sheet_id = self.quantity_sheet_generate_route(path)
         if sheet_id:
             self.handle_quantity_sheet_statement_generate(sheet_id)
@@ -2742,6 +2880,23 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             body = self.read_optional_json_body() if method == "DELETE" else self.read_json_body()
             payload, status = write_entity_state(endpoint, method, item_id, body, user)
             self.send_json(payload, status)
+        except sqlite3.IntegrityError:
+            self.send_json({"error": "实体 id 已存在"}, HTTPStatus.CONFLICT)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_infrastructure_write(self):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            payload = write_infrastructure_state(body, user)
+            self.send_json(payload, HTTPStatus.CREATED)
         except sqlite3.IntegrityError:
             self.send_json({"error": "实体 id 已存在"}, HTTPStatus.CONFLICT)
         except LookupError as exc:
