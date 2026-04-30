@@ -2786,6 +2786,25 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "用户名或密码错误"}, HTTPStatus.UNAUTHORIZED)
                 return
             token, expires_at = create_session(conn, user["id"])
+            now = now_iso()
+            event = audit_event(
+                user,
+                "auth.login",
+                "session",
+                user["id"],
+                f"{user['displayName']} 登录系统",
+                [],
+                now,
+                None,
+                {
+                    "username": user["username"],
+                    "role": user["role"],
+                    "clientIp": self.client_address[0] if self.client_address else "",
+                    "userAgent": self.headers.get("User-Agent", ""),
+                },
+            )
+            write_audit_events(conn, [event])
+            conn.commit()
         self.send_response(HTTPStatus.OK)
         body_bytes = json.dumps({"user": user}, ensure_ascii=False).encode("utf-8")
         self.send_header("Content-Type", "application/json; charset=utf-8")
