@@ -23,9 +23,18 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.3",
+    title: "房间和笼架管理优化",
+    items: [
+      "新增饲养间不再自动生成笼架，笼架可按实际编号单独添加、删除和编辑",
+      "笼架新增后保留当前表单内容并自动递增编号，便于连续录入同规格笼架",
+      "补齐 tag 发布自动化，推送 v* 标签后自动生成 Release、离线包和容器镜像",
+    ],
+  },
+  {
     version: "0.3.2",
-    title: "自动发布",
-    items: ["同步版本号、GitHub Release、离线源码包和容器镜像"],
+    title: "设施结构和窄屏导航修复",
+    items: ["设施创建改为批量保存，避免笼位半量写入", "新增笼架编辑和非连续编号支持", "优化窄屏导航栏和退出按钮布局"],
   },
   {
     version: "0.3.1",
@@ -69,7 +78,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.2",
+  version: "0.3.3",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -104,6 +113,11 @@ const seedData = {
   batchMode: false,
   samplingMode: "",
   sidebarCollapsed: false,
+  rackFormDraft: {
+    roomId: "",
+    rows: 5,
+    cols: 6,
+  },
   billingSource: "cage_map",
   billingMonth: today.slice(0, 7),
   billingIacuc: "IACUC-2026-001",
@@ -409,6 +423,7 @@ function normalize(data) {
   next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
   next.editingRackId = next.editingRackId || "";
+  next.rackFormDraft = normalizeRackFormDraft(next.rackFormDraft);
 
   if (!next.racks.length || !next.slots.length) {
     const generated = generateInfrastructure(next.rooms);
@@ -1606,7 +1621,8 @@ function renderAdjustment(item) {
 }
 
 function renderRoomManagementView() {
-  const rackFormRoomId = state.selectedRoomId || state.rooms[0]?.id || "";
+  const rackDraft = currentRackFormDraft();
+  const rackFormRoomId = rackDraft.roomId;
   return `
     <section class="content-grid">
       <div class="panel large">
@@ -1663,11 +1679,11 @@ function renderRoomManagementView() {
           <div class="form-row">
             <label class="field-required">
               行数 X
-              <input type="number" name="rows" min="1" value="5" placeholder="请输入行数" required />
+              <input type="number" name="rows" min="1" value="${escapeAttr(rackDraft.rows)}" placeholder="请输入行数" required />
             </label>
             <label class="field-required">
               列数 Y
-              <input type="number" name="cols" min="1" value="6" placeholder="请输入列数" required />
+              <input type="number" name="cols" min="1" value="${escapeAttr(rackDraft.cols)}" placeholder="请输入列数" required />
             </label>
           </div>
           <button class="primary" type="submit">${iconSvg("plus")}新增笼架</button>
@@ -2259,6 +2275,9 @@ function bindEvents() {
   document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
   document.querySelector("#rackForm")?.addEventListener("submit", handleRackSubmit);
   document.querySelector("#rackForm select[name='roomId']")?.addEventListener("change", syncRackFormIndex);
+  document.querySelectorAll("#rackForm input[name='rows'], #rackForm input[name='cols']").forEach((input) => {
+    input.addEventListener("input", updateRackFormDraft);
+  });
   document.querySelectorAll("[data-edit-rack]").forEach((button) => {
     button.addEventListener("click", () => {
       state.editingRackId = button.dataset.editRack;
@@ -3054,8 +3073,38 @@ function numericOrZero(value) {
 }
 
 function syncRackFormIndex(event) {
+  state.rackFormDraft = normalizeRackFormDraft({
+    ...state.rackFormDraft,
+    roomId: event.target.value,
+  });
   const indexInput = event.target.form?.elements.index;
   if (indexInput) indexInput.value = suggestedRackIndex(event.target.value);
+}
+
+function updateRackFormDraft(event) {
+  const form = event.target.form;
+  state.rackFormDraft = normalizeRackFormDraft({
+    roomId: form?.elements.roomId?.value || state.rackFormDraft?.roomId,
+    rows: form?.elements.rows?.value || state.rackFormDraft?.rows,
+    cols: form?.elements.cols?.value || state.rackFormDraft?.cols,
+  });
+}
+
+function normalizeRackFormDraft(draft = {}) {
+  return {
+    roomId: draft.roomId || "",
+    rows: Math.max(Number(draft.rows) || 5, 1),
+    cols: Math.max(Number(draft.cols) || 6, 1),
+  };
+}
+
+function currentRackFormDraft() {
+  const draft = normalizeRackFormDraft(state.rackFormDraft);
+  const roomExists = state.rooms.some((room) => room.id === draft.roomId);
+  return {
+    ...draft,
+    roomId: roomExists ? draft.roomId : state.selectedRoomId || state.rooms[0]?.id || "",
+  };
 }
 
 async function handleRoomSubmit(event) {
@@ -3091,7 +3140,12 @@ async function handleRoomSubmit(event) {
 async function handleRackSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
-  const room = state.rooms.find((item) => item.id === form.get("roomId"));
+  state.rackFormDraft = normalizeRackFormDraft({
+    roomId: form.get("roomId"),
+    rows: form.get("rows"),
+    cols: form.get("cols"),
+  });
+  const room = state.rooms.find((item) => item.id === state.rackFormDraft.roomId);
   if (!room) {
     alert("请选择有效的饲养间。");
     return;
@@ -3103,8 +3157,8 @@ async function handleRackSubmit(event) {
     alert("同一饲养间内笼架编号不能重复。");
     return;
   }
-  const rows = Number(form.get("rows"));
-  const cols = Number(form.get("cols"));
+  const rows = state.rackFormDraft.rows;
+  const cols = state.rackFormDraft.cols;
   const rackId = `rack-${room.id.replace(/^room-/, "")}-${Date.now()}`;
   const generated = generateRackInfrastructure(room, rackIndex, rows, cols, rackId);
   const updatedRoom = { ...room, rackCount: roomRacks.length + 1 };
@@ -3122,7 +3176,8 @@ async function handleRackSubmit(event) {
     state.selectedRoomId = room.id;
     state.selectedRackId = generated.rack.id;
     state.selectedSlotId = generated.slots[0]?.id;
-    state.activeView = "cages";
+    state.activeView = "rooms";
+    state.editingRackId = "";
     pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
     render();
   } catch (error) {

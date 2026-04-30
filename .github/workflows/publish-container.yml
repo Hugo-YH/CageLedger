@@ -11,11 +11,11 @@ on:
       source_ref:
         description: "Git ref to build"
         required: true
-        default: "v0.3.2"
+        default: "v0.3.3"
       image_tag:
         description: "Container image tag"
         required: true
-        default: "0.3.2"
+        default: "0.3.3"
 
 permissions:
   contents: read
