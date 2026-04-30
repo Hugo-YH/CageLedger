@@ -1,6 +1,9 @@
 name: Publish container package
 
 on:
+  push:
+    tags:
+      - "v*"
   release:
     types: [published]
   workflow_dispatch:
@@ -8,11 +11,11 @@ on:
       source_ref:
         description: "Git ref to build"
         required: true
-        default: "v0.2.1"
+        default: "v0.3.2"
       image_tag:
         description: "Container image tag"
         required: true
-        default: "0.2.1"
+        default: "0.3.2"
 
 permissions:
   contents: read
@@ -28,6 +31,9 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "source_ref=${{ inputs.source_ref }}" >> "$GITHUB_OUTPUT"
             echo "image_tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "source_ref=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "image_tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "source_ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
             echo "image_tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
