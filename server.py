@@ -493,6 +493,48 @@ def read_state():
     return {"state": state, "updatedAt": updated_at}
 
 
+def filter_state_for_actor(state, actor):
+    if not state or not actor or actor.get("role") == "admin":
+        return state
+
+    allowed_rooms = set(actor.get("roomIds", []))
+    rooms = [room for room in state.get("rooms", []) if room.get("id") in allowed_rooms]
+    room_ids = {room.get("id") for room in rooms}
+    racks = [rack for rack in state.get("racks", []) if rack.get("roomId") in room_ids]
+    rack_ids = {rack.get("id") for rack in racks}
+    slots = [slot for slot in state.get("slots", []) if slot.get("rackId") in rack_ids]
+    slot_ids = {slot.get("id") for slot in slots}
+    occupancies = [item for item in state.get("occupancies", []) if item.get("slotId") in slot_ids]
+
+    return {
+        **state,
+        "rooms": rooms,
+        "racks": racks,
+        "slots": slots,
+        "occupancies": occupancies,
+    }
+
+
+def filter_entity_payloads_for_actor(collection, items, actor):
+    if not actor or actor.get("role") == "admin":
+        return items
+
+    allowed_rooms = set(actor.get("roomIds", []))
+    if collection == "rooms":
+        return [item for item in items if item.get("id") in allowed_rooms]
+    if collection in ("racks", "slots", "occupancies"):
+        with connect_db() as conn:
+            state = assemble_state(conn) or empty_state()
+        visible = filter_state_for_actor(state, actor)
+        visible_ids = {
+            "racks": {item.get("id") for item in visible.get("racks", [])},
+            "slots": {item.get("id") for item in visible.get("slots", [])},
+            "occupancies": {item.get("id") for item in visible.get("occupancies", [])},
+        }[collection]
+        return [item for item in items if item.get("id") in visible_ids]
+    return items
+
+
 def write_state(state, actor):
     updated_at = datetime.now(timezone.utc).isoformat()
     with connect_db() as conn:
@@ -1201,10 +1243,26 @@ def validate_state_write_permission(conn, actor, old_state, new_state):
     if not allowed_rooms:
         raise PermissionError("当前账号没有可编辑的饲养间")
 
-    if comparable_items(old_state.get("rooms", [])) != comparable_items(new_state.get("rooms", [])):
-        raise PermissionError("房间管理员不能修改饲养间配置")
-    if comparable_items(old_state.get("racks", [])) != comparable_items(new_state.get("racks", [])):
-        raise PermissionError("房间管理员不能修改笼架配置")
+    old_rooms = {item.get("id"): item for item in old_state.get("rooms", [])}
+    new_rooms = {item.get("id"): item for item in new_state.get("rooms", [])}
+    if set(old_rooms) != set(new_rooms):
+        raise PermissionError("房间管理员不能新增或删除饲养间")
+    for room_id in changed_keys(old_rooms, new_rooms):
+        if room_id not in allowed_rooms:
+            raise PermissionError("不能修改未授权饲养间配置")
+        old_room = old_rooms.get(room_id, {})
+        new_room = new_rooms.get(room_id, {})
+        allowed_room_update_keys = {"rackCount"}
+        changed_fields = {key for key in set(old_room) | set(new_room) if old_room.get(key) != new_room.get(key)}
+        if not changed_fields.issubset(allowed_room_update_keys):
+            raise PermissionError("房间管理员不能修改饲养间基础信息")
+
+    old_racks = {item.get("id"): item for item in old_state.get("racks", [])}
+    new_racks = {item.get("id"): item for item in new_state.get("racks", [])}
+    rack_rooms = rack_room_map(old_state, new_state)
+    for rack_id in changed_keys(old_racks, new_racks):
+        if rack_rooms.get(rack_id) not in allowed_rooms:
+            raise PermissionError("不能修改未授权饲养间的笼架配置")
     if comparable_items(old_state.get("billingRules", [])) != comparable_items(new_state.get("billingRules", [])):
         raise PermissionError("房间管理员不能修改计费规则")
     if old_state.get("baseRate") != new_state.get("baseRate"):
@@ -1215,13 +1273,18 @@ def validate_state_write_permission(conn, actor, old_state, new_state):
     old_slots = {item.get("id"): item for item in old_state.get("slots", [])}
     new_slots = {item.get("id"): item for item in new_state.get("slots", [])}
     slot_rooms = slot_room_map(new_state)
-    if set(old_slots) != set(new_slots):
-        raise PermissionError("房间管理员不能新增或删除笼位")
+    old_slot_rooms = slot_room_map(old_state)
+    for slot_id in changed_keys(old_slots, new_slots):
+        room_id = slot_rooms.get(slot_id) or old_slot_rooms.get(slot_id)
+        if room_id not in allowed_rooms:
+            raise PermissionError("不能修改未授权饲养间的笼位结构")
     for slot_id, new_slot in new_slots.items():
         old_slot = dict(old_slots.get(slot_id, {}))
+        if not old_slot:
+            continue
         comparable_old = {k: v for k, v in old_slot.items() if k != "status"}
         comparable_new = {k: v for k, v in new_slot.items() if k != "status"}
-        if comparable_old != comparable_new:
+        if comparable_old != comparable_new and slot_rooms.get(slot_id) not in allowed_rooms:
             raise PermissionError("房间管理员不能修改笼位结构")
         if old_slot.get("status") != new_slot.get("status") and slot_rooms.get(slot_id) not in allowed_rooms:
             raise PermissionError("不能修改未授权饲养间的笼位状态")
@@ -1247,6 +1310,14 @@ def changed_keys(old_items, new_items):
 def slot_room_map(state):
     rack_rooms = {rack.get("id"): rack.get("roomId") for rack in state.get("racks", [])}
     return {slot.get("id"): rack_rooms.get(slot.get("rackId")) for slot in state.get("slots", [])}
+
+
+def rack_room_map(*states):
+    rooms = {}
+    for state in states:
+        for rack in state.get("racks", []):
+            rooms[rack.get("id")] = rack.get("roomId")
+    return rooms
 
 
 def build_audit_events(actor, old_state, new_state, at):
@@ -2464,9 +2535,11 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             self.send_json({"user": user})
             return
         if path == "/api/state":
-            if not self.require_user():
+            user = self.require_user()
+            if not user:
                 return
-            self.send_json(read_state())
+            payload = read_state()
+            self.send_json({**payload, "state": filter_state_for_actor(payload.get("state"), user)})
             return
         if path == "/api/iacuc-index":
             if not self.require_user():
@@ -2518,9 +2591,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 self.send_json({"items": list_principal_identities(conn)})
             return
         if path in ENTITY_ENDPOINTS:
-            if not self.require_user():
+            user = self.require_user()
+            if not user:
                 return
-            self.send_entity_list(ENTITY_ENDPOINTS[path])
+            self.send_entity_list(ENTITY_ENDPOINTS[path], user)
             return
         super().do_GET()
 
@@ -2818,13 +2892,22 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return value
         return ""
 
-    def send_entity_list(self, table):
+    def send_entity_list(self, table, actor):
         with connect_db() as conn:
             if table == "audit_events":
                 rows = conn.execute("SELECT payload FROM audit_events ORDER BY at DESC, rowid DESC LIMIT 500").fetchall()
             else:
                 rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {ENTITY_ORDER_BY.get(table, 'rowid')}").fetchall()
-        self.send_json({"items": [json.loads(row["payload"]) for row in rows]})
+        items = [json.loads(row["payload"]) for row in rows]
+        collection = {
+            "rooms": "rooms",
+            "racks": "racks",
+            "cage_slots": "slots",
+            "occupancies": "occupancies",
+        }.get(table)
+        if collection:
+            items = filter_entity_payloads_for_actor(collection, items, actor)
+        self.send_json({"items": items})
 
     def entity_route(self, path):
         for endpoint in WRITABLE_ENTITY_ENDPOINTS:

@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.4",
+    title: "权限与界面交互优化",
+    items: [
+      "房间管理员仅展示并可编辑已授权饲养间，禁止访问未授权房间的笼架和笼位数据",
+      "笼位图与房间管理默认预览模式，编辑操作改为点击按钮后弹出编辑窗口",
+      "饲养费核算子页改为“动态笼位图（自动）/数量统计表（录入）”，并优化必填提示与删除图标样式",
+    ],
+  },
+  {
     version: "0.3.3",
     title: "房间和笼架管理优化",
     items: [
@@ -78,7 +87,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.3",
+  version: "0.3.4",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -118,6 +127,9 @@ const seedData = {
     rows: 5,
     cols: 6,
   },
+  showCageEditor: false,
+  showRoomForm: false,
+  showRackForm: false,
   billingSource: "cage_map",
   billingMonth: today.slice(0, 7),
   billingIacuc: "IACUC-2026-001",
@@ -219,18 +231,7 @@ const seedData = {
       effectiveEnd: "",
     },
   ],
-  adjustments: [
-    {
-      id: "adj-demo",
-      targetType: "iacuc",
-      targetId: "IACUC-2026-003",
-      type: "discount",
-      value: 10,
-      reason: "示例：预实验减免 10%",
-      effectiveStart: "2026-01-01",
-      effectiveEnd: "",
-    },
-  ],
+  adjustments: [],
 };
 
 let state = normalize(structuredClone(seedData));
@@ -420,6 +421,9 @@ function normalize(data) {
   next.freeCageAllowance = Number(next.freeCageAllowance ?? FREE_CAGES_DEFAULT);
   next.principalIdentityFilter = String(next.principalIdentityFilter || "");
   next.batchMode = Boolean(next.batchMode);
+  next.showCageEditor = Boolean(next.showCageEditor);
+  next.showRoomForm = Boolean(next.showRoomForm);
+  next.showRackForm = Boolean(next.showRackForm);
   next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
   next.editingRackId = next.editingRackId || "";
@@ -512,7 +516,7 @@ function render() {
     bindAuthEvents();
     return;
   }
-  const adminViews = new Set(["rooms", "data", "system", "users"]);
+  const adminViews = new Set(["data", "system", "users"]);
   if (currentUser?.role !== "admin" && adminViews.has(state.activeView)) {
     state.activeView = "cages";
   }
@@ -542,11 +546,7 @@ function renderSidebar() {
   const navItems = [
     ["dashboard", "首页", "home"],
     ["cages", "笼位图", "grid"],
-    ...(currentUser?.role === "admin"
-      ? [
-          ["rooms", "房间管理", "building"],
-        ]
-      : []),
+    ...(currentUser ? [["rooms", "房间管理", "building"]] : []),
     ["billing", "饲养费核算", "receipt"],
     ...(currentUser?.role === "admin"
       ? [
@@ -793,7 +793,7 @@ function slotStatusCounts() {
 }
 
 function roomCapacityRows() {
-  return state.rooms.map((room) => {
+  return visibleRooms().map((room) => {
     const rackIds = new Set(state.racks.filter((rack) => rack.roomId === room.id).map((rack) => rack.id));
     const slots = state.slots.filter((slot) => rackIds.has(slot.rackId));
     const total = slots.length;
@@ -881,7 +881,7 @@ function renderCageView() {
             ${iconSvg("grid")}
             <h2>尚未创建笼架</h2>
             <p>当前饲养间还没有笼架，请先添加笼架后再录入笼位。</p>
-            ${currentUser?.role === "admin" ? `<button class="primary" type="button" data-view="rooms">${iconSvg("plus")}新增笼架</button>` : ""}
+            ${currentUser ? `<button class="primary" type="button" data-view="rooms">${iconSvg("plus")}新增笼架</button>` : ""}
           </div>
         </div>
       </section>
@@ -902,11 +902,12 @@ function renderCageView() {
           </div>
           <div class="toolbar">
             <select id="roomSelect">
-              ${state.rooms.map((room) => `<option value="${room.id}" ${room.id === selectedRoom.id ? "selected" : ""}>${room.name}</option>`).join("")}
+              ${visibleRooms().map((room) => `<option value="${room.id}" ${room.id === selectedRoom.id ? "selected" : ""}>${room.name}</option>`).join("")}
             </select>
             <select id="rackSelect">
               ${racks.map((rack) => `<option value="${rack.id}" ${rack.id === selectedRack.id ? "selected" : ""}>${escapeText(rackDisplayName(rack, selectedRoom))}</option>`).join("")}
             </select>
+            <button class="secondary" type="button" id="openCageEditor">${iconSvg("edit")}编辑笼位图</button>
           </div>
         </div>
         <div class="legend">
@@ -935,9 +936,19 @@ function renderCageView() {
           ${visibleSlots.map((slot) => renderSlot(slot)).join("")}
         </div>
       </div>
-      <div class="panel detail-panel cage-editor">
-        ${state.batchMode ? renderBatchSlotDetail(selectedBatchSlots) : renderSlotDetail(selectedSlot)}
-      </div>
+      ${
+        state.showCageEditor
+          ? `
+            <div class="editor-modal-backdrop" id="closeCageEditor"></div>
+            <div class="panel detail-panel cage-editor editor-modal">
+              <div class="editor-modal-actions">
+                <button class="secondary" type="button" id="closeCageEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
+              </div>
+              ${state.batchMode ? renderBatchSlotDetail(selectedBatchSlots) : renderSlotDetail(selectedSlot)}
+            </div>
+          `
+          : ""
+      }
     </section>
   `;
 }
@@ -1296,8 +1307,8 @@ function renderHistoryItem(item) {
 function renderBillingView() {
   return `
     <section class="billing-source-tabs" role="tablist" aria-label="饲养费核算方式">
-      <button class="segmented ${state.billingSource === "cage_map" ? "active" : ""}" type="button" data-billing-source="cage_map">动态笼位图</button>
-      <button class="segmented ${state.billingSource === "quantity_sheet" ? "active" : ""}" type="button" data-billing-source="quantity_sheet">数量统计表</button>
+      <button class="segmented ${state.billingSource === "cage_map" ? "active" : ""}" type="button" data-billing-source="cage_map">动态笼位图（自动）</button>
+      <button class="segmented ${state.billingSource === "quantity_sheet" ? "active" : ""}" type="button" data-billing-source="quantity_sheet">数量统计表（录入）</button>
     </section>
     ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
   `;
@@ -1443,7 +1454,7 @@ function renderQuantitySheetBillingView() {
               饲养间
               <select name="roomId">
                 <option value="">请选择饲养间或手动填写房间号</option>
-                ${state.rooms.map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === draft.roomId ? "selected" : ""}>${escapeText(room.name)}</option>`).join("")}
+                ${visibleRooms().map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === draft.roomId ? "selected" : ""}>${escapeText(room.name)}</option>`).join("")}
               </select>
             </label>
             <label>
@@ -1623,6 +1634,7 @@ function renderAdjustment(item) {
 function renderRoomManagementView() {
   const rackDraft = currentRackFormDraft();
   const rackFormRoomId = rackDraft.roomId;
+  const canManageRooms = !remotePersistence || currentUser?.role === "admin";
   return `
     <section class="content-grid">
       <div class="panel large">
@@ -1631,64 +1643,97 @@ function renderRoomManagementView() {
             <h2>饲养间与笼架</h2>
             <p>饲养间下可维护多个笼架，每个笼架可设置独立行列数。</p>
           </div>
-          <button id="resetDemo" class="secondary">${iconSvg("refresh")}重置示例数据</button>
+          ${canManageRooms ? `<button id="resetDemo" class="secondary">${iconSvg("refresh")}重置示例数据</button>` : ""}
         </div>
         <div class="room-list">
-          ${state.rooms.map(renderRoomCard).join("")}
+          ${visibleRooms().map(renderRoomCard).join("") || `<p class="muted">当前账号没有授权饲养间。</p>`}
         </div>
       </div>
       <div class="panel">
         <div class="panel-head compact">
           <div>
-            <h2>新增饲养间</h2>
-            <p>先建立饲养间，再按实际摆放新增笼架。</p>
+            <h2>编辑操作</h2>
+            <p>默认展示预览，点击按钮后弹出对应编辑窗口。</p>
           </div>
         </div>
-        <form id="roomForm" class="form">
-          <label class="field-required">
-            饲养间名称
-            <input name="name" required placeholder="请输入饲养间名称，如 SPF 小鼠饲养间 C" />
-          </label>
-          <label>
-            区域
-            <input name="area" placeholder="请输入区域，如 屏障区" />
-          </label>
-          <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
-        </form>
-        <div class="section-divider"></div>
-        <div class="panel-head compact">
-          <div>
-            <h2>新增笼架</h2>
-            <p>给已创建饲养间添加一个独立规格的笼架。</p>
-          </div>
+        <div class="form-actions">
+          ${canManageRooms ? `<button class="secondary" type="button" id="openRoomForm">${iconSvg("plus")}新增饲养间</button>` : ""}
+          <button class="secondary" type="button" id="openRackForm" ${visibleRooms().length ? "" : "disabled"}>${iconSvg("plus")}新增笼架</button>
         </div>
-        <form id="rackForm" class="form">
-          <label class="field-required">
-            所属饲养间
-            <select name="roomId" required>
-              <option value="" disabled ${state.rooms.length ? "" : "selected"}>请选择饲养间</option>
-              ${state.rooms
-                .map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === rackFormRoomId ? "selected" : ""}>${escapeText(room.name)}</option>`)
-                .join("")}
-            </select>
-          </label>
-          <label class="field-required">
-            笼架编号
-            <input type="number" name="index" min="1" value="${suggestedRackIndex(rackFormRoomId)}" placeholder="请输入笼架编号" required />
-          </label>
-          <div class="form-row">
-            <label class="field-required">
-              行数 X
-              <input type="number" name="rows" min="1" value="${escapeAttr(rackDraft.rows)}" placeholder="请输入行数" required />
-            </label>
-            <label class="field-required">
-              列数 Y
-              <input type="number" name="cols" min="1" value="${escapeAttr(rackDraft.cols)}" placeholder="请输入列数" required />
-            </label>
-          </div>
-          <button class="primary" type="submit">${iconSvg("plus")}新增笼架</button>
-        </form>
       </div>
+      ${
+        canManageRooms && state.showRoomForm
+          ? `
+            <div class="editor-modal-backdrop" id="closeRoomForm"></div>
+            <div class="panel detail-panel editor-modal">
+              <div class="editor-modal-actions">
+                <button class="secondary" type="button" id="closeRoomFormButton">${iconSvg("chevronRight")}关闭编辑</button>
+              </div>
+              <div class="panel-head compact">
+                <div>
+                  <h2>新增饲养间</h2>
+                  <p>先建立饲养间，再按实际摆放新增笼架。</p>
+                </div>
+              </div>
+              <form id="roomForm" class="form">
+                <label class="field-required">
+                  饲养间名称
+                  <input name="name" required placeholder="请输入饲养间名称，如 SPF 小鼠饲养间 C" />
+                </label>
+                <label>
+                  区域
+                  <input name="area" placeholder="请输入区域，如 屏障区" />
+                </label>
+                <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
+              </form>
+            </div>
+          `
+          : ""
+      }
+      ${
+        state.showRackForm
+          ? `
+            <div class="editor-modal-backdrop" id="closeRackForm"></div>
+            <div class="panel detail-panel editor-modal">
+              <div class="editor-modal-actions">
+                <button class="secondary" type="button" id="closeRackFormButton">${iconSvg("chevronRight")}关闭编辑</button>
+              </div>
+              <div class="panel-head compact">
+                <div>
+                  <h2>新增笼架</h2>
+                  <p>给已创建饲养间添加一个独立规格的笼架。</p>
+                </div>
+              </div>
+              <form id="rackForm" class="form">
+                <label class="field-required">
+                  所属饲养间
+                  <select name="roomId" required>
+                    <option value="" disabled ${visibleRooms().length ? "" : "selected"}>请选择饲养间</option>
+                    ${visibleRooms()
+                      .map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === rackFormRoomId ? "selected" : ""}>${escapeText(room.name)}</option>`)
+                      .join("")}
+                  </select>
+                </label>
+                <label class="field-required">
+                  笼架编号
+                  <input type="number" name="index" min="1" value="${suggestedRackIndex(rackFormRoomId)}" placeholder="请输入笼架编号" required />
+                </label>
+                <div class="form-row">
+                  <label class="field-required">
+                    行数 X
+                    <input type="number" name="rows" min="1" value="${escapeAttr(rackDraft.rows)}" placeholder="请输入行数" required />
+                  </label>
+                  <label class="field-required">
+                    列数 Y
+                    <input type="number" name="cols" min="1" value="${escapeAttr(rackDraft.cols)}" placeholder="请输入列数" required />
+                  </label>
+                </div>
+                <button class="primary" type="submit">${iconSvg("plus")}新增笼架</button>
+              </form>
+            </div>
+          `
+          : ""
+      }
     </section>
   `;
 }
@@ -2083,6 +2128,7 @@ function renderRoomCard(room) {
   const slots = racks.flatMap((rack) => state.slots.filter((slot) => slot.rackId === rack.id));
   const active = slots.filter((slot) => slot.status === "active").length;
   const reserved = slots.filter((slot) => slot.status === "reserved").length;
+  const canManageRooms = !remotePersistence || currentUser?.role === "admin";
 
   return `
     <div class="room-tree">
@@ -2095,9 +2141,15 @@ function renderRoomCard(room) {
           <span>${slots.length} 笼位</span>
           <span>${active} 在用</span>
           <span>${reserved} 预约</span>
-          <button type="button" class="icon-danger" data-delete-room="${room.id}" title="删除饲养间" aria-label="删除饲养间 ${room.name}">
-            ${iconSvg("trash")}
-          </button>
+          ${
+            canManageRooms
+              ? `
+                <button type="button" class="icon-danger" data-delete-room="${room.id}" title="删除饲养间" aria-label="删除饲养间 ${room.name}">
+                  ${iconSvg("trash")}
+                </button>
+              `
+              : ""
+          }
         </div>
       </div>
       <div class="rack-tree">
@@ -2160,6 +2212,7 @@ function renderRackEditForm(room, rack) {
 }
 
 function bindEvents() {
+  decorateRequiredFields();
   document.querySelector("#logoutButton")?.addEventListener("click", logout);
   document.querySelector("#sidebarToggle")?.addEventListener("click", () => {
     state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -2235,6 +2288,18 @@ function bindEvents() {
   });
   document.querySelector("#clearSlot")?.addEventListener("click", clearSelectedSlot);
   document.querySelector("#clearBatchSlots")?.addEventListener("click", clearBatchSlots);
+  document.querySelector("#openCageEditor")?.addEventListener("click", () => {
+    state.showCageEditor = true;
+    render();
+  });
+  document.querySelector("#closeCageEditor")?.addEventListener("click", () => {
+    state.showCageEditor = false;
+    render();
+  });
+  document.querySelector("#closeCageEditorButton")?.addEventListener("click", () => {
+    state.showCageEditor = false;
+    render();
+  });
   document.querySelectorAll("[data-billing-source]").forEach((button) => {
     button.addEventListener("click", () => {
       captureQuantitySheetDraft();
@@ -2332,6 +2397,30 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-delete-rack]").forEach((button) => {
     button.addEventListener("click", () => deleteRack(button.dataset.deleteRack));
+  });
+  document.querySelector("#openRoomForm")?.addEventListener("click", () => {
+    state.showRoomForm = true;
+    render();
+  });
+  document.querySelector("#openRackForm")?.addEventListener("click", () => {
+    state.showRackForm = true;
+    render();
+  });
+  document.querySelector("#closeRoomForm")?.addEventListener("click", () => {
+    state.showRoomForm = false;
+    render();
+  });
+  document.querySelector("#closeRackForm")?.addEventListener("click", () => {
+    state.showRackForm = false;
+    render();
+  });
+  document.querySelector("#closeRoomFormButton")?.addEventListener("click", () => {
+    state.showRoomForm = false;
+    render();
+  });
+  document.querySelector("#closeRackFormButton")?.addEventListener("click", () => {
+    state.showRackForm = false;
+    render();
   });
   document.querySelector("#resetDemo")?.addEventListener("click", () => {
     if (remotePersistence) {
@@ -3100,10 +3189,11 @@ function normalizeRackFormDraft(draft = {}) {
 
 function currentRackFormDraft() {
   const draft = normalizeRackFormDraft(state.rackFormDraft);
-  const roomExists = state.rooms.some((room) => room.id === draft.roomId);
+  const rooms = visibleRooms();
+  const roomExists = rooms.some((room) => room.id === draft.roomId);
   return {
     ...draft,
-    roomId: roomExists ? draft.roomId : state.selectedRoomId || state.rooms[0]?.id || "",
+    roomId: roomExists ? draft.roomId : rooms.find((room) => room.id === state.selectedRoomId)?.id || rooms[0]?.id || "",
   };
 }
 
@@ -3130,6 +3220,7 @@ async function handleRoomSubmit(event) {
     state.selectedRackId = "";
     state.selectedSlotId = "";
     state.activeView = "rooms";
+    state.showRoomForm = false;
     pushLog(`新增饲养间 ${room.name}`);
     render();
   } catch (error) {
@@ -3178,6 +3269,7 @@ async function handleRackSubmit(event) {
     state.selectedSlotId = generated.slots[0]?.id;
     state.activeView = "rooms";
     state.editingRackId = "";
+    state.showRackForm = false;
     pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
     render();
   } catch (error) {
@@ -3328,7 +3420,8 @@ function slotPositionKey(slot) {
 }
 
 function selectFirstAvailableCage() {
-  const room = state.rooms.find((item) => item.id === state.selectedRoomId) ?? state.rooms[0];
+  const rooms = visibleRooms();
+  const room = rooms.find((item) => item.id === state.selectedRoomId) ?? rooms[0];
   state.selectedRoomId = room?.id;
 
   const rack =
@@ -3932,11 +4025,18 @@ function datesInMonth(month) {
 }
 
 function getSelectedRoom() {
-  return state.rooms.find((room) => room.id === state.selectedRoomId) ?? state.rooms[0];
+  const rooms = visibleRooms();
+  return rooms.find((room) => room.id === state.selectedRoomId) ?? rooms[0];
 }
 
 function roomNameById(roomId) {
   return state.rooms.find((room) => room.id === roomId)?.name || roomId;
+}
+
+function visibleRooms() {
+  if (!remotePersistence || !currentUser || currentUser.role === "admin") return state.rooms;
+  const allowed = new Set(currentUser.roomIds || []);
+  return state.rooms.filter((room) => allowed.has(room.id));
 }
 
 function getSelectedRack(racks) {
@@ -4207,7 +4307,7 @@ function iconSvg(name) {
     save: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5zM8 5v5h8V5zm1 11h6v3H9z"/></svg>`,
     edit: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5L17.8 8.7l-2.5-2.5zM19.7 6.8a1 1 0 0 0 0-1.4l-1.1-1.1a1 1 0 0 0-1.4 0l-.8.8 2.5 2.5z"/></svg>`,
     logout: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9v2H7v12h7v2H5zm11.6 4.6L20 12l-3.4 3.4-1.4-1.4 1-1H10v-2h6.2l-1-1z"/></svg>`,
-    trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l1 2h4v2H3V6h4zm1 6h2v8H9zm4 0h2v8h-2z"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m-8 0 1 12h8l1-12M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16h2V7l3 3 1.4-1.4L12 3.2 6.6 8.6 8 10l3-3zM5 18h14v2H5z"/></svg>`,
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
     search: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 10.5l4 4-1.4 1.4-4-4A6.5 6.5 0 1 1 10.5 4zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/></svg>`,
@@ -4217,6 +4317,20 @@ function iconSvg(name) {
     plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>`,
   };
   return icons[name] ?? "";
+}
+
+function decorateRequiredFields() {
+  document.querySelectorAll(".field-required input, .field-required textarea").forEach((input) => {
+    const raw = input.getAttribute("placeholder") || "";
+    const hint = raw.trim();
+    if (!hint) {
+      input.setAttribute("placeholder", "必填");
+      return;
+    }
+    if (!hint.startsWith("必填")) {
+      input.setAttribute("placeholder", `必填 · ${hint}`);
+    }
+  });
 }
 
 initialize();

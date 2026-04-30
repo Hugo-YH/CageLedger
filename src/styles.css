@@ -1034,31 +1034,12 @@ textarea:focus {
   background: #fffdf7;
 }
 
-.field-required::after {
-  content: "必填";
-  color: #9a5b00;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .field-auto input,
 .field-auto select,
 .field-auto textarea {
   border-style: dashed;
   border-color: #7aa7a1;
   background: #f7fbfa;
-}
-
-.field-auto::after {
-  content: "自动匹配，可手动覆盖";
-  color: #5f7378;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.compact-slot-form label.field-required::after,
-.compact-slot-form label.field-auto::after {
-  grid-column: 2;
 }
 
 .form-row {
@@ -1141,6 +1122,10 @@ textarea:focus {
   gap: 7px;
   border-left: 1px solid var(--line);
   padding-left: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  max-height: 230px;
+  overflow: auto;
 }
 
 .user-room-access label {
@@ -1581,6 +1566,30 @@ tr:last-child td {
   border-color: #e7a8a0;
 }
 
+.editor-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 30, 39, 0.35);
+  z-index: 80;
+}
+
+.editor-modal {
+  position: fixed;
+  top: 56px;
+  right: 24px;
+  bottom: 24px;
+  width: min(560px, calc(100vw - 48px));
+  z-index: 90;
+  overflow: auto;
+  box-shadow: 0 18px 40px rgba(9, 31, 38, 0.2);
+}
+
+.editor-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
 .empty-state {
   min-height: 320px;
   display: grid;
@@ -1697,6 +1706,14 @@ tr:last-child td {
     overflow: visible;
     position: static;
     top: auto;
+  }
+
+  .editor-modal {
+    right: 14px;
+    left: 14px;
+    top: 84px;
+    bottom: 14px;
+    width: auto;
   }
 
   .user-edit-form {
