@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.5",
+    title: "用户手册完善",
+    items: [
+      "新增完整用户手册，覆盖角色权限、功能操作、SOP、常见问题和数据安全建议",
+      "补充技术栈、项目结构、API 概览、数据表、部署更新和发布流程说明",
+      "同步 README 文档入口，便于系统管理页和仓库首页查阅手册",
+    ],
+  },
+  {
     version: "0.3.4",
     title: "权限与界面交互优化",
     items: [
@@ -87,7 +96,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.4",
+  version: "0.3.5",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",

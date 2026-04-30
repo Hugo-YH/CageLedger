@@ -82,7 +82,8 @@ npm run package:offline  # 生成 NAS 离线源码包
 │   └── package_offline.sh        # 离线源码包脚本
 ├── docs/
 │   ├── API.md                    # API 和数据模型说明
-│   └── DEPLOYMENT.md             # Docker、NAS 和离线部署说明
+│   ├── DEPLOYMENT.md             # Docker、NAS 和离线部署说明
+│   └── USER_MANUAL.md            # 系统用户手册（管理员/房间管理员）
 ├── data/                         # 本地运行数据，已被 Git 忽略
 ├── Dockerfile
 ├── docker-compose.yml
@@ -154,6 +155,7 @@ http://服务器IP:5173
 ## 开发者参考
 
 - API 与主要数据表见 [docs/API.md](docs/API.md)。
+- 终端用户操作手册见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md)。
 - 版本号维护在 `package.json` 的 `version` 字段中。
 - 页面资源版本、后端 `/api/system/info` 和 UI 版本展示都读取同一版本信息。
 - 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应 GitHub Release。
