@@ -650,19 +650,32 @@ h3 {
 }
 
 .quantity-sheet-fields {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin-bottom: 16px;
 }
 
-.quantity-sheet-fields .wide {
-  grid-column: span 2;
+.quantity-field-group {
+  display: grid;
+  gap: 12px;
 }
 
-.quantity-sheet-fields .month-opening-field {
-  grid-column: span 1;
-  grid-row: 4;
+.quantity-field-group-basic {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.quantity-field-group-project {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.quantity-field-group-billing {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  max-width: calc(50% - 6px);
+}
+
+.quantity-field-group .wide {
+  grid-column: span 2;
 }
 
 .quantity-entry-wrap {
@@ -701,7 +714,7 @@ h3 {
 
 .cage-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -762,6 +775,30 @@ textarea:focus {
 .toolbar input {
   width: auto;
   min-width: 170px;
+}
+
+.quantity-sheet-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.quantity-sheet-actions select {
+  width: 280px;
+}
+
+.quantity-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 220px);
+  gap: 10px;
+}
+
+.quantity-action-grid button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .legend,
@@ -833,6 +870,10 @@ textarea:focus {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(96px, 1fr));
   gap: 10px;
+}
+
+.cage-preview {
+  position: relative;
 }
 
 .slot {
@@ -938,6 +979,91 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.slot-hover-preview {
+  position: absolute;
+  z-index: 25;
+  width: min(340px, calc(100% - 24px));
+  border: 1px solid #c7d9dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 38px rgba(16, 42, 47, 0.18);
+  padding: 14px;
+  pointer-events: none;
+}
+
+.slot-hover-preview[hidden],
+.slot-preview-template {
+  display: none;
+}
+
+.slot-preview-head,
+.slot-preview-rows,
+.slot-preview-row {
+  display: grid;
+}
+
+.slot-preview-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.slot-preview-head strong {
+  color: var(--text);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-preview-head em {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.slot-preview-head em.empty {
+  background: #edf1f2;
+  color: #5b6a70;
+}
+
+.slot-preview-head em.reserved {
+  background: #e3f1ff;
+  color: #1d5f9f;
+}
+
+.slot-preview-head em.active {
+  background: #def4e8;
+  color: #16613b;
+}
+
+.slot-preview-rows {
+  gap: 7px;
+}
+
+.slot-preview-row {
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.slot-preview-row span {
+  color: var(--muted);
+}
+
+.slot-preview-row strong {
+  color: var(--text);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .detail-panel {
   align-self: start;
 }
@@ -952,6 +1078,15 @@ textarea:focus {
 
 .cage-editor .form {
   max-width: none;
+}
+
+.cage-editor-popover {
+  position: absolute;
+  z-index: 35;
+  width: min(460px, calc(100% - 24px));
+  max-height: min(720px, calc(100vh - 148px));
+  overflow: auto;
+  box-shadow: 0 18px 40px rgba(9, 31, 38, 0.22);
 }
 
 .compact-slot-form {
@@ -1708,6 +1843,12 @@ tr:last-child td {
     top: auto;
   }
 
+  .cage-editor-popover {
+    position: absolute;
+    max-height: min(640px, calc(100vh - 112px));
+    overflow: auto;
+  }
+
   .editor-modal {
     right: 14px;
     left: 14px;
@@ -1794,16 +1935,19 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
-  .quantity-sheet-fields {
+  .quantity-field-group,
+  .quantity-field-group-basic,
+  .quantity-field-group-project,
+  .quantity-field-group-billing {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .quantity-sheet-fields .wide {
-    grid-column: auto;
+  .quantity-field-group-billing {
+    max-width: none;
   }
 
-  .quantity-sheet-fields .month-opening-field {
-    grid-row: auto;
+  .quantity-field-group .wide {
+    grid-column: auto;
   }
 
   .user-fields {
@@ -1820,12 +1964,15 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
-  .quantity-sheet-fields {
+  .quantity-field-group,
+  .quantity-field-group-basic,
+  .quantity-field-group-project,
+  .quantity-field-group-billing {
     grid-template-columns: 1fr;
   }
 
-  .quantity-sheet-fields .month-opening-field {
-    grid-row: auto;
+  .quantity-field-group-billing {
+    max-width: none;
   }
 
   .compact-slot-form label,
@@ -1836,10 +1983,21 @@ tr:last-child td {
   .toolbar,
   .toolbar select,
   .toolbar input,
+  .quantity-sheet-actions,
+  .quantity-sheet-actions select,
+  .quantity-action-grid,
   .primary,
   .secondary,
   .ghost {
     width: 100%;
+  }
+
+  .quantity-sheet-actions {
+    display: grid;
+  }
+
+  .quantity-action-grid {
+    grid-template-columns: 1fr;
   }
 
   .sidebar .secondary,

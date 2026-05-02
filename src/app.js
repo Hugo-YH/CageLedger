@@ -953,20 +953,20 @@ function renderCageView() {
         <div class="rack-grid" style="--cols:${selectedRack.cols}">
           ${visibleSlots.map((slot) => renderSlot(slot)).join("")}
         </div>
-      </div>
-      ${
-        state.showCageEditor
-          ? `
-            <div class="editor-modal-backdrop" id="closeCageEditor"></div>
-            <div class="panel detail-panel cage-editor editor-modal">
-              <div class="editor-modal-actions">
-                <button class="secondary" type="button" id="closeCageEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
+        <div id="slotHoverPreview" class="slot-hover-preview" hidden></div>
+        ${
+          state.showCageEditor
+            ? `
+              <div class="panel detail-panel cage-editor cage-editor-popover" id="cageEditorPopover">
+                <div class="editor-modal-actions">
+                  <button class="secondary" type="button" id="closeCageEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
+                </div>
+                ${state.batchMode ? renderBatchSlotDetail(selectedBatchSlots) : renderSlotDetail(selectedSlot)}
               </div>
-              ${state.batchMode ? renderBatchSlotDetail(selectedBatchSlots) : renderSlotDetail(selectedSlot)}
-            </div>
-          `
-          : ""
-      }
+            `
+            : ""
+        }
+      </div>
     </section>
   `;
 }
@@ -1002,7 +1002,43 @@ function renderSlot(slot) {
           `
       }
       ${state.batchMode && state.selectedSlotIds.includes(slot.id) ? `<span class="slot-selected-label">已选</span>` : ""}
+      <span class="slot-preview-template" hidden>${renderSlotPreview(slot, occupancy, slotCode)}</span>
     </button>
+  `;
+}
+
+function renderSlotPreview(slot, occupancy, slotCode) {
+  const rack = state.racks.find((item) => item.id === slot.rackId);
+  const room = rack ? state.rooms.find((item) => item.id === rack.roomId) : null;
+  const rows = [
+    ["状态", statusLabel(slot.status)],
+    ["房间", room?.name || "-"],
+    ["笼架", rack ? rackDisplayName(rack, room) : "-"],
+    ["位置", slotPositionCode(slot)],
+    ["笼位编号", slotCode || "-"],
+  ];
+
+  if (occupancy) {
+    rows.push(
+      ["笼盒编号", occupancy.cageCode || "-"],
+      ["IACUC", occupancy.iacuc || "-"],
+      ["项目名称", occupancy.project || "-"],
+      ["项目负责人", occupancy.pi || "-"],
+      ["实验负责人", occupancy.owner || "-"],
+      ["开始日期", occupancy.startDate || "-"],
+      ["结束日期", occupancy.endDate || "-"],
+      ["备注", occupancy.notes || "-"],
+    );
+  }
+
+  return `
+    <span class="slot-preview-head">
+      <strong>${escapeText(slotCode || slotPositionCode(slot))}</strong>
+      <em class="${escapeAttr(slot.status)}">${escapeText(statusLabel(slot.status))}</em>
+    </span>
+    <span class="slot-preview-rows">
+      ${rows.map(([label, value]) => `<span class="slot-preview-row"><span>${escapeText(label)}</span><strong>${escapeText(value)}</strong></span>`).join("")}
+    </span>
   `;
 }
 
@@ -1439,6 +1475,7 @@ function renderQuantitySheetBillingView() {
   const draft = state.quantitySheetDraft || makeQuantitySheetDraft(state.billingMonth);
   const statement = buildQuantitySheetStatement(draft);
   const canGenerateStatement = !remotePersistence || Boolean(currentUser);
+  const managerValue = draft.manager || currentUser?.displayName || "";
 
   return `
     <section class="billing-layout quantity-billing-layout">
@@ -1449,78 +1486,76 @@ function renderQuantitySheetBillingView() {
               <h2>数量统计表结算</h2>
               <p>录入纸质数量统计表中的变更行，系统按每日结余笼数展开明细。</p>
             </div>
-            <div class="toolbar">
+            <div class="quantity-sheet-actions">
               <select id="quantitySheetSelect" aria-label="选择数量统计表">
                 <option value="">请选择统计表或新建</option>
                 ${state.quantitySheets
                   .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
                   .join("")}
               </select>
-              <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
-              <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
-              <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
-              <button id="exportSettlementPdf" class="primary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+              <div class="quantity-action-grid">
+                <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
+                <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+                <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
+                <button id="exportSettlementPdf" class="primary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+              </div>
             </div>
           </div>
 
           <div class="quantity-sheet-fields">
-            <label class="field-required">
-              结算月份
-              <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
-            </label>
-            <label>
-              饲养间
-              <select name="roomId">
-                <option value="">请选择饲养间或手动填写房间号</option>
-                ${visibleRooms().map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === draft.roomId ? "selected" : ""}>${escapeText(room.name)}</option>`).join("")}
-              </select>
-            </label>
-            <label>
-              房间号
-              <input name="roomName" value="${escapeAttr(draft.roomName)}" placeholder="请输入房间号，如 8101" />
-            </label>
-            <label>
-              管理员
-              <input name="manager" value="${escapeAttr(draft.manager)}" placeholder="请输入管理员姓名" />
-            </label>
-            <label class="field-required">
-              IACUC 编号
-              <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" placeholder="请输入或选择 IACUC 编号" required />
-            </label>
-            <label class="field-auto">
-              项目负责人
-              <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="选择 IACUC 后自动填充" />
-            </label>
-            <label class="field-auto">
-              实验负责人
-              <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
-            </label>
-            <label>
-              联系电话
-              <input name="contact" value="${escapeAttr(draft.contact)}" placeholder="请输入联系电话" />
-            </label>
-            <label class="wide field-auto">
-              项目名称
-              <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
-            </label>
-            <label class="field-auto">
-              支撑经费
-              <input name="funding" value="${escapeAttr(draft.funding)}" placeholder="选择 IACUC 后自动填充" />
-            </label>
-            <label class="month-opening-field">
-              月初结余动物数
-              <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" placeholder="请输入月初动物数" />
-            </label>
-            <label class="month-opening-field field-required">
-              月初结余笼数
-              <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" placeholder="请输入月初笼数" />
-            </label>
-            <label class="month-opening-field">
-              计费口径
-              <select name="billingUnit">
-                <option value="cage_day" selected>笼/天</option>
-              </select>
-            </label>
+            <div class="quantity-field-group quantity-field-group-basic">
+              <label class="field-required">
+                结算月份
+                <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
+              </label>
+              <label>
+                房间号
+                <select name="roomId">
+                  <option value="">请选择房间号</option>
+                  ${visibleRooms()
+                    .map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === quantitySheetRoomId(draft) ? "selected" : ""}>${escapeText(room.name)}</option>`)
+                    .join("")}
+                </select>
+              </label>
+              <label>
+                管理员
+                <input name="manager" value="${escapeAttr(managerValue)}" placeholder="请输入管理员姓名" />
+              </label>
+            </div>
+            <div class="quantity-field-group quantity-field-group-project">
+              <label class="field-required">
+                IACUC 编号
+                <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" placeholder="请输入或选择 IACUC 编号" required />
+              </label>
+              <label class="wide field-auto">
+                项目名称
+                <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
+              </label>
+              <label class="field-auto">
+                支撑经费
+                <input name="funding" value="${escapeAttr(draft.funding)}" placeholder="选择 IACUC 后自动填充" />
+              </label>
+              <label class="field-auto">
+                项目负责人
+                <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="选择 IACUC 后自动填充" />
+              </label>
+              <label class="field-auto">
+                实验负责人
+                <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
+              </label>
+            </div>
+            <div class="quantity-field-group quantity-field-group-billing">
+              <label class="field-required">
+                月初结余笼数
+                <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" placeholder="请输入月初笼数" />
+              </label>
+              <label>
+                计费口径
+                <select name="billingUnit">
+                  <option value="cage_day" selected>笼/天</option>
+                </select>
+              </label>
+            </div>
           </div>
           <datalist id="quantityIacucOptions">
             ${iacucOptions(draft.iacuc)
@@ -2268,6 +2303,11 @@ function bindEvents() {
       }
       render();
     });
+    button.addEventListener("mouseenter", () => showSlotHoverPreview(button));
+    button.addEventListener("mousemove", () => positionSlotHoverPreview(button));
+    button.addEventListener("mouseleave", hideSlotHoverPreview);
+    button.addEventListener("focus", () => showSlotHoverPreview(button));
+    button.addEventListener("blur", hideSlotHoverPreview);
   });
 
   document.querySelectorAll("[data-filter]").forEach((button) => {
@@ -2318,6 +2358,10 @@ function bindEvents() {
     state.showCageEditor = false;
     render();
   });
+  positionCageEditorPopover();
+  window.onresize = () => {
+    positionCageEditorPopover();
+  };
   document.querySelectorAll("[data-billing-source]").forEach((button) => {
     button.addEventListener("click", () => {
       captureQuantitySheetDraft();
@@ -3070,15 +3114,15 @@ function readQuantitySheetForm(form) {
     month,
     roomId: data.get("roomId") || "",
     roomName: data.get("roomName")?.trim() || room?.name || "",
-    manager: data.get("manager")?.trim() || "",
+    manager: data.get("manager")?.trim() || currentUser?.displayName || "",
     iacuc: normalizeIacucNumber(data.get("iacuc") || ""),
     project: data.get("project")?.trim() || "",
     pi: data.get("pi")?.trim() || "",
     owner: data.get("owner")?.trim() || "",
-    contact: data.get("contact")?.trim() || "",
+    contact: "",
     funding: data.get("funding")?.trim() || "",
     billingUnit: data.get("billingUnit") || "cage_day",
-    initialAnimalCount: numericOrZero(data.get("initialAnimalCount")),
+    initialAnimalCount: 0,
     initialCageCount: numericOrZero(data.get("initialCageCount")),
     rows,
   });
@@ -3140,6 +3184,12 @@ function normalizeQuantitySheetDraft(sheet) {
   };
 }
 
+function quantitySheetRoomId(sheet) {
+  if (sheet?.roomId) return sheet.roomId;
+  if (!sheet?.roomName) return "";
+  return state.rooms.find((room) => room.name === sheet.roomName)?.id || "";
+}
+
 function normalizeQuantitySheetDraftRow(row, month) {
   return {
     id: row?.id || crypto.randomUUID(),
@@ -3166,9 +3216,76 @@ function autofillQuantitySheetIacucFields(event) {
 }
 
 function syncQuantitySheetRoomName(event) {
-  const room = state.rooms.find((item) => item.id === event.target.value);
-  const roomNameInput = event.target.form?.elements.roomName;
-  if (room && roomNameInput && !roomNameInput.value) roomNameInput.value = room.name;
+  const form = event.target.form;
+  if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
+}
+
+function positionCageEditorPopover() {
+  const editor = document.querySelector("#cageEditorPopover");
+  const container = document.querySelector(".cage-preview");
+  if (!editor || !container) return;
+
+  const selectedSlotId = state.batchMode ? state.selectedSlotIds[0] : state.selectedSlotId;
+  const anchor = selectedSlotId ? container.querySelector(`[data-slot="${cssEscape(selectedSlotId)}"]`) : null;
+  const fallback = container.querySelector("#openCageEditor") || container;
+  const anchorElement = anchor || fallback;
+  const gap = 12;
+  const containerRect = container.getBoundingClientRect();
+  const anchorRect = anchorElement.getBoundingClientRect();
+  const editorRect = editor.getBoundingClientRect();
+  const maxLeft = Math.max(gap, container.clientWidth - editorRect.width - gap);
+
+  let left = anchorRect.right - containerRect.left + gap;
+  if (left > maxLeft) left = anchorRect.left - containerRect.left - editorRect.width - gap;
+  left = Math.min(Math.max(gap, left), maxLeft);
+
+  let top = anchorRect.top - containerRect.top;
+  const viewportBottom = window.innerHeight - containerRect.top - gap;
+  const containerBottom = container.clientHeight - gap;
+  const maxTop = Math.max(gap, Math.min(containerBottom, viewportBottom) - Math.min(editorRect.height, viewportBottom - gap));
+  top = Math.min(Math.max(gap, top), maxTop);
+
+  editor.style.left = `${Math.round(left)}px`;
+  editor.style.top = `${Math.round(top)}px`;
+}
+
+function showSlotHoverPreview(slotButton) {
+  const preview = document.querySelector("#slotHoverPreview");
+  const template = slotButton.querySelector(".slot-preview-template");
+  if (!preview || !template) return;
+
+  preview.innerHTML = template.innerHTML;
+  preview.hidden = false;
+  positionSlotHoverPreview(slotButton);
+}
+
+function positionSlotHoverPreview(slotButton) {
+  const preview = document.querySelector("#slotHoverPreview");
+  const container = slotButton.closest(".cage-preview");
+  if (!preview || !container || preview.hidden) return;
+
+  const gap = 12;
+  const containerRect = container.getBoundingClientRect();
+  const slotRect = slotButton.getBoundingClientRect();
+  const previewRect = preview.getBoundingClientRect();
+  const maxLeft = Math.max(gap, container.clientWidth - previewRect.width - gap);
+  let left = slotRect.right - containerRect.left + gap;
+  if (left > maxLeft) left = slotRect.left - containerRect.left - previewRect.width - gap;
+  left = Math.min(Math.max(gap, left), maxLeft);
+
+  let top = slotRect.top - containerRect.top;
+  const maxTop = Math.max(gap, container.clientHeight - previewRect.height - gap);
+  top = Math.min(Math.max(gap, top), maxTop);
+
+  preview.style.left = `${Math.round(left)}px`;
+  preview.style.top = `${Math.round(top)}px`;
+}
+
+function hideSlotHoverPreview() {
+  const preview = document.querySelector("#slotHoverPreview");
+  if (!preview) return;
+  preview.hidden = true;
+  preview.innerHTML = "";
 }
 
 function numericOrNull(value) {
