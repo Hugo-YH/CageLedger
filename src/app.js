@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.7",
+    title: "笼位图与数量统计表界面优化",
+    items: [
+      "笼位图新增悬浮信息预览，空笼、预约和在用笼位可快速查看位置与占用详情",
+      "笼位编辑改为浮在笼位图上方，并根据选中笼位自动避让边界",
+      "优化数量统计表表头分组、操作按钮排列和冗余字段展示",
+    ],
+  },
+  {
     version: "0.3.6",
     title: "登录审计记录",
     items: [
@@ -105,7 +114,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.6",
+  version: "0.3.7",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",

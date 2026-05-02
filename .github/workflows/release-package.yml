@@ -9,7 +9,7 @@ on:
       source_ref:
         description: "Git ref to package"
         required: true
-        default: "v0.3.2"
+        default: "v0.3.7"
 
 permissions:
   contents: write
