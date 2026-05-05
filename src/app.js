@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.8",
+    title: "笼位拖选与结算单打印优化",
+    items: [
+      "笼位图多选录入支持按住鼠标拖过笼位批量加入或移出选择",
+      "结算单 PDF 改为黑白紧凑三线表，按 IACUC 列展示每日笼数、减免和费用",
+      "结算单新增唯一单据编号、二维码和扫码查看入口，为分发与报销状态预留接口",
+    ],
+  },
+  {
     version: "0.3.7",
     title: "笼位图与数量统计表界面优化",
     items: [
@@ -114,7 +123,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.7",
+  version: "0.3.8",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -125,6 +134,8 @@ let systemInfo = {
 let remotePersistence = false;
 let currentUser = null;
 let users = [];
+let batchSlotDrag = null;
+let suppressNextSlotClick = false;
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -1155,7 +1166,7 @@ function renderBatchSlotDetail(slots) {
       <div class="empty-state">
         ${iconSvg("grid")}
         <h2>请选择要批量录入的笼位</h2>
-        <p class="muted">开启多选录入后，点击笼位可加入或移出批量选择。</p>
+        <p class="muted">开启多选录入后，点击或按住拖过笼位可加入或移出批量选择。</p>
       </div>
     `;
   }
@@ -2303,7 +2314,12 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-slot]").forEach((button) => {
+    button.addEventListener("pointerdown", (event) => startBatchSlotDrag(event, button));
     button.addEventListener("click", () => {
+      if (suppressNextSlotClick) {
+        suppressNextSlotClick = false;
+        return;
+      }
       if (state.batchMode) {
         toggleBatchSlot(button.dataset.slot);
       } else {
@@ -2507,6 +2523,56 @@ function bindEvents() {
 
 function bindAuthEvents() {
   document.querySelector("#loginForm")?.addEventListener("submit", login);
+}
+
+function startBatchSlotDrag(event, slotButton) {
+  if (!state.batchMode || event.button !== 0 || !slotButton?.dataset.slot) return;
+  const slotId = slotButton.dataset.slot;
+  suppressNextSlotClick = true;
+  batchSlotDrag = {
+    shouldSelect: !state.selectedSlotIds.includes(slotId),
+    visitedSlotIds: new Set(),
+  };
+  event.preventDefault();
+  hideSlotHoverPreview();
+  document.body.classList.add("slot-dragging");
+  applyBatchSlotDragTarget(slotButton);
+  window.addEventListener("pointermove", handleBatchSlotDragMove);
+  window.addEventListener("pointerup", finishBatchSlotDrag, { once: true });
+  window.addEventListener("pointercancel", finishBatchSlotDrag, { once: true });
+}
+
+function handleBatchSlotDragMove(event) {
+  if (!batchSlotDrag) return;
+  const slotButton = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-slot]");
+  if (!slotButton || !slotButton.closest(".rack-grid")) return;
+  applyBatchSlotDragTarget(slotButton);
+}
+
+function applyBatchSlotDragTarget(slotButton) {
+  const slotId = slotButton?.dataset.slot;
+  if (!slotId || !batchSlotDrag || batchSlotDrag.visitedSlotIds.has(slotId)) return;
+
+  batchSlotDrag.visitedSlotIds.add(slotId);
+  state.selectedSlotId = slotId;
+  if (batchSlotDrag.shouldSelect) {
+    if (!state.selectedSlotIds.includes(slotId)) state.selectedSlotIds = [...state.selectedSlotIds, slotId];
+    slotButton.classList.add("selected", "batch-selected");
+  } else {
+    state.selectedSlotIds = state.selectedSlotIds.filter((id) => id !== slotId);
+    slotButton.classList.remove("batch-selected");
+    if (state.selectedSlotId !== slotId) slotButton.classList.remove("selected");
+  }
+}
+
+function finishBatchSlotDrag() {
+  if (!batchSlotDrag) return;
+  batchSlotDrag = null;
+  document.body.classList.remove("slot-dragging");
+  window.removeEventListener("pointermove", handleBatchSlotDragMove);
+  window.removeEventListener("pointerup", finishBatchSlotDrag);
+  window.removeEventListener("pointercancel", finishBatchSlotDrag);
+  render();
 }
 
 function toggleBatchSlot(slotId) {
@@ -4053,41 +4119,39 @@ function settlementHtml(statement, info, rows) {
     ? formatLogTime(statement.generatedAt)
     : new Date().toLocaleString("zh-CN", { hour12: false });
   const isQuantitySheet = statement.sourceType === "quantity_sheet";
+  const documentNumber = settlementDocumentNumber(statement, generatedAt);
+  const statementUrl = settlementLookupUrl(documentNumber, statement);
+  const qrSvg = qrCodeSvg(statementUrl);
+  const periodLabel = settlementPeriodLabel(statement.month);
+  const currency = "CNY";
+  const dataSourceLabel = isQuantitySheet ? "数量统计表（录入）" : "动态笼位图（自动）";
+  const principalType = principalTypeLabel(principalTypeForPi(statement.pi || info.pi || state.billingPi));
+  const totalAmountText = MONEY_FORMAT.format(statement.totalAmount);
+  const billableTotal = statement.totalBillableCageDays ?? statement.totalCageDays;
+  const tier2Total = Number(statement.totalTier2CageDays || 0);
   const project = info.project || "-";
   const funding = info.funding || "-";
   const pi = info.pi || "-";
   const owner = info.owner || "-";
-  const rowsHtml = rows
+  const iacucList = statement.iacucs?.length ? statement.iacucs : String(statement.iacuc || "").split("、").filter(Boolean);
+  const detailMatrix = settlementDetailMatrix(rows, iacucList);
+  const detailHeaderHtml = detailMatrix.iacucs.map((iacuc) => `<th>${escapeText(iacuc)}</th>`).join("");
+  const detailRowsHtml = rows
     .map(
-      (row) =>
-        isQuantitySheet
-          ? `
-            <tr>
-              <td>${escapeText(row.date)}</td>
-              <td>${row.animalCount ?? 0}</td>
-              <td>${row.cageCount}</td>
-              <td>${row.freeCages}</td>
-              <td>${row.billableCages}</td>
-              <td>${row.tier1BillableCages}</td>
-              <td>${row.tier2BillableCages}</td>
-              <td>${MONEY_FORMAT.format(row.amount)}</td>
-            </tr>
-          `
-          : `
-            <tr>
-              <td>${escapeText(row.date)}</td>
-              <td>${row.cageCount}</td>
-              <td>${row.freeCages}</td>
-              <td>${row.billableCages}</td>
-              <td>${row.tier1BillableCages}</td>
-              <td>${row.tier2BillableCages}</td>
-              <td>${MONEY_FORMAT.format(row.amount)}</td>
-            </tr>
-          `,
+      (row) => `
+        <tr>
+          <td>${escapeText(row.date)}</td>
+          ${detailMatrix.iacucs.map((iacuc) => `<td class="num">${formatStatementNumber(detailMatrix.byDate.get(row.date)?.get(iacuc) || 0)}</td>`).join("")}
+          <td class="num">${formatStatementNumber(row.cageCount)}</td>
+          <td class="num">${formatStatementNumber(row.freeCages)}</td>
+          <td class="num">${formatStatementNumber(row.billableCages)}</td>
+          <td class="money">¥${MONEY_FORMAT.format(row.amount)}</td>
+          <td class="money">¥${MONEY_FORMAT.format(row.cumulative)}</td>
+        </tr>
+      `,
     )
     .join("");
-  const billableTotalLabel = "收费笼日";
-  const billableTotal = statement.totalBillableCageDays ?? statement.totalCageDays;
+  const detailTotalsHtml = detailMatrix.iacucs.map((iacuc) => `<td class="num">${formatStatementNumber(detailMatrix.totals.get(iacuc) || 0)}</td>`).join("");
 
   return `
     <!doctype html>
@@ -4096,65 +4160,633 @@ function settlementHtml(statement, info, rows) {
         <meta charset="utf-8" />
         <title>${escapeText(statement.pi || state.billingPi || state.billingIacuc)}-${escapeText(statement.month || state.billingMonth)}-饲养费结算单</title>
         <style>
-          @page { size: A4; margin: 18mm; }
-          body { color: #1f2a2e; font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; font-size: 12px; line-height: 1.5; }
-          h1 { text-align: center; font-size: 22px; margin: 0 0 18px; }
-          .meta { color: #66757c; text-align: right; margin-bottom: 10px; }
-          .section { margin-top: 14px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #cfd8dc; border-bottom: 0; border-right: 0; }
-          .cell { min-height: 34px; border-right: 1px solid #cfd8dc; border-bottom: 1px solid #cfd8dc; padding: 7px 9px; }
-          .cell.full { grid-column: 1 / -1; }
-          .label { color: #66757c; display: inline-block; min-width: 84px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          th, td { border: 1px solid #cfd8dc; padding: 7px 8px; text-align: right; }
-          th:first-child, td:first-child { text-align: left; }
-          th { background: #eef4f3; color: #1f2a2e; }
-          .total { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
-          .total div { border: 1px solid #cfd8dc; padding: 9px; }
-          .total strong { display: block; font-size: 18px; margin-top: 4px; }
-          .sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 34px; }
-          .sign div { border-top: 1px solid #1f2a2e; padding-top: 8px; color: #66757c; }
+          @page { size: A4; margin: 9mm 10mm 10mm; }
+          * { box-sizing: border-box; }
+          body {
+            color: #111111;
+            font-family: "Times New Roman", "Songti SC", "SimSun", "Noto Serif CJK SC", serif;
+            font-size: 9.2px;
+            line-height: 1.22;
+            margin: 0;
+            background: #ffffff;
+          }
+          .document {
+            max-width: 190mm;
+            margin: 0 auto;
+          }
+          .topbar {
+            display: grid;
+            grid-template-columns: 1fr 25mm;
+            gap: 9px;
+            align-items: start;
+            border-bottom: 1.6px solid #000000;
+            padding-bottom: 5px;
+          }
+          h1 {
+            color: #000000;
+            font-size: 18px;
+            line-height: 1.1;
+            margin: 0 0 4px;
+            text-align: center;
+          }
+          .subtitle {
+            color: #222222;
+            margin: 0;
+            text-align: center;
+          }
+          .doc-meta,
+          .basic-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2px 10px;
+            margin-top: 5px;
+          }
+          .doc-meta span,
+          .basic-grid span { color: #444444; }
+          .doc-meta strong {
+            color: #000000;
+            font-weight: 400;
+            overflow-wrap: anywhere;
+          }
+          .qr-box {
+            align-items: center;
+            display: grid;
+            gap: 2px;
+            justify-items: center;
+            text-align: center;
+          }
+          .qr-box svg {
+            height: 21mm;
+            width: 21mm;
+          }
+          .section {
+            margin-top: 6px;
+          }
+          .amount-strip {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0;
+            margin-top: 6px;
+            border-top: 1.4px solid #000000;
+            border-bottom: 1px solid #000000;
+          }
+          .metric {
+            border-right: 1px solid #000000;
+            padding: 3px 5px;
+            break-inside: avoid;
+          }
+          .metric:last-child { border-right: 0; }
+          .metric span {
+            color: #333333;
+            display: block;
+            font-size: 8.5px;
+          }
+          .metric strong {
+            color: #000000;
+            display: block;
+            font-size: 12px;
+            line-height: 1.15;
+            margin-top: 1px;
+          }
+          .terms-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            border-top: 1px solid #000000;
+            border-bottom: 1px solid #000000;
+          }
+          .terms-grid div {
+            border-right: 1px solid #000000;
+            padding: 3px 5px;
+          }
+          .terms-grid div:last-child { border-right: 0; }
+          .terms-grid span {
+            color: #333333;
+            display: block;
+            font-size: 8.5px;
+          }
+          .section-head {
+            align-items: end;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 2px;
+          }
+          h2 {
+            color: #000000;
+            font-size: 10.5px;
+            margin: 0;
+          }
+          .section-head span {
+            color: #333333;
+            font-size: 8.5px;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+          }
+          th,
+          td {
+            border: 0;
+            padding: 2.2px 4px;
+            vertical-align: top;
+          }
+          th {
+            color: #000000;
+            font-size: 8.8px;
+            font-weight: 700;
+            text-align: right;
+          }
+          th:first-child,
+          td:first-child {
+            text-align: left;
+          }
+          td {
+            text-align: right;
+          }
+          .num,
+          .money {
+            font-variant-numeric: tabular-nums;
+          }
+          .money {
+            white-space: nowrap;
+          }
+          .three-line {
+            border-top: 1.4px solid #000000;
+            border-bottom: 1.4px solid #000000;
+          }
+          .three-line thead tr {
+            border-bottom: 1px solid #000000;
+          }
+          .three-line tfoot tr {
+            border-top: 1px solid #000000;
+          }
+          .three-line tfoot td {
+            color: #000000;
+            font-weight: 700;
+          }
+          .summary-table td:nth-child(2),
+          .summary-table th:nth-child(2) {
+            text-align: left;
+          }
+          .empty-line {
+            color: #333333;
+            text-align: center !important;
+          }
+          .note-card {
+            border-top: 1px solid #000000;
+            color: #333333;
+            padding-top: 4px;
+          }
+          .note-card strong {
+            color: #000000;
+          }
+          .sign {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 14px;
+            break-inside: avoid;
+          }
+          .sign div {
+            border-top: 1px solid #000000;
+            color: #222222;
+            min-height: 20px;
+            padding-top: 4px;
+          }
+          .footer {
+            border-top: 1px solid #000000;
+            color: #333333;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 6px;
+            padding-top: 4px;
+          }
+          @media print {
+            body { font-size: 8.6px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .section { margin-top: 4px; }
+            th, td { padding: 1.7px 3px; }
+            .detail-table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+          }
         </style>
       </head>
       <body>
-        <h1>实验动物饲养费结算单</h1>
-        <div class="meta">生成时间：${escapeText(generatedAt)}</div>
-        <div class="section grid">
-          <div class="cell"><span class="label">结算月份</span>${escapeText(statement.month)}</div>
-          <div class="cell"><span class="label">项目负责人</span>${escapeText(statement.pi || "-")}</div>
-          <div class="cell full"><span class="label">IACUC编号</span>${escapeText(statement.iacuc || "-")}</div>
-          ${isQuantitySheet ? `<div class="cell"><span class="label">数据来源</span>数量统计表</div><div class="cell"><span class="label">房间/管理员</span>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</div>` : ""}
-          <div class="cell full"><span class="label">项目名称</span>${escapeText(project)}</div>
-          <div class="cell"><span class="label">项目负责人</span>${escapeText(pi)}</div>
-          <div class="cell"><span class="label">实验负责人</span>${escapeText(owner)}</div>
-          <div class="cell full"><span class="label">支撑经费</span>${escapeText(funding)}</div>
-        </div>
-        <div class="section total">
-          <div><span class="label">${billableTotalLabel}</span><strong>${billableTotal}</strong></div>
-          <div><span class="label">阶梯价格</span><strong>${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)} / ${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)} 元</strong></div>
-          <div><span class="label">应收金额</span><strong>${MONEY_FORMAT.format(statement.totalAmount)} 元</strong></div>
-        </div>
-        <div class="section">
-          <strong>饲养费明细</strong>
-          <table>
+        <main class="document">
+          <header class="topbar">
+            <div>
+              <h1>实验动物饲养费结算单</h1>
+              <p class="subtitle">${escapeText(systemInfo.organization || "-")} · ${escapeText(systemInfo.department || "-")}</p>
+              <div class="doc-meta">
+                <div><span>单据编号：</span><strong>${escapeText(documentNumber)}</strong></div>
+                <div><span>结算期间：</span><strong>${escapeText(periodLabel)}</strong></div>
+                <div><span>币种：</span><strong>${currency}</strong></div>
+                <div><span>生成时间：</span><strong>${escapeText(generatedAt)}</strong></div>
+              </div>
+            </div>
+            <div class="qr-box">
+              ${qrSvg}
+              <span>扫码查看</span>
+            </div>
+          </header>
+
+          <section class="basic-grid">
+            <div><span>出具单位：</span>${escapeText(systemInfo.organization || "-")}</div>
+            <div><span>部门：</span>${escapeText(systemInfo.department || "-")}</div>
+            <div><span>项目负责人：</span>${escapeText(statement.pi || pi || "-")}</div>
+            <div><span>负责人类型：</span>${escapeText(principalType)}</div>
+            <div><span>实验负责人：</span>${escapeText(owner)}</div>
+            <div><span>支撑经费：</span>${escapeText(funding)}</div>
+            <div><span>数据来源：</span>${escapeText(dataSourceLabel)}</div>
+            <div><span>计费单位：</span>笼/天</div>
+          </section>
+
+          <section class="amount-strip">
+            <div class="metric">
+              <span>累计笼日</span>
+              <strong>${formatStatementNumber(statement.totalCageDays)}</strong>
+            </div>
+            <div class="metric">
+              <span>收费笼日</span>
+              <strong>${formatStatementNumber(billableTotal)}</strong>
+            </div>
+            <div class="metric">
+              <span>免费额度</span>
+              <strong>${formatStatementNumber(statement.freeCageAllowance)} 笼/天</strong>
+            </div>
+            <div class="metric">
+              <span>超额笼日</span>
+              <strong>${formatStatementNumber(tier2Total)}</strong>
+            </div>
+            <div class="metric">
+              <span>应收金额</span>
+              <strong>¥${totalAmountText}</strong>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>项目信息</h2>
+              <span>IACUC ${escapeText(iacucList.length ? `${iacucList.length} 项` : "-")}</span>
+            </div>
+            <table class="summary-table three-line">
+              <tbody>
+                <tr><th>项目名称</th><td>${escapeText(project)}</td></tr>
+                <tr><th>IACUC 编号</th><td>${escapeText(iacucList.join("、") || "-")}</td></tr>
+                ${isQuantitySheet ? `<tr><th>房间/管理员</th><td>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</td></tr>` : ""}
+              </tbody>
+            </table>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>每日饲养费明细</h2>
+              <span>各 IACUC 列为当日笼数；首单元 ¥${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)}；超额单元 ¥${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)}${tier2Total ? `，本单超额 ${formatStatementNumber(tier2Total)} 笼日` : "，本单无超额笼日"}</span>
+            </div>
+            <table class="detail-table three-line">
             <thead>
-              ${
-                isQuantitySheet
-                  ? `<tr><th>日期</th><th>动物数</th><th>合计笼数</th><th>免费笼数</th><th>收费笼数</th><th>4.5元笼数</th><th>6.5元笼数</th><th>当日费用</th></tr>`
-                  : `<tr><th>日期</th><th>合计笼数</th><th>免费笼数</th><th>收费笼数</th><th>4.5元笼数</th><th>6.5元笼数</th><th>当日费用</th></tr>`
-              }
+              <tr><th>日期</th>${detailHeaderHtml}<th>合计笼数</th><th>减免笼数</th><th>收费笼数</th><th>当日费用</th><th>累计费用</th></tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
+            <tbody>${detailRowsHtml}</tbody>
+            <tfoot>
+              <tr>
+                <td>合计</td>
+                ${detailTotalsHtml}
+                <td class="num">${formatStatementNumber(statement.totalCageDays)}</td>
+                <td class="num">${formatStatementNumber(statement.totalFreeCageDays)}</td>
+                <td class="num">${formatStatementNumber(billableTotal)}</td>
+                <td class="money">¥${totalAmountText}</td>
+                <td class="money">¥${totalAmountText}</td>
+              </tr>
+            </tfoot>
           </table>
-        </div>
-        <div class="sign">
-          <div>项目负责人确认</div>
-          <div>动物房审核</div>
-          <div>财务审核</div>
-        </div>
+          </section>
+
+          <section class="section note-card">
+            <strong>说明：</strong>
+            本结算单为内部饲养费结算凭证，金额大写：${escapeText(rmbUppercase(statement.totalAmount))}。二维码预留系统查询入口：${escapeText(statementUrl)}；后续可在该入口接入分发状态、确认状态、报销状态和归档状态。
+          </section>
+
+          <section class="sign">
+            <div>项目负责人确认 / Date</div>
+            <div>动物房审核 / Date</div>
+            <div>财务审核 / Date</div>
+          </section>
+
+          <footer class="footer">
+            <span>${escapeText(systemInfo.name || "CageLedger")} · ${escapeText(systemInfo.license || "")}</span>
+            <span>${escapeText(documentNumber)}</span>
+          </footer>
+        </main>
       </body>
     </html>
   `;
+}
+
+function settlementDocumentNumber(statement, generatedAt) {
+  const source = statement.sourceType === "quantity_sheet" ? "QS" : "CM";
+  const month = String(statement.month || state.billingMonth || "0000-00").replace(/\D/g, "");
+  if (statement.documentNumber) return statement.documentNumber;
+  if (statement.id) return `CL-${source}-${month}-${String(statement.id).replace(/[^a-z0-9-]/gi, "").toUpperCase()}`;
+  const generated = String(generatedAt || "")
+    .replace(/\D/g, "")
+    .slice(0, 12);
+  const hash = hashCompact([statement.month, statement.iacuc, statement.pi, statement.sourceType].join("|"));
+  return `CL-${source}-${month}-${generated || "000000000000"}-${hash}`;
+}
+
+function settlementLookupUrl(documentNumber, statement) {
+  const params = new URLSearchParams({ s: documentNumber });
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}?${params.toString()}`;
+}
+
+function settlementPeriodLabel(month) {
+  const dates = datesInMonth(month);
+  if (!dates.length) return month || "-";
+  return `${dates[0]} 至 ${dates[dates.length - 1]}`;
+}
+
+function settlementDetailMatrix(rows, statementIacucs) {
+  const discovered = [];
+  const byDate = new Map();
+  const totals = new Map();
+  const ensureIacuc = (iacuc) => {
+    if (iacuc && !discovered.includes(iacuc)) discovered.push(iacuc);
+  };
+  (statementIacucs || []).forEach((iacuc) => ensureIacuc(normalizeIacucNumber(iacuc)));
+
+  for (const row of rows) {
+    const current = new Map();
+    for (const item of row.iacucBreakdown || []) {
+      const iacuc = normalizeIacucNumber(item.iacuc || "");
+      if (!iacuc) continue;
+      ensureIacuc(iacuc);
+      const cageCount = numericOrZero(item.cageCount);
+      current.set(iacuc, numericOrZero(current.get(iacuc)) + cageCount);
+      totals.set(iacuc, numericOrZero(totals.get(iacuc)) + cageCount);
+    }
+    byDate.set(row.date, current);
+  }
+  discovered.sort((a, b) => a.localeCompare(b, "zh-CN"));
+  return { iacucs: discovered, byDate, totals };
+}
+
+function formatStatementNumber(value) {
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function hashCompact(value) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(36).toUpperCase().padStart(6, "0").slice(-6);
+}
+
+function rmbUppercase(value) {
+  const amount = Math.round(Number(value || 0) * 100);
+  if (!amount) return "人民币零元整";
+
+  const digits = ["零", "壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖"];
+  const units = ["", "拾", "佰", "仟"];
+  const sections = ["", "万", "亿", "兆"];
+  const integer = Math.floor(amount / 100);
+  const fraction = amount % 100;
+
+  const sectionToUpper = (section) => {
+    let text = "";
+    let zero = false;
+    for (let index = 0; index < 4; index += 1) {
+      const digit = section % 10;
+      if (digit === 0) {
+        if (text) zero = true;
+      } else {
+        text = `${digits[digit]}${units[index]}${zero ? "零" : ""}${text}`;
+        zero = false;
+      }
+      section = Math.floor(section / 10);
+    }
+    return text;
+  };
+
+  let integerText = "";
+  let sectionIndex = 0;
+  let remaining = integer;
+  let needZero = false;
+  while (remaining > 0) {
+    const section = remaining % 10000;
+    if (section) {
+      const prefix = needZero ? "零" : "";
+      integerText = `${sectionToUpper(section)}${sections[sectionIndex]}${prefix}${integerText}`;
+      needZero = section < 1000;
+    } else if (integerText) {
+      needZero = true;
+    }
+    remaining = Math.floor(remaining / 10000);
+    sectionIndex += 1;
+  }
+
+  const jiao = Math.floor(fraction / 10);
+  const fen = fraction % 10;
+  const fractionText = fraction ? `${jiao ? `${digits[jiao]}角` : ""}${fen ? `${digits[fen]}分` : ""}` : "整";
+  return `人民币${integerText || "零"}元${fractionText}`;
+}
+
+function qrCodeSvg(text) {
+  const modules = qrCodeMatrix(text);
+  const size = modules.length;
+  const quiet = 4;
+  const viewBoxSize = size + quiet * 2;
+  const cells = [];
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
+      if (modules[row][col]) cells.push(`<rect x="${col + quiet}" y="${row + quiet}" width="1" height="1"/>`);
+    }
+  }
+  return `<svg viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="结算单二维码" xmlns="http://www.w3.org/2000/svg"><rect width="${viewBoxSize}" height="${viewBoxSize}" fill="#fff"/><g fill="#000">${cells.join("")}</g></svg>`;
+}
+
+function qrCodeMatrix(text) {
+  const version = 5;
+  const size = version * 4 + 17;
+  const dataCodewords = 108;
+  const eccCodewords = 26;
+  const matrix = Array.from({ length: size }, () => Array(size).fill(false));
+  const reserved = Array.from({ length: size }, () => Array(size).fill(false));
+  const setFunction = (row, col, dark) => {
+    if (row < 0 || row >= size || col < 0 || col >= size) return;
+    matrix[row][col] = dark;
+    reserved[row][col] = true;
+  };
+
+  const drawFinder = (row, col) => {
+    for (let y = -1; y <= 7; y += 1) {
+      for (let x = -1; x <= 7; x += 1) {
+        const r = row + y;
+        const c = col + x;
+        const inFinder = x >= 0 && x <= 6 && y >= 0 && y <= 6;
+        const dark = inFinder && (x === 0 || x === 6 || y === 0 || y === 6 || (x >= 2 && x <= 4 && y >= 2 && y <= 4));
+        setFunction(r, c, dark);
+      }
+    }
+  };
+  drawFinder(0, 0);
+  drawFinder(0, size - 7);
+  drawFinder(size - 7, 0);
+
+  for (let index = 8; index < size - 8; index += 1) {
+    setFunction(6, index, index % 2 === 0);
+    setFunction(index, 6, index % 2 === 0);
+  }
+
+  const drawAlignment = (centerRow, centerCol) => {
+    if (reserved[centerRow][centerCol]) return;
+    for (let y = -2; y <= 2; y += 1) {
+      for (let x = -2; x <= 2; x += 1) {
+        const distance = Math.max(Math.abs(x), Math.abs(y));
+        setFunction(centerRow + y, centerCol + x, distance !== 1);
+      }
+    }
+  };
+  [6, 30].forEach((row) => [6, 30].forEach((col) => drawAlignment(row, col)));
+  setFunction(size - 8, 8, true);
+
+  reserveFormatAreas(reserved, size);
+  const bytes = new TextEncoder().encode(text);
+  const data = qrEncodeData(bytes, dataCodewords);
+  const codewords = [...data, ...qrReedSolomonRemainder(data, eccCodewords)];
+  placeQrData(matrix, reserved, codewords);
+  applyQrMask(matrix, reserved, 0);
+  drawQrFormatBits(matrix, reserved, 0);
+  return matrix;
+}
+
+function reserveFormatAreas(reserved, size) {
+  for (let index = 0; index <= 8; index += 1) {
+    if (index !== 6) {
+      reserved[8][index] = true;
+      reserved[index][8] = true;
+    }
+  }
+  for (let index = 0; index < 8; index += 1) {
+    reserved[size - 1 - index][8] = true;
+    reserved[8][size - 1 - index] = true;
+  }
+}
+
+function qrEncodeData(bytes, capacity) {
+  if (bytes.length > 105) throw new Error("结算单二维码内容过长");
+  const bits = [];
+  const append = (value, length) => {
+    for (let index = length - 1; index >= 0; index -= 1) bits.push((value >>> index) & 1);
+  };
+  append(0b0100, 4);
+  append(bytes.length, 8);
+  bytes.forEach((byte) => append(byte, 8));
+  const totalBits = capacity * 8;
+  for (let index = 0; index < Math.min(4, totalBits - bits.length); index += 1) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const data = [];
+  for (let index = 0; index < bits.length; index += 8) {
+    data.push(bits.slice(index, index + 8).reduce((sum, bit) => (sum << 1) | bit, 0));
+  }
+  for (let pad = 0; data.length < capacity; pad += 1) data.push(pad % 2 === 0 ? 0xec : 0x11);
+  return data;
+}
+
+function qrReedSolomonRemainder(data, degree) {
+  const divisor = qrReedSolomonDivisor(degree);
+  const result = Array(degree).fill(0);
+  for (const byte of data) {
+    const factor = byte ^ result.shift();
+    result.push(0);
+    for (let index = 0; index < degree; index += 1) {
+      result[index] ^= qrGfMultiply(divisor[index], factor);
+    }
+  }
+  return result;
+}
+
+function qrReedSolomonDivisor(degree) {
+  const result = Array(degree).fill(0);
+  result[degree - 1] = 1;
+  let root = 1;
+  for (let index = 0; index < degree; index += 1) {
+    for (let term = 0; term < degree; term += 1) {
+      result[term] = qrGfMultiply(result[term], root);
+      if (term + 1 < degree) result[term] ^= result[term + 1];
+    }
+    root = qrGfMultiply(root, 2);
+  }
+  return result;
+}
+
+function qrGfMultiply(x, y) {
+  let product = 0;
+  for (let index = 7; index >= 0; index -= 1) {
+    product = (product << 1) ^ ((product >>> 7) * 0x11d);
+    product ^= ((y >>> index) & 1) * x;
+  }
+  return product & 0xff;
+}
+
+function placeQrData(matrix, reserved, codewords) {
+  const size = matrix.length;
+  const bits = codewords.flatMap((byte) => Array.from({ length: 8 }, (_, index) => (byte >>> (7 - index)) & 1));
+  let bitIndex = 0;
+  let upward = true;
+  for (let right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right -= 1;
+    for (let vertical = 0; vertical < size; vertical += 1) {
+      const row = upward ? size - 1 - vertical : vertical;
+      for (let offset = 0; offset < 2; offset += 1) {
+        const col = right - offset;
+        if (reserved[row][col]) continue;
+        matrix[row][col] = bitIndex < bits.length ? Boolean(bits[bitIndex]) : false;
+        bitIndex += 1;
+      }
+    }
+    upward = !upward;
+  }
+}
+
+function applyQrMask(matrix, reserved, mask) {
+  for (let row = 0; row < matrix.length; row += 1) {
+    for (let col = 0; col < matrix.length; col += 1) {
+      if (!reserved[row][col] && qrMaskApplies(mask, row, col)) matrix[row][col] = !matrix[row][col];
+    }
+  }
+}
+
+function qrMaskApplies(mask, row, col) {
+  return mask === 0 ? (row + col) % 2 === 0 : false;
+}
+
+function drawQrFormatBits(matrix, reserved, mask) {
+  const size = matrix.length;
+  const bits = qrFormatBits(mask);
+  const set = (row, col, index) => {
+    matrix[row][col] = Boolean((bits >>> index) & 1);
+    reserved[row][col] = true;
+  };
+  for (let index = 0; index <= 5; index += 1) set(index, 8, index);
+  set(7, 8, 6);
+  set(8, 8, 7);
+  set(8, 7, 8);
+  for (let index = 9; index < 15; index += 1) set(8, 14 - index, index);
+  for (let index = 0; index < 8; index += 1) set(8, size - 1 - index, index);
+  for (let index = 8; index < 15; index += 1) set(size - 15 + index, 8, index);
+  matrix[size - 8][8] = true;
+}
+
+function qrFormatBits(mask) {
+  const data = (1 << 3) | mask;
+  let value = data << 10;
+  for (let index = 14; index >= 10; index -= 1) {
+    if (((value >>> index) & 1) !== 0) value ^= 0x537 << (index - 10);
+  }
+  return ((data << 10) | value) ^ 0x5412;
 }
 
 function datesInMonth(month) {
@@ -4484,8 +5116,38 @@ async function initialize() {
   await loadCurrentUser();
   if (!remotePersistence || currentUser) {
     await Promise.all([loadIacucIndex(), loadPrincipalIdentities(), loadPersistedState(), loadUsers()]);
+    await applyStatementDeepLink();
   }
   render();
+}
+
+async function applyStatementDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const statementCode = params.get("statement") || params.get("s") || "";
+  if (!statementCode) return;
+
+  state.activeView = "billing";
+  const statementId = params.get("statementId") || statementIdFromDocumentNumber(statementCode);
+  if (!statementId || !remotePersistence || !currentUser) return;
+
+  try {
+    const response = await fetch("/api/billing-statements", { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    const statement = (payload.items || []).find((item) => item.id === statementId);
+    if (!statement) return;
+    state.billingSource = statement.sourceType === "quantity_sheet" ? "quantity_sheet" : "cage_map";
+    state.billingMonth = statement.month || state.billingMonth;
+    state.billingPi = statement.pi || state.billingPi;
+  } catch {
+    // Deep links are advisory; the normal billing page remains usable if lookup fails.
+  }
+}
+
+function statementIdFromDocumentNumber(value) {
+  const match = String(value || "").match(/-(stmt-[a-z0-9-]+)$/i);
+  if (!match) return "";
+  return match[1].toLowerCase();
 }
 
 async function loadSystemInfo() {

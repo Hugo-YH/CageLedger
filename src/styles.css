@@ -917,6 +917,12 @@ textarea:focus {
   box-shadow: inset 0 0 0 2px var(--primary);
 }
 
+.slot-dragging,
+.slot-dragging .slot {
+  cursor: crosshair;
+  user-select: none;
+}
+
 .slot-selected-label {
   position: absolute;
   right: 8px;
