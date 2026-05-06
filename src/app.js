@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.8a",
+    title: "数量统计表转移与结算修正",
+    items: [
+      "数量统计表支持转入/转出按伦理号自动双向同步，目标伦理缺表时自动创建并入账",
+      "同日转移优先合并到现有行，避免重复新增行",
+      "修复结算预览与导出的笼数滚动计算，优化数量统计表录入交互与布局",
+    ],
+  },
+  {
     version: "0.3.7",
     title: "笼位图与数量统计表界面优化",
     items: [
@@ -123,7 +132,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.7",
+  version: "0.3.8a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
