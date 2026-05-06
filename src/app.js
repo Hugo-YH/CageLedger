@@ -23,12 +23,22 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.8b",
+    title: "数量统计表录入与更新记录展示优化",
+    items: [
+      "数量统计表录入列顺序调整为新增类型、新增数量、减少类型、减少数量",
+      "转入来源伦理号与转出目标伦理号改为与类型同一行内联展示",
+      "更新记录中的 @提及按主题色高亮并修复异常换行",
+    ],
+  },
+  {
     version: "0.3.8a",
     title: "数量统计表转移与结算修正",
     items: [
       "数量统计表支持转入/转出按伦理号自动双向同步，目标伦理缺表时自动创建并入账",
       "同日转移优先合并到现有行，避免重复新增行",
       "修复结算预览与导出的笼数滚动计算，优化数量统计表录入交互与布局",
+      "转入/转出同步功能根据 @邱素娟 建议优化",
     ],
   },
   {
@@ -132,7 +142,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.8a",
+  version: "0.3.8b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -2062,10 +2072,15 @@ function renderReleaseNote(note) {
         <span>${escapeText(note.title)}</span>
       </div>
       <ul>
-        ${note.items.map((item) => `<li>${escapeText(item)}</li>`).join("")}
+        ${note.items.map((item) => `<li>${renderReleaseItem(item)}</li>`).join("")}
       </ul>
     </article>
   `;
+}
+
+function renderReleaseItem(item) {
+  const escaped = escapeText(item);
+  return escaped.replace(/(@[^\s，。；、]+)/g, '<span class="mention-theme">$1</span>');
 }
 
 function renderSystemDocsPanel() {

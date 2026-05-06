@@ -1000,6 +1000,12 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.mention-theme {
+  color: var(--primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .slot-hover-preview {
   position: absolute;
   z-index: 25;
@@ -1552,15 +1558,15 @@ tr:last-child td {
   gap: 10px;
 }
 
-.release-card strong,
-.release-card span,
+.release-card > div > strong,
+.release-card > div > span,
 .doc-link strong,
 .doc-link span,
 .api-group strong {
   display: block;
 }
 
-.release-card span,
+.release-card > div > span,
 .doc-link span {
   color: var(--muted);
   font-size: 13px;
