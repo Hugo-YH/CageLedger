@@ -108,4 +108,4 @@ docker pull ghcr.io/hugo-yh/cageledger:latest
 docker pull ghcr.io/hugo-yh/cageledger:0.4.0a
 ```
 
-仓库内的 `Publish container package` GitHub Actions 工作流会在发布 Release 时推送镜像，也可以通过 `workflow_dispatch` 手动指定 Git ref 和镜像标签重新发布。
+仓库内的 `Publish container package` GitHub Actions 工作流会在推送 `v*` 标签时发布镜像，也可以通过 `workflow_dispatch` 手动指定 Git ref 和镜像标签重新发布。

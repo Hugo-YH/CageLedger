@@ -64,6 +64,7 @@ npm run dev              # 启动 Python 后端和静态页面
 npm run static           # 仅启动静态文件服务
 npm run check            # 检查前端 JS 语法和 Python 编译
 npm run package:offline  # 生成 NAS 离线源码包
+npm run release:local -- --version 0.4.1 --push  # 本地顺序化发布
 ```
 
 ## 项目结构

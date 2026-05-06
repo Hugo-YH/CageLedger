@@ -10,6 +10,7 @@
     "dev": "python3 server.py",
     "static": "python3 -m http.server 5173",
     "check": "node --check src/app.js && python3 -m py_compile server.py scripts/generate_iacuc_index.py",
-    "package:offline": "bash scripts/package_offline.sh"
+    "package:offline": "bash scripts/package_offline.sh",
+    "release:local": "bash scripts/release_local.sh"
   }
 }

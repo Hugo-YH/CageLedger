@@ -9,7 +9,11 @@ on:
       source_ref:
         description: "Git ref to package"
         required: true
-        default: "v0.3.7"
+        default: "v0.0.0"
+
+concurrency:
+  group: release-package-${{ github.event_name }}-${{ github.ref_name || inputs.source_ref || github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write

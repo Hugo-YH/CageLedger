@@ -26,8 +26,8 @@ const explicitVersion = argValue("--version");
 const bump = argValue("--bump");
 const newVersion = explicitVersion || (bump === "patch" ? nextPatch(oldVersion) : "");
 
-if (!newVersion || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
-  throw new Error("Usage: node scripts/set_version.mjs --version 0.3.1 OR --bump patch");
+if (!newVersion || !/^\d+\.\d+\.\d+[0-9A-Za-z.-]*$/.test(newVersion)) {
+  throw new Error("Usage: node scripts/set_version.mjs --version 0.3.1 OR --version 0.4.0a OR --bump patch");
 }
 
 function writeText(file, text) {
@@ -50,20 +50,10 @@ appJs = appJs.replace(
   /(let systemInfo = \{[\s\S]*?\n\s*version: )"[^"]+"/,
   `$1"${newVersion}"`,
 );
-if (!appJs.includes(`version: "${newVersion}",\n    title: "自动发布"`)) {
-  appJs = appJs.replace(
-    "const SYSTEM_RELEASE_NOTES = [\n",
-    `const SYSTEM_RELEASE_NOTES = [\n  {\n    version: "${newVersion}",\n    title: "自动发布",\n    items: ["同步版本号、GitHub Release、离线源码包和容器镜像"],\n  },\n`,
-  );
-}
 writeText("src/app.js", appJs);
 
 let deployment = readText("docs/DEPLOYMENT.md");
 deployment = deployment.replaceAll(oldVersion, newVersion);
 writeText("docs/DEPLOYMENT.md", deployment);
-
-let workflow = readText(".github/workflows/publish-container.yml");
-workflow = workflow.replaceAll(`v${oldVersion}`, `v${newVersion}`).replaceAll(`"${oldVersion}"`, `"${newVersion}"`);
-writeText(".github/workflows/publish-container.yml", workflow);
 
 console.log(newVersion);

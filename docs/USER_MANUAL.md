@@ -976,13 +976,7 @@ docker compose -f docker-compose.offline.yml up -d --build
 标准发布流程：
 
 ```bash
-npm run check
-node scripts/set_version.mjs --version 0.3.4
-git add .
-git commit -m "Release 0.3.4"
-git tag -a v0.3.4 -m "Release v0.3.4"
-git push origin main
-git push origin v0.3.4
+npm run release:local -- --version 0.3.4 --push
 ```
 
 标签推送后 GitHub Actions 会自动生成：
@@ -990,6 +984,12 @@ git push origin v0.3.4
 - GitHub Release。
 - 离线源码包。
 - GHCR 容器镜像。
+
+补充说明：
+
+- `SYSTEM_RELEASE_NOTES` 需要在发布前手动写入本次真实更新内容。
+- `release:local` 会按“改版本 -> 校验 -> 打包 -> commit -> tag -> push”的固定顺序执行，避免标签打到错误提交。
+- GHCR 镜像默认由 `v*` 标签触发，不再额外依赖 Release 事件二次触发。
 
 ---
 
@@ -1111,4 +1111,3 @@ git push origin v0.3.4
 | `docs/API.md` | API 和数据模型 |
 | `docs/DEPLOYMENT.md` | Docker、NAS、离线部署 |
 | `.env.example` | 环境变量模板 |
-
