@@ -58,7 +58,8 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 | `GET` | `/api/experiment-applications` | 实验申请汇总表 |
 | `GET` | `/api/billing-statements` | 结算单列表 |
 | `GET` | `/api/billing-statement-lines` | 结算单明细 |
-| `POST` | `/api/billing-statements/generate` | 生成结算单 |
+| `POST` | `/api/billing-statements/generate` | 按伦理号生成结算单（分表） |
+| `POST` | `/api/billing-statements/generate-by-pi` | 按项目负责人生成结算单（合表，用于导出） |
 | `GET` | `/api/audit-events` | 审计事件 |
 
 ## 数量统计表结算
@@ -77,6 +78,7 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 
 - 表头：`month`、`roomId`、`roomName`、`manager`、`iacuc`、`project`、`pi`、`owner`、`funding`、`billingUnit`、`initialAnimalCount`、`initialCageCount`
 - 明细行：`date`、`addedCount`、`addedType`、`removedCount`、`removedType`、`animalCount`、`cageCount`、`notes`
+  - 可选转移字段：`transferInFromIacuc`、`transferOutToIacuc`（用于 A/B 伦理号间转移自动增减）
 
 当前核算单位固定为：
 
@@ -84,7 +86,9 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 
 结算规则：
 
-- 结算维度：按项目负责人和月份汇总，同一项目负责人名下多个 IACUC 合并出具饲养费明细和结算单。
+- 结算维度：
+  - 分表：按伦理号（IACUC）和月份生成单独结算单（`/api/billing-statements/generate`）。
+  - 合表：按项目负责人和月份汇总多个 IACUC 生成导出结算单（`/api/billing-statements/generate-by-pi`）。
 - 免费额度：按项目负责人每日合计笼数抵扣。负责人类型为 PI 时免费 20 笼/天，独立科研人员免费 10 笼/天；负责人身份保存在 `principal_identities` 表中，未编辑的负责人默认按独立科研人员计算。
 - 阶梯计价：每日合计笼数先切分价格区间，前 160 笼为 4.5 元/笼/天，超过 160 笼部分为 6.5 元/笼/天；免费额度优先抵扣首单元。
 
