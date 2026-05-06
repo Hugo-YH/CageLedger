@@ -10,6 +10,8 @@ const API_PRINCIPAL_IDENTITIES_URL = "/api/principal-identities";
 const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
 const API_BILLING_STATEMENT_GENERATE_BY_PI_URL = "/api/billing-statements/generate-by-pi";
+const API_BILLING_WORKFLOWS_URL = "/api/billing-workflows";
+const API_BILLING_WORKFLOW_ADVANCE_URL = "/api/billing-workflows/advance";
 const API_QUANTITY_SHEETS_URL = "/api/quantity-sheets";
 const API_INFRASTRUCTURE_URL = "/api/infrastructure";
 const ENTITY_API_URLS = {
@@ -22,6 +24,11 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.4.0",
+    title: "自动发布",
+    items: ["同步版本号、GitHub Release、离线源码包和容器镜像"],
+  },
   {
     version: "0.3.9a",
     title: "笼位图多选录入滚动体验修复",
@@ -170,7 +177,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.9a",
+  version: "0.4.0",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -221,9 +228,14 @@ const seedData = {
   billingPi: "张教授",
   billingPrincipalType: BILLING_PRINCIPAL_PI,
   freeCageAllowance: FREE_CAGES_DEFAULT,
+  billingWorkflowFilter: "todo",
+  selectedBillingWorkflowId: "",
+  selectedBillingWorkflowDetail: null,
+  settingsNavExpanded: false,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
+  billingWorkflows: [],
   principalIdentityFilter: "",
   slotFilter: "all",
   baseRate: 4.5,
@@ -363,7 +375,11 @@ async function loadEntityState() {
   const quantityResponse = await fetch(API_QUANTITY_SHEETS_URL, { cache: "no-store" });
   if (!quantityResponse.ok) throw new Error(`Failed to load ${API_QUANTITY_SHEETS_URL}`);
   const quantityPayload = await quantityResponse.json();
+  const workflowResponse = await fetch(API_BILLING_WORKFLOWS_URL, { cache: "no-store" });
+  if (!workflowResponse.ok) throw new Error(`Failed to load ${API_BILLING_WORKFLOWS_URL}`);
+  const workflowPayload = await workflowResponse.json();
   const quantitySheets = quantityPayload.items || [];
+  const billingWorkflows = workflowPayload.items || [];
   const entityData = Object.fromEntries(entries);
 
   const billingRules = entityData.billingRules || [];
@@ -387,9 +403,13 @@ async function loadEntityState() {
     billingPi: localBillingPi || selectedQuantitySheet?.pi || firstPi,
     billingPrincipalType: principalTypeForPi(localBillingPi || selectedQuantitySheet?.pi || firstPi),
     freeCageAllowance: Number(localState.freeCageAllowance ?? seedData.freeCageAllowance),
+    billingWorkflowFilter: localState.billingWorkflowFilter || "todo",
+    selectedBillingWorkflowId: "",
+    selectedBillingWorkflowDetail: null,
     selectedQuantitySheetId: selectedQuantitySheet?.id || "",
     quantitySheetDraft: selectedQuantitySheet || makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
     quantitySheets,
+    billingWorkflows,
     principalIdentityFilter: localState.principalIdentityFilter || "",
     slotFilter: localState.slotFilter || "all",
     baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
@@ -450,6 +470,63 @@ async function createInfrastructure(payload) {
   return result;
 }
 
+async function loadBillingWorkflows() {
+  if (!remotePersistence) {
+    state.billingWorkflows = [];
+    return [];
+  }
+  const response = await fetch(API_BILLING_WORKFLOWS_URL, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "加载结算流程失败");
+  }
+  state.billingWorkflows = payload.items || [];
+  return state.billingWorkflows;
+}
+
+async function advanceBillingWorkflow(workflowId, toStatus) {
+  const response = await fetch(API_BILLING_WORKFLOW_ADVANCE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workflowId, toStatus }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "更新结算流程失败");
+  }
+  mergeServerAuditLogs(payload);
+  if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
+  return payload.workflow;
+}
+
+async function loadBillingWorkflowDetail(workflowId) {
+  if (!remotePersistence) return null;
+  const response = await fetch(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "加载流程详情失败");
+  }
+  state.selectedBillingWorkflowId = workflowId;
+  state.selectedBillingWorkflowDetail = payload;
+  if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
+  return payload;
+}
+
 async function updateEntity(collection, itemId, item) {
   return entityRequest(collection, "PUT", item, itemId);
 }
@@ -499,11 +576,16 @@ function normalize(data) {
   if (next.activeView === "settings") next.activeView = "rooms";
   next.selectedSlotIds = Array.isArray(next.selectedSlotIds) ? next.selectedSlotIds : [];
   next.quantitySheets = Array.isArray(next.quantitySheets) ? next.quantitySheets : [];
+  next.billingWorkflows = Array.isArray(next.billingWorkflows) ? next.billingWorkflows : [];
+  next.settingsNavExpanded = Boolean(next.settingsNavExpanded);
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
   next.billingSource = next.billingSource === "quantity_sheet" ? "quantity_sheet" : "cage_map";
   next.billingPi = next.billingPi || piForIacuc(next.billingIacuc) || next.quantitySheetDraft.pi || "";
   next.billingPrincipalType = principalTypeForPi(next.billingPi);
   next.freeCageAllowance = Number(next.freeCageAllowance ?? FREE_CAGES_DEFAULT);
+  next.billingWorkflowFilter = ["todo", "all", "done"].includes(next.billingWorkflowFilter) ? next.billingWorkflowFilter : "todo";
+  next.selectedBillingWorkflowId = String(next.selectedBillingWorkflowId || "");
+  next.selectedBillingWorkflowDetail = next.selectedBillingWorkflowDetail && typeof next.selectedBillingWorkflowDetail === "object" ? next.selectedBillingWorkflowDetail : null;
   next.principalIdentityFilter = String(next.principalIdentityFilter || "");
   next.batchMode = Boolean(next.batchMode);
   next.showCageEditor = Boolean(next.showCageEditor);
@@ -606,7 +688,7 @@ function render() {
     lastRenderedView = "login";
     return;
   }
-  const adminViews = new Set(["data", "system", "users"]);
+  const adminViews = new Set(["data", "system", "users", "rooms"]);
   if (currentUser?.role !== "admin" && adminViews.has(state.activeView)) {
     state.activeView = "cages";
   }
@@ -619,6 +701,7 @@ function render() {
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
+        ${state.activeView === "workflow-center" ? renderWorkflowCenterView() : ""}
         ${state.activeView === "rooms" ? renderRoomManagementView() : ""}
         ${state.activeView === "data" ? renderDataManagementView() : ""}
         ${state.activeView === "system" ? renderSystemManagementView() : ""}
@@ -645,20 +728,25 @@ function render() {
 }
 
 function renderSidebar() {
-  const navItems = [
-    ["dashboard", "首页", "home"],
+  const businessNavItems = [
+    ["dashboard", "主页", "home"],
     ["cages", "笼位图", "grid"],
-    ...(currentUser ? [["rooms", "房间管理", "building"]] : []),
     ["billing", "饲养费核算", "receipt"],
+    ["workflow-center", "流程中心", "refresh"],
+  ];
+  const settingsNavItems = [
     ...(currentUser?.role === "admin"
       ? [
+          ["rooms", "房间管理", "building"],
           ["data", "数据管理", "database"],
           ["users", "账号管理", "users"],
-          ["system", "系统管理", "settings"],
+          ["system", "关于系统", "settings"],
         ]
       : []),
-    ["logs", "操作日志", "receipt"],
+    ...(currentUser ? [["logs", "操作日志", "receipt"]] : []),
   ];
+  const settingsViews = settingsNavItems.map(([view]) => view);
+  const settingsNavExpanded = settingsViews.includes(state.activeView) || state.settingsNavExpanded;
 
   return `
     <aside class="sidebar">
@@ -680,16 +768,45 @@ function renderSidebar() {
         <span>${state.sidebarCollapsed ? "展开" : "隐藏导航栏"}</span>
       </button>
       <nav class="nav">
-        ${navItems
-          .map(
-            ([view, label, icon]) => `
-              <button class="nav-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
-                ${iconSvg(icon)}
-                <span>${label}</span>
-              </button>
-            `,
-          )
-          .join("")}
+        <div class="nav-group">
+          <span class="nav-group-title">业务</span>
+          ${businessNavItems
+            .map(
+              ([view, label, icon]) => `
+                <button class="nav-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
+                  ${iconSvg(icon)}
+                  <span>${label}</span>
+                </button>
+              `,
+            )
+            .join("")}
+        </div>
+        ${
+          settingsNavItems.length
+            ? `
+              <div class="nav-group">
+                <button class="nav-group-toggle ${settingsNavExpanded ? "expanded" : ""}" id="settingsNavToggle" type="button" aria-expanded="${settingsNavExpanded ? "true" : "false"}" aria-label="切换系统设置分组">
+                  <span class="nav-group-title">系统设置</span>
+                  ${iconSvg(settingsNavExpanded ? "chevronDown" : "chevronRight")}
+                </button>
+                ${
+                  settingsNavExpanded
+                    ? settingsNavItems
+                        .map(
+                          ([view, label, icon]) => `
+                            <button class="nav-item nav-sub-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
+                              ${iconSvg(icon)}
+                              <span>${label}</span>
+                            </button>
+                          `,
+                        )
+                        .join("")
+                    : ""
+                }
+              </div>
+            `
+            : ""
+        }
       </nav>
       ${renderSidebarAccount()}
     </aside>
@@ -735,6 +852,10 @@ function pageMeta(view) {
       title: "饲养费核算",
       description: "按项目负责人和月份汇总多个 IACUC 的饲养费用。",
     },
+    "workflow-center": {
+      title: "流程中心",
+      description: "跟踪结算单发送、签回、交财务和修订版本。",
+    },
     rooms: {
       title: "房间管理",
       description: "维护饲养间、笼架和笼位基础结构。",
@@ -744,7 +865,7 @@ function pageMeta(view) {
       description: "维护 IACUC 索引和外部数据源。",
     },
     system: {
-      title: "系统管理",
+      title: "关于系统",
       description: "查看系统版本、更新状态、更新记录和接口文档。",
     },
     users: {
@@ -1452,25 +1573,54 @@ function renderBillingView() {
   `;
 }
 
+function renderWorkflowCenterView() {
+  if (!remotePersistence) {
+    return `
+      <section class="content-grid">
+        <div class="panel large">
+          <div class="empty-state">
+            ${iconSvg("refresh")}
+            <h2>流程中心仅在共享模式下可用</h2>
+            <p>当前离线演示模式不会持久化结算流程、版本和事件记录。</p>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+  return `
+    <section class="workflow-center-view">
+      ${renderBillingWorkflowPanel()}
+      ${state.selectedBillingWorkflowDetail ? renderBillingWorkflowDetailModal() : ""}
+    </section>
+  `;
+}
+
 function renderCageMapBillingView() {
   const statement = buildStatement(state.billingPi, state.billingMonth);
-  const billingInfo = statementInfoForExport(statement);
   const canGenerateStatement = !remotePersistence || currentUser?.role === "admin";
-  const principalType = principalTypeForPi(state.billingPi);
 
   return `
-    <section class="billing-layout">
+    <section class="billing-layout quantity-billing-layout">
       <div class="panel large">
         <div class="panel-head">
           <div>
-            <h2>月度结算单</h2>
+            <h2>动态笼位图结算</h2>
             <p>按每天实际在养笼数计算，已预约默认不计费。</p>
           </div>
-          <div class="toolbar">
-            <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
-            <input id="billingPi" type="text" value="${escapeAttr(state.billingPi)}" list="billingPiOptions" placeholder="请输入或选择项目负责人" />
-            <button id="exportBilling" class="secondary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
-            <button id="exportSettlementPdf" class="primary" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+          <div class="billing-sheet-actions">
+            <div class="billing-filter-grid">
+              <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
+              <input id="billingPi" type="text" value="${escapeAttr(state.billingPi)}" list="billingPiOptions" placeholder="请输入或选择项目负责人" />
+            </div>
+            <div class="billing-action-stack">
+              <div class="billing-action-grid">
+                <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+                <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+              </div>
+              <div class="billing-action-grid single">
+                <button id="generateBillingWorkflow" class="primary billing-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1495,11 +1645,8 @@ function renderCageMapBillingView() {
             <thead>
               <tr>
                 <th>日期</th>
-                <th>合计笼数</th>
-                <th>免费笼数</th>
+                <th>笼数</th>
                 <th>收费笼数</th>
-                <th>4.5元笼数</th>
-                <th>6.5元笼数</th>
                 <th>当日费用</th>
                 <th>累计费用</th>
               </tr>
@@ -1514,42 +1661,6 @@ function renderCageMapBillingView() {
             ? ""
             : `<p class="muted">共享模式下只有系统管理员可以生成和导出正式结算单。</p>`
         }
-      </div>
-
-      <div class="panel">
-        <div class="panel-head compact">
-          <div>
-            <h2>计费规则</h2>
-            <p>按项目负责人每日合计笼数计费，免费额度优先抵扣首单元。</p>
-          </div>
-        </div>
-        ${
-          currentUser?.role === "admin"
-            ? `
-              <form id="rateForm" class="form">
-                <label>
-                  负责人类型
-                  <select name="principalType">
-                    <option value="${BILLING_PRINCIPAL_PI}" ${principalType === BILLING_PRINCIPAL_PI ? "selected" : ""}>PI（20 笼/天免费）</option>
-                    <option value="${BILLING_PRINCIPAL_INDEPENDENT}" ${principalType === BILLING_PRINCIPAL_INDEPENDENT ? "selected" : ""}>独立科研人员（10 笼/天免费）</option>
-                  </select>
-                </label>
-                <label>
-                  当前免费笼数/天
-                  <input type="number" value="${statement.freeCageAllowance}" readonly />
-                </label>
-                <button class="primary" type="submit">${iconSvg("save")}保存项目负责人减免</button>
-              </form>
-            `
-            : `<p class="muted">当前账号只能查看计费规则，不能修改免费笼数。</p>`
-        }
-        <div class="rule-list">
-          <div class="rule-item"><strong>首单元</strong><span>前 ${BILLING_TIER_LIMIT} 笼按 ¥${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)} /笼/天</span></div>
-          <div class="rule-item"><strong>超额单元</strong><span>超过 ${BILLING_TIER_LIMIT} 笼按 ¥${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)} /笼/天</span></div>
-        </div>
-        <div class="rule-list">
-          ${state.adjustments.map(renderAdjustment).join("")}
-        </div>
       </div>
     </section>
   `;
@@ -1577,11 +1688,18 @@ function renderQuantitySheetBillingView() {
                   .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
                   .join("")}
               </select>
-              <div class="quantity-action-grid">
-                <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
-                <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
-                <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
-                <button id="exportSettlementPdf" class="primary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+              <div class="quantity-action-stack">
+                <div class="quantity-action-grid">
+                  <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
+                  <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
+                </div>
+                <div class="quantity-action-grid">
+                  <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+                  <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+                </div>
+                <div class="quantity-action-grid single">
+                  <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1695,6 +1813,246 @@ function renderQuantitySheetBillingView() {
   `;
 }
 
+function renderBillingWorkflowPanel() {
+  const items = filteredBillingWorkflows();
+  const counts = {
+    todo: state.billingWorkflows.filter((item) => workflowIsTodo(item)).length,
+    done: state.billingWorkflows.filter((item) => item.workflowStatus === "submitted_to_finance").length,
+    all: state.billingWorkflows.length,
+  };
+  return `
+    <section class="workflow-center-panel">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>结算流程跟踪</h2>
+            <p>按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号，发送后重生成为修订版并自动保留旧版本留痕。</p>
+          </div>
+          <div class="toolbar">
+            <button class="segmented ${state.billingWorkflowFilter === "todo" ? "active" : ""}" type="button" data-workflow-filter="todo">待办 ${counts.todo}</button>
+            <button class="segmented ${state.billingWorkflowFilter === "all" ? "active" : ""}" type="button" data-workflow-filter="all">全部 ${counts.all}</button>
+            <button class="segmented ${state.billingWorkflowFilter === "done" ? "active" : ""}" type="button" data-workflow-filter="done">已完成 ${counts.done}</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="workflow-table">
+            <thead>
+              <tr>
+                <th>结算月份</th>
+                <th>项目负责人</th>
+                <th>来源</th>
+                <th>当前状态</th>
+                <th>版本</th>
+                <th>应收金额</th>
+                <th>最近更新</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                items.length
+                  ? items.map(renderBillingWorkflowRow).join("")
+                  : `<tr><td colspan="8">当前筛选下没有结算流程。</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderBillingWorkflowRow(item) {
+  const currentVersion = item.currentVersion || {};
+  const summary = currentVersion.summary || {};
+  const nextStatus = nextWorkflowStatus(item.workflowStatus);
+  const scopeLabel = item.scopeType === "pi" ? item.pi || item.scopeKey?.replace(/^pi::/, "") || "-" : item.iacuc || "-";
+  const iacucCount = Array.isArray(item.iacucs) ? item.iacucs.filter(Boolean).length : 0;
+  return `
+    <tr class="workflow-row" data-open-workflow="${escapeAttr(item.id)}">
+      <td>${escapeText(item.month || "-")}</td>
+      <td>${escapeText(scopeLabel)}<br /><span class="muted">${iacucCount ? `${iacucCount} 个伦理号` : "未拆分伦理号"}</span></td>
+      <td>${escapeText(workflowSourceLabel(item.sourceType))}</td>
+      <td><span class="pill active">${escapeText(workflowStatusLabel(item.workflowStatus))}</span></td>
+      <td>${escapeText(currentVersion.documentNumber || `v${item.currentVersionNo || 0}`)}<br /><span class="muted">v${item.currentVersionNo || 0}</span></td>
+      <td>¥${MONEY_FORMAT.format(Number(item.totalAmount || summary.totalAmount || 0))}</td>
+      <td>${escapeText(formatLogTime(item.latestEventAt || item.generatedAt || "")) || "-"}</td>
+      <td>
+        <button class="ghost" type="button" data-open-workflow-button="${escapeAttr(item.id)}">查看</button>
+        ${
+          nextStatus
+            ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(item.id)}" data-next-status="${escapeAttr(nextStatus)}">${escapeText(workflowActionLabel(nextStatus))}</button>`
+            : `<span class="muted">已完成</span>`
+        }
+      </td>
+    </tr>
+  `;
+}
+
+function renderBillingWorkflowDetailModal() {
+  const detail = state.selectedBillingWorkflowDetail || {};
+  const workflow = detail.workflow || {};
+  const versions = detail.versions || [];
+  const events = detail.events || [];
+  const lines = detail.lines || [];
+  const currentVersion = workflow.currentVersion || {};
+  const statement = currentVersion.statement || {};
+  const timeline = workflowTimelineItems(workflow);
+  return `
+    <div class="editor-modal-backdrop" id="closeWorkflowDetail"></div>
+    <div class="panel detail-panel editor-modal workflow-detail-modal">
+      <div class="editor-modal-actions">
+        <button class="secondary" type="button" id="closeWorkflowDetailButton">${iconSvg("chevronRight")}关闭</button>
+      </div>
+      <div class="panel-head compact">
+        <div>
+          <h2>${escapeText(workflow.pi || workflow.scopeKey?.replace(/^pi::/, "") || "结算流程")}</h2>
+          <p>${escapeText(workflow.month || "-")} · ${escapeText(workflowSourceLabel(workflow.sourceType))} · 当前版本 ${escapeText(currentVersion.documentNumber || `v${workflow.currentVersionNo || 0}`)}</p>
+        </div>
+        <span class="pill active">${escapeText(workflowStatusLabel(workflow.workflowStatus))}</span>
+      </div>
+
+      <div class="workflow-timeline">
+        ${timeline
+          .map(
+            (item) => `
+              <div class="workflow-node ${item.state}">
+                <span class="workflow-node-dot"></span>
+                <div>
+                  <strong>${escapeText(item.label)}</strong>
+                  <small>${escapeText(item.time || (item.state === "upcoming" ? "待推进" : item.state === "current" ? "当前节点" : "已完成"))}</small>
+                </div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+
+      <div class="workflow-detail-grid">
+        <section class="panel workflow-detail-card">
+          <div class="panel-head compact">
+            <div>
+              <h2>结算单摘要</h2>
+              <p>当前有效版本对应的汇总信息。</p>
+            </div>
+          </div>
+          <div class="statement-summary">
+            ${summaryTile("项目负责人", workflow.pi || "-")}
+            ${summaryTile("结算月份", workflow.month || "-")}
+            ${summaryTile("伦理号数", Array.isArray(workflow.iacucs) ? workflow.iacucs.filter(Boolean).length : 0)}
+            ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(Number(workflow.totalAmount || 0))}`)}
+          </div>
+          <div class="workflow-meta-list">
+            <div><span>项目名称</span><strong>${escapeText(workflow.project || "-")}</strong></div>
+            <div><span>实验负责人</span><strong>${escapeText(workflow.owner || "-")}</strong></div>
+            <div><span>支撑经费</span><strong>${escapeText(workflow.funding || "-")}</strong></div>
+            <div><span>伦理编号</span><strong>${escapeText((workflow.iacucs || []).join("、") || statement.iacuc || "-")}</strong></div>
+          </div>
+        </section>
+
+        <section class="panel workflow-detail-card">
+          <div class="panel-head compact">
+            <div>
+              <h2>版本记录</h2>
+              <p>发送后修订会生成新版本并保留旧版本作废留痕。</p>
+            </div>
+          </div>
+          <div class="workflow-version-list">
+            ${
+              versions.length
+                ? versions
+                    .map(
+                      (version) => `
+                        <div class="rule-card">
+                          <strong>${escapeText(version.documentNumber || `v${version.versionNo}`)}</strong>
+                          <span>${escapeText(version.versionStatus === "active" ? "当前有效版本" : "历史作废版本")}</span>
+                          <p>${escapeText(workflowStatusLabel(version.workflowStatus))} · ${escapeText(formatLogTime(version.generatedAt)) || "-"}</p>
+                          ${version.voidReason ? `<p class="muted">作废原因：${escapeText(version.voidReason)}</p>` : ""}
+                        </div>
+                      `,
+                    )
+                    .join("")
+                : `<p class="muted">暂无版本记录。</p>`
+            }
+          </div>
+        </section>
+      </div>
+
+      <section class="panel workflow-detail-card">
+        <div class="panel-head compact">
+          <div>
+            <h2>流程事件</h2>
+            <p>记录生成、发送、签回、交财务和修订等关键动作。</p>
+          </div>
+        </div>
+        <div class="workflow-event-list">
+          ${
+            events.length
+              ? events
+                  .map(
+                    (event) => `
+                      <div class="audit-row">
+                        <div>
+                          <strong>${escapeText(workflowEventLabel(event.eventType))}</strong>
+                          <p class="muted">${escapeText(event.actor?.displayName || "-")} · ${escapeText(formatLogTime(event.at)) || "-"}</p>
+                        </div>
+                        <span class="muted">${escapeText(event.note || "")}</span>
+                      </div>
+                    `,
+                  )
+                  .join("")
+              : `<p class="muted">暂无流程事件。</p>`
+          }
+        </div>
+      </section>
+
+      <section class="panel workflow-detail-card">
+        <div class="panel-head compact">
+          <div>
+            <h2>当前结算单明细</h2>
+            <p>当前有效版本对应的每日结算内容。</p>
+          </div>
+        </div>
+        <div class="table-wrap workflow-lines-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>笼数</th>
+                <th>免费笼数</th>
+                <th>收费笼数</th>
+                <th>当日费用</th>
+                <th>累计费用</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                lines.length
+                  ? lines
+                      .filter((line) => Number(line.cageCount || line.animalCount || 0) > 0)
+                      .map(
+                        (line) => `
+                          <tr>
+                            <td>${escapeText(line.date || "-")}</td>
+                            <td>${Number(line.cageCount || 0)}</td>
+                            <td>${Number(line.freeCages || 0)}</td>
+                            <td>${Number(line.billableCages || 0)}</td>
+                            <td>¥${MONEY_FORMAT.format(Number(line.amount || 0))}</td>
+                            <td>¥${MONEY_FORMAT.format(Number(line.cumulative || 0))}</td>
+                          </tr>
+                        `,
+                      )
+                      .join("") || `<tr><td colspan="6">当前结算单没有非零明细。</td></tr>`
+                  : `<tr><td colspan="6">当前结算单暂无明细。</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function summaryTile(label, value) {
   return `
     <div class="summary-tile">
@@ -1709,10 +2067,7 @@ function renderBillingRow(row) {
     <tr>
       <td>${row.date}</td>
       <td>${row.cageCount}</td>
-      <td>${row.freeCages}</td>
       <td>${row.billableCages}</td>
-      <td>${row.tier1BillableCages}</td>
-      <td>${row.tier2BillableCages}</td>
       <td>¥${MONEY_FORMAT.format(row.amount)}</td>
       <td>¥${MONEY_FORMAT.format(row.cumulative)}</td>
     </tr>
@@ -1984,8 +2339,8 @@ function renderSystemManagementView() {
       <div class="panel large">
         <div class="panel-head">
           <div>
-            <h2>系统管理</h2>
-            <p>查看系统状态、版本更新和项目说明文档。</p>
+            <h2>关于系统</h2>
+            <p>查看系统状态、版本更新、说明文档和接口参考。</p>
           </div>
         </div>
         ${renderSystemUpdateCard()}
@@ -2383,6 +2738,10 @@ function bindEvents() {
     state.sidebarCollapsed = !state.sidebarCollapsed;
     render();
   });
+  document.querySelector("#settingsNavToggle")?.addEventListener("click", () => {
+    state.settingsNavExpanded = !state.settingsNavExpanded;
+    render();
+  });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeView = button.dataset.view;
@@ -2504,6 +2863,13 @@ function bindEvents() {
   });
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
   document.querySelector("#exportSettlementPdf")?.addEventListener("click", exportSettlementPdf);
+  document.querySelector("#generateBillingWorkflow")?.addEventListener("click", async () => {
+    try {
+      await persistBillingWorkflowFromCurrent();
+    } catch (error) {
+      reportSaveError(error);
+    }
+  });
   document.querySelector("#quantitySheetForm")?.addEventListener("submit", handleQuantitySheetSubmit);
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
@@ -2511,6 +2877,50 @@ function bindEvents() {
   document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
     button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
   });
+  document.querySelectorAll("[data-workflow-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.billingWorkflowFilter = button.dataset.workflowFilter;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-open-workflow]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      try {
+        await loadBillingWorkflowDetail(row.dataset.openWorkflow);
+        render();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-open-workflow-button]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await loadBillingWorkflowDetail(button.dataset.openWorkflowButton);
+        render();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-advance-workflow]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await advanceBillingWorkflow(button.dataset.advanceWorkflow, button.dataset.nextStatus);
+        if (state.selectedBillingWorkflowId === button.dataset.advanceWorkflow) {
+          await loadBillingWorkflowDetail(button.dataset.advanceWorkflow);
+        }
+        pushLog(`更新结算流程：${workflowActionLabel(button.dataset.nextStatus)}`);
+        render();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelector("#closeWorkflowDetail")?.addEventListener("click", closeBillingWorkflowDetail);
+  document.querySelector("#closeWorkflowDetailButton")?.addEventListener("click", closeBillingWorkflowDetail);
   document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
   document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("change", autofillQuantitySheetIacucFields);
   document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("blur", autofillQuantitySheetIacucFields);
@@ -3976,6 +4386,87 @@ function quantitySheetsForStatement(currentSheet, month, pi) {
   return [...byId.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
 }
 
+function filteredBillingWorkflows() {
+  const items = [...state.billingWorkflows].sort((a, b) => {
+    const byMonth = String(b.month || "").localeCompare(String(a.month || ""), "zh-CN");
+    if (byMonth !== 0) return byMonth;
+    return String(a.iacuc || "").localeCompare(String(b.iacuc || ""), "zh-CN");
+  });
+  if (state.billingWorkflowFilter === "done") {
+    return items.filter((item) => item.workflowStatus === "submitted_to_finance");
+  }
+  if (state.billingWorkflowFilter === "todo") {
+    return items.filter((item) => workflowIsTodo(item));
+  }
+  return items;
+}
+
+function workflowIsTodo(item) {
+  return item.workflowStatus && item.workflowStatus !== "submitted_to_finance";
+}
+
+function workflowSourceLabel(value) {
+  return {
+    cage_map: "动态笼位图",
+    quantity_sheet: "数量统计表",
+    pi_merged_cage_map: "动态笼位图（按 PI 合表）",
+    pi_merged_quantity_sheet: "数量统计表（按 PI 合表）",
+  }[value] || value || "-";
+}
+
+function workflowStatusLabel(value) {
+  return {
+    in_feeding: "饲养中",
+    statement_generated: "已生成结算单",
+    statement_sent: "已发送",
+    statement_signed_returned: "已签字交回",
+    submitted_to_finance: "已交财务",
+  }[value] || value || "-";
+}
+
+function nextWorkflowStatus(value) {
+  return {
+    statement_generated: "statement_sent",
+    statement_sent: "statement_signed_returned",
+    statement_signed_returned: "submitted_to_finance",
+  }[value] || "";
+}
+
+function workflowActionLabel(nextStatus) {
+  return {
+    statement_sent: "标记已发送",
+    statement_signed_returned: "标记已签回",
+    submitted_to_finance: "标记已交财务",
+  }[nextStatus] || "推进流程";
+}
+
+function workflowEventLabel(value) {
+  return {
+    statement_generated: "生成结算单",
+    statement_revised: "生成修订版",
+    statement_voided: "旧版本作废",
+    statement_sent: "标记已发送",
+    statement_signed_returned: "标记已签字交回",
+    submitted_to_finance: "标记已交财务",
+  }[value] || value || "-";
+}
+
+function workflowTimelineItems(workflow) {
+  const order = [
+    ["statement_generated", "已生成结算单", workflow.generatedAt],
+    ["statement_sent", "已发送", workflow.sentAt],
+    ["statement_signed_returned", "已签字交回", workflow.signedReturnedAt],
+    ["submitted_to_finance", "已交财务", workflow.submittedToFinanceAt],
+  ];
+  const currentIndex = order.findIndex(([status]) => status === workflow.workflowStatus);
+  return order.map(([status, label, time], index) => ({
+    status,
+    label,
+    time: time ? formatLogTime(time) : "",
+    state: index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming",
+  }));
+}
+
 function occupancyBreakdown(items) {
   const byIacuc = new Map();
   items.forEach((item) => {
@@ -4142,6 +4633,71 @@ async function exportSettlementPdf() {
   opened.print();
 }
 
+async function persistBillingWorkflowFromCurrent() {
+  if (!remotePersistence) {
+    throw new Error("本地离线模式不支持结算流程跟踪");
+  }
+  if (state.billingSource === "quantity_sheet") {
+    const sheet = await saveQuantitySheetDraft();
+    if (!sheet.pi || !sheet.month) throw new Error("请先完善数量统计表中的结算月份和项目负责人");
+    const response = await fetch(API_BILLING_STATEMENT_GENERATE_BY_PI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pi: sheet.pi,
+        month: sheet.month,
+        sourceType: "quantity_sheet",
+        status: "draft",
+        persist: true,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      currentUser = null;
+      render();
+      throw new Error("请先登录");
+    }
+    if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
+    mergeServerAuditLogs(payload);
+    await loadBillingWorkflows();
+    pushLog(`发起结算流程：${sheet.pi} ${sheet.month}`);
+    render();
+    return payload.statement;
+  }
+  if (!state.billingPi || !state.billingMonth) {
+    throw new Error("请先选择项目负责人和结算月份");
+  }
+  const response = await fetch(API_BILLING_STATEMENT_GENERATE_BY_PI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pi: state.billingPi,
+      month: state.billingMonth,
+      sourceType: "cage_map",
+      status: "draft",
+      persist: true,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
+  mergeServerAuditLogs(payload);
+  await loadBillingWorkflows();
+  pushLog(`发起结算流程：${state.billingPi} ${state.billingMonth}`);
+  render();
+  return payload.statement;
+}
+
+function closeBillingWorkflowDetail() {
+  state.selectedBillingWorkflowId = "";
+  state.selectedBillingWorkflowDetail = null;
+  render();
+}
+
 async function statementForExport() {
   if (state.billingSource === "quantity_sheet") {
     return quantitySheetStatementForExport();
@@ -4165,7 +4721,7 @@ async function statementForExport() {
       month: state.billingMonth,
       sourceType: "cage_map",
       status: "draft",
-      replaceDraft: true,
+      persist: false,
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -4209,7 +4765,7 @@ async function quantitySheetStatementForExport() {
       month: sheet.month,
       sourceType: "quantity_sheet",
       status: "draft",
-      replaceDraft: true,
+      persist: false,
     }),
   });
   const payload = await response.json().catch(() => ({}));

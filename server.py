@@ -37,6 +37,20 @@ FREE_CAGES_DEFAULT = FREE_CAGES_PI
 BILLING_TIER_LIMIT = 160
 BILLING_TIER_BASE_PRICE = 4.5
 BILLING_TIER_OVER_PRICE = 6.5
+WORKFLOW_STATUS_IN_FEEDING = "in_feeding"
+WORKFLOW_STATUS_GENERATED = "statement_generated"
+WORKFLOW_STATUS_SENT = "statement_sent"
+WORKFLOW_STATUS_SIGNED = "statement_signed_returned"
+WORKFLOW_STATUS_FINANCE = "submitted_to_finance"
+WORKFLOW_STATUSES = (
+    WORKFLOW_STATUS_IN_FEEDING,
+    WORKFLOW_STATUS_GENERATED,
+    WORKFLOW_STATUS_SENT,
+    WORKFLOW_STATUS_SIGNED,
+    WORKFLOW_STATUS_FINANCE,
+)
+VERSION_STATUS_ACTIVE = "active"
+VERSION_STATUS_VOIDED = "voided"
 DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")
 CAGELEDGER_VERSION = os.environ.get("CAGELEDGER_VERSION", "").strip()
@@ -295,6 +309,65 @@ def initialize_schema(conn):
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS billing_workflows (
+            id TEXT PRIMARY KEY,
+            business_key TEXT NOT NULL UNIQUE,
+            iacuc TEXT NOT NULL,
+            month TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            workflow_status TEXT NOT NULL,
+            current_version_id TEXT,
+            current_version_no INTEGER NOT NULL DEFAULT 0,
+            latest_event_at TEXT,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS billing_statement_versions (
+            id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            version_no INTEGER NOT NULL,
+            version_status TEXT NOT NULL,
+            workflow_status TEXT NOT NULL,
+            generated_at TEXT NOT NULL,
+            voided_at TEXT,
+            created_by TEXT,
+            payload TEXT NOT NULL,
+            FOREIGN KEY(workflow_id) REFERENCES billing_workflows(id) ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS billing_statement_version_lines (
+            id TEXT PRIMARY KEY,
+            version_id TEXT NOT NULL,
+            line_date TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            FOREIGN KEY(version_id) REFERENCES billing_statement_versions(id) ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS billing_workflow_events (
+            id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            version_id TEXT,
+            event_type TEXT NOT NULL,
+            from_status TEXT,
+            to_status TEXT,
+            at TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            FOREIGN KEY(workflow_id) REFERENCES billing_workflows(id) ON DELETE CASCADE,
+            FOREIGN KEY(version_id) REFERENCES billing_statement_versions(id) ON DELETE SET NULL
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS audit_logs (
             id TEXT PRIMARY KEY,
             message TEXT,
@@ -354,6 +427,8 @@ def initialize_schema(conn):
 
 def migrate_schema(conn):
     ensure_occupancies_history_schema(conn)
+    migrate_billing_workflow_schema(conn)
+    backfill_billing_workflow_scope(conn)
 
 
 def ensure_occupancies_history_schema(conn):
@@ -423,6 +498,191 @@ def ensure_occupancies_history_schema(conn):
             ),
         )
     conn.execute("DROP TABLE occupancies_legacy")
+
+
+def migrate_billing_workflow_schema(conn):
+    if table_has_rows(conn, "billing_workflows"):
+        return
+    if not table_has_rows(conn, "billing_statements"):
+        return
+
+    rows = conn.execute(
+        "SELECT id, payload, generated_at, rowid FROM billing_statements ORDER BY month, iacuc, generated_at, rowid"
+    ).fetchall()
+    grouped = {}
+    for row in rows:
+        statement = json.loads(row["payload"])
+        source_type = normalize_workflow_source(statement.get("sourceType", ""))
+        scope_type, scope_key = workflow_scope_for_statement(statement)
+        business_key = billing_workflow_business_key(scope_type, scope_key, statement.get("month", ""), source_type)
+        grouped.setdefault(business_key, []).append((row, statement, source_type))
+
+    for items in grouped.values():
+        first_statement = items[0][1]
+        source_type = items[0][2]
+        workflow_id = new_id("bwf")
+        versions = []
+        latest_at = ""
+        for index, (row, statement, grouped_source) in enumerate(items, start=1):
+            version_id = row["id"]
+            generated_at = statement.get("generatedAt") or row["generated_at"] or now_iso()
+            lines = [
+                json.loads(line_row["payload"])
+                for line_row in conn.execute(
+                    "SELECT payload FROM billing_statement_lines WHERE statement_id = ? ORDER BY line_date, rowid",
+                    (row["id"],),
+                ).fetchall()
+            ]
+            version_status = VERSION_STATUS_ACTIVE if index == len(items) else VERSION_STATUS_VOIDED
+            workflow_status = WORKFLOW_STATUS_GENERATED
+            document_number = statement.get("documentNumber") or make_statement_document_number(statement, index)
+            enriched = enrich_statement_for_workflow(
+                statement,
+                workflow_id=workflow_id,
+                version_id=version_id,
+                version_no=index,
+                version_status=version_status,
+                workflow_status=workflow_status,
+                document_number=document_number,
+            )
+            version_payload = build_version_payload(
+                enriched,
+                workflow_id,
+                index,
+                version_status,
+                workflow_status,
+                generated_at,
+                "",
+                "",
+                "",
+            )
+            conn.execute(
+                """
+                INSERT INTO billing_statement_versions (
+                    id, workflow_id, version_no, version_status, workflow_status,
+                    generated_at, voided_at, created_by, payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version_id,
+                    workflow_id,
+                    index,
+                    version_status,
+                    workflow_status,
+                    generated_at,
+                    generated_at if version_status == VERSION_STATUS_VOIDED else "",
+                    "",
+                    dump_json(version_payload),
+                ),
+            )
+            for line in lines:
+                conn.execute(
+                    """
+                    INSERT INTO billing_statement_version_lines (id, version_id, line_date, payload)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (line.get("id") or new_id("line"), version_id, line.get("date", ""), dump_json(line)),
+                )
+            event_at = generated_at
+            event_payload = build_workflow_event_payload(
+                new_id("wevt"),
+                workflow_id,
+                version_id,
+                "statement_generated",
+                "",
+                WORKFLOW_STATUS_GENERATED,
+                {
+                    "displayName": "系统迁移",
+                    "username": "system",
+                    "id": "system",
+                },
+                event_at,
+                "system",
+                "由旧版 billing_statements 迁移生成",
+            )
+            conn.execute(
+                """
+                INSERT INTO billing_workflow_events (
+                    id, workflow_id, version_id, event_type, from_status, to_status, at, payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_payload["id"],
+                    workflow_id,
+                    version_id,
+                    event_payload["eventType"],
+                    event_payload["fromStatus"],
+                    event_payload["toStatus"],
+                    event_payload["at"],
+                    dump_json(event_payload),
+                ),
+            )
+            versions.append(version_payload)
+            latest_at = max(latest_at, generated_at)
+
+        current_version = versions[-1]
+        workflow_payload = build_workflow_payload(
+            workflow_id,
+            first_statement.get("iacuc", ""),
+            first_statement.get("month", ""),
+            source_type,
+            WORKFLOW_STATUS_GENERATED,
+            current_version,
+            latest_at,
+        )
+        conn.execute(
+            """
+            INSERT INTO billing_workflows (
+                id, business_key, iacuc, month, source_type, workflow_status,
+                current_version_id, current_version_no, latest_event_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                workflow_id,
+                workflow_payload.get("businessKey", ""),
+                first_statement.get("iacuc", ""),
+                first_statement.get("month", ""),
+                grouped_source,
+                WORKFLOW_STATUS_GENERATED,
+                current_version["id"],
+                current_version["versionNo"],
+                latest_at,
+                dump_json(workflow_payload),
+            ),
+        )
+
+
+def backfill_billing_workflow_scope(conn):
+    rows = conn.execute("SELECT id, payload FROM billing_workflows").fetchall()
+    for row in rows:
+        workflow = json.loads(row["payload"])
+        current_version = workflow.get("currentVersion") or {}
+        statement = current_version.get("statement") or {}
+        scope_type, scope_key = workflow_scope_for_statement(statement)
+        desired_key = billing_workflow_business_key(scope_type, scope_key, workflow.get("month", ""), workflow.get("sourceType", ""))
+        conflict = conn.execute(
+            "SELECT id FROM billing_workflows WHERE business_key = ? AND id != ?",
+            (desired_key, row["id"]),
+        ).fetchone()
+        if conflict:
+            desired_key = f"{desired_key}|legacy|{row['id']}"
+        if workflow.get("scopeType") == scope_type and workflow.get("scopeKey") == scope_key and desired_key == workflow.get("businessKey"):
+            continue
+        workflow["scopeType"] = scope_type
+        workflow["scopeKey"] = scope_key
+        workflow["businessKey"] = desired_key
+        workflow["iacucs"] = statement.get("iacucs", workflow.get("iacucs", []))
+        conn.execute(
+            """
+            UPDATE billing_workflows
+            SET business_key = ?, payload = ?
+            WHERE id = ?
+            """,
+            (desired_key, dump_json(workflow), row["id"]),
+        )
 
 
 def table_columns(conn, table):
@@ -2262,6 +2522,7 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     sheet = get_quantity_sheet(conn, sheet_id)
     validate_quantity_sheet_permission(actor, sheet)
     status = clean_text(payload.get("status", "draft")) or "draft"
+    persist = bool(payload.get("persist"))
     if status not in ("draft", "locked"):
         raise ValueError("结算单状态只能是 draft 或 locked")
 
@@ -2319,19 +2580,26 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     for line in lines:
         line["statementId"] = statement["id"]
 
-    if payload.get("replaceDraft", True):
-        replace_existing_draft_statement(conn, statement["iacuc"], sheet["month"])
-    insert_billing_statement(conn, statement, lines)
+    if not persist:
+        return statement, lines, []
+
+    workflow, version, statement, lines, workflow_events = save_billing_statement_workflow(
+        conn,
+        statement,
+        lines,
+        actor,
+        f"根据数量统计表生成 {statement_iacuc} {sheet['month']} 饲养费结算单",
+    )
     event = audit_event(
         actor,
         "billing_statement.generated_from_quantity_sheet",
-        "billing_statement",
-        statement["id"],
+        "billing_workflow",
+        workflow["id"],
         f"{actor['displayName']} 根据数量统计表生成 {statement_iacuc} {sheet['month']} 饲养费结算单",
         [],
         generated_at,
         sheet,
-        statement,
+        {"workflow": workflow, "version": version},
     )
     write_audit_events(conn, [event])
     return statement, lines, merge_audit_logs([], [event])
@@ -2439,6 +2707,7 @@ def generate_billing_statement(conn, payload, actor):
     requested_pi = clean_text(payload.get("pi", ""))
     month = clean_text(payload.get("month", ""))
     status = clean_text(payload.get("status", "draft")) or "draft"
+    persist = bool(payload.get("persist"))
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise ValueError("结算月份格式应为 YYYY-MM")
     if status not in ("draft", "locked"):
@@ -2522,20 +2791,26 @@ def generate_billing_statement(conn, payload, actor):
     for line in lines:
         line["statementId"] = statement["id"]
 
-    if payload.get("replaceDraft", True):
-        replace_existing_draft_statement(conn, statement["iacuc"], month)
+    if not persist:
+        return statement, lines, []
 
-    insert_billing_statement(conn, statement, lines)
+    workflow, version, statement, lines, workflow_events = save_billing_statement_workflow(
+        conn,
+        statement,
+        lines,
+        actor,
+        f"生成 {pi_name} {month} 饲养费结算单",
+    )
     event = audit_event(
         actor,
         "billing_statement.generated",
-        "billing_statement",
-        statement["id"],
+        "billing_workflow",
+        workflow["id"],
         f"{actor['displayName']} 生成 {pi_name} {month} 饲养费结算单",
         [],
         generated_at,
         None,
-        statement,
+        {"workflow": workflow, "version": version},
     )
     write_audit_events(conn, [event])
     return statement, lines, merge_audit_logs([], [event])
@@ -2546,6 +2821,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
     pi_name = clean_text(payload.get("pi", ""))
     status = clean_text(payload.get("status", "draft")) or "draft"
     source_type = clean_text(payload.get("sourceType", "cage_map")) or "cage_map"
+    persist = bool(payload.get("persist"))
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise ValueError("结算月份格式应为 YYYY-MM")
     if status not in ("draft", "locked"):
@@ -2679,19 +2955,25 @@ def generate_billing_statement_by_pi(conn, payload, actor):
 
     for line in lines:
         line["statementId"] = statement["id"]
-    if payload.get("replaceDraft", True):
-        replace_existing_draft_statement(conn, statement["iacuc"], month)
-    insert_billing_statement(conn, statement, lines)
+    if not persist:
+        return statement, lines, []
+    workflow, version, statement, lines, workflow_events = save_billing_statement_workflow(
+        conn,
+        statement,
+        lines,
+        actor,
+        f"按 PI 合表生成 {pi_name} {month} 饲养费结算单",
+    )
     event = audit_event(
         actor,
         "billing_statement.generated_by_pi",
-        "billing_statement",
-        statement["id"],
+        "billing_workflow",
+        workflow["id"],
         f"{actor['displayName']} 按 PI 合表生成 {pi_name} {month} 饲养费结算单",
         [],
         generated_at,
         None,
-        statement,
+        {"workflow": workflow, "version": version},
     )
     write_audit_events(conn, [event])
     return statement, lines, merge_audit_logs([], [event])
@@ -2849,64 +3131,602 @@ def statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies):
     }
 
 
-def replace_existing_draft_statement(conn, iacuc, month):
+def normalize_workflow_source(source_type):
+    text = clean_text(source_type or "")
+    return text if text else "cage_map"
+
+
+def workflow_scope_for_statement(statement):
+    source_type = normalize_workflow_source(statement.get("sourceType", ""))
+    pi_name = clean_text(statement.get("pi", ""))
+    if source_type.startswith("pi_merged_") and pi_name:
+        return "pi", f"pi::{pi_name}"
+    if source_type in ("cage_map", "quantity_sheet") and pi_name:
+        return "pi", f"pi::{pi_name}"
+    iacuc = clean_text(statement.get("iacuc", ""))
+    return "iacuc", iacuc
+
+
+def billing_workflow_business_key(scope_type, scope_key, month, source_type):
+    return "|".join([clean_text(scope_type), clean_text(scope_key), clean_text(month), normalize_workflow_source(source_type)])
+
+
+def make_statement_document_number(statement, version_no):
+    source = normalize_workflow_source(statement.get("sourceType", ""))
+    source_code = {
+        "quantity_sheet": "QS",
+        "pi_merged_quantity_sheet": "PQS",
+        "pi_merged_cage_map": "PCM",
+    }.get(source, "CM")
+    month = re.sub(r"\D", "", clean_text(statement.get("month", "")) or "000000")
+    iacuc = re.sub(r"[^A-Za-z0-9]", "", clean_text(statement.get("iacuc", "")) or "UNKNOWN").upper()
+    return f"CL-{source_code}-{month}-{iacuc}-V{int(version_no):02d}"
+
+
+def enrich_statement_for_workflow(
+    statement,
+    *,
+    workflow_id,
+    version_id,
+    version_no,
+    version_status,
+    workflow_status,
+    document_number,
+):
+    return {
+        **statement,
+        "id": version_id,
+        "workflowId": workflow_id,
+        "versionId": version_id,
+        "versionNo": version_no,
+        "versionStatus": version_status,
+        "workflowStatus": workflow_status,
+        "documentNumber": document_number,
+    }
+
+
+def build_version_payload(
+    statement,
+    workflow_id,
+    version_no,
+    version_status,
+    workflow_status,
+    generated_at,
+    voided_at,
+    voided_by,
+    void_reason,
+):
+    return {
+        "id": statement["id"],
+        "workflowId": workflow_id,
+        "versionNo": version_no,
+        "versionStatus": version_status,
+        "workflowStatus": workflow_status,
+        "generatedAt": generated_at,
+        "voidedAt": voided_at,
+        "voidedBy": voided_by,
+        "voidReason": void_reason,
+        "documentNumber": statement.get("documentNumber", ""),
+        "statement": statement,
+        "summary": {
+            "iacuc": statement.get("iacuc", ""),
+            "iacucs": statement.get("iacucs", []),
+            "month": statement.get("month", ""),
+            "sourceType": statement.get("sourceType", ""),
+            "pi": statement.get("pi", ""),
+            "project": statement.get("project", ""),
+            "owner": statement.get("owner", ""),
+            "funding": statement.get("funding", ""),
+            "totalAmount": statement.get("totalAmount", 0),
+            "totalCageDays": statement.get("totalCageDays", 0),
+            "status": statement.get("status", "draft"),
+        },
+    }
+
+
+def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_status, current_version, latest_event_at):
+    statement = current_version.get("statement", {})
+    scope_type, scope_key = workflow_scope_for_statement(statement)
+    timestamps = {
+        "generatedAt": current_version.get("generatedAt", ""),
+        "sentAt": statement.get("sentAt", ""),
+        "signedReturnedAt": statement.get("signedReturnedAt", ""),
+        "submittedToFinanceAt": statement.get("submittedToFinanceAt", ""),
+    }
+    return {
+        "id": workflow_id,
+        "businessKey": billing_workflow_business_key(scope_type, scope_key, month, source_type),
+        "scopeType": scope_type,
+        "scopeKey": scope_key,
+        "iacuc": iacuc,
+        "iacucs": statement.get("iacucs", []),
+        "month": month,
+        "sourceType": source_type,
+        "workflowStatus": workflow_status,
+        "currentVersionId": current_version.get("id", ""),
+        "currentVersionNo": current_version.get("versionNo", 0),
+        "currentVersion": current_version,
+        "latestEventAt": latest_event_at,
+        "pi": statement.get("pi", ""),
+        "project": statement.get("project", ""),
+        "owner": statement.get("owner", ""),
+        "funding": statement.get("funding", ""),
+        "totalAmount": statement.get("totalAmount", 0),
+        "totalCageDays": statement.get("totalCageDays", 0),
+        **timestamps,
+    }
+
+
+def build_workflow_event_payload(event_id, workflow_id, version_id, event_type, from_status, to_status, actor, at, channel, note):
+    return {
+        "id": event_id,
+        "workflowId": workflow_id,
+        "versionId": version_id,
+        "eventType": event_type,
+        "fromStatus": from_status,
+        "toStatus": to_status,
+        "actor": {
+            "id": actor.get("id", ""),
+            "username": actor.get("username", ""),
+            "displayName": actor.get("displayName", ""),
+        },
+        "channel": channel,
+        "note": note,
+        "at": at,
+    }
+
+
+def get_billing_workflow_by_key(conn, business_key):
+    row = conn.execute("SELECT payload FROM billing_workflows WHERE business_key = ?", (business_key,)).fetchone()
+    return json.loads(row["payload"]) if row else None
+
+
+def get_billing_workflow(conn, workflow_id):
+    row = conn.execute("SELECT payload FROM billing_workflows WHERE id = ?", (workflow_id,)).fetchone()
+    return json.loads(row["payload"]) if row else None
+
+
+def get_billing_version(conn, version_id):
+    row = conn.execute("SELECT payload FROM billing_statement_versions WHERE id = ?", (version_id,)).fetchone()
+    return json.loads(row["payload"]) if row else None
+
+
+def list_billing_workflows(conn):
+    rows = conn.execute("SELECT payload FROM billing_workflows ORDER BY month DESC, rowid DESC").fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def list_billing_workflow_versions(conn, workflow_id):
     rows = conn.execute(
-        "SELECT id FROM billing_statements WHERE iacuc = ? AND month = ? AND status = ?",
-        (iacuc, month, "draft"),
+        "SELECT payload FROM billing_statement_versions WHERE workflow_id = ? ORDER BY version_no DESC, rowid DESC",
+        (workflow_id,),
     ).fetchall()
-    ids = [row["id"] for row in rows]
-    for statement_id in ids:
-        conn.execute("DELETE FROM billing_statement_lines WHERE statement_id = ?", (statement_id,))
-        conn.execute("DELETE FROM billing_statements WHERE id = ?", (statement_id,))
+    return [json.loads(row["payload"]) for row in rows]
 
 
-def insert_billing_statement(conn, statement, lines):
+def list_billing_workflow_events(conn, workflow_id):
+    rows = conn.execute(
+        "SELECT payload FROM billing_workflow_events WHERE workflow_id = ? ORDER BY at DESC, rowid DESC",
+        (workflow_id,),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def list_billing_statement_lines_for_version(conn, version_id):
+    rows = conn.execute(
+        "SELECT payload FROM billing_statement_version_lines WHERE version_id = ? ORDER BY line_date, rowid",
+        (version_id,),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def list_current_billing_statements(conn):
+    statements = []
+    for workflow in list_billing_workflows(conn):
+        current_version = workflow.get("currentVersion") or {}
+        statement = dict((current_version.get("statement") or {}))
+        if statement:
+            statements.append(statement)
+    return statements
+
+
+def save_billing_statement_workflow(conn, statement, lines, actor, note=""):
+    source_type = normalize_workflow_source(statement.get("sourceType", ""))
+    scope_type, scope_key = workflow_scope_for_statement(statement)
+    business_key = billing_workflow_business_key(scope_type, scope_key, statement.get("month", ""), source_type)
+    existing = get_billing_workflow_by_key(conn, business_key)
+    generated_at = statement.get("generatedAt") or now_iso()
+    default_note = note or "生成饲养费结算单"
+    events = []
+
+    if not existing:
+        workflow_id = new_id("bwf")
+        version_id = new_id("stmt")
+        version_no = 1
+        lines = [{**line, "statementId": version_id} for line in lines]
+        document_number = make_statement_document_number(statement, version_no)
+        statement = enrich_statement_for_workflow(
+            statement,
+            workflow_id=workflow_id,
+            version_id=version_id,
+            version_no=version_no,
+            version_status=VERSION_STATUS_ACTIVE,
+            workflow_status=WORKFLOW_STATUS_GENERATED,
+            document_number=document_number,
+        )
+        version_payload = build_version_payload(
+            statement,
+            workflow_id,
+            version_no,
+            VERSION_STATUS_ACTIVE,
+            WORKFLOW_STATUS_GENERATED,
+            generated_at,
+            "",
+            "",
+            "",
+        )
+        workflow_payload = build_workflow_payload(
+            workflow_id,
+            statement.get("iacuc", ""),
+            statement.get("month", ""),
+            source_type,
+            WORKFLOW_STATUS_GENERATED,
+            version_payload,
+            generated_at,
+        )
+        insert_billing_workflow(conn, workflow_payload)
+        insert_billing_version(conn, version_payload)
+        replace_version_lines(conn, version_id, lines)
+        event = build_workflow_event_payload(
+            new_id("wevt"),
+            workflow_id,
+            version_id,
+            "statement_generated",
+            "",
+            WORKFLOW_STATUS_GENERATED,
+            actor,
+            generated_at,
+            "manual",
+            default_note,
+        )
+        insert_billing_workflow_event(conn, event)
+        events.append(event)
+        return workflow_payload, version_payload, statement, lines, events
+
+    workflow_id = existing["id"]
+    current_version = existing.get("currentVersion") or {}
+    current_version_id = current_version.get("id")
+    current_workflow_status = existing.get("workflowStatus", WORKFLOW_STATUS_GENERATED)
+
+    if current_workflow_status == WORKFLOW_STATUS_GENERATED and current_version_id:
+        version_id = current_version_id
+        version_no = int(current_version.get("versionNo") or existing.get("currentVersionNo") or 1)
+        lines = [{**line, "statementId": version_id} for line in lines]
+        document_number = current_version.get("documentNumber") or make_statement_document_number(statement, version_no)
+        statement = enrich_statement_for_workflow(
+            statement,
+            workflow_id=workflow_id,
+            version_id=version_id,
+            version_no=version_no,
+            version_status=VERSION_STATUS_ACTIVE,
+            workflow_status=WORKFLOW_STATUS_GENERATED,
+            document_number=document_number,
+        )
+        version_payload = build_version_payload(
+            statement,
+            workflow_id,
+            version_no,
+            VERSION_STATUS_ACTIVE,
+            WORKFLOW_STATUS_GENERATED,
+            generated_at,
+            "",
+            "",
+            "",
+        )
+        update_billing_version(conn, version_payload)
+        replace_version_lines(conn, version_id, lines)
+        workflow_payload = build_workflow_payload(
+            workflow_id,
+            statement.get("iacuc", ""),
+            statement.get("month", ""),
+            source_type,
+            WORKFLOW_STATUS_GENERATED,
+            version_payload,
+            generated_at,
+        )
+        update_billing_workflow(conn, workflow_payload)
+        event = build_workflow_event_payload(
+            new_id("wevt"),
+            workflow_id,
+            version_id,
+            "statement_generated",
+            WORKFLOW_STATUS_GENERATED,
+            WORKFLOW_STATUS_GENERATED,
+            actor,
+            generated_at,
+            "manual",
+            default_note,
+        )
+        insert_billing_workflow_event(conn, event)
+        events.append(event)
+        return workflow_payload, version_payload, statement, lines, events
+
+    void_at = generated_at
+    if current_version_id:
+        previous = get_billing_version(conn, current_version_id) or current_version
+        previous_statement = dict(previous.get("statement") or {})
+        previous_statement["workflowStatus"] = current_workflow_status
+        previous_payload = build_version_payload(
+            previous_statement,
+            workflow_id,
+            int(previous.get("versionNo") or existing.get("currentVersionNo") or 1),
+            VERSION_STATUS_VOIDED,
+            current_workflow_status,
+            previous.get("generatedAt") or generated_at,
+            void_at,
+            actor.get("displayName", ""),
+            note or "根据更正数据生成修订版",
+        )
+        update_billing_version(conn, previous_payload)
+        void_event = build_workflow_event_payload(
+            new_id("wevt"),
+            workflow_id,
+            current_version_id,
+            "statement_voided",
+            current_workflow_status,
+            current_workflow_status,
+            actor,
+            void_at,
+            "manual",
+            note or "旧版本作废，生成修订版",
+        )
+        insert_billing_workflow_event(conn, void_event)
+        events.append(void_event)
+
+    version_no = int(existing.get("currentVersionNo") or 0) + 1
+    version_id = new_id("stmt")
+    lines = [{**line, "statementId": version_id} for line in lines]
+    document_number = make_statement_document_number(statement, version_no)
+    statement = enrich_statement_for_workflow(
+        statement,
+        workflow_id=workflow_id,
+        version_id=version_id,
+        version_no=version_no,
+        version_status=VERSION_STATUS_ACTIVE,
+        workflow_status=WORKFLOW_STATUS_GENERATED,
+        document_number=document_number,
+    )
+    version_payload = build_version_payload(
+        statement,
+        workflow_id,
+        version_no,
+        VERSION_STATUS_ACTIVE,
+        WORKFLOW_STATUS_GENERATED,
+        generated_at,
+        "",
+        "",
+        "",
+    )
+    insert_billing_version(conn, version_payload)
+    replace_version_lines(conn, version_id, lines)
+    workflow_payload = build_workflow_payload(
+        workflow_id,
+        statement.get("iacuc", ""),
+        statement.get("month", ""),
+        source_type,
+        WORKFLOW_STATUS_GENERATED,
+        version_payload,
+        generated_at,
+    )
+    update_billing_workflow(conn, workflow_payload)
+    revise_event = build_workflow_event_payload(
+        new_id("wevt"),
+        workflow_id,
+        version_id,
+        "statement_revised",
+        current_workflow_status,
+        WORKFLOW_STATUS_GENERATED,
+        actor,
+        generated_at,
+        "manual",
+        note or "基于当前有效版本生成修订版",
+    )
+    insert_billing_workflow_event(conn, revise_event)
+    events.append(revise_event)
+    return workflow_payload, version_payload, statement, lines, events
+
+
+def insert_billing_workflow(conn, payload):
     conn.execute(
         """
-        INSERT INTO billing_statements (
-            id, iacuc, month, project, pi, owner, funding, total_cage_days,
-            total_amount, status, generated_at, locked_at, payload
+        INSERT INTO billing_workflows (
+            id, business_key, iacuc, month, source_type, workflow_status,
+            current_version_id, current_version_no, latest_event_at, payload
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            statement["id"],
-            statement["iacuc"],
-            statement["month"],
-            statement.get("project", ""),
-            statement.get("pi", ""),
-            statement.get("owner", ""),
-            statement.get("funding", ""),
-            as_int(statement.get("totalCageDays")),
-            as_float(statement.get("totalAmount")),
-            statement["status"],
-            statement["generatedAt"],
-            statement.get("lockedAt", ""),
-            dump_json(statement),
+            payload["id"],
+            payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
+            payload.get("iacuc", ""),
+            payload.get("month", ""),
+            payload.get("sourceType", ""),
+            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
+            payload.get("currentVersionId", ""),
+            as_int(payload.get("currentVersionNo")) or 0,
+            payload.get("latestEventAt", ""),
+            dump_json(payload),
         ),
     )
-    for line in lines:
+
+
+def update_billing_workflow(conn, payload):
+    conn.execute(
+        """
+        UPDATE billing_workflows
+        SET business_key = ?, iacuc = ?, month = ?, source_type = ?, workflow_status = ?,
+            current_version_id = ?, current_version_no = ?, latest_event_at = ?, payload = ?
+        WHERE id = ?
+        """,
+        (
+            payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
+            payload.get("iacuc", ""),
+            payload.get("month", ""),
+            payload.get("sourceType", ""),
+            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
+            payload.get("currentVersionId", ""),
+            as_int(payload.get("currentVersionNo")) or 0,
+            payload.get("latestEventAt", ""),
+            dump_json(payload),
+            payload["id"],
+        ),
+    )
+
+
+def insert_billing_version(conn, payload):
+    conn.execute(
+        """
+        INSERT INTO billing_statement_versions (
+            id, workflow_id, version_no, version_status, workflow_status,
+            generated_at, voided_at, created_by, payload
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            payload["id"],
+            payload.get("workflowId", ""),
+            as_int(payload.get("versionNo")) or 1,
+            payload.get("versionStatus", VERSION_STATUS_ACTIVE),
+            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
+            payload.get("generatedAt", ""),
+            payload.get("voidedAt", ""),
+            payload.get("statement", {}).get("createdBy", ""),
+            dump_json(payload),
+        ),
+    )
+
+
+def update_billing_version(conn, payload):
+    conn.execute(
+        """
+        UPDATE billing_statement_versions
+        SET version_no = ?, version_status = ?, workflow_status = ?, generated_at = ?,
+            voided_at = ?, created_by = ?, payload = ?
+        WHERE id = ?
+        """,
+        (
+            as_int(payload.get("versionNo")) or 1,
+            payload.get("versionStatus", VERSION_STATUS_ACTIVE),
+            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
+            payload.get("generatedAt", ""),
+            payload.get("voidedAt", ""),
+            payload.get("statement", {}).get("createdBy", ""),
+            dump_json(payload),
+            payload["id"],
+        ),
+    )
+
+
+def replace_version_lines(conn, version_id, lines):
+    conn.execute("DELETE FROM billing_statement_version_lines WHERE version_id = ?", (version_id,))
+    for index, line in enumerate(lines, start=1):
+        normalized = {**line, "versionId": version_id}
+        line_id = normalized.get("id") or f"{version_id}-line-{index}"
         conn.execute(
             """
-            INSERT INTO billing_statement_lines (
-                id, statement_id, line_date, cage_count, unit_price, discount_percent,
-                amount, cumulative, occupancy_ids, payload
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO billing_statement_version_lines (id, version_id, line_date, payload)
+            VALUES (?, ?, ?, ?)
             """,
-            (
-                line["id"],
-                line["statementId"],
-                line["date"],
-                as_int(line.get("cageCount")),
-                as_float(line.get("unitPrice")),
-                as_float(line.get("discountPercent")),
-                as_float(line.get("amount")),
-                as_float(line.get("cumulative")),
-                dump_json(line.get("occupancyIds", [])),
-                dump_json(line),
-            ),
+            (line_id, version_id, normalized.get("date", ""), dump_json(normalized)),
         )
+
+
+def insert_billing_workflow_event(conn, payload):
+    conn.execute(
+        """
+        INSERT INTO billing_workflow_events (
+            id, workflow_id, version_id, event_type, from_status, to_status, at, payload
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            payload["id"],
+            payload.get("workflowId", ""),
+            payload.get("versionId", ""),
+            payload.get("eventType", ""),
+            payload.get("fromStatus", ""),
+            payload.get("toStatus", ""),
+            payload.get("at", ""),
+            dump_json(payload),
+        ),
+    )
+
+
+def update_workflow_status(conn, workflow_id, next_status, actor, note=""):
+    workflow = get_billing_workflow(conn, workflow_id)
+    if not workflow:
+        raise LookupError("结算流程不存在")
+    current_status = workflow.get("workflowStatus", WORKFLOW_STATUS_GENERATED)
+    allowed = {
+        WORKFLOW_STATUS_GENERATED: WORKFLOW_STATUS_SENT,
+        WORKFLOW_STATUS_SENT: WORKFLOW_STATUS_SIGNED,
+        WORKFLOW_STATUS_SIGNED: WORKFLOW_STATUS_FINANCE,
+    }
+    if allowed.get(current_status) != next_status:
+        raise ValueError("当前流程状态不允许执行该操作")
+
+    version = get_billing_version(conn, workflow.get("currentVersionId", ""))
+    if not version:
+        raise LookupError("当前有效结算单不存在")
+    statement = dict(version.get("statement") or {})
+    at = now_iso()
+    statement["workflowStatus"] = next_status
+    if next_status == WORKFLOW_STATUS_SENT:
+        statement["sentAt"] = at
+    elif next_status == WORKFLOW_STATUS_SIGNED:
+        statement["signedReturnedAt"] = at
+    elif next_status == WORKFLOW_STATUS_FINANCE:
+        statement["submittedToFinanceAt"] = at
+    updated_version = build_version_payload(
+        statement,
+        workflow_id,
+        version.get("versionNo", 1),
+        version.get("versionStatus", VERSION_STATUS_ACTIVE),
+        next_status,
+        version.get("generatedAt", at),
+        version.get("voidedAt", ""),
+        version.get("voidedBy", ""),
+        version.get("voidReason", ""),
+    )
+    update_billing_version(conn, updated_version)
+    updated_workflow = build_workflow_payload(
+        workflow_id,
+        workflow.get("iacuc", ""),
+        workflow.get("month", ""),
+        workflow.get("sourceType", ""),
+        next_status,
+        updated_version,
+        at,
+    )
+    update_billing_workflow(conn, updated_workflow)
+    event = build_workflow_event_payload(
+        new_id("wevt"),
+        workflow_id,
+        updated_version["id"],
+        {
+            WORKFLOW_STATUS_SENT: "statement_sent",
+            WORKFLOW_STATUS_SIGNED: "statement_signed_returned",
+            WORKFLOW_STATUS_FINANCE: "submitted_to_finance",
+        }[next_status],
+        current_status,
+        next_status,
+        actor,
+        at,
+        "manual",
+        note,
+    )
+    insert_billing_workflow_event(conn, event)
+    return updated_workflow, updated_version, event
 
 
 def parse_multipart_upload(content_type, raw):
@@ -3034,6 +3854,39 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 self.send_json({"items": list_principal_identities(conn)})
             return
+        if path == "/api/billing-workflows":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json({"items": list_billing_workflows(conn)})
+            return
+        workflow_id = self.billing_workflow_route(path)
+        if workflow_id:
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                workflow = get_billing_workflow(conn, workflow_id)
+                if not workflow:
+                    self.send_json({"error": "结算流程不存在"}, HTTPStatus.NOT_FOUND)
+                    return
+                self.send_json(
+                    {
+                        "workflow": workflow,
+                        "versions": list_billing_workflow_versions(conn, workflow_id),
+                        "events": list_billing_workflow_events(conn, workflow_id),
+                        "lines": list_billing_statement_lines_for_version(conn, workflow.get("currentVersionId", "")),
+                    }
+                )
+            return
+        if path == "/api/billing-statements":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json({"items": list_current_billing_statements(conn)})
+            return
         if path in ENTITY_ENDPOINTS:
             user = self.require_user()
             if not user:
@@ -3058,6 +3911,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/billing-statements/generate-by-pi":
             self.handle_billing_statement_generate_by_pi()
+            return
+        if path == "/api/billing-workflows/advance":
+            self.handle_billing_workflow_advance()
             return
         if path == "/api/infrastructure":
             self.handle_infrastructure_write()
@@ -3353,6 +4209,39 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+    def handle_billing_workflow_advance(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            body = self.read_json_body()
+            workflow_id = clean_text(body.get("workflowId", ""))
+            to_status = clean_text(body.get("toStatus", ""))
+            note = clean_text(body.get("note", ""))
+            with connect_db() as conn:
+                workflow, version, event = update_workflow_status(conn, workflow_id, to_status, user, note)
+                audit = audit_event(
+                    user,
+                    f"billing_workflow.{to_status}",
+                    "billing_workflow",
+                    workflow_id,
+                    f"{user['displayName']} 更新 {workflow.get('iacuc', '')} {workflow.get('month', '')} 结算流程状态",
+                    [],
+                    event["at"],
+                    None,
+                    {"workflow": workflow, "version": version, "event": event},
+                )
+                write_audit_events(conn, [audit])
+                conn.commit()
+            self.send_json({"workflow": workflow, "event": event, "auditLogs": merge_audit_logs([], [audit])})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
     def current_user(self):
         with connect_db() as conn:
             return user_from_token(conn, self.session_token())
@@ -3426,6 +4315,15 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if "/" in pi_name or not pi_name:
             return None
         return pi_name
+
+    def billing_workflow_route(self, path):
+        prefix = "/api/billing-workflows/"
+        if not path.startswith(prefix):
+            return None
+        workflow_id = unquote(path[len(prefix) :])
+        if "/" in workflow_id or not workflow_id:
+            return None
+        return workflow_id
 
     def quantity_sheet_generate_route(self, path):
         prefix = "/api/quantity-sheets/"

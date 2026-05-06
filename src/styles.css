@@ -173,6 +173,42 @@ svg {
   gap: 8px;
 }
 
+.nav-group {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-group-toggle {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0 14px;
+  text-align: left;
+}
+
+.nav-group-toggle svg {
+  color: #8eaead;
+  flex: 0 0 auto;
+}
+
+.nav-group-toggle:hover .nav-group-title,
+.nav-group-toggle:hover svg,
+.nav-group-toggle.expanded .nav-group-title,
+.nav-group-toggle.expanded svg {
+  color: #bdd2d0;
+}
+
+.nav-group-title {
+  color: #8eaead;
+  font-size: 12px;
+  padding: 0;
+}
+
 .nav-item {
   border: 0;
   border-radius: 8px;
@@ -183,6 +219,10 @@ svg {
   gap: 10px;
   padding: 12px 14px;
   text-align: left;
+}
+
+.nav-sub-item {
+  margin-left: 12px;
 }
 
 .shell.sidebar-collapsed .sidebar {
@@ -200,6 +240,8 @@ svg {
 }
 
 .shell.sidebar-collapsed .brand > div:not(.brand-mark),
+.shell.sidebar-collapsed .nav-group-title,
+.shell.sidebar-collapsed .nav-group-toggle svg,
 .shell.sidebar-collapsed .nav-item span,
 .shell.sidebar-collapsed .sidebar-account span,
 .shell.sidebar-collapsed .sidebar-account strong,
@@ -629,6 +671,16 @@ h3 {
   gap: 18px;
 }
 
+.workflow-center-view,
+.workflow-center-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.workflow-center-panel .panel {
+  min-width: 0;
+}
+
 .system-layout {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
   align-items: start;
@@ -647,6 +699,110 @@ h3 {
 
 .quantity-billing-layout {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.workflow-table .ghost,
+.workflow-table .secondary {
+  margin-right: 8px;
+}
+
+.workflow-row {
+  cursor: pointer;
+}
+
+.workflow-row:hover td {
+  background: #f3f8f7;
+}
+
+.workflow-detail-modal {
+  width: min(1320px, calc(100vw - 64px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.workflow-timeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 8px 0 18px;
+}
+
+.workflow-node {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.workflow-node-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 3px;
+  background: #c3d0d5;
+  flex: 0 0 auto;
+}
+
+.workflow-node.done .workflow-node-dot {
+  background: var(--green);
+}
+
+.workflow-node.current {
+  border-color: rgba(15, 118, 110, 0.35);
+  background: #eef8f6;
+}
+
+.workflow-node.current .workflow-node-dot {
+  background: var(--primary);
+}
+
+.workflow-node strong,
+.workflow-node small {
+  display: block;
+}
+
+.workflow-node small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.workflow-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.workflow-detail-card {
+  min-width: 0;
+}
+
+.workflow-meta-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-meta-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-meta-list span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workflow-version-list,
+.workflow-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-lines-wrap {
+  max-height: 360px;
 }
 
 .quantity-sheet-fields {
@@ -803,19 +959,44 @@ textarea:focus {
   align-items: flex-start;
   justify-content: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
-.quantity-sheet-actions select {
+.billing-sheet-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quantity-sheet-actions select,
+.billing-filter-grid input {
   width: 280px;
 }
 
-.quantity-action-grid {
+.quantity-action-stack,
+.billing-action-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-filter-grid,
+.quantity-action-grid,
+.billing-action-grid {
   display: grid;
   grid-template-columns: repeat(2, 220px);
   gap: 10px;
 }
 
-.quantity-action-grid button {
+.billing-action-grid.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.quantity-action-grid button,
+.billing-action-grid button,
+.billing-workflow-button,
+.quantity-workflow-button {
   width: 100%;
   min-height: 44px;
   justify-content: center;
@@ -1863,6 +2044,8 @@ tr:last-child td {
   .content-grid,
   .billing-layout,
   .quantity-billing-layout,
+  .workflow-detail-grid,
+  .workflow-timeline,
   .system-layout,
   .cage-layout,
   .dashboard-grid {
@@ -1887,6 +2070,10 @@ tr:last-child td {
     left: 14px;
     top: 84px;
     bottom: 14px;
+    width: auto;
+  }
+
+  .workflow-detail-modal {
     width: auto;
   }
 
@@ -2016,8 +2203,14 @@ tr:last-child td {
   .toolbar,
   .toolbar select,
   .toolbar input,
+  .billing-sheet-actions,
+  .billing-filter-grid,
+  .billing-filter-grid input,
+  .billing-action-stack,
+  .billing-action-grid,
   .quantity-sheet-actions,
   .quantity-sheet-actions select,
+  .quantity-action-stack,
   .quantity-action-grid,
   .primary,
   .secondary,
@@ -2025,10 +2218,13 @@ tr:last-child td {
     width: 100%;
   }
 
+  .billing-sheet-actions,
   .quantity-sheet-actions {
     display: grid;
   }
 
+  .billing-filter-grid,
+  .billing-action-grid,
   .quantity-action-grid {
     grid-template-columns: 1fr;
   }
