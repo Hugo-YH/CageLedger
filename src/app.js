@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.9a",
+    title: "笼位图多选录入滚动体验修复",
+    items: [
+      "修复多选录入操作时页面滚动位置重置导致自动跳到顶部的问题",
+      "重渲染时同步保留工作区滚动位置，保证连续编辑体验",
+      "该项修改建议由 @吴玉婷 提供",
+    ],
+  },
+  {
     version: "0.3.9",
     title: "结算单财务版式优化",
     items: [
@@ -156,11 +165,12 @@ let PRINCIPAL_IDENTITIES = [];
 let PRINCIPAL_IDENTITY_BY_NAME = new Map();
 let iacucIndexMeta = null;
 let systemUpdateInfo = null;
+let lastRenderedView = "";
 let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.9",
+  version: "0.3.9a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -586,9 +596,14 @@ function updateSlotStatuses(targetState = state) {
 }
 
 function render() {
+  const previousView = lastRenderedView;
+  const previousScrollY = window.scrollY;
+  const previousWorkspaceScrollTop = document.querySelector(".workspace")?.scrollTop ?? 0;
+  const shouldPreserveScroll = previousView === state.activeView;
   if (remotePersistence && !currentUser) {
     document.querySelector("#app").innerHTML = renderLoginView();
     bindAuthEvents();
+    lastRenderedView = "login";
     return;
   }
   const adminViews = new Set(["data", "system", "users"]);
@@ -615,6 +630,18 @@ function render() {
   `;
 
   bindEvents();
+  lastRenderedView = state.activeView;
+  if (shouldPreserveScroll) {
+    requestAnimationFrame(() => {
+      const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
+      window.scrollTo({ top: Math.min(previousScrollY, maxScroll) });
+      const workspace = document.querySelector(".workspace");
+      if (workspace) {
+        const maxWorkspaceScroll = Math.max(workspace.scrollHeight - workspace.clientHeight, 0);
+        workspace.scrollTop = Math.min(previousWorkspaceScrollTop, maxWorkspaceScroll);
+      }
+    });
+  }
 }
 
 function renderSidebar() {
