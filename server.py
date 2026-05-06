@@ -1869,9 +1869,11 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         message = f"{actor['displayName']} 创建 {sheet['iacuc']} {sheet['month']} 数量统计表"
         status = HTTPStatus.CREATED
 
+    transfer_events = sync_quantity_sheet_transfer_rows(conn, sheet, actor, now)
     event = audit_event(actor, action, "quantity_sheet", sheet["id"], message, [], now, None, sheet)
-    write_audit_events(conn, [event])
-    return sheet, merge_audit_logs([], [event]), status
+    events = [event, *transfer_events]
+    write_audit_events(conn, events)
+    return sheet, merge_audit_logs([], events), status
 
 
 def delete_quantity_sheet(conn, actor, sheet_id):
@@ -1908,6 +1910,256 @@ def quantity_sheet_db_values(sheet):
         sheet["updatedAt"],
         dump_json(sheet),
     )
+
+
+def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
+    month = source_sheet.get("month", "")
+    source_sheet_id = source_sheet.get("id", "")
+    source_iacuc = normalize_iacuc_number(source_sheet.get("iacuc", ""))
+    if not month or not source_sheet_id or not source_iacuc:
+        return []
+
+    applications_by_iacuc = read_applications_by_iacuc(conn)
+    rows = source_sheet.get("rows", [])
+    transfer_rows = []
+    for row in rows:
+        if clean_text(row.get("transferSourceSheetId", "")):
+            continue
+        row_id = clean_text(row.get("id", "")) or new_id("qrow")
+        row_date = clean_text(row.get("date", "")) or f"{month}-01"
+        row_notes = clean_text(row.get("notes", ""))
+        added_count = as_int(row.get("addedCount")) or 0
+        removed_count = as_int(row.get("removedCount")) or 0
+        target_iacuc = normalize_iacuc_number(row.get("transferOutToIacuc", ""))
+        if target_iacuc and removed_count > 0 and target_iacuc != source_iacuc:
+            transfer_rows.append(
+                {
+                    "direction": "out_to_in",
+                    "sourceRowId": row_id,
+                    "date": row_date,
+                    "notes": row_notes,
+                    "targetIacuc": target_iacuc,
+                    "count": removed_count,
+                    "fromIacuc": source_iacuc,
+                    "toIacuc": target_iacuc,
+                }
+            )
+        from_iacuc = normalize_iacuc_number(row.get("transferInFromIacuc", ""))
+        if from_iacuc and added_count > 0 and from_iacuc != source_iacuc:
+            transfer_rows.append(
+                {
+                    "direction": "in_to_out",
+                    "sourceRowId": row_id,
+                    "date": row_date,
+                    "notes": row_notes,
+                    "targetIacuc": from_iacuc,
+                    "count": added_count,
+                    "fromIacuc": from_iacuc,
+                    "toIacuc": source_iacuc,
+                }
+            )
+
+    sheet_rows = conn.execute("SELECT id, payload FROM quantity_sheets WHERE month = ?", (month,)).fetchall()
+    sheets = [json.loads(row["payload"]) for row in sheet_rows]
+    events = []
+
+    for target_sheet in sheets:
+        if target_sheet.get("id") == source_sheet_id:
+            continue
+        original_rows = target_sheet.get("rows", [])
+        next_rows = []
+        changed = False
+        for row in original_rows:
+            if clean_text(row.get("transferSourceSheetId", "")) == source_sheet_id:
+                changed = True
+                continue
+            contrib = row.get("transferMirrorContrib")
+            if isinstance(contrib, dict):
+                next_contrib = {}
+                row_changed = False
+                for key, value in contrib.items():
+                    if not str(key).startswith(f"{source_sheet_id}:"):
+                        next_contrib[key] = as_int(value) or 0
+                        continue
+                    amount = as_int(value) or 0
+                    if amount <= 0:
+                        continue
+                    direction = "out_to_in" if key.endswith(":out_to_in") else "in_to_out"
+                    if direction == "out_to_in":
+                        row["addedCount"] = max((as_int(row.get("addedCount")) or 0) - amount, 0)
+                    else:
+                        row["removedCount"] = max((as_int(row.get("removedCount")) or 0) - amount, 0)
+                    row_changed = True
+                    changed = True
+                if row_changed:
+                    if next_contrib:
+                        row["transferMirrorContrib"] = next_contrib
+                    else:
+                        row.pop("transferMirrorContrib", None)
+            next_rows.append(row)
+        if changed:
+            target_sheet["rows"] = sorted(next_rows, key=lambda item: (item.get("date", ""), item.get("id", "")))
+            target_sheet["updatedAt"] = now
+            conn.execute(
+                """
+                UPDATE quantity_sheets
+                SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
+                    project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
+                WHERE id = ?
+                """,
+                quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
+            )
+
+    target_sheet_by_iacuc = {}
+    for target_sheet in sheets:
+        key = normalize_iacuc_number(target_sheet.get("iacuc", ""))
+        if key and key != source_iacuc and key not in target_sheet_by_iacuc:
+            target_sheet_by_iacuc[key] = target_sheet
+
+    for transfer in transfer_rows:
+        target_iacuc = transfer["targetIacuc"]
+        target_sheet = target_sheet_by_iacuc.get(target_iacuc)
+        if not target_sheet:
+            app = applications_by_iacuc.get(target_iacuc, {})
+            target_sheet = {
+                "id": new_id("qsheet"),
+                "month": month,
+                "roomId": "",
+                "roomName": "",
+                "manager": actor.get("displayName", ""),
+                "iacuc": target_iacuc,
+                "project": clean_text(app.get("project", "")),
+                "pi": clean_text(app.get("pi", "")),
+                "owner": clean_text(app.get("owner", "")),
+                "contact": "",
+                "funding": clean_text(app.get("funding", "")),
+                "billingUnit": "cage_day",
+                "initialAnimalCount": 0,
+                "initialCageCount": 0,
+                "rows": [],
+                "updatedAt": now,
+            }
+            conn.execute(
+                """
+                INSERT INTO quantity_sheets (
+                    month, iacuc, room_id, room_name, manager, project, pi, owner,
+                    funding, updated_at, payload, id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
+            )
+            target_sheet_by_iacuc[target_iacuc] = target_sheet
+            sheets.append(target_sheet)
+            events.append(
+                audit_event(
+                    actor,
+                    "quantity_sheet.transfer_placeholder_created",
+                    "quantity_sheet",
+                    target_sheet["id"],
+                    f"{actor['displayName']} 自动创建 {target_iacuc} {month} 数量统计表（转移入账）",
+                    [],
+                    now,
+                    None,
+                    target_sheet,
+                )
+            )
+
+        row_id = f"xfer-{source_sheet_id}-{transfer['sourceRowId']}-{target_iacuc}-{transfer['direction']}"
+        contrib_key = f"{source_sheet_id}:{transfer['sourceRowId']}:{target_iacuc}:{transfer['direction']}"
+        if transfer["direction"] == "out_to_in":
+            mirrored_row = {
+                "id": row_id,
+                "date": transfer["date"],
+                "addedCount": transfer["count"],
+                "addedType": "转入",
+                "transferInFromIacuc": transfer["fromIacuc"],
+                "removedCount": None,
+                "removedType": "",
+                "transferOutToIacuc": "",
+                "animalCount": None,
+                "cageCount": None,
+                "notes": transfer["notes"],
+                "transferSourceSheetId": source_sheet_id,
+                "transferSourceIacuc": source_iacuc,
+            }
+        else:
+            mirrored_row = {
+                "id": row_id,
+                "date": transfer["date"],
+                "addedCount": None,
+                "addedType": "",
+                "transferInFromIacuc": "",
+                "removedCount": transfer["count"],
+                "removedType": "转出",
+                "transferOutToIacuc": transfer["toIacuc"],
+                "animalCount": None,
+                "cageCount": None,
+                "notes": transfer["notes"],
+                "transferSourceSheetId": source_sheet_id,
+                "transferSourceIacuc": source_iacuc,
+            }
+        target_rows = [row for row in target_sheet.get("rows", []) if row.get("id") != row_id]
+        merged = False
+        for row in target_rows:
+            if clean_text(row.get("transferSourceSheetId", "")):
+                continue
+            if clean_text(row.get("date", "")) != transfer["date"]:
+                continue
+            if transfer["direction"] == "out_to_in":
+                if clean_text(row.get("addedType", "")) not in ("", "转入"):
+                    continue
+                if row.get("cageCount") is not None:
+                    continue
+                existing = row.get("transferMirrorContrib")
+                contrib = existing if isinstance(existing, dict) else {}
+                row["addedType"] = "转入"
+                row["transferInFromIacuc"] = transfer["fromIacuc"]
+                row["addedCount"] = (as_int(row.get("addedCount")) or 0) + transfer["count"]
+                contrib[contrib_key] = transfer["count"]
+                row["transferMirrorContrib"] = contrib
+                merged = True
+                break
+            if clean_text(row.get("removedType", "")) not in ("", "转出"):
+                continue
+            if row.get("cageCount") is not None:
+                continue
+            existing = row.get("transferMirrorContrib")
+            contrib = existing if isinstance(existing, dict) else {}
+            row["removedType"] = "转出"
+            row["transferOutToIacuc"] = transfer["toIacuc"]
+            row["removedCount"] = (as_int(row.get("removedCount")) or 0) + transfer["count"]
+            contrib[contrib_key] = transfer["count"]
+            row["transferMirrorContrib"] = contrib
+            merged = True
+            break
+        if not merged:
+            target_rows.append(mirrored_row)
+        target_sheet["rows"] = sorted(target_rows, key=lambda item: (item.get("date", ""), item.get("id", "")))
+        target_sheet["updatedAt"] = now
+        conn.execute(
+            """
+            UPDATE quantity_sheets
+            SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
+                project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
+            WHERE id = ?
+            """,
+            quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
+        )
+        events.append(
+            audit_event(
+                actor,
+                "quantity_sheet.transfer_synced",
+                "quantity_sheet",
+                target_sheet["id"],
+                f"{actor['displayName']} 将 {source_iacuc} 转移记录同步到 {target_iacuc} 数量统计表",
+                [],
+                now,
+                None,
+                {"targetSheetId": target_sheet["id"], "targetIacuc": target_iacuc, "rowId": row_id},
+            )
+        )
+    return events
 
 
 def normalize_quantity_sheet(payload, sheet_id, updated_at):
@@ -1959,9 +2211,20 @@ def normalize_quantity_sheet_row(row, month):
         "addedType": clean_text(row.get("addedType", "")),
         "removedCount": as_int(row.get("removedCount")),
         "removedType": clean_text(row.get("removedType", "")),
+        "transferInFromIacuc": normalize_iacuc_number(row.get("transferInFromIacuc", "")),
+        "transferOutToIacuc": normalize_iacuc_number(row.get("transferOutToIacuc", "")),
         "animalCount": as_int(row.get("animalCount")),
         "cageCount": as_int(row.get("cageCount")),
         "notes": clean_text(row.get("notes", "")),
+        "transferSourceSheetId": clean_text(row.get("transferSourceSheetId", "")),
+        "transferSourceIacuc": normalize_iacuc_number(row.get("transferSourceIacuc", "")),
+        "transferMirrorContrib": {
+            clean_text(key): max(as_int(value) or 0, 0)
+            for key, value in (row.get("transferMirrorContrib") or {}).items()
+            if clean_text(key)
+        }
+        if isinstance(row.get("transferMirrorContrib"), dict)
+        else {},
     }
 
 
@@ -2002,26 +2265,28 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     if status not in ("draft", "locked"):
         raise ValueError("结算单状态只能是 draft 或 locked")
 
+    sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
+    if not sheet_iacuc:
+        raise ValueError("数量统计表缺少伦理号，无法生成按伦理号拆分的结算单")
     sheets = [
         item
         for item in list_quantity_sheets(conn)
-        if item.get("month") == sheet["month"] and clean_text(item.get("pi", "")) == clean_text(sheet.get("pi", ""))
+        if item.get("month") == sheet["month"] and normalize_iacuc_number(item.get("iacuc", "")) == sheet_iacuc
     ]
     for item in sheets:
         validate_quantity_sheet_permission(actor, item)
-    if not clean_text(sheet.get("pi", "")):
-        sheets = [sheet]
-
     pi_name = clean_text(sheet.get("pi", ""))
     principal_type_by_pi = read_principal_type_by_pi(conn)
     principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
-    free_cages = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
+    # IACUC 分表阶段不应用 PI 免费笼位，避免跨伦理号结算失真。
+    free_cages = 0
     lines = quantity_sheet_statement_lines(sheets, free_cages)
     generated_at = now_iso()
-    iacucs = sorted({item["iacuc"] for item in sheets if item.get("iacuc")})
+    iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
+    statement_iacuc = iacucs[0] if iacucs else sheet_iacuc
     statement = {
         "id": new_id("stmt"),
-        "iacuc": "、".join(iacucs) or sheet["iacuc"],
+        "iacuc": statement_iacuc,
         "iacucs": iacucs,
         "month": sheet["month"],
         "project": "、".join(sorted({item.get("project", "") for item in sheets if item.get("project")})),
@@ -2062,7 +2327,7 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
         "billing_statement.generated_from_quantity_sheet",
         "billing_statement",
         statement["id"],
-        f"{actor['displayName']} 根据数量统计表生成 {pi_name or sheet['iacuc']} {sheet['month']} 饲养费结算单",
+        f"{actor['displayName']} 根据数量统计表生成 {statement_iacuc} {sheet['month']} 饲养费结算单",
         [],
         generated_at,
         sheet,
@@ -2077,23 +2342,27 @@ def quantity_sheet_statement_lines(sheets, free_cages):
         return []
 
     sheet_states = []
+    sheet_state_by_iacuc = {}
     month = sheets[0]["month"]
     for sheet in sheets:
         rows_by_date = {}
         for row in sheet.get("rows", []):
             rows_by_date.setdefault(row["date"], []).append(row)
-        sheet_states.append(
-            {
-                "sheet": sheet,
-                "rowsByDate": rows_by_date,
-                "animalCount": sheet.get("initialAnimalCount") or 0,
-                "cageCount": sheet.get("initialCageCount") or 0,
-            }
-        )
+        state = {
+            "sheet": sheet,
+            "rowsByDate": rows_by_date,
+            "animalCount": sheet.get("initialAnimalCount") or 0,
+            "cageCount": sheet.get("initialCageCount") or 0,
+        }
+        sheet_states.append(state)
+        iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
+        if iacuc and iacuc not in sheet_state_by_iacuc:
+            sheet_state_by_iacuc[iacuc] = state
 
     cumulative = 0
     lines = []
     for date in dates_in_month(month):
+        transfer_deltas = {}
         breakdown = []
         animal_count = 0
         cage_count = 0
@@ -2101,19 +2370,42 @@ def quantity_sheet_statement_lines(sheets, free_cages):
         for state in sheet_states:
             day_rows = state["rowsByDate"].get(date, [])
             for row in day_rows:
+                added_count = row.get("addedCount") or 0
+                removed_count = row.get("removedCount") or 0
                 if row.get("animalCount") is not None:
                     state["animalCount"] = row.get("animalCount") or 0
                 else:
                     state["animalCount"] = max(
-                        state["animalCount"] + (row.get("addedCount") or 0) - (row.get("removedCount") or 0),
+                        state["animalCount"] + added_count - removed_count,
                         0,
                     )
                 if row.get("cageCount") is not None:
                     state["cageCount"] = row.get("cageCount") or 0
+                else:
+                    state["cageCount"] = max(
+                        state["cageCount"] + added_count - removed_count,
+                        0,
+                    )
+                transfer_out_iacuc = normalize_iacuc_number(row.get("transferOutToIacuc", ""))
+                if transfer_out_iacuc and removed_count > 0:
+                    transfer_deltas[transfer_out_iacuc] = transfer_deltas.get(transfer_out_iacuc, 0) + removed_count
+                transfer_in_from_iacuc = normalize_iacuc_number(row.get("transferInFromIacuc", ""))
+                if transfer_in_from_iacuc and added_count > 0:
+                    transfer_deltas[transfer_in_from_iacuc] = transfer_deltas.get(transfer_in_from_iacuc, 0) - added_count
+            sheet = state["sheet"]
+            quantity_row_ids.extend(row["id"] for row in day_rows)
+
+        for iacuc, delta in transfer_deltas.items():
+            target = sheet_state_by_iacuc.get(iacuc)
+            if not target:
+                continue
+            target["cageCount"] = max((target.get("cageCount") or 0) + delta, 0)
+            target["animalCount"] = max((target.get("animalCount") or 0) + delta, 0)
+
+        for state in sheet_states:
             sheet = state["sheet"]
             animal_count += state["animalCount"]
             cage_count += state["cageCount"]
-            quantity_row_ids.extend(row["id"] for row in day_rows)
             if state["cageCount"] or state["animalCount"]:
                 breakdown.append(
                     {
@@ -2151,6 +2443,8 @@ def generate_billing_statement(conn, payload, actor):
         raise ValueError("结算月份格式应为 YYYY-MM")
     if status not in ("draft", "locked"):
         raise ValueError("结算单状态只能是 draft 或 locked")
+    if not iacuc:
+        raise ValueError("请先选择伦理号后再生成结算单")
 
     applications_by_iacuc = read_applications_by_iacuc(conn)
     occupancies = read_payloads(conn, "occupancies", "start_date, rowid")
@@ -2163,34 +2457,28 @@ def generate_billing_statement(conn, payload, actor):
         raise ValueError("项目负责人不能为空")
     principal_type_by_pi = read_principal_type_by_pi(conn)
     principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
-    free_cages = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
-    iacucs = sorted({
-        normalize_iacuc_number(item.get("iacuc", ""))
-        for item in occupancies
-        if clean_text(item.get("pi", "")) == pi_name and normalize_iacuc_number(item.get("iacuc", ""))
-    })
+    # IACUC 分表阶段不应用 PI 免费笼位，避免跨伦理号结算失真。
+    free_cages = 0
+    iacucs = [iacuc]
 
     for date in dates:
         active_items = [
             item
             for item in occupancies
-            if clean_text(item.get("pi", "")) == pi_name and occupancy_active_on_date(item, date)
+            if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and occupancy_active_on_date(item, date)
         ]
         charges = tiered_daily_charge(len(active_items), free_cages)
         amount = charges["amount"]
         cumulative += amount
         breakdown = []
-        for item in active_items:
-            item_iacuc = normalize_iacuc_number(item.get("iacuc", ""))
-            found = next((entry for entry in breakdown if entry["iacuc"] == item_iacuc), None)
-            if not found:
-                found = {
-                    "iacuc": item_iacuc,
-                    "project": item.get("project", ""),
-                    "cageCount": 0,
+        if active_items:
+            breakdown.append(
+                {
+                    "iacuc": iacuc,
+                    "project": statement_application_snapshot(iacuc, applications_by_iacuc, occupancies).get("project", ""),
+                    "cageCount": len(active_items),
                 }
-                breakdown.append(found)
-            found["cageCount"] += 1
+            )
         line = {
             "id": new_id("line"),
             "date": date,
@@ -2203,14 +2491,14 @@ def generate_billing_statement(conn, payload, actor):
         }
         lines.append(line)
 
-    application = statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies)
+    application = statement_application_snapshot(iacuc, applications_by_iacuc, occupancies)
     statement = {
         "id": new_id("stmt"),
-        "iacuc": "、".join(iacucs) or iacuc,
+        "iacuc": iacuc,
         "iacucs": iacucs,
         "month": month,
         "project": application.get("project", ""),
-        "pi": application.get("pi", ""),
+        "pi": pi_name,
         "owner": application.get("owner", ""),
         "funding": application.get("funding", ""),
         "sourceType": "cage_map",
@@ -2244,6 +2532,162 @@ def generate_billing_statement(conn, payload, actor):
         "billing_statement",
         statement["id"],
         f"{actor['displayName']} 生成 {pi_name} {month} 饲养费结算单",
+        [],
+        generated_at,
+        None,
+        statement,
+    )
+    write_audit_events(conn, [event])
+    return statement, lines, merge_audit_logs([], [event])
+
+
+def generate_billing_statement_by_pi(conn, payload, actor):
+    month = clean_text(payload.get("month", ""))
+    pi_name = clean_text(payload.get("pi", ""))
+    status = clean_text(payload.get("status", "draft")) or "draft"
+    source_type = clean_text(payload.get("sourceType", "cage_map")) or "cage_map"
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise ValueError("结算月份格式应为 YYYY-MM")
+    if status not in ("draft", "locked"):
+        raise ValueError("结算单状态只能是 draft 或 locked")
+    if source_type not in ("cage_map", "quantity_sheet"):
+        raise ValueError("sourceType 只能是 cage_map 或 quantity_sheet")
+    if not pi_name:
+        raise ValueError("按 PI 合表需要提供项目负责人")
+
+    principal_type_by_pi = read_principal_type_by_pi(conn)
+    principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
+    free_cages = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
+    generated_at = now_iso()
+    iacucs = []
+
+    if source_type == "cage_map":
+        applications_by_iacuc = read_applications_by_iacuc(conn)
+        occupancies = read_payloads(conn, "occupancies", "start_date, rowid")
+        iacucs = sorted(
+            {
+                normalize_iacuc_number(item.get("iacuc", ""))
+                for item in occupancies
+                if clean_text(item.get("pi", "")) == pi_name and normalize_iacuc_number(item.get("iacuc", ""))
+            }
+        )
+        cumulative = 0
+        lines = []
+        for date in dates_in_month(month):
+            active_items = [
+                item
+                for item in occupancies
+                if clean_text(item.get("pi", "")) == pi_name and occupancy_active_on_date(item, date)
+            ]
+            charges = tiered_daily_charge(len(active_items), free_cages)
+            cumulative += charges["amount"]
+            breakdown = []
+            for item in active_items:
+                item_iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+                found = next((entry for entry in breakdown if entry["iacuc"] == item_iacuc), None)
+                if not found:
+                    found = {
+                        "iacuc": item_iacuc,
+                        "project": item.get("project", ""),
+                        "cageCount": 0,
+                    }
+                    breakdown.append(found)
+                found["cageCount"] += 1
+            lines.append(
+                {
+                    "id": new_id("line"),
+                    "date": date,
+                    "cageCount": len(active_items),
+                    **charges,
+                    "amount": charges["amount"],
+                    "cumulative": cumulative,
+                    "iacucBreakdown": breakdown,
+                    "occupancyIds": [item.get("id") for item in active_items if item.get("id")],
+                }
+            )
+        application = statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies)
+        statement = {
+            "id": new_id("stmt"),
+            "iacuc": f"pi::{pi_name}",
+            "iacucs": iacucs,
+            "month": month,
+            "project": application.get("project", ""),
+            "pi": pi_name,
+            "owner": application.get("owner", ""),
+            "funding": application.get("funding", ""),
+            "sourceType": "pi_merged_cage_map",
+            "sourceLabel": "动态笼位图（按 PI 合表）",
+            "billingUnit": "cage_day",
+            "principalType": principal_type,
+            "freeCageAllowance": free_cages,
+            "tierLimit": BILLING_TIER_LIMIT,
+            "baseUnitPrice": BILLING_TIER_BASE_PRICE,
+            "overageUnitPrice": BILLING_TIER_OVER_PRICE,
+            "totalCageDays": sum(line["cageCount"] for line in lines),
+            "totalFreeCageDays": sum(line.get("freeCages", 0) for line in lines),
+            "totalBillableCageDays": sum(line.get("billableCages", 0) for line in lines),
+            "totalTier1CageDays": sum(line.get("tier1BillableCages", 0) for line in lines),
+            "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
+            "totalAmount": cumulative,
+            "status": status,
+            "generatedAt": generated_at,
+            "lockedAt": generated_at if status == "locked" else "",
+        }
+    else:
+        sheets = [
+            item
+            for item in list_quantity_sheets(conn)
+            if item.get("month") == month and clean_text(item.get("pi", "")) == pi_name
+        ]
+        if not sheets:
+            raise ValueError("未找到该 PI 在结算月份内的数量统计表")
+        for item in sheets:
+            validate_quantity_sheet_permission(actor, item)
+        iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
+        lines = quantity_sheet_statement_lines(sheets, free_cages)
+        statement = {
+            "id": new_id("stmt"),
+            "iacuc": f"pi::{pi_name}",
+            "iacucs": iacucs,
+            "month": month,
+            "project": "、".join(sorted({item.get("project", "") for item in sheets if item.get("project")})),
+            "pi": pi_name,
+            "owner": "、".join(sorted({item.get("owner", "") for item in sheets if item.get("owner")})),
+            "funding": "、".join(sorted({item.get("funding", "") for item in sheets if item.get("funding")})),
+            "sourceType": "pi_merged_quantity_sheet",
+            "sourceIds": [item["id"] for item in sheets],
+            "sourceLabel": "数量统计表（按 PI 合表）",
+            "roomName": "、".join(sorted({item.get("roomName", "") for item in sheets if item.get("roomName")})),
+            "manager": "、".join(sorted({item.get("manager", "") for item in sheets if item.get("manager")})),
+            "billingUnit": "cage_day",
+            "principalType": principal_type,
+            "freeCageAllowance": free_cages,
+            "tierLimit": BILLING_TIER_LIMIT,
+            "baseUnitPrice": BILLING_TIER_BASE_PRICE,
+            "overageUnitPrice": BILLING_TIER_OVER_PRICE,
+            "totalCageDays": sum(line["cageCount"] for line in lines),
+            "totalFreeCageDays": sum(line.get("freeCages", 0) for line in lines),
+            "totalBillableCageDays": sum(line.get("billableCages", 0) for line in lines),
+            "totalTier1CageDays": sum(line.get("tier1BillableCages", 0) for line in lines),
+            "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
+            "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
+            "totalAmount": lines[-1]["cumulative"] if lines else 0,
+            "status": status,
+            "generatedAt": generated_at,
+            "lockedAt": generated_at if status == "locked" else "",
+        }
+
+    for line in lines:
+        line["statementId"] = statement["id"]
+    if payload.get("replaceDraft", True):
+        replace_existing_draft_statement(conn, statement["iacuc"], month)
+    insert_billing_statement(conn, statement, lines)
+    event = audit_event(
+        actor,
+        "billing_statement.generated_by_pi",
+        "billing_statement",
+        statement["id"],
+        f"{actor['displayName']} 按 PI 合表生成 {pi_name} {month} 饲养费结算单",
         [],
         generated_at,
         None,
@@ -2612,6 +3056,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if path == "/api/billing-statements/generate":
             self.handle_billing_statement_generate()
             return
+        if path == "/api/billing-statements/generate-by-pi":
+            self.handle_billing_statement_generate_by_pi()
+            return
         if path == "/api/infrastructure":
             self.handle_infrastructure_write()
             return
@@ -2885,6 +3332,22 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             body = self.read_json_body()
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement(conn, body, user)
+                conn.commit()
+            self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_billing_statement_generate_by_pi(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                statement, lines, audit_logs = generate_billing_statement_by_pi(conn, body, user)
                 conn.commit()
             self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
         except ValueError as exc:

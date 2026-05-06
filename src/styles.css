@@ -692,6 +692,27 @@ h3 {
   min-width: 86px;
 }
 
+.quantity-entry-table .quantity-type-cell select {
+  min-width: 160px;
+}
+
+.quantity-entry-table .quantity-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.quantity-entry-table .quantity-inline-field input {
+  min-width: 120px;
+}
+
+.quantity-entry-table .quantity-count-input {
+  min-width: 72px;
+  width: 72px;
+  text-align: right;
+}
+
 .quantity-entry-table input[required] {
   border-color: #b7791f;
   box-shadow: inset 3px 0 0 #d69e2e;
