@@ -26,8 +26,12 @@ const ENTITY_API_URLS = {
 const SYSTEM_RELEASE_NOTES = [
   {
     version: "0.4.0",
-    title: "自动发布",
-    items: ["同步版本号、GitHub Release、离线源码包和容器镜像"],
+    title: "结算流程中心与核算界面重构",
+    items: [
+      "新增按项目负责人汇总的结算流程中心，支持结算单状态推进、详情弹窗、版本链和事件记录展示",
+      "后端结算模块拆分为 workflow、version、event 结构，为后续邮件、企业微信和催办自动化预留扩展位",
+      "重构饲养费核算界面：拆出流程中心、精简动态笼位图结算页、统一数量统计表按钮布局，并新增系统设置折叠分组",
+    ],
   },
   {
     version: "0.3.9a",
