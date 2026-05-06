@@ -23,6 +23,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.3.9",
+    title: "结算单财务版式优化",
+    items: [
+      "结算单调整为更偏财务单据风格，优化顶部信息栏、表格列宽比例和签章留白",
+      "单据右上角新增二维码，可扫码访问在线版结算单",
+      "按内部流转场景精简字段并重排信息区，形成先分后总的展示结构",
+    ],
+  },
+  {
     version: "0.3.8b",
     title: "数量统计表录入与更新记录展示优化",
     items: [
@@ -151,7 +160,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.3.8b",
+  version: "0.3.9",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -4247,7 +4256,6 @@ function settlementHtml(statement, info, rows) {
   const periodLabel = settlementPeriodLabel(statement.month);
   const currency = "CNY";
   const dataSourceLabel = isQuantitySheet ? "数量统计表（录入）" : "动态笼位图（自动）";
-  const principalType = principalTypeLabel(principalTypeForPi(statement.pi || info.pi || state.billingPi));
   const totalAmountText = MONEY_FORMAT.format(statement.totalAmount);
   const billableTotal = statement.totalBillableCageDays ?? statement.totalCageDays;
   const tier2Total = Number(statement.totalTier2CageDays || 0);
@@ -4274,6 +4282,7 @@ function settlementHtml(statement, info, rows) {
     )
     .join("");
   const detailTotalsHtml = detailMatrix.iacucs.map((iacuc) => `<td class="num">${formatStatementNumber(detailMatrix.totals.get(iacuc) || 0)}</td>`).join("");
+  const iacucColumnGroupHtml = detailMatrix.iacucs.map(() => `<col class="col-iacuc" />`).join("");
 
   return `
     <!doctype html>
@@ -4282,27 +4291,32 @@ function settlementHtml(statement, info, rows) {
         <meta charset="utf-8" />
         <title>${escapeText(statement.pi || state.billingPi || state.billingIacuc)}-${escapeText(statement.month || state.billingMonth)}-饲养费结算单</title>
         <style>
-          @page { size: A4; margin: 9mm 10mm 10mm; }
+          @page { size: A4; margin: 12mm; }
           * { box-sizing: border-box; }
           body {
             color: #111111;
-            font-family: "Times New Roman", "Songti SC", "SimSun", "Noto Serif CJK SC", serif;
-            font-size: 9.2px;
-            line-height: 1.22;
+            font-family: "Arial", "Helvetica Neue", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-size: 9.8px;
+            line-height: 1.28;
             margin: 0;
             background: #ffffff;
           }
           .document {
-            max-width: 190mm;
+            max-width: 186mm;
+            min-height: 272mm;
+            max-height: 272mm;
+            overflow: hidden;
             margin: 0 auto;
           }
           .topbar {
+            border-bottom: 1.4px solid #000000;
+            padding-bottom: 6px;
+          }
+          .topbar-grid {
             display: grid;
-            grid-template-columns: 1fr 25mm;
-            gap: 9px;
+            grid-template-columns: 1fr 24mm;
+            gap: 8px;
             align-items: start;
-            border-bottom: 1.6px solid #000000;
-            padding-bottom: 5px;
           }
           h1 {
             color: #000000;
@@ -4319,7 +4333,7 @@ function settlementHtml(statement, info, rows) {
           .doc-meta,
           .basic-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 2px 10px;
             margin-top: 5px;
           }
@@ -4331,15 +4345,18 @@ function settlementHtml(statement, info, rows) {
             overflow-wrap: anywhere;
           }
           .qr-box {
-            align-items: center;
             display: grid;
-            gap: 2px;
             justify-items: center;
+            gap: 2px;
             text-align: center;
           }
           .qr-box svg {
-            height: 21mm;
-            width: 21mm;
+            width: 22mm;
+            height: 22mm;
+          }
+          .qr-box span {
+            font-size: 8px;
+            color: #444444;
           }
           .section {
             margin-top: 6px;
@@ -4349,7 +4366,7 @@ function settlementHtml(statement, info, rows) {
             grid-template-columns: repeat(5, 1fr);
             gap: 0;
             margin-top: 6px;
-            border-top: 1.4px solid #000000;
+            border-top: 1px solid #000000;
             border-bottom: 1px solid #000000;
           }
           .metric {
@@ -4405,6 +4422,7 @@ function settlementHtml(statement, info, rows) {
           table {
             border-collapse: collapse;
             width: 100%;
+            table-layout: fixed;
           }
           th,
           td {
@@ -4433,8 +4451,8 @@ function settlementHtml(statement, info, rows) {
             white-space: nowrap;
           }
           .three-line {
-            border-top: 1.4px solid #000000;
-            border-bottom: 1.4px solid #000000;
+            border-top: 1px solid #000000;
+            border-bottom: 1px solid #000000;
           }
           .three-line thead tr {
             border-bottom: 1px solid #000000;
@@ -4446,6 +4464,13 @@ function settlementHtml(statement, info, rows) {
             color: #000000;
             font-weight: 700;
           }
+          .detail-table .col-date { width: 11%; }
+          .detail-table .col-iacuc { width: 7%; }
+          .detail-table .col-total { width: 8%; }
+          .detail-table .col-free { width: 8%; }
+          .detail-table .col-billable { width: 8%; }
+          .detail-table .col-amount { width: 10%; }
+          .detail-table .col-cumulative { width: 10%; }
           .summary-table td:nth-child(2),
           .summary-table th:nth-child(2) {
             text-align: left;
@@ -4472,8 +4497,21 @@ function settlementHtml(statement, info, rows) {
           .sign div {
             border-top: 1px solid #000000;
             color: #222222;
-            min-height: 20px;
+            min-height: 24px;
             padding-top: 4px;
+          }
+          .flow-table th,
+          .flow-table td {
+            border: 1px solid #000000;
+            text-align: left;
+            padding: 4px;
+          }
+          .flow-table th {
+            background: #ffffff;
+            font-weight: 700;
+          }
+          .flow-table td {
+            height: 16px;
           }
           .footer {
             border-top: 1px solid #000000;
@@ -4485,7 +4523,7 @@ function settlementHtml(statement, info, rows) {
             padding-top: 4px;
           }
           @media print {
-            body { font-size: 8.6px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            body { font-size: 9.4px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             .section { margin-top: 4px; }
             th, td { padding: 1.7px 3px; }
             .detail-table { page-break-inside: auto; }
@@ -4496,31 +4534,77 @@ function settlementHtml(statement, info, rows) {
       <body>
         <main class="document">
           <header class="topbar">
-            <div>
-              <h1>实验动物饲养费结算单</h1>
-              <p class="subtitle">${escapeText(systemInfo.organization || "-")} · ${escapeText(systemInfo.department || "-")}</p>
-              <div class="doc-meta">
-                <div><span>单据编号：</span><strong>${escapeText(documentNumber)}</strong></div>
-                <div><span>结算期间：</span><strong>${escapeText(periodLabel)}</strong></div>
-                <div><span>币种：</span><strong>${currency}</strong></div>
-                <div><span>生成时间：</span><strong>${escapeText(generatedAt)}</strong></div>
+            <div class="topbar-grid">
+              <div>
+                <h1>实验动物饲养费结算单</h1>
+                <p class="subtitle">${escapeText(systemInfo.department || "-")}</p>
+                <div class="doc-meta">
+                  <div><span>单据编号：</span><strong>${escapeText(documentNumber)}</strong></div>
+                  <div><span>结算期间：</span><strong>${escapeText(periodLabel)}</strong></div>
+                  <div><span>数据来源：</span><strong>${escapeText(dataSourceLabel)}</strong></div>
+                </div>
               </div>
-            </div>
-            <div class="qr-box">
-              ${qrSvg}
-              <span>扫码查看</span>
+              <div class="qr-box">
+                ${qrSvg}
+                <span>扫码访问在线单据</span>
+              </div>
             </div>
           </header>
 
           <section class="basic-grid">
-            <div><span>出具单位：</span>${escapeText(systemInfo.organization || "-")}</div>
-            <div><span>部门：</span>${escapeText(systemInfo.department || "-")}</div>
-            <div><span>项目负责人：</span>${escapeText(statement.pi || pi || "-")}</div>
-            <div><span>负责人类型：</span>${escapeText(principalType)}</div>
-            <div><span>实验负责人：</span>${escapeText(owner)}</div>
-            <div><span>支撑经费：</span>${escapeText(funding)}</div>
-            <div><span>数据来源：</span>${escapeText(dataSourceLabel)}</div>
+            <div><span>出具科室：</span>${escapeText(systemInfo.department || "-")}</div>
             <div><span>计费单位：</span>笼/天</div>
+            <div><span>单据状态：</span>${statement.status === "locked" ? "已锁定" : "草稿"}</div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>项目信息</h2>
+              <span>IACUC ${escapeText(iacucList.length ? `${iacucList.length} 项` : "-")}</span>
+            </div>
+            <table class="summary-table three-line">
+              <tbody>
+                <tr><th>项目负责人</th><td>${escapeText(statement.pi || pi || "-")}</td></tr>
+                <tr><th>实验负责人</th><td>${escapeText(owner)}</td></tr>
+                <tr><th>支撑经费</th><td>${escapeText(funding)}</td></tr>
+                <tr><th>项目名称</th><td>${escapeText(project)}</td></tr>
+                <tr><th>IACUC 编号</th><td>${escapeText(iacucList.join("、") || "-")}</td></tr>
+                ${isQuantitySheet ? `<tr><th>房间/管理员</th><td>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</td></tr>` : ""}
+              </tbody>
+            </table>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>每日饲养费明细</h2>
+              <span>各 IACUC 列为当日笼数；首单元 ¥${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)}；超额单元 ¥${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)}${tier2Total ? `，本单超额 ${formatStatementNumber(tier2Total)} 笼日` : "，本单无超额笼日"}</span>
+            </div>
+            <table class="detail-table three-line">
+            <colgroup>
+              <col class="col-date" />
+              ${iacucColumnGroupHtml}
+              <col class="col-total" />
+              <col class="col-free" />
+              <col class="col-billable" />
+              <col class="col-amount" />
+              <col class="col-cumulative" />
+            </colgroup>
+            <thead>
+              <tr><th>日期</th>${detailHeaderHtml}<th>合计笼数</th><th>减免笼数</th><th>收费笼数</th><th>当日费用</th><th>累计费用</th></tr>
+            </thead>
+            <tbody>${detailRowsHtml}</tbody>
+            <tfoot>
+              <tr>
+                <td>合计</td>
+                ${detailTotalsHtml}
+                <td class="num">${formatStatementNumber(statement.totalCageDays)}</td>
+                <td class="num">${formatStatementNumber(statement.totalFreeCageDays)}</td>
+                <td class="num">${formatStatementNumber(billableTotal)}</td>
+                <td class="money">¥${totalAmountText}</td>
+                <td class="money">¥${totalAmountText}</td>
+              </tr>
+            </tfoot>
+            </table>
           </section>
 
           <section class="amount-strip">
@@ -4546,47 +4630,9 @@ function settlementHtml(statement, info, rows) {
             </div>
           </section>
 
-          <section class="section">
-            <div class="section-head">
-              <h2>项目信息</h2>
-              <span>IACUC ${escapeText(iacucList.length ? `${iacucList.length} 项` : "-")}</span>
-            </div>
-            <table class="summary-table three-line">
-              <tbody>
-                <tr><th>项目名称</th><td>${escapeText(project)}</td></tr>
-                <tr><th>IACUC 编号</th><td>${escapeText(iacucList.join("、") || "-")}</td></tr>
-                ${isQuantitySheet ? `<tr><th>房间/管理员</th><td>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</td></tr>` : ""}
-              </tbody>
-            </table>
-          </section>
-
-          <section class="section">
-            <div class="section-head">
-              <h2>每日饲养费明细</h2>
-              <span>各 IACUC 列为当日笼数；首单元 ¥${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)}；超额单元 ¥${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)}${tier2Total ? `，本单超额 ${formatStatementNumber(tier2Total)} 笼日` : "，本单无超额笼日"}</span>
-            </div>
-            <table class="detail-table three-line">
-            <thead>
-              <tr><th>日期</th>${detailHeaderHtml}<th>合计笼数</th><th>减免笼数</th><th>收费笼数</th><th>当日费用</th><th>累计费用</th></tr>
-            </thead>
-            <tbody>${detailRowsHtml}</tbody>
-            <tfoot>
-              <tr>
-                <td>合计</td>
-                ${detailTotalsHtml}
-                <td class="num">${formatStatementNumber(statement.totalCageDays)}</td>
-                <td class="num">${formatStatementNumber(statement.totalFreeCageDays)}</td>
-                <td class="num">${formatStatementNumber(billableTotal)}</td>
-                <td class="money">¥${totalAmountText}</td>
-                <td class="money">¥${totalAmountText}</td>
-              </tr>
-            </tfoot>
-          </table>
-          </section>
-
           <section class="section note-card">
             <strong>说明：</strong>
-            本结算单为内部饲养费结算凭证，金额大写：${escapeText(rmbUppercase(statement.totalAmount))}。二维码预留系统查询入口：${escapeText(statementUrl)}；后续可在该入口接入分发状态、确认状态、报销状态和归档状态。
+            <span>&nbsp;</span>
           </section>
 
           <section class="sign">
