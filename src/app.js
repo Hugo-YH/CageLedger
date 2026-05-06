@@ -25,6 +25,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.0b",
+    title: "发布流整理",
+    items: [
+      "新增本地顺序化发布脚本 release:local，固定按改版本、校验、打包、提交、打标签、推送的顺序执行",
+      "精简 set_version 脚本职责，不再自动改 workflow 或插入占位更新记录",
+      "收敛 GitHub Actions 触发路径，避免 Release 与 tag push 重复触发容器包发布",
+    ],
+  },
+  {
     version: "0.4.0a",
     title: "版本记录修正与发布对齐",
     items: [
@@ -190,7 +199,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.0a",
+  version: "0.4.0b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",

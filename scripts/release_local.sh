@@ -66,11 +66,6 @@ run() {
 
 cd "$ROOT"
 
-if [[ -n "$(git status --short)" ]]; then
-  echo "Release script expects a clean working tree. Commit or stash current changes first." >&2
-  exit 1
-fi
-
 if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
   echo "Local tag v${VERSION} already exists." >&2
   exit 1
