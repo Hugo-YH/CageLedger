@@ -25,6 +25,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.1a",
+    title: "界面交互与伦理号录入优化",
+    items: [
+      "优化非全尺寸窗口下的导航展示，管理页面统一收纳到齿轮入口和管理抽屉中",
+      "流程中心详情默认聚焦流程进度和当前节点，已生成结算单、版本记录和明细改为点击后展开",
+      "伦理号输入改为轻量匹配面板，限制候选渲染数量并使用缓存查找，提升自动填充性能和交互体验",
+    ],
+  },
+  {
     version: "0.4.1",
     title: "移动端界面适配",
     items: [
@@ -199,6 +208,7 @@ const SYSTEM_API_GROUPS = [
 ];
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
+let IACUC_SEARCH_CACHE = null;
 let PRINCIPAL_IDENTITIES = [];
 let PRINCIPAL_IDENTITY_BY_NAME = new Map();
 let iacucIndexMeta = null;
@@ -208,7 +218,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.1",
+  version: "0.4.1a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -230,6 +240,7 @@ const BILLING_PRINCIPAL_INDEPENDENT = "independent";
 const FREE_CAGES_PI = 20;
 const FREE_CAGES_INDEPENDENT = 10;
 const FREE_CAGES_DEFAULT = FREE_CAGES_PI;
+const IACUC_OPTION_LIMIT = 8;
 const BILLING_TIER_LIMIT = 160;
 const BILLING_TIER_BASE_PRICE = 4.5;
 const BILLING_TIER_OVER_PRICE = 6.5;
@@ -262,6 +273,7 @@ const seedData = {
   billingWorkflowFilter: "todo",
   selectedBillingWorkflowId: "",
   selectedBillingWorkflowDetail: null,
+  showWorkflowStatements: false,
   settingsNavExpanded: false,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
@@ -376,6 +388,7 @@ function loadState() {
 }
 
 function saveState() {
+  invalidateIacucSearchCache();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -384,6 +397,7 @@ async function loadPersistedState() {
     remotePersistence = true;
     const entityState = await loadEntityState();
     state = normalize(entityState);
+    invalidateIacucSearchCache();
     selectFirstAvailableCage();
     return;
   } catch {
@@ -391,6 +405,7 @@ async function loadPersistedState() {
   }
 
   state = normalize(loadState());
+  invalidateIacucSearchCache();
 }
 
 async function loadEntityState() {
@@ -437,6 +452,7 @@ async function loadEntityState() {
     billingWorkflowFilter: localState.billingWorkflowFilter || "todo",
     selectedBillingWorkflowId: "",
     selectedBillingWorkflowDetail: null,
+    showWorkflowStatements: false,
     selectedQuantitySheetId: selectedQuantitySheet?.id || "",
     quantitySheetDraft: selectedQuantitySheet || makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
     quantitySheets,
@@ -554,6 +570,7 @@ async function loadBillingWorkflowDetail(workflowId) {
   }
   state.selectedBillingWorkflowId = workflowId;
   state.selectedBillingWorkflowDetail = payload;
+  state.showWorkflowStatements = false;
   if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
   return payload;
 }
@@ -617,6 +634,7 @@ function normalize(data) {
   next.billingWorkflowFilter = ["todo", "all", "done"].includes(next.billingWorkflowFilter) ? next.billingWorkflowFilter : "todo";
   next.selectedBillingWorkflowId = String(next.selectedBillingWorkflowId || "");
   next.selectedBillingWorkflowDetail = next.selectedBillingWorkflowDetail && typeof next.selectedBillingWorkflowDetail === "object" ? next.selectedBillingWorkflowDetail : null;
+  next.showWorkflowStatements = Boolean(next.showWorkflowStatements);
   next.principalIdentityFilter = String(next.principalIdentityFilter || "");
   next.batchMode = Boolean(next.batchMode);
   next.showCageEditor = Boolean(next.showCageEditor);
@@ -777,7 +795,7 @@ function renderSidebar() {
     ...(currentUser ? [["logs", "操作日志", "receipt"]] : []),
   ];
   const settingsViews = settingsNavItems.map(([view]) => view);
-  const settingsNavExpanded = state.settingsNavExpanded || (!isMobileViewport() && settingsViews.includes(state.activeView));
+  const settingsNavExpanded = state.settingsNavExpanded || (!isCompactViewport() && settingsViews.includes(state.activeView));
 
   return `
     <aside class="sidebar">
@@ -1345,7 +1363,7 @@ function renderSlotDetail(slot) {
       <div class="compact-form-row half">
         <label class="field-required">
           IACUC 编号
-          <input name="iacuc" value="${escapeAttr(occupancy.iacuc)}" placeholder="请输入或选择 IACUC 编号" list="iacucOptions" />
+          ${renderIacucLookupInput("iacuc", occupancy.iacuc, { required: false })}
         </label>
         <label class="field-auto">
           项目名称
@@ -1387,12 +1405,6 @@ function renderSlotDetail(slot) {
       </div>
       ${occupancy.status === "active" && state.samplingMode === "single" ? renderSamplingPanel("single", occupancy.endDate || today) : ""}
     </form>
-
-    <datalist id="iacucOptions">
-      ${iacucOptions(occupancy.iacuc)
-        .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
-        .join("")}
-    </datalist>
 
     <div class="history">
       <h3>占用历史</h3>
@@ -1474,7 +1486,7 @@ function renderBatchSlotDetail(slots) {
       <div class="compact-form-row half">
         <label class="field-required">
           IACUC 编号
-          <input name="iacuc" value="${escapeAttr(draft.iacuc)}" placeholder="请输入或选择 IACUC 编号" list="iacucOptions" />
+          ${renderIacucLookupInput("iacuc", draft.iacuc, { required: false })}
         </label>
         <label class="field-auto">
           项目名称
@@ -1517,16 +1529,67 @@ function renderBatchSlotDetail(slots) {
       ${activeCount && state.samplingMode === "batch" ? renderSamplingPanel("batch", today, activeCount) : ""}
     </form>
 
-    <datalist id="iacucOptions">
-      ${iacucOptions(draft.iacuc)
-        .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
-        .join("")}
-    </datalist>
   `;
 }
 
 function statusOption(status, current) {
   return `<option value="${status}" ${status === current ? "selected" : ""}>${statusLabel(status)}</option>`;
+}
+
+function renderIacucLookupInput(name, value = "", options = {}) {
+  const placeholder = options.placeholder || "请输入或选择 IACUC 编号";
+  const required = options.required ? "required" : "";
+  const compact = options.compact ? " compact" : "";
+  return `
+    <div class="iacuc-lookup-field${compact}">
+      <input
+        name="${escapeAttr(name)}"
+        value="${escapeAttr(value)}"
+        placeholder="${escapeAttr(placeholder)}"
+        autocomplete="off"
+        data-iacuc-lookup
+        ${required}
+      />
+      ${renderIacucLookupPanel(value)}
+    </div>
+  `;
+}
+
+function renderIacucLookupPanel(value = "") {
+  const options = iacucOptions(value);
+  const hasKeyword = String(value || "").trim();
+  return `
+    <div class="iacuc-suggest-panel" data-iacuc-suggest-panel>
+      <div class="iacuc-suggest-head">
+        <span>${hasKeyword ? "匹配伦理号" : "常用伦理号"}</span>
+        <small>${IACUC_INDEX.length ? `${IACUC_INDEX.length} 条索引` : "暂无索引"}</small>
+      </div>
+      <div class="iacuc-suggest-list">
+        ${
+          options.length
+            ? options.map(renderIacucSuggestion).join("")
+            : `<div class="iacuc-suggest-empty">未匹配到索引，可继续手动输入</div>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderIacucSuggestion(item) {
+  const title = item.project || item.pi || "未填写项目信息";
+  const meta = [item.pi, item.owner, item.funding].filter(Boolean).join(" · ");
+  return `
+    <button
+      class="iacuc-suggest-item"
+      type="button"
+      data-iacuc-pick="${escapeAttr(item.iacuc)}"
+      title="${escapeAttr(title)}"
+    >
+      <strong>${escapeText(item.iacuc)}</strong>
+      <span>${escapeText(title)}</span>
+      ${meta ? `<small>${escapeText(meta)}</small>` : ""}
+    </button>
+  `;
 }
 
 function renderSamplingPanel(mode, defaultDate, count = 1) {
@@ -1783,7 +1846,7 @@ function renderQuantitySheetBillingView() {
             <div class="quantity-field-group quantity-field-group-project">
               <label class="field-required">
                 IACUC 编号
-                <input name="iacuc" value="${escapeAttr(draft.iacuc)}" list="quantityIacucOptions" placeholder="请输入或选择 IACUC 编号" required />
+                ${renderIacucLookupInput("iacuc", draft.iacuc, { required: true })}
               </label>
               <label class="wide field-auto">
                 项目名称
@@ -1815,12 +1878,6 @@ function renderQuantitySheetBillingView() {
               </label>
             </div>
           </div>
-          <datalist id="quantityIacucOptions">
-            ${iacucOptions(draft.iacuc)
-              .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
-              .join("")}
-          </datalist>
-
           <div class="table-wrap quantity-entry-wrap">
             <table class="quantity-entry-table">
               <thead>
@@ -1954,6 +2011,8 @@ function renderBillingWorkflowDetailModal() {
   const currentVersion = workflow.currentVersion || {};
   const statement = currentVersion.statement || {};
   const timeline = workflowTimelineItems(workflow);
+  const currentNode = timeline.find((item) => item.state === "current") || timeline.find((item) => item.state === "done") || timeline[0] || {};
+  const showStatements = Boolean(state.showWorkflowStatements);
   return `
     <div class="editor-modal-backdrop" id="closeWorkflowDetail"></div>
     <div class="panel detail-panel editor-modal workflow-detail-modal">
@@ -1984,6 +2043,30 @@ function renderBillingWorkflowDetailModal() {
           .join("")}
       </div>
 
+      <section class="panel workflow-detail-card workflow-overview-card">
+        <div class="workflow-current-node">
+          <span class="workflow-node-dot"></span>
+          <div>
+            <span>当前节点</span>
+            <strong>${escapeText(currentNode.label || workflowStatusLabel(workflow.workflowStatus))}</strong>
+            <small>${escapeText(currentNode.time || "待推进")}</small>
+          </div>
+        </div>
+        <div class="workflow-overview-meta">
+          <div><span>结算月份</span><strong>${escapeText(workflow.month || "-")}</strong></div>
+          <div><span>来源</span><strong>${escapeText(workflowSourceLabel(workflow.sourceType))}</strong></div>
+          <div><span>伦理号数</span><strong>${Array.isArray(workflow.iacucs) ? workflow.iacucs.filter(Boolean).length : 0}</strong></div>
+          <div><span>应收金额</span><strong>¥${MONEY_FORMAT.format(Number(workflow.totalAmount || 0))}</strong></div>
+        </div>
+        <button class="secondary workflow-statement-toggle ${showStatements ? "active" : ""}" type="button" data-toggle-workflow-statements>
+          ${iconSvg("receipt")}
+          已生成结算单 ${versions.length ? versions.length : ""}
+        </button>
+      </section>
+
+      ${
+        showStatements
+          ? `
       <div class="workflow-detail-grid">
         <section class="panel workflow-detail-card">
           <div class="panel-head compact">
@@ -2105,6 +2188,9 @@ function renderBillingWorkflowDetailModal() {
           </table>
         </div>
       </section>
+          `
+          : ""
+      }
     </div>
   `;
 }
@@ -2144,7 +2230,7 @@ function renderQuantitySheetRow(row, index) {
           </select>
           ${
             showTransferIn
-              ? `<input name="transferInFromIacuc" value="${escapeAttr(row.transferInFromIacuc || "")}" list="quantityIacucOptions" placeholder="来源伦理号" />`
+              ? renderIacucLookupInput("transferInFromIacuc", row.transferInFromIacuc || "", { placeholder: "来源伦理号", compact: true })
               : ""
           }
         </div>
@@ -2157,7 +2243,7 @@ function renderQuantitySheetRow(row, index) {
           </select>
           ${
             showTransferOut
-              ? `<input name="transferOutToIacuc" value="${escapeAttr(row.transferOutToIacuc || "")}" list="quantityIacucOptions" placeholder="目标伦理号" />`
+              ? renderIacucLookupInput("transferOutToIacuc", row.transferOutToIacuc || "", { placeholder: "目标伦理号", compact: true })
               : ""
           }
         </div>
@@ -2861,13 +2947,9 @@ function bindEvents() {
     render();
   });
   document.querySelector("#slotForm")?.addEventListener("submit", handleSlotSubmit);
-  document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
-  document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("change", autofillIacucFields);
-  document.querySelector("#slotForm input[name='iacuc']")?.addEventListener("blur", autofillIacucFields);
+  bindIacucLookupInputs("#slotForm", autofillIacucFields);
   document.querySelector("#batchSlotForm")?.addEventListener("submit", handleBatchSlotSubmit);
-  document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
-  document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("change", autofillIacucFields);
-  document.querySelector("#batchSlotForm input[name='iacuc']")?.addEventListener("blur", autofillIacucFields);
+  bindIacucLookupInputs("#batchSlotForm", autofillIacucFields);
   document.querySelector("#openSampleSlot")?.addEventListener("click", () => openSampling("single"));
   document.querySelector("#openSampleBatchSlots")?.addEventListener("click", () => openSampling("batch"));
   document.querySelector("#confirmSampleSlot")?.addEventListener("click", sampleSelectedSlot);
@@ -2977,9 +3059,11 @@ function bindEvents() {
   });
   document.querySelector("#closeWorkflowDetail")?.addEventListener("click", closeBillingWorkflowDetail);
   document.querySelector("#closeWorkflowDetailButton")?.addEventListener("click", closeBillingWorkflowDetail);
-  document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("input", updateIacucOptions);
-  document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("change", autofillQuantitySheetIacucFields);
-  document.querySelector("#quantitySheetForm input[name='iacuc']")?.addEventListener("blur", autofillQuantitySheetIacucFields);
+  document.querySelector("[data-toggle-workflow-statements]")?.addEventListener("click", () => {
+    state.showWorkflowStatements = !state.showWorkflowStatements;
+    render();
+  });
+  bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
     if (name === "addedType" || name === "removedType") {
@@ -3088,6 +3172,10 @@ function bindEvents() {
 
 function isMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
+}
+
+function isCompactViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 1180px)").matches;
 }
 
 function bindAuthEvents() {
@@ -3307,6 +3395,7 @@ async function handleIacucUpload(event) {
     }
     IACUC_INDEX = payload.items || [];
     IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
+    invalidateIacucSearchCache();
     await loadPrincipalIdentities();
     iacucIndexMeta = {
       count: payload.count,
@@ -3507,14 +3596,42 @@ function autofillIacucFields(event) {
   event.target.value = match.iacuc;
 }
 
-function updateIacucOptions(event) {
-  const listId = event.target.getAttribute("list");
-  if (!listId) return;
-  const datalist = document.getElementById(listId);
-  if (!datalist) return;
-  datalist.innerHTML = iacucOptions(event.target.value)
-    .map((item) => `<option value="${escapeAttr(item.iacuc)}" label="${escapeAttr(item.project || item.pi || "")}"></option>`)
-    .join("");
+function bindIacucLookupInputs(scopeSelector, autofillHandler) {
+  const scope = document.querySelector(scopeSelector);
+  document.querySelectorAll(`${scopeSelector} [data-iacuc-lookup]`).forEach((input) => {
+    input.addEventListener("input", (event) => {
+      input.closest(".iacuc-lookup-field")?.classList.remove("lookup-picked");
+      updateIacucLookupPanel(input);
+      if (input.name === "iacuc") autofillHandler(event);
+    });
+    input.addEventListener("change", (event) => {
+      if (input.name === "iacuc") autofillHandler(event);
+    });
+    input.addEventListener("blur", (event) => {
+      if (input.name === "iacuc") autofillHandler(event);
+    });
+  });
+
+  scope?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-iacuc-pick]");
+    if (!button || !scope.contains(button)) return;
+    event.preventDefault();
+    const field = button.closest(".iacuc-lookup-field");
+    const input = field?.querySelector("[data-iacuc-lookup]");
+    if (!input) return;
+    input.value = button.dataset.iacucPick || "";
+    updateIacucLookupPanel(input);
+    if (input.name === "iacuc") autofillHandler({ target: input });
+    field.classList.add("lookup-picked");
+    input.blur();
+  });
+}
+
+function updateIacucLookupPanel(input) {
+  const field = input.closest(".iacuc-lookup-field");
+  const panel = field?.querySelector("[data-iacuc-suggest-panel]");
+  if (!panel) return;
+  panel.outerHTML = renderIacucLookupPanel(input.value);
 }
 
 async function clearSelectedSlot() {
@@ -4755,6 +4872,7 @@ async function persistBillingWorkflowFromCurrent() {
 function closeBillingWorkflowDetail() {
   state.selectedBillingWorkflowId = "";
   state.selectedBillingWorkflowDetail = null;
+  state.showWorkflowStatements = false;
   render();
 }
 
@@ -5697,30 +5815,60 @@ function uniqueIacucs() {
 }
 
 function iacucOptions(currentValue = "") {
-  const fromIndex = IACUC_INDEX.map((item) => ({
-    iacuc: item.iacuc,
-    project: item.project,
-    pi: item.pi,
-    owner: item.owner,
-    funding: item.funding,
-  }));
-  const fromOccupancies = state.occupancies
-    .filter((item) => item.iacuc)
-    .map((item) => ({
-      iacuc: item.iacuc,
-      project: item.project,
-      pi: item.pi,
-      owner: item.owner,
-      funding: "",
-    }));
   const typedValue = String(currentValue || "").trim();
-  const fromCurrentValue = typedValue ? [{ iacuc: typedValue, project: "", pi: "", owner: "", funding: "" }] : [];
-  const byNumber = new Map();
-  [...fromIndex, ...fromOccupancies, ...fromCurrentValue].forEach((item) => {
-    const key = normalizeIacucNumber(item.iacuc);
-    if (!byNumber.has(key)) byNumber.set(key, item);
+  const keyword = normalizeSearchText(typedValue);
+  const normalizedIacuc = normalizeIacucNumber(typedValue);
+  const cache = iacucSearchCache();
+  const exact = normalizedIacuc ? cache.byNumber.get(normalizedIacuc) : null;
+  const matches = keyword
+    ? cache.items.filter((item) => item.searchText.includes(keyword) || normalizeIacucNumber(item.iacuc).includes(normalizedIacuc))
+    : cache.items;
+  const limited = [];
+  if (exact) limited.push(exact);
+  matches.forEach((item) => {
+    if (limited.length >= IACUC_OPTION_LIMIT) return;
+    if (normalizeIacucNumber(item.iacuc) === normalizeIacucNumber(exact?.iacuc)) return;
+    limited.push(item);
   });
-  return [...byNumber.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
+  if (typedValue && !exact && limited.length < IACUC_OPTION_LIMIT) {
+    limited.unshift({ iacuc: typedValue, project: "", pi: "", owner: "", funding: "", searchText: keyword });
+  }
+  return limited.slice(0, IACUC_OPTION_LIMIT);
+}
+
+function iacucSearchCache() {
+  if (IACUC_SEARCH_CACHE) return IACUC_SEARCH_CACHE;
+  const byNumber = new Map();
+  const put = (item, source) => {
+    const iacuc = normalizeIacucNumber(item.iacuc);
+    if (!iacuc) return;
+    const existing = byNumber.get(iacuc);
+    if (existing?.source === "index" && source !== "index") return;
+    const normalized = {
+      iacuc: item.iacuc || iacuc,
+      project: item.project || "",
+      pi: item.pi || "",
+      owner: item.owner || "",
+      funding: item.funding || "",
+      source,
+    };
+    normalized.searchText = normalizeSearchText(
+      [normalized.iacuc, normalized.project, normalized.pi, normalized.owner, normalized.funding].join(" "),
+    );
+    byNumber.set(iacuc, normalized);
+  };
+
+  IACUC_INDEX.forEach((item) => put(item, "index"));
+  state.occupancies.forEach((item) => put(item, "occupancy"));
+  IACUC_SEARCH_CACHE = {
+    byNumber,
+    items: [...byNumber.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN")),
+  };
+  return IACUC_SEARCH_CACHE;
+}
+
+function invalidateIacucSearchCache() {
+  IACUC_SEARCH_CACHE = null;
 }
 
 function piOptions(currentValue = "") {
@@ -5754,20 +5902,7 @@ function piOptions(currentValue = "") {
 function findIacucInfo(value) {
   const key = normalizeIacucNumber(value);
   if (!key) return null;
-
-  const indexed = IACUC_BY_NUMBER.get(key);
-  if (indexed) return indexed;
-
-  const occupancy = state.occupancies.find((item) => normalizeIacucNumber(item.iacuc) === key);
-  if (!occupancy) return null;
-
-  return {
-    iacuc: occupancy.iacuc,
-    project: occupancy.project,
-    pi: occupancy.pi,
-    owner: occupancy.owner,
-    funding: "",
-  };
+  return iacucSearchCache().byNumber.get(key) || null;
 }
 
 function piForIacuc(value) {
@@ -5984,9 +6119,11 @@ async function loadIacucIndex() {
       source: payload.source,
     };
     IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
+    invalidateIacucSearchCache();
   } catch {
     IACUC_INDEX = [];
     IACUC_BY_NUMBER = new Map();
+    invalidateIacucSearchCache();
     iacucIndexMeta = null;
   }
 }
