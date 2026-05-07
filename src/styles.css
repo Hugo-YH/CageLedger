@@ -706,18 +706,74 @@ h3 {
   margin-right: 8px;
 }
 
+.workflow-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.workflow-table th:nth-child(1),
+.workflow-table td:nth-child(1) {
+  width: 90px;
+}
+
+.workflow-table th:nth-child(2),
+.workflow-table td:nth-child(2) {
+  width: 210px;
+}
+
+.workflow-table th:nth-child(3),
+.workflow-table td:nth-child(3) {
+  width: 190px;
+}
+
+.workflow-table th:nth-child(4),
+.workflow-table td:nth-child(4) {
+  width: 130px;
+}
+
+.workflow-table th:nth-child(5),
+.workflow-table td:nth-child(5) {
+  width: 190px;
+}
+
+.workflow-table th:nth-child(6),
+.workflow-table td:nth-child(6) {
+  width: 110px;
+}
+
+.workflow-table th:nth-child(7),
+.workflow-table td:nth-child(7) {
+  width: 120px;
+}
+
+.workflow-table th:nth-child(8),
+.workflow-table td:nth-child(8) {
+  width: 210px;
+}
+
+.workflow-principal-cell strong,
+.workflow-principal-cell span {
+  display: block;
+}
+
+.workflow-principal-cell strong {
+  color: var(--text);
+}
+
+.workflow-principal-cell span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .workflow-row {
   cursor: pointer;
 }
 
 .workflow-row:hover td {
   background: #f3f8f7;
-}
-
-.workflow-detail-modal {
-  width: min(1320px, calc(100vw - 64px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
 }
 
 .workflow-timeline {
@@ -778,6 +834,30 @@ h3 {
 
 .workflow-detail-card {
   min-width: 0;
+}
+
+.workflow-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.workflow-modal-head h2 {
+  font-size: 22px;
+}
+
+.workflow-modal-head p {
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.workflow-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
 .workflow-overview-card {
@@ -1767,6 +1847,10 @@ textarea:focus {
   color: var(--danger);
 }
 
+.danger-text {
+  color: var(--danger);
+}
+
 .history {
   margin-top: 20px;
   border-top: 1px solid var(--line);
@@ -2092,6 +2176,14 @@ tr:last-child td {
   box-shadow: 0 18px 40px rgba(9, 31, 38, 0.2);
 }
 
+.workflow-detail-modal {
+  left: max(292px, calc(50vw - 520px));
+  right: 24px;
+  width: auto;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
 .editor-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -2318,6 +2410,15 @@ tr:last-child td {
 
   .workflow-overview-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-modal-head {
+    display: grid;
+    gap: 12px;
+  }
+
+  .workflow-modal-actions {
+    justify-content: space-between;
   }
 
   .cage-editor {

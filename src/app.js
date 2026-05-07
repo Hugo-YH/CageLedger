@@ -25,6 +25,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.1b",
+    title: "结算流程中心管理优化",
+    items: [
+      "流程中心新增删除结算流程功能，删除时同步清理版本记录、明细和流程事件并写入操作日志",
+      "流程详情弹窗调整为更宽的专用布局，避免汇总信息在窄抽屉中异常换行",
+      "流程列表项目负责人列改为直接显示具体伦理号，并调整列宽提升表格可读性",
+    ],
+  },
+  {
     version: "0.4.1a",
     title: "界面交互与伦理号录入优化",
     items: [
@@ -218,7 +227,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.1a",
+  version: "0.4.1b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -573,6 +582,29 @@ async function loadBillingWorkflowDetail(workflowId) {
   state.showWorkflowStatements = false;
   if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
   return payload;
+}
+
+async function deleteBillingWorkflow(workflowId) {
+  const response = await fetch(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}`, {
+    method: "DELETE",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "删除结算流程失败");
+  }
+  mergeServerAuditLogs(payload);
+  state.billingWorkflows = state.billingWorkflows.filter((item) => item.id !== workflowId);
+  if (state.selectedBillingWorkflowId === workflowId) {
+    state.selectedBillingWorkflowId = "";
+    state.selectedBillingWorkflowDetail = null;
+    state.showWorkflowStatements = false;
+  }
+  return payload.workflow;
 }
 
 async function updateEntity(collection, itemId, item) {
@@ -1980,11 +2012,15 @@ function renderBillingWorkflowRow(item) {
   const summary = currentVersion.summary || {};
   const nextStatus = nextWorkflowStatus(item.workflowStatus);
   const scopeLabel = item.scopeType === "pi" ? item.pi || item.scopeKey?.replace(/^pi::/, "") || "-" : item.iacuc || "-";
-  const iacucCount = Array.isArray(item.iacucs) ? item.iacucs.filter(Boolean).length : 0;
+  const iacucList = Array.isArray(item.iacucs) ? item.iacucs.filter(Boolean) : [];
+  const iacucLabel = iacucList.length ? iacucList.join("、") : item.iacuc || "-";
   return `
     <tr class="workflow-row" data-open-workflow="${escapeAttr(item.id)}">
       <td>${escapeText(item.month || "-")}</td>
-      <td>${escapeText(scopeLabel)}<br /><span class="muted">${iacucCount ? `${iacucCount} 个伦理号` : "未拆分伦理号"}</span></td>
+      <td class="workflow-principal-cell">
+        <strong>${escapeText(scopeLabel)}</strong>
+        <span>${escapeText(iacucLabel)}</span>
+      </td>
       <td>${escapeText(workflowSourceLabel(item.sourceType))}</td>
       <td><span class="pill active">${escapeText(workflowStatusLabel(item.workflowStatus))}</span></td>
       <td>${escapeText(currentVersion.documentNumber || `v${item.currentVersionNo || 0}`)}<br /><span class="muted">v${item.currentVersionNo || 0}</span></td>
@@ -1997,6 +2033,7 @@ function renderBillingWorkflowRow(item) {
             ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(item.id)}" data-next-status="${escapeAttr(nextStatus)}">${escapeText(workflowActionLabel(nextStatus))}</button>`
             : `<span class="muted">已完成</span>`
         }
+        <button class="ghost danger-text" type="button" data-delete-workflow="${escapeAttr(item.id)}">删除</button>
       </td>
     </tr>
   `;
@@ -2016,15 +2053,16 @@ function renderBillingWorkflowDetailModal() {
   return `
     <div class="editor-modal-backdrop" id="closeWorkflowDetail"></div>
     <div class="panel detail-panel editor-modal workflow-detail-modal">
-      <div class="editor-modal-actions">
-        <button class="secondary" type="button" id="closeWorkflowDetailButton">${iconSvg("chevronRight")}关闭</button>
-      </div>
-      <div class="panel-head compact">
+      <div class="workflow-modal-head">
         <div>
           <h2>${escapeText(workflow.pi || workflow.scopeKey?.replace(/^pi::/, "") || "结算流程")}</h2>
           <p>${escapeText(workflow.month || "-")} · ${escapeText(workflowSourceLabel(workflow.sourceType))} · 当前版本 ${escapeText(currentVersion.documentNumber || `v${workflow.currentVersionNo || 0}`)}</p>
         </div>
-        <span class="pill active">${escapeText(workflowStatusLabel(workflow.workflowStatus))}</span>
+        <div class="workflow-modal-actions">
+          <span class="pill active">${escapeText(workflowStatusLabel(workflow.workflowStatus))}</span>
+          <button class="ghost danger-text" type="button" data-delete-workflow="${escapeAttr(workflow.id || state.selectedBillingWorkflowId)}">删除流程</button>
+          <button class="secondary" type="button" id="closeWorkflowDetailButton">${iconSvg("chevronRight")}关闭</button>
+        </div>
       </div>
 
       <div class="workflow-timeline">
@@ -3051,6 +3089,22 @@ function bindEvents() {
           await loadBillingWorkflowDetail(button.dataset.advanceWorkflow);
         }
         pushLog(`更新结算流程：${workflowActionLabel(button.dataset.nextStatus)}`);
+        render();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-delete-workflow]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const workflowId = button.dataset.deleteWorkflow;
+      const workflow = state.billingWorkflows.find((item) => item.id === workflowId) || state.selectedBillingWorkflowDetail?.workflow || {};
+      const label = [workflow.pi || workflow.iacuc || "该流程", workflow.month || ""].filter(Boolean).join(" ");
+      if (!confirm(`确认删除 ${label} 的结算流程？删除后会同时移除版本记录、明细和流程事件。`)) return;
+      try {
+        await deleteBillingWorkflow(workflowId);
+        pushLog(`删除结算流程：${label}`);
         render();
       } catch (error) {
         reportSaveError(error);

@@ -3296,6 +3296,25 @@ def list_billing_workflows(conn):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def delete_billing_workflow(conn, workflow_id):
+    workflow = get_billing_workflow(conn, workflow_id)
+    if not workflow:
+        raise LookupError("结算流程不存在")
+    conn.execute(
+        """
+        DELETE FROM billing_statement_version_lines
+        WHERE version_id IN (
+            SELECT id FROM billing_statement_versions WHERE workflow_id = ?
+        )
+        """,
+        (workflow_id,),
+    )
+    conn.execute("DELETE FROM billing_workflow_events WHERE workflow_id = ?", (workflow_id,))
+    conn.execute("DELETE FROM billing_statement_versions WHERE workflow_id = ?", (workflow_id,))
+    conn.execute("DELETE FROM billing_workflows WHERE id = ?", (workflow_id,))
+    return workflow
+
+
 def list_billing_workflow_versions(conn, workflow_id):
     rows = conn.execute(
         "SELECT payload FROM billing_statement_versions WHERE workflow_id = ? ORDER BY version_no DESC, rowid DESC",
@@ -4032,6 +4051,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if sheet_id:
             self.handle_quantity_sheet_delete(sheet_id)
             return
+        workflow_id = self.billing_workflow_route(path)
+        if workflow_id:
+            self.handle_billing_workflow_delete(workflow_id)
+            return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def read_json_body(self):
@@ -4241,6 +4264,34 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_billing_workflow_delete(self, workflow_id):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with connect_db() as conn:
+                workflow = delete_billing_workflow(conn, workflow_id)
+                at = now_iso()
+                audit = audit_event(
+                    user,
+                    "billing_workflow.deleted",
+                    "billing_workflow",
+                    workflow_id,
+                    f"{user['displayName']} 删除 {workflow.get('pi') or workflow.get('iacuc', '')} {workflow.get('month', '')} 结算流程",
+                    [],
+                    at,
+                    workflow,
+                    None,
+                )
+                write_audit_events(conn, [audit])
+                conn.commit()
+            self.send_json({"ok": True, "workflow": workflow, "auditLogs": merge_audit_logs([], [audit])})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
 
     def current_user(self):
         with connect_db() as conn:
