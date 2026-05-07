@@ -25,6 +25,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.1",
+    title: "移动端界面适配",
+    items: [
+      "移动端导航调整为底部导航栏，管理页面收纳到管理抽屉中",
+      "笼位图在移动端改为稳定横向滚动网格，编辑面板改为底部抽屉式展示",
+      "优化移动端表单、表格和触控控件尺寸，提升手机查看和轻量操作体验",
+    ],
+  },
+  {
     version: "0.4.0b",
     title: "发布流整理",
     items: [
@@ -199,7 +208,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.0b",
+  version: "0.4.1",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -768,7 +777,7 @@ function renderSidebar() {
     ...(currentUser ? [["logs", "操作日志", "receipt"]] : []),
   ];
   const settingsViews = settingsNavItems.map(([view]) => view);
-  const settingsNavExpanded = settingsViews.includes(state.activeView) || state.settingsNavExpanded;
+  const settingsNavExpanded = state.settingsNavExpanded || (!isMobileViewport() && settingsViews.includes(state.activeView));
 
   return `
     <aside class="sidebar">
@@ -809,7 +818,7 @@ function renderSidebar() {
               <div class="nav-group">
                 <button class="nav-group-toggle ${settingsNavExpanded ? "expanded" : ""}" id="settingsNavToggle" type="button" aria-expanded="${settingsNavExpanded ? "true" : "false"}" aria-label="切换系统设置分组">
                   <span class="nav-group-title">系统设置</span>
-                  ${iconSvg(settingsNavExpanded ? "chevronDown" : "chevronRight")}
+                  ${iconSvg("settings")}
                 </button>
                 ${
                   settingsNavExpanded
@@ -831,7 +840,32 @@ function renderSidebar() {
         }
       </nav>
       ${renderSidebarAccount()}
+      ${settingsNavItems.length ? renderMobileSettingsDrawer(settingsNavItems, settingsNavExpanded) : ""}
     </aside>
+  `;
+}
+
+function renderMobileSettingsDrawer(settingsNavItems, expanded) {
+  if (!expanded) return "";
+  return `
+    <div class="mobile-settings-drawer">
+      <div class="mobile-settings-drawer-head">
+        <strong>管理</strong>
+        <span>系统设置与管理页面</span>
+      </div>
+      <div class="mobile-settings-grid">
+        ${settingsNavItems
+          .map(
+            ([view, label, icon]) => `
+              <button class="mobile-settings-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
+                ${iconSvg(icon)}
+                <span>${label}</span>
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -3050,6 +3084,10 @@ function bindEvents() {
     state = normalize(structuredClone(seedData));
     render();
   });
+}
+
+function isMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
 }
 
 function bindAuthEvents() {
