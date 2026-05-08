@@ -25,6 +25,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.2a",
+    title: "笼位周期管理与首页可视化优化",
+    items: [
+      "笼位编辑新增“饲养周期（天）”，按开始日期自动计算结束日期",
+      "笼位图新增周期状态着色：未填结束日期（淡黄）、正常饲养周期（淡绿）、超期饲养（淡粉）",
+      "新进驻录入时增加同伦理号超期占用提示，提示房间与笼位并继续完成录入",
+      "首页“笼位状态分布”和“饲养间使用情况”增加周期分类展示，并将房间统计改为同色标签样式与总笼位右侧突出显示",
+    ],
+  },
+  {
     version: "0.4.1b",
     title: "结算流程中心管理优化",
     items: [
@@ -227,7 +237,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.2",
+  version: "0.4.2a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
