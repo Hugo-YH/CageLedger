@@ -25,6 +25,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.3",
+    title: "多设施动物饲养费适配",
+    items: [
+      "房间管理新增所属设施、默认动物、默认收费项目、院内/院外和默认每笼只数配置",
+      "笼位录入和数量统计表按房间计费口径自动切换，支持笼/天与只/天两类饲养费计算",
+      "结算预览与后端导出按收费项目分组计价，小鼠保留阶梯和减免规则，其他动物按固定单价计算",
+      "本次多设施与动物计费适配根据 @纪嘉升 建议完善",
+    ],
+  },
+  {
     version: "0.4.2a",
     title: "笼位周期管理与首页可视化优化",
     items: [
@@ -237,7 +247,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.2a",
+  version: "0.4.3",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -263,6 +273,45 @@ const IACUC_OPTION_LIMIT = 8;
 const BILLING_TIER_LIMIT = 160;
 const BILLING_TIER_BASE_PRICE = 4.5;
 const BILLING_TIER_OVER_PRICE = 6.5;
+const FACILITY_OPTIONS = [
+  ["zhujiang", "珠江新城设施"],
+  ["bioisland", "生物岛设施"],
+];
+const SPECIES_OPTIONS = [
+  ["mouse", "小鼠"],
+  ["rat", "大鼠"],
+  ["guinea_pig", "豚鼠"],
+  ["rabbit", "兔"],
+  ["monkey", "猴"],
+  ["dog", "犬"],
+  ["pig", "猪"],
+];
+const BILLING_ITEM_OPTIONS = [
+  ["mouse_standard", "小鼠饲养费"],
+  ["mouse_diabetic", "糖尿病小鼠饲养费"],
+  ["rat_standard", "大鼠饲养费"],
+  ["rat_diabetic", "糖尿病大鼠饲养费"],
+  ["guinea_pig", "豚鼠饲养费"],
+  ["rabbit", "兔饲养费"],
+  ["monkey", "猴饲养费"],
+  ["pig", "猪饲养费"],
+  ["dog", "犬饲养费"],
+];
+const CUSTOMER_TYPE_OPTIONS = [
+  ["internal", "院内"],
+  ["external", "院外"],
+];
+const BILLING_RULES = {
+  mouse_standard: { species: "mouse", unit: "cage_day", internalPrice: 4.5, externalPrice: 13.5, tiered: true, freeAllowance: true },
+  mouse_diabetic: { species: "mouse", unit: "cage_day", internalPrice: 7.2, externalPrice: 21.6, tiered: false, freeAllowance: false },
+  rat_standard: { species: "rat", unit: "cage_day", internalPrice: 8.5, externalPrice: 25.5, tiered: false, freeAllowance: false },
+  rat_diabetic: { species: "rat", unit: "cage_day", internalPrice: 14, externalPrice: 42, tiered: false, freeAllowance: false },
+  guinea_pig: { species: "guinea_pig", unit: "animal_day", internalPrice: 3, externalPrice: 9, tiered: false, freeAllowance: false },
+  rabbit: { species: "rabbit", unit: "animal_day", internalPrice: 5, externalPrice: 15, tiered: false, freeAllowance: false },
+  monkey: { species: "monkey", unit: "animal_day", internalPrice: 35, externalPrice: 65, tiered: false, freeAllowance: false },
+  pig: { species: "pig", unit: "animal_day", internalPrice: 15, externalPrice: 45, tiered: false, freeAllowance: false },
+  dog: { species: "dog", unit: "animal_day", internalPrice: 15, externalPrice: 45, tiered: false, freeAllowance: false },
+};
 
 const today = formatLocalDate(new Date());
 
@@ -306,6 +355,11 @@ const seedData = {
       id: "room-spf-a",
       name: "SPF 小鼠饲养间 A",
       area: "屏障区",
+      facility: "zhujiang",
+      defaultSpecies: "mouse",
+      defaultBillingItem: "mouse_standard",
+      defaultCustomerType: "internal",
+      defaultAnimalCount: 1,
       rackCount: 2,
       rows: 5,
       cols: 6,
@@ -314,6 +368,11 @@ const seedData = {
       id: "room-spf-b",
       name: "SPF 小鼠饲养间 B",
       area: "屏障区",
+      facility: "zhujiang",
+      defaultSpecies: "mouse",
+      defaultBillingItem: "mouse_standard",
+      defaultCustomerType: "internal",
+      defaultAnimalCount: 1,
       rackCount: 1,
       rows: 4,
       cols: 5,
@@ -686,6 +745,15 @@ function normalize(data) {
   next.samplingMode = next.samplingMode || "";
   next.editingRackId = next.editingRackId || "";
   next.rackFormDraft = normalizeRackFormDraft(next.rackFormDraft);
+  next.rooms = Array.isArray(next.rooms) ? next.rooms.map(normalizeRoomDefaults) : [];
+  next.occupancies = Array.isArray(next.occupancies)
+    ? next.occupancies.map((item) => ({
+        ...item,
+        animalCount: numericOrNull(item.animalCount),
+        billingItem: normalizeBillingItem(item.billingItem || ""),
+        customerType: normalizeCustomerType(item.customerType || ""),
+      }))
+    : [];
 
   if (!next.racks.length || !next.slots.length) {
     const generated = generateInfrastructure(next.rooms);
@@ -704,6 +772,122 @@ function normalize(data) {
 
   updateSlotStatuses(next);
   return next;
+}
+
+function normalizeRoomDefaults(room) {
+  const species = normalizeSpecies(room.defaultSpecies || room.species || "mouse");
+  const billingItem = normalizeBillingItem(room.defaultBillingItem || billingItemForSpecies(species));
+  return {
+    ...room,
+    facility: normalizeFacility(room.facility || "zhujiang"),
+    defaultSpecies: normalizeSpecies(BILLING_RULES[billingItem]?.species || species),
+    defaultBillingItem: billingItem,
+    defaultCustomerType: normalizeCustomerType(room.defaultCustomerType || "internal"),
+    defaultAnimalCount: Math.max(numericOrZero(room.defaultAnimalCount ?? 1), 1),
+  };
+}
+
+function normalizeFacility(value) {
+  return FACILITY_OPTIONS.some(([key]) => key === value) ? value : "zhujiang";
+}
+
+function normalizeSpecies(value) {
+  return SPECIES_OPTIONS.some(([key]) => key === value) ? value : "mouse";
+}
+
+function normalizeBillingItem(value) {
+  return BILLING_RULES[value] ? value : "mouse_standard";
+}
+
+function normalizeCustomerType(value) {
+  return value === "external" ? "external" : "internal";
+}
+
+function billingItemForSpecies(species) {
+  return {
+    mouse: "mouse_standard",
+    rat: "rat_standard",
+    guinea_pig: "guinea_pig",
+    rabbit: "rabbit",
+    monkey: "monkey",
+    pig: "pig",
+    dog: "dog",
+  }[species] || "mouse_standard";
+}
+
+function facilityLabel(value) {
+  return FACILITY_OPTIONS.find(([key]) => key === value)?.[1] || value || "-";
+}
+
+function speciesLabel(value) {
+  return SPECIES_OPTIONS.find(([key]) => key === value)?.[1] || value || "-";
+}
+
+function billingItemLabel(value) {
+  return BILLING_ITEM_OPTIONS.find(([key]) => key === value)?.[1] || value || "-";
+}
+
+function customerTypeLabel(value) {
+  return normalizeCustomerType(value) === "external" ? "院外" : "院内";
+}
+
+function billingUnitLabel(value) {
+  if (value === "mixed") return "混合";
+  return value === "animal_day" ? "只/天" : "笼/天";
+}
+
+function billingProfileForRoom(room = {}) {
+  const normalized = normalizeRoomDefaults(room);
+  const rule = BILLING_RULES[normalized.defaultBillingItem] || BILLING_RULES.mouse_standard;
+  const customerType = normalizeCustomerType(normalized.defaultCustomerType);
+  return {
+    facility: normalized.facility,
+    species: rule.species,
+    billingItem: normalized.defaultBillingItem,
+    customerType,
+    unit: rule.unit,
+    unitPrice: customerType === "external" ? rule.externalPrice : rule.internalPrice,
+    tiered: Boolean(rule.tiered && customerType === "internal"),
+    freeAllowance: Boolean(rule.freeAllowance && customerType === "internal"),
+    defaultAnimalCount: normalized.defaultAnimalCount,
+  };
+}
+
+function billingProfileForSlotId(slotId) {
+  const slot = state.slots.find((item) => item.id === slotId);
+  return billingProfileForSlot(slot);
+}
+
+function billingProfileForSlot(slot, occupancy = {}) {
+  const rack = slot ? state.racks.find((item) => item.id === slot.rackId) : null;
+  const room = rack ? state.rooms.find((item) => item.id === rack.roomId) : null;
+  const base = billingProfileForRoom(room || {});
+  const billingItem = normalizeBillingItem(occupancy.billingItem || base.billingItem);
+  const customerType = normalizeCustomerType(occupancy.customerType || base.customerType);
+  const rule = BILLING_RULES[billingItem] || BILLING_RULES.mouse_standard;
+  return {
+    ...base,
+    species: rule.species,
+    billingItem,
+    customerType,
+    unit: rule.unit,
+    unitPrice: customerType === "external" ? rule.externalPrice : rule.internalPrice,
+    tiered: Boolean(rule.tiered && customerType === "internal"),
+    freeAllowance: Boolean(rule.freeAllowance && customerType === "internal"),
+  };
+}
+
+function billingProfileForOccupancy(occupancy = {}) {
+  const slot = state.slots.find((item) => item.id === occupancy.slotId);
+  return billingProfileForSlot(slot, occupancy);
+}
+
+function occupancyAnimalCount(occupancy, profile) {
+  return Math.max(numericOrZero(occupancy?.animalCount ?? profile.defaultAnimalCount ?? 1), 1);
+}
+
+function optionList(options, selected) {
+  return options.map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeText(label)}</option>`).join("");
 }
 
 function generateInfrastructure(rooms) {
@@ -1385,8 +1569,12 @@ function renderSlotPreview(slot, occupancy, slotCode) {
   ];
 
   if (occupancy) {
+    const profile = billingProfileForSlot(slot, occupancy);
     rows.push(
       ["笼盒编号", occupancy.cageCode || "-"],
+      ["收费项目", billingItemLabel(profile.billingItem)],
+      ["计费单位", billingUnitLabel(profile.unit)],
+      ["动物数量", profile.unit === "animal_day" ? occupancyAnimalCount(occupancy, profile) : "-"],
       ["IACUC", occupancy.iacuc || "-"],
       ["项目名称", occupancy.project || "-"],
       ["项目负责人", occupancy.pi || "-"],
@@ -1422,6 +1610,8 @@ function renderSlotDetail(slot) {
   const current = currentOccupancy(slot.id);
   const occupancy = current ?? emptyOccupancy(slot.id);
   const history = state.occupancies.filter((item) => item.slotId === slot.id);
+  const profile = billingProfileForSlot(slot, occupancy);
+  const showAnimalCount = profile.unit === "animal_day";
 
   return `
     <div class="panel-head compact">
@@ -1447,6 +1637,22 @@ function renderSlotDetail(slot) {
           笼盒编号
           <input name="cageCode" value="${escapeAttr(occupancy.cageCode)}" placeholder="请输入笼盒编号，如 M-A001" />
         </label>
+        ${
+          showAnimalCount
+            ? `
+              <label class="field-required">
+                动物数量
+                <input name="animalCount" type="number" min="1" value="${escapeAttr(occupancy.animalCount || profile.defaultAnimalCount || 1)}" placeholder="请输入本笼动物只数" required />
+              </label>
+            `
+            : ""
+        }
+      </div>
+      <div class="room-billing-hint">
+        <span>${escapeText(facilityLabel(profile.facility))}</span>
+        <span>${escapeText(billingItemLabel(profile.billingItem))}</span>
+        <span>${escapeText(customerTypeLabel(profile.customerType))}</span>
+        <span>${escapeText(billingUnitLabel(profile.unit))}</span>
       </div>
       <div class="compact-form-row third">
         <label class="field-required">
@@ -1888,6 +2094,9 @@ function renderQuantitySheetBillingView() {
   const statement = buildQuantitySheetStatement(draft);
   const canGenerateStatement = !remotePersistence || Boolean(currentUser);
   const managerValue = draft.manager || currentUser?.displayName || "";
+  const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
+  const quantityProfile = billingProfileForRoom(quantityRoom || {});
+  const isAnimalBilling = quantityProfile.unit === "animal_day";
 
   return `
     <section class="billing-layout quantity-billing-layout">
@@ -1896,7 +2105,7 @@ function renderQuantitySheetBillingView() {
           <div class="panel-head">
             <div>
               <h2>数量统计表结算</h2>
-              <p>录入纸质数量统计表中的变更行，系统按每日结余笼数展开明细。</p>
+              <p>录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细。</p>
             </div>
             <div class="quantity-sheet-actions">
               <select id="quantitySheetSelect" aria-label="选择数量统计表">
@@ -1964,16 +2173,31 @@ function renderQuantitySheetBillingView() {
               </label>
             </div>
             <div class="quantity-field-group quantity-field-group-billing">
+              ${
+                isAnimalBilling
+                  ? `
+                    <label class="field-required">
+                      月初结余动物数
+                      <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" placeholder="请输入月初动物数" />
+                    </label>
+                  `
+                  : ""
+              }
               <label class="field-required">
                 月初结余笼数
                 <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" placeholder="请输入月初笼数" />
               </label>
               <label>
                 计费口径
-                <select name="billingUnit">
-                  <option value="cage_day" selected>笼/天</option>
-                </select>
+                <input value="${escapeAttr(billingUnitLabel(quantityProfile.unit))}" disabled />
+                <input type="hidden" name="billingUnit" value="${escapeAttr(quantityProfile.unit)}" />
               </label>
+            </div>
+            <div class="room-billing-hint">
+              <span>${escapeText(facilityLabel(quantityProfile.facility))}</span>
+              <span>${escapeText(billingItemLabel(quantityProfile.billingItem))}</span>
+              <span>${escapeText(customerTypeLabel(quantityProfile.customerType))}</span>
+              <span>单价 ¥${MONEY_FORMAT.format(quantityProfile.unitPrice)} / ${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
             </div>
           </div>
           <div class="table-wrap quantity-entry-wrap">
@@ -1985,7 +2209,7 @@ function renderQuantitySheetBillingView() {
                   <th>新增</th>
                   <th>减少类型</th>
                   <th>减少</th>
-                  <th>结余笼数</th>
+                  <th>${isAnimalBilling ? "结余动物数" : "结余笼数"}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -2009,12 +2233,13 @@ function renderQuantitySheetBillingView() {
             ${summaryTile("伦理编号", statement.iacucs.length ? statement.iacucs.join("、") : "-")}
             ${summaryTile("免费笼数/天", statement.freeCageAllowance)}
             ${summaryTile("累计笼日", statement.totalCageDays)}
+            ${summaryTile("累计动物日", statement.totalAnimalDays || 0)}
             ${summaryTile("收费笼日", statement.totalBillableCageDays)}
             ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
           </div>
           <div class="table-wrap mini-statement">
             <table>
-              <thead><tr><th>日期</th><th>笼数</th><th>收费笼数</th><th>费用</th></tr></thead>
+              <thead><tr><th>日期</th><th>数量</th><th>收费数量</th><th>费用</th></tr></thead>
               <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="4">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
             </table>
           </div>
@@ -2323,7 +2548,7 @@ function renderBillingRow(row) {
 function renderQuantitySheetRow(row, index) {
   const showTransferIn = row.addedType === "转入";
   const showTransferOut = row.removedType === "转出";
-  const cageCount = quantitySheetRowCageCount(index);
+  const balance = quantitySheetRowBalance(index);
   return `
     <tr data-quantity-row="${index}">
       <td><input name="rowDate" type="date" value="${escapeAttr(row.date)}" placeholder="请选择日期" required /></td>
@@ -2353,15 +2578,16 @@ function renderQuantitySheetRow(row, index) {
         </div>
       </td>
       <td><input class="quantity-count-input" name="removedCount" type="number" min="0" value="${row.removedCount ?? ""}" placeholder="0" /></td>
-      <td>${cageCount}</td>
+      <td>${balance}</td>
       <td><button class="icon-danger" type="button" data-remove-qrow="${index}" title="删除行">${iconSvg("trash")}</button></td>
     </tr>
   `;
 }
 
-function quantitySheetRowCageCount(rowIndex) {
+function quantitySheetRowBalance(rowIndex) {
   const draft = normalizeQuantitySheetDraft(state.quantitySheetDraft || {});
-  let current = numericOrZero(draft.initialCageCount);
+  const profile = billingProfileForRoom(state.rooms.find((room) => room.id === quantitySheetRoomId(draft)) || {});
+  let current = profile.unit === "animal_day" ? numericOrZero(draft.initialAnimalCount) : numericOrZero(draft.initialCageCount);
   for (let index = 0; index <= rowIndex; index += 1) {
     const row = draft.rows[index];
     if (!row) break;
@@ -2371,11 +2597,12 @@ function quantitySheetRowCageCount(rowIndex) {
 }
 
 function renderQuantityPreviewRow(row) {
+  const isAnimalRow = numericOrZero(row.animalCount) > 0 && numericOrZero(row.cageCount) === 0;
   return `
     <tr>
       <td>${row.date}</td>
-      <td>${row.cageCount}</td>
-      <td>${row.billableCages}</td>
+      <td>${isAnimalRow ? row.animalCount : row.cageCount}</td>
+      <td>${isAnimalRow ? row.billableAnimals : row.billableCages}</td>
       <td>¥${MONEY_FORMAT.format(row.amount)}</td>
     </tr>
   `;
@@ -2445,6 +2672,38 @@ function renderRoomManagementView() {
                   区域
                   <input name="area" placeholder="请输入区域，如 屏障区" />
                 </label>
+                <div class="form-row">
+                  <label class="field-required">
+                    所属设施
+                    <select name="facility" required>
+                      ${optionList(FACILITY_OPTIONS, "zhujiang")}
+                    </select>
+                  </label>
+                  <label class="field-required">
+                    默认动物
+                    <select name="defaultSpecies" required>
+                      ${optionList(SPECIES_OPTIONS, "mouse")}
+                    </select>
+                  </label>
+                </div>
+                <label class="field-required">
+                  默认收费项目
+                  <select name="defaultBillingItem" required>
+                    ${optionList(BILLING_ITEM_OPTIONS, "mouse_standard")}
+                  </select>
+                </label>
+                <div class="form-row">
+                  <label class="field-required">
+                    默认院内/院外
+                    <select name="defaultCustomerType" required>
+                      ${optionList(CUSTOMER_TYPE_OPTIONS, "internal")}
+                    </select>
+                  </label>
+                  <label class="field-required">
+                    默认每笼只数
+                    <input name="defaultAnimalCount" type="number" min="1" value="1" placeholder="请输入默认每笼动物数" required />
+                  </label>
+                </div>
                 <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
               </form>
             </div>
@@ -2890,18 +3149,20 @@ function renderAuditLog(log) {
 }
 
 function renderRoomCard(room) {
+  const normalizedRoom = normalizeRoomDefaults(room);
   const racks = state.racks.filter((rack) => rack.roomId === room.id);
   const slots = racks.flatMap((rack) => state.slots.filter((slot) => slot.rackId === rack.id));
   const active = slots.filter((slot) => slot.status === "active").length;
   const reserved = slots.filter((slot) => slot.status === "reserved").length;
   const canManageRooms = !remotePersistence || currentUser?.role === "admin";
+  const profile = billingProfileForRoom(normalizedRoom);
 
   return `
     <div class="room-tree">
       <div class="room-tree-head">
         <div>
           <h3>${room.name}</h3>
-          <p>${room.area || "未设置区域"} · ${racks.length} 个笼架 · ${slots.length} 个笼位</p>
+          <p>${room.area || "未设置区域"} · ${facilityLabel(normalizedRoom.facility)} · ${billingItemLabel(profile.billingItem)} · ${billingUnitLabel(profile.unit)}</p>
         </div>
         <div class="tree-actions">
           <span>${slots.length} 笼位</span>
@@ -3195,7 +3456,9 @@ function bindEvents() {
   });
   document.querySelector("#quantitySheetForm select[name='roomId']")?.addEventListener("change", syncQuantitySheetRoomName);
   document.querySelector("#rateForm")?.addEventListener("submit", handleRateSubmit);
-  document.querySelector("#roomForm")?.addEventListener("submit", handleRoomSubmit);
+  const roomForm = document.querySelector("#roomForm");
+  roomForm?.addEventListener("submit", handleRoomSubmit);
+  roomForm?.addEventListener("change", syncRoomBillingFields);
   document.querySelector("#rackForm")?.addEventListener("submit", handleRackSubmit);
   document.querySelector("#rackForm select[name='roomId']")?.addEventListener("change", syncRackFormIndex);
   document.querySelectorAll("#rackForm input[name='rows'], #rackForm input[name='cols']").forEach((input) => {
@@ -3639,6 +3902,9 @@ async function handleSlotSubmit(event) {
     startDate: form.get("startDate") || today,
     feedingDays: normalizeFeedingDays(form.get("feedingDays")),
     endDate: "",
+    animalCount: numericOrNull(form.get("animalCount")),
+    billingItem: "",
+    customerType: "",
     notes: form.get("notes").trim(),
     updatedAt: today,
   };
@@ -4044,8 +4310,8 @@ function readQuantitySheetForm(form) {
     owner: data.get("owner")?.trim() || "",
     contact: "",
     funding: data.get("funding")?.trim() || "",
-    billingUnit: data.get("billingUnit") || "cage_day",
-    initialAnimalCount: 0,
+    billingUnit: data.get("billingUnit") || billingProfileForRoom(room || {}).unit,
+    initialAnimalCount: numericOrZero(data.get("initialAnimalCount")),
     initialCageCount: numericOrZero(data.get("initialCageCount")),
     rows,
   });
@@ -4101,7 +4367,7 @@ function normalizeQuantitySheetDraft(sheet) {
     owner: sheet?.owner || "",
     contact: sheet?.contact || "",
     funding: sheet?.funding || "",
-    billingUnit: "cage_day",
+    billingUnit: sheet?.billingUnit === "animal_day" ? "animal_day" : "cage_day",
     initialAnimalCount: numericOrZero(sheet?.initialAnimalCount),
     initialCageCount: numericOrZero(sheet?.initialCageCount),
     rows: Array.isArray(sheet?.rows) ? sheet.rows.map((row) => normalizeQuantitySheetDraftRow(row, month)) : [],
@@ -4148,6 +4414,7 @@ function autofillQuantitySheetIacucFields(event) {
 function syncQuantitySheetRoomName(event) {
   const form = event.target.form;
   if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
+  render();
 }
 
 function positionCageEditorPopover() {
@@ -4270,6 +4537,11 @@ async function handleRoomSubmit(event) {
     id: `room-${slugify(name)}-${Date.now()}`,
     name,
     area: form.get("area").trim(),
+    facility: normalizeFacility(form.get("facility")),
+    defaultSpecies: normalizeSpecies(form.get("defaultSpecies")),
+    defaultBillingItem: normalizeBillingItem(form.get("defaultBillingItem")),
+    defaultCustomerType: normalizeCustomerType(form.get("defaultCustomerType")),
+    defaultAnimalCount: Math.max(Number(form.get("defaultAnimalCount")) || 1, 1),
     rackCount: 0,
     rows: 0,
     cols: 0,
@@ -4290,6 +4562,20 @@ async function handleRoomSubmit(event) {
     render();
   } catch (error) {
     reportSaveError(error);
+  }
+}
+
+function syncRoomBillingFields(event) {
+  const form = event.currentTarget;
+  const speciesSelect = form.querySelector("select[name='defaultSpecies']");
+  const billingItemSelect = form.querySelector("select[name='defaultBillingItem']");
+  if (!speciesSelect || !billingItemSelect) return;
+  if (event.target?.name === "defaultSpecies") {
+    billingItemSelect.value = billingItemForSpecies(speciesSelect.value);
+    return;
+  }
+  if (event.target?.name === "defaultBillingItem") {
+    speciesSelect.value = BILLING_RULES[billingItemSelect.value]?.species || speciesSelect.value;
   }
 }
 
@@ -4518,6 +4804,7 @@ function buildQuantitySheetStatement(sheet) {
       rowsByDate,
       animalCount: numericOrZero(item.initialAnimalCount),
       cageCount: numericOrZero(item.initialCageCount),
+      profile: billingProfileForRoom(state.rooms.find((room) => room.id === quantitySheetRoomId(item)) || {}),
     };
   });
   const sheetStateByIacuc = new Map(sheetStates.map((item) => [normalizeIacucNumber(item.sheet.iacuc), item]).filter(([key]) => key));
@@ -4530,14 +4817,20 @@ function buildQuantitySheetStatement(sheet) {
     let cageCount = 0;
     const quantitySheetRowIds = [];
     const iacucBreakdown = [];
+    const chargeGroups = new Map();
     for (const item of sheetStates) {
       const dayRows = item.rowsByDate.get(date) || [];
       for (const row of dayRows) {
         const addedCount = numericOrZero(row.addedCount);
         const removedCount = numericOrZero(row.removedCount);
-        item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
-        if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
-        else item.cageCount = Math.max(item.cageCount + addedCount - removedCount, 0);
+        if (item.profile.unit === "animal_day") {
+          item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
+          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
+        } else {
+          if (row.animalCount !== null) item.animalCount = numericOrZero(row.animalCount);
+          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
+          else item.cageCount = Math.max(item.cageCount + addedCount - removedCount, 0);
+        }
         const transferOutToIacuc = normalizeIacucNumber(row.transferOutToIacuc);
         if (transferOutToIacuc && removedCount > 0) {
           transferDeltas.set(transferOutToIacuc, numericOrZero(transferDeltas.get(transferOutToIacuc)) + removedCount);
@@ -4552,22 +4845,26 @@ function buildQuantitySheetStatement(sheet) {
     for (const [iacuc, delta] of transferDeltas.entries()) {
       const target = sheetStateByIacuc.get(iacuc);
       if (!target) continue;
-      target.cageCount = Math.max(numericOrZero(target.cageCount) + delta, 0);
-      target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
+      if (target.profile.unit === "animal_day") target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
+      else target.cageCount = Math.max(numericOrZero(target.cageCount) + delta, 0);
     }
     for (const item of sheetStates) {
       animalCount += item.animalCount;
       cageCount += item.cageCount;
+      const billableCount = item.profile.unit === "animal_day" ? item.animalCount : item.cageCount;
+      addChargeGroup(chargeGroups, item.profile, billableCount);
       if (item.cageCount || item.animalCount) {
         iacucBreakdown.push({
           iacuc: item.sheet.iacuc,
           project: item.sheet.project,
           animalCount: item.animalCount,
           cageCount: item.cageCount,
+          billingItem: item.profile.billingItem,
+          billingUnit: item.profile.unit,
         });
       }
     }
-    const charge = tieredDailyCharge(cageCount, freeCageAllowance);
+    const charge = combinedDailyCharge(chargeGroups, freeCageAllowance);
     const amount = charge.amount;
     cumulative += amount;
     return {
@@ -4596,8 +4893,8 @@ function buildQuantitySheetStatement(sheet) {
     sourceType: "quantity_sheet",
     sourceId: normalizedSheet.id,
     sourceIds: sheets.map((item) => item.id),
-    billingUnit: "cage_day",
-    unitPrice: BILLING_TIER_BASE_PRICE,
+    billingUnit: statementBillingUnitFromRows(rows),
+    unitPrice: rows.find((row) => row.unitPrice)?.unitPrice ?? BILLING_TIER_BASE_PRICE,
     baseUnitPrice: BILLING_TIER_BASE_PRICE,
     overageUnitPrice: BILLING_TIER_OVER_PRICE,
     tierLimit: BILLING_TIER_LIMIT,
@@ -4621,13 +4918,23 @@ function buildStatement(pi, month) {
 
   const rows = dates.map((date) => {
     const activeItems = activeOccupanciesOnDate(date).filter((item) => normalizePersonName(item.pi) === normalizedPi);
-    const charge = tieredDailyCharge(activeItems.length, freeCageAllowance);
+    const chargeGroups = new Map();
+    activeItems.forEach((item) => {
+      const profile = billingProfileForOccupancy(item);
+      const count = profile.unit === "animal_day" ? occupancyAnimalCount(item, profile) : 1;
+      addChargeGroup(chargeGroups, profile, count);
+    });
+    const charge = combinedDailyCharge(chargeGroups, freeCageAllowance);
     const amount = charge.amount;
     cumulative += amount;
 
     return {
       date,
-      cageCount: activeItems.length,
+      animalCount: activeItems.reduce((sum, item) => {
+        const profile = billingProfileForOccupancy(item);
+        return sum + (profile.unit === "animal_day" ? occupancyAnimalCount(item, profile) : 0);
+      }, 0),
+      cageCount: activeItems.filter((item) => billingProfileForOccupancy(item).unit === "cage_day").length,
       ...charge,
       amount,
       cumulative,
@@ -4646,14 +4953,15 @@ function buildStatement(pi, month) {
     owner: info.owner,
     funding: info.funding,
     sourceType: "cage_map",
-    billingUnit: "cage_day",
-    unitPrice: BILLING_TIER_BASE_PRICE,
+    billingUnit: statementBillingUnitFromRows(rows),
+    unitPrice: rows.find((row) => row.unitPrice)?.unitPrice ?? BILLING_TIER_BASE_PRICE,
     baseUnitPrice: BILLING_TIER_BASE_PRICE,
     overageUnitPrice: BILLING_TIER_OVER_PRICE,
     tierLimit: BILLING_TIER_LIMIT,
     freeCageAllowance,
     rows,
     totalCageDays: rows.reduce((sum, row) => sum + row.cageCount, 0),
+    totalAnimalDays: rows.reduce((sum, row) => sum + row.animalCount, 0),
     totalFreeCageDays: rows.reduce((sum, row) => sum + row.freeCages, 0),
     totalBillableCageDays: rows.reduce((sum, row) => sum + row.billableCages, 0),
     totalTier1CageDays: rows.reduce((sum, row) => sum + row.tier1BillableCages, 0),
@@ -4692,6 +5000,68 @@ function tieredDailyCharge(cageCount, freeCageAllowance) {
     discountPercent: 0,
     amount: tier1BillableCages * BILLING_TIER_BASE_PRICE + tier2BillableCages * BILLING_TIER_OVER_PRICE,
   };
+}
+
+function flatDailyCharge(count, profile) {
+  const quantity = Math.max(numericOrZero(count), 0);
+  const amount = quantity * numericOrZero(profile.unitPrice);
+  return {
+    freeCages: 0,
+    billableCages: profile.unit === "cage_day" ? quantity : 0,
+    billableAnimals: profile.unit === "animal_day" ? quantity : 0,
+    tier1Cages: profile.unit === "cage_day" ? quantity : 0,
+    tier2Cages: 0,
+    tier1BillableCages: profile.unit === "cage_day" ? quantity : 0,
+    tier2BillableCages: 0,
+    unitPrice: profile.unitPrice,
+    overageUnitPrice: 0,
+    discountPercent: 0,
+    amount,
+  };
+}
+
+function addChargeGroup(groups, profile, count) {
+  const quantity = Math.max(numericOrZero(count), 0);
+  if (!quantity) return;
+  const key = [profile.billingItem, profile.customerType, profile.unit, profile.unitPrice].join("|");
+  const current = groups.get(key) || { profile, count: 0 };
+  current.count += quantity;
+  groups.set(key, current);
+}
+
+function combinedDailyCharge(groups, freeCageAllowance) {
+  const totals = {
+    freeCages: 0,
+    billableCages: 0,
+    billableAnimals: 0,
+    tier1Cages: 0,
+    tier2Cages: 0,
+    tier1BillableCages: 0,
+    tier2BillableCages: 0,
+    unitPrice: 0,
+    overageUnitPrice: 0,
+    discountPercent: 0,
+    amount: 0,
+  };
+  for (const { profile, count } of groups.values()) {
+    const charge = profile.tiered
+      ? tieredDailyCharge(count, profile.freeAllowance ? freeCageAllowance : 0)
+      : flatDailyCharge(count, profile);
+    Object.keys(totals).forEach((key) => {
+      if (key === "unitPrice" || key === "overageUnitPrice" || key === "discountPercent") return;
+      totals[key] += numericOrZero(charge[key]);
+    });
+    if (!totals.unitPrice && charge.unitPrice) totals.unitPrice = charge.unitPrice;
+    if (!totals.overageUnitPrice && charge.overageUnitPrice) totals.overageUnitPrice = charge.overageUnitPrice;
+  }
+  return totals;
+}
+
+function statementBillingUnitFromRows(rows) {
+  const hasAnimals = rows.some((row) => numericOrZero(row.animalCount) > 0);
+  const hasCages = rows.some((row) => numericOrZero(row.cageCount) > 0);
+  if (hasAnimals && hasCages) return "mixed";
+  return hasAnimals ? "animal_day" : "cage_day";
 }
 
 function quantitySheetsForStatement(currentSheet, month, pi) {
@@ -4790,8 +5160,10 @@ function occupancyBreakdown(items) {
   items.forEach((item) => {
     const iacuc = normalizeIacucNumber(item.iacuc);
     if (!iacuc) return;
-    const current = byIacuc.get(iacuc) || { iacuc, project: item.project || "", cageCount: 0 };
-    current.cageCount += 1;
+    const profile = billingProfileForOccupancy(item);
+    const current = byIacuc.get(iacuc) || { iacuc, project: item.project || "", animalCount: 0, cageCount: 0 };
+    if (profile.unit === "animal_day") current.animalCount += occupancyAnimalCount(item, profile);
+    else current.cageCount += 1;
     byIacuc.set(iacuc, current);
   });
   return [...byIacuc.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
@@ -5936,6 +6308,7 @@ function currentOccupancy(slotId) {
 }
 
 function emptyOccupancy(slotId) {
+  const profile = billingProfileForSlotId(slotId);
   return {
     slotId,
     cageCode: cageCodeForSlot(slotId),
@@ -5946,6 +6319,9 @@ function emptyOccupancy(slotId) {
     owner: "",
     startDate: today,
     endDate: "",
+    animalCount: profile.unit === "animal_day" ? profile.defaultAnimalCount : null,
+    billingItem: "",
+    customerType: "",
     notes: "",
   };
 }

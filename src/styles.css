@@ -471,7 +471,7 @@ h3 {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -1024,8 +1024,29 @@ h3 {
 }
 
 .quantity-field-group-billing {
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
-  max-width: calc(50% - 6px);
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  max-width: none;
+}
+
+.room-billing-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.room-billing-hint span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .quantity-field-group .wide {

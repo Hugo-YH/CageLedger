@@ -37,6 +37,17 @@ FREE_CAGES_DEFAULT = FREE_CAGES_PI
 BILLING_TIER_LIMIT = 160
 BILLING_TIER_BASE_PRICE = 4.5
 BILLING_TIER_OVER_PRICE = 6.5
+BILLING_RULES = {
+    "mouse_standard": {"species": "mouse", "unit": "cage_day", "internalPrice": 4.5, "externalPrice": 13.5, "tiered": True, "freeAllowance": True},
+    "mouse_diabetic": {"species": "mouse", "unit": "cage_day", "internalPrice": 7.2, "externalPrice": 21.6, "tiered": False, "freeAllowance": False},
+    "rat_standard": {"species": "rat", "unit": "cage_day", "internalPrice": 8.5, "externalPrice": 25.5, "tiered": False, "freeAllowance": False},
+    "rat_diabetic": {"species": "rat", "unit": "cage_day", "internalPrice": 14, "externalPrice": 42, "tiered": False, "freeAllowance": False},
+    "guinea_pig": {"species": "guinea_pig", "unit": "animal_day", "internalPrice": 3, "externalPrice": 9, "tiered": False, "freeAllowance": False},
+    "rabbit": {"species": "rabbit", "unit": "animal_day", "internalPrice": 5, "externalPrice": 15, "tiered": False, "freeAllowance": False},
+    "monkey": {"species": "monkey", "unit": "animal_day", "internalPrice": 35, "externalPrice": 65, "tiered": False, "freeAllowance": False},
+    "pig": {"species": "pig", "unit": "animal_day", "internalPrice": 15, "externalPrice": 45, "tiered": False, "freeAllowance": False},
+    "dog": {"species": "dog", "unit": "animal_day", "internalPrice": 15, "externalPrice": 45, "tiered": False, "freeAllowance": False},
+}
 WORKFLOW_STATUS_IN_FEEDING = "in_feeding"
 WORKFLOW_STATUS_GENERATED = "statement_generated"
 WORKFLOW_STATUS_SENT = "statement_sent"
@@ -2450,7 +2461,7 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "owner": clean_text(source.get("owner", "")),
         "contact": clean_text(source.get("contact", "")),
         "funding": clean_text(source.get("funding", "")),
-        "billingUnit": "cage_day",
+        "billingUnit": "animal_day" if clean_text(source.get("billingUnit", "")) == "animal_day" else "cage_day",
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
         "initialCageCount": as_int(source.get("initialCageCount")),
         "rows": [normalize_quantity_sheet_row(row, month) for row in rows],
@@ -2541,7 +2552,8 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
     # IACUC 分表阶段不应用 PI 免费笼位，避免跨伦理号结算失真。
     free_cages = 0
-    lines = quantity_sheet_statement_lines(sheets, free_cages)
+    rooms = read_payloads(conn, "rooms", "rowid")
+    lines = quantity_sheet_statement_lines(sheets, free_cages, rooms)
     generated_at = now_iso()
     iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
     statement_iacuc = iacucs[0] if iacucs else sheet_iacuc
@@ -2605,10 +2617,11 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     return statement, lines, merge_audit_logs([], [event])
 
 
-def quantity_sheet_statement_lines(sheets, free_cages):
+def quantity_sheet_statement_lines(sheets, free_cages, rooms=None):
     if not sheets:
         return []
 
+    room_by_id = {room.get("id"): room for room in rooms or []}
     sheet_states = []
     sheet_state_by_iacuc = {}
     month = sheets[0]["month"]
@@ -2616,9 +2629,11 @@ def quantity_sheet_statement_lines(sheets, free_cages):
         rows_by_date = {}
         for row in sheet.get("rows", []):
             rows_by_date.setdefault(row["date"], []).append(row)
+        profile = billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit"))
         state = {
             "sheet": sheet,
             "rowsByDate": rows_by_date,
+            "profile": profile,
             "animalCount": sheet.get("initialAnimalCount") or 0,
             "cageCount": sheet.get("initialCageCount") or 0,
         }
@@ -2634,26 +2649,28 @@ def quantity_sheet_statement_lines(sheets, free_cages):
         breakdown = []
         animal_count = 0
         cage_count = 0
+        charge_groups = {}
         quantity_row_ids = []
         for state in sheet_states:
             day_rows = state["rowsByDate"].get(date, [])
             for row in day_rows:
                 added_count = row.get("addedCount") or 0
                 removed_count = row.get("removedCount") or 0
-                if row.get("animalCount") is not None:
-                    state["animalCount"] = row.get("animalCount") or 0
+                profile = state["profile"]
+                if profile["unit"] == "animal_day":
+                    if row.get("animalCount") is not None:
+                        state["animalCount"] = row.get("animalCount") or 0
+                    else:
+                        state["animalCount"] = max(state["animalCount"] + added_count - removed_count, 0)
+                    if row.get("cageCount") is not None:
+                        state["cageCount"] = row.get("cageCount") or 0
                 else:
-                    state["animalCount"] = max(
-                        state["animalCount"] + added_count - removed_count,
-                        0,
-                    )
-                if row.get("cageCount") is not None:
-                    state["cageCount"] = row.get("cageCount") or 0
-                else:
-                    state["cageCount"] = max(
-                        state["cageCount"] + added_count - removed_count,
-                        0,
-                    )
+                    if row.get("cageCount") is not None:
+                        state["cageCount"] = row.get("cageCount") or 0
+                    else:
+                        state["cageCount"] = max(state["cageCount"] + added_count - removed_count, 0)
+                    if row.get("animalCount") is not None:
+                        state["animalCount"] = row.get("animalCount") or 0
                 transfer_out_iacuc = normalize_iacuc_number(row.get("transferOutToIacuc", ""))
                 if transfer_out_iacuc and removed_count > 0:
                     transfer_deltas[transfer_out_iacuc] = transfer_deltas.get(transfer_out_iacuc, 0) + removed_count
@@ -2667,13 +2684,18 @@ def quantity_sheet_statement_lines(sheets, free_cages):
             target = sheet_state_by_iacuc.get(iacuc)
             if not target:
                 continue
-            target["cageCount"] = max((target.get("cageCount") or 0) + delta, 0)
-            target["animalCount"] = max((target.get("animalCount") or 0) + delta, 0)
+            if target["profile"]["unit"] == "animal_day":
+                target["animalCount"] = max((target.get("animalCount") or 0) + delta, 0)
+            else:
+                target["cageCount"] = max((target.get("cageCount") or 0) + delta, 0)
 
         for state in sheet_states:
             sheet = state["sheet"]
+            profile = state["profile"]
             animal_count += state["animalCount"]
             cage_count += state["cageCount"]
+            charge_count = state["animalCount"] if profile["unit"] == "animal_day" else state["cageCount"]
+            add_charge_group(charge_groups, profile, charge_count)
             if state["cageCount"] or state["animalCount"]:
                 breakdown.append(
                     {
@@ -2681,10 +2703,12 @@ def quantity_sheet_statement_lines(sheets, free_cages):
                         "project": sheet.get("project", ""),
                         "animalCount": state["animalCount"],
                         "cageCount": state["cageCount"],
+                        "billingItem": profile["billingItem"],
+                        "billingUnit": profile["unit"],
                     }
                 )
 
-        charges = tiered_daily_charge(cage_count, free_cages)
+        charges = combined_daily_charge(charge_groups, free_cages)
         cumulative += charges["amount"]
         lines.append(
             {
@@ -2716,7 +2740,15 @@ def generate_billing_statement(conn, payload, actor):
         raise ValueError("请先选择伦理号后再生成结算单")
 
     applications_by_iacuc = read_applications_by_iacuc(conn)
-    occupancies = read_payloads(conn, "occupancies", "start_date, rowid")
+    state = {
+        "rooms": read_payloads(conn, "rooms", "rowid"),
+        "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
+        "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
+    }
+    occupancies = [
+        occupancy_with_snapshots(item, state, applications_by_iacuc)
+        for item in read_payloads(conn, "occupancies", "start_date, rowid")
+    ]
     dates = dates_in_month(month)
     generated_at = now_iso()
     cumulative = 0
@@ -2736,22 +2768,52 @@ def generate_billing_statement(conn, payload, actor):
             for item in occupancies
             if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and occupancy_active_on_date(item, date)
         ]
-        charges = tiered_daily_charge(len(active_items), free_cages)
+        charge_groups = {}
+        cage_count = 0
+        animal_count = 0
+        for item in active_items:
+            profile = billing_profile_for_occupancy(item, state)
+            if profile["unit"] == "animal_day":
+                count = occupancy_animal_count(item, profile)
+                animal_count += count
+            else:
+                count = 1
+                cage_count += 1
+            add_charge_group(charge_groups, profile, count)
+        charges = combined_daily_charge(charge_groups, free_cages)
         amount = charges["amount"]
         cumulative += amount
         breakdown = []
         if active_items:
-            breakdown.append(
-                {
-                    "iacuc": iacuc,
-                    "project": statement_application_snapshot(iacuc, applications_by_iacuc, occupancies).get("project", ""),
-                    "cageCount": len(active_items),
-                }
-            )
+            for item in active_items:
+                profile = billing_profile_for_occupancy(item, state)
+                found = next(
+                    (
+                        entry
+                        for entry in breakdown
+                        if entry["iacuc"] == iacuc and entry.get("billingItem") == profile["billingItem"]
+                    ),
+                    None,
+                )
+                if not found:
+                    found = {
+                        "iacuc": iacuc,
+                        "project": statement_application_snapshot(iacuc, applications_by_iacuc, occupancies).get("project", ""),
+                        "animalCount": 0,
+                        "cageCount": 0,
+                        "billingItem": profile["billingItem"],
+                        "billingUnit": profile["unit"],
+                    }
+                    breakdown.append(found)
+                if profile["unit"] == "animal_day":
+                    found["animalCount"] += occupancy_animal_count(item, profile)
+                else:
+                    found["cageCount"] += 1
         line = {
             "id": new_id("line"),
             "date": date,
-            "cageCount": len(active_items),
+            "animalCount": animal_count,
+            "cageCount": cage_count,
             **charges,
             "amount": amount,
             "cumulative": cumulative,
@@ -2772,7 +2834,7 @@ def generate_billing_statement(conn, payload, actor):
         "funding": application.get("funding", ""),
         "sourceType": "cage_map",
         "sourceLabel": "动态笼位图",
-        "billingUnit": "cage_day",
+        "billingUnit": statement_billing_unit_from_lines(lines),
         "principalType": principal_type,
         "freeCageAllowance": free_cages,
         "tierLimit": BILLING_TIER_LIMIT,
@@ -2783,6 +2845,7 @@ def generate_billing_statement(conn, payload, actor):
         "totalBillableCageDays": sum(line.get("billableCages", 0) for line in lines),
         "totalTier1CageDays": sum(line.get("tier1BillableCages", 0) for line in lines),
         "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
+        "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
         "totalAmount": cumulative,
         "status": status,
         "generatedAt": generated_at,
@@ -2839,7 +2902,15 @@ def generate_billing_statement_by_pi(conn, payload, actor):
 
     if source_type == "cage_map":
         applications_by_iacuc = read_applications_by_iacuc(conn)
-        occupancies = read_payloads(conn, "occupancies", "start_date, rowid")
+        state = {
+            "rooms": read_payloads(conn, "rooms", "rowid"),
+            "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
+            "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
+        }
+        occupancies = [
+            occupancy_with_snapshots(item, state, applications_by_iacuc)
+            for item in read_payloads(conn, "occupancies", "start_date, rowid")
+        ]
         iacucs = sorted(
             {
                 normalize_iacuc_number(item.get("iacuc", ""))
@@ -2855,25 +2926,52 @@ def generate_billing_statement_by_pi(conn, payload, actor):
                 for item in occupancies
                 if clean_text(item.get("pi", "")) == pi_name and occupancy_active_on_date(item, date)
             ]
-            charges = tiered_daily_charge(len(active_items), free_cages)
+            charge_groups = {}
+            cage_count = 0
+            animal_count = 0
+            for item in active_items:
+                profile = billing_profile_for_occupancy(item, state)
+                if profile["unit"] == "animal_day":
+                    count = occupancy_animal_count(item, profile)
+                    animal_count += count
+                else:
+                    count = 1
+                    cage_count += 1
+                add_charge_group(charge_groups, profile, count)
+            charges = combined_daily_charge(charge_groups, free_cages)
             cumulative += charges["amount"]
             breakdown = []
             for item in active_items:
                 item_iacuc = normalize_iacuc_number(item.get("iacuc", ""))
-                found = next((entry for entry in breakdown if entry["iacuc"] == item_iacuc), None)
+                profile = billing_profile_for_occupancy(item, state)
+                found = next(
+                    (
+                        entry
+                        for entry in breakdown
+                        if entry["iacuc"] == item_iacuc and entry.get("billingItem") == profile["billingItem"]
+                    ),
+                    None,
+                )
                 if not found:
                     found = {
                         "iacuc": item_iacuc,
                         "project": item.get("project", ""),
+                        "animalCount": 0,
                         "cageCount": 0,
+                        "billingItem": profile["billingItem"],
+                        "billingUnit": profile["unit"],
                     }
                     breakdown.append(found)
-                found["cageCount"] += 1
+                if profile["unit"] == "animal_day":
+                    found["animalCount"] += occupancy_animal_count(item, profile)
+                else:
+                    found["cageCount"] += 1
             lines.append(
                 {
                     "id": new_id("line"),
                     "date": date,
-                    "cageCount": len(active_items),
+                    "animalCount": animal_count,
+                    "cageCount": cage_count,
                     **charges,
                     "amount": charges["amount"],
                     "cumulative": cumulative,
@@ -2893,7 +2991,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "funding": application.get("funding", ""),
             "sourceType": "pi_merged_cage_map",
             "sourceLabel": "动态笼位图（按 PI 合表）",
-            "billingUnit": "cage_day",
+            "billingUnit": statement_billing_unit_from_lines(lines),
             "principalType": principal_type,
             "freeCageAllowance": free_cages,
             "tierLimit": BILLING_TIER_LIMIT,
@@ -2904,6 +3002,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "totalBillableCageDays": sum(line.get("billableCages", 0) for line in lines),
             "totalTier1CageDays": sum(line.get("tier1BillableCages", 0) for line in lines),
             "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
+            "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
             "totalAmount": cumulative,
             "status": status,
             "generatedAt": generated_at,
@@ -2920,7 +3019,8 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         for item in sheets:
             validate_quantity_sheet_permission(actor, item)
         iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
-        lines = quantity_sheet_statement_lines(sheets, free_cages)
+        rooms = read_payloads(conn, "rooms", "rowid")
+        lines = quantity_sheet_statement_lines(sheets, free_cages, rooms)
         statement = {
             "id": new_id("stmt"),
             "iacuc": f"pi::{pi_name}",
@@ -2935,7 +3035,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "sourceLabel": "数量统计表（按 PI 合表）",
             "roomName": "、".join(sorted({item.get("roomName", "") for item in sheets if item.get("roomName")})),
             "manager": "、".join(sorted({item.get("manager", "") for item in sheets if item.get("manager")})),
-            "billingUnit": "cage_day",
+            "billingUnit": statement_billing_unit_from_lines(lines),
             "principalType": principal_type,
             "freeCageAllowance": free_cages,
             "tierLimit": BILLING_TIER_LIMIT,
@@ -3007,6 +3107,177 @@ def tiered_daily_charge(cage_count, free_cages):
         "discountPercent": 0,
         "amount": amount,
     }
+
+
+def normalize_billing_item(value):
+    text = clean_text(value)
+    return text if text in BILLING_RULES else "mouse_standard"
+
+
+def normalize_customer_type(value):
+    return "external" if clean_text(value) == "external" else "internal"
+
+
+def normalize_billing_unit(value):
+    return "animal_day" if clean_text(value) == "animal_day" else "cage_day"
+
+
+def billing_item_for_species(species):
+    return {
+        "mouse": "mouse_standard",
+        "rat": "rat_standard",
+        "guinea_pig": "guinea_pig",
+        "rabbit": "rabbit",
+        "monkey": "monkey",
+        "pig": "pig",
+        "dog": "dog",
+    }.get(clean_text(species), "mouse_standard")
+
+
+def billing_profile_for_room(room=None, fallback_unit=None):
+    room = room or {}
+    billing_item = normalize_billing_item(
+        room.get("defaultBillingItem") or billing_item_for_species(room.get("defaultSpecies", "mouse"))
+    )
+    if fallback_unit == "animal_day" and billing_item == "mouse_standard":
+        billing_item = "guinea_pig"
+    rule = BILLING_RULES.get(billing_item, BILLING_RULES["mouse_standard"])
+    customer_type = normalize_customer_type(room.get("defaultCustomerType", "internal"))
+    unit_price = rule["externalPrice"] if customer_type == "external" else rule["internalPrice"]
+    return {
+        "facility": clean_text(room.get("facility", "zhujiang")) or "zhujiang",
+        "species": rule["species"],
+        "billingItem": billing_item,
+        "customerType": customer_type,
+        "unit": rule["unit"],
+        "unitPrice": unit_price,
+        "tiered": bool(rule.get("tiered") and customer_type == "internal"),
+        "freeAllowance": bool(rule.get("freeAllowance") and customer_type == "internal"),
+        "defaultAnimalCount": max(as_int(room.get("defaultAnimalCount")) or 1, 1),
+    }
+
+
+def billing_profile_for_occupancy(occupancy, state):
+    slot = next((item for item in state.get("slots", []) if item.get("id") == occupancy.get("slotId")), None)
+    rack = next((item for item in state.get("racks", []) if item.get("id") == (slot or {}).get("rackId")), None)
+    room = next((item for item in state.get("rooms", []) if item.get("id") == (rack or {}).get("roomId")), None)
+    base = billing_profile_for_room(room)
+    billing_item = normalize_billing_item(occupancy.get("billingItem") or base["billingItem"])
+    rule = BILLING_RULES.get(billing_item, BILLING_RULES["mouse_standard"])
+    customer_type = normalize_customer_type(occupancy.get("customerType") or base["customerType"])
+    unit_price = rule["externalPrice"] if customer_type == "external" else rule["internalPrice"]
+    return {
+        **base,
+        "species": rule["species"],
+        "billingItem": billing_item,
+        "customerType": customer_type,
+        "unit": rule["unit"],
+        "unitPrice": unit_price,
+        "tiered": bool(rule.get("tiered") and customer_type == "internal"),
+        "freeAllowance": bool(rule.get("freeAllowance") and customer_type == "internal"),
+    }
+
+
+def occupancy_animal_count(occupancy, profile):
+    return max(as_int(occupancy.get("animalCount")) or as_int(profile.get("defaultAnimalCount")) or 1, 1)
+
+
+def flat_daily_charge(count, profile):
+    count = max(as_int(count) or 0, 0)
+    amount = count * float(profile.get("unitPrice") or 0)
+    if profile.get("unit") == "animal_day":
+        return {
+            "freeCages": 0,
+            "billableCages": 0,
+            "tier1Cages": 0,
+            "tier2Cages": 0,
+            "tier1BillableCages": 0,
+            "tier2BillableCages": 0,
+            "billableAnimals": count,
+            "unitPrice": profile.get("unitPrice") or 0,
+            "overageUnitPrice": 0,
+            "discountPercent": 0,
+            "amount": amount,
+        }
+    return {
+        "freeCages": 0,
+        "billableCages": count,
+        "tier1Cages": count,
+        "tier2Cages": 0,
+        "tier1BillableCages": count,
+        "tier2BillableCages": 0,
+        "billableAnimals": 0,
+        "unitPrice": profile.get("unitPrice") or 0,
+        "overageUnitPrice": 0,
+        "discountPercent": 0,
+        "amount": amount,
+    }
+
+
+def add_charge_group(groups, profile, count):
+    count = max(as_int(count) or 0, 0)
+    if count <= 0:
+        return
+    key = "|".join(
+        [
+            profile.get("billingItem", ""),
+            profile.get("customerType", ""),
+            profile.get("unit", ""),
+            str(profile.get("unitPrice") or 0),
+        ]
+    )
+    if key not in groups:
+        groups[key] = {"profile": profile, "count": 0}
+    groups[key]["count"] += count
+
+
+def combined_daily_charge(groups, free_cages):
+    total = {
+        "freeCages": 0,
+        "billableCages": 0,
+        "tier1Cages": 0,
+        "tier2Cages": 0,
+        "tier1BillableCages": 0,
+        "tier2BillableCages": 0,
+        "billableAnimals": 0,
+        "unitPrice": BILLING_TIER_BASE_PRICE,
+        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
+        "discountPercent": 0,
+        "amount": 0,
+    }
+    remaining_free_cages = max(as_int(free_cages) or 0, 0)
+    for group in groups.values():
+        profile = group["profile"]
+        count = group["count"]
+        if profile.get("tiered"):
+            allowance = remaining_free_cages if profile.get("freeAllowance") else 0
+            charges = tiered_daily_charge(count, allowance)
+            remaining_free_cages = max(remaining_free_cages - charges.get("freeCages", 0), 0)
+        else:
+            charges = flat_daily_charge(count, profile)
+        for key in (
+            "freeCages",
+            "billableCages",
+            "tier1Cages",
+            "tier2Cages",
+            "tier1BillableCages",
+            "tier2BillableCages",
+            "billableAnimals",
+            "amount",
+        ):
+            total[key] += charges.get(key, 0)
+        total["unitPrice"] = charges.get("unitPrice", total["unitPrice"])
+        if charges.get("overageUnitPrice"):
+            total["overageUnitPrice"] = charges.get("overageUnitPrice")
+    return total
+
+
+def statement_billing_unit_from_lines(lines):
+    has_animals = any((line.get("animalCount") or 0) > 0 for line in lines)
+    has_cages = any((line.get("cageCount") or 0) > 0 for line in lines)
+    if has_animals and has_cages:
+        return "mixed"
+    return "animal_day" if has_animals else "cage_day"
 
 
 def occupancy_active_on_date(item, date):
