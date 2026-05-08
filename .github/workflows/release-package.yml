@@ -61,9 +61,10 @@ jobs:
           echo "name=$(basename "${PACKAGE_PATH}")" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ref.outputs.tag_name }}
-          name: CageLedger ${{ steps.ref.outputs.tag_name }}
-          generate_release_notes: true
-          files: ${{ steps.package.outputs.path }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.ref.outputs.tag_name }}" \
+            "${{ steps.package.outputs.path }}" \
+            --title "CageLedger ${{ steps.ref.outputs.tag_name }}" \
+            --generate-notes
