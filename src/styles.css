@@ -632,10 +632,69 @@ h3 {
   background: #c7d1d5;
 }
 
+.stacked-capacity-track i.period-open {
+  background: #fff6cc;
+}
+
+.stacked-capacity-track i.period-normal {
+  background: #ddf5dd;
+}
+
+.stacked-capacity-track i.period-overdue {
+  background: #ffe1ea;
+}
+
 .room-capacity-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.room-capacity-meta .meta-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+}
+
+.room-capacity-meta .meta-pill.period-open {
+  background: #fff9db;
+  border-color: #eddc8b;
+}
+
+.room-capacity-meta .meta-pill.period-normal {
+  background: #e8f7e8;
+  border-color: #9fd2a5;
+}
+
+.room-capacity-meta .meta-pill.period-overdue {
+  background: #ffe8ef;
+  border-color: #e7a6b7;
+}
+
+.room-capacity-meta .meta-pill.active {
+  background: #e7f7ef;
+  border-color: #9bd2b5;
+}
+
+.room-capacity-meta .meta-pill.reserved {
+  background: #edf6ff;
+  border-color: #b8d8f4;
+}
+
+.room-capacity-meta .meta-pill.empty {
+  background: #f3f5f6;
+  border-color: #d8e0e3;
+}
+
+.room-capacity-meta .meta-pill.total {
+  margin-left: auto;
+  background: #f0f4f7;
+  border-color: #c7d1d5;
+  color: #2b3a42;
+  font-weight: 600;
 }
 
 .capacity-track {
@@ -1183,6 +1242,18 @@ textarea:focus {
   color: #1f7a55;
 }
 
+.status-dot.period-open {
+  background: #fff6cc;
+}
+
+.status-dot.period-normal {
+  background: #ddf5dd;
+}
+
+.status-dot.period-overdue {
+  background: #ffe1ea;
+}
+
 .pill.ended {
   background: #f6ebe8;
   color: #9f2d21;
@@ -1241,6 +1312,21 @@ textarea:focus {
 .slot.active {
   background: #e9f7ef;
   border-color: #9bd2b5;
+}
+
+.slot.period-open {
+  background: #fff9db;
+  border-color: #eddc8b;
+}
+
+.slot.period-normal {
+  background: #e8f7e8;
+  border-color: #9fd2a5;
+}
+
+.slot.period-overdue {
+  background: #ffe8ef;
+  border-color: #e7a6b7;
 }
 
 .slot.reserved {

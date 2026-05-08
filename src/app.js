@@ -227,7 +227,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.1b",
+  version: "0.4.2",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1049,6 +1049,10 @@ function renderDashboardView() {
   const reservedPct = percent(counts.reserved, counts.total);
   const emptyPct = percent(counts.empty, counts.total);
   const occupiedPct = percent(occupied, counts.total);
+  const periodTotal = counts.periodOpen + counts.periodNormal + counts.periodOverdue;
+  const periodOpenPct = percent(counts.periodOpen, periodTotal);
+  const periodNormalPct = percent(counts.periodNormal, periodTotal);
+  const periodOverduePct = percent(counts.periodOverdue, periodTotal);
 
   return `
     <section class="dashboard-view">
@@ -1070,6 +1074,9 @@ function renderDashboardView() {
         ${metric("在用", counts.active, "active")}
         ${metric("已预约", counts.reserved, "reserved")}
         ${metric("空", counts.empty, "empty")}
+        ${metric("未填结束", counts.periodOpen, "empty")}
+        ${metric("正常周期", counts.periodNormal, "active")}
+        ${metric("超期饲养", counts.periodOverdue, "reserved")}
       </div>
 
       <div class="dashboard-grid">
@@ -1077,7 +1084,7 @@ function renderDashboardView() {
           <div class="panel-head compact">
             <div>
               <h2>笼位状态分布</h2>
-              <p>按当前笼位状态统计，便于快速判断资源占用情况。</p>
+              <p>同时展示笼位状态和饲养周期分类，便于快速识别超期风险。</p>
             </div>
           </div>
           <div class="status-chart">
@@ -1093,6 +1100,9 @@ function renderDashboardView() {
               ${chartLegend("active", "在用", counts.active, activePct)}
               ${chartLegend("reserved", "已预约", counts.reserved, reservedPct)}
               ${chartLegend("empty", "空", counts.empty, emptyPct)}
+              ${chartLegend("period-open", "未填结束日期", counts.periodOpen, periodOpenPct)}
+              ${chartLegend("period-normal", "正常饲养周期", counts.periodNormal, periodNormalPct)}
+              ${chartLegend("period-overdue", "超期饲养", counts.periodOverdue, periodOverduePct)}
             </div>
           </div>
         </section>
@@ -1101,7 +1111,7 @@ function renderDashboardView() {
           <div class="panel-head compact">
             <div>
               <h2>饲养间使用情况</h2>
-              <p>按饲养间展示在用、已预约和空笼位，便于比较各房间容量。</p>
+              <p>按饲养间展示状态与饲养周期分类，便于比较容量与超期分布。</p>
             </div>
           </div>
           <div class="room-capacity-list">
@@ -1118,7 +1128,18 @@ function slotStatusCounts() {
   const active = state.slots.filter((slot) => slot.status === "active").length;
   const reserved = state.slots.filter((slot) => slot.status === "reserved").length;
   const empty = Math.max(total - active - reserved, 0);
-  return { total, active, reserved, empty };
+  const periodCounts = {
+    periodOpen: 0,
+    periodNormal: 0,
+    periodOverdue: 0,
+  };
+  state.slots.forEach((slot) => {
+    const tone = occupancyPeriodTone(currentOccupancy(slot.id));
+    if (tone === "open") periodCounts.periodOpen += 1;
+    if (tone === "normal") periodCounts.periodNormal += 1;
+    if (tone === "overdue") periodCounts.periodOverdue += 1;
+  });
+  return { total, active, reserved, empty, ...periodCounts };
 }
 
 function roomCapacityRows() {
@@ -1129,6 +1150,15 @@ function roomCapacityRows() {
     const active = slots.filter((slot) => slot.status === "active").length;
     const reserved = slots.filter((slot) => slot.status === "reserved").length;
     const empty = Math.max(total - active - reserved, 0);
+    let periodOpen = 0;
+    let periodNormal = 0;
+    let periodOverdue = 0;
+    slots.forEach((slot) => {
+      const tone = occupancyPeriodTone(currentOccupancy(slot.id));
+      if (tone === "open") periodOpen += 1;
+      if (tone === "normal") periodNormal += 1;
+      if (tone === "overdue") periodOverdue += 1;
+    });
     return {
       id: room.id,
       name: room.name,
@@ -1137,6 +1167,9 @@ function roomCapacityRows() {
       active,
       reserved,
       empty,
+      periodOpen,
+      periodNormal,
+      periodOverdue,
     };
   });
 }
@@ -1157,10 +1190,12 @@ function chartLegend(tone, label, value, pct) {
 }
 
 function renderRoomCapacityRow(room) {
-  const activePct = percent(room.active, room.total);
   const reservedPct = percent(room.reserved, room.total);
   const emptyPct = percent(room.empty, room.total);
   const occupiedPct = percent(room.active + room.reserved, room.total);
+  const periodOpenPct = percent(room.periodOpen, room.total);
+  const periodNormalPct = percent(room.periodNormal, room.total);
+  const periodOverduePct = percent(room.periodOverdue, room.total);
   return `
     <div class="room-capacity-row">
       <div class="room-capacity-head">
@@ -1170,15 +1205,21 @@ function renderRoomCapacityRow(room) {
         </div>
         <em>${occupiedPct}% 占用/预约</em>
       </div>
-      <div class="stacked-capacity-track" aria-label="${escapeAttr(room.name)} 笼位使用情况">
-        <i class="active" style="width:${activePct}%"></i>
+      <div class="stacked-capacity-track" aria-label="${escapeAttr(room.name)} 笼位使用和周期分布">
+        <i class="period-open" style="width:${periodOpenPct}%"></i>
+        <i class="period-normal" style="width:${periodNormalPct}%"></i>
+        <i class="period-overdue" style="width:${periodOverduePct}%"></i>
         <i class="reserved" style="width:${reservedPct}%"></i>
         <i class="empty" style="width:${emptyPct}%"></i>
       </div>
       <div class="room-capacity-meta">
-        <span>在用 ${room.active}</span>
-        <span>已预约 ${room.reserved}</span>
-        <span>空 ${room.empty}</span>
+        <span class="meta-pill period-open">未填结束 ${room.periodOpen}</span>
+        <span class="meta-pill period-normal">正常周期 ${room.periodNormal}</span>
+        <span class="meta-pill period-overdue">超期饲养 ${room.periodOverdue}</span>
+        <span class="meta-pill active">在用 ${room.active}</span>
+        <span class="meta-pill reserved">已预约 ${room.reserved}</span>
+        <span class="meta-pill empty">空 ${room.empty}</span>
+        <span class="meta-pill total">总笼位 ${room.total}</span>
       </div>
     </div>
   `;
@@ -1243,6 +1284,9 @@ function renderCageView() {
           ${legend("empty", "空")}
           ${legend("reserved", "已预约")}
           ${legend("active", "在用")}
+          ${legend("period-open", "未填结束日期")}
+          ${legend("period-normal", "正常饲养周期")}
+          ${legend("period-overdue", "超期饲养")}
         </div>
         <div class="filter-row" role="group" aria-label="笼位状态筛选">
           ${filterButton("all", "全部")}
@@ -1294,12 +1338,13 @@ function renderSlot(slot) {
   const occupancy = currentOccupancy(slot.id);
   const isSelected = slot.id === state.selectedSlotId || state.selectedSlotIds.includes(slot.id);
   const slotCode = cageCodeForSlot(slot.id);
+  const periodTone = occupancyPeriodTone(occupancy);
   const title = occupancy
     ? `${slotCode} ${occupancy.iacuc || ""} ${occupancy.pi || ""} ${occupancy.owner || ""} ${occupancy.startDate || ""}`
     : `${slotCode} 空`;
 
   return `
-    <button class="slot ${slot.status} ${isSelected ? "selected" : ""} ${state.selectedSlotIds.includes(slot.id) ? "batch-selected" : ""}" data-slot="${slot.id}" title="${escapeAttr(title)}">
+    <button class="slot ${slot.status} ${periodTone ? `period-${periodTone}` : ""} ${isSelected ? "selected" : ""} ${state.selectedSlotIds.includes(slot.id) ? "batch-selected" : ""}" data-slot="${slot.id}" title="${escapeAttr(title)}">
       <span class="slot-code">${slotCode}</span>
       ${
         occupancy
@@ -1337,6 +1382,7 @@ function renderSlotPreview(slot, occupancy, slotCode) {
       ["项目负责人", occupancy.pi || "-"],
       ["实验负责人", occupancy.owner || "-"],
       ["开始日期", occupancy.startDate || "-"],
+      ["饲养周期(天)", occupancy.feedingDays || "-"],
       ["结束日期", occupancy.endDate || "-"],
       ["备注", occupancy.notes || "-"],
     );
@@ -1392,7 +1438,7 @@ function renderSlotDetail(slot) {
           <input name="cageCode" value="${escapeAttr(occupancy.cageCode)}" placeholder="请输入笼盒编号，如 M-A001" />
         </label>
       </div>
-      <div class="compact-form-row half">
+      <div class="compact-form-row third">
         <label class="field-required">
           IACUC 编号
           ${renderIacucLookupInput("iacuc", occupancy.iacuc, { required: false })}
@@ -1402,7 +1448,7 @@ function renderSlotDetail(slot) {
           <textarea name="project" rows="2" placeholder="选择 IACUC 后自动填充，也可手动输入">${escapeText(occupancy.project)}</textarea>
         </label>
       </div>
-      <div class="compact-form-row half">
+      <div class="compact-form-row third">
         <label class="field-auto">
           项目负责人
           <input name="pi" value="${escapeAttr(occupancy.pi)}" placeholder="选择 IACUC 后自动填充" />
@@ -1416,6 +1462,10 @@ function renderSlotDetail(slot) {
         <label class="field-required">
           开始日期
           <input type="date" name="startDate" value="${occupancy.startDate || today}" placeholder="请选择开始日期" />
+        </label>
+        <label>
+          饲养周期（天）
+          <input type="number" name="feedingDays" min="1" step="1" value="${escapeAttr(occupancy.feedingDays || "")}" placeholder="请输入饲养周期天数" />
         </label>
         <label>
           结束/最后计费日期
@@ -1539,6 +1589,10 @@ function renderBatchSlotDetail(slots) {
         <label class="field-required">
           开始日期
           <input type="date" name="startDate" value="${draft.startDate}" placeholder="请选择开始日期" />
+        </label>
+        <label>
+          饲养周期（天）
+          <input type="number" name="feedingDays" min="1" step="1" value="${escapeAttr(draft.feedingDays || "")}" placeholder="请输入饲养周期天数" />
         </label>
         <label>
           结束/最后计费日期
@@ -1672,6 +1726,7 @@ function buildBatchDraft(occupiedItems) {
     pi: commonValue(occupiedItems, "pi") || matched?.pi || "",
     owner: commonValue(occupiedItems, "owner") || matched?.owner || "",
     startDate: commonValue(occupiedItems, "startDate") || today,
+    feedingDays: commonValue(occupiedItems, "feedingDays"),
     endDate: commonValue(occupiedItems, "endDate"),
     notes: commonValue(occupiedItems, "notes"),
   };
@@ -1685,6 +1740,7 @@ function emptyBatchDraft() {
     pi: "",
     owner: "",
     startDate: today,
+    feedingDays: "",
     endDate: "",
     notes: "",
   };
@@ -2986,8 +3042,10 @@ function bindEvents() {
   });
   document.querySelector("#slotForm")?.addEventListener("submit", handleSlotSubmit);
   bindIacucLookupInputs("#slotForm", autofillIacucFields);
+  bindFeedingPeriodInputs("#slotForm");
   document.querySelector("#batchSlotForm")?.addEventListener("submit", handleBatchSlotSubmit);
   bindIacucLookupInputs("#batchSlotForm", autofillIacucFields);
+  bindFeedingPeriodInputs("#batchSlotForm");
   document.querySelector("#openSampleSlot")?.addEventListener("click", () => openSampling("single"));
   document.querySelector("#openSampleBatchSlots")?.addEventListener("click", () => openSampling("batch"));
   document.querySelector("#confirmSampleSlot")?.addEventListener("click", sampleSelectedSlot);
@@ -3569,10 +3627,19 @@ async function handleSlotSubmit(event) {
     pi: form.get("pi").trim(),
     owner: form.get("owner").trim(),
     startDate: form.get("startDate") || today,
-    endDate: form.get("endDate"),
+    feedingDays: normalizeFeedingDays(form.get("feedingDays")),
+    endDate: "",
     notes: form.get("notes").trim(),
     updatedAt: today,
   };
+  payload.endDate = resolveEndDateByFeedingPeriod(payload.startDate, payload.feedingDays, form.get("endDate"));
+
+  if (payload.status === "active") {
+    const overdueItems = findOverdueOccupanciesByIacuc(payload.iacuc, [payload.id]);
+    if (overdueItems.length) {
+      alert(buildOverdueAlertMessage(payload.iacuc, overdueItems));
+    }
+  }
 
   try {
     const response = current
@@ -3606,10 +3673,20 @@ async function handleBatchSlotSubmit(event) {
     pi: form.get("pi").trim(),
     owner: form.get("owner").trim(),
     startDate: form.get("startDate") || today,
-    endDate: form.get("endDate"),
+    feedingDays: normalizeFeedingDays(form.get("feedingDays")),
+    endDate: "",
     notes: form.get("notes").trim(),
     updatedAt: today,
   };
+  payload.endDate = resolveEndDateByFeedingPeriod(payload.startDate, payload.feedingDays, form.get("endDate"));
+
+  if (payload.status === "active") {
+    const editingIds = state.selectedSlotIds.map((slotId) => currentOccupancy(slotId)?.id).filter(Boolean);
+    const overdueItems = findOverdueOccupanciesByIacuc(payload.iacuc, editingIds);
+    if (overdueItems.length) {
+      alert(buildOverdueAlertMessage(payload.iacuc, overdueItems));
+    }
+  }
 
   try {
     const savedItems = [];
@@ -6007,6 +6084,70 @@ function validateEndDate(occupancy, endDate) {
     return false;
   }
   return true;
+}
+
+function bindFeedingPeriodInputs(scopeSelector) {
+  const scope = document.querySelector(scopeSelector);
+  if (!scope) return;
+  const startDateInput = scope.querySelector("input[name='startDate']");
+  const feedingDaysInput = scope.querySelector("input[name='feedingDays']");
+  const endDateInput = scope.querySelector("input[name='endDate']");
+  if (!startDateInput || !feedingDaysInput || !endDateInput) return;
+
+  const syncEndDate = () => {
+    const resolved = resolveEndDateByFeedingPeriod(startDateInput.value, feedingDaysInput.value, endDateInput.value);
+    endDateInput.value = resolved;
+  };
+  startDateInput.addEventListener("change", syncEndDate);
+  feedingDaysInput.addEventListener("input", syncEndDate);
+}
+
+function normalizeFeedingDays(value) {
+  const days = Number.parseInt(String(value || "").trim(), 10);
+  if (!Number.isFinite(days) || days <= 0) return "";
+  return String(days);
+}
+
+function resolveEndDateByFeedingPeriod(startDate, feedingDays, fallbackEndDate = "") {
+  const normalized = normalizeFeedingDays(feedingDays);
+  if (startDate && normalized) {
+    return addDays(startDate, Number(normalized));
+  }
+  return String(fallbackEndDate || "");
+}
+
+function occupancyPeriodTone(occupancy) {
+  if (!occupancy || occupancy.status !== "active") return "";
+  if (!occupancy.endDate) return "open";
+  if (today > occupancy.endDate) return "overdue";
+  return "normal";
+}
+
+function findOverdueOccupanciesByIacuc(iacuc, excludeIds = []) {
+  const normalizedIacuc = normalizeIacucNumber(iacuc);
+  if (!normalizedIacuc) return [];
+  const excluded = new Set(excludeIds);
+  const rackById = new Map(state.racks.map((item) => [item.id, item]));
+  const roomById = new Map(state.rooms.map((item) => [item.id, item]));
+  const slotById = new Map(state.slots.map((item) => [item.id, item]));
+  return state.occupancies
+    .filter((item) => item.status === "active" && !excluded.has(item.id))
+    .filter((item) => normalizeIacucNumber(item.iacuc) === normalizedIacuc)
+    .filter((item) => item.endDate && item.endDate < today)
+    .map((item) => {
+      const slot = slotById.get(item.slotId);
+      const rack = slot ? rackById.get(slot.rackId) : null;
+      const room = rack ? roomById.get(rack.roomId) : null;
+      return {
+        roomName: room?.name || "未知房间",
+        cageLabel: slot ? slotPositionCode(slot) : item.slotId || "未知笼位",
+      };
+    });
+}
+
+function buildOverdueAlertMessage(iacuc, overdueItems) {
+  const detail = overdueItems.map((item) => `${item.roomName} / ${item.cageLabel}`).join("\n");
+  return `伦理号 ${iacuc || "未填写"} 存在超期饲养笼位：\n${detail}\n\n系统已继续保存当前录入。`;
 }
 
 function pushLog(message) {
