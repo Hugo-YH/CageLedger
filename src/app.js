@@ -25,6 +25,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.4",
+    title: "笼位编辑聚焦与猴信息完善",
+    items: [
+      "饲养间页面新增编辑功能，支持创建后修改所属设施、默认动物、默认收费项目、院内/院外和默认每笼只数",
+      "笼位编辑弹层新增遮罩和固定编辑入口，长笼位图下可直接从当前视口进入编辑，并移除顶部重复按钮",
+      "猴笼位信息新增性别、出生日期和自动年龄计算，保存后随单笼占用记录一起展示和维护",
+      "笼位图单选态新增“当前”标签和更强高亮，多选态继续保留“已选”标签；本轮优化根据 @吴玉婷 与 @纪嘉升 建议完善",
+    ],
+  },
+  {
     version: "0.4.3",
     title: "多设施动物饲养费适配",
     items: [
@@ -247,7 +257,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.3",
+  version: "0.4.4",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -331,6 +341,7 @@ const seedData = {
   },
   showCageEditor: false,
   showRoomForm: false,
+  editingRoomId: "",
   showRackForm: false,
   billingSource: "cage_map",
   billingMonth: today.slice(0, 7),
@@ -740,6 +751,7 @@ function normalize(data) {
   next.batchMode = Boolean(next.batchMode);
   next.showCageEditor = Boolean(next.showCageEditor);
   next.showRoomForm = Boolean(next.showRoomForm);
+  next.editingRoomId = next.editingRoomId || "";
   next.showRackForm = Boolean(next.showRackForm);
   next.sidebarCollapsed = Boolean(next.sidebarCollapsed);
   next.samplingMode = next.samplingMode || "";
@@ -752,6 +764,8 @@ function normalize(data) {
         animalCount: numericOrNull(item.animalCount),
         billingItem: normalizeBillingItem(item.billingItem || ""),
         customerType: normalizeCustomerType(item.customerType || ""),
+        animalSex: normalizeAnimalSex(item.animalSex || ""),
+        birthDate: normalizeDateInput(item.birthDate || ""),
       }))
     : [];
 
@@ -775,8 +789,10 @@ function normalize(data) {
 }
 
 function normalizeRoomDefaults(room) {
-  const species = normalizeSpecies(room.defaultSpecies || room.species || "mouse");
-  const billingItem = normalizeBillingItem(room.defaultBillingItem || billingItemForSpecies(species));
+  const inferredBillingItem = inferBillingItemFromRoom(room);
+  const manualBilling = roomHasManualBillingProfile(room, inferredBillingItem);
+  const species = normalizeSpecies(room.defaultSpecies || room.species || BILLING_RULES[inferredBillingItem]?.species || "mouse");
+  const billingItem = normalizeBillingItem((manualBilling ? room.defaultBillingItem : inferredBillingItem) || room.defaultBillingItem || billingItemForSpecies(species));
   return {
     ...room,
     facility: normalizeFacility(room.facility || "zhujiang"),
@@ -784,7 +800,32 @@ function normalizeRoomDefaults(room) {
     defaultBillingItem: billingItem,
     defaultCustomerType: normalizeCustomerType(room.defaultCustomerType || "internal"),
     defaultAnimalCount: Math.max(numericOrZero(room.defaultAnimalCount ?? 1), 1),
+    billingProfileConfigured: manualBilling,
+    billingProfileConfirmed: Boolean(room.billingProfileConfirmed),
   };
+}
+
+function roomHasManualBillingProfile(room = {}, inferredBillingItem = "") {
+  if (room.billingProfileConfirmed) return true;
+  if (!room.billingProfileConfigured) return false;
+  const fallbackMouse =
+    (!room.defaultBillingItem || room.defaultBillingItem === "mouse_standard") &&
+    (!room.defaultSpecies || room.defaultSpecies === "mouse");
+  return !(fallbackMouse && inferredBillingItem && inferredBillingItem !== "mouse_standard");
+}
+
+function inferBillingItemFromRoom(room = {}) {
+  const text = `${room.name || ""} ${room.area || ""} ${room.defaultSpecies || ""} ${room.species || ""}`;
+  if (/糖尿病.*大鼠|大鼠.*糖尿病/.test(text)) return "rat_diabetic";
+  if (/糖尿病.*小鼠|小鼠.*糖尿病/.test(text)) return "mouse_diabetic";
+  if (/豚鼠/.test(text)) return "guinea_pig";
+  if (/大鼠/.test(text)) return "rat_standard";
+  if (/兔/.test(text)) return "rabbit";
+  if (/猴/.test(text)) return "monkey";
+  if (/犬|狗/.test(text)) return "dog";
+  if (/猪/.test(text)) return "pig";
+  if (/小鼠/.test(text)) return "mouse_standard";
+  return "";
 }
 
 function normalizeFacility(value) {
@@ -801,6 +842,23 @@ function normalizeBillingItem(value) {
 
 function normalizeCustomerType(value) {
   return value === "external" ? "external" : "internal";
+}
+
+function normalizeAnimalSex(value) {
+  return ["male", "female", "unknown"].includes(value) ? value : "unknown";
+}
+
+function normalizeDateInput(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function animalSexLabel(value) {
+  return {
+    male: "雄",
+    female: "雌",
+    unknown: "未填写",
+  }[normalizeAnimalSex(value)];
 }
 
 function billingItemForSpecies(species) {
@@ -834,6 +892,10 @@ function customerTypeLabel(value) {
 function billingUnitLabel(value) {
   if (value === "mixed") return "混合";
   return value === "animal_day" ? "只/天" : "笼/天";
+}
+
+function billingPriceLabel(profile) {
+  return `¥${MONEY_FORMAT.format(profile.unitPrice)} / ${billingUnitLabel(profile.unit)}`;
 }
 
 function billingProfileForRoom(room = {}) {
@@ -1471,7 +1533,6 @@ function renderCageView() {
             <select id="rackSelect">
               ${racks.map((rack) => `<option value="${rack.id}" ${rack.id === selectedRack.id ? "selected" : ""}>${escapeText(rackDisplayName(rack, selectedRoom))}</option>`).join("")}
             </select>
-            <button class="secondary" type="button" id="openCageEditor">${iconSvg("edit")}编辑笼位图</button>
           </div>
         </div>
         <div class="legend">
@@ -1503,9 +1564,11 @@ function renderCageView() {
           ${visibleSlots.map((slot) => renderSlot(slot)).join("")}
         </div>
         <div id="slotHoverPreview" class="slot-hover-preview" hidden></div>
+        ${state.showCageEditor ? "" : renderCageEditorQuickAction(selectedSlot, selectedBatchSlots)}
         ${
           state.showCageEditor
             ? `
+              <div class="cage-editor-backdrop" id="closeCageEditor"></div>
               <div class="panel detail-panel cage-editor cage-editor-popover" id="cageEditorPopover">
                 <div class="editor-modal-actions">
                   <button class="secondary" type="button" id="closeCageEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
@@ -1520,6 +1583,17 @@ function renderCageView() {
   `;
 }
 
+function renderCageEditorQuickAction(selectedSlot, selectedBatchSlots) {
+  const label = state.batchMode
+    ? `编辑已选 ${selectedBatchSlots.length || 0} 个笼位`
+    : `编辑当前笼位 ${selectedSlot ? slotPositionCode(selectedSlot) : ""}`.trim();
+  return `
+    <button class="primary cage-editor-fab" type="button" data-open-cage-editor>
+      ${iconSvg("edit")}${escapeText(label)}
+    </button>
+  `;
+}
+
 function legend(status, label) {
   return `<span class="legend-item"><i class="status-dot ${status}"></i>${label}</span>`;
 }
@@ -1531,6 +1605,8 @@ function filterButton(value, label) {
 function renderSlot(slot) {
   const occupancy = currentOccupancy(slot.id);
   const isSelected = slot.id === state.selectedSlotId || state.selectedSlotIds.includes(slot.id);
+  const isBatchSelected = state.selectedSlotIds.includes(slot.id);
+  const showCurrentLabel = !state.batchMode && slot.id === state.selectedSlotId;
   const slotCode = cageCodeForSlot(slot.id);
   const periodTone = occupancyPeriodTone(occupancy);
   const title = occupancy
@@ -1538,7 +1614,7 @@ function renderSlot(slot) {
     : `${slotCode} 空`;
 
   return `
-    <button class="slot ${slot.status} ${periodTone ? `period-${periodTone}` : ""} ${isSelected ? "selected" : ""} ${state.selectedSlotIds.includes(slot.id) ? "batch-selected" : ""}" data-slot="${slot.id}" title="${escapeAttr(title)}">
+    <button class="slot ${slot.status} ${periodTone ? `period-${periodTone}` : ""} ${isSelected ? "selected" : ""} ${isBatchSelected ? "batch-selected" : ""} ${showCurrentLabel ? "current-selected" : ""}" data-slot="${slot.id}" title="${escapeAttr(title)}">
       <span class="slot-code">${slotCode}</span>
       ${
         occupancy
@@ -1551,7 +1627,8 @@ function renderSlot(slot) {
             <strong class="slot-empty-text">空</strong>
           `
       }
-      ${state.batchMode && state.selectedSlotIds.includes(slot.id) ? `<span class="slot-selected-label">已选</span>` : ""}
+      ${state.batchMode && isBatchSelected ? `<span class="slot-selected-label">已选</span>` : ""}
+      ${showCurrentLabel ? `<span class="slot-current-label">当前</span>` : ""}
       <span class="slot-preview-template" hidden>${renderSlotPreview(slot, occupancy, slotCode)}</span>
     </button>
   `;
@@ -1575,6 +1652,13 @@ function renderSlotPreview(slot, occupancy, slotCode) {
       ["收费项目", billingItemLabel(profile.billingItem)],
       ["计费单位", billingUnitLabel(profile.unit)],
       ["动物数量", profile.unit === "animal_day" ? occupancyAnimalCount(occupancy, profile) : "-"],
+      ...(profile.species === "monkey"
+        ? [
+            ["性别", animalSexLabel(occupancy.animalSex)],
+            ["出生日期", occupancy.birthDate || "-"],
+            ["年龄", formatAnimalAge(occupancy.birthDate) || "-"],
+          ]
+        : []),
       ["IACUC", occupancy.iacuc || "-"],
       ["项目名称", occupancy.project || "-"],
       ["项目负责人", occupancy.pi || "-"],
@@ -1612,6 +1696,7 @@ function renderSlotDetail(slot) {
   const history = state.occupancies.filter((item) => item.slotId === slot.id);
   const profile = billingProfileForSlot(slot, occupancy);
   const showAnimalCount = profile.unit === "animal_day";
+  const showMonkeyFields = profile.species === "monkey";
 
   return `
     <div class="panel-head compact">
@@ -1653,6 +1738,7 @@ function renderSlotDetail(slot) {
         <span>${escapeText(billingItemLabel(profile.billingItem))}</span>
         <span>${escapeText(customerTypeLabel(profile.customerType))}</span>
         <span>${escapeText(billingUnitLabel(profile.unit))}</span>
+        <span>${escapeText(billingPriceLabel(profile))}</span>
       </div>
       <div class="compact-form-row third">
         <label class="field-required">
@@ -1688,6 +1774,30 @@ function renderSlotDetail(slot) {
           <input type="date" name="endDate" value="${occupancy.endDate}" placeholder="请选择结束日期" />
         </label>
       </div>
+      ${
+        showMonkeyFields
+          ? `
+            <div class="compact-form-row third">
+              <label>
+                性别
+                <select name="animalSex">
+                  <option value="unknown" ${normalizeAnimalSex(occupancy.animalSex) === "unknown" ? "selected" : ""}>请选择</option>
+                  <option value="male" ${normalizeAnimalSex(occupancy.animalSex) === "male" ? "selected" : ""}>雄</option>
+                  <option value="female" ${normalizeAnimalSex(occupancy.animalSex) === "female" ? "selected" : ""}>雌</option>
+                </select>
+              </label>
+              <label>
+                出生日期
+                <input type="date" name="birthDate" value="${escapeAttr(occupancy.birthDate || "")}" />
+              </label>
+              <label>
+                年龄
+                <input type="text" value="${escapeAttr(formatAnimalAge(occupancy.birthDate) || "自动计算")}" data-monkey-age readonly />
+              </label>
+            </div>
+          `
+          : ""
+      }
       <label class="full-field">
         备注
         <textarea name="notes" rows="3" placeholder="请输入品系、周龄、特殊饲养要求等备注">${escapeText(occupancy.notes)}</textarea>
@@ -2623,6 +2733,7 @@ function renderRoomManagementView() {
   const rackDraft = currentRackFormDraft();
   const rackFormRoomId = rackDraft.roomId;
   const canManageRooms = !remotePersistence || currentUser?.role === "admin";
+  const editingRoom = state.editingRoomId ? state.rooms.find((room) => room.id === state.editingRoomId) : null;
   return `
     <section class="content-grid">
       <div class="panel large">
@@ -2651,63 +2762,7 @@ function renderRoomManagementView() {
       </div>
       ${
         canManageRooms && state.showRoomForm
-          ? `
-            <div class="editor-modal-backdrop" id="closeRoomForm"></div>
-            <div class="panel detail-panel editor-modal">
-              <div class="editor-modal-actions">
-                <button class="secondary" type="button" id="closeRoomFormButton">${iconSvg("chevronRight")}关闭编辑</button>
-              </div>
-              <div class="panel-head compact">
-                <div>
-                  <h2>新增饲养间</h2>
-                  <p>先建立饲养间，再按实际摆放新增笼架。</p>
-                </div>
-              </div>
-              <form id="roomForm" class="form">
-                <label class="field-required">
-                  饲养间名称
-                  <input name="name" required placeholder="请输入饲养间名称，如 SPF 小鼠饲养间 C" />
-                </label>
-                <label>
-                  区域
-                  <input name="area" placeholder="请输入区域，如 屏障区" />
-                </label>
-                <div class="form-row">
-                  <label class="field-required">
-                    所属设施
-                    <select name="facility" required>
-                      ${optionList(FACILITY_OPTIONS, "zhujiang")}
-                    </select>
-                  </label>
-                  <label class="field-required">
-                    默认动物
-                    <select name="defaultSpecies" required>
-                      ${optionList(SPECIES_OPTIONS, "mouse")}
-                    </select>
-                  </label>
-                </div>
-                <label class="field-required">
-                  默认收费项目
-                  <select name="defaultBillingItem" required>
-                    ${optionList(BILLING_ITEM_OPTIONS, "mouse_standard")}
-                  </select>
-                </label>
-                <div class="form-row">
-                  <label class="field-required">
-                    默认院内/院外
-                    <select name="defaultCustomerType" required>
-                      ${optionList(CUSTOMER_TYPE_OPTIONS, "internal")}
-                    </select>
-                  </label>
-                  <label class="field-required">
-                    默认每笼只数
-                    <input name="defaultAnimalCount" type="number" min="1" value="1" placeholder="请输入默认每笼动物数" required />
-                  </label>
-                </div>
-                <button class="primary" type="submit">${iconSvg("plus")}新增饲养间</button>
-              </form>
-            </div>
-          `
+          ? renderRoomForm(editingRoom)
           : ""
       }
       ${
@@ -2755,6 +2810,76 @@ function renderRoomManagementView() {
           : ""
       }
     </section>
+  `;
+}
+
+function renderRoomForm(room) {
+  const isEditing = Boolean(room);
+  const normalized = normalizeRoomDefaults(room || {});
+  const profile = billingProfileForRoom(normalized);
+  return `
+    <div class="editor-modal-backdrop" id="closeRoomForm"></div>
+    <div class="panel detail-panel editor-modal">
+      <div class="editor-modal-actions">
+        <button class="secondary" type="button" id="closeRoomFormButton">${iconSvg("chevronRight")}关闭编辑</button>
+      </div>
+      <div class="panel-head compact">
+        <div>
+          <h2>${isEditing ? "编辑饲养间" : "新增饲养间"}</h2>
+          <p>${isEditing ? "修改饲养间基础信息和默认计费配置。" : "先建立饲养间，再按实际摆放新增笼架。"}</p>
+        </div>
+      </div>
+      <form id="roomForm" class="form">
+        <input type="hidden" name="roomId" value="${escapeAttr(room?.id || "")}" />
+        <label class="field-required">
+          饲养间名称
+          <input name="name" required value="${escapeAttr(room?.name || "")}" placeholder="请输入饲养间名称，如 SPF 小鼠饲养间 C" />
+        </label>
+        <label>
+          区域
+          <input name="area" value="${escapeAttr(room?.area || "")}" placeholder="请输入区域，如 屏障区" />
+        </label>
+        <div class="form-row">
+          <label class="field-required">
+            所属设施
+            <select name="facility" required>
+              ${optionList(FACILITY_OPTIONS, normalized.facility || "zhujiang")}
+            </select>
+          </label>
+          <label class="field-required">
+            默认动物
+            <select name="defaultSpecies" required>
+              ${optionList(SPECIES_OPTIONS, normalized.defaultSpecies || "mouse")}
+            </select>
+          </label>
+        </div>
+        <label class="field-required">
+          默认收费项目
+          <select name="defaultBillingItem" required>
+            ${optionList(BILLING_ITEM_OPTIONS, profile.billingItem || "mouse_standard")}
+          </select>
+        </label>
+        <div class="form-row">
+          <label class="field-required">
+            默认院内/院外
+            <select name="defaultCustomerType" required>
+              ${optionList(CUSTOMER_TYPE_OPTIONS, profile.customerType || "internal")}
+            </select>
+          </label>
+          <label class="field-required">
+            默认每笼只数
+            <input name="defaultAnimalCount" type="number" min="1" value="${escapeAttr(normalized.defaultAnimalCount || 1)}" placeholder="请输入默认每笼动物数" required />
+          </label>
+        </div>
+        <div class="room-billing-hint">
+          <span>${escapeText(facilityLabel(normalized.facility))}</span>
+          <span>${escapeText(billingItemLabel(profile.billingItem))}</span>
+          <span>${escapeText(customerTypeLabel(profile.customerType))}</span>
+          <span>${escapeText(billingPriceLabel(profile))}</span>
+        </div>
+        <button class="primary" type="submit">${iconSvg(isEditing ? "save" : "plus")}${isEditing ? "保存饲养间" : "新增饲养间"}</button>
+      </form>
+    </div>
   `;
 }
 
@@ -3162,7 +3287,7 @@ function renderRoomCard(room) {
       <div class="room-tree-head">
         <div>
           <h3>${room.name}</h3>
-          <p>${room.area || "未设置区域"} · ${facilityLabel(normalizedRoom.facility)} · ${billingItemLabel(profile.billingItem)} · ${billingUnitLabel(profile.unit)}</p>
+          <p>${room.area || "未设置区域"} · ${facilityLabel(normalizedRoom.facility)} · ${billingItemLabel(profile.billingItem)} · ${billingUnitLabel(profile.unit)} · ${billingPriceLabel(profile)}</p>
         </div>
         <div class="tree-actions">
           <span>${slots.length} 笼位</span>
@@ -3171,6 +3296,9 @@ function renderRoomCard(room) {
           ${
             canManageRooms
               ? `
+                <button type="button" class="secondary compact-action" data-edit-room="${room.id}" title="编辑饲养间" aria-label="编辑饲养间 ${room.name}">
+                  ${iconSvg("edit")}编辑
+                </button>
                 <button type="button" class="icon-danger" data-delete-room="${room.id}" title="删除饲养间" aria-label="删除饲养间 ${room.name}">
                   ${iconSvg("trash")}
                 </button>
@@ -3314,6 +3442,7 @@ function bindEvents() {
   document.querySelector("#slotForm")?.addEventListener("submit", handleSlotSubmit);
   bindIacucLookupInputs("#slotForm", autofillIacucFields);
   bindFeedingPeriodInputs("#slotForm");
+  bindMonkeyAgeField("#slotForm");
   document.querySelector("#batchSlotForm")?.addEventListener("submit", handleBatchSlotSubmit);
   bindIacucLookupInputs("#batchSlotForm", autofillIacucFields);
   bindFeedingPeriodInputs("#batchSlotForm");
@@ -3327,9 +3456,8 @@ function bindEvents() {
   });
   document.querySelector("#clearSlot")?.addEventListener("click", clearSelectedSlot);
   document.querySelector("#clearBatchSlots")?.addEventListener("click", clearBatchSlots);
-  document.querySelector("#openCageEditor")?.addEventListener("click", () => {
-    state.showCageEditor = true;
-    render();
+  document.querySelectorAll("[data-open-cage-editor]").forEach((button) => {
+    button.addEventListener("click", openCageEditor);
   });
   document.querySelector("#closeCageEditor")?.addEventListener("click", () => {
     state.showCageEditor = false;
@@ -3513,6 +3641,13 @@ function bindEvents() {
   document.querySelectorAll("[data-delete-user]").forEach((button) => {
     button.addEventListener("click", () => deleteUser(button.dataset.deleteUser));
   });
+  document.querySelectorAll("[data-edit-room]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.editingRoomId = button.dataset.editRoom;
+      state.showRoomForm = true;
+      render();
+    });
+  });
   document.querySelectorAll("[data-delete-room]").forEach((button) => {
     button.addEventListener("click", () => deleteRoom(button.dataset.deleteRoom));
   });
@@ -3520,6 +3655,7 @@ function bindEvents() {
     button.addEventListener("click", () => deleteRack(button.dataset.deleteRack));
   });
   document.querySelector("#openRoomForm")?.addEventListener("click", () => {
+    state.editingRoomId = "";
     state.showRoomForm = true;
     render();
   });
@@ -3529,6 +3665,7 @@ function bindEvents() {
   });
   document.querySelector("#closeRoomForm")?.addEventListener("click", () => {
     state.showRoomForm = false;
+    state.editingRoomId = "";
     render();
   });
   document.querySelector("#closeRackForm")?.addEventListener("click", () => {
@@ -3537,6 +3674,7 @@ function bindEvents() {
   });
   document.querySelector("#closeRoomFormButton")?.addEventListener("click", () => {
     state.showRoomForm = false;
+    state.editingRoomId = "";
     render();
   });
   document.querySelector("#closeRackFormButton")?.addEventListener("click", () => {
@@ -3555,6 +3693,11 @@ function bindEvents() {
   });
 }
 
+function openCageEditor() {
+  state.showCageEditor = true;
+  render();
+}
+
 function isMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
 }
@@ -3565,6 +3708,19 @@ function isCompactViewport() {
 
 function bindAuthEvents() {
   document.querySelector("#loginForm")?.addEventListener("submit", login);
+}
+
+function bindMonkeyAgeField(scopeSelector) {
+  const scope = document.querySelector(scopeSelector);
+  const birthDateInput = scope?.querySelector("input[name='birthDate']");
+  const ageInput = scope?.querySelector("[data-monkey-age]");
+  if (!birthDateInput || !ageInput) return;
+  const sync = () => {
+    ageInput.value = formatAnimalAge(birthDateInput.value) || "自动计算";
+  };
+  birthDateInput.addEventListener("input", sync);
+  birthDateInput.addEventListener("change", sync);
+  sync();
 }
 
 function startBatchSlotDrag(event, slotButton) {
@@ -3903,6 +4059,8 @@ async function handleSlotSubmit(event) {
     feedingDays: normalizeFeedingDays(form.get("feedingDays")),
     endDate: "",
     animalCount: numericOrNull(form.get("animalCount")),
+    animalSex: normalizeAnimalSex(form.get("animalSex")),
+    birthDate: normalizeDateInput(form.get("birthDate")),
     billingItem: "",
     customerType: "",
     notes: form.get("notes").trim(),
@@ -4533,8 +4691,11 @@ async function handleRoomSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
   const name = form.get("name").trim();
+  const roomId = String(form.get("roomId") || "");
+  const existingRoom = roomId ? state.rooms.find((item) => item.id === roomId) : null;
   const room = {
-    id: `room-${slugify(name)}-${Date.now()}`,
+    ...(existingRoom || {}),
+    id: existingRoom?.id || `room-${slugify(name)}-${Date.now()}`,
     name,
     area: form.get("area").trim(),
     facility: normalizeFacility(form.get("facility")),
@@ -4542,23 +4703,25 @@ async function handleRoomSubmit(event) {
     defaultBillingItem: normalizeBillingItem(form.get("defaultBillingItem")),
     defaultCustomerType: normalizeCustomerType(form.get("defaultCustomerType")),
     defaultAnimalCount: Math.max(Number(form.get("defaultAnimalCount")) || 1, 1),
-    rackCount: 0,
-    rows: 0,
-    cols: 0,
+    billingProfileConfigured: Boolean(existingRoom),
+    billingProfileConfirmed: Boolean(existingRoom),
+    rackCount: existingRoom?.rackCount || 0,
+    rows: existingRoom?.rows || 0,
+    cols: existingRoom?.cols || 0,
   };
 
   try {
-    const response = await createInfrastructure({
-      rooms: [room],
-    });
-
-    state.rooms.push(...(response.rooms || [room]));
+    const response = await createInfrastructure(existingRoom ? { roomUpdates: [room] } : { rooms: [room] });
+    const savedRoom = normalizeRoomDefaults(existingRoom ? (response.roomUpdates || [room])[0] : (response.rooms || [room])[0]);
+    if (existingRoom) Object.assign(existingRoom, savedRoom);
+    else state.rooms.push(savedRoom);
     state.selectedRoomId = room.id;
     state.selectedRackId = "";
     state.selectedSlotId = "";
     state.activeView = "rooms";
     state.showRoomForm = false;
-    pushLog(`新增饲养间 ${room.name}`);
+    state.editingRoomId = "";
+    pushLog(`${existingRoom ? "更新" : "新增"}饲养间 ${room.name}`);
     render();
   } catch (error) {
     reportSaveError(error);
@@ -6320,6 +6483,8 @@ function emptyOccupancy(slotId) {
     startDate: today,
     endDate: "",
     animalCount: profile.unit === "animal_day" ? profile.defaultAnimalCount : null,
+    animalSex: "unknown",
+    birthDate: "",
     billingItem: "",
     customerType: "",
     notes: "",
@@ -6507,6 +6672,30 @@ function occupancyPeriodTone(occupancy) {
   if (!occupancy.endDate) return "open";
   if (today > occupancy.endDate) return "overdue";
   return "normal";
+}
+
+function formatAnimalAge(birthDate) {
+  const normalized = normalizeDateInput(birthDate);
+  if (!normalized) return "";
+  const birth = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return "";
+  const current = new Date(`${today}T00:00:00`);
+  if (birth > current) return "";
+  let years = current.getFullYear() - birth.getFullYear();
+  let months = current.getMonth() - birth.getMonth();
+  let days = current.getDate() - birth.getDate();
+  if (days < 0) {
+    months -= 1;
+    const previousMonth = new Date(current.getFullYear(), current.getMonth(), 0).getDate();
+    days += previousMonth;
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years > 0) return `${years}岁${months}月`;
+  if (months > 0) return `${months}月${days}天`;
+  return `${Math.max(days, 0)}天`;
 }
 
 function findOverdueOccupanciesByIacuc(iacuc, excludeIds = []) {

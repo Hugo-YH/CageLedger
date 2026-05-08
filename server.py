@@ -3134,10 +3134,55 @@ def billing_item_for_species(species):
     }.get(clean_text(species), "mouse_standard")
 
 
+def infer_billing_item_from_room(room=None):
+    room = room or {}
+    text = " ".join(
+        clean_text(room.get(key, ""))
+        for key in ("name", "area", "defaultSpecies", "species")
+        if clean_text(room.get(key, ""))
+    )
+    if re.search(r"糖尿病.*大鼠|大鼠.*糖尿病", text):
+        return "rat_diabetic"
+    if re.search(r"糖尿病.*小鼠|小鼠.*糖尿病", text):
+        return "mouse_diabetic"
+    if "豚鼠" in text:
+        return "guinea_pig"
+    if "大鼠" in text:
+        return "rat_standard"
+    if "兔" in text:
+        return "rabbit"
+    if "猴" in text:
+        return "monkey"
+    if "犬" in text or "狗" in text:
+        return "dog"
+    if "猪" in text:
+        return "pig"
+    if "小鼠" in text:
+        return "mouse_standard"
+    return ""
+
+
+def room_has_manual_billing_profile(room=None, inferred_billing_item=""):
+    room = room or {}
+    if room.get("billingProfileConfirmed"):
+        return True
+    if not room.get("billingProfileConfigured"):
+        return False
+    fallback_mouse = (
+        clean_text(room.get("defaultBillingItem", "")) in ("", "mouse_standard")
+        and clean_text(room.get("defaultSpecies", "")) in ("", "mouse")
+    )
+    return not (fallback_mouse and inferred_billing_item and inferred_billing_item != "mouse_standard")
+
+
 def billing_profile_for_room(room=None, fallback_unit=None):
     room = room or {}
+    inferred_billing_item = infer_billing_item_from_room(room)
+    manual_billing = room_has_manual_billing_profile(room, inferred_billing_item)
     billing_item = normalize_billing_item(
-        room.get("defaultBillingItem") or billing_item_for_species(room.get("defaultSpecies", "mouse"))
+        (room.get("defaultBillingItem") if manual_billing else inferred_billing_item)
+        or room.get("defaultBillingItem")
+        or billing_item_for_species(room.get("defaultSpecies", "mouse"))
     )
     if fallback_unit == "animal_day" and billing_item == "mouse_standard":
         billing_item = "guinea_pig"
