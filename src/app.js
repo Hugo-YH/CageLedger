@@ -26,6 +26,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.5a",
+    title: "预约识别与笼卡打印细化",
+    items: [
+      "增强预约消息识别，兼容锐竞/锐竟、采购订单编号、无冒号字段、全角括号、同一行品系数量和 26/5/13 等日期格式",
+      "新增供应商简称规则，笼卡打印时将江苏集萃药康、广东药康、上海南模、广东南模、珠海百试通等供应商显示为短名称",
+      "优化笼卡打印版式，统一标题、字段标题和字段内容字号层级，购买单位恢复为普通字段字号，仅批次号和饲养周期保留紧凑字号",
+      "统一打印日期为短横线格式，接收日期显示为 YYYY-MM-DD，饲养周期显示为紧凑日期范围",
+    ],
+  },
+  {
     version: "0.4.5",
     title: "笼卡管理与接收打印",
     items: [
@@ -269,7 +279,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5",
+  version: "0.4.5a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -363,6 +373,19 @@ const STRAIN_STANDARD_MAP = {
   wistar: "Wistar",
   lewis: "LEWIS",
 };
+const SUPPLIER_SHORT_NAME_RULES = [
+  [/江苏集萃药康|江苏集萃/, "江苏集萃"],
+  [/广东药康/, "广东药康"],
+  [/上海(?:南方模式|南模)/, "上海南模"],
+  [/广东南模/, "广东南模"],
+  [/珠海百试通/, "珠海百试通"],
+  [/丹阳昌益/, "丹阳昌益"],
+  [/北京维通利华/, "北京维通利华"],
+  [/浙江维通利华/, "浙江维通利华"],
+  [/上海斯莱克|斯莱克/, "上海斯莱克"],
+  [/北京华阜康|华阜康/, "北京华阜康"],
+  [/北京百奥赛图|百奥赛图/, "北京百奥赛图"],
+];
 
 function makeIncomingBatchDraft() {
   return normalizeIncomingBatchDraft({
@@ -455,15 +478,31 @@ function autoEndDate(intakeDate, husbandryDays) {
 }
 
 function normalizeFlexibleDate(value) {
-  const text = String(value || "").trim().replace(/[./年]/g, "-").replace(/[月]/g, "-").replace(/[日]/g, "").replace(/\s+/g, "");
-  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (!match) return normalizeDateInput(value);
-  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+  return normalizeFlexibleDateWithYear(value, new Date(`${today}T00:00:00`).getFullYear());
+}
+
+function normalizeFlexibleDateWithYear(value, fallbackYear) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const text = raw
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[./年]/g, "-")
+    .replace(/[月]/g, "-")
+    .replace(/[日号]/g, "")
+    .replace(/\s+/g, "");
+  const full = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  if (full) return `${full[1]}-${String(full[2]).padStart(2, "0")}-${String(full[3]).padStart(2, "0")}`;
+  const short = text.match(/\b(\d{2})-(\d{1,2})-(\d{1,2})\b/);
+  if (short) return `20${short[1]}-${String(short[2]).padStart(2, "0")}-${String(short[3]).padStart(2, "0")}`;
+  const monthDay = raw.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+  if (monthDay) return `${fallbackYear}-${String(monthDay[1]).padStart(2, "0")}-${String(monthDay[2]).padStart(2, "0")}`;
+  return normalizeDateInput(value);
 }
 
 function inferSpecies(value) {
   const text = String(value || "").trim().toLowerCase();
   if (!text) return "mouse";
+  if (/豚鼠|guinea/i.test(text)) return "guinea_pig";
   if (/(大鼠|rat|sprague|wistar|lewis|sd)/i.test(text)) return "rat";
   if (/(小鼠|mouse|c57|balb|dba|icr|km|kunming)/i.test(text)) return "mouse";
   return "mouse";
@@ -472,8 +511,25 @@ function inferSpecies(value) {
 function standardizeStrainName(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  const key = raw.toLowerCase().replace(/\s+/g, " ").replace(/[()]/g, "");
+  const cleaned = raw
+    .replace(/[，,].*$/, "")
+    .replace(/小鼠|大鼠|豚鼠|动物/g, "")
+    .trim();
+  if (/^c57bl\/6j?gpt$/i.test(cleaned)) return "C57BL/6JGpt";
+  const key = cleaned.toLowerCase().replace(/\s+/g, " ").replace(/[()]/g, "");
   return STRAIN_STANDARD_MAP[key] || STRAIN_STANDARD_MAP[key.replace(/\s*\/\s*/g, "/")] || raw;
+}
+
+function abbreviateSupplierName(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/\s+/g, "");
+  const matched = SUPPLIER_SHORT_NAME_RULES.find(([pattern]) => pattern.test(normalized));
+  if (matched) return matched[1];
+  return normalized
+    .replace(/(?:实验动物养殖|模式生物|生物科技|科技)?(?:股份)?有限公司$/, "")
+    .replace(/公司$/, "")
+    .trim();
 }
 
 function extractIacucFromBatchNo(value) {
@@ -483,32 +539,114 @@ function extractIacucFromBatchNo(value) {
 }
 
 function matchField(text, labels) {
-  const source = String(text || "");
+  const source = normalizeIncomingText(text);
   for (const label of labels) {
-    const pattern = new RegExp(`${label}\\s*[：:]\\s*([^\\n\\r]+)`, "i");
+    const pattern = new RegExp(`${label}\\s*(?:为|是)?\\s*[：:]?\\s*([^\\n\\r]+)`, "i");
     const matched = source.match(pattern);
-    if (matched?.[1]) return matched[1].trim();
+    if (matched?.[1]) return cleanupFieldValue(matched[1]);
   }
   return "";
+}
+
+function normalizeIncomingText(value) {
+  return String(value || "")
+    .replace(/[：]/g, ":")
+    .replace(/[（]/g, "(")
+    .replace(/[）]/g, ")")
+    .replace(/\u2005|\u00a0/g, " ")
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+}
+
+function cleanupFieldValue(value) {
+  return String(value || "")
+    .replace(/^[:：，,\s]+/, "")
+    .split(/@|谢谢|请审核|请审批|老师/)[0]
+    .trim()
+    .replace(/[，,。；;]+$/, "")
+    .trim();
+}
+
+function stopAtNextField(value) {
+  return cleanupFieldValue(value).split(/\s*(?:锐竞|锐竟|饲养需求批次号|供应商|品系|数量|饲养房间|进驻日期|拟进驻日期|接收日期|拟实验时间)\s*(?:为|是)?\s*[:：]?/)[0].trim();
+}
+
+function extractPurchaseOrder(text) {
+  const source = normalizeIncomingText(text);
+  const match = source.match(/锐[竞竟](?:采购)?(?:单号|订单编号|采购订单编号)?\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})/i);
+  return match?.[1]?.trim() || "";
+}
+
+function extractBatchNo(text) {
+  const source = normalizeIncomingText(text);
+  const match = source.match(/饲养需求批次号\s*(?:为)?\s*:?\s*[(]\s*([A-Z]{1,6}\d{4,})\s*[)]\s*(\d{6,})/i);
+  return match ? `(${match[1].toUpperCase()})${match[2]}` : "";
+}
+
+function extractReferenceYear(batchNo, purchaseOrderNo, rawText) {
+  const normalizedBatch = normalizeIncomingText(batchNo);
+  const batchSuffixYear = normalizedBatch.match(/[)]\s*(20\d{2})\d{4,}/);
+  if (batchSuffixYear) return Number(batchSuffixYear[1]);
+  const purchaseYear = String(purchaseOrderNo || "").match(/[A-Z]{0,3}(20\d{2})\d{4,}/i);
+  if (purchaseYear) return Number(purchaseYear[1]);
+  const source = normalizeIncomingText(rawText);
+  const explicitDateYear = source.match(/(20\d{2})\s*(?:[-/.年]\s*)\d{1,2}/);
+  if (explicitDateYear) return Number(explicitDateYear[1]);
+  return new Date(`${today}T00:00:00`).getFullYear();
+}
+
+function extractSupplier(text) {
+  const value = matchField(text, ["供应商", "购买单位"]);
+  return stopAtNextField(value);
+}
+
+function extractStrain(text) {
+  const source = normalizeIncomingText(text);
+  const match = source.match(/品系\s*:?\s*([\s\S]*?)(?=\s*(?:数量|饲养房间|进驻日期|拟进驻日期|接收日期|拟实验时间)\s*(?:为|是)?\s*:|[\n\r]|$)/i);
+  return cleanupFieldValue(match?.[1] || "");
+}
+
+function extractQuantity(text) {
+  const source = normalizeIncomingText(text);
+  const match = source.match(/数量\s*:?\s*(\d+)/);
+  return numericOrNull(match?.[1] || "");
+}
+
+function extractRoomName(text) {
+  const value = matchField(text, ["饲养房间", "房间"]);
+  const cleaned = stopAtNextField(value);
+  return cleaned.match(/\d{3,4}/)?.[0] || cleaned;
+}
+
+function extractIntakeDate(text, referenceYear) {
+  const direct = matchField(text, ["进驻日期", "拟进驻日期", "接收日期"]);
+  const directDate = normalizeFlexibleDateWithYear(direct, referenceYear);
+  if (directDate) return directDate;
+  const source = normalizeIncomingText(text);
+  const applyMatch = source.match(/申请\s*([^，,。\n\r]*?\d{1,2}\s*月\s*\d{1,2}\s*[日号][^，,。\n\r]*?)\s*进(?:鼠|驻)/);
+  const applyDate = normalizeFlexibleDateWithYear(applyMatch?.[1] || "", referenceYear);
+  if (applyDate) return applyDate;
+  return normalizeFlexibleDateWithYear(matchField(text, ["拟实验时间"]), referenceYear);
 }
 
 function parseIncomingMessage(rawMessage) {
   const raw = String(rawMessage || "").trim();
   if (!raw) return makeIncomingBatchDraft();
-  const batchNo = matchField(raw, ["饲养需求批次号", "批次号"]);
-  const strainRaw = matchField(raw, ["品系"]);
+  const batchNo = extractBatchNo(raw) || matchField(raw, ["饲养需求批次号", "批次号"]);
+  const purchaseOrderNo = extractPurchaseOrder(raw) || matchField(raw, ["锐竞采购单号", "锐竟采购单号", "采购单号", "锐竞单号"]);
+  const referenceYear = extractReferenceYear(batchNo, purchaseOrderNo, raw);
+  const strainRaw = extractStrain(raw);
   const parsed = normalizeIncomingBatchDraft({
     rawMessage: raw,
-    purchaseOrderNo: matchField(raw, ["锐竞采购单号", "采购单号"]),
+    purchaseOrderNo,
     batchNo,
     iacuc: extractIacucFromBatchNo(batchNo),
-    supplier: matchField(raw, ["供应商", "购买单位"]),
+    supplier: extractSupplier(raw),
     species: matchField(raw, ["物种"]) || inferSpecies(raw + "\n" + strainRaw),
     strainRaw,
     sex: matchField(raw, ["性别"]),
-    quantity: numericOrNull(matchField(raw, ["数量"])),
-    roomName: matchField(raw, ["饲养房间", "房间"]),
-    intakeDate: normalizeFlexibleDate(matchField(raw, ["进驻日期", "接收日期"])),
+    quantity: extractQuantity(raw),
+    roomName: extractRoomName(raw),
+    intakeDate: extractIntakeDate(raw, referenceYear),
     husbandryDays: numericOrNull(matchField(raw, ["饲养周期\\(天\\)", "饲养周期（天）", "饲养周期", "周期\\(天\\)", "周期"])),
     receiverName: currentUser?.displayName || "",
   });
@@ -5121,8 +5259,8 @@ function intakeCardsPrintHtml(items) {
           body {
             margin: 0;
             background: #fff;
-            font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-            color: #111;
+            font-family: "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: #0f172a;
           }
           .sheet {
             width: 210mm;
@@ -5139,7 +5277,7 @@ function intakeCardsPrintHtml(items) {
             position: relative;
             width: 100mm;
             height: 40mm;
-            border: 0.35mm solid #111;
+            border: 0.36mm solid #111827;
             overflow: hidden;
             background: #fff;
           }
@@ -5150,55 +5288,62 @@ function intakeCardsPrintHtml(items) {
             table-layout: fixed;
           }
           .card td {
-            border: 0.35mm solid #111;
-            padding: 0.15mm 0.65mm;
+            border: 0.32mm solid #111827;
+            padding: 0.12mm 0.55mm;
             vertical-align: middle;
-            font-size: 2.55mm;
+            font-size: 2.45mm;
             line-height: 1;
             word-break: break-word;
             overflow: hidden;
           }
           .card .header-title {
-            font-size: 4.8mm;
-            font-weight: 700;
-            text-align: center;
-            letter-spacing: 0;
+            font-size: 4.35mm;
+            font-weight: 800;
+            text-align: left;
+            padding-left: 7mm;
+            letter-spacing: 0.12mm;
           }
           .card .header-cage {
             font-size: 4.35mm;
-            font-weight: 700;
+            font-weight: 800;
             text-align: left;
-            padding-left: 2mm;
+            padding-left: 4mm;
           }
           .card .label {
-            font-size: 2.5mm;
-            font-weight: 700;
+            font-size: 2.35mm;
+            font-weight: 800;
+            color: #111827;
             white-space: nowrap;
           }
           .card .label-long {
-            font-size: 2.28mm;
+            font-size: 2.35mm;
           }
           .card .value {
-            font-size: 2.45mm;
+            font-size: 2.32mm;
+            font-weight: 500;
+            text-align: center;
           }
           .card .value-compact {
-            font-size: 2.05mm;
+            font-size: 1.98mm;
             line-height: 0.98;
           }
           .card .row-head {
             text-align: center;
-            font-weight: 700;
-            font-size: 2.55mm;
+            font-weight: 800;
+            font-size: 2.35mm;
           }
           .card .room {
             text-align: center;
-            color: #8b0000;
-            font-size: 8.5mm;
-            font-weight: 700;
+            color: #7f0000;
+            font-size: 8.8mm;
+            font-weight: 800;
           }
           .card .cycle {
-            font-size: 2.75mm;
-            font-weight: 700;
+            font-size: 2mm;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: -0.06mm;
+            white-space: nowrap;
           }
           @media print {
             @page { size: A4 portrait; margin: 0; }
@@ -5216,6 +5361,7 @@ function intakeCardsPrintHtml(items) {
 }
 
 function renderIntakeCardPrint(batch, card) {
+  const supplierShortName = abbreviateSupplierName(batch.supplier);
   return `
     <section class="card">
       <table>
@@ -5233,7 +5379,7 @@ function renderIntakeCardPrint(batch, card) {
           <td class="label">批次号：</td>
           <td class="value value-compact">${escapeText(batch.batchNo || "")}</td>
           <td class="label">购买单位：</td>
-          <td class="value value-compact">${escapeText(batch.supplier || "")}</td>
+          <td class="value">${escapeText(supplierShortName || batch.supplier || "")}</td>
         </tr>
         <tr style="height:4.25mm">
           <td class="label">动物品系：</td>
@@ -5243,7 +5389,7 @@ function renderIntakeCardPrint(batch, card) {
         </tr>
         <tr style="height:4.25mm">
           <td class="label">接收日期：</td>
-          <td class="value">${escapeText(formatDisplayDate(batch.intakeDate))}</td>
+          <td class="value">${escapeText(formatPrintDate(batch.intakeDate))}</td>
           <td class="label label-long">实验责任人/助手：</td>
           <td class="value">${escapeText(batch.owner || "")}</td>
         </tr>
@@ -5260,10 +5406,10 @@ function renderIntakeCardPrint(batch, card) {
           <td class="row-head">饲养周期</td>
         </tr>
         <tr style="height:4.65mm">
-          <td class="value">${escapeText(formatDisplayDate(batch.intakeDate))}</td>
+          <td class="value">${escapeText(formatPrintDate(batch.intakeDate))}</td>
           <td class="value">${escapeText(card.suggestedQuantity || "")}</td>
           <td class="room" rowspan="3">${escapeText(batch.roomName || "")}</td>
-          <td class="cycle">${escapeText(batch.endDate ? `${formatShortDate(batch.intakeDate)}-${formatShortDate(batch.endDate)}` : "")}</td>
+          <td class="cycle">${escapeText(formatPrintDateRange(batch.intakeDate, batch.endDate))}</td>
         </tr>
         <tr style="height:4.65mm">
           <td></td>
@@ -5280,11 +5426,23 @@ function renderIntakeCardPrint(batch, card) {
   `;
 }
 
-function formatDisplayDate(value) {
+function formatPrintDate(value) {
+  const normalized = normalizeFlexibleDate(value);
+  if (!normalized) return "";
+  return normalized;
+}
+
+function formatPrintDateRange(startDate, endDate) {
+  const start = formatPrintCompactDate(startDate);
+  const end = formatPrintCompactDate(endDate);
+  return start && end ? `${start}至${end}` : "";
+}
+
+function formatPrintCompactDate(value) {
   const normalized = normalizeFlexibleDate(value);
   if (!normalized) return "";
   const [year, month, day] = normalized.split("-");
-  return `${year}. ${Number(month)}. ${Number(day)}`;
+  return `${year.slice(2)}-${month}-${day}`;
 }
 
 function readQuantitySheetForm(form) {
