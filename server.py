@@ -83,6 +83,7 @@ TABLES = (
     "billing_rules",
     "occupancies",
     "cage_slots",
+    "intake_batches",
     "racks",
     "rooms",
     "app_settings",
@@ -94,6 +95,7 @@ ENTITY_ENDPOINTS = {
     "/api/occupancies": "occupancies",
     "/api/billing-rules": "billing_rules",
     "/api/billing-adjustments": "billing_adjustments",
+    "/api/intake-batches": "intake_batches",
     "/api/experiment-applications": "experiment_applications",
     "/api/billing-statements": "billing_statements",
     "/api/billing-statement-lines": "billing_statement_lines",
@@ -106,6 +108,7 @@ ENTITY_ORDER_BY = {
     "occupancies": "start_date, rowid",
     "billing_rules": "rowid",
     "billing_adjustments": "rowid",
+    "intake_batches": "updated_at DESC, rowid DESC",
     "experiment_applications": "iacuc",
     "billing_statements": "month DESC, iacuc, rowid DESC",
     "billing_statement_lines": "statement_id, line_date, rowid",
@@ -117,6 +120,7 @@ WRITABLE_ENTITY_ENDPOINTS = {
     "/api/occupancies": {"collection": "occupancies", "id_prefix": "occ"},
     "/api/billing-rules": {"collection": "billingRules", "id_prefix": "rule"},
     "/api/billing-adjustments": {"collection": "adjustments", "id_prefix": "adj"},
+    "/api/intake-batches": {"collection": "intakeBatches", "id_prefix": "batch"},
 }
 
 
@@ -277,6 +281,21 @@ def initialize_schema(conn):
             pi TEXT,
             owner TEXT,
             funding TEXT,
+            updated_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS intake_batches (
+            id TEXT PRIMARY KEY,
+            batch_no TEXT NOT NULL,
+            iacuc TEXT,
+            supplier TEXT,
+            room_name TEXT,
+            intake_date TEXT,
+            status TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             payload TEXT NOT NULL
         )
@@ -938,6 +957,7 @@ def empty_state():
         "occupancies": [],
         "billingRules": [],
         "adjustments": [],
+        "intakeBatches": [],
         "auditLogs": [],
     }
 
@@ -983,6 +1003,13 @@ def validate_entity_payload(collection, item):
     elif collection == "adjustments":
         require_text(item, "targetType", "减免规则目标类型不能为空")
         require_text(item, "targetId", "减免规则目标不能为空")
+    elif collection == "intakeBatches":
+        require_text(item, "batchNo", "批次号不能为空")
+        require_text(item, "supplier", "购买单位不能为空")
+        require_text(item, "status", "批次状态不能为空")
+        quantity = as_int(item.get("quantity"))
+        if quantity is None or quantity <= 0:
+            raise ValueError("动物数量必须大于 0")
 
 
 def require_text(item, key, message):
@@ -1197,6 +1224,27 @@ def write_normalized_state(conn, state, updated_at):
             ),
         )
 
+    for batch in state.get("intakeBatches", []):
+        conn.execute(
+            """
+            INSERT INTO intake_batches (
+                id, batch_no, iacuc, supplier, room_name, intake_date, status, updated_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                batch.get("id"),
+                batch.get("batchNo", ""),
+                batch.get("iacuc", ""),
+                batch.get("supplier", ""),
+                batch.get("roomName", ""),
+                batch.get("intakeDate", ""),
+                batch.get("status", "draft"),
+                batch.get("updatedAt", updated_at),
+                dump_json(batch),
+            ),
+        )
+
     for log in state.get("auditLogs", []):
         conn.execute(
             """
@@ -1208,7 +1256,7 @@ def write_normalized_state(conn, state, updated_at):
 
 
 def assemble_state(conn):
-    if not any(table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies")):
+    if not any(table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies", "intake_batches")):
         return None
 
     return {
@@ -1221,6 +1269,7 @@ def assemble_state(conn):
         "occupancies": read_payloads(conn, "occupancies", "start_date, rowid"),
         "billingRules": read_payloads(conn, "billing_rules", "rowid"),
         "adjustments": read_payloads(conn, "billing_adjustments", "rowid"),
+        "intakeBatches": read_payloads(conn, "intake_batches", "updated_at DESC, rowid DESC"),
         "auditLogs": read_payloads(conn, "audit_logs", "at DESC, rowid DESC"),
     }
 
@@ -1632,6 +1681,20 @@ def build_audit_events(actor, old_state, new_state, at):
         name = (new_item or old_item or {}).get("name", room_id)
         message = f"{actor['displayName']} {action_label(action)}饲养间 {name}"
         events.append(audit_event(actor, action, "room", room_id, message, [], at, old_item, new_item))
+
+    old_batches = {item.get("id"): item for item in old_state.get("intakeBatches", [])}
+    new_batches = {item.get("id"): item for item in new_state.get("intakeBatches", [])}
+    for batch_id in sorted(changed_keys(old_batches, new_batches)):
+        old_item = old_batches.get(batch_id)
+        new_item = new_batches.get(batch_id)
+        action = "intake_batch.updated"
+        if old_item is None:
+            action = "intake_batch.created"
+        elif new_item is None:
+            action = "intake_batch.deleted"
+        label = (new_item or old_item or {}).get("batchNo", batch_id)
+        message = f"{actor['displayName']} {action_label(action)}待接收批次 {label}"
+        events.append(audit_event(actor, action, "intake_batch", batch_id, message, [], at, old_item, new_item))
 
     return events[:100]
 

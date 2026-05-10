@@ -55,6 +55,10 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 | `POST` | `/api/billing-adjustments` | 创建减免规则 |
 | `PUT` | `/api/billing-adjustments/{id}` | 更新减免规则 |
 | `DELETE` | `/api/billing-adjustments/{id}` | 删除减免规则 |
+| `GET` | `/api/intake-batches` | 待接收批次和笼卡打印记录列表 |
+| `POST` | `/api/intake-batches` | 创建待接收批次 |
+| `PUT` | `/api/intake-batches/{id}` | 更新待接收批次 |
+| `DELETE` | `/api/intake-batches/{id}` | 删除待接收批次 |
 | `GET` | `/api/experiment-applications` | 实验申请汇总表 |
 | `GET` | `/api/billing-statements` | 结算单列表 |
 | `GET` | `/api/billing-statement-lines` | 结算单明细 |
@@ -94,6 +98,33 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 
 `/api/state` 仍保留为兼容、导入导出或调试接口。前端正常读写已迁移到实体级 API。
 
+## 笼卡管理
+
+用于预约接收消息到检疫笼卡打印的工作流。前端会保存粘贴的原始预约消息、识别后的批次字段、最终打印张数和批次状态；打印时按每个待接收批次展开笼卡实例。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/intake-batches` | 读取待接收批次列表 |
+| `POST` | `/api/intake-batches` | 保存新的待接收批次 |
+| `PUT` | `/api/intake-batches/{id}` | 更新待接收批次、打印张数或状态 |
+| `DELETE` | `/api/intake-batches/{id}` | 删除待接收批次 |
+
+核心字段：
+
+- 批次信息：`batchNo`、`iacuc`、`supplier`、`rawMessage`、`purchaseOrderNo`
+- 动物信息：`species`、`strainRaw`、`strainStandard`、`quantity`
+- 接收信息：`roomName`、`intakeDate`、`husbandryDays`、`endDate`、`receiverName`、`vetPhone`
+- 项目快照：`project`、`pi`、`owner`
+- 打印控制：`suggestedAnimalsPerCage`、`suggestedCardCount`、`finalCardCount`、`cards`
+- 状态：`draft`（待完善）、`pending_print`（待打印）、`printed`（已打印）
+
+笼卡打印规则：
+
+- 默认小鼠按 5 只/笼计算建议打印张数，大鼠按 4 只/笼计算。
+- 识别完成后，`finalCardCount` 默认等于 `suggestedCardCount`，用户可在打印前修改。
+- 数量不能整除时，最后一张笼卡的“数目变化”留空，便于按实收数量手写。
+- 打印模板按 A4 纸 2 x 7 版式排列，每张笼卡为 `100mm x 40mm`。
+
 ## IACUC 索引
 
 | 方法 | 路径 | 说明 |
@@ -128,6 +159,7 @@ CSV 必须包含：
 - `billing_rules`
 - `billing_adjustments`
 - `quantity_sheets`
+- `intake_batches`
 - `billing_statements`
 - `billing_statement_lines`
 - `audit_logs`

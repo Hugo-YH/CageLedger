@@ -21,9 +21,20 @@ const ENTITY_API_URLS = {
   occupancies: "/api/occupancies",
   billingRules: "/api/billing-rules",
   adjustments: "/api/billing-adjustments",
+  intakeBatches: "/api/intake-batches",
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.4.5",
+    title: "笼卡管理与接收打印",
+    items: [
+      "新增笼卡管理一级入口，支持粘贴预约接收消息自动识别批次号、IACUC、供应商、品系、数量、房间和接收日期",
+      "新增待接收批次持久化，保存打印张数、状态和笼卡实例编号，支持攒单后勾选批量打印",
+      "新增 100mm x 40mm 笼卡打印模板，按 A4 纸 2 x 7 切卡布局输出，并保留接收后两行数量变化空白记录",
+      "调整系统一级导航为主页、笼卡管理、笼位管理、饲养费管理、流程中心和系统设置",
+    ],
+  },
   {
     version: "0.4.4",
     title: "笼位编辑聚焦与猴信息完善",
@@ -232,6 +243,7 @@ const SYSTEM_DOC_LINKS = [
 ];
 const SYSTEM_API_GROUPS = [
   { title: "认证与账号", endpoints: ["POST /api/auth/login", "POST /api/auth/logout", "GET /api/auth/me", "GET /api/users", "POST /api/users"] },
+  { title: "笼卡管理", endpoints: ["GET /api/intake-batches", "POST /api/intake-batches", "PUT /api/intake-batches/{id}", "DELETE /api/intake-batches/{id}"] },
   { title: "笼位与设施", endpoints: ["GET /api/rooms", "GET /api/racks", "GET /api/cage-slots", "GET /api/occupancies"] },
   {
     title: "计费与审计",
@@ -257,7 +269,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.4",
+  version: "0.4.5",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -324,6 +336,214 @@ const BILLING_RULES = {
 };
 
 const today = formatLocalDate(new Date());
+const INTAKE_STATUS_OPTIONS = [
+  ["draft", "待完善"],
+  ["pending_print", "待打印"],
+  ["printed", "已打印"],
+];
+const STRAIN_STANDARD_MAP = {
+  c57: "C57BL/6J",
+  "c57bl/6": "C57BL/6J",
+  "c57bl/6j": "C57BL/6J",
+  "black 6": "C57BL/6J",
+  b6: "C57BL/6J",
+  balb: "BALB/c",
+  "balb/c": "BALB/c",
+  balbc: "BALB/c",
+  "balb/cj": "BALB/cJ",
+  dba: "DBA/2J",
+  "dba/2": "DBA/2J",
+  "dba/2j": "DBA/2J",
+  icr: "ICR",
+  km: "KM",
+  kunming: "KM",
+  sd: "Sprague Dawley",
+  "sprague dawley": "Sprague Dawley",
+  "sprague-dawley": "Sprague Dawley",
+  wistar: "Wistar",
+  lewis: "LEWIS",
+};
+
+function makeIncomingBatchDraft() {
+  return normalizeIncomingBatchDraft({
+    id: crypto.randomUUID(),
+    rawMessage: "",
+    purchaseOrderNo: "",
+    batchNo: "",
+    iacuc: "",
+    supplier: "",
+    species: "mouse",
+    strainRaw: "",
+    strainStandard: "",
+    sex: "",
+    quantity: null,
+    roomName: "",
+    intakeDate: "",
+    husbandryDays: null,
+    endDate: "",
+    project: "",
+    pi: "",
+    owner: "",
+    receiverName: currentUser?.displayName || "",
+    vetPhone: "",
+    notes: "",
+    status: "draft",
+    suggestedAnimalsPerCage: 5,
+    suggestedCardCount: 0,
+    finalCardCount: 0,
+    cards: [],
+    updatedAt: "",
+  });
+}
+
+function normalizeIncomingBatchDraft(item = {}) {
+  const species = normalizeSpecies(item.species || inferSpecies(item.strainStandard || item.strainRaw || item.rawMessage || ""));
+  const quantity = numericOrNull(item.quantity);
+  const suggestedAnimalsPerCage = Math.max(numericOrNull(item.suggestedAnimalsPerCage) || defaultAnimalsPerCage(species), 1);
+  const husbandryDays = numericOrNull(item.husbandryDays);
+  const endDate = normalizeDateInput(item.endDate || "") || autoEndDate(item.intakeDate, husbandryDays);
+  const suggestedCardCount = Math.max(numericOrNull(item.suggestedCardCount) || suggestCardCount(quantity, suggestedAnimalsPerCage), 0);
+  const finalCardCount = Math.max(numericOrNull(item.finalCardCount) || suggestedCardCount, 0);
+  const normalized = {
+    id: String(item.id || crypto.randomUUID()),
+    rawMessage: String(item.rawMessage || ""),
+    purchaseOrderNo: String(item.purchaseOrderNo || "").trim(),
+    batchNo: String(item.batchNo || "").trim(),
+    iacuc: normalizeIacucNumber(item.iacuc || extractIacucFromBatchNo(item.batchNo || "")),
+    supplier: String(item.supplier || "").trim(),
+    species,
+    strainRaw: String(item.strainRaw || "").trim(),
+    strainStandard: standardizeStrainName(item.strainStandard || item.strainRaw || ""),
+    sex: String(item.sex || "").trim(),
+    quantity,
+    roomName: String(item.roomName || "").trim(),
+    intakeDate: normalizeFlexibleDate(item.intakeDate || ""),
+    husbandryDays,
+    endDate,
+    project: String(item.project || "").trim(),
+    pi: String(item.pi || "").trim(),
+    owner: String(item.owner || "").trim(),
+    receiverName: String(item.receiverName || currentUser?.displayName || "").trim(),
+    vetPhone: String(item.vetPhone || "").trim(),
+    notes: String(item.notes || "").trim(),
+    status: INTAKE_STATUS_OPTIONS.some(([value]) => value === item.status) ? item.status : "draft",
+    suggestedAnimalsPerCage,
+    suggestedCardCount,
+    finalCardCount,
+    cards: [],
+    updatedAt: String(item.updatedAt || ""),
+  };
+  normalized.cards = buildIncomingCards(normalized);
+  return normalized;
+}
+
+function defaultAnimalsPerCage(species) {
+  return species === "rat" ? 4 : 5;
+}
+
+function suggestCardCount(quantity, perCage) {
+  const animalCount = numericOrNull(quantity);
+  if (!animalCount || !perCage) return 0;
+  return Math.ceil(animalCount / perCage);
+}
+
+function autoEndDate(intakeDate, husbandryDays) {
+  const normalizedDate = normalizeFlexibleDate(intakeDate);
+  const numericDays = numericOrNull(husbandryDays);
+  if (!normalizedDate || !numericDays) return "";
+  return addDays(normalizedDate, numericDays);
+}
+
+function normalizeFlexibleDate(value) {
+  const text = String(value || "").trim().replace(/[./年]/g, "-").replace(/[月]/g, "-").replace(/[日]/g, "").replace(/\s+/g, "");
+  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) return normalizeDateInput(value);
+  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+}
+
+function inferSpecies(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return "mouse";
+  if (/(大鼠|rat|sprague|wistar|lewis|sd)/i.test(text)) return "rat";
+  if (/(小鼠|mouse|c57|balb|dba|icr|km|kunming)/i.test(text)) return "mouse";
+  return "mouse";
+}
+
+function standardizeStrainName(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const key = raw.toLowerCase().replace(/\s+/g, " ").replace(/[()]/g, "");
+  return STRAIN_STANDARD_MAP[key] || STRAIN_STANDARD_MAP[key.replace(/\s*\/\s*/g, "/")] || raw;
+}
+
+function extractIacucFromBatchNo(value) {
+  const text = String(value || "");
+  const match = text.match(/[（(]([A-Za-z]{1,6}\d{4,})[)）]/);
+  return normalizeIacucNumber(match?.[1] || "");
+}
+
+function matchField(text, labels) {
+  const source = String(text || "");
+  for (const label of labels) {
+    const pattern = new RegExp(`${label}\\s*[：:]\\s*([^\\n\\r]+)`, "i");
+    const matched = source.match(pattern);
+    if (matched?.[1]) return matched[1].trim();
+  }
+  return "";
+}
+
+function parseIncomingMessage(rawMessage) {
+  const raw = String(rawMessage || "").trim();
+  if (!raw) return makeIncomingBatchDraft();
+  const batchNo = matchField(raw, ["饲养需求批次号", "批次号"]);
+  const strainRaw = matchField(raw, ["品系"]);
+  const parsed = normalizeIncomingBatchDraft({
+    rawMessage: raw,
+    purchaseOrderNo: matchField(raw, ["锐竞采购单号", "采购单号"]),
+    batchNo,
+    iacuc: extractIacucFromBatchNo(batchNo),
+    supplier: matchField(raw, ["供应商", "购买单位"]),
+    species: matchField(raw, ["物种"]) || inferSpecies(raw + "\n" + strainRaw),
+    strainRaw,
+    sex: matchField(raw, ["性别"]),
+    quantity: numericOrNull(matchField(raw, ["数量"])),
+    roomName: matchField(raw, ["饲养房间", "房间"]),
+    intakeDate: normalizeFlexibleDate(matchField(raw, ["进驻日期", "接收日期"])),
+    husbandryDays: numericOrNull(matchField(raw, ["饲养周期\\(天\\)", "饲养周期（天）", "饲养周期", "周期\\(天\\)", "周期"])),
+    receiverName: currentUser?.displayName || "",
+  });
+  return applyIncomingBatchIacucInfo(parsed);
+}
+
+function applyIncomingBatchIacucInfo(batch) {
+  const normalized = normalizeIncomingBatchDraft(batch);
+  const info = findIacucInfo(normalized.iacuc) || {};
+  return normalizeIncomingBatchDraft({
+    ...normalized,
+    project: normalized.project || info.project || "",
+    pi: normalized.pi || info.pi || "",
+    owner: normalized.owner || info.owner || "",
+  });
+}
+
+function buildIncomingCards(batch) {
+  const cardCount = Math.max(numericOrNull(batch.finalCardCount) || 0, 0);
+  const perCage = Math.max(numericOrNull(batch.suggestedAnimalsPerCage) || defaultAnimalsPerCage(batch.species), 1);
+  const quantity = Math.max(numericOrNull(batch.quantity) || 0, 0);
+  const remainder = quantity && perCage ? quantity % perCage : 0;
+  return Array.from({ length: cardCount }, (_, index) => {
+    const isLast = index === cardCount - 1;
+    const suggestedQuantity = !quantity ? "" : remainder && isLast ? "" : String(perCage);
+    const qrId = [batch.iacuc || "NOIACUC", (batch.intakeDate || "nodate").replaceAll("-", ""), String(index + 1).padStart(2, "0")].join("-");
+    return {
+      id: `${batch.id}-card-${index + 1}`,
+      index: index + 1,
+      label: `${index + 1}/${cardCount}`,
+      suggestedQuantity,
+      qrId,
+    };
+  });
+}
 
 const seedData = {
   activeView: "dashboard",
@@ -357,6 +577,9 @@ const seedData = {
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
+  selectedIntakeBatchId: "",
+  selectedIntakeBatchIds: [],
+  intakeBatchDraft: makeIncomingBatchDraft(),
   billingWorkflows: [],
   principalIdentityFilter: "",
   slotFilter: "all",
@@ -461,6 +684,7 @@ const seedData = {
     },
   ],
   adjustments: [],
+  intakeBatches: [],
 };
 
 let state = normalize(structuredClone(seedData));
@@ -525,6 +749,8 @@ async function loadEntityState() {
   const knownPis = new Set([...(entityData.occupancies || []).map((item) => normalizePersonName(item.pi)), ...quantitySheets.map((item) => normalizePersonName(item.pi))].filter(Boolean));
   const localBillingPi = knownPis.has(normalizePersonName(localState.billingPi)) ? localState.billingPi : "";
   const selectedQuantitySheet = quantitySheets.find((sheet) => sheet.id === localState.selectedQuantitySheetId) || quantitySheets[0];
+  const intakeBatches = entityData.intakeBatches || [];
+  const selectedIntakeBatch = intakeBatches.find((item) => item.id === localState.selectedIntakeBatchId) || intakeBatches[0];
 
   return {
     ...structuredClone(seedData),
@@ -545,6 +771,12 @@ async function loadEntityState() {
     selectedQuantitySheetId: selectedQuantitySheet?.id || "",
     quantitySheetDraft: selectedQuantitySheet || makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
     quantitySheets,
+    selectedIntakeBatchId: selectedIntakeBatch?.id || "",
+    selectedIntakeBatchIds: Array.isArray(localState.selectedIntakeBatchIds)
+      ? localState.selectedIntakeBatchIds.filter((id) => intakeBatches.some((item) => item.id === id))
+      : [],
+    intakeBatchDraft: selectedIntakeBatch || makeIncomingBatchDraft(),
+    intakeBatches,
     billingWorkflows,
     principalIdentityFilter: localState.principalIdentityFilter || "",
     slotFilter: localState.slotFilter || "all",
@@ -736,6 +968,7 @@ function normalize(data) {
   if (next.activeView === "settings") next.activeView = "rooms";
   next.selectedSlotIds = Array.isArray(next.selectedSlotIds) ? next.selectedSlotIds : [];
   next.quantitySheets = Array.isArray(next.quantitySheets) ? next.quantitySheets : [];
+  next.intakeBatches = Array.isArray(next.intakeBatches) ? next.intakeBatches.map(normalizeIncomingBatchDraft) : [];
   next.billingWorkflows = Array.isArray(next.billingWorkflows) ? next.billingWorkflows : [];
   next.settingsNavExpanded = Boolean(next.settingsNavExpanded);
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
@@ -747,6 +980,9 @@ function normalize(data) {
   next.selectedBillingWorkflowId = String(next.selectedBillingWorkflowId || "");
   next.selectedBillingWorkflowDetail = next.selectedBillingWorkflowDetail && typeof next.selectedBillingWorkflowDetail === "object" ? next.selectedBillingWorkflowDetail : null;
   next.showWorkflowStatements = Boolean(next.showWorkflowStatements);
+  next.selectedIntakeBatchId = String(next.selectedIntakeBatchId || "");
+  next.selectedIntakeBatchIds = Array.isArray(next.selectedIntakeBatchIds) ? next.selectedIntakeBatchIds.filter(Boolean) : [];
+  next.intakeBatchDraft = normalizeIncomingBatchDraft(next.intakeBatchDraft || next.intakeBatches.find((item) => item.id === next.selectedIntakeBatchId) || makeIncomingBatchDraft());
   next.principalIdentityFilter = String(next.principalIdentityFilter || "");
   next.batchMode = Boolean(next.batchMode);
   next.showCageEditor = Boolean(next.showCageEditor);
@@ -1037,6 +1273,7 @@ function render() {
       <main class="workspace">
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
+        ${state.activeView === "intake" ? renderIntakeBatchView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
         ${state.activeView === "workflow-center" ? renderWorkflowCenterView() : ""}
         ${state.activeView === "rooms" ? renderRoomManagementView() : ""}
@@ -1067,8 +1304,9 @@ function render() {
 function renderSidebar() {
   const businessNavItems = [
     ["dashboard", "主页", "home"],
-    ["cages", "笼位图", "grid"],
-    ["billing", "饲养费核算", "receipt"],
+    ["intake", "笼卡管理", "receipt"],
+    ["cages", "笼位管理", "grid"],
+    ["billing", "饲养费管理", "receipt"],
     ["workflow-center", "流程中心", "refresh"],
   ];
   const settingsNavItems = [
@@ -1207,12 +1445,16 @@ function renderLoginView() {
 function pageMeta(view) {
   return {
     cages: {
-      title: "笼位图",
+      title: "笼位管理",
       description: "按饲养间和笼架查看、录入和维护笼位占用。",
     },
     billing: {
-      title: "饲养费核算",
+      title: "饲养费管理",
       description: "按项目负责人和月份汇总多个 IACUC 的饲养费用。",
+    },
+    intake: {
+      title: "笼卡管理",
+      description: "解析预约接收消息、保存待接收批次并批量打印笼卡。",
     },
     "workflow-center": {
       title: "流程中心",
@@ -2094,6 +2336,225 @@ function renderHistoryItem(item) {
       </div>
     </div>
   `;
+}
+
+function renderIntakeBatchView() {
+  const draft = state.intakeBatchDraft || makeIncomingBatchDraft();
+  const selectedCount = state.selectedIntakeBatchIds.length;
+  const canPrintCurrent = draft.cards.length > 0;
+  return `
+    <section class="billing-layout quantity-billing-layout intake-layout">
+      <div class="panel large">
+        <form id="intakeBatchForm">
+          <div class="panel-head">
+            <div>
+              <h2>接收笼卡</h2>
+              <p>粘贴课题组预约接收消息，系统解析批次、项目和装笼建议，并保存为待打印批次。</p>
+            </div>
+          </div>
+
+          <div class="intake-entry-layout">
+            <div class="intake-message-field">
+              <div class="intake-message-head">
+                <span>预约消息识别</span>
+                <button id="parseIncomingMessage" class="secondary compact-action" type="button">${iconSvg("refresh")}识别文本</button>
+              </div>
+              <textarea name="rawMessage" rows="8" placeholder="粘贴课题组发送的预约接收文本，点击“识别文本”自动提取批次号、供应商、品系、数量、房间、进驻日期等信息。">${escapeText(draft.rawMessage)}</textarea>
+            </div>
+            <div class="intake-action-panel">
+              <select id="intakeBatchSelect" aria-label="选择待接收批次">
+                <option value="">请选择待接收批次或新建</option>
+                ${state.intakeBatches
+                  .map(
+                    (item) => `<option value="${escapeAttr(item.id)}" ${item.id === draft.id ? "selected" : ""}>${escapeText(intakeStatusLabel(item.status))} · ${escapeText(item.batchNo || "未命名批次")}</option>`,
+                  )
+                  .join("")}
+              </select>
+              <div class="intake-action-grid">
+                <button id="newIntakeBatch" class="secondary" type="button">${iconSvg("plus")}新建</button>
+                <button id="saveIntakeBatch" class="secondary" type="submit">${iconSvg("save")}保存批次</button>
+                <button id="printCurrentCageCards" class="secondary" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("download")}打印当前笼卡</button>
+                <button id="printSelectedCageCards" class="primary" type="button" ${selectedCount ? "" : "disabled"}>${iconSvg("download")}打印勾选批次（${selectedCount}）</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="intake-form-grid">
+            <input type="hidden" name="purchaseOrderNo" value="${escapeAttr(draft.purchaseOrderNo)}" />
+            <input type="hidden" name="project" value="${escapeAttr(draft.project)}" />
+            <input type="hidden" name="sex" value="${escapeAttr(draft.sex)}" />
+            <input type="hidden" name="notes" value="${escapeAttr(draft.notes)}" />
+            <input type="hidden" name="strainRaw" value="${escapeAttr(draft.strainRaw)}" />
+            <div class="intake-field-row three">
+              <label class="field-required">
+                购买单位
+                <input name="supplier" value="${escapeAttr(draft.supplier)}" placeholder="供应商名称" required />
+              </label>
+              <label class="field-required">
+                批次号
+                <input name="batchNo" value="${escapeAttr(draft.batchNo)}" placeholder="（IACUC编号）年月日批次" required />
+              </label>
+              <label>
+                IACUC 编号
+                ${renderIacucLookupInput("iacuc", draft.iacuc)}
+              </label>
+            </div>
+            <div class="intake-field-row two">
+              <label class="field-auto">
+                项目负责人
+                <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="IACUC 匹配后自动填充" />
+              </label>
+              <label class="field-auto">
+                实验负责人/助手
+                <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="默认打印实验负责人，助手可手写" />
+              </label>
+            </div>
+            <div class="intake-field-row four">
+              <label>
+                物种
+                <select name="species">
+                  ${SPECIES_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === draft.species ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
+                </select>
+              </label>
+              <label>
+                品系
+                <input name="strainStandard" value="${escapeAttr(draft.strainStandard)}" placeholder="如 C57BL/6J" />
+              </label>
+              <label class="field-required">
+                数量（只）
+                <input name="quantity" type="number" min="1" value="${draft.quantity ?? ""}" placeholder="请输入动物数量" required />
+              </label>
+              <label>
+                房间
+                <input name="roomName" value="${escapeAttr(draft.roomName)}" placeholder="可修改" />
+              </label>
+            </div>
+            <div class="intake-field-row three">
+              <label class="field-required">
+                接收日期
+                <input name="intakeDate" type="date" value="${escapeAttr(draft.intakeDate)}" required />
+              </label>
+              <label>
+                饲养周期
+                <input name="husbandryDays" type="number" min="1" value="${draft.husbandryDays ?? ""}" placeholder="天数" />
+              </label>
+              <label>
+                结束日期
+                <input name="endDate" type="date" value="${escapeAttr(draft.endDate)}" />
+              </label>
+            </div>
+            <div class="intake-field-row two">
+              <label>
+                打印张数
+                <input name="finalCardCount" type="number" min="0" value="${draft.finalCardCount ?? 0}" />
+              </label>
+              <label>
+                状态
+                <select name="status">
+                  ${INTAKE_STATUS_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === draft.status ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+            <input type="hidden" name="receiverName" value="${escapeAttr(draft.receiverName || currentUser?.displayName || "")}" />
+            <input type="hidden" name="vetPhone" value="${escapeAttr(draft.vetPhone)}" />
+            <input type="hidden" name="suggestedAnimalsPerCage" value="${escapeAttr(draft.suggestedAnimalsPerCage ?? defaultAnimalsPerCage(draft.species))}" />
+            <input type="hidden" name="suggestedCardCount" value="${escapeAttr(draft.suggestedCardCount ?? 0)}" />
+          </div>
+        </form>
+
+        <div class="quantity-preview-section intake-preview-section">
+          <div class="panel-head compact">
+            <div>
+              <h2>笼卡预览</h2>
+              <p>默认按装笼建议生成；数量不能整除时最后一张“数目变化”留空，方便现场手写修正。</p>
+            </div>
+          </div>
+          <div class="statement-summary compact-summary">
+            ${summaryTile("批次号", draft.batchNo || "-")}
+            ${summaryTile("品系", draft.strainStandard || draft.strainRaw || "-")}
+            ${summaryTile("打印张数", draft.finalCardCount || 0)}
+            ${summaryTile("房间", draft.roomName || "-")}
+            ${summaryTile("饲养周期", draft.endDate ? `${formatShortDate(draft.intakeDate)}-${formatShortDate(draft.endDate)}` : "-")}
+          </div>
+          <div class="table-wrap mini-statement">
+            <table class="intake-card-table">
+              <thead><tr><th>序号</th><th>建议数量</th><th>二维码编号</th><th>打印字段</th></tr></thead>
+              <tbody>
+                ${
+                  draft.cards.length
+                    ? draft.cards.map(renderIntakeCardPreviewRow).join("")
+                    : `<tr><td colspan="4">填写批次数量和每笼建议只数后生成笼卡。</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel intake-batch-list-panel">
+          <div class="panel-head compact">
+            <div>
+              <h2>待接收批次列表</h2>
+              <p>支持攒单后一起打印；打印后可将状态切到“已打印”。</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="workflow-table intake-batch-table">
+              <thead><tr><th></th><th>状态</th><th>批次号</th><th>购买单位</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
+              <tbody>
+                ${
+                  state.intakeBatches.length
+                    ? state.intakeBatches.map(renderIntakeBatchRow).join("")
+                    : `<tr><td colspan="9">还没有保存待接收批次。</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderIntakeCardPreviewRow(card) {
+  return `
+    <tr>
+      <td>${escapeText(card.label)}</td>
+      <td>${escapeText(card.suggestedQuantity || "留空")}</td>
+      <td><code>${escapeText(card.qrId)}</code></td>
+      <td>${escapeText(card.suggestedQuantity ? `数目变化默认填 ${card.suggestedQuantity}` : "数目变化留空")}</td>
+    </tr>
+  `;
+}
+
+function renderIntakeBatchRow(batch) {
+  const checked = state.selectedIntakeBatchIds.includes(batch.id);
+  return `
+    <tr class="workflow-row ${batch.id === state.selectedIntakeBatchId ? "selected-row" : ""}" data-open-intake-batch="${escapeAttr(batch.id)}">
+      <td><input type="checkbox" data-select-intake-batch="${escapeAttr(batch.id)}" ${checked ? "checked" : ""} aria-label="选择 ${escapeAttr(batch.batchNo || batch.id)}" /></td>
+      <td><span class="pill ${batch.status === "printed" ? "active" : "reserved"}">${escapeText(intakeStatusLabel(batch.status))}</span></td>
+      <td>${escapeText(batch.batchNo || "-")}</td>
+      <td>${escapeText(batch.supplier || "-")}</td>
+      <td>${escapeText(batch.quantity ?? "-")}</td>
+      <td>${escapeText(batch.roomName || "-")}</td>
+      <td>${escapeText(batch.intakeDate || "-")}</td>
+      <td>${escapeText(batch.finalCardCount || 0)} 张</td>
+      <td>
+        <button class="ghost" type="button" data-open-intake-batch-button="${escapeAttr(batch.id)}">编辑</button>
+        <button class="ghost danger-text" type="button" data-delete-intake-batch="${escapeAttr(batch.id)}">删除</button>
+      </td>
+    </tr>
+  `;
+}
+
+function intakeStatusLabel(value) {
+  return INTAKE_STATUS_OPTIONS.find(([key]) => key === value)?.[1] || "待完善";
+}
+
+function formatShortDate(value) {
+  const normalized = normalizeFlexibleDate(value);
+  if (!normalized) return "";
+  const [year, month, day] = normalized.split("-");
+  return `${year.slice(2)}.${Number(month)}.${Number(day)}`;
 }
 
 function renderBillingView() {
@@ -3507,6 +3968,76 @@ function bindEvents() {
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
+  document.querySelector("#intakeBatchForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await saveIntakeBatchDraft();
+      pushLog(`保存待接收批次：${state.intakeBatchDraft.batchNo || state.intakeBatchDraft.id}`);
+      render();
+    } catch (error) {
+      reportSaveError(error);
+    }
+  });
+  document.querySelector("#intakeBatchSelect")?.addEventListener("change", handleIntakeBatchSelect);
+  document.querySelector("#newIntakeBatch")?.addEventListener("click", newIntakeBatchDraft);
+  document.querySelector("#parseIncomingMessage")?.addEventListener("click", parseCurrentIncomingMessage);
+  document.querySelector("#printCurrentCageCards")?.addEventListener("click", () => {
+    captureIntakeBatchDraft();
+    printIntakeBatches([normalizeIncomingBatchDraft(state.intakeBatchDraft)]);
+  });
+  document.querySelector("#printSelectedCageCards")?.addEventListener("click", () => {
+    const batches = state.intakeBatches.filter((item) => state.selectedIntakeBatchIds.includes(item.id));
+    printIntakeBatches(batches);
+  });
+  document.querySelectorAll("[data-select-intake-batch]").forEach((input) => {
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("change", (event) => {
+      toggleSelectedIntakeBatch(input.dataset.selectIntakeBatch, event.target.checked);
+      render();
+    });
+  });
+  document.querySelectorAll("[data-open-intake-batch]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const batch = state.intakeBatches.find((item) => item.id === row.dataset.openIntakeBatch);
+      if (!batch) return;
+      state.selectedIntakeBatchId = batch.id;
+      state.intakeBatchDraft = normalizeIncomingBatchDraft(batch);
+      render();
+    });
+  });
+  document.querySelectorAll("[data-open-intake-batch-button]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const batch = state.intakeBatches.find((item) => item.id === button.dataset.openIntakeBatchButton);
+      if (!batch) return;
+      state.selectedIntakeBatchId = batch.id;
+      state.intakeBatchDraft = normalizeIncomingBatchDraft(batch);
+      render();
+    });
+  });
+  document.querySelectorAll("[data-delete-intake-batch]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const batchId = button.dataset.deleteIntakeBatch;
+      const batch = state.intakeBatches.find((item) => item.id === batchId);
+      if (!batch) return;
+      if (!confirm(`确认删除待接收批次 ${batch.batchNo || batch.id}？`)) return;
+      try {
+        await deleteIntakeBatch(batchId);
+        pushLog(`删除待接收批次：${batch.batchNo || batch.id}`);
+        render();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  bindIacucLookupInputs("#intakeBatchForm", (event) => {
+    const form = event.target.closest("form");
+    if (!form) return;
+    const current = readIncomingBatchForm(form);
+    state.intakeBatchDraft = applyIncomingBatchIacucInfo(current);
+    render();
+  });
   document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
     button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
   });
@@ -4423,6 +4954,337 @@ async function saveQuantitySheetDraft() {
     upsertById(state.quantitySheets, savedSheet);
   }
   return state.quantitySheetDraft;
+}
+
+function handleIntakeBatchSelect(event) {
+  captureIntakeBatchDraft();
+  const batch = state.intakeBatches.find((item) => item.id === event.target.value);
+  state.selectedIntakeBatchId = batch?.id || "";
+  state.intakeBatchDraft = normalizeIncomingBatchDraft(batch || makeIncomingBatchDraft());
+  render();
+}
+
+function newIntakeBatchDraft() {
+  captureIntakeBatchDraft();
+  state.selectedIntakeBatchId = "";
+  state.intakeBatchDraft = makeIncomingBatchDraft();
+  render();
+}
+
+function captureIntakeBatchDraft() {
+  const form = document.querySelector("#intakeBatchForm");
+  if (!form) return;
+  state.intakeBatchDraft = readIncomingBatchForm(form);
+}
+
+async function saveIntakeBatchDraft() {
+  const form = document.querySelector("#intakeBatchForm");
+  if (form) state.intakeBatchDraft = readIncomingBatchForm(form);
+  const batch = normalizeIncomingBatchDraft(state.intakeBatchDraft);
+  if (!remotePersistence) {
+    upsertById(state.intakeBatches, batch);
+    state.selectedIntakeBatchId = batch.id;
+    state.intakeBatchDraft = batch;
+    return batch;
+  }
+
+  const exists = state.intakeBatches.some((item) => item.id === batch.id);
+  const response = await fetch(exists ? `${ENTITY_API_URLS.intakeBatches}/${encodeURIComponent(batch.id)}` : ENTITY_API_URLS.intakeBatches, {
+    method: exists ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item: batch }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "保存待接收批次失败");
+  }
+  mergeServerAuditLogs(payload);
+  const savedBatch = normalizeIncomingBatchDraft(payload.item || batch);
+  state.selectedIntakeBatchId = savedBatch.id;
+  state.intakeBatchDraft = savedBatch;
+  try {
+    await loadPersistedState();
+    const refreshed = state.intakeBatches.find((item) => item.id === savedBatch.id);
+    if (refreshed) state.intakeBatchDraft = refreshed;
+  } catch (refreshError) {
+    console.error(refreshError);
+    upsertById(state.intakeBatches, savedBatch);
+  }
+  return state.intakeBatchDraft;
+}
+
+function readIncomingBatchForm(form) {
+  const data = new FormData(form);
+  return applyIncomingBatchIacucInfo({
+    id: state.intakeBatchDraft?.id || crypto.randomUUID(),
+    rawMessage: data.get("rawMessage") || "",
+    purchaseOrderNo: data.get("purchaseOrderNo") || "",
+    batchNo: data.get("batchNo") || "",
+    iacuc: data.get("iacuc") || extractIacucFromBatchNo(data.get("batchNo") || ""),
+    supplier: data.get("supplier") || "",
+    species: data.get("species") || "mouse",
+    strainRaw: data.get("strainRaw") || "",
+    strainStandard: data.get("strainStandard") || "",
+    sex: data.get("sex") || "",
+    quantity: numericOrNull(data.get("quantity")),
+    roomName: data.get("roomName") || "",
+    intakeDate: data.get("intakeDate") || "",
+    husbandryDays: numericOrNull(data.get("husbandryDays")),
+    endDate: data.get("endDate") || "",
+    project: data.get("project") || "",
+    pi: data.get("pi") || "",
+    owner: data.get("owner") || "",
+    receiverName: data.get("receiverName") || currentUser?.displayName || "",
+    vetPhone: data.get("vetPhone") || "",
+    notes: data.get("notes") || "",
+    status: data.get("status") || "draft",
+    suggestedAnimalsPerCage: numericOrNull(data.get("suggestedAnimalsPerCage")),
+    suggestedCardCount: numericOrNull(data.get("suggestedCardCount")),
+    finalCardCount: numericOrNull(data.get("finalCardCount")),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+function parseCurrentIncomingMessage() {
+  const rawMessage = document.querySelector("#intakeBatchForm textarea[name='rawMessage']")?.value || "";
+  const parsed = parseIncomingMessage(rawMessage);
+  state.intakeBatchDraft = normalizeIncomingBatchDraft({
+    ...state.intakeBatchDraft,
+    ...parsed,
+    id: state.intakeBatchDraft?.id || parsed.id,
+    finalCardCount: parsed.suggestedCardCount,
+    vetPhone: state.intakeBatchDraft?.vetPhone || parsed.vetPhone || "",
+    status: state.intakeBatchDraft?.status || parsed.status || "draft",
+  });
+  render();
+}
+
+function toggleSelectedIntakeBatch(batchId, checked) {
+  const next = new Set(state.selectedIntakeBatchIds);
+  if (checked) next.add(batchId);
+  else next.delete(batchId);
+  state.selectedIntakeBatchIds = [...next];
+  saveState();
+}
+
+async function deleteIntakeBatch(batchId) {
+  if (!remotePersistence) {
+    state.intakeBatches = state.intakeBatches.filter((item) => item.id !== batchId);
+    state.selectedIntakeBatchIds = state.selectedIntakeBatchIds.filter((id) => id !== batchId);
+    if (state.selectedIntakeBatchId === batchId) {
+      state.selectedIntakeBatchId = "";
+      state.intakeBatchDraft = makeIncomingBatchDraft();
+    }
+    return;
+  }
+  await deleteEntityRequest("intakeBatches", batchId);
+  state.intakeBatches = state.intakeBatches.filter((item) => item.id !== batchId);
+  state.selectedIntakeBatchIds = state.selectedIntakeBatchIds.filter((id) => id !== batchId);
+  if (state.selectedIntakeBatchId === batchId) {
+    state.selectedIntakeBatchId = "";
+    state.intakeBatchDraft = makeIncomingBatchDraft();
+  }
+}
+
+function printIntakeBatches(batches) {
+  const items = batches.flatMap((batch) => batch.cards.map((card) => ({ batch, card })));
+  if (!items.length) {
+    alert("当前没有可打印的笼卡。");
+    return;
+  }
+  const opened = window.open("", "_blank");
+  if (!opened) {
+    alert("浏览器阻止了弹出窗口，请允许弹出窗口后重试。");
+    return;
+  }
+  opened.document.write(intakeCardsPrintHtml(items));
+  opened.document.close();
+  opened.focus();
+  opened.print();
+}
+
+function intakeCardsPrintHtml(items) {
+  return `
+    <!doctype html>
+    <html lang="zh-CN">
+      <head>
+        <meta charset="UTF-8" />
+        <title>接收笼卡打印</title>
+        <style>
+          :root { color-scheme: light; }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            background: #fff;
+            font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+            color: #111;
+          }
+          .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 2mm 4mm;
+            display: grid;
+            grid-template-columns: repeat(2, 100mm);
+            grid-auto-rows: 40mm;
+            gap: 1.8mm 2mm;
+            align-content: start;
+            justify-content: center;
+          }
+          .card {
+            position: relative;
+            width: 100mm;
+            height: 40mm;
+            border: 0.35mm solid #111;
+            overflow: hidden;
+            background: #fff;
+          }
+          .card table {
+            width: 100%;
+            height: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+          .card td {
+            border: 0.35mm solid #111;
+            padding: 0.15mm 0.65mm;
+            vertical-align: middle;
+            font-size: 2.55mm;
+            line-height: 1;
+            word-break: break-word;
+            overflow: hidden;
+          }
+          .card .header-title {
+            font-size: 4.8mm;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 0;
+          }
+          .card .header-cage {
+            font-size: 4.35mm;
+            font-weight: 700;
+            text-align: left;
+            padding-left: 2mm;
+          }
+          .card .label {
+            font-size: 2.5mm;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+          .card .label-long {
+            font-size: 2.28mm;
+          }
+          .card .value {
+            font-size: 2.45mm;
+          }
+          .card .value-compact {
+            font-size: 2.05mm;
+            line-height: 0.98;
+          }
+          .card .row-head {
+            text-align: center;
+            font-weight: 700;
+            font-size: 2.55mm;
+          }
+          .card .room {
+            text-align: center;
+            color: #8b0000;
+            font-size: 8.5mm;
+            font-weight: 700;
+          }
+          .card .cycle {
+            font-size: 2.75mm;
+            font-weight: 700;
+          }
+          @media print {
+            @page { size: A4 portrait; margin: 0; }
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          ${items.map(({ batch, card }) => renderIntakeCardPrint(batch, card)).join("")}
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+function renderIntakeCardPrint(batch, card) {
+  return `
+    <section class="card">
+      <table>
+        <colgroup>
+          <col style="width:16mm" />
+          <col style="width:34mm" />
+          <col style="width:27mm" />
+          <col style="width:23mm" />
+        </colgroup>
+        <tr style="height:4.9mm">
+          <td class="header-title" colspan="2">实验动物检疫卡</td>
+          <td class="header-cage" colspan="2">笼号：</td>
+        </tr>
+        <tr style="height:4.25mm">
+          <td class="label">批次号：</td>
+          <td class="value value-compact">${escapeText(batch.batchNo || "")}</td>
+          <td class="label">购买单位：</td>
+          <td class="value value-compact">${escapeText(batch.supplier || "")}</td>
+        </tr>
+        <tr style="height:4.25mm">
+          <td class="label">动物品系：</td>
+          <td class="value">${escapeText(batch.strainStandard || batch.strainRaw || "")}</td>
+          <td class="label">项目负责人：</td>
+          <td class="value">${escapeText(batch.pi || "")}</td>
+        </tr>
+        <tr style="height:4.25mm">
+          <td class="label">接收日期：</td>
+          <td class="value">${escapeText(formatDisplayDate(batch.intakeDate))}</td>
+          <td class="label label-long">实验责任人/助手：</td>
+          <td class="value">${escapeText(batch.owner || "")}</td>
+        </tr>
+        <tr style="height:4.25mm">
+          <td class="label">接收人员：</td>
+          <td class="value">${escapeText(batch.receiverName || "")}</td>
+          <td class="label">兽医电话：</td>
+          <td class="value">${escapeText(batch.vetPhone || "")}</td>
+        </tr>
+        <tr style="height:3.3mm">
+          <td class="row-head">日期</td>
+          <td class="row-head">数目变化</td>
+          <td class="row-head">房间</td>
+          <td class="row-head">饲养周期</td>
+        </tr>
+        <tr style="height:4.65mm">
+          <td class="value">${escapeText(formatDisplayDate(batch.intakeDate))}</td>
+          <td class="value">${escapeText(card.suggestedQuantity || "")}</td>
+          <td class="room" rowspan="3">${escapeText(batch.roomName || "")}</td>
+          <td class="cycle">${escapeText(batch.endDate ? `${formatShortDate(batch.intakeDate)}-${formatShortDate(batch.endDate)}` : "")}</td>
+        </tr>
+        <tr style="height:4.65mm">
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr style="height:4.65mm">
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+      </table>
+    </section>
+  `;
+}
+
+function formatDisplayDate(value) {
+  const normalized = normalizeFlexibleDate(value);
+  if (!normalized) return "";
+  const [year, month, day] = normalized.split("-");
+  return `${year}. ${Number(month)}. ${Number(day)}`;
 }
 
 function readQuantitySheetForm(form) {

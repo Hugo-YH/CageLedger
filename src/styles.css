@@ -1100,6 +1100,106 @@ h3 {
   padding-top: 18px;
 }
 
+.intake-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
+.intake-form-grid textarea,
+.intake-form-grid input,
+.intake-form-grid select {
+  width: 100%;
+}
+
+.intake-field-row {
+  display: grid;
+  gap: 12px;
+}
+
+.intake-field-row.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.intake-field-row.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.intake-field-row.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.intake-message-field {
+  display: grid;
+  gap: 8px;
+}
+
+.intake-entry-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 4px;
+}
+
+.intake-message-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.intake-message-head .compact-action {
+  flex: 0 0 auto;
+}
+
+.intake-action-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.intake-action-panel select {
+  width: 100%;
+}
+
+.intake-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.intake-action-grid button {
+  width: 100%;
+  min-height: 38px;
+}
+
+.intake-preview-section {
+  margin-top: 22px;
+}
+
+.intake-card-table code {
+  font-size: 12px;
+}
+
+.intake-batch-list-panel {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.intake-batch-table th:first-child,
+.intake-batch-table td:first-child {
+  width: 42px;
+}
+
+.selected-row {
+  background: rgba(15, 118, 110, 0.06);
+}
+
 .compact-summary {
   grid-template-columns: repeat(4, 1fr);
 }
@@ -2923,6 +3023,20 @@ tr:last-child td {
     grid-column: auto;
   }
 
+  .intake-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-entry-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-field-row.two,
+  .intake-field-row.three,
+  .intake-field-row.four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .user-fields {
     grid-template-columns: 1fr;
   }
@@ -2946,6 +3060,16 @@ tr:last-child td {
 
   .quantity-field-group-billing {
     max-width: none;
+  }
+
+  .intake-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-field-row.two,
+  .intake-field-row.three,
+  .intake-field-row.four {
+    grid-template-columns: 1fr;
   }
 
   .compact-slot-form label,
