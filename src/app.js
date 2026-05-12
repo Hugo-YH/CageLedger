@@ -26,6 +26,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.5c",
+    title: "笼卡批量打印分页与内切纸对齐修正",
+    items: [
+      "修复多个待接收批次合并打印时未按每页 14 张强制分页，导致笼卡跨页和后续版面错位的问题",
+      "打印模板按公司提供的 A4 内切 14 枚笼卡纸重新校准，调整顶部起点、卡片高度和横纵间距",
+      "每 14 张笼卡独立渲染为一张 A4 页面，并设置卡片和页面容器禁止跨页断裂",
+    ],
+  },
+  {
     version: "0.4.5b",
     title: "笼卡管理界面与操作流程优化",
     items: [
@@ -289,7 +298,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5b",
+  version: "0.4.5c",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -5459,6 +5468,15 @@ function printIntakeBatches(batches) {
 }
 
 function intakeCardsPrintHtml(items) {
+  const pages = chunkIntakePrintItems(items, 14);
+  const sheets = pages
+    .map(
+      (page) => `
+        <div class="sheet">
+          ${page.map(({ batch, card }) => renderIntakeCardPrint(batch, card)).join("")}
+        </div>`,
+    )
+    .join("");
   return `
     <!doctype html>
     <html lang="zh-CN">
@@ -5476,19 +5494,25 @@ function intakeCardsPrintHtml(items) {
           }
           .sheet {
             width: 210mm;
-            min-height: 297mm;
-            padding: 2mm 4mm;
+            height: 297mm;
+            padding: 2.36mm 4mm 2.7mm;
             display: grid;
             grid-template-columns: repeat(2, 100mm);
-            grid-auto-rows: 40mm;
-            gap: 1.8mm 2mm;
+            grid-auto-rows: 40.09mm;
+            gap: 1.87mm 1.86mm;
             align-content: start;
             justify-content: center;
+            break-after: page;
+            page-break-after: always;
+          }
+          .sheet:last-child {
+            break-after: auto;
+            page-break-after: auto;
           }
           .card {
             position: relative;
             width: 100mm;
-            height: 40mm;
+            height: 40.09mm;
             border: 0.36mm solid #111827;
             overflow: hidden;
             background: #fff;
@@ -5560,16 +5584,30 @@ function intakeCardsPrintHtml(items) {
           @media print {
             @page { size: A4 portrait; margin: 0; }
             body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .sheet {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+            .card {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
           }
         </style>
       </head>
       <body>
-        <div class="sheet">
-          ${items.map(({ batch, card }) => renderIntakeCardPrint(batch, card)).join("")}
-        </div>
+        ${sheets}
       </body>
     </html>
   `;
+}
+
+function chunkIntakePrintItems(items, pageSize) {
+  const pages = [];
+  for (let index = 0; index < items.length; index += pageSize) {
+    pages.push(items.slice(index, index + pageSize));
+  }
+  return pages;
 }
 
 function renderIntakeCardPrint(batch, card) {
