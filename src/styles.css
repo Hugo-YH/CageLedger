@@ -1168,7 +1168,6 @@ h3 {
 
 .intake-action-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
@@ -1177,12 +1176,129 @@ h3 {
   min-height: 38px;
 }
 
-.intake-preview-section {
-  margin-top: 22px;
+.intake-card-preview-surface {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.06), transparent 45%),
+    #f8fbfb;
 }
 
-.intake-card-table code {
-  font-size: 12px;
+.intake-card-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.intake-card-preview-frame {
+  width: fit-content;
+  max-width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+  overflow: auto;
+}
+
+.intake-card-preview-empty {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  color: var(--muted);
+  background: #f8fbfb;
+}
+
+.intake-card-preview-frame .card {
+  position: relative;
+  width: 100mm;
+  height: 40mm;
+  border: 0.36mm solid #111827;
+  overflow: hidden;
+  background: #fff;
+  color: #0f172a;
+  font-family: "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.intake-card-preview-frame .card table {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.intake-card-preview-frame .card td {
+  border: 0.32mm solid #111827;
+  padding: 0.12mm 0.55mm;
+  vertical-align: middle;
+  font-size: 2.45mm;
+  line-height: 1;
+  word-break: break-word;
+  overflow: hidden;
+}
+
+.intake-card-preview-frame .card .header-title {
+  font-size: 4.35mm;
+  font-weight: 800;
+  text-align: left;
+  padding-left: 7mm;
+  letter-spacing: 0.12mm;
+}
+
+.intake-card-preview-frame .card .header-cage {
+  font-size: 4.35mm;
+  font-weight: 800;
+  text-align: left;
+  padding-left: 4mm;
+}
+
+.intake-card-preview-frame .card .label {
+  font-size: 2.35mm;
+  font-weight: 800;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.intake-card-preview-frame .card .label-long {
+  font-size: 2.35mm;
+}
+
+.intake-card-preview-frame .card .value {
+  font-size: 2.32mm;
+  font-weight: 500;
+  text-align: center;
+}
+
+.intake-card-preview-frame .card .value-compact {
+  font-size: 1.98mm;
+  line-height: 0.98;
+}
+
+.intake-card-preview-frame .card .row-head {
+  text-align: center;
+  font-weight: 800;
+  font-size: 2.35mm;
+}
+
+.intake-card-preview-frame .card .room {
+  text-align: center;
+  color: #7f0000;
+  font-size: 8.8mm;
+  font-weight: 800;
+}
+
+.intake-card-preview-frame .card .cycle {
+  font-size: 2mm;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: -0.06mm;
+  white-space: nowrap;
 }
 
 .intake-batch-list-panel {
@@ -1191,9 +1307,107 @@ h3 {
   padding-top: 18px;
 }
 
+.intake-batch-toolbar {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.intake-filter-row {
+  margin-bottom: 0;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.intake-filter-row .segmented {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.intake-batch-toolbar #printSelectedCageCards {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.intake-batch-table {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.intake-batch-table th,
+.intake-batch-table td {
+  padding: 10px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
 .intake-batch-table th:first-child,
 .intake-batch-table td:first-child {
-  width: 42px;
+  width: 38px;
+  text-align: center;
+}
+
+.intake-batch-table th:nth-child(2),
+.intake-batch-table td:nth-child(2) {
+  width: 78px;
+}
+
+.intake-batch-table th:nth-child(3),
+.intake-batch-table td:nth-child(3) {
+  width: 210px;
+  overflow-wrap: anywhere;
+}
+
+.intake-batch-table th:nth-child(4),
+.intake-batch-table td:nth-child(4) {
+  width: 120px;
+}
+
+.intake-batch-table th:nth-child(5),
+.intake-batch-table td:nth-child(5) {
+  width: 56px;
+}
+
+.intake-batch-table th:nth-child(6),
+.intake-batch-table td:nth-child(6) {
+  width: 66px;
+}
+
+.intake-batch-table th:nth-child(7),
+.intake-batch-table td:nth-child(7) {
+  width: 102px;
+}
+
+.intake-batch-table th:nth-child(8),
+.intake-batch-table td:nth-child(8) {
+  width: 58px;
+}
+
+.intake-batch-table th:nth-child(9),
+.intake-batch-table td:nth-child(9) {
+  width: 118px;
+  white-space: nowrap;
+}
+
+.intake-batch-table .ghost {
+  margin-right: 4px;
+  padding-inline: 8px;
+}
+
+.intake-batch-editor-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 64px));
+  overflow: auto;
+}
+
+.intake-card-preview-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-height: min(680px, calc(100vh - 64px));
+  overflow: auto;
+}
+
+.intake-edit-form {
+  max-width: none;
 }
 
 .selected-row {

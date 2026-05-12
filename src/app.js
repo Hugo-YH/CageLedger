@@ -26,6 +26,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.5b",
+    title: "笼卡管理界面与操作流程优化",
+    items: [
+      "优化笼卡管理操作区，保存按钮改为主按钮并移除新建入口，支持粘贴、识别、保存后连续录入下一批次",
+      "将当前笼卡预览改为弹窗展示，并直接渲染实际打印模板的第一张笼卡，页面主体不再占用大块预览区域",
+      "待接收批次列表新增状态筛选和紧凑列宽，购买单位显示简称，批量打印入口移动到列表区域",
+      "已保存批次编辑改为独立弹窗，避免编辑动作覆盖上方预约消息识别区；本次 UI 调整根据 @吴玉婷 建议完善",
+    ],
+  },
+  {
     version: "0.4.5a",
     title: "预约识别与笼卡打印细化",
     items: [
@@ -279,7 +289,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5a",
+  version: "0.4.5b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -347,6 +357,13 @@ const BILLING_RULES = {
 
 const today = formatLocalDate(new Date());
 const INTAKE_STATUS_OPTIONS = [
+  ["draft", "待完善"],
+  ["pending_print", "待打印"],
+  ["printed", "已打印"],
+];
+const INTAKE_BATCH_FILTER_OPTIONS = [
+  ["todo", "未打印"],
+  ["all", "全部"],
   ["draft", "待完善"],
   ["pending_print", "待打印"],
   ["printed", "已打印"],
@@ -717,7 +734,11 @@ const seedData = {
   quantitySheets: [],
   selectedIntakeBatchId: "",
   selectedIntakeBatchIds: [],
+  intakeBatchFilter: "todo",
   intakeBatchDraft: makeIncomingBatchDraft(),
+  editingIntakeBatchId: "",
+  editingIntakeBatchDraft: null,
+  showIntakeCardPreview: false,
   billingWorkflows: [],
   principalIdentityFilter: "",
   slotFilter: "all",
@@ -1120,7 +1141,11 @@ function normalize(data) {
   next.showWorkflowStatements = Boolean(next.showWorkflowStatements);
   next.selectedIntakeBatchId = String(next.selectedIntakeBatchId || "");
   next.selectedIntakeBatchIds = Array.isArray(next.selectedIntakeBatchIds) ? next.selectedIntakeBatchIds.filter(Boolean) : [];
+  next.intakeBatchFilter = INTAKE_BATCH_FILTER_OPTIONS.some(([value]) => value === next.intakeBatchFilter) ? next.intakeBatchFilter : "todo";
   next.intakeBatchDraft = normalizeIncomingBatchDraft(next.intakeBatchDraft || next.intakeBatches.find((item) => item.id === next.selectedIntakeBatchId) || makeIncomingBatchDraft());
+  next.editingIntakeBatchId = String(next.editingIntakeBatchId || "");
+  next.editingIntakeBatchDraft = next.editingIntakeBatchDraft ? normalizeIncomingBatchDraft(next.editingIntakeBatchDraft) : null;
+  next.showIntakeCardPreview = Boolean(next.showIntakeCardPreview);
   next.principalIdentityFilter = String(next.principalIdentityFilter || "");
   next.batchMode = Boolean(next.batchMode);
   next.showCageEditor = Boolean(next.showCageEditor);
@@ -2480,6 +2505,7 @@ function renderIntakeBatchView() {
   const draft = state.intakeBatchDraft || makeIncomingBatchDraft();
   const selectedCount = state.selectedIntakeBatchIds.length;
   const canPrintCurrent = draft.cards.length > 0;
+  const visibleBatches = filteredIntakeBatches();
   return `
     <section class="billing-layout quantity-billing-layout intake-layout">
       <div class="panel large">
@@ -2501,7 +2527,7 @@ function renderIntakeBatchView() {
             </div>
             <div class="intake-action-panel">
               <select id="intakeBatchSelect" aria-label="选择待接收批次">
-                <option value="">请选择待接收批次或新建</option>
+                <option value="">编辑已保存批次</option>
                 ${state.intakeBatches
                   .map(
                     (item) => `<option value="${escapeAttr(item.id)}" ${item.id === draft.id ? "selected" : ""}>${escapeText(intakeStatusLabel(item.status))} · ${escapeText(item.batchNo || "未命名批次")}</option>`,
@@ -2509,15 +2535,15 @@ function renderIntakeBatchView() {
                   .join("")}
               </select>
               <div class="intake-action-grid">
-                <button id="newIntakeBatch" class="secondary" type="button">${iconSvg("plus")}新建</button>
-                <button id="saveIntakeBatch" class="secondary" type="submit">${iconSvg("save")}保存批次</button>
+                <button id="saveIntakeBatch" class="primary" type="submit">${iconSvg("save")}保存为待接收批次</button>
                 <button id="printCurrentCageCards" class="secondary" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("download")}打印当前笼卡</button>
-                <button id="printSelectedCageCards" class="primary" type="button" ${selectedCount ? "" : "disabled"}>${iconSvg("download")}打印勾选批次（${selectedCount}）</button>
+                <button id="previewCurrentCageCard" class="secondary" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("search")}预览当前笼卡</button>
               </div>
             </div>
           </div>
 
           <div class="intake-form-grid">
+            <input type="hidden" name="id" value="${escapeAttr(draft.id)}" />
             <input type="hidden" name="purchaseOrderNo" value="${escapeAttr(draft.purchaseOrderNo)}" />
             <input type="hidden" name="project" value="${escapeAttr(draft.project)}" />
             <input type="hidden" name="sex" value="${escapeAttr(draft.sex)}" />
@@ -2600,39 +2626,17 @@ function renderIntakeBatchView() {
           </div>
         </form>
 
-        <div class="quantity-preview-section intake-preview-section">
-          <div class="panel-head compact">
-            <div>
-              <h2>笼卡预览</h2>
-              <p>默认按装笼建议生成；数量不能整除时最后一张“数目变化”留空，方便现场手写修正。</p>
-            </div>
-          </div>
-          <div class="statement-summary compact-summary">
-            ${summaryTile("批次号", draft.batchNo || "-")}
-            ${summaryTile("品系", draft.strainStandard || draft.strainRaw || "-")}
-            ${summaryTile("打印张数", draft.finalCardCount || 0)}
-            ${summaryTile("房间", draft.roomName || "-")}
-            ${summaryTile("饲养周期", draft.endDate ? `${formatShortDate(draft.intakeDate)}-${formatShortDate(draft.endDate)}` : "-")}
-          </div>
-          <div class="table-wrap mini-statement">
-            <table class="intake-card-table">
-              <thead><tr><th>序号</th><th>建议数量</th><th>二维码编号</th><th>打印字段</th></tr></thead>
-              <tbody>
-                ${
-                  draft.cards.length
-                    ? draft.cards.map(renderIntakeCardPreviewRow).join("")
-                    : `<tr><td colspan="4">填写批次数量和每笼建议只数后生成笼卡。</td></tr>`
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         <div class="panel intake-batch-list-panel">
           <div class="panel-head compact">
             <div>
               <h2>待接收批次列表</h2>
               <p>支持攒单后一起打印；打印后可将状态切到“已打印”。</p>
+            </div>
+            <div class="toolbar intake-batch-toolbar">
+              <div class="filter-row intake-filter-row" role="group" aria-label="待接收批次筛选">
+                ${INTAKE_BATCH_FILTER_OPTIONS.map(([value, label]) => intakeBatchFilterButton(value, label)).join("")}
+              </div>
+              <button id="printSelectedCageCards" class="primary" type="button" ${selectedCount ? "" : "disabled"}>${iconSvg("download")}打印勾选批次（${selectedCount}）</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -2640,38 +2644,82 @@ function renderIntakeBatchView() {
               <thead><tr><th></th><th>状态</th><th>批次号</th><th>购买单位</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
               <tbody>
                 ${
-                  state.intakeBatches.length
-                    ? state.intakeBatches.map(renderIntakeBatchRow).join("")
-                    : `<tr><td colspan="9">还没有保存待接收批次。</td></tr>`
+                  visibleBatches.length
+                    ? visibleBatches.map(renderIntakeBatchRow).join("")
+                    : `<tr><td colspan="9">${state.intakeBatches.length ? "当前筛选下没有待接收批次。" : "还没有保存待接收批次。"}</td></tr>`
                 }
               </tbody>
             </table>
           </div>
         </div>
+        ${renderIntakeBatchEditorModal()}
+        ${state.showIntakeCardPreview ? renderIntakeCardPreviewModal(draft) : ""}
       </div>
     </section>
   `;
 }
 
-function renderIntakeCardPreviewRow(card) {
+function renderIntakeCardVisualPreview(batch) {
+  const card = batch.cards[0];
+  if (!card) {
+    return `<div class="intake-card-preview-empty">填写批次数量和打印张数后生成笼卡预览。</div>`;
+  }
   return `
-    <tr>
-      <td>${escapeText(card.label)}</td>
-      <td>${escapeText(card.suggestedQuantity || "留空")}</td>
-      <td><code>${escapeText(card.qrId)}</code></td>
-      <td>${escapeText(card.suggestedQuantity ? `数目变化默认填 ${card.suggestedQuantity}` : "数目变化留空")}</td>
-    </tr>
+    <div class="intake-card-preview-surface">
+      <div class="intake-card-preview-meta">
+        <span>预览第 1 张 / 共 ${escapeText(batch.finalCardCount || 0)} 张</span>
+        <span>数量不能整除时，最后一张“数目变化”会留空。</span>
+      </div>
+      <div class="intake-card-preview-frame">
+        ${renderIntakeCardPrint(batch, card)}
+      </div>
+    </div>
   `;
+}
+
+function renderIntakeCardPreviewModal(batch) {
+  const normalized = normalizeIncomingBatchDraft(batch);
+  return `
+    <div class="editor-modal-backdrop" id="closeIntakeCardPreview"></div>
+    <div class="panel detail-panel editor-modal intake-card-preview-modal">
+      <div class="editor-modal-actions">
+        <button class="secondary" type="button" id="closeIntakeCardPreviewButton">${iconSvg("chevronRight")}关闭预览</button>
+      </div>
+      <div class="panel-head compact">
+        <div>
+          <h2>预览当前笼卡</h2>
+          <p>按实际打印模板预览第一张笼卡；完整张数仍以打印张数为准。</p>
+        </div>
+      </div>
+      ${renderIntakeCardVisualPreview(normalized)}
+    </div>
+  `;
+}
+
+function filteredIntakeBatches() {
+  return state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, state.intakeBatchFilter));
+}
+
+function intakeBatchMatchesFilter(batch, filter) {
+  if (filter === "all") return true;
+  if (filter === "todo") return batch.status !== "printed";
+  return batch.status === filter;
+}
+
+function intakeBatchFilterButton(value, label) {
+  const count = state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, value)).length;
+  return `<button class="segmented ${state.intakeBatchFilter === value ? "active" : ""}" type="button" data-intake-batch-filter="${value}">${escapeText(label)} ${count}</button>`;
 }
 
 function renderIntakeBatchRow(batch) {
   const checked = state.selectedIntakeBatchIds.includes(batch.id);
+  const supplierShortName = abbreviateSupplierName(batch.supplier);
   return `
     <tr class="workflow-row ${batch.id === state.selectedIntakeBatchId ? "selected-row" : ""}" data-open-intake-batch="${escapeAttr(batch.id)}">
       <td><input type="checkbox" data-select-intake-batch="${escapeAttr(batch.id)}" ${checked ? "checked" : ""} aria-label="选择 ${escapeAttr(batch.batchNo || batch.id)}" /></td>
       <td><span class="pill ${batch.status === "printed" ? "active" : "reserved"}">${escapeText(intakeStatusLabel(batch.status))}</span></td>
       <td>${escapeText(batch.batchNo || "-")}</td>
-      <td>${escapeText(batch.supplier || "-")}</td>
+      <td title="${escapeAttr(batch.supplier || "")}">${escapeText(supplierShortName || batch.supplier || "-")}</td>
       <td>${escapeText(batch.quantity ?? "-")}</td>
       <td>${escapeText(batch.roomName || "-")}</td>
       <td>${escapeText(batch.intakeDate || "-")}</td>
@@ -2681,6 +2729,117 @@ function renderIntakeBatchRow(batch) {
         <button class="ghost danger-text" type="button" data-delete-intake-batch="${escapeAttr(batch.id)}">删除</button>
       </td>
     </tr>
+  `;
+}
+
+function renderIntakeBatchEditorModal() {
+  const draft = state.editingIntakeBatchDraft ? normalizeIncomingBatchDraft(state.editingIntakeBatchDraft) : null;
+  if (!draft) return "";
+  return `
+    <div class="editor-modal-backdrop" id="closeIntakeBatchEditor"></div>
+    <div class="panel detail-panel editor-modal intake-batch-editor-modal">
+      <div class="editor-modal-actions">
+        <button class="secondary" type="button" id="closeIntakeBatchEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
+      </div>
+      <div class="panel-head compact">
+        <div>
+          <h2>编辑待接收批次</h2>
+          <p>${escapeText(draft.batchNo || "未命名批次")} · 修改后只更新这条记录，不影响上方预约消息识别。</p>
+        </div>
+        <span class="pill ${draft.status === "printed" ? "active" : "reserved"}">${escapeText(intakeStatusLabel(draft.status))}</span>
+      </div>
+      <form id="intakeBatchEditForm" class="form intake-edit-form">
+        <input type="hidden" name="id" value="${escapeAttr(draft.id)}" />
+        <input type="hidden" name="rawMessage" value="${escapeAttr(draft.rawMessage)}" />
+        <input type="hidden" name="purchaseOrderNo" value="${escapeAttr(draft.purchaseOrderNo)}" />
+        <input type="hidden" name="project" value="${escapeAttr(draft.project)}" />
+        <input type="hidden" name="sex" value="${escapeAttr(draft.sex)}" />
+        <input type="hidden" name="notes" value="${escapeAttr(draft.notes)}" />
+        <input type="hidden" name="strainRaw" value="${escapeAttr(draft.strainRaw)}" />
+        <input type="hidden" name="receiverName" value="${escapeAttr(draft.receiverName || currentUser?.displayName || "")}" />
+        <input type="hidden" name="vetPhone" value="${escapeAttr(draft.vetPhone)}" />
+        <input type="hidden" name="suggestedAnimalsPerCage" value="${escapeAttr(draft.suggestedAnimalsPerCage ?? defaultAnimalsPerCage(draft.species))}" />
+        <input type="hidden" name="suggestedCardCount" value="${escapeAttr(draft.suggestedCardCount ?? 0)}" />
+        <div class="intake-field-row two">
+          <label class="field-required">
+            购买单位
+            <input name="supplier" value="${escapeAttr(draft.supplier)}" placeholder="供应商名称" required />
+          </label>
+          <label class="field-required">
+            批次号
+            <input name="batchNo" value="${escapeAttr(draft.batchNo)}" placeholder="（IACUC编号）年月日批次" required />
+          </label>
+        </div>
+        <div class="intake-field-row two">
+          <label>
+            IACUC 编号
+            ${renderIacucLookupInput("iacuc", draft.iacuc)}
+          </label>
+          <label>
+            物种
+            <select name="species">
+              ${SPECIES_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === draft.species ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="intake-field-row two">
+          <label class="field-auto">
+            项目负责人
+            <input name="pi" value="${escapeAttr(draft.pi)}" placeholder="IACUC 匹配后自动填充" />
+          </label>
+          <label class="field-auto">
+            实验负责人/助手
+            <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="默认打印实验负责人，助手可手写" />
+          </label>
+        </div>
+        <div class="intake-field-row two">
+          <label>
+            品系
+            <input name="strainStandard" value="${escapeAttr(draft.strainStandard)}" placeholder="如 C57BL/6J" />
+          </label>
+          <label class="field-required">
+            数量（只）
+            <input name="quantity" type="number" min="1" value="${draft.quantity ?? ""}" placeholder="请输入动物数量" required />
+          </label>
+        </div>
+        <div class="intake-field-row two">
+          <label>
+            房间
+            <input name="roomName" value="${escapeAttr(draft.roomName)}" placeholder="可修改" />
+          </label>
+          <label class="field-required">
+            接收日期
+            <input name="intakeDate" type="date" value="${escapeAttr(draft.intakeDate)}" required />
+          </label>
+        </div>
+        <div class="intake-field-row two">
+          <label>
+            饲养周期
+            <input name="husbandryDays" type="number" min="1" value="${draft.husbandryDays ?? ""}" placeholder="天数" />
+          </label>
+          <label>
+            结束日期
+            <input name="endDate" type="date" value="${escapeAttr(draft.endDate)}" />
+          </label>
+        </div>
+        <div class="intake-field-row two">
+          <label>
+            打印张数
+            <input name="finalCardCount" type="number" min="0" value="${draft.finalCardCount ?? 0}" />
+          </label>
+          <label>
+            状态
+            <select name="status">
+              ${INTAKE_STATUS_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === draft.status ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="primary">${iconSvg("save")}保存修改</button>
+          <button type="button" class="secondary" id="cancelIntakeBatchEdit">取消</button>
+        </div>
+      </form>
+    </div>
   `;
 }
 
@@ -4109,23 +4268,67 @@ function bindEvents() {
   document.querySelector("#intakeBatchForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      await saveIntakeBatchDraft();
-      pushLog(`保存待接收批次：${state.intakeBatchDraft.batchNo || state.intakeBatchDraft.id}`);
+      const savedBatch = await saveIntakeBatchDraft();
+      pushLog(`保存待接收批次：${savedBatch.batchNo || savedBatch.id}`);
+      state.selectedIntakeBatchId = "";
+      state.intakeBatchDraft = makeIncomingBatchDraft();
       render();
     } catch (error) {
       reportSaveError(error);
     }
   });
   document.querySelector("#intakeBatchSelect")?.addEventListener("change", handleIntakeBatchSelect);
-  document.querySelector("#newIntakeBatch")?.addEventListener("click", newIntakeBatchDraft);
+  document.querySelector("#intakeBatchEditForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const editedBatch = readIncomingBatchForm(event.target);
+      const savedBatch = await saveIntakeBatch(editedBatch);
+      pushLog(`更新待接收批次：${savedBatch.batchNo || savedBatch.id}`);
+      closeIntakeBatchEditor();
+      render();
+    } catch (error) {
+      reportSaveError(error);
+    }
+  });
+  document.querySelector("#closeIntakeBatchEditor")?.addEventListener("click", () => {
+    closeIntakeBatchEditor();
+    render();
+  });
+  document.querySelector("#closeIntakeBatchEditorButton")?.addEventListener("click", () => {
+    closeIntakeBatchEditor();
+    render();
+  });
+  document.querySelector("#cancelIntakeBatchEdit")?.addEventListener("click", () => {
+    closeIntakeBatchEditor();
+    render();
+  });
   document.querySelector("#parseIncomingMessage")?.addEventListener("click", parseCurrentIncomingMessage);
   document.querySelector("#printCurrentCageCards")?.addEventListener("click", () => {
     captureIntakeBatchDraft();
     printIntakeBatches([normalizeIncomingBatchDraft(state.intakeBatchDraft)]);
   });
+  document.querySelector("#previewCurrentCageCard")?.addEventListener("click", () => {
+    captureIntakeBatchDraft();
+    state.showIntakeCardPreview = true;
+    render();
+  });
+  document.querySelector("#closeIntakeCardPreview")?.addEventListener("click", () => {
+    state.showIntakeCardPreview = false;
+    render();
+  });
+  document.querySelector("#closeIntakeCardPreviewButton")?.addEventListener("click", () => {
+    state.showIntakeCardPreview = false;
+    render();
+  });
   document.querySelector("#printSelectedCageCards")?.addEventListener("click", () => {
     const batches = state.intakeBatches.filter((item) => state.selectedIntakeBatchIds.includes(item.id));
     printIntakeBatches(batches);
+  });
+  document.querySelectorAll("[data-intake-batch-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.intakeBatchFilter = button.dataset.intakeBatchFilter || "todo";
+      render();
+    });
   });
   document.querySelectorAll("[data-select-intake-batch]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());
@@ -4136,20 +4339,14 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-open-intake-batch]").forEach((row) => {
     row.addEventListener("click", () => {
-      const batch = state.intakeBatches.find((item) => item.id === row.dataset.openIntakeBatch);
-      if (!batch) return;
-      state.selectedIntakeBatchId = batch.id;
-      state.intakeBatchDraft = normalizeIncomingBatchDraft(batch);
+      openIntakeBatchEditor(row.dataset.openIntakeBatch);
       render();
     });
   });
   document.querySelectorAll("[data-open-intake-batch-button]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const batch = state.intakeBatches.find((item) => item.id === button.dataset.openIntakeBatchButton);
-      if (!batch) return;
-      state.selectedIntakeBatchId = batch.id;
-      state.intakeBatchDraft = normalizeIncomingBatchDraft(batch);
+      openIntakeBatchEditor(button.dataset.openIntakeBatchButton);
       render();
     });
   });
@@ -4174,6 +4371,12 @@ function bindEvents() {
     if (!form) return;
     const current = readIncomingBatchForm(form);
     state.intakeBatchDraft = applyIncomingBatchIacucInfo(current);
+    render();
+  });
+  bindIacucLookupInputs("#intakeBatchEditForm", (event) => {
+    const form = event.target.closest("form");
+    if (!form) return;
+    state.editingIntakeBatchDraft = applyIncomingBatchIacucInfo(readIncomingBatchForm(form));
     render();
   });
   document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
@@ -5095,18 +5298,23 @@ async function saveQuantitySheetDraft() {
 }
 
 function handleIntakeBatchSelect(event) {
-  captureIntakeBatchDraft();
   const batch = state.intakeBatches.find((item) => item.id === event.target.value);
-  state.selectedIntakeBatchId = batch?.id || "";
-  state.intakeBatchDraft = normalizeIncomingBatchDraft(batch || makeIncomingBatchDraft());
+  if (batch) openIntakeBatchEditor(batch.id);
+  else closeIntakeBatchEditor();
   render();
 }
 
-function newIntakeBatchDraft() {
-  captureIntakeBatchDraft();
-  state.selectedIntakeBatchId = "";
-  state.intakeBatchDraft = makeIncomingBatchDraft();
-  render();
+function openIntakeBatchEditor(batchId) {
+  const batch = state.intakeBatches.find((item) => item.id === batchId);
+  if (!batch) return;
+  state.selectedIntakeBatchId = batch.id;
+  state.editingIntakeBatchId = batch.id;
+  state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(batch);
+}
+
+function closeIntakeBatchEditor() {
+  state.editingIntakeBatchId = "";
+  state.editingIntakeBatchDraft = null;
 }
 
 function captureIntakeBatchDraft() {
@@ -5119,18 +5327,22 @@ async function saveIntakeBatchDraft() {
   const form = document.querySelector("#intakeBatchForm");
   if (form) state.intakeBatchDraft = readIncomingBatchForm(form);
   const batch = normalizeIncomingBatchDraft(state.intakeBatchDraft);
+  return saveIntakeBatch(batch);
+}
+
+async function saveIntakeBatch(batch) {
+  const normalizedBatch = normalizeIncomingBatchDraft(batch);
   if (!remotePersistence) {
-    upsertById(state.intakeBatches, batch);
-    state.selectedIntakeBatchId = batch.id;
-    state.intakeBatchDraft = batch;
-    return batch;
+    upsertById(state.intakeBatches, normalizedBatch);
+    state.selectedIntakeBatchId = normalizedBatch.id;
+    return normalizedBatch;
   }
 
-  const exists = state.intakeBatches.some((item) => item.id === batch.id);
-  const response = await fetch(exists ? `${ENTITY_API_URLS.intakeBatches}/${encodeURIComponent(batch.id)}` : ENTITY_API_URLS.intakeBatches, {
+  const exists = state.intakeBatches.some((item) => item.id === normalizedBatch.id);
+  const response = await fetch(exists ? `${ENTITY_API_URLS.intakeBatches}/${encodeURIComponent(normalizedBatch.id)}` : ENTITY_API_URLS.intakeBatches, {
     method: exists ? "PUT" : "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item: batch }),
+    body: JSON.stringify({ item: normalizedBatch }),
   });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
@@ -5142,24 +5354,21 @@ async function saveIntakeBatchDraft() {
     throw new Error(payload.error || "保存待接收批次失败");
   }
   mergeServerAuditLogs(payload);
-  const savedBatch = normalizeIncomingBatchDraft(payload.item || batch);
+  const savedBatch = normalizeIncomingBatchDraft(payload.item || normalizedBatch);
   state.selectedIntakeBatchId = savedBatch.id;
-  state.intakeBatchDraft = savedBatch;
   try {
     await loadPersistedState();
-    const refreshed = state.intakeBatches.find((item) => item.id === savedBatch.id);
-    if (refreshed) state.intakeBatchDraft = refreshed;
   } catch (refreshError) {
     console.error(refreshError);
     upsertById(state.intakeBatches, savedBatch);
   }
-  return state.intakeBatchDraft;
+  return state.intakeBatches.find((item) => item.id === savedBatch.id) || savedBatch;
 }
 
 function readIncomingBatchForm(form) {
   const data = new FormData(form);
   return applyIncomingBatchIacucInfo({
-    id: state.intakeBatchDraft?.id || crypto.randomUUID(),
+    id: data.get("id") || state.intakeBatchDraft?.id || crypto.randomUUID(),
     rawMessage: data.get("rawMessage") || "",
     purchaseOrderNo: data.get("purchaseOrderNo") || "",
     batchNo: data.get("batchNo") || "",
@@ -5191,14 +5400,17 @@ function readIncomingBatchForm(form) {
 function parseCurrentIncomingMessage() {
   const rawMessage = document.querySelector("#intakeBatchForm textarea[name='rawMessage']")?.value || "";
   const parsed = parseIncomingMessage(rawMessage);
+  const selectedBatch = state.intakeBatches.find((item) => item.id === state.selectedIntakeBatchId);
+  const isEditingSelectedBatch = selectedBatch && rawMessage.trim() === String(selectedBatch.rawMessage || "").trim();
   state.intakeBatchDraft = normalizeIncomingBatchDraft({
-    ...state.intakeBatchDraft,
+    ...(isEditingSelectedBatch ? state.intakeBatchDraft : makeIncomingBatchDraft()),
     ...parsed,
-    id: state.intakeBatchDraft?.id || parsed.id,
+    id: isEditingSelectedBatch ? state.intakeBatchDraft.id : parsed.id,
     finalCardCount: parsed.suggestedCardCount,
-    vetPhone: state.intakeBatchDraft?.vetPhone || parsed.vetPhone || "",
-    status: state.intakeBatchDraft?.status || parsed.status || "draft",
+    vetPhone: (isEditingSelectedBatch ? state.intakeBatchDraft?.vetPhone : "") || parsed.vetPhone || "",
+    status: (isEditingSelectedBatch ? state.intakeBatchDraft?.status : "") || parsed.status || "draft",
   });
+  if (!isEditingSelectedBatch) state.selectedIntakeBatchId = "";
   render();
 }
 
