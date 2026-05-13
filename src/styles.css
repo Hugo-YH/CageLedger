@@ -2481,6 +2481,18 @@ tr:last-child td {
   line-height: 1.55;
 }
 
+.release-note-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.release-note-meta strong {
+  color: var(--text);
+  margin-right: 4px;
+}
+
 .doc-link {
   color: inherit;
   text-decoration: none;

@@ -32,7 +32,7 @@ http://群晖IP:5173
 默认使用 GitHub Container Registry 的 `latest` 镜像。如果希望固定到某个发布版本：
 
 ```bash
-CAGELEDGER_IMAGE_TAG=0.4.5d docker compose up -d
+CAGELEDGER_IMAGE_TAG=0.4.5e docker compose up -d
 ```
 
 ## 数据持久化
@@ -85,14 +85,14 @@ npm run package:offline
 脚本会生成类似文件：
 
 ```text
-dist/CageLedger-offline-v0.4.5d.tar.gz
+dist/CageLedger-offline-v0.4.5e.tar.gz
 ```
 
 把这个文件上传到 NAS，例如 `/volume1/docker/`。然后在 NAS 的 SSH 终端执行：
 
 ```bash
 cd /volume1/docker
-tar -xzf CageLedger-offline-v0.4.5d.tar.gz
+tar -xzf CageLedger-offline-v0.4.5e.tar.gz
 cd CageLedger
 docker compose -f docker-compose.offline.yml up -d --build
 ```
@@ -105,7 +105,7 @@ docker compose -f docker-compose.offline.yml up -d --build
 
 ```bash
 docker pull ghcr.io/hugo-yh/cageledger:latest
-docker pull ghcr.io/hugo-yh/cageledger:0.4.5d
+docker pull ghcr.io/hugo-yh/cageledger:0.4.5e
 ```
 
 仓库内的 `Publish container package` GitHub Actions 工作流会在推送 `v*` 标签时发布镜像，也可以通过 `workflow_dispatch` 手动指定 Git ref 和镜像标签重新发布。
