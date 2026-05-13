@@ -1280,6 +1280,11 @@ h3 {
   line-height: 0.98;
 }
 
+.intake-card-preview-frame .card .batch-iacuc-highlight {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
 .intake-card-preview-frame .card .row-head {
   text-align: center;
   font-weight: 800;

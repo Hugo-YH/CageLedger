@@ -26,6 +26,14 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.5d",
+    title: "笼卡批次号高亮修正",
+    items: [
+      "笼卡打印模板中批次号里的 IACUC 编号改为红色显示，便于在检疫卡上快速识别伦理编号",
+      "补齐笼卡预览弹窗的同名样式规则，确保预览与实际打印的批次号高亮表现一致",
+    ],
+  },
+  {
     version: "0.4.5c",
     title: "笼卡批量打印分页与内切纸对齐修正",
     items: [
@@ -298,7 +306,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5c",
+  version: "0.4.5d",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -5563,6 +5571,10 @@ function intakeCardsPrintHtml(items) {
             font-size: 1.98mm;
             line-height: 0.98;
           }
+          .card .batch-iacuc-highlight {
+            color: #b91c1c;
+            font-weight: 800;
+          }
           .card .row-head {
             text-align: center;
             font-weight: 800;
@@ -5612,6 +5624,7 @@ function chunkIntakePrintItems(items, pageSize) {
 
 function renderIntakeCardPrint(batch, card) {
   const supplierShortName = abbreviateSupplierName(batch.supplier);
+  const batchNoHtml = renderBatchNoWithHighlightedIacuc(batch.batchNo, batch.iacuc);
   return `
     <section class="card">
       <table>
@@ -5627,7 +5640,7 @@ function renderIntakeCardPrint(batch, card) {
         </tr>
         <tr style="height:4.25mm">
           <td class="label">批次号：</td>
-          <td class="value value-compact">${escapeText(batch.batchNo || "")}</td>
+          <td class="value value-compact">${batchNoHtml}</td>
           <td class="label">购买单位：</td>
           <td class="value">${escapeText(supplierShortName || batch.supplier || "")}</td>
         </tr>
@@ -5674,6 +5687,19 @@ function renderIntakeCardPrint(batch, card) {
       </table>
     </section>
   `;
+}
+
+function renderBatchNoWithHighlightedIacuc(batchNo, iacuc) {
+  const full = String(batchNo || "").trim();
+  const target = String(iacuc || "").trim();
+  if (!full) return "";
+  if (!target) return escapeText(full);
+  const start = full.indexOf(target);
+  if (start < 0) return escapeText(full);
+  const before = escapeText(full.slice(0, start));
+  const matched = escapeText(full.slice(start, start + target.length));
+  const after = escapeText(full.slice(start + target.length));
+  return `${before}<span class="batch-iacuc-highlight">${matched}</span>${after}`;
 }
 
 function formatPrintDate(value) {
