@@ -26,6 +26,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.5f",
+    title: "系统设置导航与站内通知统一",
+    items: [
+      "系统设置调整为一级菜单，二级管理页改为抽屉式入口，侧栏恢复滚动并优化桌面端浮层展开交互",
+      "系统设置抽屉支持进入后自动收起，并统一了笼卡管理与饲养费管理的一级菜单图标",
+      "发起结算流程改为页内悬浮成功提示，并将全系统原生提示框统一替换为 success、warning、error 三类站内通知",
+      "站内通知新增弹性进入动画、多行文案展示和自动消失规则，后续系统提示统一沿用这套样式",
+    ],
+  },
+  {
     version: "0.4.5e",
     title: "笼卡预览与记录展示整理",
     items: [
@@ -317,7 +327,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5e",
+  version: "0.4.5f",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -330,6 +340,7 @@ let currentUser = null;
 let users = [];
 let batchSlotDrag = null;
 let suppressNextSlotClick = false;
+let flashNoticeTimer = null;
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -757,6 +768,8 @@ const seedData = {
   selectedBillingWorkflowDetail: null,
   showWorkflowStatements: false,
   settingsNavExpanded: false,
+  lastSettingsView: "rooms",
+  flashNotice: null,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
@@ -889,7 +902,7 @@ function loadState() {
 
 function saveState() {
   invalidateIacucSearchCache();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, flashNotice: null }));
 }
 
 async function loadPersistedState() {
@@ -1121,7 +1134,7 @@ function mergeServerAuditLogs(payload) {
 }
 
 function reportSaveError(error) {
-  alert(error?.message || "保存失败");
+  showFlashNotice("保存失败", error?.message || "保存失败", "error");
 }
 
 function upsertById(items, item) {
@@ -1152,12 +1165,20 @@ function upsertPrincipalIdentity(item) {
 
 function normalize(data) {
   const next = { ...structuredClone(seedData), ...data };
-  if (next.activeView === "settings") next.activeView = "rooms";
+  if (next.activeView === "settings") next.activeView = next.lastSettingsView || "rooms";
   next.selectedSlotIds = Array.isArray(next.selectedSlotIds) ? next.selectedSlotIds : [];
   next.quantitySheets = Array.isArray(next.quantitySheets) ? next.quantitySheets : [];
   next.intakeBatches = Array.isArray(next.intakeBatches) ? next.intakeBatches.map(normalizeIncomingBatchDraft) : [];
   next.billingWorkflows = Array.isArray(next.billingWorkflows) ? next.billingWorkflows : [];
   next.settingsNavExpanded = Boolean(next.settingsNavExpanded);
+  next.lastSettingsView = ["rooms", "data", "users", "system", "logs"].includes(next.lastSettingsView) ? next.lastSettingsView : "rooms";
+  next.flashNotice = next.flashNotice && typeof next.flashNotice === "object"
+    ? {
+        type: ["success", "warning", "error"].includes(next.flashNotice.type) ? next.flashNotice.type : "success",
+        title: String(next.flashNotice.title || ""),
+        message: String(next.flashNotice.message || ""),
+      }
+    : null;
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
   next.billingSource = next.billingSource === "quantity_sheet" ? "quantity_sheet" : "cage_map";
   next.billingPi = next.billingPi || piForIacuc(next.billingIacuc) || next.quantitySheetDraft.pi || "";
@@ -1462,6 +1483,7 @@ function render() {
     <div class="shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       ${renderSidebar()}
       <main class="workspace">
+        ${renderFlashNotice()}
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "intake" ? renderIntakeBatchView() : ""}
@@ -1492,12 +1514,22 @@ function render() {
   }
 }
 
+function renderFlashNotice() {
+  if (!state.flashNotice?.message) return "";
+  return `
+    <div class="flash-notice ${state.flashNotice.type || "success"}" role="status" aria-live="polite">
+      <strong>${escapeText(state.flashNotice.title || "已完成")}</strong>
+      <span>${escapeText(state.flashNotice.message)}</span>
+    </div>
+  `;
+}
+
 function renderSidebar() {
   const businessNavItems = [
     ["dashboard", "主页", "home"],
-    ["intake", "笼卡管理", "receipt"],
+    ["intake", "笼卡管理", "tag"],
     ["cages", "笼位管理", "grid"],
-    ["billing", "饲养费管理", "receipt"],
+    ["billing", "饲养费管理", "calculator"],
     ["workflow-center", "流程中心", "refresh"],
   ];
   const settingsNavItems = [
@@ -1512,7 +1544,8 @@ function renderSidebar() {
     ...(currentUser ? [["logs", "操作日志", "receipt"]] : []),
   ];
   const settingsViews = settingsNavItems.map(([view]) => view);
-  const settingsNavExpanded = state.settingsNavExpanded || (!isCompactViewport() && settingsViews.includes(state.activeView));
+  const settingsActive = settingsViews.includes(state.activeView);
+  const settingsNavExpanded = state.settingsNavExpanded;
 
   return `
     <aside class="sidebar">
@@ -1546,55 +1579,41 @@ function renderSidebar() {
               `,
             )
             .join("")}
-        </div>
-        ${
-          settingsNavItems.length
-            ? `
-              <div class="nav-group">
-                <button class="nav-group-toggle ${settingsNavExpanded ? "expanded" : ""}" id="settingsNavToggle" type="button" aria-expanded="${settingsNavExpanded ? "true" : "false"}" aria-label="切换系统设置分组">
-                  <span class="nav-group-title">系统设置</span>
+          ${
+            settingsNavItems.length
+              ? `
+                <button class="nav-item nav-item-settings-root ${settingsActive ? "active" : ""} ${settingsNavExpanded ? "expanded" : ""}" id="settingsNavToggle" type="button" title="打开系统设置" aria-label="系统设置" aria-expanded="${settingsNavExpanded ? "true" : "false"}">
                   ${iconSvg("settings")}
+                  <span>系统设置</span>
                 </button>
-                ${
-                  settingsNavExpanded
-                    ? settingsNavItems
-                        .map(
-                          ([view, label, icon]) => `
-                            <button class="nav-item nav-sub-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
-                              ${iconSvg(icon)}
-                              <span>${label}</span>
-                            </button>
-                          `,
-                        )
-                        .join("")
-                    : ""
-                }
-              </div>
-            `
-            : ""
-        }
+              `
+              : ""
+          }
+        </div>
       </nav>
+      ${settingsNavItems.length ? renderSettingsDrawer(settingsNavItems, settingsNavExpanded) : ""}
       ${renderSidebarAccount()}
-      ${settingsNavItems.length ? renderMobileSettingsDrawer(settingsNavItems, settingsNavExpanded) : ""}
     </aside>
   `;
 }
 
-function renderMobileSettingsDrawer(settingsNavItems, expanded) {
+function renderSettingsDrawer(settingsNavItems, expanded) {
   if (!expanded) return "";
+  const activeItem = settingsNavItems.find(([view]) => view === state.activeView) || settingsNavItems.find(([view]) => view === state.lastSettingsView) || settingsNavItems[0];
   return `
-    <div class="mobile-settings-drawer">
-      <div class="mobile-settings-drawer-head">
-        <strong>管理</strong>
-        <span>系统设置与管理页面</span>
+    <div class="settings-drawer ${isCompactViewport() ? "settings-drawer-mobile" : "settings-drawer-desktop"}">
+      <div class="settings-drawer-head">
+        <strong>系统设置</strong>
+        <span>当前页面：${escapeText(activeItem?.[1] || "房间管理")}</span>
       </div>
-      <div class="mobile-settings-grid">
+      <div class="settings-drawer-grid">
         ${settingsNavItems
           .map(
             ([view, label, icon]) => `
-              <button class="mobile-settings-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
+              <button class="settings-drawer-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
                 ${iconSvg(icon)}
                 <span>${label}</span>
+                <small>${escapeText(pageMeta(view).description)}</small>
               </button>
             `,
           )
@@ -4161,12 +4180,24 @@ function bindEvents() {
     render();
   });
   document.querySelector("#settingsNavToggle")?.addEventListener("click", () => {
-    state.settingsNavExpanded = !state.settingsNavExpanded;
+    const settingsViews = ["rooms", "data", "users", "system", "logs"];
+    if (!settingsViews.includes(state.activeView)) {
+      state.activeView = state.lastSettingsView || "rooms";
+      state.settingsNavExpanded = true;
+    } else {
+      state.settingsNavExpanded = !state.settingsNavExpanded;
+    }
     render();
   });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeView = button.dataset.view;
+      if (["rooms", "data", "users", "system", "logs"].includes(state.activeView)) {
+        state.lastSettingsView = state.activeView;
+        state.settingsNavExpanded = false;
+      } else {
+        state.settingsNavExpanded = false;
+      }
       render();
     });
   });
@@ -4584,7 +4615,7 @@ function bindEvents() {
   });
   document.querySelector("#resetDemo")?.addEventListener("click", () => {
     if (remotePersistence) {
-      alert("共享模式下不支持重置示例数据。");
+      showFlashNotice("当前不可用", "共享模式下不支持重置示例数据。", "warning");
       return;
     }
     localStorage.removeItem(STORAGE_KEY);
@@ -4769,7 +4800,7 @@ async function handleUserSubmit(event) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    alert(payload.error || "创建账号失败");
+    showFlashNotice("创建账号失败", payload.error || "创建账号失败", "error");
     return;
   }
   await loadUsers();
@@ -4795,7 +4826,7 @@ async function handleUserUpdate(event) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    alert(payload.error || "保存账号失败");
+    showFlashNotice("保存账号失败", payload.error || "保存账号失败", "error");
     return;
   }
   await loadUsers();
@@ -4812,7 +4843,7 @@ async function deleteUser(userId) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    alert(payload.error || "删除账号失败");
+    showFlashNotice("删除账号失败", payload.error || "删除账号失败", "error");
     return;
   }
   await loadUsers();
@@ -4832,7 +4863,7 @@ async function handleIacucUpload(event) {
     });
     const payload = await response.json();
     if (!response.ok) {
-      alert(payload.error || "上传失败");
+      showFlashNotice("上传失败", payload.error || "上传失败", "error");
       return;
     }
     IACUC_INDEX = payload.items || [];
@@ -4845,10 +4876,10 @@ async function handleIacucUpload(event) {
       source: "data",
     };
     mergeServerAuditLogs(payload);
-    alert(`已生成 IACUC 索引 ${payload.count} 条，重复编号 ${payload.duplicateCount || 0} 条。`);
+    showFlashNotice("上传完成", `已生成 IACUC 索引 ${payload.count} 条，重复编号 ${payload.duplicateCount || 0} 条。`, "success");
     render();
   } catch {
-    alert("上传失败，请检查网络或文件格式");
+    showFlashNotice("上传失败", "请检查网络或文件格式。", "error");
   }
 }
 
@@ -4972,7 +5003,7 @@ async function handleSlotSubmit(event) {
   if (payload.status === "active") {
     const overdueItems = findOverdueOccupanciesByIacuc(payload.iacuc, [payload.id]);
     if (overdueItems.length) {
-      alert(buildOverdueAlertMessage(payload.iacuc, overdueItems));
+      showFlashNotice("超期提示", buildOverdueAlertMessage(payload.iacuc, overdueItems), "warning");
     }
   }
 
@@ -4996,7 +5027,7 @@ async function handleBatchSlotSubmit(event) {
   const selectedSlots = state.slots.filter((slot) => state.selectedSlotIds.includes(slot.id));
   const batchState = getBatchEditState(selectedSlots);
   if (batchState.hasConflict) {
-    alert("当前选择包含多个不同 IACUC 编号，请只选择相同 IACUC 的笼位进行批量编辑。");
+    showFlashNotice("无法批量编辑", "当前选择包含多个不同 IACUC 编号，请只选择相同 IACUC 的笼位进行批量编辑。", "warning");
     return;
   }
 
@@ -5019,7 +5050,7 @@ async function handleBatchSlotSubmit(event) {
     const editingIds = state.selectedSlotIds.map((slotId) => currentOccupancy(slotId)?.id).filter(Boolean);
     const overdueItems = findOverdueOccupanciesByIacuc(payload.iacuc, editingIds);
     if (overdueItems.length) {
-      alert(buildOverdueAlertMessage(payload.iacuc, overdueItems));
+      showFlashNotice("超期提示", buildOverdueAlertMessage(payload.iacuc, overdueItems), "warning");
     }
   }
 
@@ -5208,7 +5239,7 @@ async function handleRateSubmit(event) {
   const freeCageAllowance = freeCageAllowanceForPrincipalType(principalType);
   const targetPi = state.billingPi || state.quantitySheetDraft?.pi || "";
   if (!targetPi) {
-    alert("请先选择项目负责人。");
+    showFlashNotice("缺少项目信息", "请先选择项目负责人。", "warning");
     return;
   }
   try {
@@ -5473,12 +5504,12 @@ async function deleteIntakeBatch(batchId) {
 function printIntakeBatches(batches) {
   const items = batches.flatMap((batch) => batch.cards.map((card) => ({ batch, card })));
   if (!items.length) {
-    alert("当前没有可打印的笼卡。");
+    showFlashNotice("当前无法打印", "当前没有可打印的笼卡。", "warning");
     return;
   }
   const opened = window.open("", "_blank");
   if (!opened) {
-    alert("浏览器阻止了弹出窗口，请允许弹出窗口后重试。");
+    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
     return;
   }
   opened.document.write(intakeCardsPrintHtml(items));
@@ -6060,14 +6091,14 @@ async function handleRackSubmit(event) {
   });
   const room = state.rooms.find((item) => item.id === state.rackFormDraft.roomId);
   if (!room) {
-    alert("请选择有效的饲养间。");
+    showFlashNotice("信息不完整", "请选择有效的饲养间。", "warning");
     return;
   }
 
   const roomRacks = state.racks.filter((item) => item.roomId === room.id);
   const rackIndex = Number(form.get("index"));
   if (roomRacks.some((item) => Number(item.index) === rackIndex)) {
-    alert("同一饲养间内笼架编号不能重复。");
+    showFlashNotice("无法新增笼架", "同一饲养间内笼架编号不能重复。", "warning");
     return;
   }
   const rows = state.rackFormDraft.rows;
@@ -6108,14 +6139,14 @@ async function handleRackEditSubmit(event) {
 
   const room = state.rooms.find((item) => item.id === rack.roomId);
   if (!room) {
-    alert("笼架关联的饲养间不存在。");
+    showFlashNotice("无法保存笼架", "笼架关联的饲养间不存在。", "error");
     return;
   }
 
   const rackIndex = Number(form.get("index"));
   const duplicate = state.racks.some((item) => item.roomId === room.id && item.id !== rack.id && Number(item.index) === rackIndex);
   if (duplicate) {
-    alert("同一饲养间内笼架编号不能重复。");
+    showFlashNotice("无法保存笼架", "同一饲养间内笼架编号不能重复。", "warning");
     return;
   }
 
@@ -6130,7 +6161,7 @@ async function handleRackEditSubmit(event) {
   const slotDeletes = existingSlots.filter((slot) => !nextPositions.has(slotPositionKey(slot)));
   const activeDeleted = slotDeletes.filter((slot) => currentOccupancy(slot.id));
   if (activeDeleted.length) {
-    alert(`缩小行列范围会移除 ${activeDeleted.length} 个在用或预约笼位，请先处理这些笼位。`);
+    showFlashNotice("无法缩小笼架", `缩小行列范围会移除 ${activeDeleted.length} 个在用或预约笼位，请先处理这些笼位。`, "warning");
     return;
   }
 
@@ -6161,7 +6192,7 @@ async function deleteRoom(roomId) {
   if (!room) return;
 
   if (state.rooms.length <= 1) {
-    alert("至少需要保留一个饲养间。");
+    showFlashNotice("无法删除饲养间", "至少需要保留一个饲养间。", "warning");
     return;
   }
 
@@ -6773,7 +6804,7 @@ async function exportBillingCsv() {
 async function exportSettlementPdf() {
   const opened = window.open("", "_blank");
   if (!opened) {
-    alert("浏览器阻止了弹出窗口，请允许弹出窗口后重试。");
+    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
     return;
   }
 
@@ -6822,7 +6853,7 @@ async function persistBillingWorkflowFromCurrent() {
     mergeServerAuditLogs(payload);
     await loadBillingWorkflows();
     pushLog(`发起结算流程：${sheet.pi} ${sheet.month}`);
-    render();
+    showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${sheet.month} ${sheet.pi} 的进度。`);
     return payload.statement;
   }
   if (!state.billingPi || !state.billingMonth) {
@@ -6849,7 +6880,7 @@ async function persistBillingWorkflowFromCurrent() {
   mergeServerAuditLogs(payload);
   await loadBillingWorkflows();
   pushLog(`发起结算流程：${state.billingPi} ${state.billingMonth}`);
-  render();
+  showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${state.billingMonth} ${state.billingPi} 的进度。`);
   return payload.statement;
 }
 
@@ -7935,11 +7966,11 @@ function historyStatusLabel(item) {
 
 function validateEndDate(occupancy, endDate) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-    alert("日期格式需要为 YYYY-MM-DD。");
+    showFlashNotice("日期格式错误", "日期格式需要为 YYYY-MM-DD。", "warning");
     return false;
   }
   if (occupancy.startDate && endDate < occupancy.startDate) {
-    alert(`取材日期不能早于入住日期 ${occupancy.startDate}。`);
+    showFlashNotice("日期范围错误", `取材日期不能早于入住日期 ${occupancy.startDate}。`, "warning");
     return false;
   }
   return true;
@@ -8042,6 +8073,21 @@ function pushLog(message) {
   });
 }
 
+function showFlashNotice(title, message, type = "success") {
+  if (flashNoticeTimer) clearTimeout(flashNoticeTimer);
+  state.flashNotice = {
+    type: ["success", "warning", "error"].includes(type) ? type : "success",
+    title,
+    message,
+  };
+  render();
+  flashNoticeTimer = window.setTimeout(() => {
+    state.flashNotice = null;
+    flashNoticeTimer = null;
+    render();
+  }, type === "success" ? 3200 : 4200);
+}
+
 function addDays(dateText, days) {
   const [year, month, day] = dateText.split("-").map(Number);
   const date = new Date(year, month - 1, day);
@@ -8112,6 +8158,8 @@ function iconSvg(name) {
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
     search: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 10.5l4 4-1.4 1.4-4-4A6.5 6.5 0 1 1 10.5 4zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z"/></svg>`,
+    calculator: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v4h8V5zm0 7v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM8 16v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>`,
+    tag: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9zm5-5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>`,
     chevronLeft: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3-1.4-1.4L6.2 12l7.1 7.1 1.4-1.4L10 13h8v-2h-8z"/></svg>`,
     chevronRight: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.3 17.7 1.4 1.4 7.1-7.1-7.1-7.1-1.4 1.4L14 11H6v2h8z"/></svg>`,
     plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>`,
