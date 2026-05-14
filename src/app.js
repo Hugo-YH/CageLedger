@@ -27,6 +27,17 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.6",
+    title: "后端性能、数据结构与系统文档优化",
+    items: [
+      "SQLite 启用 WAL、外键约束和 busy timeout，并为笼位、占用、数量统计表、结算流程、审计事件等高频查询补充业务索引",
+      "前端新增房间、笼架、笼位、当前占用、PI、伦理号、数量统计表和结算流程派生索引，减少笼位图与饲养费计算中的重复全量扫描",
+      "后端列表接口新增分页和筛选参数，支持审计日志、待接收批次、数量统计表和结算流程按需加载",
+      "占用记录新增 room_id、rack_id、species、billing_item、customer_type、animal_count 等结构化列，并支持旧 SQLite 数据库启动时自动补列和回填",
+      "关于系统中的 API 和数据模型、部署说明改为站内页面渲染，支持标题、列表、表格和代码块展示",
+    ],
+  },
+  {
     version: "0.4.5h",
     title: "通知规范、预约识别与账号授权优化",
     items: [
@@ -315,9 +326,9 @@ const SYSTEM_RELEASE_NOTES = [
   },
 ];
 const SYSTEM_DOC_LINKS = [
-  { title: "API 和数据模型", href: "./docs/API.md", description: "接口路径、账号权限、实体 API、IACUC 索引和主要数据表。" },
-  { title: "部署说明", href: "./docs/DEPLOYMENT.md", description: "Docker Compose、群晖、离线源码包和 GHCR 镜像发布。" },
-  { title: "环境变量模板", href: "./.env.example", description: "后端监听、数据库路径、初始管理员、单位信息和更新检查配置。" },
+  { id: "api", title: "API 和数据模型", href: "./docs/API.md", renderInline: true, description: "接口路径、账号权限、实体 API、IACUC 索引和主要数据表。" },
+  { id: "deployment", title: "部署说明", href: "./docs/DEPLOYMENT.md", renderInline: true, description: "Docker Compose、群晖、离线源码包和 GHCR 镜像发布。" },
+  { id: "env", title: "环境变量模板", href: "./.env.example", renderInline: false, description: "后端监听、数据库路径、初始管理员、单位信息和更新检查配置。" },
 ];
 const SYSTEM_API_GROUPS = [
   { title: "认证与账号", endpoints: ["POST /api/auth/login", "POST /api/auth/logout", "GET /api/auth/me", "GET /api/users", "POST /api/users"] },
@@ -347,7 +358,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5h",
+  version: "0.4.6",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -361,6 +372,8 @@ let users = [];
 let batchSlotDrag = null;
 let suppressNextSlotClick = false;
 let flashNoticeTimer = null;
+let STATE_INDEX_CACHE = null;
+const SYSTEM_DOC_CACHE = new Map();
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -822,6 +835,8 @@ const seedData = {
   lastSettingsView: "rooms",
   flashNotice: null,
   confirmDialog: null,
+  selectedSystemDocId: "",
+  systemDocViewer: null,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
@@ -954,7 +969,8 @@ function loadState() {
 
 function saveState() {
   invalidateIacucSearchCache();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, flashNotice: null, confirmDialog: null }));
+  invalidateStateIndexCache();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, flashNotice: null, confirmDialog: null, systemDocViewer: null }));
 }
 
 async function loadPersistedState() {
@@ -963,6 +979,7 @@ async function loadPersistedState() {
     const entityState = await loadEntityState();
     state = normalize(entityState);
     invalidateIacucSearchCache();
+    invalidateStateIndexCache();
     selectFirstAvailableCage();
     return;
   } catch {
@@ -971,6 +988,7 @@ async function loadPersistedState() {
 
   state = normalize(loadState());
   invalidateIacucSearchCache();
+  invalidateStateIndexCache();
 }
 
 async function loadEntityState() {
@@ -1106,6 +1124,7 @@ async function loadBillingWorkflows() {
     throw new Error(payload.error || "加载结算流程失败");
   }
   state.billingWorkflows = payload.items || [];
+  invalidateStateIndexCache();
   return state.billingWorkflows;
 }
 
@@ -1163,6 +1182,7 @@ async function deleteBillingWorkflow(workflowId) {
   }
   mergeServerAuditLogs(payload);
   state.billingWorkflows = state.billingWorkflows.filter((item) => item.id !== workflowId);
+  invalidateStateIndexCache();
   if (state.selectedBillingWorkflowId === workflowId) {
     state.selectedBillingWorkflowId = "";
     state.selectedBillingWorkflowDetail = null;
@@ -1196,6 +1216,7 @@ function upsertById(items, item) {
   } else {
     items.push(item);
   }
+  invalidateStateIndexCache();
 }
 
 function upsertPrincipalIdentity(item) {
@@ -1239,6 +1260,16 @@ function normalize(data) {
         message: String(next.confirmDialog.message || ""),
         confirmLabel: String(next.confirmDialog.confirmLabel || "确认"),
         payload: next.confirmDialog.payload && typeof next.confirmDialog.payload === "object" ? next.confirmDialog.payload : {},
+      }
+    : null;
+  next.selectedSystemDocId = SYSTEM_DOC_LINKS.some((doc) => doc.id === next.selectedSystemDocId) ? next.selectedSystemDocId : "";
+  next.systemDocViewer = next.systemDocViewer && typeof next.systemDocViewer === "object"
+    ? {
+        id: String(next.systemDocViewer.id || ""),
+        title: String(next.systemDocViewer.title || ""),
+        markdown: String(next.systemDocViewer.markdown || ""),
+        loading: Boolean(next.systemDocViewer.loading),
+        error: String(next.systemDocViewer.error || ""),
       }
     : null;
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
@@ -1426,13 +1457,14 @@ function billingProfileForRoom(room = {}) {
 }
 
 function billingProfileForSlotId(slotId) {
-  const slot = state.slots.find((item) => item.id === slotId);
+  const slot = stateIndexes().slotById.get(slotId);
   return billingProfileForSlot(slot);
 }
 
 function billingProfileForSlot(slot, occupancy = {}) {
-  const rack = slot ? state.racks.find((item) => item.id === slot.rackId) : null;
-  const room = rack ? state.rooms.find((item) => item.id === rack.roomId) : null;
+  const indexes = stateIndexes();
+  const rack = slot ? indexes.rackById.get(slot.rackId) : null;
+  const room = rack ? indexes.roomById.get(rack.roomId) : null;
   const base = billingProfileForRoom(room || {});
   const billingItem = normalizeBillingItem(occupancy.billingItem || base.billingItem);
   const customerType = normalizeCustomerType(occupancy.customerType || base.customerType);
@@ -1450,7 +1482,7 @@ function billingProfileForSlot(slot, occupancy = {}) {
 }
 
 function billingProfileForOccupancy(occupancy = {}) {
-  const slot = state.slots.find((item) => item.id === occupancy.slotId);
+  const slot = stateIndexes().slotById.get(occupancy.slotId);
   return billingProfileForSlot(slot, occupancy);
 }
 
@@ -1933,8 +1965,7 @@ function slotStatusCounts() {
 
 function roomCapacityRows() {
   return visibleRooms().map((room) => {
-    const rackIds = new Set(state.racks.filter((rack) => rack.roomId === room.id).map((rack) => rack.id));
-    const slots = state.slots.filter((slot) => rackIds.has(slot.rackId));
+    const slots = slotsForRoom(room.id);
     const total = slots.length;
     const active = slots.filter((slot) => slot.status === "active").length;
     const reserved = slots.filter((slot) => slot.status === "reserved").length;
@@ -2030,7 +2061,7 @@ function renderCageView() {
       </section>
     `;
   }
-  const racks = state.racks.filter((rack) => rack.roomId === selectedRoom.id);
+  const racks = racksForRoom(selectedRoom.id);
   const selectedRack = getSelectedRack(racks);
   if (!selectedRack) {
     return `
@@ -2046,7 +2077,7 @@ function renderCageView() {
       </section>
     `;
   }
-  const slots = state.slots.filter((slot) => slot.rackId === selectedRack.id);
+  const slots = slotsForRack(selectedRack.id);
   const visibleSlots = state.slotFilter === "all" ? slots : slots.filter((slot) => slot.status === state.slotFilter);
   const selectedSlot = getSelectedSlot(visibleSlots, slots);
   const selectedBatchSlots = slots.filter((slot) => state.selectedSlotIds.includes(slot.id));
@@ -4047,14 +4078,152 @@ function renderSystemDocsPanel() {
     <div class="doc-link-list">
       ${SYSTEM_DOC_LINKS.map(
         (doc) => `
+          ${
+            doc.renderInline
+              ? `
+          <button class="doc-link ${state.selectedSystemDocId === doc.id ? "active" : ""}" type="button" data-system-doc="${escapeAttr(doc.id)}">
+            <strong>${escapeText(doc.title)}</strong>
+            <span>${escapeText(doc.description)}</span>
+          </button>
+              `
+              : `
           <a class="doc-link" href="${escapeAttr(doc.href)}" target="_blank" rel="noreferrer">
             <strong>${escapeText(doc.title)}</strong>
             <span>${escapeText(doc.description)}</span>
           </a>
+              `
+          }
         `,
       ).join("")}
     </div>
+    ${renderSystemDocViewer()}
   `;
+}
+
+function renderSystemDocViewer() {
+  const viewer = state.systemDocViewer;
+  if (!viewer) return "";
+  return `
+    <article class="system-doc-viewer">
+      <div class="system-doc-head">
+        <div>
+          <strong>${escapeText(viewer.title || "说明文档")}</strong>
+          <span>${viewer.loading ? "正在加载文档" : viewer.error ? "加载失败" : "站内渲染文档"}</span>
+        </div>
+        <button class="secondary compact-action" type="button" data-close-system-doc>${iconSvg("chevronLeft")}关闭</button>
+      </div>
+      ${
+        viewer.loading
+          ? `<p class="muted">正在加载文档内容。</p>`
+          : viewer.error
+            ? `<p class="error-text">${escapeText(viewer.error)}</p>`
+            : `<div class="markdown-view">${renderMarkdownDocument(viewer.markdown)}</div>`
+      }
+    </article>
+  `;
+}
+
+function renderMarkdownDocument(markdown) {
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const html = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+    const fence = line.match(/^```(\w*)\s*$/);
+    if (fence) {
+      const code = [];
+      index += 1;
+      while (index < lines.length && !lines[index].startsWith("```")) {
+        code.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      html.push(`<pre><code>${escapeText(code.join("\n"))}</code></pre>`);
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length + 1;
+      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+    if (isMarkdownTableStart(lines, index)) {
+      const tableLines = [];
+      tableLines.push(lines[index]);
+      index += 2;
+      while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+      html.push(renderMarkdownTable(tableLines));
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+        items.push(lines[index].replace(/^\s*[-*]\s+/, ""));
+        index += 1;
+      }
+      html.push(`<ul>${items.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</ul>`);
+      continue;
+    }
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items = [];
+      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
+        items.push(lines[index].replace(/^\s*\d+\.\s+/, ""));
+        index += 1;
+      }
+      html.push(`<ol>${items.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</ol>`);
+      continue;
+    }
+    const paragraph = [line.trim()];
+    index += 1;
+    while (index < lines.length && lines[index].trim() && !/^(#{1,4})\s+/.test(lines[index]) && !/^```/.test(lines[index]) && !/^\s*[-*]\s+/.test(lines[index]) && !/^\s*\d+\.\s+/.test(lines[index]) && !isMarkdownTableStart(lines, index)) {
+      paragraph.push(lines[index].trim());
+      index += 1;
+    }
+    html.push(`<p>${renderMarkdownInline(paragraph.join(" "))}</p>`);
+  }
+  return html.join("");
+}
+
+function isMarkdownTableStart(lines, index) {
+  return /^\s*\|.*\|\s*$/.test(lines[index] || "") && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] || "");
+}
+
+function renderMarkdownTable(lines) {
+  const rows = lines.map(markdownTableCells);
+  const header = rows[0] || [];
+  const body = rows.slice(1);
+  return `
+    <div class="markdown-table-wrap">
+      <table>
+        <thead><tr>${header.map((cell) => `<th>${renderMarkdownInline(cell)}</th>`).join("")}</tr></thead>
+        <tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${renderMarkdownInline(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function markdownTableCells(line) {
+  return String(line || "")
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderMarkdownInline(value) {
+  return escapeText(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 }
 
 function renderApiReferencePanel() {
@@ -4191,8 +4360,8 @@ function renderAuditLog(log) {
 
 function renderRoomCard(room) {
   const normalizedRoom = normalizeRoomDefaults(room);
-  const racks = state.racks.filter((rack) => rack.roomId === room.id);
-  const slots = racks.flatMap((rack) => state.slots.filter((slot) => slot.rackId === rack.id));
+  const racks = racksForRoom(room.id);
+  const slots = slotsForRoom(room.id);
   const active = slots.filter((slot) => slot.status === "active").length;
   const reserved = slots.filter((slot) => slot.status === "reserved").length;
   const canManageRooms = !remotePersistence || currentUser?.role === "admin";
@@ -4231,7 +4400,7 @@ function renderRoomCard(room) {
 }
 
 function renderRackTreeItem(room, rack) {
-  const slots = state.slots.filter((slot) => slot.rackId === rack.id);
+  const slots = slotsForRack(rack.id);
   const active = slots.filter((slot) => slot.status === "active").length;
   const reserved = slots.filter((slot) => slot.status === "reserved").length;
 
@@ -4604,7 +4773,7 @@ function bindEvents() {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
       const workflowId = button.dataset.deleteWorkflow;
-      const workflow = state.billingWorkflows.find((item) => item.id === workflowId) || state.selectedBillingWorkflowDetail?.workflow || {};
+      const workflow = billingWorkflowById(workflowId) || state.selectedBillingWorkflowDetail?.workflow || {};
       const label = [workflow.pi || workflow.iacuc || "该流程", workflow.month || ""].filter(Boolean).join(" ");
       openConfirmDialog({
         type: "delete-workflow",
@@ -4682,6 +4851,14 @@ function bindEvents() {
     });
   });
   document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
+  document.querySelectorAll("[data-system-doc]").forEach((button) => {
+    button.addEventListener("click", () => openSystemDoc(button.dataset.systemDoc));
+  });
+  document.querySelector("[data-close-system-doc]")?.addEventListener("click", () => {
+    state.selectedSystemDocId = "";
+    state.systemDocViewer = null;
+    render();
+  });
   document.querySelectorAll("[data-delete-user]").forEach((button) => {
     button.addEventListener("click", () => deleteUser(button.dataset.deleteUser));
   });
@@ -5116,6 +5293,44 @@ async function checkSystemUpdate() {
     systemUpdateInfo = { error: "无法连接后端服务" };
     render();
   }
+}
+
+async function openSystemDoc(docId) {
+  const doc = SYSTEM_DOC_LINKS.find((item) => item.id === docId && item.renderInline);
+  if (!doc) return;
+  state.selectedSystemDocId = doc.id;
+  state.systemDocViewer = {
+    id: doc.id,
+    title: doc.title,
+    markdown: SYSTEM_DOC_CACHE.get(doc.id) || "",
+    loading: !SYSTEM_DOC_CACHE.has(doc.id),
+    error: "",
+  };
+  render();
+  if (SYSTEM_DOC_CACHE.has(doc.id)) return;
+  try {
+    const response = await fetch(doc.href, { cache: "no-store" });
+    if (!response.ok) throw new Error(`加载失败：${response.status}`);
+    const markdown = await response.text();
+    SYSTEM_DOC_CACHE.set(doc.id, markdown);
+    state.systemDocViewer = {
+      id: doc.id,
+      title: doc.title,
+      markdown,
+      loading: false,
+      error: "",
+    };
+  } catch (error) {
+    state.systemDocViewer = {
+      id: doc.id,
+      title: doc.title,
+      markdown: "",
+      loading: false,
+      error: error?.message || "文档加载失败",
+    };
+    showFlashNotice("文档加载失败", state.systemDocViewer.error, "error");
+  }
+  render();
 }
 
 function selectVisibleSlots() {
@@ -6635,12 +6850,20 @@ function buildStatement(pi, month) {
   let cumulative = 0;
   const normalizedPi = normalizePersonName(pi);
   const freeCageAllowance = freeCageAllowanceForPi(pi);
+  const piOccupancies = occupanciesForPi(pi);
+  const profileByOccupancyId = new Map();
+  const profileForItem = (item) => {
+    if (profileByOccupancyId.has(item.id)) return profileByOccupancyId.get(item.id);
+    const profile = billingProfileForOccupancy(item);
+    profileByOccupancyId.set(item.id, profile);
+    return profile;
+  };
 
   const rows = dates.map((date) => {
-    const activeItems = activeOccupanciesOnDate(date).filter((item) => normalizePersonName(item.pi) === normalizedPi);
+    const activeItems = activeOccupanciesOnDate(date, piOccupancies);
     const chargeGroups = new Map();
     activeItems.forEach((item) => {
-      const profile = billingProfileForOccupancy(item);
+      const profile = profileForItem(item);
       const count = profile.unit === "animal_day" ? occupancyAnimalCount(item, profile) : 1;
       addChargeGroup(chargeGroups, profile, count);
     });
@@ -6651,10 +6874,10 @@ function buildStatement(pi, month) {
     return {
       date,
       animalCount: activeItems.reduce((sum, item) => {
-        const profile = billingProfileForOccupancy(item);
+        const profile = profileForItem(item);
         return sum + (profile.unit === "animal_day" ? occupancyAnimalCount(item, profile) : 0);
       }, 0),
-      cageCount: activeItems.filter((item) => billingProfileForOccupancy(item).unit === "cage_day").length,
+      cageCount: activeItems.filter((item) => profileForItem(item).unit === "cage_day").length,
       ...charge,
       amount,
       cumulative,
@@ -6662,7 +6885,7 @@ function buildStatement(pi, month) {
     };
   });
 
-  const iacucs = [...new Set(state.occupancies.filter((item) => normalizePersonName(item.pi) === normalizedPi).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean))].sort();
+  const iacucs = [...new Set(piOccupancies.map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean))].sort();
   const info = piInfo(pi);
   return {
     iacuc: iacucs.join("、"),
@@ -6690,8 +6913,8 @@ function buildStatement(pi, month) {
   };
 }
 
-function activeOccupanciesOnDate(date) {
-  return state.occupancies.filter((item) => {
+function activeOccupanciesOnDate(date, candidates = stateIndexes().billableOccupancies) {
+  return candidates.filter((item) => {
     if (item.status !== "active" && item.status !== "ended") return false;
     if (!item.startDate || item.startDate > date) return false;
     if (item.endDate && item.endDate < date) return false;
@@ -6787,7 +7010,7 @@ function statementBillingUnitFromRows(rows) {
 function quantitySheetsForStatement(currentSheet, month, pi) {
   const normalizedPi = normalizePersonName(pi);
   const byId = new Map();
-  [...state.quantitySheets, currentSheet].forEach((sheet) => {
+  [...quantitySheetsForMonth(month), currentSheet].forEach((sheet) => {
     const normalized = normalizeQuantitySheetDraft(sheet);
     if (normalized.month === month && normalizePersonName(normalized.pi) === normalizedPi) byId.set(normalized.id, normalized);
   });
@@ -6795,11 +7018,7 @@ function quantitySheetsForStatement(currentSheet, month, pi) {
 }
 
 function filteredBillingWorkflows() {
-  const items = [...state.billingWorkflows].sort((a, b) => {
-    const byMonth = String(b.month || "").localeCompare(String(a.month || ""), "zh-CN");
-    if (byMonth !== 0) return byMonth;
-    return String(a.iacuc || "").localeCompare(String(b.iacuc || ""), "zh-CN");
-  });
+  const items = [...stateIndexes().billingWorkflowsSorted];
   if (state.billingWorkflowFilter === "done") {
     return items.filter((item) => item.workflowStatus === "submitted_to_finance");
   }
@@ -6807,6 +7026,14 @@ function filteredBillingWorkflows() {
     return items.filter((item) => workflowIsTodo(item));
   }
   return items;
+}
+
+function sortBillingWorkflows(items) {
+  return [...items].sort((a, b) => {
+    const byMonth = String(b.month || "").localeCompare(String(a.month || ""), "zh-CN");
+    if (byMonth !== 0) return byMonth;
+    return String(a.iacuc || "").localeCompare(String(b.iacuc || ""), "zh-CN");
+  });
 }
 
 function workflowIsTodo(item) {
@@ -6956,7 +7183,7 @@ function normalizeSearchText(value) {
 function piInfo(pi) {
   const normalizedPi = normalizePersonName(pi);
   const applications = IACUC_INDEX.filter((item) => normalizePersonName(item.pi) === normalizedPi);
-  const occupancies = state.occupancies.filter((item) => normalizePersonName(item.pi) === normalizedPi);
+  const occupancies = occupanciesForPi(pi);
   return {
     project: uniqueJoined([...applications.map((item) => item.project), ...occupancies.map((item) => item.project)]),
     pi,
@@ -7968,13 +8195,50 @@ function getSelectedRoom() {
 }
 
 function roomNameById(roomId) {
-  return state.rooms.find((room) => room.id === roomId)?.name || roomId;
+  return stateIndexes().roomById.get(roomId)?.name || roomId;
 }
 
 function visibleRooms() {
   if (!remotePersistence || !currentUser || currentUser.role === "admin") return state.rooms;
   const allowed = new Set(currentUser.roomIds || []);
   return state.rooms.filter((room) => allowed.has(room.id));
+}
+
+function racksForRoom(roomId) {
+  return stateIndexes().racksByRoomId.get(roomId) || [];
+}
+
+function slotsForRack(rackId) {
+  return stateIndexes().slotsByRackId.get(rackId) || [];
+}
+
+function slotsForRoom(roomId) {
+  const racks = racksForRoom(roomId);
+  return racks.flatMap((rack) => slotsForRack(rack.id));
+}
+
+function occupanciesForPi(pi) {
+  return stateIndexes().occupanciesByPi.get(normalizePersonName(pi)) || [];
+}
+
+function occupanciesForIacuc(iacuc) {
+  return stateIndexes().occupanciesByIacuc.get(normalizeIacucNumber(iacuc)) || [];
+}
+
+function quantitySheetsForMonth(month) {
+  return stateIndexes().quantitySheetsByMonth.get(month) || [];
+}
+
+function quantitySheetsForIacuc(iacuc) {
+  return stateIndexes().quantitySheetsByIacuc.get(normalizeIacucNumber(iacuc)) || [];
+}
+
+function billingWorkflowById(workflowId) {
+  return stateIndexes().billingWorkflowById.get(workflowId) || null;
+}
+
+function billingWorkflowByBusinessKey(businessKey) {
+  return stateIndexes().billingWorkflowByBusinessKey.get(businessKey) || null;
 }
 
 function getSelectedRack(racks) {
@@ -8013,18 +8277,100 @@ function columnLabel(index) {
 }
 
 function cageCodeForSlot(slotId) {
-  const slot = state.slots.find((item) => item.id === slotId);
+  const indexes = stateIndexes();
+  const slot = indexes.slotById.get(slotId);
   if (!slot) return "";
 
-  const rack = state.racks.find((item) => item.id === slot.rackId);
-  const room = rack ? state.rooms.find((item) => item.id === rack.roomId) : null;
+  const rack = indexes.rackById.get(slot.rackId);
+  const room = rack ? indexes.roomById.get(rack.roomId) : null;
   if (!rack || !room) return slotPositionCode(slot);
 
   return `${room.name}-${rackCode(rack)}-${slotPositionCode(slot)}`;
 }
 
 function currentOccupancy(slotId) {
-  return state.occupancies.find((item) => item.slotId === slotId && (item.status === "active" || item.status === "reserved"));
+  return stateIndexes().currentOccupancyBySlotId.get(slotId);
+}
+
+function stateIndexes() {
+  if (STATE_INDEX_CACHE) return STATE_INDEX_CACHE;
+  const roomById = new Map(state.rooms.map((room) => [room.id, room]));
+  const rackById = new Map(state.racks.map((rack) => [rack.id, rack]));
+  const slotById = new Map(state.slots.map((slot) => [slot.id, slot]));
+  const racksByRoomId = new Map();
+  state.racks.forEach((rack) => {
+    if (!racksByRoomId.has(rack.roomId)) racksByRoomId.set(rack.roomId, []);
+    racksByRoomId.get(rack.roomId).push(rack);
+  });
+  const slotsByRackId = new Map();
+  state.slots.forEach((slot) => {
+    if (!slotsByRackId.has(slot.rackId)) slotsByRackId.set(slot.rackId, []);
+    slotsByRackId.get(slot.rackId).push(slot);
+  });
+  const currentOccupancyBySlotId = new Map();
+  const occupanciesByPi = new Map();
+  const occupanciesByIacuc = new Map();
+  const billableOccupancies = [];
+  state.occupancies.forEach((item) => {
+    if ((item.status === "active" || item.status === "reserved") && item.slotId) {
+      currentOccupancyBySlotId.set(item.slotId, item);
+    }
+    const iacucKey = normalizeIacucNumber(item.iacuc);
+    if (iacucKey) {
+      if (!occupanciesByIacuc.has(iacucKey)) occupanciesByIacuc.set(iacucKey, []);
+      occupanciesByIacuc.get(iacucKey).push(item);
+    }
+    if (item.status === "active" || item.status === "ended") {
+      billableOccupancies.push(item);
+      const piKey = normalizePersonName(item.pi);
+      if (piKey) {
+        if (!occupanciesByPi.has(piKey)) occupanciesByPi.set(piKey, []);
+        occupanciesByPi.get(piKey).push(item);
+      }
+    }
+  });
+  const quantitySheetsById = new Map(state.quantitySheets.map((sheet) => [sheet.id, sheet]));
+  const quantitySheetsByMonth = new Map();
+  const quantitySheetsByIacuc = new Map();
+  state.quantitySheets.forEach((sheet) => {
+    if (sheet.month) {
+      if (!quantitySheetsByMonth.has(sheet.month)) quantitySheetsByMonth.set(sheet.month, []);
+      quantitySheetsByMonth.get(sheet.month).push(sheet);
+    }
+    const iacucKey = normalizeIacucNumber(sheet.iacuc);
+    if (iacucKey) {
+      if (!quantitySheetsByIacuc.has(iacucKey)) quantitySheetsByIacuc.set(iacucKey, []);
+      quantitySheetsByIacuc.get(iacucKey).push(sheet);
+    }
+  });
+  const billingWorkflowById = new Map(state.billingWorkflows.map((workflow) => [workflow.id, workflow]));
+  const billingWorkflowByBusinessKey = new Map();
+  state.billingWorkflows.forEach((workflow) => {
+    if (workflow.businessKey) billingWorkflowByBusinessKey.set(workflow.businessKey, workflow);
+  });
+  STATE_INDEX_CACHE = {
+    roomById,
+    rackById,
+    slotById,
+    racksByRoomId,
+    slotsByRackId,
+    currentOccupancyBySlotId,
+    occupanciesByPi,
+    occupanciesByIacuc,
+    billableOccupancies,
+    quantitySheets: state.quantitySheets,
+    quantitySheetsById,
+    quantitySheetsByMonth,
+    quantitySheetsByIacuc,
+    billingWorkflowById,
+    billingWorkflowByBusinessKey,
+    billingWorkflowsSorted: sortBillingWorkflows(state.billingWorkflows),
+  };
+  return STATE_INDEX_CACHE;
+}
+
+function invalidateStateIndexCache() {
+  STATE_INDEX_CACHE = null;
 }
 
 function emptyOccupancy(slotId) {
@@ -8115,11 +8461,11 @@ function piOptions(currentValue = "") {
     pi: item.pi,
     iacuc: item.iacuc,
   }));
-  const fromOccupancies = state.occupancies.map((item) => ({
+  const fromOccupancies = stateIndexes().billableOccupancies.map((item) => ({
     pi: item.pi,
     iacuc: item.iacuc,
   }));
-  const fromSheets = state.quantitySheets.map((item) => ({
+  const fromSheets = stateIndexes().quantitySheets.map((item) => ({
     pi: item.pi,
     iacuc: item.iacuc,
   }));
@@ -8259,17 +8605,14 @@ function findOverdueOccupanciesByIacuc(iacuc, excludeIds = []) {
   const normalizedIacuc = normalizeIacucNumber(iacuc);
   if (!normalizedIacuc) return [];
   const excluded = new Set(excludeIds);
-  const rackById = new Map(state.racks.map((item) => [item.id, item]));
-  const roomById = new Map(state.rooms.map((item) => [item.id, item]));
-  const slotById = new Map(state.slots.map((item) => [item.id, item]));
-  return state.occupancies
+  const indexes = stateIndexes();
+  return occupanciesForIacuc(normalizedIacuc)
     .filter((item) => item.status === "active" && !excluded.has(item.id))
-    .filter((item) => normalizeIacucNumber(item.iacuc) === normalizedIacuc)
     .filter((item) => item.endDate && item.endDate < today)
     .map((item) => {
-      const slot = slotById.get(item.slotId);
-      const rack = slot ? rackById.get(slot.rackId) : null;
-      const room = rack ? roomById.get(rack.roomId) : null;
+      const slot = indexes.slotById.get(item.slotId);
+      const rack = slot ? indexes.rackById.get(slot.rackId) : null;
+      const room = rack ? indexes.roomById.get(rack.roomId) : null;
       return {
         roomName: room?.name || "未知房间",
         cageLabel: slot ? slotPositionCode(slot) : item.slotId || "未知笼位",

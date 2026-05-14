@@ -2750,13 +2750,130 @@ tr:last-child td {
 }
 
 .doc-link {
+  border: 1px solid var(--line);
+  text-align: left;
   color: inherit;
   text-decoration: none;
+  cursor: pointer;
 }
 
-.doc-link:hover {
+.doc-link:hover,
+.doc-link.active {
   border-color: #b7d6d2;
   background: #f3faf9;
+}
+
+.system-doc-viewer {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.system-doc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.system-doc-head strong,
+.system-doc-head span {
+  display: block;
+}
+
+.system-doc-head span {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.markdown-view {
+  color: #243238;
+  line-height: 1.65;
+}
+
+.markdown-view h2,
+.markdown-view h3,
+.markdown-view h4,
+.markdown-view h5 {
+  margin: 18px 0 8px;
+  color: #1d2a2f;
+  line-height: 1.3;
+}
+
+.markdown-view h2 {
+  font-size: 22px;
+}
+
+.markdown-view h3 {
+  font-size: 18px;
+}
+
+.markdown-view h4,
+.markdown-view h5 {
+  font-size: 15px;
+}
+
+.markdown-view p,
+.markdown-view ul,
+.markdown-view ol {
+  margin: 8px 0;
+}
+
+.markdown-view ul,
+.markdown-view ol {
+  padding-left: 20px;
+}
+
+.markdown-view code {
+  border: 1px solid #dbe5e8;
+  border-radius: 5px;
+  background: #f5f8f8;
+  padding: 1px 5px;
+  font-size: 0.92em;
+}
+
+.markdown-view pre {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7faf9;
+  padding: 12px;
+}
+
+.markdown-view pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-table-wrap {
+  overflow: auto;
+  margin: 12px 0;
+}
+
+.markdown-view table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+  font-size: 13px;
+}
+
+.markdown-view th,
+.markdown-view td {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-view th {
+  background: var(--panel-soft);
 }
 
 .api-group code {

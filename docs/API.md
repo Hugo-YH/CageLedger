@@ -167,6 +167,48 @@ openConfirmDialog({
 | `POST` | `/api/billing-statements/generate-by-pi` | 按项目负责人生成结算单（合表，用于导出） |
 | `GET` | `/api/audit-events` | 审计事件 |
 
+### 列表分页与筛选
+
+部分列表接口支持分页和筛选参数；未传参数时保持原有列表返回结构，响应中额外带 `page` 元数据。
+
+通用分页参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `limit` | 返回条数，普通列表最大 10000，审计日志最大 1000 |
+| `offset` | 起始偏移量 |
+
+分页响应：
+
+```json
+{
+  "items": [],
+  "page": {
+    "limit": 200,
+    "offset": 0,
+    "total": 521,
+    "hasMore": true
+  }
+}
+```
+
+当前支持筛选的接口：
+
+| 接口 | 筛选参数 |
+| --- | --- |
+| `GET /api/audit-events` | `entityType`、`action`、`limit`、`offset` |
+| `GET /api/intake-batches` | `status`、`month`、`iacuc`、`roomName`、`limit`、`offset` |
+| `GET /api/quantity-sheets` | `month`、`iacuc`、`pi`、`roomId`、`limit`、`offset` |
+| `GET /api/billing-workflows` | `month`、`status`、`sourceType`、`iacuc`、`limit`、`offset` |
+
+示例：
+
+```http
+GET /api/intake-batches?status=pending&month=2026-05&limit=50&offset=0
+GET /api/billing-workflows?status=statement_generated&limit=20
+GET /api/audit-events?entityType=cage_slot&limit=100
+```
+
 ## 数量统计表结算
 
 用于兼容纸质《实验动物数量统计表》工作流。房间管理员可录入月底统计表，系统按变更行展开每日结余数量；生成结算单时会按同月同项目负责人汇总多个 IACUC。
@@ -275,6 +317,35 @@ CSV 必须包含：
 - `users`
 - `sessions`
 - `audit_events`
+
+### `occupancies` 结构化字段
+
+`occupancies` 保留完整 `payload` 快照，同时把高频查询字段拆成结构化列，方便筛选、计费和统计报表直接走 SQL。
+
+| 字段 | 说明 |
+| --- | --- |
+| `slot_id` | 笼位 ID |
+| `room_id` | 饲养间 ID |
+| `rack_id` | 笼架 ID |
+| `cage_code` | 笼位完整编号 |
+| `status` | 占用状态 |
+| `iacuc` | IACUC 编号 |
+| `project` | 项目名称 |
+| `pi` | 项目负责人 |
+| `owner` | 实验负责人 |
+| `funding` | 支撑经费 |
+| `species` | 动物种类 |
+| `billing_item` | 收费项目 |
+| `customer_type` | 院内/院外 |
+| `animal_count` | 动物数量 |
+| `room_name` | 饲养间名称快照 |
+| `rack_name` | 笼架名称快照 |
+| `slot_code` | 笼位位置快照 |
+| `start_date` | 开始日期 |
+| `end_date` | 结束/最后计费日期 |
+| `end_reason` | 结束原因 |
+| `updated_at` | 更新时间 |
+| `payload` | 完整业务快照 |
 
 ## 数据保留规则
 

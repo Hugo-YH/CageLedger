@@ -16,7 +16,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -128,6 +128,9 @@ def connect_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
     initialize_schema(conn)
     return conn
 
@@ -197,6 +200,8 @@ def initialize_schema(conn):
         CREATE TABLE IF NOT EXISTS occupancies (
             id TEXT PRIMARY KEY,
             slot_id TEXT,
+            room_id TEXT,
+            rack_id TEXT,
             cage_code TEXT,
             status TEXT NOT NULL,
             iacuc TEXT,
@@ -204,6 +209,10 @@ def initialize_schema(conn):
             pi TEXT,
             owner TEXT,
             funding TEXT,
+            species TEXT,
+            billing_item TEXT,
+            customer_type TEXT,
+            animal_count INTEGER,
             room_name TEXT,
             rack_name TEXT,
             slot_code TEXT,
@@ -451,14 +460,99 @@ def initialize_schema(conn):
     )
     migrate_schema(conn)
     repair_missing_cage_slots(conn)
+    create_performance_indexes(conn)
     conn.commit()
     ensure_default_admin(conn)
 
 
+def create_performance_indexes(conn):
+    index_statements = [
+        "CREATE INDEX IF NOT EXISTS idx_racks_room_id ON racks(room_id)",
+        "CREATE INDEX IF NOT EXISTS idx_cage_slots_rack_id ON cage_slots(rack_id)",
+        "CREATE INDEX IF NOT EXISTS idx_cage_slots_status ON cage_slots(status)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_slot_id ON occupancies(slot_id)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_room_id ON occupancies(room_id)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_rack_id ON occupancies(rack_id)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_iacuc ON occupancies(iacuc)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_pi ON occupancies(pi)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_status ON occupancies(status)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_species ON occupancies(species)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_billing_item ON occupancies(billing_item)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_customer_type ON occupancies(customer_type)",
+        "CREATE INDEX IF NOT EXISTS idx_occupancies_start_end ON occupancies(start_date, end_date)",
+        "CREATE INDEX IF NOT EXISTS idx_experiment_applications_pi ON experiment_applications(pi)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month ON quantity_sheets(month)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc ON quantity_sheets(iacuc)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_pi ON quantity_sheets(pi)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_status ON intake_batches(status)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_intake_date ON intake_batches(intake_date)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_iacuc ON intake_batches(iacuc)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_statements_iacuc_month ON billing_statements(iacuc, month)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_statement_lines_statement_id ON billing_statement_lines(statement_id)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_workflows_month ON billing_workflows(month)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_workflows_status ON billing_workflows(workflow_status)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_versions_workflow_id ON billing_statement_versions(workflow_id)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_version_lines_version_id ON billing_statement_version_lines(version_id)",
+        "CREATE INDEX IF NOT EXISTS idx_billing_events_workflow_id ON billing_workflow_events(workflow_id)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_events_at ON audit_events(at)",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
+    ]
+    for statement in index_statements:
+        conn.execute(statement)
+
+
 def migrate_schema(conn):
     ensure_occupancies_history_schema(conn)
+    ensure_occupancies_structured_columns(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
+
+
+def ensure_occupancies_structured_columns(conn):
+    columns = table_columns(conn, "occupancies")
+    additions = {
+        "room_id": "TEXT",
+        "rack_id": "TEXT",
+        "species": "TEXT",
+        "billing_item": "TEXT",
+        "customer_type": "TEXT",
+        "animal_count": "INTEGER",
+    }
+    changed = False
+    for column, column_type in additions.items():
+        if column in columns:
+            continue
+        conn.execute(f"ALTER TABLE occupancies ADD COLUMN {column} {column_type}")
+        changed = True
+    if changed:
+        backfill_occupancy_structured_columns(conn)
+
+
+def backfill_occupancy_structured_columns(conn):
+    state = assemble_state(conn) or empty_state()
+    applications_by_iacuc = read_applications_by_iacuc(conn)
+    for occupancy in state.get("occupancies", []):
+        normalized = occupancy_with_snapshots(occupancy, state, applications_by_iacuc)
+        values = occupancy_structured_values(normalized)
+        conn.execute(
+            """
+            UPDATE occupancies
+            SET room_id = ?, rack_id = ?, species = ?, billing_item = ?,
+                customer_type = ?, animal_count = ?, payload = ?
+            WHERE id = ?
+            """,
+            (
+                values["room_id"],
+                values["rack_id"],
+                values["species"],
+                values["billing_item"],
+                values["customer_type"],
+                values["animal_count"],
+                dump_json(normalized),
+                normalized.get("id"),
+            ),
+        )
 
 
 def ensure_occupancies_history_schema(conn):
@@ -475,6 +569,8 @@ def ensure_occupancies_history_schema(conn):
         CREATE TABLE occupancies (
             id TEXT PRIMARY KEY,
             slot_id TEXT,
+            room_id TEXT,
+            rack_id TEXT,
             cage_code TEXT,
             status TEXT NOT NULL,
             iacuc TEXT,
@@ -482,6 +578,10 @@ def ensure_occupancies_history_schema(conn):
             pi TEXT,
             owner TEXT,
             funding TEXT,
+            species TEXT,
+            billing_item TEXT,
+            customer_type TEXT,
+            animal_count INTEGER,
             room_name TEXT,
             rack_name TEXT,
             slot_code TEXT,
@@ -500,15 +600,18 @@ def ensure_occupancies_history_schema(conn):
         conn.execute(
             """
             INSERT INTO occupancies (
-                id, slot_id, cage_code, status, iacuc, project, pi, owner, funding,
+                id, slot_id, room_id, rack_id, cage_code, status, iacuc, project, pi, owner, funding,
+                species, billing_item, customer_type, animal_count,
                 room_name, rack_name, slot_code, start_date, end_date, end_reason,
                 notes, updated_at, payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["id"],
                 row["slot_id"],
+                payload.get("roomId", ""),
+                payload.get("rackId", ""),
                 row["cage_code"],
                 row["status"],
                 row["iacuc"],
@@ -516,6 +619,10 @@ def ensure_occupancies_history_schema(conn):
                 row["pi"],
                 row["owner"],
                 payload.get("funding", ""),
+                payload.get("species", ""),
+                payload.get("billingItem", ""),
+                payload.get("customerType", ""),
+                as_int(payload.get("animalCount")),
                 payload.get("roomName", ""),
                 payload.get("rackName", ""),
                 payload.get("slotCode", ""),
@@ -1154,18 +1261,21 @@ def write_normalized_state(conn, state, updated_at):
 
     for occupancy_item in state.get("occupancies", []):
         occupancy = occupancy_with_snapshots(occupancy_item, state, applications_by_iacuc)
+        structured = occupancy_structured_values(occupancy)
         conn.execute(
             """
             INSERT INTO occupancies (
-                id, slot_id, cage_code, status, iacuc, project, pi, owner, funding,
-                room_name, rack_name, slot_code,
+                id, slot_id, room_id, rack_id, cage_code, status, iacuc, project, pi, owner, funding,
+                species, billing_item, customer_type, animal_count, room_name, rack_name, slot_code,
                 start_date, end_date, end_reason, notes, updated_at, payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 occupancy.get("id"),
                 occupancy.get("slotId"),
+                structured["room_id"],
+                structured["rack_id"],
                 occupancy.get("cageCode", ""),
                 occupancy.get("status", ""),
                 occupancy.get("iacuc", ""),
@@ -1173,6 +1283,10 @@ def write_normalized_state(conn, state, updated_at):
                 occupancy.get("pi", ""),
                 occupancy.get("owner", ""),
                 occupancy.get("funding", ""),
+                structured["species"],
+                structured["billing_item"],
+                structured["customer_type"],
+                structured["animal_count"],
                 occupancy.get("roomName", ""),
                 occupancy.get("rackName", ""),
                 occupancy.get("slotCode", ""),
@@ -1279,6 +1393,24 @@ def read_payloads(conn, table, order_by):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200, offset=0):
+    where_clause = f" WHERE {where_sql}" if where_sql else ""
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM {table}{where_clause}", params).fetchone()["total"]
+    rows = conn.execute(
+        f"SELECT payload FROM {table}{where_clause} ORDER BY {order_by} LIMIT ? OFFSET ?",
+        (*params, limit, offset),
+    ).fetchall()
+    return {
+        "items": [json.loads(row["payload"]) for row in rows],
+        "page": {
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "hasMore": offset + limit < total,
+        },
+    }
+
+
 def read_applications_by_iacuc(conn):
     rows = conn.execute("SELECT payload FROM experiment_applications").fetchall()
     return {
@@ -1302,6 +1434,14 @@ def occupancy_with_snapshots(occupancy, state, applications_by_iacuc):
     for key, value in slot_context.items():
         if value and not item.get(key):
             item[key] = value
+    profile = billing_profile_for_occupancy(item, state)
+    item["roomId"] = item.get("roomId") or slot_context.get("roomId", "")
+    item["rackId"] = item.get("rackId") or slot_context.get("rackId", "")
+    item["species"] = item.get("species") or profile.get("species", "")
+    item["billingItem"] = item.get("billingItem") or profile.get("billingItem", "")
+    item["customerType"] = item.get("customerType") or profile.get("customerType", "")
+    if item.get("animalCount") in (None, ""):
+        item["animalCount"] = occupancy_animal_count(item, profile) if profile.get("unit") == "animal_day" else None
     return item
 
 
@@ -1312,9 +1452,22 @@ def slot_snapshot_context(state, slot_id):
     rack = next((item for item in state.get("racks", []) if item.get("id") == slot.get("rackId")), None)
     room = next((item for item in state.get("rooms", []) if item.get("id") == (rack or {}).get("roomId")), None)
     return {
+        "roomId": (room or {}).get("id", ""),
+        "rackId": (rack or {}).get("id", ""),
         "roomName": (room or {}).get("name", ""),
         "rackName": (rack or {}).get("name", ""),
         "slotCode": slot.get("code", ""),
+    }
+
+
+def occupancy_structured_values(occupancy):
+    return {
+        "room_id": occupancy.get("roomId", ""),
+        "rack_id": occupancy.get("rackId", ""),
+        "species": occupancy.get("species", ""),
+        "billing_item": occupancy.get("billingItem", ""),
+        "customer_type": occupancy.get("customerType", ""),
+        "animal_count": as_int(occupancy.get("animalCount")),
     }
 
 
@@ -2147,6 +2300,26 @@ def clean_text(value):
     return re.sub(r"\s+", " ", str(value).strip())
 
 
+def bounded_int(value, default, min_value, max_value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, min(number, max_value))
+
+
+def filtered_where(filter_specs, filters):
+    where = []
+    params = []
+    for key, expression in filter_specs:
+        value = clean_text(filters.get(key, ""))
+        if not value:
+            continue
+        where.append(expression)
+        params.append(value)
+    return " AND ".join(where), tuple(params)
+
+
 def normalize_iacuc_number(value):
     text = clean_text(value)
     text = re.sub(r"（.*?）", "", text)
@@ -2161,6 +2334,19 @@ def is_valid_iacuc_number(value):
 def list_quantity_sheets(conn):
     rows = conn.execute("SELECT payload FROM quantity_sheets ORDER BY month DESC, iacuc, updated_at DESC").fetchall()
     return [json.loads(row["payload"]) for row in rows]
+
+
+def list_quantity_sheets_page(conn, filters):
+    where, params = filtered_where(
+        [
+            ("month", "month = ?"),
+            ("iacuc", "iacuc = ?"),
+            ("pi", "pi = ?"),
+            ("roomId", "room_id = ?"),
+        ],
+        filters,
+    )
+    return paginated_payloads(conn, "quantity_sheets", "month DESC, iacuc, updated_at DESC", where, params, filters["limit"], filters["offset"])
 
 
 def get_quantity_sheet(conn, sheet_id):
@@ -3675,6 +3861,19 @@ def list_billing_workflows(conn):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def list_billing_workflows_page(conn, filters):
+    where, params = filtered_where(
+        [
+            ("month", "month = ?"),
+            ("status", "workflow_status = ?"),
+            ("sourceType", "source_type = ?"),
+            ("iacuc", "iacuc = ?"),
+        ],
+        filters,
+    )
+    return paginated_payloads(conn, "billing_workflows", "month DESC, rowid DESC", where, params, filters["limit"], filters["offset"])
+
+
 def delete_billing_workflow(conn, workflow_id):
     workflow = get_billing_workflow(conn, workflow_id)
     if not workflow:
@@ -4242,7 +4441,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             if not self.require_user():
                 return
             with connect_db() as conn:
-                self.send_json({"items": list_quantity_sheets(conn)})
+                self.send_json(list_quantity_sheets_page(conn, self.list_filters()))
             return
         if path == "/api/principal-identities":
             user = self.require_user()
@@ -4259,7 +4458,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             if not user:
                 return
             with connect_db() as conn:
-                self.send_json({"items": list_billing_workflows(conn)})
+                self.send_json(list_billing_workflows_page(conn, self.list_filters()))
             return
         workflow_id = self.billing_workflow_route(path)
         if workflow_id:
@@ -4695,13 +4894,57 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return value
         return ""
 
+    def list_filters(self, default_limit=10000, max_limit=10000):
+        query = parse_qs(urlparse(self.path).query)
+        value = lambda key: query.get(key, [""])[0]
+        return {
+            "limit": bounded_int(value("limit"), default_limit, 1, max_limit),
+            "offset": bounded_int(value("offset"), 0, 0, 1_000_000),
+            "status": value("status"),
+            "month": value("month"),
+            "iacuc": value("iacuc"),
+            "pi": value("pi"),
+            "roomId": value("roomId"),
+            "roomName": value("roomName"),
+            "sourceType": value("sourceType"),
+            "entityType": value("entityType"),
+            "action": value("action"),
+        }
+
     def send_entity_list(self, table, actor):
         with connect_db() as conn:
             if table == "audit_events":
-                rows = conn.execute("SELECT payload FROM audit_events ORDER BY at DESC, rowid DESC LIMIT 500").fetchall()
+                filters = self.list_filters(default_limit=500, max_limit=1000)
+                where, params = filtered_where(
+                    [
+                        ("entityType", "entity_type = ?"),
+                        ("action", "action = ?"),
+                    ],
+                    filters,
+                )
+                payload = paginated_payloads(conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"])
+                items = payload["items"]
+                page = payload["page"]
+            elif table == "intake_batches":
+                filters = self.list_filters()
+                where, params = filtered_where(
+                    [
+                        ("status", "status = ?"),
+                        ("iacuc", "iacuc = ?"),
+                        ("roomName", "room_name = ?"),
+                    ],
+                    filters,
+                )
+                if filters.get("month"):
+                    where = " AND ".join([part for part in (where, "intake_date LIKE ?") if part])
+                    params = (*params, f"{filters['month']}%")
+                payload = paginated_payloads(conn, "intake_batches", ENTITY_ORDER_BY.get(table, "rowid"), where, params, filters["limit"], filters["offset"])
+                items = payload["items"]
+                page = payload["page"]
             else:
                 rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {ENTITY_ORDER_BY.get(table, 'rowid')}").fetchall()
-        items = [json.loads(row["payload"]) for row in rows]
+                items = [json.loads(row["payload"]) for row in rows]
+                page = None
         collection = {
             "rooms": "rooms",
             "racks": "racks",
@@ -4710,7 +4953,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         }.get(table)
         if collection:
             items = filter_entity_payloads_for_actor(collection, items, actor)
-        self.send_json({"items": items})
+        response = {"items": items}
+        if page:
+            response["page"] = page
+        self.send_json(response)
 
     def entity_route(self, path):
         for endpoint in WRITABLE_ENTITY_ENDPOINTS:
