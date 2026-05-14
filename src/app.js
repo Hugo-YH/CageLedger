@@ -28,6 +28,13 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.6c",
+    title: "数量统计表保存反馈优化",
+    items: [
+      "根据 @苏玉霞 建议，数量统计表保存成功后新增站内成功提示，明确显示已保存的结算月份和伦理号",
+    ],
+  },
+  {
     version: "0.4.6b",
     title: "伦理号索引、结算流程与流程中心优化",
     items: [
@@ -378,7 +385,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.6b",
+  version: "0.4.6c",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -5758,6 +5765,7 @@ async function handleQuantitySheetSubmit(event) {
   try {
     const sheet = await saveQuantitySheetDraft();
     pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
+    showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
     render();
   } catch (error) {
     reportSaveError(error);
