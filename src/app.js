@@ -28,6 +28,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.6d",
+    title: "房间管理员权限入口优化",
+    items: [
+      "根据 @李志权、@吴玉婷、@苏玉霞 反馈，房间管理员可进入房间管理页面调整授权饲养间下的笼架",
+      "关于系统页面开放给所有登录用户查看，便于普通账号查看版本更新、说明文档和部署信息",
+      "保留系统管理员专属的数据管理和账号管理入口，饲养间基础信息仍由系统管理员维护",
+    ],
+  },
+  {
     version: "0.4.6c",
     title: "数量统计表保存反馈优化",
     items: [
@@ -385,7 +394,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.6c",
+  version: "0.4.6d",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1657,7 +1666,7 @@ function render() {
     lastRenderedView = "login";
     return;
   }
-  const adminViews = new Set(["data", "system", "users", "rooms"]);
+  const adminViews = new Set(["data", "users"]);
   if (currentUser?.role !== "admin" && adminViews.has(state.activeView)) {
     state.activeView = "cages";
   }
@@ -1736,12 +1745,16 @@ function renderSidebar() {
     ["workflow-center", "流程中心", "refresh"],
   ];
   const settingsNavItems = [
-    ...(currentUser?.role === "admin"
+    ...(currentUser
       ? [
           ["rooms", "房间管理", "building"],
+          ["system", "关于系统", "settings"],
+        ]
+      : []),
+    ...(currentUser?.role === "admin"
+      ? [
           ["data", "数据管理", "database"],
           ["users", "账号管理", "users"],
-          ["system", "关于系统", "settings"],
         ]
       : []),
     ...(currentUser ? [["logs", "操作日志", "receipt"]] : []),
