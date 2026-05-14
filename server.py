@@ -77,6 +77,7 @@ CAGELEDGER_COPYRIGHT = os.environ.get(
 ).strip()
 CAGELEDGER_REPOSITORY = os.environ.get("CAGELEDGER_REPOSITORY", "Hugo-YH/CageLedger")
 CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
+BILLING_WORKFLOW_MIGRATION_KEY = "billingWorkflowMigrationDone"
 TABLES = (
     "audit_logs",
     "billing_adjustments",
@@ -109,7 +110,7 @@ ENTITY_ORDER_BY = {
     "billing_rules": "rowid",
     "billing_adjustments": "rowid",
     "intake_batches": "updated_at DESC, rowid DESC",
-    "experiment_applications": "iacuc",
+    "experiment_applications": "rowid",
     "billing_statements": "month DESC, iacuc, rowid DESC",
     "billing_statement_lines": "statement_id, line_date, rowid",
 }
@@ -228,7 +229,8 @@ def initialize_schema(conn):
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS experiment_applications (
-            iacuc TEXT PRIMARY KEY,
+            id TEXT PRIMARY KEY,
+            iacuc TEXT NOT NULL,
             raw_iacuc TEXT,
             project TEXT,
             pi TEXT,
@@ -480,6 +482,8 @@ def create_performance_indexes(conn):
         "CREATE INDEX IF NOT EXISTS idx_occupancies_billing_item ON occupancies(billing_item)",
         "CREATE INDEX IF NOT EXISTS idx_occupancies_customer_type ON occupancies(customer_type)",
         "CREATE INDEX IF NOT EXISTS idx_occupancies_start_end ON occupancies(start_date, end_date)",
+        "CREATE INDEX IF NOT EXISTS idx_experiment_applications_iacuc ON experiment_applications(iacuc)",
+        "CREATE INDEX IF NOT EXISTS idx_experiment_applications_raw_iacuc ON experiment_applications(raw_iacuc)",
         "CREATE INDEX IF NOT EXISTS idx_experiment_applications_pi ON experiment_applications(pi)",
         "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month ON quantity_sheets(month)",
         "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc ON quantity_sheets(iacuc)",
@@ -503,10 +507,65 @@ def create_performance_indexes(conn):
 
 
 def migrate_schema(conn):
+    ensure_experiment_applications_duplicate_schema(conn)
     ensure_occupancies_history_schema(conn)
     ensure_occupancies_structured_columns(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
+
+
+def ensure_experiment_applications_duplicate_schema(conn):
+    columns = table_columns(conn, "experiment_applications")
+    pk_column = next((name for name, info in columns.items() if info.get("pk")), "")
+    if "id" in columns and pk_column == "id":
+        return
+
+    conn.execute("ALTER TABLE experiment_applications RENAME TO experiment_applications_legacy")
+    conn.execute(
+        """
+        CREATE TABLE experiment_applications (
+            id TEXT PRIMARY KEY,
+            iacuc TEXT NOT NULL,
+            raw_iacuc TEXT,
+            project TEXT,
+            pi TEXT,
+            owner TEXT,
+            funding TEXT,
+            imported_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    rows = conn.execute("SELECT rowid, * FROM experiment_applications_legacy ORDER BY rowid").fetchall()
+    for index, row in enumerate(rows, start=1):
+        payload = json.loads(row["payload"])
+        raw_iacuc = clean_text(payload.get("rawIacuc", "") or row["raw_iacuc"] or row["iacuc"])
+        item = {
+            **payload,
+            "id": payload.get("id") or f"app-{index:06d}",
+            "iacuc": clean_text(payload.get("iacuc", "") or raw_iacuc or row["iacuc"]),
+            "rawIacuc": raw_iacuc,
+        }
+        conn.execute(
+            """
+            INSERT INTO experiment_applications (
+                id, iacuc, raw_iacuc, project, pi, owner, funding, imported_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                item["id"],
+                item["iacuc"],
+                item.get("rawIacuc", ""),
+                item.get("project", ""),
+                item.get("pi", ""),
+                item.get("owner", ""),
+                item.get("funding", ""),
+                row["imported_at"],
+                dump_json(item),
+            ),
+        )
+    conn.execute("DROP TABLE experiment_applications_legacy")
 
 
 def ensure_occupancies_structured_columns(conn):
@@ -638,9 +697,13 @@ def ensure_occupancies_history_schema(conn):
 
 
 def migrate_billing_workflow_schema(conn):
+    if read_setting(conn, BILLING_WORKFLOW_MIGRATION_KEY, False):
+        return
     if table_has_rows(conn, "billing_workflows"):
+        set_setting(conn, BILLING_WORKFLOW_MIGRATION_KEY, True, now_iso())
         return
     if not table_has_rows(conn, "billing_statements"):
+        set_setting(conn, BILLING_WORKFLOW_MIGRATION_KEY, True, now_iso())
         return
 
     rows = conn.execute(
@@ -811,6 +874,7 @@ def migrate_billing_workflow_schema(conn):
                 workflow_id,
             ),
         )
+    set_setting(conn, BILLING_WORKFLOW_MIGRATION_KEY, True, now_iso())
 
 
 def backfill_billing_workflow_scope(conn):
@@ -845,7 +909,7 @@ def backfill_billing_workflow_scope(conn):
 
 def table_columns(conn, table):
     return {
-        row["name"]: {"type": row["type"], "notnull": bool(row["notnull"])}
+        row["name"]: {"type": row["type"], "notnull": bool(row["notnull"]), "pk": int(row["pk"] or 0)}
         for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
     }
 
@@ -1433,12 +1497,14 @@ def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200
 
 
 def read_applications_by_iacuc(conn):
-    rows = conn.execute("SELECT payload FROM experiment_applications").fetchall()
-    return {
-        normalize_iacuc_number(item.get("iacuc", "")): item
-        for item in (json.loads(row["payload"]) for row in rows)
-        if normalize_iacuc_number(item.get("iacuc", ""))
-    }
+    rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
+    applications = {}
+    for row in rows:
+        item = json.loads(row["payload"])
+        key = normalize_iacuc_number(item.get("iacuc", ""))
+        if key and key not in applications:
+            applications[key] = item
+    return applications
 
 
 def occupancy_with_snapshots(occupancy, state, applications_by_iacuc):
@@ -1975,7 +2041,7 @@ def format_http_date(value):
 
 def read_iacuc_index():
     with connect_db() as conn:
-        rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY iacuc").fetchall()
+        rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY rowid").fetchall()
         if rows:
             items = [json.loads(row["payload"]) for row in rows]
             updated_at = max(row["imported_at"] for row in rows)
@@ -2002,16 +2068,17 @@ def read_iacuc_index():
 
 def write_experiment_applications(conn, items, imported_at):
     conn.execute("DELETE FROM experiment_applications")
-    for item in items:
+    for index, item in enumerate(items, start=1):
         normalized = application_payload(item, imported_at)
         conn.execute(
             """
             INSERT INTO experiment_applications (
-                iacuc, raw_iacuc, project, pi, owner, funding, imported_at, payload
+                id, iacuc, raw_iacuc, project, pi, owner, funding, imported_at, payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                normalized.get("id") or f"app-{index:06d}",
                 normalized["iacuc"],
                 normalized.get("rawIacuc", ""),
                 normalized.get("project", ""),
@@ -2098,17 +2165,17 @@ def save_principal_identity(conn, payload, actor, pi_name):
 
 
 def application_payload(item, imported_at):
+    raw_iacuc = clean_text(item.get("rawIacuc", "") or item.get("iacuc", ""))
     normalized = {
-        "iacuc": normalize_iacuc_number(item.get("iacuc", "")),
-        "rawIacuc": clean_text(item.get("rawIacuc", "")),
+        "id": clean_text(item.get("id", "")),
+        "iacuc": clean_text(item.get("iacuc", "") or raw_iacuc),
+        "rawIacuc": raw_iacuc,
         "project": clean_text(item.get("project", "")),
         "pi": clean_text(item.get("pi", "")),
         "owner": clean_text(item.get("owner", "")),
         "funding": clean_text(item.get("funding", "")),
         "importedAt": imported_at,
     }
-    if not normalized["rawIacuc"]:
-        normalized["rawIacuc"] = normalized["iacuc"]
     return normalized
 
 
@@ -2269,10 +2336,11 @@ def parse_iacuc_csv(raw):
         None,
     )
 
-    records_by_iacuc = {}
+    items = []
     duplicate_count = 0
     row_count = 0
     empty_iacuc_count = 0
+    seen_iacucs = set()
     for row in reader:
         row_count += 1
         raw_iacuc = clean_text(row.get(field_by_name[required["iacuc"]], ""))
@@ -2280,21 +2348,19 @@ def parse_iacuc_csv(raw):
         if not iacuc:
             empty_iacuc_count += 1
             continue
-        if not is_valid_iacuc_number(iacuc):
-            empty_iacuc_count += 1
-            continue
-        if iacuc in records_by_iacuc:
+        if iacuc in seen_iacucs:
             duplicate_count += 1
-        records_by_iacuc[iacuc] = {
-            "iacuc": iacuc,
+        seen_iacucs.add(iacuc)
+        items.append({
+            "id": f"app-{row_count:06d}",
+            "iacuc": raw_iacuc,
             "rawIacuc": raw_iacuc,
             "project": clean_text(row.get(field_by_name[required["project"]], "")),
             "pi": clean_text(row.get(field_by_name[required["pi"]], "")),
             "owner": clean_text(row.get(field_by_name[required["owner"]], "")),
             "funding": clean_text(row.get(funding_field, "")) if funding_field else "",
-        }
+        })
 
-    items = sorted(records_by_iacuc.values(), key=lambda item: item["iacuc"])
     return {
         "items": items,
         "summary": {
@@ -2709,10 +2775,10 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         raise ValueError("数量统计表必须是 JSON 对象")
 
     month = clean_text(source.get("month", ""))
-    iacuc = normalize_iacuc_number(source.get("iacuc", ""))
+    iacuc = clean_text(source.get("iacuc", ""))
     if not re.fullmatch(r"\d{4}-\d{2}", month):
         raise ValueError("结算月份格式应为 YYYY-MM")
-    if not iacuc:
+    if not normalize_iacuc_number(iacuc):
         raise ValueError("IACUC 编号不能为空")
 
     rows = source.get("rows", [])

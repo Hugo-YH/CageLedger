@@ -1,6 +1,7 @@
 const STORAGE_KEY = "cageledger.v1";
 const LEGACY_STORAGE_KEY = "lahcas.v1";
 const VERSION_REFRESH_KEY = "cageledger.version-refresh";
+const MAX_LOCAL_STATE_BYTES = 800_000;
 const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
 const API_LOGOUT_URL = "/api/auth/logout";
@@ -26,6 +27,17 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.4.6b",
+    title: "伦理号索引、结算流程与流程中心优化",
+    items: [
+      "伦理号索引导入改为保留 CSV 原始记录，相同伦理号按原表逐条保存，数量统计表录入优先匹配完整伦理号",
+      "修复远程模式下旧本地缓存可能覆盖业务数据的问题，前端仅保留必要界面状态并清理过大的历史缓存",
+      "数量统计表新增删除入口，并补充删除统计表的站内确认流程",
+      "修复已删除结算流程在旧库迁移逻辑下刷新后重新出现的问题，迁移完成后写入标记避免重复回填",
+      "结算流程跟踪表格优化列宽、筛选按钮和操作按钮布局，查看、标记已发送、删除保持同排显示",
+    ],
+  },
   {
     version: "0.4.6a",
     title: "旧库结算流程迁移修复",
@@ -366,7 +378,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.6a",
+  version: "0.4.6b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -967,10 +979,17 @@ let state = normalize(structuredClone(seedData));
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!raw) return structuredClone(seedData);
+  if (raw.length > MAX_LOCAL_STATE_BYTES) {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    return structuredClone(seedData);
+  }
 
   try {
     return JSON.parse(raw);
   } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     return structuredClone(seedData);
   }
 }
@@ -978,7 +997,17 @@ function loadState() {
 function saveState() {
   invalidateIacucSearchCache();
   invalidateStateIndexCache();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, flashNotice: null, confirmDialog: null, systemDocViewer: null }));
+  const payload = remotePersistence ? localUiStateSnapshot() : { ...state };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null, systemDocViewer: null }));
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  }
+}
+
+function localUiStateSnapshot() {
+  return localUiOnlyState(state);
 }
 
 async function loadPersistedState() {
@@ -986,15 +1015,34 @@ async function loadPersistedState() {
     remotePersistence = true;
     const entityState = await loadEntityState();
     state = normalize(entityState);
+    state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
     invalidateIacucSearchCache();
     invalidateStateIndexCache();
     selectFirstAvailableCage();
     return;
-  } catch {
+  } catch (error) {
+    console.error(error);
+    if (currentUser) {
+      remotePersistence = true;
+      const localState = loadState();
+      state = normalize({
+        ...structuredClone(seedData),
+        ...localUiOnlyState(localState),
+        flashNotice: {
+          type: "warning",
+          title: "数据加载失败",
+          message: "未能完整加载服务器数据，请刷新页面或检查网络连接。",
+        },
+      });
+      invalidateIacucSearchCache();
+      invalidateStateIndexCache();
+      return;
+    }
     remotePersistence = false;
   }
 
   state = normalize(loadState());
+  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   invalidateIacucSearchCache();
   invalidateStateIndexCache();
 }
@@ -1066,6 +1114,32 @@ async function loadEntityState() {
     billingRules,
     adjustments: entityData.adjustments || [],
     auditLogs: entityData.auditLogs || [],
+  };
+}
+
+function localUiOnlyState(source = {}) {
+  return {
+    activeView: source.activeView || seedData.activeView,
+    lastSettingsView: source.lastSettingsView || "",
+    sidebarCollapsed: Boolean(source.sidebarCollapsed),
+    settingsNavExpanded: Boolean(source.settingsNavExpanded),
+    selectedRoomId: source.selectedRoomId || "",
+    selectedRackId: source.selectedRackId || "",
+    selectedSlotId: source.selectedSlotId || "",
+    selectedSlotIds: Array.isArray(source.selectedSlotIds) ? source.selectedSlotIds.slice(0, 500) : [],
+    batchMode: Boolean(source.batchMode),
+    slotFilter: source.slotFilter || "all",
+    billingSource: source.billingSource || "cage_map",
+    billingMonth: source.billingMonth || today.slice(0, 7),
+    billingIacuc: source.billingIacuc || "",
+    billingPi: source.billingPi || "",
+    billingWorkflowFilter: source.billingWorkflowFilter || "todo",
+    selectedQuantitySheetId: source.selectedQuantitySheetId || "",
+    selectedIntakeBatchId: source.selectedIntakeBatchId || "",
+    selectedIntakeBatchIds: Array.isArray(source.selectedIntakeBatchIds) ? source.selectedIntakeBatchIds.slice(0, 200) : [],
+    intakeBatchFilter: source.intakeBatchFilter || "todo",
+    principalIdentityFilter: source.principalIdentityFilter || "",
+    selectedSystemDocId: source.selectedSystemDocId || "",
   };
 }
 
@@ -1196,6 +1270,7 @@ async function deleteBillingWorkflow(workflowId) {
     state.selectedBillingWorkflowDetail = null;
     state.showWorkflowStatements = false;
   }
+  await loadBillingWorkflows();
   return payload.workflow;
 }
 
@@ -3153,12 +3228,11 @@ function renderQuantitySheetBillingView() {
                 <div class="quantity-action-grid">
                   <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
                   <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
+                  <button id="deleteQuantitySheet" class="ghost danger-text" type="button" ${state.quantitySheets.some((sheet) => sheet.id === draft.id) ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
                 </div>
                 <div class="quantity-action-grid">
                   <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
                   <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
-                </div>
-                <div class="quantity-action-grid single">
                   <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
                 </div>
               </div>
@@ -3299,7 +3373,7 @@ function renderBillingWorkflowPanel() {
             <h2>结算流程跟踪</h2>
             <p>按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号，发送后重生成为修订版并自动保留旧版本留痕。</p>
           </div>
-          <div class="toolbar">
+          <div class="toolbar workflow-filter-toolbar">
             <button class="segmented ${state.billingWorkflowFilter === "todo" ? "active" : ""}" type="button" data-workflow-filter="todo">待办 ${counts.todo}</button>
             <button class="segmented ${state.billingWorkflowFilter === "all" ? "active" : ""}" type="button" data-workflow-filter="all">全部 ${counts.all}</button>
             <button class="segmented ${state.billingWorkflowFilter === "done" ? "active" : ""}" type="button" data-workflow-filter="done">已完成 ${counts.done}</button>
@@ -3353,13 +3427,15 @@ function renderBillingWorkflowRow(item) {
       <td>¥${MONEY_FORMAT.format(Number(item.totalAmount || summary.totalAmount || 0))}</td>
       <td>${escapeText(formatLogTime(item.latestEventAt || item.generatedAt || "")) || "-"}</td>
       <td>
-        <button class="ghost" type="button" data-open-workflow-button="${escapeAttr(item.id)}">查看</button>
-        ${
-          nextStatus
-            ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(item.id)}" data-next-status="${escapeAttr(nextStatus)}">${escapeText(workflowActionLabel(nextStatus))}</button>`
-            : `<span class="muted">已完成</span>`
-        }
-        <button class="ghost danger-text" type="button" data-delete-workflow="${escapeAttr(item.id)}">删除</button>
+        <div class="workflow-row-actions">
+          <button class="ghost" type="button" data-open-workflow-button="${escapeAttr(item.id)}">查看</button>
+          ${
+            nextStatus
+              ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(item.id)}" data-next-status="${escapeAttr(nextStatus)}">${escapeText(workflowActionLabel(nextStatus))}</button>`
+              : `<span class="muted">已完成</span>`
+          }
+          <button class="ghost danger-text" type="button" data-delete-workflow="${escapeAttr(item.id)}">删除</button>
+        </div>
       </td>
     </tr>
   `;
@@ -4611,6 +4687,7 @@ function bindEvents() {
   document.querySelector("#quantitySheetForm")?.addEventListener("submit", handleQuantitySheetSubmit);
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
+  document.querySelector("#deleteQuantitySheet")?.addEventListener("click", deleteCurrentQuantitySheet);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
   bindIntakeRequiredNotice("#intakeBatchForm", "无法保存待接收批次");
   document.querySelector("#intakeBatchForm")?.addEventListener("submit", async (event) => {
@@ -5050,7 +5127,8 @@ async function login(event) {
       return;
     }
     currentUser = payload.user;
-    await Promise.all([loadIacucIndex(), loadPersistedState(), loadUsers()]);
+    await loadIacucIndex();
+    await Promise.all([loadPersistedState(), loadUsers()]);
     render();
   } catch {
     if (error) error.textContent = "无法连接后端服务";
@@ -5221,8 +5299,9 @@ async function handleIacucUpload(event) {
       return;
     }
     IACUC_INDEX = payload.items || [];
-    IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
+    IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [iacucRawKey(item.iacuc), item]));
     invalidateIacucSearchCache();
+    state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
     await loadPrincipalIdentities();
     iacucIndexMeta = {
       count: payload.count,
@@ -5689,7 +5768,7 @@ function handleQuantitySheetSelect(event) {
   captureQuantitySheetDraft();
   const sheet = state.quantitySheets.find((item) => item.id === event.target.value);
   state.selectedQuantitySheetId = sheet?.id || "";
-  state.quantitySheetDraft = normalizeQuantitySheetDraft(sheet || makeQuantitySheetDraft(state.billingMonth));
+  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(sheet || makeQuantitySheetDraft(state.billingMonth));
   state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
   state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
   state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
@@ -5702,6 +5781,50 @@ function newQuantitySheetDraft() {
   captureQuantitySheetDraft();
   state.selectedQuantitySheetId = "";
   state.quantitySheetDraft = makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
+  render();
+}
+
+function deleteCurrentQuantitySheet() {
+  const sheetId = state.selectedQuantitySheetId || state.quantitySheetDraft?.id || "";
+  const sheet = state.quantitySheets.find((item) => item.id === sheetId);
+  if (!sheet) return;
+  openConfirmDialog({
+    type: "delete-quantity-sheet",
+    id: sheet.id,
+    title: "删除数量统计表",
+    message: `确认删除 ${sheet.iacuc || "该伦理号"} ${sheet.month || ""} 数量统计表？相关结算流程和已导出的结算单不会自动删除。`,
+    confirmLabel: "删除",
+    payload: { label: [sheet.iacuc, sheet.month].filter(Boolean).join(" ") },
+  });
+}
+
+async function deleteQuantitySheetConfirmed(sheetId) {
+  if (!sheetId) return;
+  if (!remotePersistence) {
+    state.quantitySheets = state.quantitySheets.filter((item) => item.id !== sheetId);
+    state.selectedQuantitySheetId = "";
+    state.quantitySheetDraft = makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
+    render();
+    return;
+  }
+
+  const response = await fetch(`${API_QUANTITY_SHEETS_URL}/${encodeURIComponent(sheetId)}`, {
+    method: "DELETE",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "删除数量统计表失败");
+  }
+  mergeServerAuditLogs(payload);
+  await loadPersistedState();
+  const nextSheet = state.quantitySheets[0] || null;
+  state.selectedQuantitySheetId = nextSheet?.id || "";
+  state.quantitySheetDraft = nextSheet ? hydrateQuantitySheetIacucInfo(nextSheet) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
   render();
 }
 
@@ -5731,7 +5854,7 @@ function captureQuantitySheetDraft() {
 async function saveQuantitySheetDraft() {
   const form = document.querySelector("#quantitySheetForm");
   if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
-  const sheet = normalizeQuantitySheetDraft(state.quantitySheetDraft);
+  const sheet = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   if (!remotePersistence) {
     upsertById(state.quantitySheets, sheet);
     state.selectedQuantitySheetId = sheet.id;
@@ -6180,6 +6303,8 @@ function readQuantitySheetForm(form) {
   const data = new FormData(form);
   const room = state.rooms.find((item) => item.id === data.get("roomId"));
   const month = data.get("month") || state.billingMonth || today.slice(0, 7);
+  const iacuc = String(data.get("iacuc") || "").trim();
+  const iacucInfo = findIacucInfo(iacuc) || {};
   const rows = [...form.querySelectorAll("[data-quantity-row]")]
     .map((row) => {
       const rowIndex = Number(row.dataset.quantityRow);
@@ -6213,12 +6338,12 @@ function readQuantitySheetForm(form) {
     roomId: data.get("roomId") || "",
     roomName: data.get("roomName")?.trim() || room?.name || "",
     manager: data.get("manager")?.trim() || currentUser?.displayName || "",
-    iacuc: normalizeIacucNumber(data.get("iacuc") || ""),
-    project: data.get("project")?.trim() || "",
-    pi: data.get("pi")?.trim() || "",
-    owner: data.get("owner")?.trim() || "",
+    iacuc: iacucInfo.iacuc || iacuc,
+    project: iacucInfo.project || data.get("project")?.trim() || "",
+    pi: iacucInfo.pi || data.get("pi")?.trim() || "",
+    owner: iacucInfo.owner || data.get("owner")?.trim() || "",
     contact: "",
-    funding: data.get("funding")?.trim() || "",
+    funding: iacucInfo.funding || data.get("funding")?.trim() || "",
     billingUnit: data.get("billingUnit") || billingProfileForRoom(room || {}).unit,
     initialAnimalCount: numericOrZero(data.get("initialAnimalCount")),
     initialCageCount: numericOrZero(data.get("initialCageCount")),
@@ -6270,7 +6395,7 @@ function normalizeQuantitySheetDraft(sheet) {
     roomId: sheet?.roomId || "",
     roomName: sheet?.roomName || "",
     manager: sheet?.manager || "",
-    iacuc: normalizeIacucNumber(sheet?.iacuc || ""),
+    iacuc: String(sheet?.iacuc || "").trim(),
     project: sheet?.project || "",
     pi: sheet?.pi || "",
     owner: sheet?.owner || "",
@@ -6313,11 +6438,25 @@ function autofillQuantitySheetIacucFields(event) {
   const form = event.target.form;
   const match = findIacucInfo(event.target.value);
   if (!form || !match) return;
-  if (form.elements.project && match.project) form.elements.project.value = match.project;
-  if (form.elements.pi && match.pi) form.elements.pi.value = match.pi;
-  if (form.elements.owner && match.owner) form.elements.owner.value = match.owner;
-  if (form.elements.funding && match.funding) form.elements.funding.value = match.funding;
+  if (form.elements.project) form.elements.project.value = match.project || "";
+  if (form.elements.pi) form.elements.pi.value = match.pi || "";
+  if (form.elements.owner) form.elements.owner.value = match.owner || "";
+  if (form.elements.funding) form.elements.funding.value = match.funding || "";
   event.target.value = match.iacuc;
+}
+
+function hydrateQuantitySheetIacucInfo(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const match = findIacucInfo(normalized.iacuc);
+  if (!match) return normalized;
+  return normalizeQuantitySheetDraft({
+    ...normalized,
+    iacuc: match.iacuc || normalized.iacuc,
+    project: match.project || normalized.project,
+    pi: match.pi || normalized.pi,
+    owner: match.owner || normalized.owner,
+    funding: match.funding || normalized.funding,
+  });
 }
 
 function syncQuantitySheetRoomName(event) {
@@ -8412,7 +8551,7 @@ function iacucOptions(currentValue = "") {
   const keyword = normalizeSearchText(typedValue);
   const normalizedIacuc = normalizeIacucNumber(typedValue);
   const cache = iacucSearchCache();
-  const exact = normalizedIacuc ? cache.byNumber.get(normalizedIacuc) : null;
+  const exact = typedValue ? cache.byRaw.get(typedValue) || cache.byNumber.get(normalizedIacuc) : null;
   const matches = keyword
     ? cache.items.filter((item) => item.searchText.includes(keyword) || normalizeIacucNumber(item.iacuc).includes(normalizedIacuc))
     : cache.items;
@@ -8420,7 +8559,7 @@ function iacucOptions(currentValue = "") {
   if (exact) limited.push(exact);
   matches.forEach((item) => {
     if (limited.length >= IACUC_OPTION_LIMIT) return;
-    if (normalizeIacucNumber(item.iacuc) === normalizeIacucNumber(exact?.iacuc)) return;
+    if (iacucOptionKey(item) === iacucOptionKey(exact)) return;
     limited.push(item);
   });
   if (typedValue && !exact && limited.length < IACUC_OPTION_LIMIT) {
@@ -8432,13 +8571,16 @@ function iacucOptions(currentValue = "") {
 function iacucSearchCache() {
   if (IACUC_SEARCH_CACHE) return IACUC_SEARCH_CACHE;
   const byNumber = new Map();
+  const byRaw = new Map();
+  const items = [];
   const put = (item, source) => {
     const iacuc = normalizeIacucNumber(item.iacuc);
     if (!iacuc) return;
-    const existing = byNumber.get(iacuc);
-    if (existing?.source === "index" && source !== "index") return;
+    const rawKey = iacucRawKey(item.iacuc);
+    const hasNumber = byNumber.has(iacuc);
     const normalized = {
       iacuc: item.iacuc || iacuc,
+      rawIacuc: item.rawIacuc || item.iacuc || iacuc,
       project: item.project || "",
       pi: item.pi || "",
       owner: item.owner || "",
@@ -8446,16 +8588,19 @@ function iacucSearchCache() {
       source,
     };
     normalized.searchText = normalizeSearchText(
-      [normalized.iacuc, normalized.project, normalized.pi, normalized.owner, normalized.funding].join(" "),
+      [normalized.iacuc, normalized.rawIacuc, normalized.project, normalized.pi, normalized.owner, normalized.funding].join(" "),
     );
-    byNumber.set(iacuc, normalized);
+    if (!byRaw.has(rawKey)) byRaw.set(rawKey, normalized);
+    if (!hasNumber) byNumber.set(iacuc, normalized);
+    if (source === "index" || !hasNumber) items.push(normalized);
   };
 
   IACUC_INDEX.forEach((item) => put(item, "index"));
   state.occupancies.forEach((item) => put(item, "occupancy"));
   IACUC_SEARCH_CACHE = {
     byNumber,
-    items: [...byNumber.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN")),
+    byRaw,
+    items: items.sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN")),
   };
   return IACUC_SEARCH_CACHE;
 }
@@ -8493,9 +8638,20 @@ function piOptions(currentValue = "") {
 }
 
 function findIacucInfo(value) {
+  const rawKey = iacucRawKey(value);
   const key = normalizeIacucNumber(value);
   if (!key) return null;
-  return iacucSearchCache().byNumber.get(key) || null;
+  const cache = iacucSearchCache();
+  return cache.byRaw.get(rawKey) || cache.byNumber.get(key) || null;
+}
+
+function iacucRawKey(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function iacucOptionKey(item) {
+  if (!item) return "";
+  return `${iacucRawKey(item.iacuc)}:${item.source || ""}`;
 }
 
 function piForIacuc(value) {
@@ -8692,6 +8848,12 @@ async function handleConfirmDialogAction() {
       showFlashNotice("删除成功", `结算流程已删除：${dialog.payload?.label || dialog.id}`);
       return;
     }
+    if (dialog.type === "delete-quantity-sheet") {
+      await deleteQuantitySheetConfirmed(dialog.id);
+      pushLog(`删除数量统计表：${dialog.payload?.label || dialog.id}`);
+      showFlashNotice("删除成功", `数量统计表已删除：${dialog.payload?.label || dialog.id}`);
+      return;
+    }
     if (dialog.type === "delete-user") {
       await deleteUserConfirmed(dialog.id);
       showFlashNotice("删除成功", `账号已删除：${dialog.payload?.displayName || dialog.id}`);
@@ -8821,7 +8983,8 @@ async function initialize() {
   await loadSystemInfo();
   await loadCurrentUser();
   if (!remotePersistence || currentUser) {
-    await Promise.all([loadIacucIndex(), loadPrincipalIdentities(), loadPersistedState(), loadUsers()]);
+    await loadIacucIndex();
+    await Promise.all([loadPrincipalIdentities(), loadPersistedState(), loadUsers()]);
     await applyStatementDeepLink();
   }
   render();
@@ -8897,7 +9060,7 @@ async function loadIacucIndex() {
       updatedAt: payload.updatedAt,
       source: payload.source,
     };
-    IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [normalizeIacucNumber(item.iacuc), item]));
+    IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [iacucRawKey(item.iacuc), item]));
     invalidateIacucSearchCache();
   } catch {
     IACUC_INDEX = [];

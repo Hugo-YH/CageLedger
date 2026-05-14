@@ -919,6 +919,12 @@ h3 {
   min-width: 0;
 }
 
+.workflow-center-panel .panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+}
+
 .system-layout {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
   align-items: start;
@@ -939,54 +945,70 @@ h3 {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.workflow-table .ghost,
-.workflow-table .secondary {
-  margin-right: 8px;
-}
-
 .workflow-table {
-  min-width: 980px;
+  min-width: 1015px;
   table-layout: fixed;
 }
 
 .workflow-table th:nth-child(1),
 .workflow-table td:nth-child(1) {
   width: 90px;
+  white-space: nowrap;
 }
 
 .workflow-table th:nth-child(2),
 .workflow-table td:nth-child(2) {
-  width: 210px;
+  width: 115px;
 }
 
 .workflow-table th:nth-child(3),
 .workflow-table td:nth-child(3) {
-  width: 190px;
+  width: 145px;
 }
 
 .workflow-table th:nth-child(4),
 .workflow-table td:nth-child(4) {
-  width: 130px;
+  width: 105px;
 }
 
 .workflow-table th:nth-child(5),
 .workflow-table td:nth-child(5) {
-  width: 190px;
+  width: 155px;
 }
 
 .workflow-table th:nth-child(6),
 .workflow-table td:nth-child(6) {
-  width: 110px;
+  width: 80px;
 }
 
 .workflow-table th:nth-child(7),
 .workflow-table td:nth-child(7) {
-  width: 120px;
+  width: 95px;
 }
 
 .workflow-table th:nth-child(8),
 .workflow-table td:nth-child(8) {
-  width: 210px;
+  width: 230px;
+  position: sticky;
+  right: 0;
+  background: var(--panel);
+  box-shadow: -8px 0 12px rgba(248, 251, 251, 0.94);
+  overflow: visible;
+  z-index: 2;
+}
+
+.workflow-filter-toolbar {
+  flex-wrap: nowrap;
+  min-width: max-content;
+}
+
+.workflow-filter-toolbar .segmented {
+  white-space: nowrap;
+}
+
+.workflow-table th:nth-child(8) {
+  background: #f4f8f7;
+  z-index: 3;
 }
 
 .workflow-principal-cell strong,
@@ -1004,6 +1026,24 @@ h3 {
   line-height: 1.4;
   margin-top: 4px;
   overflow-wrap: anywhere;
+}
+
+.workflow-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.workflow-row-actions .ghost,
+.workflow-row-actions .secondary {
+  min-height: 32px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.workflow-row-actions .muted {
+  white-space: nowrap;
 }
 
 .workflow-row {
@@ -1706,6 +1746,10 @@ textarea:focus {
   gap: 10px;
 }
 
+.quantity-action-grid {
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+}
+
 .billing-action-grid.single {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1715,7 +1759,7 @@ textarea:focus {
 .billing-workflow-button,
 .quantity-workflow-button {
   width: 100%;
-  min-height: 44px;
+  min-height: 38px;
   justify-content: center;
   white-space: nowrap;
 }
