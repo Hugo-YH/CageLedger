@@ -1,5 +1,6 @@
 const STORAGE_KEY = "cageledger.v1";
 const LEGACY_STORAGE_KEY = "lahcas.v1";
+const VERSION_REFRESH_KEY = "cageledger.version-refresh";
 const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
 const API_LOGOUT_URL = "/api/auth/logout";
@@ -25,6 +26,15 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.4.5g",
+    title: "前端版本刷新与缓存防护",
+    items: [
+      "前端启动时自动比对服务器版本与当前页面版本，发现版本不一致时带版本时间戳重新加载页面",
+      "版本重载失败时改用站内通知提示用户刷新，减少浏览器缓存导致新功能不显示的问题",
+      "静态资源响应补充 no-cache 兼容头，降低浏览器和中间代理缓存旧入口文件的概率",
+    ],
+  },
   {
     version: "0.4.5f",
     title: "系统设置导航与站内通知统一",
@@ -327,7 +337,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5f",
+  version: "0.4.5g",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -8224,13 +8234,32 @@ function statementIdFromDocumentNumber(value) {
 
 async function loadSystemInfo() {
   try {
+    const bundledVersion = systemInfo.version || "";
     const response = await fetch(API_SYSTEM_INFO_URL, { cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
     systemInfo = { ...systemInfo, ...payload };
+    refreshStaleClientVersion(bundledVersion, payload.version);
   } catch {
     // Keep the bundled metadata fallback for static or offline runs.
   }
+}
+
+function refreshStaleClientVersion(clientVersion, serverVersion) {
+  if (!clientVersion || !serverVersion || clientVersion === serverVersion || typeof window === "undefined") return;
+  const refreshToken = `${serverVersion}:${clientVersion}`;
+  if (sessionStorage.getItem(VERSION_REFRESH_KEY) === refreshToken) {
+    state.flashNotice = {
+      type: "warning",
+      title: "检测到新版本",
+      message: `服务器版本为 v${serverVersion}，当前页面版本为 v${clientVersion}。请刷新页面获取最新功能。`,
+    };
+    return;
+  }
+  sessionStorage.setItem(VERSION_REFRESH_KEY, refreshToken);
+  const url = new URL(window.location.href);
+  url.searchParams.set("_clv", `${serverVersion}-${Date.now()}`);
+  window.location.replace(url.toString());
 }
 
 async function loadIacucIndex() {

@@ -4171,6 +4171,8 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         if not urlparse(self.path).path.startswith("/api/"):
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         self.send_header("X-Content-Type-Options", "nosniff")
         super().end_headers()
 
