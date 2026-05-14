@@ -27,6 +27,14 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.6a",
+    title: "旧库结算流程迁移修复",
+    items: [
+      "修复旧版 billing_statements 启动迁移到结算流程表时因外键约束导致服务启动失败的问题",
+      "迁移顺序调整为先创建流程主记录，再写入版本、明细和事件，最后回写完整流程快照",
+    ],
+  },
+  {
     version: "0.4.6",
     title: "后端性能、数据结构与系统文档优化",
     items: [
@@ -358,7 +366,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.6",
+  version: "0.4.6a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",

@@ -658,6 +658,27 @@ def migrate_billing_workflow_schema(conn):
         first_statement = items[0][1]
         source_type = items[0][2]
         workflow_id = new_id("bwf")
+        conn.execute(
+            """
+            INSERT INTO billing_workflows (
+                id, business_key, iacuc, month, source_type, workflow_status,
+                current_version_id, current_version_no, latest_event_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                workflow_id,
+                billing_workflow_business_key(*workflow_scope_for_statement(first_statement), first_statement.get("month", ""), source_type),
+                first_statement.get("iacuc", ""),
+                first_statement.get("month", ""),
+                source_type,
+                WORKFLOW_STATUS_GENERATED,
+                "",
+                0,
+                "",
+                dump_json({"id": workflow_id, "migrationPending": True}),
+            ),
+        )
         versions = []
         latest_at = ""
         for index, (row, statement, grouped_source) in enumerate(items, start=1):
@@ -771,14 +792,13 @@ def migrate_billing_workflow_schema(conn):
         )
         conn.execute(
             """
-            INSERT INTO billing_workflows (
-                id, business_key, iacuc, month, source_type, workflow_status,
-                current_version_id, current_version_no, latest_event_at, payload
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE billing_workflows
+            SET business_key = ?, iacuc = ?, month = ?, source_type = ?,
+                workflow_status = ?, current_version_id = ?, current_version_no = ?,
+                latest_event_at = ?, payload = ?
+            WHERE id = ?
             """,
             (
-                workflow_id,
                 workflow_payload.get("businessKey", ""),
                 first_statement.get("iacuc", ""),
                 first_statement.get("month", ""),
@@ -788,6 +808,7 @@ def migrate_billing_workflow_schema(conn):
                 current_version["versionNo"],
                 latest_at,
                 dump_json(workflow_payload),
+                workflow_id,
             ),
         )
 
