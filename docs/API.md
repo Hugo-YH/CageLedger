@@ -27,6 +27,107 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 - `admin`：系统管理员，拥有全部功能权限。
 - `room_admin`：房间管理员，只能编辑授权饲养间内的笼位占用信息。
 
+## 前端通知与确认规范
+
+系统前端统一使用站内通知和站内确认弹层，不再使用浏览器原生 `alert()` 或 `confirm()`。
+
+### 站内通知接口
+
+前端通知入口：
+
+```js
+showFlashNotice(title, message, type = "success")
+```
+
+参数说明：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `title` | `string` | 通知标题，建议控制在 4-8 个汉字 |
+| `message` | `string` | 通知正文，支持换行展示 |
+| `type` | `success` / `warning` / `error` | 通知类型，默认 `success` |
+
+通知类型：
+
+| 类型 | 使用场景 | 自动消失 |
+| --- | --- | --- |
+| `success` | 保存成功、删除成功、流程发起成功、上传完成 | 约 3.2 秒 |
+| `warning` | 表单缺项、业务校验未通过、需要用户处理但数据未损坏 | 约 4.2 秒 |
+| `error` | 网络失败、接口失败、保存失败、浏览器阻止弹窗 | 约 4.2 秒 |
+
+使用示例：
+
+```js
+showFlashNotice("保存成功", `已保存为待接收批次：${batchNo}`);
+showFlashNotice("无法保存待接收批次", "请先完善 接收日期。", "warning");
+showFlashNotice("保存失败", error.message || "保存失败", "error");
+```
+
+设计规则：
+
+- 通知固定悬浮在工作区右上角，不占用页面文档流。
+- 同一时间只展示一条通知，新的通知会替换旧通知。
+- 通知内容不写入本地缓存，刷新后不保留。
+- 后续新增功能的成功、警告、错误提示统一走 `showFlashNotice(...)`。
+
+### 站内确认弹层接口
+
+前端确认入口：
+
+```js
+openConfirmDialog({
+  type,
+  id,
+  title,
+  message,
+  confirmLabel,
+  payload,
+})
+```
+
+参数说明：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `type` | `string` | 确认动作类型，用于 `handleConfirmDialogAction()` 分发 |
+| `id` | `string` | 目标实体 ID |
+| `title` | `string` | 弹层标题 |
+| `message` | `string` | 确认说明 |
+| `confirmLabel` | `string` | 主操作按钮文案 |
+| `payload` | `object` | 临时上下文，例如显示名称、日期等 |
+
+当前确认动作类型：
+
+| 类型 | 业务动作 |
+| --- | --- |
+| `delete-intake-batch` | 删除待接收批次 |
+| `delete-workflow` | 删除结算流程 |
+| `delete-user` | 删除账号 |
+| `sample-batch-slots` | 批量标记已取材 |
+| `clear-batch-slots` | 批量设为空 |
+| `delete-room` | 删除饲养间 |
+| `delete-rack` | 删除笼架 |
+
+使用示例：
+
+```js
+openConfirmDialog({
+  type: "delete-intake-batch",
+  id: batchId,
+  title: "删除待接收批次",
+  message: `确认删除待接收批次 ${batchNo}？`,
+  confirmLabel: "删除",
+  payload: { batchNo },
+});
+```
+
+确认弹层规则：
+
+- 危险操作统一使用站内确认弹层。
+- 确认后由 `handleConfirmDialogAction()` 执行业务动作。
+- 成功后继续调用 `showFlashNotice(...)` 给出结果反馈。
+- 弹层状态不写入本地缓存，刷新后不保留。
+
 ## 业务实体 API
 
 | 方法 | 路径 | 说明 |

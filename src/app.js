@@ -27,6 +27,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.5h",
+    title: "通知规范、预约识别与账号授权优化",
+    items: [
+      "笼卡管理保存待接收批次、必填校验、删除确认等操作统一使用站内通知和站内确认弹层",
+      "预约消息识别新增进驻日期、入驻日期、到货日期等接收日期别名，并兼容 20250513、2025.5.13、2025/5/13、0513、2026513 等日期格式",
+      "系统文档补充前端通知与确认规范，明确 success、warning、error 类型和确认弹层调用方式",
+      "账号管理的人员饲养间授权调整为紧凑下拉选择，并优化账号编辑行的登录名、显示姓名、新密码、角色、授权和操作按钮排版",
+    ],
+  },
+  {
     version: "0.4.5g",
     title: "前端版本刷新与缓存防护",
     items: [
@@ -337,7 +347,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.5g",
+  version: "0.4.5h",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -557,12 +567,35 @@ function normalizeFlexibleDateWithYear(value, fallbackYear) {
     .replace(/[日号]/g, "")
     .replace(/\s+/g, "");
   const full = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
-  if (full) return `${full[1]}-${String(full[2]).padStart(2, "0")}-${String(full[3]).padStart(2, "0")}`;
+  if (full) return formatFlexibleDateParts(full[1], full[2], full[3]);
   const short = text.match(/\b(\d{2})-(\d{1,2})-(\d{1,2})\b/);
-  if (short) return `20${short[1]}-${String(short[2]).padStart(2, "0")}-${String(short[3]).padStart(2, "0")}`;
+  if (short) return formatFlexibleDateParts(`20${short[1]}`, short[2], short[3]);
   const monthDay = raw.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
-  if (monthDay) return `${fallbackYear}-${String(monthDay[1]).padStart(2, "0")}-${String(monthDay[2]).padStart(2, "0")}`;
+  if (monthDay) return formatFlexibleDateParts(fallbackYear, monthDay[1], monthDay[2]);
+  const compactFull = text.match(/\b(20\d{2})(\d{4})\b/);
+  if (compactFull) return formatFlexibleDateParts(compactFull[1], compactFull[2].slice(0, 2), compactFull[2].slice(2));
+  const compactYearMonthDay = text.match(/\b(20\d{2})(\d{3,4})\b/);
+  if (compactYearMonthDay) {
+    const rest = compactYearMonthDay[2];
+    return formatFlexibleDateParts(compactYearMonthDay[1], rest.length === 3 ? rest.slice(0, 1) : rest.slice(0, 2), rest.length === 3 ? rest.slice(1) : rest.slice(2));
+  }
+  const compactMonthDay = text.match(/\b(\d{3,4})\b/);
+  if (compactMonthDay) {
+    const rest = compactMonthDay[1];
+    return formatFlexibleDateParts(fallbackYear, rest.length === 3 ? rest.slice(0, 1) : rest.slice(0, 2), rest.length === 3 ? rest.slice(1) : rest.slice(2));
+  }
   return normalizeDateInput(value);
+}
+
+function formatFlexibleDateParts(year, month, day) {
+  const normalizedYear = Number(year);
+  const normalizedMonth = Number(month);
+  const normalizedDay = Number(day);
+  if (!Number.isInteger(normalizedYear) || !Number.isInteger(normalizedMonth) || !Number.isInteger(normalizedDay)) return "";
+  if (normalizedYear < 2000 || normalizedYear > 2099 || normalizedMonth < 1 || normalizedMonth > 12 || normalizedDay < 1 || normalizedDay > 31) return "";
+  const date = new Date(normalizedYear, normalizedMonth - 1, normalizedDay);
+  if (date.getFullYear() !== normalizedYear || date.getMonth() !== normalizedMonth - 1 || date.getDate() !== normalizedDay) return "";
+  return `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}-${String(normalizedDay).padStart(2, "0")}`;
 }
 
 function inferSpecies(value) {
@@ -632,8 +665,16 @@ function cleanupFieldValue(value) {
     .trim();
 }
 
+function incomingDateLabels() {
+  return ["进驻日期", "拟进驻日期", "预计进驻日期", "入驻日期", "入住日期", "接收日期", "到货日期", "送达日期", "到达日期"];
+}
+
+function incomingFieldStopPattern() {
+  return /(?:锐竞|锐竟|饲养需求批次号|供应商|品系|数量|饲养房间|进驻日期|拟进驻日期|预计进驻日期|入驻日期|入住日期|接收日期|到货日期|送达日期|到达日期|拟实验时间)\s*(?:为|是)?\s*[:：]?/;
+}
+
 function stopAtNextField(value) {
-  return cleanupFieldValue(value).split(/\s*(?:锐竞|锐竟|饲养需求批次号|供应商|品系|数量|饲养房间|进驻日期|拟进驻日期|接收日期|拟实验时间)\s*(?:为|是)?\s*[:：]?/)[0].trim();
+  return cleanupFieldValue(value).split(new RegExp(`\\s*${incomingFieldStopPattern().source}`))[0].trim();
 }
 
 function extractPurchaseOrder(text) {
@@ -667,7 +708,7 @@ function extractSupplier(text) {
 
 function extractStrain(text) {
   const source = normalizeIncomingText(text);
-  const match = source.match(/品系\s*:?\s*([\s\S]*?)(?=\s*(?:数量|饲养房间|进驻日期|拟进驻日期|接收日期|拟实验时间)\s*(?:为|是)?\s*:|[\n\r]|$)/i);
+  const match = source.match(new RegExp(`品系\\s*:?\\s*([\\s\\S]*?)(?=\\s*(?:数量|饲养房间|${incomingDateLabels().join("|")}|拟实验时间)\\s*(?:为|是)?\\s*:|[\\n\\r]|$)`, "i"));
   return cleanupFieldValue(match?.[1] || "");
 }
 
@@ -684,14 +725,14 @@ function extractRoomName(text) {
 }
 
 function extractIntakeDate(text, referenceYear) {
-  const direct = matchField(text, ["进驻日期", "拟进驻日期", "接收日期"]);
+  const direct = matchField(text, incomingDateLabels());
   const directDate = normalizeFlexibleDateWithYear(direct, referenceYear);
   if (directDate) return directDate;
   const source = normalizeIncomingText(text);
   const applyMatch = source.match(/申请\s*([^，,。\n\r]*?\d{1,2}\s*月\s*\d{1,2}\s*[日号][^，,。\n\r]*?)\s*进(?:鼠|驻)/);
   const applyDate = normalizeFlexibleDateWithYear(applyMatch?.[1] || "", referenceYear);
   if (applyDate) return applyDate;
-  return normalizeFlexibleDateWithYear(matchField(text, ["拟实验时间"]), referenceYear);
+  return normalizeFlexibleDateWithYear(matchField(text, ["拟实验时间", "实验时间", "预计实验时间"]), referenceYear);
 }
 
 function parseIncomingMessage(rawMessage) {
@@ -780,6 +821,7 @@ const seedData = {
   settingsNavExpanded: false,
   lastSettingsView: "rooms",
   flashNotice: null,
+  confirmDialog: null,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
@@ -912,7 +954,7 @@ function loadState() {
 
 function saveState() {
   invalidateIacucSearchCache();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, flashNotice: null }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, flashNotice: null, confirmDialog: null }));
 }
 
 async function loadPersistedState() {
@@ -1187,6 +1229,16 @@ function normalize(data) {
         type: ["success", "warning", "error"].includes(next.flashNotice.type) ? next.flashNotice.type : "success",
         title: String(next.flashNotice.title || ""),
         message: String(next.flashNotice.message || ""),
+      }
+    : null;
+  next.confirmDialog = next.confirmDialog && typeof next.confirmDialog === "object"
+    ? {
+        type: String(next.confirmDialog.type || ""),
+        id: String(next.confirmDialog.id || ""),
+        title: String(next.confirmDialog.title || ""),
+        message: String(next.confirmDialog.message || ""),
+        confirmLabel: String(next.confirmDialog.confirmLabel || "确认"),
+        payload: next.confirmDialog.payload && typeof next.confirmDialog.payload === "object" ? next.confirmDialog.payload : {},
       }
     : null;
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
@@ -1506,6 +1558,7 @@ function render() {
         ${state.activeView === "logs" ? renderAuditView() : ""}
         ${renderWorkspaceFooter()}
       </main>
+      ${renderConfirmDialog()}
     </div>
   `;
 
@@ -1522,6 +1575,24 @@ function render() {
       }
     });
   }
+}
+
+function renderConfirmDialog() {
+  if (!state.confirmDialog?.message) return "";
+  return `
+    <div class="confirm-dialog-backdrop" role="presentation">
+      <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle">
+        <div>
+          <h2 id="confirmDialogTitle">${escapeText(state.confirmDialog.title || "请确认")}</h2>
+          <p>${escapeText(state.confirmDialog.message)}</p>
+        </div>
+        <div class="confirm-dialog-actions">
+          <button class="secondary" type="button" id="cancelConfirmDialog">取消</button>
+          <button class="danger-button" type="button" id="confirmDialogAction">${escapeText(state.confirmDialog.confirmLabel || "确认")}</button>
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 function renderFlashNotice() {
@@ -3739,23 +3810,57 @@ function renderUserManagementView() {
               <option value="admin">系统管理员</option>
             </select>
           </label>
-          <div class="room-checkboxes">
-            ${state.rooms
-              .map(
-                (room) => `
-                  <label>
-                    <input type="checkbox" name="roomIds" value="${escapeAttr(room.id)}" />
-                    ${escapeText(room.name)}
-                  </label>
-                `,
-              )
-              .join("")}
+          <div class="user-room-access user-room-access-create">
+            <div class="user-room-access-title">饲养间授权</div>
+            ${renderRoomAccessDropdown([])}
           </div>
           <button class="primary" type="submit">${iconSvg("plus")}创建账号</button>
         </form>
       </div>
     </section>
   `;
+}
+
+function renderRoomAccessDropdown(selectedRoomIds = [], options = {}) {
+  const selectedSet = new Set(selectedRoomIds || []);
+  const selectedRooms = state.rooms.filter((room) => selectedSet.has(room.id));
+  const disabled = options.disabled ? "disabled" : "";
+  const summary = options.admin
+    ? "系统管理员默认全部饲养间"
+    : formatRoomAccessSummary(selectedRooms.map((room) => room.name));
+  return `
+    <details class="room-access-dropdown ${disabled}" data-room-access-dropdown data-room-access-locked="${options.locked ? "true" : "false"}">
+      <summary data-room-access-summary>${escapeText(summary)}</summary>
+      <div class="room-access-options">
+        <p class="room-access-note">房间管理员仅可编辑选择的饲养间。</p>
+        ${
+          state.rooms
+            .map(
+              (room) => `
+                <label>
+                  <input
+                    type="checkbox"
+                    name="roomIds"
+                    value="${escapeAttr(room.id)}"
+                    data-room-name="${escapeAttr(room.name)}"
+                    ${selectedSet.has(room.id) ? "checked" : ""}
+                    ${disabled}
+                  />
+                  <span>${escapeText(room.name)}</span>
+                </label>
+              `,
+            )
+            .join("") || `<span class="muted">暂无饲养间。</span>`
+        }
+      </div>
+    </details>
+  `;
+}
+
+function formatRoomAccessSummary(roomNames) {
+  if (!roomNames.length) return "请选择授权饲养间";
+  const visibleNames = roomNames.slice(0, 2).join("、");
+  return roomNames.length > 2 ? `已选择 ${roomNames.length} 个：${visibleNames} 等` : `已选择 ${roomNames.length} 个：${visibleNames}`;
 }
 
 function renderDataManagementView() {
@@ -4027,19 +4132,14 @@ function renderUserRow(user) {
             <option value="admin" ${user.role === "admin" ? "selected" : ""}>系统管理员</option>
           </select>
         </label>
-      </div>
-      <div class="user-room-access">
-        ${state.rooms
-          .map(
-            (room) => `
-              <label>
-                <input type="checkbox" name="roomIds" value="${escapeAttr(room.id)}" ${user.roomIds.includes(room.id) ? "checked" : ""} ${isCurrent || user.role === "admin" ? "disabled" : ""} />
-                ${escapeText(room.name)}
-              </label>
-            `,
-          )
-          .join("")}
-        <p>${user.role === "admin" ? "系统管理员默认拥有全部饲养间权限。" : "房间管理员仅可编辑勾选饲养间。"}</p>
+        <div class="user-room-access">
+          <div class="user-room-access-title">饲养间授权</div>
+          ${renderRoomAccessDropdown(user.roomIds, {
+            disabled: isCurrent || user.role === "admin",
+            admin: user.role === "admin",
+            locked: isCurrent,
+          })}
+        </div>
       </div>
       <div class="user-row-actions">
         ${
@@ -4335,6 +4435,7 @@ function bindEvents() {
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
+  bindIntakeRequiredNotice("#intakeBatchForm", "无法保存待接收批次");
   document.querySelector("#intakeBatchForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -4342,12 +4443,13 @@ function bindEvents() {
       pushLog(`保存待接收批次：${savedBatch.batchNo || savedBatch.id}`);
       state.selectedIntakeBatchId = "";
       state.intakeBatchDraft = makeIncomingBatchDraft();
-      render();
+      showFlashNotice("保存成功", `已保存为待接收批次：${savedBatch.batchNo || savedBatch.id}`);
     } catch (error) {
       reportSaveError(error);
     }
   });
   document.querySelector("#intakeBatchSelect")?.addEventListener("change", handleIntakeBatchSelect);
+  bindIntakeRequiredNotice("#intakeBatchEditForm", "无法保存待接收批次");
   document.querySelector("#intakeBatchEditForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -4355,7 +4457,7 @@ function bindEvents() {
       const savedBatch = await saveIntakeBatch(editedBatch);
       pushLog(`更新待接收批次：${savedBatch.batchNo || savedBatch.id}`);
       closeIntakeBatchEditor();
-      render();
+      showFlashNotice("保存成功", `待接收批次已更新：${savedBatch.batchNo || savedBatch.id}`);
     } catch (error) {
       reportSaveError(error);
     }
@@ -4426,16 +4528,20 @@ function bindEvents() {
       const batchId = button.dataset.deleteIntakeBatch;
       const batch = state.intakeBatches.find((item) => item.id === batchId);
       if (!batch) return;
-      if (!confirm(`确认删除待接收批次 ${batch.batchNo || batch.id}？`)) return;
-      try {
-        await deleteIntakeBatch(batchId);
-        pushLog(`删除待接收批次：${batch.batchNo || batch.id}`);
-        render();
-      } catch (error) {
-        reportSaveError(error);
-      }
+      openConfirmDialog({
+        type: "delete-intake-batch",
+        id: batchId,
+        title: "删除待接收批次",
+        message: `确认删除待接收批次 ${batch.batchNo || batch.id}？`,
+        confirmLabel: "删除",
+      });
     });
   });
+  document.querySelector("#cancelConfirmDialog")?.addEventListener("click", closeConfirmDialog);
+  document.querySelector(".confirm-dialog-backdrop")?.addEventListener("click", (event) => {
+    if (event.target.classList.contains("confirm-dialog-backdrop")) closeConfirmDialog();
+  });
+  document.querySelector("#confirmDialogAction")?.addEventListener("click", handleConfirmDialogAction);
   bindIacucLookupInputs("#intakeBatchForm", (event) => {
     const form = event.target.closest("form");
     if (!form) return;
@@ -4500,14 +4606,14 @@ function bindEvents() {
       const workflowId = button.dataset.deleteWorkflow;
       const workflow = state.billingWorkflows.find((item) => item.id === workflowId) || state.selectedBillingWorkflowDetail?.workflow || {};
       const label = [workflow.pi || workflow.iacuc || "该流程", workflow.month || ""].filter(Boolean).join(" ");
-      if (!confirm(`确认删除 ${label} 的结算流程？删除后会同时移除版本记录、明细和流程事件。`)) return;
-      try {
-        await deleteBillingWorkflow(workflowId);
-        pushLog(`删除结算流程：${label}`);
-        render();
-      } catch (error) {
-        reportSaveError(error);
-      }
+      openConfirmDialog({
+        type: "delete-workflow",
+        id: workflowId,
+        title: "删除结算流程",
+        message: `确认删除 ${label} 的结算流程？删除后会同时移除版本记录、明细和流程事件。`,
+        confirmLabel: "删除",
+        payload: { label },
+      });
     });
   });
   document.querySelector("#closeWorkflowDetail")?.addEventListener("click", closeBillingWorkflowDetail);
@@ -4549,16 +4655,12 @@ function bindEvents() {
   document.querySelectorAll("[data-rack-edit-form]").forEach((form) => {
     form.addEventListener("submit", handleRackEditSubmit);
   });
-  document.querySelector("#userForm")?.addEventListener("submit", handleUserSubmit);
+  const userForm = document.querySelector("#userForm");
+  userForm?.addEventListener("submit", handleUserSubmit);
+  if (userForm) bindUserRoomAccessControls(userForm);
   document.querySelectorAll(".user-edit-form").forEach((form) => {
     form.addEventListener("submit", handleUserUpdate);
-    form.querySelector("select[name='role']")?.addEventListener("change", (event) => {
-      const isAdmin = event.target.value === "admin";
-      form.querySelectorAll("input[name='roomIds']").forEach((input) => {
-        input.disabled = isAdmin;
-      });
-      form.querySelector(".user-room-access p").textContent = isAdmin ? "系统管理员默认拥有全部饲养间权限。" : "房间管理员仅可编辑勾选饲养间。";
-    });
+    bindUserRoomAccessControls(form);
   });
   document.querySelector("#iacucUploadForm")?.addEventListener("submit", handleIacucUpload);
   document.querySelector("#principalIdentityFilter")?.addEventListener("keydown", (event) => {
@@ -4650,6 +4752,25 @@ function isCompactViewport() {
 
 function bindAuthEvents() {
   document.querySelector("#loginForm")?.addEventListener("submit", login);
+}
+
+function bindIntakeRequiredNotice(selector, title) {
+  const form = document.querySelector(selector);
+  if (!form || form.dataset.requiredNoticeBound === "true") return;
+  form.dataset.requiredNoticeBound = "true";
+  form.addEventListener(
+    "invalid",
+    (event) => {
+      if (selector === "#intakeBatchForm") {
+        state.intakeBatchDraft = readIncomingBatchForm(form);
+      } else if (selector === "#intakeBatchEditForm") {
+        state.editingIntakeBatchDraft = readIncomingBatchForm(form);
+      }
+      const fieldLabel = event.target.closest("label")?.childNodes?.[0]?.textContent?.trim() || "必填字段";
+      showFlashNotice(title, `请先完善 ${fieldLabel}。`, "warning");
+    },
+    true,
+  );
 }
 
 function bindMonkeyAgeField(scopeSelector) {
@@ -4793,10 +4914,40 @@ async function loadUsers() {
   }
 }
 
+function bindUserRoomAccessControls(form) {
+  const roleSelect = form.querySelector("select[name='role']");
+  const dropdown = form.querySelector("[data-room-access-dropdown]");
+  const summary = form.querySelector("[data-room-access-summary]");
+  if (!dropdown || !summary) return;
+  const sync = () => {
+    const isAdmin = roleSelect?.value === "admin";
+    const isLocked = dropdown.dataset.roomAccessLocked === "true";
+    dropdown.classList.toggle("disabled", Boolean(isAdmin || isLocked));
+    form.querySelectorAll("input[name='roomIds']").forEach((input) => {
+      input.disabled = Boolean(isAdmin || isLocked);
+    });
+    if (isAdmin) {
+      summary.textContent = "系统管理员默认全部饲养间";
+      dropdown.removeAttribute("open");
+      return;
+    }
+    const selectedRoomNames = Array.from(form.querySelectorAll("input[name='roomIds']:checked")).map(
+      (input) => input.dataset.roomName || input.value,
+    );
+    summary.textContent = formatRoomAccessSummary(selectedRoomNames);
+  };
+  roleSelect?.addEventListener("change", sync);
+  form.querySelectorAll("input[name='roomIds']").forEach((input) => {
+    input.addEventListener("change", sync);
+  });
+  sync();
+}
+
 async function handleUserSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.target);
-  const roomIds = form.getAll("roomIds");
+  const role = form.get("role");
+  const roomIds = role === "admin" ? [] : form.getAll("roomIds");
   const response = await fetch(API_USERS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -4804,7 +4955,7 @@ async function handleUserSubmit(event) {
       username: form.get("username"),
       displayName: form.get("displayName"),
       password: form.get("password"),
-      role: form.get("role"),
+      role,
       roomIds,
     }),
   });
@@ -4846,8 +4997,17 @@ async function handleUserUpdate(event) {
 async function deleteUser(userId) {
   const user = users.find((item) => item.id === userId);
   if (!user) return;
-  if (!confirm(`确认删除账号“${user.displayName}”？该账号将无法继续登录。`)) return;
+  openConfirmDialog({
+    type: "delete-user",
+    id: userId,
+    title: "删除账号",
+    message: `确认删除账号“${user.displayName}”？该账号将无法继续登录。`,
+    confirmLabel: "删除",
+    payload: { displayName: user.displayName },
+  });
+}
 
+async function deleteUserConfirmed(userId) {
   const response = await fetch(`${API_USERS_URL}/${encodeURIComponent(userId)}`, {
     method: "DELETE",
   });
@@ -4857,7 +5017,6 @@ async function deleteUser(userId) {
     return;
   }
   await loadUsers();
-  render();
 }
 
 async function handleIacucUpload(event) {
@@ -5181,8 +5340,20 @@ async function sampleBatchSlots() {
   const sampledDate = document.querySelector("#batchSampleDate")?.value;
   if (!sampledDate) return;
   if (activeItems.some((item) => !validateEndDate(item, sampledDate))) return;
-  if (!confirm(`确定将 ${activeItems.length} 笼标记为已取材，并以 ${sampledDate} 作为最后计费日期？`)) return;
+  openConfirmDialog({
+    type: "sample-batch-slots",
+    title: "批量标记已取材",
+    message: `确定将 ${activeItems.length} 笼标记为已取材，并以 ${sampledDate} 作为最后计费日期？`,
+    confirmLabel: "确认",
+    payload: { sampledDate },
+  });
+}
 
+async function sampleBatchSlotsConfirmed(sampledDate) {
+  const selectedSlots = state.slots.filter((slot) => state.selectedSlotIds.includes(slot.id));
+  const activeItems = selectedActiveOccupancies(selectedSlots);
+  if (!activeItems.length) return;
+  if (activeItems.some((item) => !validateEndDate(item, sampledDate))) return;
   try {
     const savedItems = [];
     for (const item of activeItems) {
@@ -5200,8 +5371,16 @@ async function sampleBatchSlots() {
 
 async function clearBatchSlots() {
   if (!state.selectedSlotIds.length) return;
-  if (!confirm(`确定将已选择的 ${state.selectedSlotIds.length} 个笼位全部设为空？`)) return;
+  openConfirmDialog({
+    type: "clear-batch-slots",
+    title: "批量设为空",
+    message: `确定将已选择的 ${state.selectedSlotIds.length} 个笼位全部设为空？`,
+    confirmLabel: "设为空",
+  });
+}
 
+async function clearBatchSlotsConfirmed() {
+  if (!state.selectedSlotIds.length) return;
   try {
     const savedItems = [];
     for (const slotId of state.selectedSlotIds) {
@@ -6214,8 +6393,22 @@ async function deleteRoom(roomId) {
     ? `确定删除 ${room.name}？这会删除 ${racks.length} 个笼架和 ${slotIds.size} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
     : `确定删除 ${room.name}？这会同时删除 ${racks.length} 个笼架和 ${slotIds.size} 个笼位。`;
 
-  if (!confirm(message)) return;
+  openConfirmDialog({
+    type: "delete-room",
+    id: roomId,
+    title: "删除饲养间",
+    message,
+    confirmLabel: "删除",
+    payload: { roomName: room.name },
+  });
+}
 
+async function deleteRoomConfirmed(roomId) {
+  const room = state.rooms.find((item) => item.id === roomId);
+  if (!room) return;
+  const racks = state.racks.filter((rack) => rack.roomId === roomId);
+  const rackIds = new Set(racks.map((rack) => rack.id));
+  const slotIds = new Set(state.slots.filter((slot) => rackIds.has(slot.rackId)).map((slot) => slot.id));
   try {
     await deleteEntityRequest("rooms", roomId);
     state.rooms = state.rooms.filter((item) => item.id !== roomId);
@@ -6246,8 +6439,23 @@ async function deleteRack(rackId) {
     ? `确定删除 ${rackLabel}？这会删除 ${slots.length} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
     : `确定删除 ${rackLabel}？这会同时删除 ${slots.length} 个笼位。`;
 
-  if (!confirm(message)) return;
+  openConfirmDialog({
+    type: "delete-rack",
+    id: rackId,
+    title: "删除笼架",
+    message,
+    confirmLabel: "删除",
+    payload: { rackLabel },
+  });
+}
 
+async function deleteRackConfirmed(rackId) {
+  const rack = state.racks.find((item) => item.id === rackId);
+  if (!rack) return;
+  const room = state.rooms.find((item) => item.id === rack.roomId);
+  const roomRacks = state.racks.filter((item) => item.roomId === rack.roomId);
+  const slotIds = new Set(state.slots.filter((slot) => slot.rackId === rackId).map((slot) => slot.id));
+  const rackLabel = `${room?.name ?? "饲养间"} 笼架 ${rackCode(rack)}`;
   try {
     const updatedRoom = room ? { ...room, rackCount: Math.max(roomRacks.length - 1, 0) } : null;
     await createInfrastructure({
@@ -8096,6 +8304,71 @@ function showFlashNotice(title, message, type = "success") {
     flashNoticeTimer = null;
     render();
   }, type === "success" ? 3200 : 4200);
+}
+
+function openConfirmDialog(config) {
+  state.confirmDialog = {
+    type: config.type || "",
+    id: config.id || "",
+    title: config.title || "请确认",
+    message: config.message || "",
+    confirmLabel: config.confirmLabel || "确认",
+    payload: config.payload || {},
+  };
+  render();
+}
+
+function closeConfirmDialog() {
+  state.confirmDialog = null;
+  render();
+}
+
+async function handleConfirmDialogAction() {
+  const dialog = state.confirmDialog;
+  if (!dialog) return;
+  state.confirmDialog = null;
+  try {
+    if (dialog.type === "delete-intake-batch") {
+      const batch = state.intakeBatches.find((item) => item.id === dialog.id);
+      await deleteIntakeBatch(dialog.id);
+      pushLog(`删除待接收批次：${batch?.batchNo || dialog.id}`);
+      showFlashNotice("删除成功", `待接收批次已删除：${batch?.batchNo || dialog.id}`);
+      return;
+    }
+    if (dialog.type === "delete-workflow") {
+      await deleteBillingWorkflow(dialog.id);
+      pushLog(`删除结算流程：${dialog.payload?.label || dialog.id}`);
+      showFlashNotice("删除成功", `结算流程已删除：${dialog.payload?.label || dialog.id}`);
+      return;
+    }
+    if (dialog.type === "delete-user") {
+      await deleteUserConfirmed(dialog.id);
+      showFlashNotice("删除成功", `账号已删除：${dialog.payload?.displayName || dialog.id}`);
+      render();
+      return;
+    }
+    if (dialog.type === "sample-batch-slots") {
+      await sampleBatchSlotsConfirmed(dialog.payload?.sampledDate || "");
+      return;
+    }
+    if (dialog.type === "clear-batch-slots") {
+      await clearBatchSlotsConfirmed();
+      return;
+    }
+    if (dialog.type === "delete-room") {
+      await deleteRoomConfirmed(dialog.id);
+      showFlashNotice("删除成功", `饲养间已删除：${dialog.payload?.roomName || dialog.id}`);
+      return;
+    }
+    if (dialog.type === "delete-rack") {
+      await deleteRackConfirmed(dialog.id);
+      showFlashNotice("删除成功", `笼架已删除：${dialog.payload?.rackLabel || dialog.id}`);
+      return;
+    }
+    render();
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
 function addDays(dateText, days) {
