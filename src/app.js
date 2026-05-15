@@ -1,6 +1,7 @@
 const STORAGE_KEY = "cageledger.v1";
 const LEGACY_STORAGE_KEY = "lahcas.v1";
 const VERSION_REFRESH_KEY = "cageledger.version-refresh";
+const CACHE_RESET_NOTICE_KEY = "cageledger.cache-reset-notice";
 const MAX_LOCAL_STATE_BYTES = 800_000;
 const API_AUTH_ME_URL = "/api/auth/me";
 const API_LOGIN_URL = "/api/auth/login";
@@ -11,6 +12,7 @@ const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
 const API_PRINCIPAL_IDENTITIES_URL = "/api/principal-identities";
 const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
+const API_BOOTSTRAP_URL = "/api/bootstrap";
 const API_BILLING_STATEMENT_GENERATE_BY_PI_URL = "/api/billing-statements/generate-by-pi";
 const API_BILLING_WORKFLOWS_URL = "/api/billing-workflows";
 const API_BILLING_WORKFLOW_ADVANCE_URL = "/api/billing-workflows/advance";
@@ -27,6 +29,17 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.4.7",
+    title: "并发加载与基础设施按需加载优化",
+    items: [
+      "SQLite 初始化改为服务启动阶段执行，热路径连接只保留轻量 PRAGMA，降低并发访问下的重复 schema 与 WAL 设置开销",
+      "IACUC 索引与项目负责人身份改为按页面和按输入场景加载，并增加短时进程内缓存与写后失效机制",
+      "基础设施 bootstrap 拆分为 summary、room、full 三种范围，首页只加载汇总，动态笼位图按房间取数，饲养费页面按需升级到完整数据",
+      "仪表盘、饲养间与笼架列表改为优先使用汇总统计，减少首屏全量笼位与占用数据传输",
+      "修复基础设施汇总改造后前端启动阶段的空白页问题，恢复本地与远端模式首页正常渲染",
+    ],
+  },
   {
     version: "0.4.6d",
     title: "房间管理员权限入口优化",
@@ -385,6 +398,9 @@ const SYSTEM_API_GROUPS = [
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let IACUC_SEARCH_CACHE = null;
+let IACUC_INDEX_LOADING = false;
+let IACUC_INDEX_LOADED = false;
+let IACUC_INDEX_PROMISE = null;
 let PRINCIPAL_IDENTITIES = [];
 let PRINCIPAL_IDENTITY_BY_NAME = new Map();
 let iacucIndexMeta = null;
@@ -394,7 +410,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.6d",
+  version: "0.4.7",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -408,6 +424,23 @@ let users = [];
 let batchSlotDrag = null;
 let suppressNextSlotClick = false;
 let flashNoticeTimer = null;
+const lazyDataState = {
+  quantitySheetsLoaded: false,
+  quantitySheetsLoading: false,
+  billingWorkflowsLoaded: false,
+  billingWorkflowsLoading: false,
+  auditLogsLoaded: false,
+  auditLogsLoading: false,
+  usersLoaded: false,
+  usersLoading: false,
+  principalIdentitiesLoaded: false,
+  principalIdentitiesLoading: false,
+};
+const infrastructureLoadState = {
+  scope: "full",
+  roomId: "",
+  loading: false,
+};
 let STATE_INDEX_CACHE = null;
 const SYSTEM_DOC_CACHE = new Map();
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
@@ -990,7 +1023,8 @@ const seedData = {
   intakeBatches: [],
 };
 
-let state = normalize(structuredClone(seedData));
+let state = structuredClone(seedData);
+state = normalize(state);
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -1026,14 +1060,34 @@ function localUiStateSnapshot() {
   return localUiOnlyState(state);
 }
 
+function buildBootstrapUrl(scope = "summary", roomId = "") {
+  const url = new URL(API_BOOTSTRAP_URL, window.location.origin);
+  url.searchParams.set("scope", scope);
+  if (roomId) url.searchParams.set("roomId", roomId);
+  return `${url.pathname}${url.search}`;
+}
+
 async function loadPersistedState() {
   try {
     remotePersistence = true;
-    const entityState = await loadEntityState();
+    const entityState = await loadBootstrapState();
     state = normalize(entityState);
     state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
     invalidateIacucSearchCache();
     invalidateStateIndexCache();
+    lazyDataState.quantitySheetsLoaded = false;
+    lazyDataState.quantitySheetsLoading = false;
+    lazyDataState.billingWorkflowsLoaded = false;
+    lazyDataState.billingWorkflowsLoading = false;
+    lazyDataState.auditLogsLoaded = false;
+    lazyDataState.auditLogsLoading = false;
+    lazyDataState.usersLoaded = false;
+    lazyDataState.usersLoading = false;
+    lazyDataState.principalIdentitiesLoaded = false;
+    lazyDataState.principalIdentitiesLoading = false;
+    infrastructureLoadState.scope = "summary";
+    infrastructureLoadState.roomId = "";
+    infrastructureLoadState.loading = false;
     selectFirstAvailableCage();
     return;
   } catch (error) {
@@ -1052,6 +1106,19 @@ async function loadPersistedState() {
       });
       invalidateIacucSearchCache();
       invalidateStateIndexCache();
+      lazyDataState.quantitySheetsLoaded = false;
+      lazyDataState.quantitySheetsLoading = false;
+      lazyDataState.billingWorkflowsLoaded = false;
+      lazyDataState.billingWorkflowsLoading = false;
+      lazyDataState.auditLogsLoaded = false;
+      lazyDataState.auditLogsLoading = false;
+      lazyDataState.usersLoaded = false;
+      lazyDataState.usersLoading = false;
+      lazyDataState.principalIdentitiesLoaded = false;
+      lazyDataState.principalIdentitiesLoading = false;
+      infrastructureLoadState.scope = "summary";
+      infrastructureLoadState.roomId = "";
+      infrastructureLoadState.loading = false;
       return;
     }
     remotePersistence = false;
@@ -1061,36 +1128,28 @@ async function loadPersistedState() {
   state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   invalidateIacucSearchCache();
   invalidateStateIndexCache();
+  lazyDataState.quantitySheetsLoaded = true;
+  lazyDataState.quantitySheetsLoading = false;
+  lazyDataState.billingWorkflowsLoaded = true;
+  lazyDataState.billingWorkflowsLoading = false;
+  lazyDataState.auditLogsLoaded = true;
+  lazyDataState.auditLogsLoading = false;
+  lazyDataState.usersLoaded = true;
+  lazyDataState.usersLoading = false;
+  lazyDataState.principalIdentitiesLoaded = true;
+  lazyDataState.principalIdentitiesLoading = false;
+  infrastructureLoadState.scope = "full";
+  infrastructureLoadState.roomId = "";
+  infrastructureLoadState.loading = false;
 }
 
-async function loadEntityState() {
+async function loadBootstrapState() {
   const localState = loadState();
-  const entries = await Promise.all(
-    Object.entries(ENTITY_API_URLS).map(async ([key, url]) => {
-      const response = await fetch(url, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Failed to load ${url}`);
-      const payload = await response.json();
-      return [key, payload.items || []];
-    }),
-  );
-  const quantityResponse = await fetch(API_QUANTITY_SHEETS_URL, { cache: "no-store" });
-  if (!quantityResponse.ok) throw new Error(`Failed to load ${API_QUANTITY_SHEETS_URL}`);
-  const quantityPayload = await quantityResponse.json();
-  const workflowResponse = await fetch(API_BILLING_WORKFLOWS_URL, { cache: "no-store" });
-  if (!workflowResponse.ok) throw new Error(`Failed to load ${API_BILLING_WORKFLOWS_URL}`);
-  const workflowPayload = await workflowResponse.json();
-  const quantitySheets = quantityPayload.items || [];
-  const billingWorkflows = workflowPayload.items || [];
-  const entityData = Object.fromEntries(entries);
+  const response = await fetch(buildBootstrapUrl("summary"), { cache: "no-store" });
+  if (!response.ok) throw new Error(`Failed to load ${API_BOOTSTRAP_URL}`);
+  const entityData = await response.json();
 
   const billingRules = entityData.billingRules || [];
-  const firstIacuc = entityData.occupancies?.find((item) => item.iacuc)?.iacuc || "";
-  const firstPi = entityData.occupancies?.find((item) => item.pi)?.pi || "";
-  const knownIacucs = new Set((entityData.occupancies || []).map((item) => normalizeIacucNumber(item.iacuc)).filter(Boolean));
-  const localBillingIacuc = knownIacucs.has(normalizeIacucNumber(localState.billingIacuc)) ? localState.billingIacuc : "";
-  const knownPis = new Set([...(entityData.occupancies || []).map((item) => normalizePersonName(item.pi)), ...quantitySheets.map((item) => normalizePersonName(item.pi))].filter(Boolean));
-  const localBillingPi = knownPis.has(normalizePersonName(localState.billingPi)) ? localState.billingPi : "";
-  const selectedQuantitySheet = quantitySheets.find((sheet) => sheet.id === localState.selectedQuantitySheetId) || quantitySheets[0];
   const intakeBatches = entityData.intakeBatches || [];
   const selectedIntakeBatch = intakeBatches.find((item) => item.id === localState.selectedIntakeBatchId) || intakeBatches[0];
 
@@ -1102,24 +1161,24 @@ async function loadEntityState() {
     selectedSlotId: localState.selectedSlotId || "",
     billingSource: localState.billingSource || seedData.billingSource,
     billingMonth: localState.billingMonth || today.slice(0, 7),
-    billingIacuc: localBillingIacuc || firstIacuc,
-    billingPi: localBillingPi || selectedQuantitySheet?.pi || firstPi,
-    billingPrincipalType: principalTypeForPi(localBillingPi || selectedQuantitySheet?.pi || firstPi),
+    billingIacuc: localState.billingIacuc || "",
+    billingPi: localState.billingPi || "",
+    billingPrincipalType: principalTypeForPi(localState.billingPi || ""),
     freeCageAllowance: Number(localState.freeCageAllowance ?? seedData.freeCageAllowance),
     billingWorkflowFilter: localState.billingWorkflowFilter || "todo",
     selectedBillingWorkflowId: "",
     selectedBillingWorkflowDetail: null,
     showWorkflowStatements: false,
-    selectedQuantitySheetId: selectedQuantitySheet?.id || "",
-    quantitySheetDraft: selectedQuantitySheet || makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
-    quantitySheets,
+    selectedQuantitySheetId: "",
+    quantitySheetDraft: makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
+    quantitySheets: [],
     selectedIntakeBatchId: selectedIntakeBatch?.id || "",
     selectedIntakeBatchIds: Array.isArray(localState.selectedIntakeBatchIds)
       ? localState.selectedIntakeBatchIds.filter((id) => intakeBatches.some((item) => item.id === id))
       : [],
     intakeBatchDraft: selectedIntakeBatch || makeIncomingBatchDraft(),
     intakeBatches,
-    billingWorkflows,
+    billingWorkflows: [],
     principalIdentityFilter: localState.principalIdentityFilter || "",
     slotFilter: localState.slotFilter || "all",
     baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
@@ -1127,10 +1186,69 @@ async function loadEntityState() {
     racks: entityData.racks || [],
     slots: entityData.slots || [],
     occupancies: entityData.occupancies || [],
+    roomSummaries: entityData.roomSummaries || [],
+    rackSummaries: entityData.rackSummaries || [],
+    dashboardSummary: entityData.dashboardSummary || null,
     billingRules,
     adjustments: entityData.adjustments || [],
-    auditLogs: entityData.auditLogs || [],
+    auditLogs: [],
   };
+}
+
+async function loadFullInfrastructure() {
+  if (!remotePersistence || infrastructureLoadState.loading) return;
+  infrastructureLoadState.loading = true;
+  try {
+    const response = await fetch(buildBootstrapUrl("full"), { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      currentUser = null;
+      render();
+      throw new Error("请先登录");
+    }
+    if (!response.ok) throw new Error(payload.error || "加载设施数据失败");
+    state.slots = payload.slots || [];
+    state.occupancies = payload.occupancies || [];
+    state.roomSummaries = payload.roomSummaries || state.roomSummaries;
+    state.rackSummaries = payload.rackSummaries || state.rackSummaries;
+    state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
+    infrastructureLoadState.scope = "full";
+    infrastructureLoadState.roomId = "";
+    invalidateIacucSearchCache();
+    invalidateStateIndexCache();
+    selectFirstAvailableCage();
+  } finally {
+    infrastructureLoadState.loading = false;
+  }
+}
+
+async function loadRoomInfrastructure(roomId) {
+  if (!remotePersistence || !roomId || infrastructureLoadState.loading) return;
+  if (infrastructureLoadState.scope === "full") return;
+  if (infrastructureLoadState.scope === "room" && infrastructureLoadState.roomId === roomId) return;
+  infrastructureLoadState.loading = true;
+  try {
+    const response = await fetch(buildBootstrapUrl("room", roomId), { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      currentUser = null;
+      render();
+      throw new Error("请先登录");
+    }
+    if (!response.ok) throw new Error(payload.error || "加载饲养间笼位失败");
+    state.slots = payload.slots || [];
+    state.occupancies = payload.occupancies || [];
+    state.roomSummaries = payload.roomSummaries || state.roomSummaries;
+    state.rackSummaries = payload.rackSummaries || state.rackSummaries;
+    state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
+    infrastructureLoadState.scope = "room";
+    infrastructureLoadState.roomId = roomId;
+    invalidateIacucSearchCache();
+    invalidateStateIndexCache();
+    selectFirstAvailableCage();
+  } finally {
+    infrastructureLoadState.loading = false;
+  }
 }
 
 function localUiOnlyState(source = {}) {
@@ -1209,21 +1327,117 @@ async function createInfrastructure(payload) {
 async function loadBillingWorkflows() {
   if (!remotePersistence) {
     state.billingWorkflows = [];
+    lazyDataState.billingWorkflowsLoaded = true;
+    lazyDataState.billingWorkflowsLoading = false;
     return [];
   }
+  lazyDataState.billingWorkflowsLoading = true;
   const response = await fetch(API_BILLING_WORKFLOWS_URL, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
+    lazyDataState.billingWorkflowsLoading = false;
     currentUser = null;
     render();
     throw new Error("请先登录");
   }
   if (!response.ok) {
+    lazyDataState.billingWorkflowsLoading = false;
     throw new Error(payload.error || "加载结算流程失败");
   }
   state.billingWorkflows = payload.items || [];
+  lazyDataState.billingWorkflowsLoaded = true;
+  lazyDataState.billingWorkflowsLoading = false;
   invalidateStateIndexCache();
   return state.billingWorkflows;
+}
+
+async function loadQuantitySheets() {
+  if (!remotePersistence) {
+    lazyDataState.quantitySheetsLoaded = true;
+    lazyDataState.quantitySheetsLoading = false;
+    return state.quantitySheets;
+  }
+  lazyDataState.quantitySheetsLoading = true;
+  const response = await fetch(API_QUANTITY_SHEETS_URL, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    lazyDataState.quantitySheetsLoading = false;
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    lazyDataState.quantitySheetsLoading = false;
+    throw new Error(payload.error || "加载数量统计表失败");
+  }
+  state.quantitySheets = payload.items || [];
+  lazyDataState.quantitySheetsLoaded = true;
+  lazyDataState.quantitySheetsLoading = false;
+  const selected = state.quantitySheets.find((sheet) => sheet.id === state.selectedQuantitySheetId) || state.quantitySheets[0] || null;
+  state.selectedQuantitySheetId = selected?.id || "";
+  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(selected || makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7)));
+  if (!state.billingPi && state.quantitySheetDraft.pi) {
+    state.billingPi = state.quantitySheetDraft.pi;
+    state.billingPrincipalType = principalTypeForPi(state.billingPi);
+    state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
+  }
+  invalidateStateIndexCache();
+  return state.quantitySheets;
+}
+
+async function loadAuditEvents() {
+  if (!remotePersistence) {
+    lazyDataState.auditLogsLoaded = true;
+    lazyDataState.auditLogsLoading = false;
+    return state.auditLogs;
+  }
+  lazyDataState.auditLogsLoading = true;
+  const response = await fetch(`${ENTITY_API_URLS.auditLogs}?limit=500`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    lazyDataState.auditLogsLoading = false;
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    lazyDataState.auditLogsLoading = false;
+    throw new Error(payload.error || "加载操作日志失败");
+  }
+  state.auditLogs = payload.items || [];
+  lazyDataState.auditLogsLoaded = true;
+  lazyDataState.auditLogsLoading = false;
+  return state.auditLogs;
+}
+
+async function ensureViewDataLoaded(view) {
+  const tasks = [];
+  if (view === "data" && !IACUC_INDEX_LOADED && !IACUC_INDEX_LOADING) {
+    tasks.push(ensureIacucIndexLoaded());
+  }
+  if (view === "cages" && state.selectedRoomId && infrastructureLoadState.scope !== "full" && infrastructureLoadState.roomId !== state.selectedRoomId) {
+    tasks.push(loadRoomInfrastructure(state.selectedRoomId));
+  }
+  if (view === "billing" && infrastructureLoadState.scope !== "full") {
+    tasks.push(loadFullInfrastructure());
+  }
+  if ((view === "billing" || view === "data") && !lazyDataState.principalIdentitiesLoaded && !lazyDataState.principalIdentitiesLoading) {
+    tasks.push(loadPrincipalIdentities());
+  }
+  if (view === "billing" && !lazyDataState.quantitySheetsLoaded && !lazyDataState.quantitySheetsLoading) {
+    tasks.push(loadQuantitySheets());
+  }
+  if (view === "workflow-center" && !lazyDataState.billingWorkflowsLoaded && !lazyDataState.billingWorkflowsLoading) {
+    tasks.push(loadBillingWorkflows());
+  }
+  if (view === "logs" && !lazyDataState.auditLogsLoaded && !lazyDataState.auditLogsLoading) {
+    tasks.push(loadAuditEvents());
+  }
+  if (view === "users" && !lazyDataState.usersLoaded && !lazyDataState.usersLoading) {
+    tasks.push(loadUsers());
+  }
+  if (!tasks.length) return;
+  await Promise.all(tasks);
 }
 
 async function advanceBillingWorkflow(workflowId, toStatus) {
@@ -1398,6 +1612,9 @@ function normalize(data) {
   next.editingRackId = next.editingRackId || "";
   next.rackFormDraft = normalizeRackFormDraft(next.rackFormDraft);
   next.rooms = Array.isArray(next.rooms) ? next.rooms.map(normalizeRoomDefaults) : [];
+  next.roomSummaries = Array.isArray(next.roomSummaries) ? next.roomSummaries.map((item) => ({ ...item })) : [];
+  next.rackSummaries = Array.isArray(next.rackSummaries) ? next.rackSummaries.map((item) => ({ ...item })) : [];
+  next.dashboardSummary = next.dashboardSummary && typeof next.dashboardSummary === "object" ? { ...next.dashboardSummary } : null;
   next.occupancies = Array.isArray(next.occupancies)
     ? next.occupancies.map((item) => ({
         ...item,
@@ -1409,22 +1626,25 @@ function normalize(data) {
       }))
     : [];
 
-  if (!next.racks.length || !next.slots.length) {
+  if (!remotePersistence && (!next.racks.length || !next.slots.length)) {
     const generated = generateInfrastructure(next.rooms);
     next.racks = generated.racks;
     next.slots = generated.slots;
   }
 
-  next.rooms.forEach((room) => {
-    const generatedRacks = next.racks.filter((rack) => rack.roomId === room.id);
-    if (!generatedRacks.length) {
-      const generated = generateInfrastructure([room]);
-      next.racks.push(...generated.racks);
-      next.slots.push(...generated.slots);
-    }
-  });
+  if (!remotePersistence) {
+    next.rooms.forEach((room) => {
+      const generatedRacks = next.racks.filter((rack) => rack.roomId === room.id);
+      if (!generatedRacks.length) {
+        const generated = generateInfrastructure([room]);
+        next.racks.push(...generated.racks);
+        next.slots.push(...generated.slots);
+      }
+    });
+  }
 
   updateSlotStatuses(next);
+  ensureInfrastructureSummaries(next);
   return next;
 }
 
@@ -1653,6 +1873,62 @@ function updateSlotStatuses(targetState = state) {
     ...slot,
     status: currentOccupancyBySlot.get(slot.id)?.status ?? "empty",
   }));
+  syncInfrastructureSummariesForLoadedState(targetState);
+}
+
+function syncInfrastructureSummariesForLoadedState(targetState = state) {
+  if (targetState !== state) {
+    ensureInfrastructureSummaries(targetState);
+    return;
+  }
+  if (infrastructureLoadState.scope === "full" || !state.roomSummaries.length || !state.dashboardSummary) {
+    refreshInfrastructureSummaries();
+    return;
+  }
+  if (infrastructureLoadState.scope !== "room" || !infrastructureLoadState.roomId) return;
+  const roomId = infrastructureLoadState.roomId;
+  const partial = computeInfrastructureSummaries({
+    rooms: state.rooms.filter((room) => room.id === roomId),
+    racks: state.racks.filter((rack) => rack.roomId === roomId),
+    slots: state.slots,
+    occupancies: state.occupancies,
+  });
+  const previousRoom = roomSummaryById(roomId) || {
+    slotCount: 0,
+    activeCount: 0,
+    reservedCount: 0,
+    emptyCount: 0,
+    periodOpenCount: 0,
+    periodNormalCount: 0,
+    periodOverdueCount: 0,
+  };
+  const nextRoom = partial.roomSummaries[0] || {
+    roomId,
+    rackCount: 0,
+    slotCount: 0,
+    activeCount: 0,
+    reservedCount: 0,
+    emptyCount: 0,
+    periodOpenCount: 0,
+    periodNormalCount: 0,
+    periodOverdueCount: 0,
+    occupancyRecordCount: 0,
+  };
+  const deltas = [
+    ["total", "slotCount"],
+    ["active", "activeCount"],
+    ["reserved", "reservedCount"],
+    ["empty", "emptyCount"],
+    ["periodOpen", "periodOpenCount"],
+    ["periodNormal", "periodNormalCount"],
+    ["periodOverdue", "periodOverdueCount"],
+  ];
+  deltas.forEach(([dashboardKey, roomKey]) => {
+    state.dashboardSummary[dashboardKey] = numericOrZero(state.dashboardSummary[dashboardKey]) - numericOrZero(previousRoom[roomKey]) + numericOrZero(nextRoom[roomKey]);
+  });
+  state.roomSummaries = (state.roomSummaries || []).map((item) => item.roomId === roomId ? nextRoom : item);
+  const partialRackMap = new Map(partial.rackSummaries.map((item) => [item.rackId, item]));
+  state.rackSummaries = (state.rackSummaries || []).map((item) => partialRackMap.get(item.rackId) || item);
 }
 
 function render() {
@@ -1966,6 +2242,124 @@ function metric(label, value, tone) {
   `;
 }
 
+function computeInfrastructureSummaries(source = state) {
+  const roomSummaries = new Map((source.rooms || []).map((room) => [room.id, {
+    roomId: room.id,
+    rackCount: 0,
+    slotCount: 0,
+    activeCount: 0,
+    reservedCount: 0,
+    emptyCount: 0,
+    periodOpenCount: 0,
+    periodNormalCount: 0,
+    periodOverdueCount: 0,
+    occupancyRecordCount: 0,
+  }]));
+  const rackSummaries = new Map((source.racks || []).map((rack) => [rack.id, {
+    rackId: rack.id,
+    roomId: rack.roomId,
+    slotCount: 0,
+    activeCount: 0,
+    reservedCount: 0,
+    emptyCount: 0,
+    periodOpenCount: 0,
+    periodNormalCount: 0,
+    periodOverdueCount: 0,
+    occupancyRecordCount: 0,
+  }]));
+  const rackById = new Map((source.racks || []).map((rack) => [rack.id, rack]));
+  const slotById = new Map((source.slots || []).map((slot) => [slot.id, slot]));
+  const currentBySlot = new Map();
+  (source.occupancies || []).forEach((item) => {
+    if ((item.status === "active" || item.status === "reserved") && item.slotId) currentBySlot.set(item.slotId, item);
+    const slot = slotById.get(item.slotId);
+    const rackId = item.rackId || slot?.rackId || "";
+    const roomId = item.roomId || rackById.get(rackId)?.roomId || "";
+    if (rackSummaries.has(rackId)) rackSummaries.get(rackId).occupancyRecordCount += 1;
+    if (roomSummaries.has(roomId)) roomSummaries.get(roomId).occupancyRecordCount += 1;
+  });
+  const dashboardSummary = { total: 0, active: 0, reserved: 0, empty: 0, periodOpen: 0, periodNormal: 0, periodOverdue: 0 };
+  (source.racks || []).forEach((rack) => {
+    if (roomSummaries.has(rack.roomId)) roomSummaries.get(rack.roomId).rackCount += 1;
+  });
+  (source.slots || []).forEach((slot) => {
+    const rackSummary = rackSummaries.get(slot.rackId);
+    const roomId = rackById.get(slot.rackId)?.roomId || "";
+    const roomSummary = roomSummaries.get(roomId);
+    const occupancy = currentBySlot.get(slot.id);
+    const tone = occupancyPeriodTone(occupancy);
+    dashboardSummary.total += 1;
+    if (rackSummary) rackSummary.slotCount += 1;
+    if (roomSummary) roomSummary.slotCount += 1;
+    if (slot.status === "active") {
+      dashboardSummary.active += 1;
+      if (rackSummary) rackSummary.activeCount += 1;
+      if (roomSummary) roomSummary.activeCount += 1;
+    } else if (slot.status === "reserved") {
+      dashboardSummary.reserved += 1;
+      if (rackSummary) rackSummary.reservedCount += 1;
+      if (roomSummary) roomSummary.reservedCount += 1;
+    } else {
+      dashboardSummary.empty += 1;
+      if (rackSummary) rackSummary.emptyCount += 1;
+      if (roomSummary) roomSummary.emptyCount += 1;
+    }
+    if (tone === "open") {
+      dashboardSummary.periodOpen += 1;
+      if (rackSummary) rackSummary.periodOpenCount += 1;
+      if (roomSummary) roomSummary.periodOpenCount += 1;
+    } else if (tone === "normal") {
+      dashboardSummary.periodNormal += 1;
+      if (rackSummary) rackSummary.periodNormalCount += 1;
+      if (roomSummary) roomSummary.periodNormalCount += 1;
+    } else if (tone === "overdue") {
+      dashboardSummary.periodOverdue += 1;
+      if (rackSummary) rackSummary.periodOverdueCount += 1;
+      if (roomSummary) roomSummary.periodOverdueCount += 1;
+    }
+  });
+  return {
+    roomSummaries: [...roomSummaries.values()],
+    rackSummaries: [...rackSummaries.values()],
+    dashboardSummary,
+  };
+}
+
+function ensureInfrastructureSummaries(targetState = state) {
+  if (targetState.dashboardSummary && targetState.roomSummaries?.length && targetState.rackSummaries?.length) return;
+  Object.assign(targetState, computeInfrastructureSummaries(targetState));
+}
+
+function refreshInfrastructureSummaries() {
+  Object.assign(state, computeInfrastructureSummaries(state));
+}
+
+async function reloadInfrastructureOverview() {
+  if (!remotePersistence) {
+    await reloadInfrastructureOverview();
+    return;
+  }
+  const response = await fetch(buildBootstrapUrl("summary"), { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) throw new Error(payload.error || "刷新设施概览失败");
+  state.roomSummaries = payload.roomSummaries || [];
+  state.rackSummaries = payload.rackSummaries || [];
+  state.dashboardSummary = payload.dashboardSummary || null;
+}
+
+function roomSummaryById(roomId) {
+  return (state.roomSummaries || []).find((item) => item.roomId === roomId) || null;
+}
+
+function rackSummaryById(rackId) {
+  return (state.rackSummaries || []).find((item) => item.rackId === rackId) || null;
+}
+
 function renderDashboardView() {
   const counts = slotStatusCounts();
   const occupied = counts.active + counts.reserved;
@@ -2048,6 +2442,17 @@ function renderDashboardView() {
 }
 
 function slotStatusCounts() {
+  if ((!state.slots.length || infrastructureLoadState.scope === "summary") && state.dashboardSummary) {
+    return {
+      total: numericOrZero(state.dashboardSummary.total),
+      active: numericOrZero(state.dashboardSummary.active),
+      reserved: numericOrZero(state.dashboardSummary.reserved),
+      empty: numericOrZero(state.dashboardSummary.empty),
+      periodOpen: numericOrZero(state.dashboardSummary.periodOpen),
+      periodNormal: numericOrZero(state.dashboardSummary.periodNormal),
+      periodOverdue: numericOrZero(state.dashboardSummary.periodOverdue),
+    };
+  }
   const total = state.slots.length;
   const active = state.slots.filter((slot) => slot.status === "active").length;
   const reserved = state.slots.filter((slot) => slot.status === "reserved").length;
@@ -2068,20 +2473,23 @@ function slotStatusCounts() {
 
 function roomCapacityRows() {
   return visibleRooms().map((room) => {
+    const summary = roomSummaryById(room.id);
     const slots = slotsForRoom(room.id);
-    const total = slots.length;
-    const active = slots.filter((slot) => slot.status === "active").length;
-    const reserved = slots.filter((slot) => slot.status === "reserved").length;
-    const empty = Math.max(total - active - reserved, 0);
-    let periodOpen = 0;
-    let periodNormal = 0;
-    let periodOverdue = 0;
-    slots.forEach((slot) => {
-      const tone = occupancyPeriodTone(currentOccupancy(slot.id));
-      if (tone === "open") periodOpen += 1;
-      if (tone === "normal") periodNormal += 1;
-      if (tone === "overdue") periodOverdue += 1;
-    });
+    const total = summary ? numericOrZero(summary.slotCount) : slots.length;
+    const active = summary ? numericOrZero(summary.activeCount) : slots.filter((slot) => slot.status === "active").length;
+    const reserved = summary ? numericOrZero(summary.reservedCount) : slots.filter((slot) => slot.status === "reserved").length;
+    const empty = summary ? numericOrZero(summary.emptyCount) : Math.max(total - active - reserved, 0);
+    let periodOpen = summary ? numericOrZero(summary.periodOpenCount) : 0;
+    let periodNormal = summary ? numericOrZero(summary.periodNormalCount) : 0;
+    let periodOverdue = summary ? numericOrZero(summary.periodOverdueCount) : 0;
+    if (!summary) {
+      slots.forEach((slot) => {
+        const tone = occupancyPeriodTone(currentOccupancy(slot.id));
+        if (tone === "open") periodOpen += 1;
+        if (tone === "normal") periodNormal += 1;
+        if (tone === "overdue") periodOverdue += 1;
+      });
+    }
     return {
       id: room.id,
       name: room.name,
@@ -2166,14 +2574,15 @@ function renderCageView() {
   }
   const racks = racksForRoom(selectedRoom.id);
   const selectedRack = getSelectedRack(racks);
+  const cageLoading = remotePersistence && infrastructureLoadState.loading && infrastructureLoadState.scope !== "full";
   if (!selectedRack) {
     return `
       <section class="content-grid">
         <div class="panel large">
           <div class="empty-state">
             ${iconSvg("grid")}
-            <h2>尚未创建笼架</h2>
-            <p>当前饲养间还没有笼架，请先添加笼架后再录入笼位。</p>
+            <h2>${cageLoading ? "正在加载笼位" : "尚未创建笼架"}</h2>
+            <p>${cageLoading ? "正在加载当前饲养间笼位信息。" : "当前饲养间还没有笼架，请先添加笼架后再录入笼位。"}</p>
             ${currentUser ? `<button class="primary" type="button" data-view="rooms">${iconSvg("plus")}新增笼架</button>` : ""}
           </div>
         </div>
@@ -2228,7 +2637,7 @@ function renderCageView() {
           }
         </div>
         <div class="rack-grid" style="--cols:${selectedRack.cols}">
-          ${visibleSlots.map((slot) => renderSlot(slot)).join("")}
+          ${cageLoading && !visibleSlots.length ? `<p class="muted">正在加载当前饲养间笼位。</p>` : visibleSlots.map((slot) => renderSlot(slot)).join("")}
         </div>
         <div id="slotHoverPreview" class="slot-hover-preview" hidden></div>
         ${state.showCageEditor ? "" : renderCageEditorQuickAction(selectedSlot, selectedBatchSlots)}
@@ -2637,15 +3046,19 @@ function renderIacucLookupInput(name, value = "", options = {}) {
 function renderIacucLookupPanel(value = "") {
   const options = iacucOptions(value);
   const hasKeyword = String(value || "").trim();
+  const total = iacucIndexMeta?.count ?? IACUC_INDEX.length;
+  const statusText = IACUC_INDEX_LOADING ? "正在加载索引" : total ? `${total} 条索引` : "暂无索引";
   return `
     <div class="iacuc-suggest-panel" data-iacuc-suggest-panel>
       <div class="iacuc-suggest-head">
         <span>${hasKeyword ? "匹配伦理号" : "常用伦理号"}</span>
-        <small>${IACUC_INDEX.length ? `${IACUC_INDEX.length} 条索引` : "暂无索引"}</small>
+        <small>${statusText}</small>
       </div>
       <div class="iacuc-suggest-list">
         ${
-          options.length
+          IACUC_INDEX_LOADING
+            ? `<div class="iacuc-suggest-empty">正在加载伦理号索引</div>`
+            : options.length
             ? options.map(renderIacucSuggestion).join("")
             : `<div class="iacuc-suggest-empty">未匹配到索引，可继续手动输入</div>`
         }
@@ -3223,6 +3636,7 @@ function renderQuantitySheetBillingView() {
   const draft = state.quantitySheetDraft || makeQuantitySheetDraft(state.billingMonth);
   const statement = buildQuantitySheetStatement(draft);
   const canGenerateStatement = !remotePersistence || Boolean(currentUser);
+  const quantityLoading = remotePersistence && lazyDataState.quantitySheetsLoading && !state.quantitySheets.length;
   const managerValue = draft.manager || currentUser?.displayName || "";
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
@@ -3239,7 +3653,7 @@ function renderQuantitySheetBillingView() {
             </div>
             <div class="quantity-sheet-actions">
               <select id="quantitySheetSelect" aria-label="选择数量统计表">
-                <option value="">请选择统计表或新建</option>
+                <option value="">${quantityLoading ? "正在加载统计表" : "请选择统计表或新建"}</option>
                 ${state.quantitySheets
                   .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
                   .join("")}
@@ -3258,6 +3672,7 @@ function renderQuantitySheetBillingView() {
               </div>
             </div>
           </div>
+          ${quantityLoading ? `<p class="muted">正在加载数量统计表，请稍候。</p>` : ""}
 
           <div class="quantity-sheet-fields">
             <div class="quantity-field-group quantity-field-group-basic">
@@ -3380,6 +3795,7 @@ function renderQuantitySheetBillingView() {
 
 function renderBillingWorkflowPanel() {
   const items = filteredBillingWorkflows();
+  const workflowLoading = remotePersistence && lazyDataState.billingWorkflowsLoading && !state.billingWorkflows.length;
   const counts = {
     todo: state.billingWorkflows.filter((item) => workflowIsTodo(item)).length,
     done: state.billingWorkflows.filter((item) => item.workflowStatus === "submitted_to_finance").length,
@@ -3415,7 +3831,9 @@ function renderBillingWorkflowPanel() {
             </thead>
             <tbody>
               ${
-                items.length
+                workflowLoading
+                  ? `<tr><td colspan="8">正在加载结算流程。</td></tr>`
+                  : items.length
                   ? items.map(renderBillingWorkflowRow).join("")
                   : `<tr><td colspan="8">当前筛选下没有结算流程。</td></tr>`
               }
@@ -4047,7 +4465,7 @@ function renderIacucStatusCard() {
   return `
     <div class="rule-card">
       <strong>IACUC 索引</strong>
-      <span>${IACUC_INDEX.length} 条记录</span>
+      <span>${iacucIndexMeta?.count ?? IACUC_INDEX.length} 条记录</span>
       <p>${iacucIndexMeta?.updatedAt ? `最后更新：${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : "尚未上传索引文件。"}</p>
       <p>索引用于录入笼位和生成结算单时自动匹配项目名称、项目负责人、实验负责人和支撑经费。</p>
     </div>
@@ -4055,6 +4473,7 @@ function renderIacucStatusCard() {
 }
 
 function renderPrincipalIdentityPanel() {
+  const loading = remotePersistence && lazyDataState.principalIdentitiesLoading && !lazyDataState.principalIdentitiesLoaded;
   const allItems = principalIdentityRows();
   const items = filteredPrincipalIdentityRows(allItems);
   return `
@@ -4069,7 +4488,7 @@ function renderPrincipalIdentityPanel() {
         <input id="principalIdentityFilter" type="search" value="${escapeAttr(state.principalIdentityFilter)}" placeholder="检索姓名、PI、独立科研人员、10 或 20" />
         <button id="applyPrincipalIdentityFilter" class="secondary" type="button">${iconSvg("search")}检索</button>
         <button id="clearPrincipalIdentityFilter" class="secondary" type="button">清空</button>
-        <span class="muted">${items.length} / ${allItems.length} 人</span>
+        <span class="muted">${loading ? "正在加载负责人身份" : `${items.length} / ${allItems.length} 人`}</span>
       </div>
       <div class="table-wrap">
         <table>
@@ -4130,7 +4549,10 @@ function renderSystemUpdateCard() {
       ${info?.currentShort ? `<p>当前运行版本：${escapeText(info.currentShort)}</p>` : ""}
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
       ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
-      <button id="checkSystemUpdate" class="secondary" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
+      <div class="update-card-actions">
+        <button id="clearClientCache" class="secondary" type="button">${iconSvg("refresh")}清理本地缓存并刷新</button>
+        <button id="checkSystemUpdate" class="secondary" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
+      </div>
     </div>
   `;
 }
@@ -4376,7 +4798,7 @@ function renderIacucAdminPanel() {
       <button class="primary" type="submit">${iconSvg("upload")}上传并生成索引</button>
     </form>
     <p class="muted iacuc-index-status">
-      当前索引：${IACUC_INDEX.length} 条${iacucIndexMeta?.updatedAt ? ` · ${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : ""}
+      当前索引：${iacucIndexMeta?.count ?? IACUC_INDEX.length} 条${iacucIndexMeta?.updatedAt ? ` · ${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : ""}
     </p>
   `;
 }
@@ -4430,6 +4852,7 @@ function renderUserRow(user) {
 
 function renderAuditView() {
   const logs = state.auditLogs || [];
+  const loading = remotePersistence && lazyDataState.auditLogsLoading && !logs.length;
   return `
     <section class="panel large">
       <div class="panel-head">
@@ -4440,7 +4863,9 @@ function renderAuditView() {
       </div>
       <div class="audit-list">
         ${
-          logs.length
+          loading
+            ? `<div class="empty-state">${iconSvg("receipt")}<h2>正在加载操作日志</h2></div>`
+            : logs.length
             ? logs.map(renderAuditLog).join("")
             : `<div class="empty-state">${iconSvg("receipt")}<h2>暂无操作日志</h2></div>`
         }
@@ -4465,9 +4890,11 @@ function renderAuditLog(log) {
 function renderRoomCard(room) {
   const normalizedRoom = normalizeRoomDefaults(room);
   const racks = racksForRoom(room.id);
+  const summary = roomSummaryById(room.id);
   const slots = slotsForRoom(room.id);
-  const active = slots.filter((slot) => slot.status === "active").length;
-  const reserved = slots.filter((slot) => slot.status === "reserved").length;
+  const slotCount = summary ? numericOrZero(summary.slotCount) : slots.length;
+  const active = summary ? numericOrZero(summary.activeCount) : slots.filter((slot) => slot.status === "active").length;
+  const reserved = summary ? numericOrZero(summary.reservedCount) : slots.filter((slot) => slot.status === "reserved").length;
   const canManageRooms = !remotePersistence || currentUser?.role === "admin";
   const profile = billingProfileForRoom(normalizedRoom);
 
@@ -4479,7 +4906,7 @@ function renderRoomCard(room) {
           <p>${room.area || "未设置区域"} · ${facilityLabel(normalizedRoom.facility)} · ${billingItemLabel(profile.billingItem)} · ${billingUnitLabel(profile.unit)} · ${billingPriceLabel(profile)}</p>
         </div>
         <div class="tree-actions">
-          <span>${slots.length} 笼位</span>
+          <span>${slotCount} 笼位</span>
           <span>${active} 在用</span>
           <span>${reserved} 预约</span>
           ${
@@ -4504,9 +4931,11 @@ function renderRoomCard(room) {
 }
 
 function renderRackTreeItem(room, rack) {
+  const summary = rackSummaryById(rack.id);
   const slots = slotsForRack(rack.id);
-  const active = slots.filter((slot) => slot.status === "active").length;
-  const reserved = slots.filter((slot) => slot.status === "reserved").length;
+  const slotCount = summary ? numericOrZero(summary.slotCount) : slots.length;
+  const active = summary ? numericOrZero(summary.activeCount) : slots.filter((slot) => slot.status === "active").length;
+  const reserved = summary ? numericOrZero(summary.reservedCount) : slots.filter((slot) => slot.status === "reserved").length;
 
   return `
     <div class="rack-tree-item">
@@ -4516,7 +4945,7 @@ function renderRackTreeItem(room, rack) {
         <small>${rack.rows} 行 * ${rack.cols} 列</small>
       </div>
       <div class="tree-actions">
-        <span>${slots.length} 笼位</span>
+        <span>${slotCount} 笼位</span>
         <span>${active} 在用</span>
         <span>${reserved} 预约</span>
         <button type="button" class="secondary compact-action" data-edit-rack="${rack.id}" title="编辑笼架" aria-label="编辑 ${room.name} 笼架 ${rackCode(rack)}">
@@ -4573,7 +5002,7 @@ function bindEvents() {
     render();
   });
   document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.activeView = button.dataset.view;
       if (["rooms", "data", "users", "system", "logs"].includes(state.activeView)) {
         state.lastSettingsView = state.activeView;
@@ -4582,14 +5011,27 @@ function bindEvents() {
         state.settingsNavExpanded = false;
       }
       render();
+      try {
+        await ensureViewDataLoaded(state.activeView);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      render();
     });
   });
 
-  document.querySelector("#roomSelect")?.addEventListener("change", (event) => {
+  document.querySelector("#roomSelect")?.addEventListener("change", async (event) => {
     state.selectedRoomId = event.target.value;
     state.selectedRackId = state.racks.find((rack) => rack.roomId === state.selectedRoomId)?.id;
-    state.selectedSlotId = state.slots.find((slot) => slot.rackId === state.selectedRackId)?.id;
+    state.selectedSlotId = "";
     state.selectedSlotIds = [];
+    if (remotePersistence) {
+      try {
+        await loadRoomInfrastructure(state.selectedRoomId);
+      } catch (error) {
+        reportSaveError(error);
+      }
+    }
     render();
   });
 
@@ -4673,9 +5115,17 @@ function bindEvents() {
     positionCageEditorPopover();
   };
   document.querySelectorAll("[data-billing-source]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       captureQuantitySheetDraft();
       state.billingSource = button.dataset.billingSource;
+      render();
+      if (state.activeView === "billing") {
+        try {
+          await ensureViewDataLoaded("billing");
+        } catch (error) {
+          reportSaveError(error);
+        }
+      }
       render();
     });
   });
@@ -4956,6 +5406,14 @@ function bindEvents() {
     });
   });
   document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
+  document.querySelector("#clearClientCache")?.addEventListener("click", () => {
+    openConfirmDialog({
+      type: "clear-client-cache",
+      title: "清理本地缓存并刷新",
+      message: "确认清理当前浏览器保存的本地缓存并重新加载页面？这会清空本地界面状态和已缓存资源。",
+      confirmLabel: "清理并刷新",
+    });
+  });
   document.querySelectorAll("[data-system-doc]").forEach((button) => {
     button.addEventListener("click", () => openSystemDoc(button.dataset.systemDoc));
   });
@@ -5147,8 +5605,17 @@ async function login(event) {
       return;
     }
     currentUser = payload.user;
-    await loadIacucIndex();
-    await Promise.all([loadPersistedState(), loadUsers()]);
+    await Promise.all([loadIacucIndexStatus(), loadPersistedState()]);
+    try {
+      await ensureViewDataLoaded(state.activeView);
+    } catch (loadError) {
+      console.error(loadError);
+      state.flashNotice = {
+        type: "warning",
+        title: "部分数据加载失败",
+        message: loadError?.message || "当前页面的附加数据未完整加载。",
+      };
+    }
     render();
   } catch {
     if (error) error.textContent = "无法连接后端服务";
@@ -5159,6 +5626,25 @@ async function logout() {
   await fetch(API_LOGOUT_URL, { method: "POST" }).catch(() => {});
   currentUser = null;
   users = [];
+  IACUC_INDEX = [];
+  IACUC_BY_NUMBER = new Map();
+  IACUC_INDEX_LOADING = false;
+  IACUC_INDEX_LOADED = false;
+  IACUC_INDEX_PROMISE = null;
+  iacucIndexMeta = null;
+  invalidateIacucSearchCache();
+  lazyDataState.quantitySheetsLoaded = false;
+  lazyDataState.quantitySheetsLoading = false;
+  lazyDataState.billingWorkflowsLoaded = false;
+  lazyDataState.billingWorkflowsLoading = false;
+  lazyDataState.auditLogsLoaded = false;
+  lazyDataState.auditLogsLoading = false;
+  lazyDataState.usersLoaded = false;
+  lazyDataState.usersLoading = false;
+  lazyDataState.principalIdentitiesLoaded = false;
+  lazyDataState.principalIdentitiesLoading = false;
+  PRINCIPAL_IDENTITIES = [];
+  PRINCIPAL_IDENTITY_BY_NAME = new Map();
   render();
 }
 
@@ -5185,15 +5671,24 @@ async function loadCurrentUser() {
 async function loadUsers() {
   if (!currentUser || currentUser.role !== "admin") {
     users = [];
+    lazyDataState.usersLoaded = true;
+    lazyDataState.usersLoading = false;
     return;
   }
+  lazyDataState.usersLoading = true;
   try {
     const response = await fetch(API_USERS_URL, { cache: "no-store" });
-    if (!response.ok) return;
+    if (!response.ok) {
+      lazyDataState.usersLoading = false;
+      return;
+    }
     const payload = await response.json();
     users = payload.users || [];
+    lazyDataState.usersLoaded = true;
+    lazyDataState.usersLoading = false;
   } catch {
     users = [];
+    lazyDataState.usersLoading = false;
   }
 }
 
@@ -5320,6 +5815,9 @@ async function handleIacucUpload(event) {
     }
     IACUC_INDEX = payload.items || [];
     IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [iacucRawKey(item.iacuc), item]));
+    IACUC_INDEX_LOADING = false;
+    IACUC_INDEX_LOADED = true;
+    IACUC_INDEX_PROMISE = null;
     invalidateIacucSearchCache();
     state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
     await loadPrincipalIdentities();
@@ -5400,6 +5898,63 @@ async function checkSystemUpdate() {
     systemUpdateInfo = { error: "无法连接后端服务" };
     render();
   }
+}
+
+async function clearClientCacheAndReload() {
+  if (typeof window === "undefined") return;
+
+  localStorage.clear();
+  sessionStorage.clear();
+
+  if ("caches" in window) {
+    try {
+      const cacheKeys = await caches.keys();
+      await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+    } catch {
+      // Best-effort cache cleanup.
+    }
+  }
+
+  if ("serviceWorker" in navigator) {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    } catch {
+      // Best-effort service worker cleanup.
+    }
+  }
+
+  if ("indexedDB" in window && typeof indexedDB.databases === "function") {
+    try {
+      const databases = await indexedDB.databases();
+      await Promise.all(
+        (databases || [])
+          .map((database) => database?.name)
+          .filter(Boolean)
+          .map(
+            (name) =>
+              new Promise((resolve) => {
+                const request = indexedDB.deleteDatabase(name);
+                request.onsuccess = () => resolve();
+                request.onerror = () => resolve();
+                request.onblocked = () => resolve();
+              }),
+          ),
+      );
+    } catch {
+      // IndexedDB cleanup is optional.
+    }
+  }
+
+  try {
+    sessionStorage.setItem(CACHE_RESET_NOTICE_KEY, JSON.stringify({ at: new Date().toISOString() }));
+  } catch {
+    // Ignore notice persistence failure and continue refresh.
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("_clr", `${Date.now()}`);
+  window.location.replace(url.toString());
 }
 
 async function openSystemDoc(docId) {
@@ -5587,6 +6142,18 @@ function autofillIacucFields(event) {
 function bindIacucLookupInputs(scopeSelector, autofillHandler) {
   const scope = document.querySelector(scopeSelector);
   document.querySelectorAll(`${scopeSelector} [data-iacuc-lookup]`).forEach((input) => {
+    input.addEventListener("focus", async () => {
+      if (IACUC_INDEX_LOADED || IACUC_INDEX_LOADING) return;
+      updateIacucLookupPanel(input);
+      try {
+        await ensureIacucIndexLoaded();
+        updateIacucLookupPanel(input);
+      } catch (error) {
+        console.error(error);
+        showFlashNotice("加载索引失败", "伦理号索引暂时不可用，当前仍可继续手动输入。", "warning");
+        updateIacucLookupPanel(input);
+      }
+    });
     input.addEventListener("input", (event) => {
       input.closest(".iacuc-lookup-field")?.classList.remove("lookup-picked");
       updateIacucLookupPanel(input);
@@ -5842,7 +6409,7 @@ async function deleteQuantitySheetConfirmed(sheetId) {
     throw new Error(payload.error || "删除数量统计表失败");
   }
   mergeServerAuditLogs(payload);
-  await loadPersistedState();
+  await loadQuantitySheets();
   const nextSheet = state.quantitySheets[0] || null;
   state.selectedQuantitySheetId = nextSheet?.id || "";
   state.quantitySheetDraft = nextSheet ? hydrateQuantitySheetIacucInfo(nextSheet) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
@@ -5903,7 +6470,7 @@ async function saveQuantitySheetDraft() {
   state.selectedQuantitySheetId = savedSheet.id;
   state.quantitySheetDraft = savedSheet;
   try {
-    await loadPersistedState();
+    await loadQuantitySheets();
     const refreshedSheet = state.quantitySheets.find((item) => item.id === savedSheet.id);
     if (refreshedSheet) state.quantitySheetDraft = refreshedSheet;
   } catch (refreshError) {
@@ -6633,6 +7200,7 @@ async function handleRoomSubmit(event) {
     state.showRoomForm = false;
     state.editingRoomId = "";
     pushLog(`${existingRoom ? "更新" : "新增"}饲养间 ${room.name}`);
+    await reloadInfrastructureOverview();
     render();
   } catch (error) {
     reportSaveError(error);
@@ -6696,6 +7264,7 @@ async function handleRackSubmit(event) {
     state.editingRackId = "";
     state.showRackForm = false;
     pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
+    await reloadInfrastructureOverview();
     render();
   } catch (error) {
     reportSaveError(error);
@@ -6753,6 +7322,7 @@ async function handleRackEditSubmit(event) {
     state.selectedRackId = rack.id;
     state.selectedSlotId = state.slots.find((slot) => slot.rackId === rack.id)?.id || "";
     pushLog(`更新${room.name} 笼架 ${rackCode(rack)}`);
+    await reloadInfrastructureOverview();
     render();
   } catch (error) {
     reportSaveError(error);
@@ -6769,12 +7339,11 @@ async function deleteRoom(roomId) {
   }
 
   const racks = state.racks.filter((rack) => rack.roomId === roomId);
-  const rackIds = new Set(racks.map((rack) => rack.id));
-  const slotIds = new Set(state.slots.filter((slot) => rackIds.has(slot.rackId)).map((slot) => slot.id));
-  const occupancyCount = state.occupancies.filter((item) => slotIds.has(item.slotId)).length;
+  const slotCount = numericOrZero(roomSummaryById(roomId)?.slotCount);
+  const occupancyCount = numericOrZero(roomSummaryById(roomId)?.occupancyRecordCount);
   const message = occupancyCount
-    ? `确定删除 ${room.name}？这会删除 ${racks.length} 个笼架和 ${slotIds.size} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
-    : `确定删除 ${room.name}？这会同时删除 ${racks.length} 个笼架和 ${slotIds.size} 个笼位。`;
+    ? `确定删除 ${room.name}？这会删除 ${racks.length} 个笼架和 ${slotCount} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
+    : `确定删除 ${room.name}？这会同时删除 ${racks.length} 个笼架和 ${slotCount} 个笼位。`;
 
   openConfirmDialog({
     type: "delete-room",
@@ -6790,16 +7359,16 @@ async function deleteRoomConfirmed(roomId) {
   const room = state.rooms.find((item) => item.id === roomId);
   if (!room) return;
   const racks = state.racks.filter((rack) => rack.roomId === roomId);
-  const rackIds = new Set(racks.map((rack) => rack.id));
-  const slotIds = new Set(state.slots.filter((slot) => rackIds.has(slot.rackId)).map((slot) => slot.id));
   try {
     await deleteEntityRequest("rooms", roomId);
     state.rooms = state.rooms.filter((item) => item.id !== roomId);
     state.racks = state.racks.filter((rack) => rack.roomId !== roomId);
-    state.slots = state.slots.filter((slot) => !slotIds.has(slot.id));
-    state.selectedSlotIds = state.selectedSlotIds.filter((slotId) => !slotIds.has(slotId));
+    const remainingRackIds = new Set(state.racks.map((rack) => rack.id));
+    state.slots = state.slots.filter((slot) => remainingRackIds.has(slot.rackId));
+    state.selectedSlotIds = state.selectedSlotIds.filter((slotId) => state.slots.some((slot) => slot.id === slotId));
     if (racks.some((rack) => rack.id === state.editingRackId)) state.editingRackId = "";
     pushLog(`删除饲养间 ${room.name}`);
+    refreshInfrastructureSummaries();
     selectFirstAvailableCage();
     updateSlotStatuses();
     render();
@@ -6814,13 +7383,12 @@ async function deleteRack(rackId) {
 
   const room = state.rooms.find((item) => item.id === rack.roomId);
   const roomRacks = state.racks.filter((item) => item.roomId === rack.roomId);
-  const slots = state.slots.filter((slot) => slot.rackId === rackId);
-  const slotIds = new Set(slots.map((slot) => slot.id));
-  const occupancyCount = state.occupancies.filter((item) => slotIds.has(item.slotId)).length;
+  const slotCount = numericOrZero(rackSummaryById(rackId)?.slotCount);
+  const occupancyCount = numericOrZero(rackSummaryById(rackId)?.occupancyRecordCount);
   const rackLabel = `${room?.name ?? "饲养间"} 笼架 ${rackCode(rack)}`;
   const message = occupancyCount
-    ? `确定删除 ${rackLabel}？这会删除 ${slots.length} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
-    : `确定删除 ${rackLabel}？这会同时删除 ${slots.length} 个笼位。`;
+    ? `确定删除 ${rackLabel}？这会删除 ${slotCount} 个笼位，${occupancyCount} 条占用记录会作为历史保留。`
+    : `确定删除 ${rackLabel}？这会同时删除 ${slotCount} 个笼位。`;
 
   openConfirmDialog({
     type: "delete-rack",
@@ -6853,6 +7421,7 @@ async function deleteRackConfirmed(rackId) {
       Object.assign(room, updatedRoom);
     }
     pushLog(`删除${rackLabel}`);
+    refreshInfrastructureSummaries();
     selectFirstAvailableCage();
     updateSlotStatuses();
     render();
@@ -8899,6 +9468,10 @@ async function handleConfirmDialogAction() {
       showFlashNotice("删除成功", `笼架已删除：${dialog.payload?.rackLabel || dialog.id}`);
       return;
     }
+    if (dialog.type === "clear-client-cache") {
+      await clearClientCacheAndReload();
+      return;
+    }
     render();
   } catch (error) {
     reportSaveError(error);
@@ -9004,11 +9577,21 @@ async function initialize() {
   await loadSystemInfo();
   await loadCurrentUser();
   if (!remotePersistence || currentUser) {
-    await loadIacucIndex();
-    await Promise.all([loadPrincipalIdentities(), loadPersistedState(), loadUsers()]);
+    await Promise.all([loadIacucIndexStatus(), loadPersistedState()]);
     await applyStatementDeepLink();
+    try {
+      await ensureViewDataLoaded(state.activeView);
+    } catch (loadError) {
+      console.error(loadError);
+      state.flashNotice = {
+        type: "warning",
+        title: "部分数据加载失败",
+        message: loadError?.message || "当前页面的附加数据未完整加载。",
+      };
+    }
   }
   render();
+  showPendingCacheResetNotice();
 }
 
 async function applyStatementDeepLink() {
@@ -9070,36 +9653,100 @@ function refreshStaleClientVersion(clientVersion, serverVersion) {
   window.location.replace(url.toString());
 }
 
-async function loadIacucIndex() {
+function showPendingCacheResetNotice() {
   try {
-    const response = await fetch(API_IACUC_INDEX_URL, { cache: "no-store" });
+    const raw = sessionStorage.getItem(CACHE_RESET_NOTICE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(CACHE_RESET_NOTICE_KEY);
+    const payload = JSON.parse(raw);
+    showFlashNotice("清理完成", `本地缓存已清理，页面已刷新${payload?.at ? `：${formatLogTime(payload.at)}` : ""}`);
+  } catch {
+    sessionStorage.removeItem(CACHE_RESET_NOTICE_KEY);
+    showFlashNotice("清理完成", "本地缓存已清理，页面已刷新。");
+  }
+}
+
+async function loadIacucIndexStatus() {
+  if (!remotePersistence && !currentUser) {
+    iacucIndexMeta = null;
+    return;
+  }
+  try {
+    const response = await fetch("/api/iacuc-index/status", { cache: "no-store" });
+    if (response.status === 401) {
+      currentUser = null;
+      iacucIndexMeta = null;
+      return;
+    }
     if (!response.ok) return;
     const payload = await response.json();
-    IACUC_INDEX = payload.items || [];
     iacucIndexMeta = {
-      count: payload.count,
+      count: payload.count || 0,
       updatedAt: payload.updatedAt,
       source: payload.source,
     };
-    IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [iacucRawKey(item.iacuc), item]));
-    invalidateIacucSearchCache();
   } catch {
-    IACUC_INDEX = [];
-    IACUC_BY_NUMBER = new Map();
-    invalidateIacucSearchCache();
     iacucIndexMeta = null;
   }
+}
+
+async function ensureIacucIndexLoaded() {
+  if (!remotePersistence && !currentUser) return IACUC_INDEX;
+  if (IACUC_INDEX_LOADED) return IACUC_INDEX;
+  if (IACUC_INDEX_PROMISE) return IACUC_INDEX_PROMISE;
+  IACUC_INDEX_LOADING = true;
+  IACUC_INDEX_PROMISE = (async () => {
+    try {
+      const response = await fetch(API_IACUC_INDEX_URL, { cache: "no-store" });
+      if (response.status === 401) {
+        currentUser = null;
+        render();
+        throw new Error("请先登录");
+      }
+      if (!response.ok) throw new Error("加载 IACUC 索引失败");
+      const payload = await response.json();
+      IACUC_INDEX = payload.items || [];
+      iacucIndexMeta = {
+        count: payload.count || IACUC_INDEX.length,
+        updatedAt: payload.updatedAt,
+        source: payload.source,
+      };
+      IACUC_BY_NUMBER = new Map(IACUC_INDEX.map((item) => [iacucRawKey(item.iacuc), item]));
+      invalidateIacucSearchCache();
+      IACUC_INDEX_LOADED = true;
+      return IACUC_INDEX;
+    } catch (error) {
+      IACUC_INDEX = [];
+      IACUC_BY_NUMBER = new Map();
+      invalidateIacucSearchCache();
+      IACUC_INDEX_LOADED = false;
+      throw error;
+    } finally {
+      IACUC_INDEX_LOADING = false;
+      IACUC_INDEX_PROMISE = null;
+    }
+  })();
+  return IACUC_INDEX_PROMISE;
 }
 
 async function loadPrincipalIdentities() {
   if (!remotePersistence && !currentUser) {
     PRINCIPAL_IDENTITIES = [];
     PRINCIPAL_IDENTITY_BY_NAME = new Map();
-    return;
+    lazyDataState.principalIdentitiesLoaded = true;
+    lazyDataState.principalIdentitiesLoading = false;
+    return PRINCIPAL_IDENTITIES;
   }
+  if (lazyDataState.principalIdentitiesLoading) return PRINCIPAL_IDENTITIES;
+  lazyDataState.principalIdentitiesLoading = true;
   try {
     const response = await fetch(API_PRINCIPAL_IDENTITIES_URL, { cache: "no-store" });
-    if (!response.ok) return;
+    if (response.status === 401) {
+      currentUser = null;
+      render();
+      throw new Error("请先登录");
+    }
+    if (!response.ok) throw new Error("加载项目负责人身份失败");
     const payload = await response.json();
     PRINCIPAL_IDENTITIES = (payload.items || []).map((item) => ({
       ...item,
@@ -9107,8 +9754,16 @@ async function loadPrincipalIdentities() {
       freeCageAllowance: freeCageAllowanceForPrincipalType(item.principalType),
     }));
     PRINCIPAL_IDENTITY_BY_NAME = new Map(PRINCIPAL_IDENTITIES.map((item) => [normalizePersonName(item.pi), item]));
-  } catch {
+    lazyDataState.principalIdentitiesLoaded = true;
+    state.billingPrincipalType = principalTypeForPi(state.billingPi);
+    state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
+    return PRINCIPAL_IDENTITIES;
+  } catch (error) {
     PRINCIPAL_IDENTITIES = [];
     PRINCIPAL_IDENTITY_BY_NAME = new Map();
+    lazyDataState.principalIdentitiesLoaded = false;
+    throw error;
+  } finally {
+    lazyDataState.principalIdentitiesLoading = false;
   }
 }

@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from http import HTTPStatus
@@ -123,17 +124,69 @@ WRITABLE_ENTITY_ENDPOINTS = {
     "/api/billing-adjustments": {"collection": "adjustments", "id_prefix": "adj"},
     "/api/intake-batches": {"collection": "intakeBatches", "id_prefix": "batch"},
 }
+DB_INIT_LOCK = threading.Lock()
+DB_READY = False
+CACHE_TTL_SECONDS = 15
+DATA_CACHE_LOCK = threading.Lock()
+DATA_CACHE = {}
 
 
 def connect_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ensure_database_ready()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
-    initialize_schema(conn)
     return conn
+
+
+def ensure_database_ready():
+    global DB_READY
+    if DB_READY:
+        return
+    with DB_INIT_LOCK:
+        if DB_READY:
+            return
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=5000")
+            initialize_schema(conn)
+            conn.commit()
+            DB_READY = True
+        finally:
+            conn.close()
+
+
+def cache_get(key):
+    with DATA_CACHE_LOCK:
+        entry = DATA_CACHE.get(key)
+        if not entry:
+            return None
+        if entry["expiresAt"] <= datetime.now(timezone.utc):
+            DATA_CACHE.pop(key, None)
+            return None
+        return entry["value"]
+
+
+def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS):
+    with DATA_CACHE_LOCK:
+        DATA_CACHE[key] = {
+            "value": value,
+            "expiresAt": datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds),
+        }
+    return value
+
+
+def invalidate_data_cache(*keys):
+    if not keys:
+        return
+    with DATA_CACHE_LOCK:
+        for key in keys:
+            DATA_CACHE.pop(key, None)
 
 
 def initialize_schema(conn):
@@ -975,6 +1028,164 @@ def read_state():
     return {"state": state, "updatedAt": updated_at}
 
 
+def current_occupancy_by_slot(state):
+    current = {}
+    for item in state.get("occupancies", []):
+        if item.get("slotId") and item.get("status") in ("active", "reserved"):
+            current[item.get("slotId")] = item
+    return current
+
+
+def occupancy_period_tone(occupancy):
+    if not occupancy or occupancy.get("status") != "active":
+        return ""
+    end_date = clean_text(occupancy.get("endDate", ""))
+    if not end_date:
+        return "open"
+    return "overdue" if today_iso() > end_date else "normal"
+
+
+def summarize_infrastructure(state):
+    current_by_slot = current_occupancy_by_slot(state)
+    rack_by_id = {rack.get("id"): rack for rack in state.get("racks", [])}
+    slot_to_rack_id = {slot.get("id"): slot.get("rackId") for slot in state.get("slots", [])}
+    room_summaries = {
+        room.get("id"): {
+            "roomId": room.get("id"),
+            "rackCount": 0,
+            "slotCount": 0,
+            "activeCount": 0,
+            "reservedCount": 0,
+            "emptyCount": 0,
+            "periodOpenCount": 0,
+            "periodNormalCount": 0,
+            "periodOverdueCount": 0,
+            "occupancyRecordCount": 0,
+        }
+        for room in state.get("rooms", [])
+    }
+    rack_summaries = {
+        rack.get("id"): {
+            "rackId": rack.get("id"),
+            "roomId": rack.get("roomId"),
+            "slotCount": 0,
+            "activeCount": 0,
+            "reservedCount": 0,
+            "emptyCount": 0,
+            "periodOpenCount": 0,
+            "periodNormalCount": 0,
+            "periodOverdueCount": 0,
+            "occupancyRecordCount": 0,
+        }
+        for rack in state.get("racks", [])
+    }
+    dashboard = {
+        "total": 0,
+        "active": 0,
+        "reserved": 0,
+        "empty": 0,
+        "periodOpen": 0,
+        "periodNormal": 0,
+        "periodOverdue": 0,
+    }
+
+    for rack in state.get("racks", []):
+        room_summary = room_summaries.get(rack.get("roomId"))
+        if room_summary:
+            room_summary["rackCount"] += 1
+
+    for slot in state.get("slots", []):
+        rack_summary = rack_summaries.get(slot.get("rackId"))
+        rack = rack_by_id.get(slot.get("rackId"), {})
+        room_summary = room_summaries.get(rack.get("roomId"))
+        occupancy = current_by_slot.get(slot.get("id"))
+        tone = occupancy_period_tone(occupancy)
+        status = clean_text(slot.get("status", ""))
+        dashboard["total"] += 1
+        if rack_summary:
+            rack_summary["slotCount"] += 1
+        if room_summary:
+            room_summary["slotCount"] += 1
+        if status == "active":
+            dashboard["active"] += 1
+            if rack_summary:
+                rack_summary["activeCount"] += 1
+            if room_summary:
+                room_summary["activeCount"] += 1
+        elif status == "reserved":
+            dashboard["reserved"] += 1
+            if rack_summary:
+                rack_summary["reservedCount"] += 1
+            if room_summary:
+                room_summary["reservedCount"] += 1
+        else:
+            dashboard["empty"] += 1
+            if rack_summary:
+                rack_summary["emptyCount"] += 1
+            if room_summary:
+                room_summary["emptyCount"] += 1
+        if tone == "open":
+            dashboard["periodOpen"] += 1
+            if rack_summary:
+                rack_summary["periodOpenCount"] += 1
+            if room_summary:
+                room_summary["periodOpenCount"] += 1
+        elif tone == "normal":
+            dashboard["periodNormal"] += 1
+            if rack_summary:
+                rack_summary["periodNormalCount"] += 1
+            if room_summary:
+                room_summary["periodNormalCount"] += 1
+        elif tone == "overdue":
+            dashboard["periodOverdue"] += 1
+            if rack_summary:
+                rack_summary["periodOverdueCount"] += 1
+            if room_summary:
+                room_summary["periodOverdueCount"] += 1
+
+    for item in state.get("occupancies", []):
+        slot_id = item.get("slotId")
+        rack_id = item.get("rackId") or slot_to_rack_id.get(slot_id)
+        room_id = item.get("roomId") or rack_by_id.get(rack_id, {}).get("roomId")
+        if rack_id and rack_id in rack_summaries:
+            rack_summaries[rack_id]["occupancyRecordCount"] += 1
+        if room_id and room_id in room_summaries:
+            room_summaries[room_id]["occupancyRecordCount"] += 1
+
+    return {
+        "dashboardSummary": dashboard,
+        "roomSummaries": list(room_summaries.values()),
+        "rackSummaries": list(rack_summaries.values()),
+    }
+
+
+def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
+    state = filter_state_for_actor(assemble_state(conn) or empty_state(), actor)
+    summary = summarize_infrastructure(state)
+    payload = {
+        "rooms": state.get("rooms", []),
+        "racks": state.get("racks", []),
+        "billingRules": state.get("billingRules", []),
+        "adjustments": state.get("adjustments", []),
+        "intakeBatches": state.get("intakeBatches", []),
+        **summary,
+    }
+    if scope == "full":
+        payload["slots"] = state.get("slots", [])
+        payload["occupancies"] = state.get("occupancies", [])
+        return payload
+    if scope == "room":
+        room_id = clean_text(room_id)
+        rack_ids = {rack.get("id") for rack in state.get("racks", []) if rack.get("roomId") == room_id}
+        payload["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") in rack_ids]
+        slot_ids = {slot.get("id") for slot in payload["slots"]}
+        payload["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") in slot_ids]
+        return payload
+    payload["slots"] = []
+    payload["occupancies"] = []
+    return payload
+
+
 def filter_state_for_actor(state, actor):
     if not state or not actor or actor.get("role") == "admin":
         return state
@@ -1027,6 +1238,7 @@ def write_state(state, actor):
         write_normalized_state(conn, state, updated_at)
         write_audit_events(conn, events)
         conn.commit()
+    invalidate_data_cache("principal_identities")
     return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
 
 
@@ -1059,8 +1271,6 @@ def write_infrastructure_state(payload, actor):
     if not isinstance(payload, dict):
         raise ValueError("Request body must be a JSON object")
 
-    current = read_state()
-    state = current.get("state") or empty_state()
     created_rooms = normalize_entity_batch("rooms", payload.get("rooms", []), "POST")
     updated_rooms = normalize_entity_batch("rooms", payload.get("roomUpdates", []), "PUT")
     created_racks = normalize_entity_batch("racks", payload.get("racks", []), "POST")
@@ -1069,23 +1279,48 @@ def write_infrastructure_state(payload, actor):
     created_slots = normalize_entity_batch("slots", payload.get("slots", []), "POST")
     deleted_slot_ids = normalize_id_batch(payload.get("slotDeletes", []), "slotDeletes")
 
-    for room in created_rooms:
-        insert_entity(state, "rooms", room)
-    for room in updated_rooms:
-        replace_entity(state, "rooms", room["id"], room)
-    for rack in created_racks:
-        insert_entity(state, "racks", rack)
-    for rack in updated_racks:
-        replace_entity(state, "racks", rack["id"], rack)
-    for slot in created_slots:
-        insert_entity(state, "slots", slot)
-    validate_infrastructure_slot_deletes(state, deleted_slot_ids)
-    for slot_id in deleted_slot_ids:
-        delete_entity(state, "slots", slot_id)
-    for rack_id in deleted_rack_ids:
-        delete_entity(state, "racks", rack_id)
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
 
-    result = write_state(state, actor)
+        for room in created_rooms:
+            insert_entity(state, "rooms", room)
+        for room in updated_rooms:
+            replace_entity(state, "rooms", room["id"], room)
+        for rack in created_racks:
+            insert_entity(state, "racks", rack)
+        for rack in updated_racks:
+            replace_entity(state, "racks", rack["id"], rack)
+        for slot in created_slots:
+            insert_entity(state, "slots", slot)
+        validate_infrastructure_slot_deletes(state, deleted_slot_ids)
+        for slot_id in deleted_slot_ids:
+            delete_entity(state, "slots", slot_id)
+        for rack_id in deleted_rack_ids:
+            delete_entity(state, "racks", rack_id)
+
+        validate_state_write_permission(conn, actor, old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+
+        for room in created_rooms:
+            insert_room_record(conn, room)
+        for room in updated_rooms:
+            update_room_record(conn, room)
+        for rack in created_racks:
+            insert_rack_record(conn, rack)
+        for rack in updated_racks:
+            update_rack_record(conn, rack)
+        for slot in created_slots:
+            insert_slot_record(conn, slot)
+        for slot_id in deleted_slot_ids:
+            conn.execute("DELETE FROM cage_slots WHERE id = ?", (slot_id,))
+        for rack_id in deleted_rack_ids:
+            conn.execute("DELETE FROM racks WHERE id = ?", (rack_id,))
+
+        write_audit_events(conn, events)
+        conn.commit()
+
     return {
         "rooms": created_rooms,
         "roomUpdates": updated_rooms,
@@ -1094,8 +1329,8 @@ def write_infrastructure_state(payload, actor):
         "rackDeletes": deleted_rack_ids,
         "slots": created_slots,
         "slotDeletes": deleted_slot_ids,
-        "updatedAt": result["updatedAt"],
-        "auditLogs": result["auditLogs"],
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
     }
 
 
@@ -1136,6 +1371,98 @@ def validate_infrastructure_slot_deletes(state, slot_ids):
     ]
     if active:
         raise ValueError("不能移除仍在用或已预约的笼位")
+
+
+def insert_room_record(conn, room):
+    conn.execute(
+        """
+        INSERT INTO rooms (id, name, area, rack_count, rows, cols, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            room.get("id"),
+            room.get("name", ""),
+            room.get("area", ""),
+            as_int(room.get("rackCount")),
+            as_int(room.get("rows")),
+            as_int(room.get("cols")),
+            dump_json(room),
+        ),
+    )
+
+
+def update_room_record(conn, room):
+    conn.execute(
+        """
+        UPDATE rooms
+        SET name = ?, area = ?, rack_count = ?, rows = ?, cols = ?, payload = ?
+        WHERE id = ?
+        """,
+        (
+            room.get("name", ""),
+            room.get("area", ""),
+            as_int(room.get("rackCount")),
+            as_int(room.get("rows")),
+            as_int(room.get("cols")),
+            dump_json(room),
+            room.get("id"),
+        ),
+    )
+
+
+def insert_rack_record(conn, rack):
+    conn.execute(
+        """
+        INSERT INTO racks (id, room_id, name, rows, cols, index_no, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            rack.get("id"),
+            rack.get("roomId"),
+            rack.get("name", ""),
+            as_int(rack.get("rows")),
+            as_int(rack.get("cols")),
+            as_int(rack.get("index")),
+            dump_json(rack),
+        ),
+    )
+
+
+def update_rack_record(conn, rack):
+    conn.execute(
+        """
+        UPDATE racks
+        SET room_id = ?, name = ?, rows = ?, cols = ?, index_no = ?, payload = ?
+        WHERE id = ?
+        """,
+        (
+            rack.get("roomId"),
+            rack.get("name", ""),
+            as_int(rack.get("rows")),
+            as_int(rack.get("cols")),
+            as_int(rack.get("index")),
+            dump_json(rack),
+            rack.get("id"),
+        ),
+    )
+
+
+def insert_slot_record(conn, slot):
+    conn.execute(
+        """
+        INSERT INTO cage_slots (id, rack_id, row_no, col_no, code, status, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            slot.get("id"),
+            slot.get("rackId"),
+            as_int(slot.get("row")),
+            as_int(slot.get("col")),
+            slot.get("code", ""),
+            slot.get("status", "empty"),
+            dump_json(slot),
+        ),
+    )
 
 
 def empty_state():
@@ -2035,35 +2362,42 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+def today_iso():
+    return datetime.now().date().isoformat()
+
+
 def format_http_date(value):
     return format_datetime(value, usegmt=True)
 
 
 def read_iacuc_index():
+    cached = cache_get("iacuc_index")
+    if cached is not None:
+        return cached
     with connect_db() as conn:
         rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY rowid").fetchall()
         if rows:
             items = [json.loads(row["payload"]) for row in rows]
             updated_at = max(row["imported_at"] for row in rows)
-            return {
+            return cache_set("iacuc_index", {
                 "items": items,
                 "count": len(items),
                 "updatedAt": updated_at,
                 "source": "database",
-            }
+            })
 
     path = IACUC_INDEX_PATH if IACUC_INDEX_PATH.exists() else LEGACY_IACUC_INDEX_PATH
     if not path.exists():
-        return {"items": [], "count": 0, "updatedAt": None, "source": None}
+        return cache_set("iacuc_index", {"items": [], "count": 0, "updatedAt": None, "source": None})
 
     items = json.loads(path.read_text(encoding="utf-8"))
     stat = path.stat()
-    return {
+    return cache_set("iacuc_index", {
         "items": items,
         "count": len(items),
         "updatedAt": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
         "source": "data" if path == IACUC_INDEX_PATH else "legacy",
-    }
+    })
 
 
 def write_experiment_applications(conn, items, imported_at):
@@ -2089,6 +2423,7 @@ def write_experiment_applications(conn, items, imported_at):
                 dump_json(normalized),
             ),
         )
+    invalidate_data_cache("iacuc_index", "principal_identities")
 
 
 def list_principal_identities(conn):
@@ -2126,6 +2461,14 @@ def list_principal_identities(conn):
     return items
 
 
+def read_principal_identities():
+    cached = cache_get("principal_identities")
+    if cached is not None:
+        return cached
+    with connect_db() as conn:
+        return cache_set("principal_identities", list_principal_identities(conn))
+
+
 def save_principal_identity(conn, payload, actor, pi_name):
     pi_name = clean_text(pi_name or payload.get("pi", ""))
     if not pi_name:
@@ -2161,6 +2504,7 @@ def save_principal_identity(conn, payload, actor, pi_name):
         item,
     )
     write_audit_events(conn, [event])
+    invalidate_data_cache("principal_identities")
     return item, merge_audit_logs([], [event])
 
 
@@ -4491,6 +4835,16 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             payload = read_state()
             self.send_json({**payload, "state": filter_state_for_actor(payload.get("state"), user)})
             return
+        if path == "/api/bootstrap":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                query = parse_qs(urlparse(self.path).query)
+                scope = clean_text(query.get("scope", ["summary"])[0]).lower() or "summary"
+                room_id = clean_text(query.get("roomId", [""])[0])
+                self.send_json(read_bootstrap_state(conn, user, scope, room_id))
+            return
         if path == "/api/iacuc-index":
             if not self.require_user():
                 return
@@ -4534,11 +4888,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             user = self.require_user()
             if not user:
                 return
-            if user["role"] != "admin":
-                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-                return
-            with connect_db() as conn:
-                self.send_json({"items": list_principal_identities(conn)})
+            self.send_json({"items": read_principal_identities()})
             return
         if path == "/api/billing-workflows":
             user = self.require_user()
@@ -5143,6 +5493,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 sheet, audit_logs, status = save_quantity_sheet(conn, body, user, sheet_id)
                 conn.commit()
+            invalidate_data_cache("principal_identities")
             self.send_json({"item": sheet, "auditLogs": audit_logs}, status)
         except sqlite3.IntegrityError:
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
@@ -5175,6 +5526,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 audit_logs = delete_quantity_sheet(conn, user, sheet_id)
                 conn.commit()
+            invalidate_data_cache("principal_identities")
             self.send_json({"ok": True, "auditLogs": audit_logs})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -5200,7 +5552,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
 
 
 def main():
-    connect_db().close()
+    ensure_database_ready()
     server = ThreadingHTTPServer((HOST, PORT), CageLedgerHandler)
     print(f"CageLedger server listening on http://{HOST}:{PORT}")
     print(f"SQLite database: {DB_PATH}")

@@ -2724,8 +2724,16 @@ tr:last-child td {
   font-size: 13px;
 }
 
-.update-card .secondary {
+.update-card-actions {
   margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.update-card-actions .secondary {
+  margin-top: 0;
 }
 
 .rule-card .error-text {
