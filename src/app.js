@@ -30,6 +30,14 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.9g",
+    title: "Gitea 镜像构建脚本兼容修正",
+    items: [
+      "修复 Alpine sh 环境下不支持 Bash 小写转换语法导致的镜像发布失败",
+      "继续验证 Gitea Container Registry 的完整构建与推送链路",
+    ],
+  },
+  {
     version: "0.4.9f",
     title: "Gitea 容器发布变量注入验证",
     items: [
@@ -477,7 +485,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.9f",
+  version: "0.4.9g",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
