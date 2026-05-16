@@ -1,0 +1,46 @@
+name: Publish container package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: publish-container-${{ gitea.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  code: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ gitea.ref_name }}
+
+      - name: Resolve revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITEA_OUTPUT"
+
+      - name: Log in to Gitea Container Registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build and publish image
+        env:
+          IMAGE_TAG: ${{ gitea.ref_name }}
+        run: |
+          IMAGE_TAG="${IMAGE_TAG#v}"
+          IMAGE_REPO="${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY,,}"
+          docker build \
+            --build-arg CAGELEDGER_VERSION="${{ steps.revision.outputs.sha }}" \
+            -t "${IMAGE_REPO}:${IMAGE_TAG}" \
+            -t "${IMAGE_REPO}:latest" \
+            .
+          docker push "${IMAGE_REPO}:${IMAGE_TAG}"
+          docker push "${IMAGE_REPO}:latest"

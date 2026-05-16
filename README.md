@@ -163,7 +163,7 @@ http://服务器IP:5173
 - 终端用户操作手册见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md)。
 - 版本号维护在 `package.json` 的 `version` 字段中。
 - 页面资源版本、后端 `/api/system/info` 和 UI 版本展示都读取同一版本信息。
-- 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应版本制品。
+- 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应 Gitea Release 与镜像制品。
 
 ## 版权
 

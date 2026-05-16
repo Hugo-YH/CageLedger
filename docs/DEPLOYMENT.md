@@ -29,7 +29,7 @@ docker compose up -d
 http://群晖IP:5173
 ```
 
-默认使用 GitHub Container Registry 的 `latest` 镜像。如果希望固定到某个发布版本：
+默认使用 Gitea Container Registry 的 `latest` 镜像。如果希望固定到某个发布版本：
 
 ```bash
 CAGELEDGER_IMAGE_TAG=0.4.8 docker compose up -d
@@ -104,15 +104,21 @@ cd CageLedger
 docker compose -f docker-compose.offline.yml up -d --build
 ```
 
-离线构建会使用 `docker-compose.offline.yml`，不需要访问 GHCR。数据仍保存在 Docker 命名卷 `cageledger-data` 中。
+离线构建会使用 `docker-compose.offline.yml`，不需要访问容器镜像仓库。数据仍保存在 Docker 命名卷 `cageledger-data` 中。
 
-## GitHub Container Registry
+## Gitea Release 与 Container Registry
 
-容器镜像发布到 GitHub Container Registry：
+推送 `v*` 标签后，Gitea Actions 会自动：
+
+- 创建对应 Gitea Release。
+- 上传离线源码包。
+- 发布容器镜像到 Gitea Container Registry。
+
+容器镜像地址：
 
 ```bash
-docker pull ghcr.io/hugo-yh/cageledger:latest
-docker pull ghcr.io/hugo-yh/cageledger:0.4.8
+docker pull git.cellnucle.us/hugo/cageledger:latest
+docker pull git.cellnucle.us/hugo/cageledger:0.4.8
 ```
 
-仓库内的 `Publish container package` GitHub Actions 工作流会在推送 `v*` 标签时发布镜像，也可以通过 `workflow_dispatch` 手动指定 Git ref 和镜像标签重新发布。
+要让自动发布生效，需要在仓库中启用 Actions、配置可用 runner，并允许工作流内置 `GITEA_TOKEN` 获得 `releases: write` 和 `packages: write` 权限。

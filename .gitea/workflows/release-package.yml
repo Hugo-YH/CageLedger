@@ -1,0 +1,73 @@
+name: Publish release package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-package-${{ gitea.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  code: read
+  releases: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ gitea.ref_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify package version
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${PACKAGE_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "package.json version ${PACKAGE_VERSION} does not match tag ${TAG_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Build offline package
+        id: package
+        run: |
+          PACKAGE_PATH="$(npm run --silent package:offline)"
+          echo "path=${PACKAGE_PATH}" >> "$GITEA_OUTPUT"
+          echo "name=$(basename "${PACKAGE_PATH}")" >> "$GITEA_OUTPUT"
+
+      - name: Create or load Gitea release
+        id: release
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          API_BASE="${GITHUB_SERVER_URL%/}/api/v1"
+          RELEASE_JSON="$(curl -fsS \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" || true)"
+          if [ -z "${RELEASE_JSON}" ]; then
+            RELEASE_JSON="$(curl -fsS -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"${GITHUB_REF_NAME}\",\"name\":\"CageLedger ${GITHUB_REF_NAME}\"}" \
+              "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases")"
+          fi
+          RELEASE_ID="$(printf '%s' "${RELEASE_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')"
+          echo "id=${RELEASE_ID}" >> "$GITEA_OUTPUT"
+
+      - name: Upload offline package
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          API_BASE="${GITHUB_SERVER_URL%/}/api/v1"
+          curl -fsS -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -F "attachment=@${{ steps.package.outputs.path }}" \
+            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/${{ steps.release.outputs.id }}/assets?name=${{ steps.package.outputs.name }}"

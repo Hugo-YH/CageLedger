@@ -76,7 +76,7 @@ CageLedger 是一个面向实验动物中心内网使用的轻量级笼位管理
 - 动态笼位图自动核算。
 - 数量统计表录入核算。
 - CSV 饲养明细和 PDF 结算单导出。
-- GitHub Release、离线包和 GHCR 容器镜像自动发布。
+- Gitea Release、离线包和 Gitea 容器镜像自动发布。
 
 ---
 
@@ -788,7 +788,7 @@ IACUC 索引用于减少重复录入，提高项目字段一致性。
 | 数据库 | SQLite | 默认路径 `data/cageledger.sqlite` |
 | 容器 | Docker | 提供 `Dockerfile` |
 | 编排 | Docker Compose | 提供在线和离线 compose 文件 |
-| 发布 | GitHub Actions | Release、离线包、GHCR 镜像 |
+| 发布 | Gitea Actions | Release、离线包、Gitea 镜像 |
 | 包管理 | npm scripts | 用于启动、检查和离线打包 |
 
 ### 13.2 项目结构
@@ -939,7 +939,7 @@ volumes:
 6. 启动后进入系统管理页确认版本号。
 
 > [!TIP]
-> 如果 `image` 使用 `ghcr.io/hugo-yh/cageledger:${CAGELEDGER_IMAGE_TAG:-latest}`，但环境变量仍是旧版本，重新构建仍会使用旧镜像标签。
+> 如果 `image` 使用 `git.cellnucle.us/hugo/cageledger:${CAGELEDGER_IMAGE_TAG:-latest}`，但环境变量仍是旧版本，重新构建仍会使用旧镜像标签。
 
 ### 14.5 固定版本标签
 
@@ -981,17 +981,17 @@ docker compose -f docker-compose.offline.yml up -d --build
 npm run release:local -- --version 0.3.4 --push
 ```
 
-标签推送后 GitHub Actions 会自动生成：
+标签推送后 Gitea Actions 会自动生成：
 
-- GitHub Release。
+- Gitea Release。
 - 离线源码包。
-- GHCR 容器镜像。
+- Gitea 容器镜像。
 
 补充说明：
 
 - `SYSTEM_RELEASE_NOTES` 需要在发布前手动写入本次真实更新内容。
 - `release:local` 会按“改版本 -> 校验 -> 打包 -> commit -> tag -> push”的固定顺序执行，避免标签打到错误提交。
-- GHCR 镜像默认由 `v*` 标签触发，不再额外依赖 Release 事件二次触发。
+- Gitea 镜像默认由 `v*` 标签触发，不再额外依赖 Release 事件二次触发。
 
 ---
 
@@ -1123,7 +1123,7 @@ npm run release:local -- --version 0.3.4 --push
 | 笼日 | 一个笼位在一天内被计费的单位 |
 | 预约 | 已计划使用但默认不计费的状态 |
 | 取材 | 动物实验结束并设置最后计费日期 |
-| GHCR | GitHub Container Registry |
+| Gitea Container Registry | Gitea 内置 OCI 镜像仓库 |
 
 ### 17.2 推荐命名规范
 

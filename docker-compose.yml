@@ -2,7 +2,7 @@ name: cageledger
 
 services:
   cageledger:
-    image: ghcr.io/hugo-yh/cageledger:${CAGELEDGER_IMAGE_TAG:-latest}
+    image: git.cellnucle.us/hugo/cageledger:${CAGELEDGER_IMAGE_TAG:-latest}
     container_name: cageledger
     restart: unless-stopped
     ports:
