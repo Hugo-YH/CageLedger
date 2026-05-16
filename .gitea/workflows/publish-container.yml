@@ -34,8 +34,9 @@ jobs:
 
       - name: Log in to Gitea Container Registry
         env:
-          REGISTRY_TOKEN: ${{ secrets.GITEA_TOKEN }}
-        run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${GITHUB_ACTOR}" --password-stdin
+          REGISTRY_TOKEN: ${{ secrets.PACKAGE_PAT }}
+          REGISTRY_USERNAME: ${{ secrets.PACKAGE_USERNAME }}
+        run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${REGISTRY_USERNAME}" --password-stdin
 
       - name: Build and publish image
         env:

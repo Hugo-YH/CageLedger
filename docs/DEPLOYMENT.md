@@ -121,4 +121,7 @@ docker pull git.cellnucle.us/hugo/cageledger:latest
 docker pull git.cellnucle.us/hugo/cageledger:0.4.9d
 ```
 
-要让自动发布生效，需要在仓库中启用 Actions、配置可用 runner，并允许工作流内置 `GITEA_TOKEN` 获得 `releases: write` 和 `packages: write` 权限。
+要让自动发布生效，需要在仓库中启用 Actions、配置可用 runner，并满足：
+
+- 工作流内置 `GITEA_TOKEN` 获得 `releases: write` 权限，用于创建 Gitea Release。
+- 仓库 secrets 中配置 `PACKAGE_USERNAME` 和 `PACKAGE_PAT`，用于登录 Gitea Container Registry 并推送镜像。
