@@ -2540,6 +2540,7 @@ def save_iacuc_index_file(items):
 
 def system_update_status():
     current = current_revision()
+    current_version = normalize_release_version(app_version())
     if not CAGELEDGER_UPDATE_CHECK_ENABLED:
         return {
             "repository": CAGELEDGER_REPOSITORY_URL,
@@ -2548,8 +2549,10 @@ def system_update_status():
             "appVersion": app_version(),
             "current": current or None,
             "currentShort": short_revision(current),
+            "currentVersion": current_version or None,
             "latest": None,
             "latestShort": "",
+            "latestVersion": None,
             "latestUrl": None,
             "latestMessage": None,
             "latestDate": None,
@@ -2558,11 +2561,12 @@ def system_update_status():
             "disabled": True,
         }
 
-    latest = latest_remote_revision()
+    latest = latest_remote_release()
     latest_sha = latest.get("sha") or ""
+    latest_version = normalize_release_version(latest.get("version"))
     update_available = None
-    if current and latest_sha:
-        update_available = not revisions_match(current, latest_sha)
+    if current_version and latest_version:
+        update_available = compare_release_versions(current_version, latest_version) < 0
 
     return {
         "repository": CAGELEDGER_REPOSITORY_URL,
@@ -2571,8 +2575,10 @@ def system_update_status():
         "appVersion": app_version(),
         "current": current or None,
         "currentShort": short_revision(current),
+        "currentVersion": current_version or None,
         "latest": latest_sha or None,
         "latestShort": short_revision(latest_sha),
+        "latestVersion": latest_version or None,
         "latestUrl": latest.get("url"),
         "latestMessage": latest.get("message"),
         "latestDate": latest.get("date"),
@@ -2647,12 +2653,9 @@ def read_git_revision(root):
     return head
 
 
-def latest_remote_revision():
+def latest_remote_release():
     repository = parse_gitea_repository_url(CAGELEDGER_REPOSITORY_URL)
-    url = (
-        f"{repository['baseUrl']}/api/v1/repos/{repository['owner']}/{repository['repo']}/commits"
-        f"?sha={CAGELEDGER_BRANCH}&limit=1&stat=false&verification=false&files=false"
-    )
+    url = f"{repository['baseUrl']}/api/v1/repos/{repository['owner']}/{repository['repo']}/releases/latest"
     headers = {"Accept": "application/json", "User-Agent": "CageLedger"}
     if CAGELEDGER_GITEA_TOKEN:
         headers["Authorization"] = f"token {CAGELEDGER_GITEA_TOKEN}"
@@ -2669,17 +2672,16 @@ def latest_remote_revision():
     except TimeoutError as exc:
         raise ValueError("连接 Gitea 超时") from exc
 
-    if not isinstance(payload, list) or not payload:
-        raise ValueError("Gitea 未返回可用提交")
+    tag_name = str(payload.get("tag_name") or "").strip()
+    if not tag_name:
+        raise ValueError("Gitea 未返回可用发布版本")
 
-    latest = payload[0] or {}
-    commit = latest.get("commit") or {}
-    author = commit.get("author") or {}
     return {
-        "sha": latest.get("sha", ""),
-        "url": latest.get("html_url", ""),
-        "message": first_line(commit.get("message", "")),
-        "date": author.get("date", ""),
+        "sha": payload.get("target_commitish", ""),
+        "version": tag_name,
+        "url": payload.get("html_url", ""),
+        "message": first_line(payload.get("name", "") or payload.get("body", "")),
+        "date": payload.get("published_at") or payload.get("created_at") or "",
     }
 
 
@@ -2707,6 +2709,35 @@ def revisions_match(current, latest):
     current = str(current or "").strip()
     latest = str(latest or "").strip()
     return bool(current and latest and (current.startswith(latest) or latest.startswith(current)))
+
+
+def normalize_release_version(value):
+    return str(value or "").strip().removeprefix("v")
+
+
+def release_version_key(value):
+    version = normalize_release_version(value)
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)([A-Za-z]*)(\d*)", version)
+    if not match:
+        return None
+    major, minor, patch, suffix, suffix_number = match.groups()
+    return (
+        int(major),
+        int(minor),
+        int(patch),
+        suffix or "",
+        int(suffix_number) if suffix_number else -1,
+    )
+
+
+def compare_release_versions(left, right):
+    left_key = release_version_key(left)
+    right_key = release_version_key(right)
+    if left_key is None or right_key is None:
+        return (normalize_release_version(left) > normalize_release_version(right)) - (
+            normalize_release_version(left) < normalize_release_version(right)
+        )
+    return (left_key > right_key) - (left_key < right_key)
 
 
 def short_revision(value):

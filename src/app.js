@@ -4620,8 +4620,9 @@ function renderSystemUpdateCard() {
       <p>开发人员：${escapeText(systemInfo.developer || "-")} · ${escapeText(systemInfo.contactEmail || "-")}</p>
       <p>开源协议：${escapeText(systemInfo.license || "-")}</p>
       <p>版权信息：${escapeText(systemInfo.copyright || "-")}</p>
-      ${info?.latestShort ? `<p>远端最新版本：${escapeText(info.latestShort)}${info.latestMessage ? ` · ${escapeText(info.latestMessage)}` : ""}</p>` : ""}
-      ${info?.currentShort ? `<p>当前运行版本：${escapeText(info.currentShort)}</p>` : ""}
+      ${info?.latestVersion ? `<p>最新发布版：v${escapeText(info.latestVersion)}${info.latestMessage ? ` · ${escapeText(info.latestMessage)}` : ""}</p>` : ""}
+      <p>当前运行版本：${escapeText(systemInfo.version ? `v${systemInfo.version}` : "未设置")}</p>
+      ${info?.latestUrl ? `<p><a href="${escapeAttr(info.latestUrl)}" target="_blank" rel="noreferrer">查看最新发布页</a></p>` : ""}
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
       ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
       <div class="update-card-actions">
@@ -4852,10 +4853,10 @@ function updateStatusText(info) {
   if (!info) return "尚未检查远端版本。";
   if (info.loading) return "正在检查远端版本。";
   if (info.error) return "检查失败";
-  if (info.disabled) return "自动更新检查已关闭";
+  if (info.disabled) return "最新发布版检查已关闭";
   if (info.updateAvailable === true) return "发现新版本";
   if (info.updateAvailable === false) return "当前已是最新版本";
-  return "已获取远端版本，当前运行版本未知";
+  return "已获取最新发布版，当前运行版本未知";
 }
 
 function renderIacucAdminPanel() {

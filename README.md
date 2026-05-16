@@ -107,8 +107,8 @@ npm run release:local -- --version 0.4.1 --push  # 本地顺序化发布
 | `CAGELEDGER_ADMIN_PASSWORD` | `admin123` | 初始管理员密码 |
 | `CAGELEDGER_REPOSITORY_URL` | `https://git.cellnucle.us/hugo/cageledger` | 项目仓库地址 |
 | `CAGELEDGER_BRANCH` | `main` | 远端分支 |
-| `CAGELEDGER_UPDATE_CHECK_ENABLED` | `false` | 是否启用远端更新检查 |
-| `CAGELEDGER_GITEA_TOKEN` | 空 | 私有 Gitea 仓库更新检查使用的只读 token |
+| `CAGELEDGER_UPDATE_CHECK_ENABLED` | `false` | 是否启用最新发布版检查 |
+| `CAGELEDGER_GITEA_TOKEN` | 空 | 私有 Gitea 仓库发布版检查使用的只读 token |
 
 页面展示的单位、科室、开发者、联系邮箱、版权和协议也可通过 `CAGELEDGER_ORGANIZATION`、`CAGELEDGER_DEPARTMENT`、`CAGELEDGER_DEVELOPER`、`CAGELEDGER_CONTACT_EMAIL`、`CAGELEDGER_COPYRIGHT` 和 `CAGELEDGER_LICENSE` 覆盖。
 
