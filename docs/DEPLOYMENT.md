@@ -32,7 +32,7 @@ http://群晖IP:5173
 默认使用 Gitea Container Registry 的 `latest` 镜像。如果希望固定到某个发布版本：
 
 ```bash
-CAGELEDGER_IMAGE_TAG=0.4.9c docker compose up -d
+CAGELEDGER_IMAGE_TAG=0.4.9d docker compose up -d
 ```
 
 ## 数据持久化
@@ -92,14 +92,14 @@ npm run package:offline
 脚本会生成类似文件：
 
 ```text
-dist/CageLedger-offline-v0.4.9c.tar.gz
+dist/CageLedger-offline-v0.4.9d.tar.gz
 ```
 
 把这个文件上传到 NAS，例如 `/volume1/docker/`。然后在 NAS 的 SSH 终端执行：
 
 ```bash
 cd /volume1/docker
-tar -xzf CageLedger-offline-v0.4.9c.tar.gz
+tar -xzf CageLedger-offline-v0.4.9d.tar.gz
 cd CageLedger
 docker compose -f docker-compose.offline.yml up -d --build
 ```
@@ -118,7 +118,7 @@ docker compose -f docker-compose.offline.yml up -d --build
 
 ```bash
 docker pull git.cellnucle.us/hugo/cageledger:latest
-docker pull git.cellnucle.us/hugo/cageledger:0.4.9c
+docker pull git.cellnucle.us/hugo/cageledger:0.4.9d
 ```
 
 要让自动发布生效，需要在仓库中启用 Actions、配置可用 runner，并允许工作流内置 `GITEA_TOKEN` 获得 `releases: write` 和 `packages: write` 权限。
