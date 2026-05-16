@@ -30,6 +30,14 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.9a",
+    title: "Gitea 自动发布链验证",
+    items: [
+      "在 Gitea act runner 上线后发布验证版本，检查标签触发、Release 上传和镜像发布链路",
+      "保留 0.4.9 的 Gitea 自动发布迁移内容，用于确认新交付体系已可实际运行",
+    ],
+  },
+  {
     version: "0.4.9",
     title: "Gitea 自动发布链迁移",
     items: [
@@ -429,7 +437,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.9",
+  version: "0.4.9a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
