@@ -30,6 +30,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.9",
+    title: "Gitea 自动发布链迁移",
+    items: [
+      "发布工作流迁移到 .gitea/workflows，标签推送后可由 Gitea Actions 接管离线包与镜像发布",
+      "默认容器镜像地址切换到 Gitea Container Registry，并移除旧 GitHub 发布工作流",
+      "部署文档和用户手册同步改为 Gitea Release、Gitea Actions 与 Gitea 镜像语义",
+    ],
+  },
+  {
     version: "0.4.8",
     title: "私有 Gitea 上游与更新检查迁移",
     items: [
@@ -420,7 +429,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.8",
+  version: "0.4.9",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
