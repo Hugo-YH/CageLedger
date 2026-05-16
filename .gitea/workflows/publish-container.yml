@@ -43,7 +43,7 @@ jobs:
           IMAGE_TAG: ${{ gitea.ref_name }}
         run: |
           IMAGE_TAG="${IMAGE_TAG#v}"
-          IMAGE_REPO="${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY,,}"
+          IMAGE_REPO="${GITHUB_SERVER_URL#https://}/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           docker build \
             --build-arg CAGELEDGER_VERSION="${{ steps.revision.outputs.sha }}" \
             -t "${IMAGE_REPO}:${IMAGE_TAG}" \
