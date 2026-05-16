@@ -907,8 +907,10 @@ http://群晖IP:5173
 | `CAGELEDGER_IACUC_INDEX` | `data/iacuc-index.json` | 兼容索引文件路径 |
 | `CAGELEDGER_ADMIN_USERNAME` | `admin` | 初始管理员账号 |
 | `CAGELEDGER_ADMIN_PASSWORD` | `admin123` | 初始管理员密码 |
-| `CAGELEDGER_REPOSITORY` | `Hugo-YH/CageLedger` | 更新检查仓库 |
-| `CAGELEDGER_BRANCH` | `main` | 更新检查分支 |
+| `CAGELEDGER_REPOSITORY_URL` | `https://git.cellnucle.us/hugo/cageledger` | 项目仓库地址 |
+| `CAGELEDGER_BRANCH` | `main` | 远端分支 |
+| `CAGELEDGER_UPDATE_CHECK_ENABLED` | `false` | 是否启用远端更新检查 |
+| `CAGELEDGER_GITEA_TOKEN` | 空 | 私有 Gitea 仓库更新检查使用的只读 token |
 
 ### 14.3 数据持久化
 

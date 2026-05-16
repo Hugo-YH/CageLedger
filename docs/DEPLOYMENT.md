@@ -7,7 +7,7 @@
 ```bash
 mkdir -p /volume1/docker/cageledger
 cd /volume1/docker/cageledger
-git clone https://github.com/Hugo-YH/CageLedger.git .
+git clone https://git.cellnucle.us/hugo/cageledger.git .
 ```
 
 首次部署前，建议修改 `docker-compose.yml` 中的默认管理员密码：
@@ -32,7 +32,7 @@ http://群晖IP:5173
 默认使用 GitHub Container Registry 的 `latest` 镜像。如果希望固定到某个发布版本：
 
 ```bash
-CAGELEDGER_IMAGE_TAG=0.4.7 docker compose up -d
+CAGELEDGER_IMAGE_TAG=0.4.8 docker compose up -d
 ```
 
 ## 数据持久化
@@ -60,7 +60,14 @@ mkdir -p /volume1/docker/cageledger/data
 
 ## 更新
 
-「数据管理 -> 系统更新」只负责检查 GitHub 最新提交，不会从网页自动拉取并运行新代码。
+「数据管理 -> 系统更新」默认关闭自动远端检查，不会从网页自动拉取并运行新代码。
+
+如果要启用 Gitea 更新检查，建议为私有仓库创建只读 token，并在同目录 `.env` 中补充：
+
+```env
+CAGELEDGER_UPDATE_CHECK_ENABLED=true
+CAGELEDGER_GITEA_TOKEN=你的只读token
+```
 
 推荐更新流程：
 
@@ -85,14 +92,14 @@ npm run package:offline
 脚本会生成类似文件：
 
 ```text
-dist/CageLedger-offline-v0.4.7.tar.gz
+dist/CageLedger-offline-v0.4.8.tar.gz
 ```
 
 把这个文件上传到 NAS，例如 `/volume1/docker/`。然后在 NAS 的 SSH 终端执行：
 
 ```bash
 cd /volume1/docker
-tar -xzf CageLedger-offline-v0.4.7.tar.gz
+tar -xzf CageLedger-offline-v0.4.8.tar.gz
 cd CageLedger
 docker compose -f docker-compose.offline.yml up -d --build
 ```
@@ -105,7 +112,7 @@ docker compose -f docker-compose.offline.yml up -d --build
 
 ```bash
 docker pull ghcr.io/hugo-yh/cageledger:latest
-docker pull ghcr.io/hugo-yh/cageledger:0.4.7
+docker pull ghcr.io/hugo-yh/cageledger:0.4.8
 ```
 
 仓库内的 `Publish container package` GitHub Actions 工作流会在推送 `v*` 标签时发布镜像，也可以通过 `workflow_dispatch` 手动指定 Git ref 和镜像标签重新发布。

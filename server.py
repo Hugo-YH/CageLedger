@@ -76,8 +76,18 @@ CAGELEDGER_COPYRIGHT = os.environ.get(
     "CAGELEDGER_COPYRIGHT",
     f"© 2026 {CAGELEDGER_ORGANIZATION} {CAGELEDGER_DEPARTMENT}. Licensed under Apache-2.0.",
 ).strip()
-CAGELEDGER_REPOSITORY = os.environ.get("CAGELEDGER_REPOSITORY", "Hugo-YH/CageLedger")
+CAGELEDGER_REPOSITORY_URL = os.environ.get(
+    "CAGELEDGER_REPOSITORY_URL",
+    os.environ.get("CAGELEDGER_REPOSITORY", "https://git.cellnucle.us/hugo/cageledger"),
+).strip()
 CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
+CAGELEDGER_GITEA_TOKEN = os.environ.get("CAGELEDGER_GITEA_TOKEN", "").strip()
+CAGELEDGER_UPDATE_CHECK_ENABLED = os.environ.get("CAGELEDGER_UPDATE_CHECK_ENABLED", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 BILLING_WORKFLOW_MIGRATION_KEY = "billingWorkflowMigrationDone"
 TABLES = (
     "audit_logs",
@@ -2530,14 +2540,33 @@ def save_iacuc_index_file(items):
 
 def system_update_status():
     current = current_revision()
-    latest = latest_github_revision()
+    if not CAGELEDGER_UPDATE_CHECK_ENABLED:
+        return {
+            "repository": CAGELEDGER_REPOSITORY_URL,
+            "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
+            "branch": CAGELEDGER_BRANCH,
+            "appVersion": app_version(),
+            "current": current or None,
+            "currentShort": short_revision(current),
+            "latest": None,
+            "latestShort": "",
+            "latestUrl": None,
+            "latestMessage": None,
+            "latestDate": None,
+            "updateAvailable": None,
+            "checkedAt": now_iso(),
+            "disabled": True,
+        }
+
+    latest = latest_remote_revision()
     latest_sha = latest.get("sha") or ""
     update_available = None
     if current and latest_sha:
         update_available = not revisions_match(current, latest_sha)
 
     return {
-        "repository": CAGELEDGER_REPOSITORY,
+        "repository": CAGELEDGER_REPOSITORY_URL,
+        "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
         "branch": CAGELEDGER_BRANCH,
         "appVersion": app_version(),
         "current": current or None,
@@ -2564,7 +2593,8 @@ def system_info():
         "contactEmail": CAGELEDGER_CONTACT_EMAIL,
         "license": CAGELEDGER_LICENSE,
         "copyright": CAGELEDGER_COPYRIGHT,
-        "repository": CAGELEDGER_REPOSITORY,
+        "repository": CAGELEDGER_REPOSITORY_URL,
+        "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
         "branch": CAGELEDGER_BRANCH,
         "revision": current_revision() or None,
         "revisionShort": short_revision(current_revision()),
@@ -2617,26 +2647,59 @@ def read_git_revision(root):
     return head
 
 
-def latest_github_revision():
-    url = f"https://api.github.com/repos/{CAGELEDGER_REPOSITORY}/commits/{CAGELEDGER_BRANCH}"
-    request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "CageLedger"})
+def latest_remote_revision():
+    repository = parse_gitea_repository_url(CAGELEDGER_REPOSITORY_URL)
+    url = (
+        f"{repository['baseUrl']}/api/v1/repos/{repository['owner']}/{repository['repo']}/commits"
+        f"?sha={CAGELEDGER_BRANCH}&limit=1&stat=false&verification=false&files=false"
+    )
+    headers = {"Accept": "application/json", "User-Agent": "CageLedger"}
+    if CAGELEDGER_GITEA_TOKEN:
+        headers["Authorization"] = f"token {CAGELEDGER_GITEA_TOKEN}"
+    request = Request(url, headers=headers)
     try:
         with urlopen(request, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        raise ValueError(f"GitHub 返回错误：HTTP {exc.code}") from exc
+        if exc.code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND):
+            raise ValueError("Gitea 更新检查失败：请确认仓库地址正确，并为私有仓库配置只读 token") from exc
+        raise ValueError(f"Gitea 返回错误：HTTP {exc.code}") from exc
     except URLError as exc:
-        raise ValueError(f"无法连接 GitHub：{exc.reason}") from exc
+        raise ValueError(f"无法连接 Gitea：{exc.reason}") from exc
     except TimeoutError as exc:
-        raise ValueError("连接 GitHub 超时") from exc
+        raise ValueError("连接 Gitea 超时") from exc
 
-    commit = payload.get("commit") or {}
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("Gitea 未返回可用提交")
+
+    latest = payload[0] or {}
+    commit = latest.get("commit") or {}
     author = commit.get("author") or {}
     return {
-        "sha": payload.get("sha", ""),
-        "url": payload.get("html_url", ""),
+        "sha": latest.get("sha", ""),
+        "url": latest.get("html_url", ""),
         "message": first_line(commit.get("message", "")),
         "date": author.get("date", ""),
+    }
+
+
+def parse_gitea_repository_url(value):
+    parsed = urlparse(str(value or "").strip())
+    path_parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or len(path_parts) < 2:
+        raise ValueError("项目仓库地址无效")
+
+    owner = path_parts[-2]
+    repo = path_parts[-1]
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+    if not owner or not repo:
+        raise ValueError("项目仓库地址无效")
+
+    return {
+        "baseUrl": f"{parsed.scheme}://{parsed.netloc}",
+        "owner": owner,
+        "repo": repo,
     }
 
 

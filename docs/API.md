@@ -8,7 +8,7 @@ CageLedger 的共享模式由 `server.py` 提供 HTTP API。后端使用 SQLite 
 | --- | --- | --- |
 | `GET` | `/api/health` | 返回服务、数据库和系统信息 |
 | `GET` | `/api/system/info` | 返回版本、单位、版权和仓库信息 |
-| `GET` | `/api/system/update-check` | 检查 GitHub 目标分支最新提交 |
+| `GET` | `/api/system/update-check` | 返回 Gitea 远端更新检查状态；默认关闭 |
 
 ## 登录与账号
 

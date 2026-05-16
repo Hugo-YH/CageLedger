@@ -105,8 +105,10 @@ npm run release:local -- --version 0.4.1 --push  # 本地顺序化发布
 | `CAGELEDGER_IACUC_INDEX` | `data/iacuc-index.json` | 兼容索引文件路径 |
 | `CAGELEDGER_ADMIN_USERNAME` | `admin` | 初始管理员账号 |
 | `CAGELEDGER_ADMIN_PASSWORD` | `admin123` | 初始管理员密码 |
-| `CAGELEDGER_REPOSITORY` | `Hugo-YH/CageLedger` | 更新检查使用的 GitHub 仓库 |
-| `CAGELEDGER_BRANCH` | `main` | 更新检查使用的分支 |
+| `CAGELEDGER_REPOSITORY_URL` | `https://git.cellnucle.us/hugo/cageledger` | 项目仓库地址 |
+| `CAGELEDGER_BRANCH` | `main` | 远端分支 |
+| `CAGELEDGER_UPDATE_CHECK_ENABLED` | `false` | 是否启用远端更新检查 |
+| `CAGELEDGER_GITEA_TOKEN` | 空 | 私有 Gitea 仓库更新检查使用的只读 token |
 
 页面展示的单位、科室、开发者、联系邮箱、版权和协议也可通过 `CAGELEDGER_ORGANIZATION`、`CAGELEDGER_DEPARTMENT`、`CAGELEDGER_DEVELOPER`、`CAGELEDGER_CONTACT_EMAIL`、`CAGELEDGER_COPYRIGHT` 和 `CAGELEDGER_LICENSE` 覆盖。
 
@@ -161,7 +163,7 @@ http://服务器IP:5173
 - 终端用户操作手册见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md)。
 - 版本号维护在 `package.json` 的 `version` 字段中。
 - 页面资源版本、后端 `/api/system/info` 和 UI 版本展示都读取同一版本信息。
-- 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应 GitHub Release。
+- 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应版本制品。
 
 ## 版权
 

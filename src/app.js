@@ -30,6 +30,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.8",
+    title: "私有 Gitea 上游与更新检查迁移",
+    items: [
+      "项目仓库地址、部署文档和容器默认配置切换到私有 Gitea 上游",
+      "系统更新检查从 GitHub API 迁移到 Gitea API，并支持私有仓库只读 token",
+      "新增远端检查开关与 Gitea token 环境变量，Compose 部署可通过 .env 直接启用",
+      "关于系统页面文案改为中性的远端版本表达，兼容私有化部署语义",
+    ],
+  },
+  {
     version: "0.4.7",
     title: "并发加载与基础设施按需加载优化",
     items: [
@@ -410,7 +420,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.7",
+  version: "0.4.8",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -4545,7 +4555,7 @@ function renderSystemUpdateCard() {
       <p>开发人员：${escapeText(systemInfo.developer || "-")} · ${escapeText(systemInfo.contactEmail || "-")}</p>
       <p>开源协议：${escapeText(systemInfo.license || "-")}</p>
       <p>版权信息：${escapeText(systemInfo.copyright || "-")}</p>
-      ${info?.latestShort ? `<p>GitHub 最新版本：${escapeText(info.latestShort)}${info.latestMessage ? ` · ${escapeText(info.latestMessage)}` : ""}</p>` : ""}
+      ${info?.latestShort ? `<p>远端最新版本：${escapeText(info.latestShort)}${info.latestMessage ? ` · ${escapeText(info.latestMessage)}` : ""}</p>` : ""}
       ${info?.currentShort ? `<p>当前运行版本：${escapeText(info.currentShort)}</p>` : ""}
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
       ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
@@ -4774,9 +4784,10 @@ function renderApiReferencePanel() {
 }
 
 function updateStatusText(info) {
-  if (!info) return "尚未检查 GitHub 最新版本。";
-  if (info.loading) return "正在检查 GitHub 最新版本。";
+  if (!info) return "尚未检查远端版本。";
+  if (info.loading) return "正在检查远端版本。";
   if (info.error) return "检查失败";
+  if (info.disabled) return "自动更新检查已关闭";
   if (info.updateAvailable === true) return "发现新版本";
   if (info.updateAvailable === false) return "当前已是最新版本";
   return "已获取远端版本，当前运行版本未知";

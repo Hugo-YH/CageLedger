@@ -10,6 +10,10 @@ services:
     environment:
       - CAGELEDGER_ADMIN_USERNAME=admin
       - CAGELEDGER_ADMIN_PASSWORD=admin123
+      - CAGELEDGER_REPOSITORY_URL=${CAGELEDGER_REPOSITORY_URL:-https://git.cellnucle.us/hugo/cageledger}
+      - CAGELEDGER_BRANCH=${CAGELEDGER_BRANCH:-main}
+      - CAGELEDGER_UPDATE_CHECK_ENABLED=${CAGELEDGER_UPDATE_CHECK_ENABLED:-false}
+      - CAGELEDGER_GITEA_TOKEN=${CAGELEDGER_GITEA_TOKEN:-}
     volumes:
       - cageledger-data:/app/data
 
