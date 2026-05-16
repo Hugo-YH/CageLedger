@@ -61,7 +61,7 @@ jobs:
               -d "{\"tag_name\":\"${GITHUB_REF_NAME}\",\"name\":\"CageLedger ${GITHUB_REF_NAME}\"}" \
               "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases")"
           fi
-          RELEASE_ID="$(printf '%s' "${RELEASE_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"id\"])')"
+          RELEASE_ID="$(printf '%s' "${RELEASE_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
           echo "id=${RELEASE_ID}" >> "$GITEA_OUTPUT"
 
       - name: Upload offline package
