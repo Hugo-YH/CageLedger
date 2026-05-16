@@ -51,6 +51,10 @@
 - 版本号源头在 `package.json`。
 - 版本同步入口是 `scripts/set_version.mjs`。
 - 本地顺序化发布入口是 `scripts/release_local.sh`。
+- 远端仓库与制品发布当前基于私有 Gitea：
+  - 仓库地址：`https://git.cellnucle.us/hugo/cageledger`
+  - 工作流目录：`.gitea/workflows/`
+  - 镜像仓库：`git.cellnucle.us/hugo/cageledger`
 - `dist/` 是打包产物目录。
 - `data/` 是运行数据目录。
 - 除非任务明确要求，否则不要手工编辑 `dist/` 和 `data/`。
@@ -58,6 +62,7 @@
 ## 4. 业务约束
 
 - IACUC 是贯穿笼位、数量统计表、结算链路的核心业务键。
+- `项目来源` 是财务字段 `funding` 的 source of truth；导入 CSV、后端解析和离线索引脚本都必须保持一致。
 - “已取材”和“设为空”是两种不同业务动作，语义必须分开保留。
 - 房间管理员只能操作授权饲养间。
 - 系统管理员维护账号、数据管理、房间基础信息和全局配置。
@@ -65,6 +70,12 @@
 - 饲养费导出、结算流程、流程中心展示必须与结算数据链路一致。
 - 只修 UI 而不修数据链路会制造假一致，涉及结算、转入转出、流程状态时要同时检查前后端行为。
 - 历史兼容逻辑有业务价值，迁移、旧库兼容、旧字段回填都要谨慎处理。
+- 结算流程属于月度结算单，不属于单个笼位占用生命周期；当前核心状态链为：
+  - `in_feeding`
+  - `statement_generated`
+  - `statement_sent`
+  - `statement_signed_returned`
+  - `submitted_to_finance`
 
 ## 5. 开发规则
 
@@ -76,6 +87,13 @@
 - 修改缓存、bootstrap、懒加载、权限、SQLite 迁移、索引、版本刷新逻辑时，必须在结果里说明验证情况。
 - 修改版本号时只用仓库脚本，不手工散改多个文件。
 - 发布前先更新 `src/app.js` 中的 `SYSTEM_RELEASE_NOTES`。
+- 发布时要求 `commit -> version -> tag -> Release/Packages` 严格一一对应；不要复用旧 tag 修补新内容。
+- “系统更新”功能按 Gitea 最新 Release 判断，不按 `main` 最新 commit 判断；涉及更新检查时先确认 Release 语义没有被改回分支语义。
+- 私有 Gitea 更新检查依赖 `CAGELEDGER_UPDATE_CHECK_ENABLED=true` 和只读 `CAGELEDGER_GITEA_TOKEN`。
+- Gitea 发布链当前分工：
+  - `GITEA_TOKEN` 用于创建 Release
+  - `PACKAGE_USERNAME` / `PACKAGE_PAT` 用于推送容器镜像
+- 修改 `.gitea/workflows/*` 时，额外考虑 runner 是否只能访问内网资源、job 容器与 runner 容器网络是否一致、脚本是否兼容 `/bin/sh`。
 - 如果修改影响接口、数据结构、部署说明，连带更新对应 `docs/` 文档。
 
 ## 6. 禁止事项
@@ -88,6 +106,8 @@
 - 不在未确认的情况下更改结算规则、负责人减免逻辑、IACUC 匹配语义。
 - 不因为前端显示正确就默认后端链路正确。
 - 不把运行时生成的数据、缓存文件、数据库文件作为常规代码修改对象。
+- 不把 `main` 上尚未发版的 commit 当成用户可安装更新。
+- 不把 Gitea Variables 与 Secrets 混用成同一语义；敏感令牌默认优先使用 Secrets。
 
 ## 7. 交付要求
 
@@ -120,6 +140,13 @@
 - 发版：
   - 先更新 `src/app.js` 中的 `SYSTEM_RELEASE_NOTES`
   - 再执行 `npm run release:local -- --version ... --push`
+- 改更新检查：
+  - 先确认目标是“最新 Release”还是“最新 commit”
+  - 私有仓库场景下同时验证有 token 与无 token 两条返回路径
+- 改发布链：
+  - 同时检查 `.gitea/workflows/release-package.yml`
+  - 同时检查 `.gitea/workflows/publish-container.yml`
+  - 关注 Gitea Release、Gitea Container Registry、runner 标签和镜像登录凭据
 
 ## 9. 项目级固定事实
 
@@ -131,6 +158,10 @@
 - 当前仓库以 `v*` tag 作为正式发布出口。
 - 版本同步入口是 `scripts/set_version.mjs`。
 - 发布顺序入口是 `scripts/release_local.sh`。
+- 当前正式上游是私有 Gitea，不再是 GitHub。
+- 当前正式容器镜像地址是 `git.cellnucle.us/hugo/cageledger:<tag>`。
+- `docker-compose.yml` 的在线部署路径应优先使用私有 Gitea 镜像；`docker-compose.offline.yml` 才是源码构建路径。
+- 在线部署只要求目标机器能访问 `git.cellnucle.us`；源码构建和 runner 构建环境是否完全内源化，要单独审计基础镜像与包管理器来源。
 - 接口与部署细节分别以 `docs/API.md`、`docs/DEPLOYMENT.md` 为准。
 - 项目文档和业务说明优先使用中文。
 
