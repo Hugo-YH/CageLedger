@@ -16,11 +16,17 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    container: docker:cli
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ gitea.ref_name }}
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          apk add --no-cache git ca-certificates
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_REF_NAME}"
+          git checkout --detach FETCH_HEAD
 
       - name: Resolve revision
         id: revision

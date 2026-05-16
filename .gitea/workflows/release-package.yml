@@ -16,16 +16,18 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
+    container: node:20-bookworm
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ gitea.ref_name }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates curl python3
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_REF_NAME}"
+          git checkout --detach FETCH_HEAD
 
       - name: Verify package version
         run: |
