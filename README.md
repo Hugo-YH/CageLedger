@@ -14,7 +14,7 @@
 - 数量统计表结算：兼容纸质《实验动物数量统计表》，可录入月初结余和变更行，系统按同月同项目负责人汇总生成饲养费明细与结算单。
 - 权限控制：支持系统管理员和房间管理员，房间管理员只能编辑授权饲养间。
 - 审计记录：服务端记录关键写操作的账号、对象、时间和变更前后数据。
-- 系统管理：管理员可查看系统信息、更新检查、更新记录、API 概览和维护文档。
+- 系统管理：管理员可查看系统信息、更新检查、更新记录和系统 Wiki。
 
 ## 运行方式
 
@@ -83,10 +83,7 @@ npm run release:local -- --version 0.4.1 --push  # 本地顺序化发布
 ├── scripts/
 │   ├── generate_iacuc_index.py   # 旧版 XLSX 索引生成脚本
 │   └── package_offline.sh        # 离线源码包脚本
-├── docs/
-│   ├── API.md                    # API 和数据模型说明
-│   ├── DEPLOYMENT.md             # Docker、NAS 和离线部署说明
-│   └── USER_MANUAL.md            # 系统用户手册（管理员/房间管理员）
+├── wiki/                         # 系统 Wiki，唯一正式文档源
 ├── data/                         # 本地运行数据，已被 Git 忽略
 ├── Dockerfile
 ├── docker-compose.yml
@@ -143,7 +140,7 @@ python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx
 
 ## Docker 和 NAS 部署
 
-常规 Docker Compose、群晖部署、离线源码包构建和镜像发布说明见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+常规 Docker Compose、群晖部署、离线源码包构建和镜像发布说明见 [wiki/部署与运行.md](wiki/部署与运行.md)。
 
 最简启动：
 
@@ -157,10 +154,15 @@ docker compose up -d
 http://服务器IP:5173
 ```
 
+## 系统 Wiki
+
+- Wiki 首页见 [wiki/Home.md](wiki/Home.md)。
+- API 与主要数据表见 [wiki/API与数据模型.md](wiki/API与数据模型.md)。
+- 终端用户操作手册见 [wiki/用户操作手册.md](wiki/用户操作手册.md)。
+- Gitea 在线 Wiki 会由主分支 `wiki/` 变更自动同步。
+
 ## 开发者参考
 
-- API 与主要数据表见 [docs/API.md](docs/API.md)。
-- 终端用户操作手册见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md)。
 - 版本号维护在 `package.json` 的 `version` 字段中。
 - 页面资源版本、后端 `/api/system/info` 和 UI 版本展示都读取同一版本信息。
 - 发布功能更新时建议同步提升 `package.json` 版本号，并发布对应 Gitea Release 与镜像制品。

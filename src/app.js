@@ -457,27 +457,7 @@ const SYSTEM_RELEASE_NOTES = [
     items: ["SQLite 拆表存储", "系统管理员和房间管理员账号", "IACUC CSV 上传、审计日志和系统更新检查"],
   },
 ];
-const SYSTEM_DOC_LINKS = [
-  { id: "api", title: "API 和数据模型", href: "./docs/API.md", renderInline: true, description: "接口路径、账号权限、实体 API、IACUC 索引和主要数据表。" },
-  { id: "deployment", title: "部署说明", href: "./docs/DEPLOYMENT.md", renderInline: true, description: "Docker Compose、群晖、离线源码包和 GHCR 镜像发布。" },
-  { id: "env", title: "环境变量模板", href: "./.env.example", renderInline: false, description: "后端监听、数据库路径、初始管理员、单位信息和更新检查配置。" },
-];
-const SYSTEM_API_GROUPS = [
-  { title: "认证与账号", endpoints: ["POST /api/auth/login", "POST /api/auth/logout", "GET /api/auth/me", "GET /api/users", "POST /api/users"] },
-  { title: "笼卡管理", endpoints: ["GET /api/intake-batches", "POST /api/intake-batches", "PUT /api/intake-batches/{id}", "DELETE /api/intake-batches/{id}"] },
-  { title: "笼位与设施", endpoints: ["GET /api/rooms", "GET /api/racks", "GET /api/cage-slots", "GET /api/occupancies"] },
-  {
-    title: "计费与审计",
-    endpoints: [
-      "GET /api/billing-rules",
-      "GET /api/billing-statements",
-      "POST /api/billing-statements/generate",
-      "POST /api/billing-statements/generate-by-pi",
-      "GET /api/audit-events",
-    ],
-  },
-  { title: "系统与数据", endpoints: ["GET /api/health", "GET /api/system/info", "GET /api/system/update-check", "POST /api/iacuc-index/upload"] },
-];
+const SYSTEM_WIKI_URL = "https://git.cellnucle.us/hugo/cageledger/wiki";
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let IACUC_SEARCH_CACHE = null;
@@ -525,7 +505,6 @@ const infrastructureLoadState = {
   loading: false,
 };
 let STATE_INDEX_CACHE = null;
-const SYSTEM_DOC_CACHE = new Map();
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -987,8 +966,6 @@ const seedData = {
   lastSettingsView: "rooms",
   flashNotice: null,
   confirmDialog: null,
-  selectedSystemDocId: "",
-  systemDocViewer: null,
   selectedQuantitySheetId: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
@@ -1132,7 +1109,7 @@ function saveState() {
   invalidateStateIndexCache();
   const payload = remotePersistence ? localUiStateSnapshot() : { ...state };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null, systemDocViewer: null }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null }));
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
@@ -1227,6 +1204,7 @@ async function loadPersistedState() {
 }
 
 async function loadBootstrapState() {
+  const startedAt = performance.now();
   const localState = loadState();
   const response = await fetch(buildBootstrapUrl("summary"), { cache: "no-store" });
   if (!response.ok) throw new Error(`Failed to load ${API_BOOTSTRAP_URL}`);
@@ -1236,7 +1214,7 @@ async function loadBootstrapState() {
   const intakeBatches = entityData.intakeBatches || [];
   const selectedIntakeBatch = intakeBatches.find((item) => item.id === localState.selectedIntakeBatchId) || intakeBatches[0];
 
-  return {
+  const nextState = {
     ...structuredClone(seedData),
     activeView: localState.activeView || seedData.activeView,
     selectedRoomId: localState.selectedRoomId || "",
@@ -1276,11 +1254,14 @@ async function loadBootstrapState() {
     adjustments: entityData.adjustments || [],
     auditLogs: [],
   };
+  logClientPerf("bootstrap.summary", startedAt, { rooms: nextState.rooms.length, racks: nextState.racks.length });
+  return nextState;
 }
 
 async function loadFullInfrastructure() {
   if (!remotePersistence || infrastructureLoadState.loading) return;
   infrastructureLoadState.loading = true;
+  const startedAt = performance.now();
   try {
     const response = await fetch(buildBootstrapUrl("full"), { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
@@ -1297,6 +1278,7 @@ async function loadFullInfrastructure() {
     state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
     infrastructureLoadState.scope = "full";
     infrastructureLoadState.roomId = "";
+    logClientPerf("bootstrap.full", startedAt, { rooms: state.rooms.length, slots: state.slots.length });
     invalidateIacucSearchCache();
     invalidateStateIndexCache();
     selectFirstAvailableCage();
@@ -1310,6 +1292,7 @@ async function loadRoomInfrastructure(roomId) {
   if (infrastructureLoadState.scope === "full") return;
   if (infrastructureLoadState.scope === "room" && infrastructureLoadState.roomId === roomId) return;
   infrastructureLoadState.loading = true;
+  const startedAt = performance.now();
   try {
     const response = await fetch(buildBootstrapUrl("room", roomId), { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
@@ -1326,6 +1309,7 @@ async function loadRoomInfrastructure(roomId) {
     state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
     infrastructureLoadState.scope = "room";
     infrastructureLoadState.roomId = roomId;
+    logClientPerf("bootstrap.room", startedAt, { roomId, slots: payload.slots?.length || 0 });
     invalidateIacucSearchCache();
     invalidateStateIndexCache();
     selectFirstAvailableCage();
@@ -1356,7 +1340,6 @@ function localUiOnlyState(source = {}) {
     selectedIntakeBatchIds: Array.isArray(source.selectedIntakeBatchIds) ? source.selectedIntakeBatchIds.slice(0, 200) : [],
     intakeBatchFilter: source.intakeBatchFilter || "todo",
     principalIdentityFilter: source.principalIdentityFilter || "",
-    selectedSystemDocId: source.selectedSystemDocId || "",
   };
 }
 
@@ -1468,6 +1451,22 @@ async function loadQuantitySheets() {
   return state.quantitySheets;
 }
 
+async function refreshQuantitySheet(sheetId) {
+  if (!remotePersistence || !sheetId) return null;
+  const response = await fetch(`${API_QUANTITY_SHEETS_URL}/${encodeURIComponent(sheetId)}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "刷新数量统计表失败");
+  }
+  if (payload.item) upsertById(state.quantitySheets, payload.item);
+  return payload.item || null;
+}
+
 async function loadAuditEvents() {
   if (!remotePersistence) {
     lazyDataState.auditLogsLoaded = true;
@@ -1524,6 +1523,7 @@ async function ensureViewDataLoaded(view) {
 }
 
 async function advanceBillingWorkflow(workflowId, toStatus) {
+  const startedAt = performance.now();
   const response = await fetch(API_BILLING_WORKFLOW_ADVANCE_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1540,6 +1540,13 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
   }
   mergeServerAuditLogs(payload);
   if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
+  if (state.selectedBillingWorkflowDetail?.workflow?.id === payload.workflow?.id) {
+    state.selectedBillingWorkflowDetail.workflow = payload.workflow;
+    if (payload.event) {
+      state.selectedBillingWorkflowDetail.events = [payload.event, ...(state.selectedBillingWorkflowDetail.events || [])];
+    }
+  }
+  logClientPerf("billing_workflow.advance", startedAt, { workflowId, toStatus });
   return payload.workflow;
 }
 
@@ -1583,7 +1590,6 @@ async function deleteBillingWorkflow(workflowId) {
     state.selectedBillingWorkflowDetail = null;
     state.showWorkflowStatements = false;
   }
-  await loadBillingWorkflows();
   return payload.workflow;
 }
 
@@ -1599,6 +1605,15 @@ function mergeServerAuditLogs(payload) {
   if (Array.isArray(payload?.auditLogs) && payload.auditLogs.length) {
     state.auditLogs = mergeAuditLogs(payload.auditLogs, state.auditLogs || []);
   }
+}
+
+function logClientPerf(label, startedAt, details = {}) {
+  const elapsedMs = Math.round((performance.now() - startedAt) * 10) / 10;
+  const detailText = Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ");
+  console.info(`[perf] ${label} ${elapsedMs}ms${detailText ? ` ${detailText}` : ""}`);
 }
 
 function reportSaveError(error) {
@@ -1656,16 +1671,6 @@ function normalize(data) {
         message: String(next.confirmDialog.message || ""),
         confirmLabel: String(next.confirmDialog.confirmLabel || "确认"),
         payload: next.confirmDialog.payload && typeof next.confirmDialog.payload === "object" ? next.confirmDialog.payload : {},
-      }
-    : null;
-  next.selectedSystemDocId = SYSTEM_DOC_LINKS.some((doc) => doc.id === next.selectedSystemDocId) ? next.selectedSystemDocId : "";
-  next.systemDocViewer = next.systemDocViewer && typeof next.systemDocViewer === "object"
-    ? {
-        id: String(next.systemDocViewer.id || ""),
-        title: String(next.systemDocViewer.title || ""),
-        markdown: String(next.systemDocViewer.markdown || ""),
-        loading: Boolean(next.systemDocViewer.loading),
-        error: String(next.systemDocViewer.error || ""),
       }
     : null;
   next.quantitySheetDraft = normalizeQuantitySheetDraft(next.quantitySheetDraft || makeQuantitySheetDraft(next.billingMonth || today.slice(0, 7)));
@@ -2255,7 +2260,7 @@ function pageMeta(view) {
     },
     system: {
       title: "关于系统",
-      description: "查看系统版本、更新状态、更新记录和接口文档。",
+      description: "查看系统版本、更新状态、更新记录和系统 Wiki。",
     },
     users: {
       title: "账号管理",
@@ -4521,24 +4526,17 @@ function renderDataManagementView() {
 
 function renderSystemManagementView() {
   return `
-    <section class="system-layout">
+    <section class="content-grid">
       <div class="panel large">
         <div class="panel-head">
           <div>
             <h2>关于系统</h2>
-            <p>查看系统状态、版本更新、说明文档和接口参考。</p>
+            <p>查看系统状态、版本更新和系统 Wiki。</p>
           </div>
         </div>
         ${renderSystemUpdateCard()}
+        ${renderSystemWikiLink()}
         ${renderReleaseNotes()}
-      </div>
-      <div class="system-side">
-        <div class="panel">
-          ${renderSystemDocsPanel()}
-        </div>
-        <div class="panel">
-          ${renderApiReferencePanel()}
-        </div>
       </div>
     </section>
   `;
@@ -4677,182 +4675,21 @@ function renderReleaseItem(item) {
   return escaped.replace(/(@[^\s，。；、]+)/g, '<span class="mention-theme">$1</span>');
 }
 
-function renderSystemDocsPanel() {
+function renderSystemWikiLink() {
   return `
-    <div class="panel-head compact">
-      <div>
-        <h2>说明文档</h2>
-        <p>系统维护相关文档入口。</p>
-      </div>
-    </div>
-    <div class="doc-link-list">
-      ${SYSTEM_DOC_LINKS.map(
-        (doc) => `
-          ${
-            doc.renderInline
-              ? `
-          <button class="doc-link ${state.selectedSystemDocId === doc.id ? "active" : ""}" type="button" data-system-doc="${escapeAttr(doc.id)}">
-            <strong>${escapeText(doc.title)}</strong>
-            <span>${escapeText(doc.description)}</span>
-          </button>
-              `
-              : `
-          <a class="doc-link" href="${escapeAttr(doc.href)}" target="_blank" rel="noreferrer">
-            <strong>${escapeText(doc.title)}</strong>
-            <span>${escapeText(doc.description)}</span>
-          </a>
-              `
-          }
-        `,
-      ).join("")}
-    </div>
-    ${renderSystemDocViewer()}
-  `;
-}
-
-function renderSystemDocViewer() {
-  const viewer = state.systemDocViewer;
-  if (!viewer) return "";
-  return `
-    <article class="system-doc-viewer">
-      <div class="system-doc-head">
+    <div class="system-section">
+      <div class="panel-head compact">
         <div>
-          <strong>${escapeText(viewer.title || "说明文档")}</strong>
-          <span>${viewer.loading ? "正在加载文档" : viewer.error ? "加载失败" : "站内渲染文档"}</span>
+          <h2>系统 Wiki</h2>
+          <p>统一查看用户手册、部署说明、API 与开发维护文档。</p>
         </div>
-        <button class="secondary compact-action" type="button" data-close-system-doc>${iconSvg("chevronLeft")}关闭</button>
       </div>
-      ${
-        viewer.loading
-          ? `<p class="muted">正在加载文档内容。</p>`
-          : viewer.error
-            ? `<p class="error-text">${escapeText(viewer.error)}</p>`
-            : `<div class="markdown-view">${renderMarkdownDocument(viewer.markdown)}</div>`
-      }
-    </article>
-  `;
-}
-
-function renderMarkdownDocument(markdown) {
-  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
-  const html = [];
-  let index = 0;
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-    const fence = line.match(/^```(\w*)\s*$/);
-    if (fence) {
-      const code = [];
-      index += 1;
-      while (index < lines.length && !lines[index].startsWith("```")) {
-        code.push(lines[index]);
-        index += 1;
-      }
-      if (index < lines.length) index += 1;
-      html.push(`<pre><code>${escapeText(code.join("\n"))}</code></pre>`);
-      continue;
-    }
-    const heading = line.match(/^(#{1,4})\s+(.+)$/);
-    if (heading) {
-      const level = heading[1].length + 1;
-      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
-      index += 1;
-      continue;
-    }
-    if (isMarkdownTableStart(lines, index)) {
-      const tableLines = [];
-      tableLines.push(lines[index]);
-      index += 2;
-      while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
-        tableLines.push(lines[index]);
-        index += 1;
-      }
-      html.push(renderMarkdownTable(tableLines));
-      continue;
-    }
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items = [];
-      while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*[-*]\s+/, ""));
-        index += 1;
-      }
-      html.push(`<ul>${items.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</ul>`);
-      continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items = [];
-      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*\d+\.\s+/, ""));
-        index += 1;
-      }
-      html.push(`<ol>${items.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</ol>`);
-      continue;
-    }
-    const paragraph = [line.trim()];
-    index += 1;
-    while (index < lines.length && lines[index].trim() && !/^(#{1,4})\s+/.test(lines[index]) && !/^```/.test(lines[index]) && !/^\s*[-*]\s+/.test(lines[index]) && !/^\s*\d+\.\s+/.test(lines[index]) && !isMarkdownTableStart(lines, index)) {
-      paragraph.push(lines[index].trim());
-      index += 1;
-    }
-    html.push(`<p>${renderMarkdownInline(paragraph.join(" "))}</p>`);
-  }
-  return html.join("");
-}
-
-function isMarkdownTableStart(lines, index) {
-  return /^\s*\|.*\|\s*$/.test(lines[index] || "") && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] || "");
-}
-
-function renderMarkdownTable(lines) {
-  const rows = lines.map(markdownTableCells);
-  const header = rows[0] || [];
-  const body = rows.slice(1);
-  return `
-    <div class="markdown-table-wrap">
-      <table>
-        <thead><tr>${header.map((cell) => `<th>${renderMarkdownInline(cell)}</th>`).join("")}</tr></thead>
-        <tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${renderMarkdownInline(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
-      </table>
-    </div>
-  `;
-}
-
-function markdownTableCells(line) {
-  return String(line || "")
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
-}
-
-function renderMarkdownInline(value) {
-  return escapeText(value)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-}
-
-function renderApiReferencePanel() {
-  return `
-    <div class="panel-head compact">
-      <div>
-        <h2>API 概览</h2>
-        <p>后端常用接口分组。</p>
+      <div class="doc-link-list">
+        <a class="doc-link" href="${escapeAttr(SYSTEM_WIKI_URL)}" target="_blank" rel="noreferrer">
+          <strong>打开系统 Wiki</strong>
+          <span>进入 Gitea Wiki 查看全部正式文档。</span>
+        </a>
       </div>
-    </div>
-    <div class="api-group-list">
-      ${SYSTEM_API_GROUPS.map(
-        (group) => `
-          <div class="api-group">
-            <strong>${escapeText(group.title)}</strong>
-            <code>${group.endpoints.map(escapeText).join("<br />")}</code>
-          </div>
-        `,
-      ).join("")}
     </div>
   `;
 }
@@ -5399,9 +5236,6 @@ function bindEvents() {
       event.stopPropagation();
       try {
         await advanceBillingWorkflow(button.dataset.advanceWorkflow, button.dataset.nextStatus);
-        if (state.selectedBillingWorkflowId === button.dataset.advanceWorkflow) {
-          await loadBillingWorkflowDetail(button.dataset.advanceWorkflow);
-        }
         pushLog(`更新结算流程：${workflowActionLabel(button.dataset.nextStatus)}`);
         render();
       } catch (error) {
@@ -5498,14 +5332,6 @@ function bindEvents() {
       message: "确认清理当前浏览器保存的本地缓存并重新加载页面？这会清空本地界面状态和已缓存资源。",
       confirmLabel: "清理并刷新",
     });
-  });
-  document.querySelectorAll("[data-system-doc]").forEach((button) => {
-    button.addEventListener("click", () => openSystemDoc(button.dataset.systemDoc));
-  });
-  document.querySelector("[data-close-system-doc]")?.addEventListener("click", () => {
-    state.selectedSystemDocId = "";
-    state.systemDocViewer = null;
-    render();
   });
   document.querySelectorAll("[data-delete-user]").forEach((button) => {
     button.addEventListener("click", () => deleteUser(button.dataset.deleteUser));
@@ -6042,44 +5868,6 @@ async function clearClientCacheAndReload() {
   window.location.replace(url.toString());
 }
 
-async function openSystemDoc(docId) {
-  const doc = SYSTEM_DOC_LINKS.find((item) => item.id === docId && item.renderInline);
-  if (!doc) return;
-  state.selectedSystemDocId = doc.id;
-  state.systemDocViewer = {
-    id: doc.id,
-    title: doc.title,
-    markdown: SYSTEM_DOC_CACHE.get(doc.id) || "",
-    loading: !SYSTEM_DOC_CACHE.has(doc.id),
-    error: "",
-  };
-  render();
-  if (SYSTEM_DOC_CACHE.has(doc.id)) return;
-  try {
-    const response = await fetch(doc.href, { cache: "no-store" });
-    if (!response.ok) throw new Error(`加载失败：${response.status}`);
-    const markdown = await response.text();
-    SYSTEM_DOC_CACHE.set(doc.id, markdown);
-    state.systemDocViewer = {
-      id: doc.id,
-      title: doc.title,
-      markdown,
-      loading: false,
-      error: "",
-    };
-  } catch (error) {
-    state.systemDocViewer = {
-      id: doc.id,
-      title: doc.title,
-      markdown: "",
-      loading: false,
-      error: error?.message || "文档加载失败",
-    };
-    showFlashNotice("文档加载失败", state.systemDocViewer.error, "error");
-  }
-  render();
-}
-
 function selectVisibleSlots() {
   const selectedRoom = getSelectedRoom();
   if (!selectedRoom) return;
@@ -6494,7 +6282,8 @@ async function deleteQuantitySheetConfirmed(sheetId) {
     throw new Error(payload.error || "删除数量统计表失败");
   }
   mergeServerAuditLogs(payload);
-  await loadQuantitySheets();
+  state.quantitySheets = state.quantitySheets.filter((item) => item.id !== sheetId);
+  invalidateStateIndexCache();
   const nextSheet = state.quantitySheets[0] || null;
   state.selectedQuantitySheetId = nextSheet?.id || "";
   state.quantitySheetDraft = nextSheet ? hydrateQuantitySheetIacucInfo(nextSheet) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
@@ -6525,6 +6314,7 @@ function captureQuantitySheetDraft() {
 }
 
 async function saveQuantitySheetDraft() {
+  const startedAt = performance.now();
   const form = document.querySelector("#quantitySheetForm");
   if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
   const sheet = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
@@ -6552,16 +6342,17 @@ async function saveQuantitySheetDraft() {
   }
   mergeServerAuditLogs(payload);
   const savedSheet = payload.item || sheet;
+  const affectedSheets = Array.isArray(payload.affectedItems) ? payload.affectedItems : [];
+  upsertById(state.quantitySheets, savedSheet);
+  affectedSheets.forEach((item) => upsertById(state.quantitySheets, item));
   state.selectedQuantitySheetId = savedSheet.id;
   state.quantitySheetDraft = savedSheet;
-  try {
-    await loadQuantitySheets();
-    const refreshedSheet = state.quantitySheets.find((item) => item.id === savedSheet.id);
-    if (refreshedSheet) state.quantitySheetDraft = refreshedSheet;
-  } catch (refreshError) {
+  lazyDataState.quantitySheetsLoaded = true;
+  lazyDataState.quantitySheetsLoading = false;
+  logClientPerf("quantity_sheet.save", startedAt, { affected: affectedSheets.length, rows: savedSheet.rows?.length || 0 });
+  Promise.all([savedSheet, ...affectedSheets].map((item) => refreshQuantitySheet(item.id))).catch((refreshError) => {
     console.error(refreshError);
-    upsertById(state.quantitySheets, savedSheet);
-  }
+  });
   return state.quantitySheetDraft;
 }
 
@@ -8093,6 +7884,7 @@ async function exportSettlementPdf() {
 }
 
 async function persistBillingWorkflowFromCurrent() {
+  const startedAt = performance.now();
   if (!remotePersistence) {
     throw new Error("本地离线模式不支持结算流程跟踪");
   }
@@ -8118,7 +7910,10 @@ async function persistBillingWorkflowFromCurrent() {
     }
     if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
     mergeServerAuditLogs(payload);
-    await loadBillingWorkflows();
+    if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
+    lazyDataState.billingWorkflowsLoaded = true;
+    lazyDataState.billingWorkflowsLoading = false;
+    logClientPerf("billing_workflow.create", startedAt, { source: "quantity_sheet" });
     pushLog(`发起结算流程：${sheet.pi} ${sheet.month}`);
     showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${sheet.month} ${sheet.pi} 的进度。`);
     return payload.statement;
@@ -8145,7 +7940,10 @@ async function persistBillingWorkflowFromCurrent() {
   }
   if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
   mergeServerAuditLogs(payload);
-  await loadBillingWorkflows();
+  if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
+  lazyDataState.billingWorkflowsLoaded = true;
+  lazyDataState.billingWorkflowsLoading = false;
+  logClientPerf("billing_workflow.create", startedAt, { source: "cage_map" });
   pushLog(`发起结算流程：${state.billingPi} ${state.billingMonth}`);
   showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${state.billingMonth} ${state.billingPi} 的进度。`);
   return payload.statement;

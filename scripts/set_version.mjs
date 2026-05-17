@@ -52,8 +52,8 @@ appJs = appJs.replace(
 );
 writeText("src/app.js", appJs);
 
-let deployment = readText("docs/DEPLOYMENT.md");
+let deployment = readText("wiki/部署与运行.md");
 deployment = deployment.replaceAll(oldVersion, newVersion);
-writeText("docs/DEPLOYMENT.md", deployment);
+writeText("wiki/部署与运行.md", deployment);
 
 console.log(newVersion);

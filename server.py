@@ -11,6 +11,7 @@ import re
 import secrets
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from http import HTTPStatus
@@ -197,6 +198,13 @@ def invalidate_data_cache(*keys):
     with DATA_CACHE_LOCK:
         for key in keys:
             DATA_CACHE.pop(key, None)
+
+
+def log_perf(label, started_at, **fields):
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 1)
+    details = " ".join(f"{key}={value}" for key, value in fields.items() if value not in (None, ""))
+    suffix = f" {details}" if details else ""
+    print(f"[perf] {label} {elapsed_ms}ms{suffix}", flush=True)
 
 
 def initialize_schema(conn):
@@ -1170,7 +1178,8 @@ def summarize_infrastructure(state):
 
 
 def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
-    state = filter_state_for_actor(assemble_state(conn) or empty_state(), actor)
+    started_at = time.perf_counter()
+    state = filter_state_for_actor(read_cached_state(conn), actor)
     summary = summarize_infrastructure(state)
     payload = {
         "rooms": state.get("rooms", []),
@@ -1183,6 +1192,7 @@ def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
     if scope == "full":
         payload["slots"] = state.get("slots", [])
         payload["occupancies"] = state.get("occupancies", [])
+        log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]), slots=len(payload["slots"]))
         return payload
     if scope == "room":
         room_id = clean_text(room_id)
@@ -1190,9 +1200,11 @@ def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
         payload["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") in rack_ids]
         slot_ids = {slot.get("id") for slot in payload["slots"]}
         payload["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") in slot_ids]
+        log_perf("bootstrap", started_at, scope=scope, room_id=room_id, rooms=len(payload["rooms"]), slots=len(payload["slots"]))
         return payload
     payload["slots"] = []
     payload["occupancies"] = []
+    log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]))
     return payload
 
 
@@ -1248,7 +1260,7 @@ def write_state(state, actor):
         write_normalized_state(conn, state, updated_at)
         write_audit_events(conn, events)
         conn.commit()
-    invalidate_data_cache("principal_identities")
+    invalidate_data_cache("assembled_state", "principal_identities")
     return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
 
 
@@ -1331,6 +1343,7 @@ def write_infrastructure_state(payload, actor):
         write_audit_events(conn, events)
         conn.commit()
 
+    invalidate_data_cache("assembled_state")
     return {
         "rooms": created_rooms,
         "roomUpdates": updated_rooms,
@@ -1808,6 +1821,13 @@ def assemble_state(conn):
         "intakeBatches": read_payloads(conn, "intake_batches", "updated_at DESC, rowid DESC"),
         "auditLogs": read_payloads(conn, "audit_logs", "at DESC, rowid DESC"),
     }
+
+
+def read_cached_state(conn):
+    cached = cache_get("assembled_state")
+    if cached is not None:
+        return cached
+    return cache_set("assembled_state", assemble_state(conn) or empty_state())
 
 
 def read_payloads(conn, table, order_by):
@@ -2882,6 +2902,7 @@ def get_quantity_sheet(conn, sheet_id):
 
 
 def save_quantity_sheet(conn, payload, actor, sheet_id=None):
+    started_at = time.perf_counter()
     now = now_iso()
     sheet = normalize_quantity_sheet(payload, sheet_id, now)
     validate_quantity_sheet_permission(actor, sheet)
@@ -2914,11 +2935,18 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         message = f"{actor['displayName']} 创建 {sheet['iacuc']} {sheet['month']} 数量统计表"
         status = HTTPStatus.CREATED
 
-    transfer_events = sync_quantity_sheet_transfer_rows(conn, sheet, actor, now)
+    transfer_events, affected_sheets = sync_quantity_sheet_transfer_rows(conn, sheet, actor, now)
     event = audit_event(actor, action, "quantity_sheet", sheet["id"], message, [], now, None, sheet)
     events = [event, *transfer_events]
     write_audit_events(conn, events)
-    return sheet, merge_audit_logs([], events), status
+    log_perf(
+        "quantity_sheet.save",
+        started_at,
+        sheet_id=sheet["id"],
+        affected=len(affected_sheets),
+        rows=len(sheet.get("rows", [])),
+    )
+    return sheet, affected_sheets, merge_audit_logs([], events), status
 
 
 def delete_quantity_sheet(conn, actor, sheet_id):
@@ -2962,7 +2990,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
     source_sheet_id = source_sheet.get("id", "")
     source_iacuc = normalize_iacuc_number(source_sheet.get("iacuc", ""))
     if not month or not source_sheet_id or not source_iacuc:
-        return []
+        return [], []
 
     applications_by_iacuc = read_applications_by_iacuc(conn)
     rows = source_sheet.get("rows", [])
@@ -3004,9 +3032,25 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
                 }
             )
 
-    sheet_rows = conn.execute("SELECT id, payload FROM quantity_sheets WHERE month = ?", (month,)).fetchall()
+    target_iacucs = sorted({transfer["targetIacuc"] for transfer in transfer_rows if transfer["targetIacuc"]})
+    where_parts = ["month = ?", "id != ?"]
+    params = [month, source_sheet_id]
+    mirror_probe = f"%{source_sheet_id}%"
+    if target_iacucs:
+        placeholders = ", ".join("?" for _ in target_iacucs)
+        where_parts.append(f"(iacuc IN ({placeholders}) OR payload LIKE ?)")
+        params.extend(target_iacucs)
+        params.append(mirror_probe)
+    else:
+        where_parts.append("payload LIKE ?")
+        params.append(mirror_probe)
+    sheet_rows = conn.execute(
+        f"SELECT id, payload FROM quantity_sheets WHERE {' AND '.join(where_parts)}",
+        params,
+    ).fetchall()
     sheets = [json.loads(row["payload"]) for row in sheet_rows]
     events = []
+    affected_sheet_by_id = {}
 
     for target_sheet in sheets:
         if target_sheet.get("id") == source_sheet_id:
@@ -3054,6 +3098,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
                 """,
                 quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
             )
+            affected_sheet_by_id[target_sheet["id"]] = target_sheet
 
     target_sheet_by_iacuc = {}
     for target_sheet in sheets:
@@ -3096,6 +3141,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
             )
             target_sheet_by_iacuc[target_iacuc] = target_sheet
             sheets.append(target_sheet)
+            affected_sheet_by_id[target_sheet["id"]] = target_sheet
             events.append(
                 audit_event(
                     actor,
@@ -3191,6 +3237,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
             """,
             quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
         )
+        affected_sheet_by_id[target_sheet["id"]] = target_sheet
         events.append(
             audit_event(
                 actor,
@@ -3204,7 +3251,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
                 {"targetSheetId": target_sheet["id"], "targetIacuc": target_iacuc, "rowId": row_id},
             )
         )
-    return events
+    return events, list(affected_sheet_by_id.values())
 
 
 def normalize_quantity_sheet(payload, sheet_id, updated_at):
@@ -4978,6 +5025,21 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 self.send_json(list_quantity_sheets_page(conn, self.list_filters()))
             return
+        sheet_id = self.quantity_sheet_route(path)
+        if sheet_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    sheet = get_quantity_sheet(conn, sheet_id)
+                    validate_quantity_sheet_permission(user, sheet)
+                    self.send_json({"item": sheet})
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
         if path == "/api/principal-identities":
             user = self.require_user()
             if not user:
@@ -5322,8 +5384,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             body = self.read_json_body()
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement(conn, body, user)
+                workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
                 conn.commit()
-            self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
+            self.send_json({"statement": statement, "lines": lines, "workflow": workflow, "auditLogs": audit_logs}, HTTPStatus.CREATED)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -5338,8 +5401,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             body = self.read_json_body()
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement_by_pi(conn, body, user)
+                workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
                 conn.commit()
-            self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
+            self.send_json({"statement": statement, "lines": lines, "workflow": workflow, "auditLogs": audit_logs}, HTTPStatus.CREATED)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -5585,10 +5649,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         try:
             body = self.read_json_body()
             with connect_db() as conn:
-                sheet, audit_logs, status = save_quantity_sheet(conn, body, user, sheet_id)
+                sheet, affected_sheets, audit_logs, status = save_quantity_sheet(conn, body, user, sheet_id)
                 conn.commit()
             invalidate_data_cache("principal_identities")
-            self.send_json({"item": sheet, "auditLogs": audit_logs}, status)
+            self.send_json({"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs}, status)
         except sqlite3.IntegrityError:
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
         except PermissionError as exc:

@@ -45,9 +45,9 @@
 - 前端主逻辑集中在 `src/app.js`。
 - 前端样式集中在 `src/styles.css`。
 - 后端 API、SQLite、权限、迁移、审计逻辑集中在 `server.py`。
-- 接口与数据模型说明以 `docs/API.md` 为准。
-- Docker、NAS、离线部署说明以 `docs/DEPLOYMENT.md` 为准。
-- 用户操作手册以 `docs/USER_MANUAL.md` 为准。
+- 接口与数据模型说明以 `wiki/API与数据模型.md` 为准。
+- Docker、NAS、离线部署说明以 `wiki/部署与运行.md` 为准。
+- 用户操作手册以 `wiki/用户操作手册.md` 为准。
 - 版本号源头在 `package.json`。
 - 版本同步入口是 `scripts/set_version.mjs`。
 - 本地顺序化发布入口是 `scripts/release_local.sh`。
@@ -94,7 +94,7 @@
   - `GITEA_TOKEN` 用于创建 Release
   - `PACKAGE_USERNAME` / `PACKAGE_PAT` 用于推送容器镜像
 - 修改 `.gitea/workflows/*` 时，额外考虑 runner 是否只能访问内网资源、job 容器与 runner 容器网络是否一致、脚本是否兼容 `/bin/sh`。
-- 如果修改影响接口、数据结构、部署说明，连带更新对应 `docs/` 文档。
+- 如果修改影响接口、数据结构、部署说明，连带更新对应 `wiki/` 页面。
 
 ## 6. 禁止事项
 
@@ -162,7 +162,8 @@
 - 当前正式容器镜像地址是 `git.cellnucle.us/hugo/cageledger:<tag>`。
 - `docker-compose.yml` 的在线部署路径应优先使用私有 Gitea 镜像；`docker-compose.offline.yml` 才是源码构建路径。
 - 在线部署只要求目标机器能访问 `git.cellnucle.us`；源码构建和 runner 构建环境是否完全内源化，要单独审计基础镜像与包管理器来源。
-- 接口与部署细节分别以 `docs/API.md`、`docs/DEPLOYMENT.md` 为准。
+- 接口与部署细节分别以 `wiki/API与数据模型.md`、`wiki/部署与运行.md` 为准。
+- `wiki/` 是唯一正式文档源；`main` 分支中的 `wiki/**` 变更会自动同步到 Gitea Wiki。
 - 项目文档和业务说明优先使用中文。
 
 ## 10. 文档风格要求
