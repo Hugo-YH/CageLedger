@@ -458,6 +458,20 @@ const SYSTEM_RELEASE_NOTES = [
   },
 ];
 const SYSTEM_WIKI_URL = "https://git.cellnucle.us/hugo/cageledger/wiki";
+const SYSTEM_WIKI_GROUPS = [
+  {
+    title: "使用者",
+    pages: ["快速开始", "用户操作手册", "笼卡管理", "笼位与房间管理", "饲养费核算", "常见问题"],
+  },
+  {
+    title: "管理员",
+    pages: ["部署与运行", "系统配置", "账号与权限", "数据管理与IACUC索引", "备份与维护", "故障排查"],
+  },
+  {
+    title: "开发维护者",
+    pages: ["项目结构", "API与数据模型", "发布与CI-CD", "开发规范"],
+  },
+];
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let IACUC_SEARCH_CACHE = null;
@@ -4696,23 +4710,28 @@ function renderSystemWikiHomeCard() {
         </div>
       </div>
       <div class="wiki-home-groups">
-        <div>
-          <strong>使用者</strong>
-          <span>快速开始、用户手册、笼卡、笼位、饲养费</span>
-        </div>
-        <div>
-          <strong>管理员</strong>
-          <span>部署、配置、权限、IACUC、备份、排障</span>
-        </div>
-        <div>
-          <strong>开发维护者</strong>
-          <span>项目结构、API、发布链、开发规范</span>
-        </div>
+        ${SYSTEM_WIKI_GROUPS.map(renderSystemWikiGroup).join("")}
       </div>
       <a class="doc-link" href="${escapeAttr(SYSTEM_WIKI_URL)}" target="_blank" rel="noreferrer">
         <strong>打开系统 Wiki</strong>
         <span>进入 Gitea Wiki 查看全部正式文档。</span>
       </a>
+    </div>
+  `;
+}
+
+function renderSystemWikiGroup(group) {
+  return `
+    <div>
+      <strong>${escapeText(group.title)}</strong>
+      <div class="wiki-home-links">
+        ${group.pages
+          .map(
+            (page) =>
+              `<a href="${escapeAttr(`${SYSTEM_WIKI_URL}/${encodeURIComponent(page)}`)}" target="_blank" rel="noreferrer">${escapeText(page)}</a>`,
+          )
+          .join("")}
+      </div>
     </div>
   `;
 }
