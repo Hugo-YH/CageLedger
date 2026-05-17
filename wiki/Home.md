@@ -2,6 +2,8 @@
 
 CageLedger 是面向实验动物中心内网使用的实验动物笼位管理与饲养费核算系统。当前正式上游为私有 Gitea，文档以本 Wiki 为唯一正式入口。
 
+![系统总览](assets/system-overview.svg)
+
 ## 推荐阅读路径
 
 ### 使用者

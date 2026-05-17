@@ -4526,7 +4526,7 @@ function renderDataManagementView() {
 
 function renderSystemManagementView() {
   return `
-    <section class="content-grid">
+    <section class="system-layout">
       <div class="panel large">
         <div class="panel-head">
           <div>
@@ -4535,8 +4535,12 @@ function renderSystemManagementView() {
           </div>
         </div>
         ${renderSystemUpdateCard()}
-        ${renderSystemWikiLink()}
         ${renderReleaseNotes()}
+      </div>
+      <div class="system-side">
+        <div class="panel">
+          ${renderSystemWikiHomeCard()}
+        </div>
       </div>
     </section>
   `;
@@ -4675,21 +4679,40 @@ function renderReleaseItem(item) {
   return escaped.replace(/(@[^\s，。；、]+)/g, '<span class="mention-theme">$1</span>');
 }
 
-function renderSystemWikiLink() {
+function renderSystemWikiHomeCard() {
   return `
-    <div class="system-section">
-      <div class="panel-head compact">
+    <div class="panel-head compact">
+      <div>
+        <h2>系统 Wiki</h2>
+        <p>统一查看用户手册、部署说明、API 与开发维护文档。</p>
+      </div>
+    </div>
+    <div class="wiki-home-card">
+      <div class="wiki-home-hero">
+        ${iconSvg("book")}
         <div>
-          <h2>系统 Wiki</h2>
-          <p>统一查看用户手册、部署说明、API 与开发维护文档。</p>
+          <strong>CageLedger Wiki</strong>
+          <span>面向使用者、管理员和开发维护者的单一文档入口。</span>
         </div>
       </div>
-      <div class="doc-link-list">
-        <a class="doc-link" href="${escapeAttr(SYSTEM_WIKI_URL)}" target="_blank" rel="noreferrer">
-          <strong>打开系统 Wiki</strong>
-          <span>进入 Gitea Wiki 查看全部正式文档。</span>
-        </a>
+      <div class="wiki-home-groups">
+        <div>
+          <strong>使用者</strong>
+          <span>快速开始、用户手册、笼卡、笼位、饲养费</span>
+        </div>
+        <div>
+          <strong>管理员</strong>
+          <span>部署、配置、权限、IACUC、备份、排障</span>
+        </div>
+        <div>
+          <strong>开发维护者</strong>
+          <span>项目结构、API、发布链、开发规范</span>
+        </div>
       </div>
+      <a class="doc-link" href="${escapeAttr(SYSTEM_WIKI_URL)}" target="_blank" rel="noreferrer">
+        <strong>打开系统 Wiki</strong>
+        <span>进入 Gitea Wiki 查看全部正式文档。</span>
+      </a>
     </div>
   `;
 }
@@ -9419,6 +9442,7 @@ function iconSvg(name) {
     home: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>`,
     grid: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`,
     receipt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zm2 5h6v2H9zm0 4h6v2H9z"/></svg>`,
+    book: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5zm2.5-.5A.5.5 0 0 0 7 4.5v13.1c.2-.1.3-.1.5-.1H18V4zM9 7h6v2H9zm0 4h6v2H9z"/></svg>`,
     building: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3 8 3v16h-6v-5h-4v5zm3-3h2v-2H7zm0-4h2v-2H7zm0-4h2V8H7zm4 4h2v-2h-2zm0-4h2V8h-2zm4 4h2v-2h-2zm0-4h2V8h-2z"/></svg>`,
     database: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3zm0 2C8.2 5 6 6 6 6s2.2 1 6 1 6-1 6-1-2.2-1-6-1zM6 9v3c.8.5 2.9 1 6 1s5.2-.5 6-1V9c-1.4.6-3.5 1-6 1s-4.6-.4-6-1zm0 6v3c.8.5 2.9 1 6 1s5.2-.5 6-1v-3c-1.4.6-3.5 1-6 1s-4.6-.4-6-1z"/></svg>`,
     users: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z"/></svg>`,

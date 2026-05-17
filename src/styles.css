@@ -2751,6 +2751,53 @@ tr:last-child td {
   gap: 10px;
 }
 
+.wiki-home-card {
+  display: grid;
+  gap: 14px;
+}
+
+.wiki-home-hero {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at top left, rgba(41, 115, 104, 0.2), transparent 48%),
+    linear-gradient(135deg, #f1f6f4, #edf4f7);
+}
+
+.wiki-home-hero svg {
+  width: 42px;
+  height: 42px;
+  fill: var(--brand);
+}
+
+.wiki-home-hero strong,
+.wiki-home-hero span,
+.wiki-home-groups strong,
+.wiki-home-groups span {
+  display: block;
+}
+
+.wiki-home-hero span,
+.wiki-home-groups span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.wiki-home-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.wiki-home-groups > div {
+  border-left: 3px solid var(--brand);
+  padding-left: 10px;
+}
+
 .release-card,
 .doc-link,
 .api-group {

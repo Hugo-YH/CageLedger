@@ -1,0 +1,22 @@
+<svg width="960" height="260" viewBox="0 0 960 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="260" rx="28" fill="#F7F8F4"/>
+  <text x="40" y="48" fill="#213437" font-family="Arial, sans-serif" font-size="24" font-weight="700">月度结算流程</text>
+  <g font-family="Arial, sans-serif" font-size="16" text-anchor="middle">
+    <rect x="40" y="92" width="150" height="74" rx="14" fill="#E8F2EF"/>
+    <text x="115" y="136" fill="#213437">在养中</text>
+    <rect x="222" y="92" width="150" height="74" rx="14" fill="#DDEDE8"/>
+    <text x="297" y="136" fill="#213437">已生成结算单</text>
+    <rect x="404" y="92" width="150" height="74" rx="14" fill="#D2E7E1"/>
+    <text x="479" y="136" fill="#213437">已发送</text>
+    <rect x="586" y="92" width="150" height="74" rx="14" fill="#C7E0D9"/>
+    <text x="661" y="136" fill="#213437">已签回</text>
+    <rect x="768" y="92" width="150" height="74" rx="14" fill="#BDD9D1"/>
+    <text x="843" y="136" fill="#213437">已交财务</text>
+  </g>
+  <g stroke="#2F7A72" stroke-width="4" stroke-linecap="round">
+    <path d="M190 129H222"/>
+    <path d="M372 129H404"/>
+    <path d="M554 129H586"/>
+    <path d="M736 129H768"/>
+  </g>
+</svg>

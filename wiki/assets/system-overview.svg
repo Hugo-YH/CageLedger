@@ -1,0 +1,32 @@
+<svg width="960" height="420" viewBox="0 0 960 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="960" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6F1E8"/>
+      <stop offset="1" stop-color="#EAF3F1"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="420" rx="28" fill="url(#bg)"/>
+  <text x="48" y="54" fill="#213437" font-family="Arial, sans-serif" font-size="28" font-weight="700">CageLedger</text>
+  <text x="48" y="86" fill="#5D6A6E" font-family="Arial, sans-serif" font-size="16">实验动物笼位管理与饲养费核算系统</text>
+  <g font-family="Arial, sans-serif">
+    <rect x="48" y="130" width="250" height="190" rx="18" fill="#FFFFFF"/>
+    <text x="72" y="166" fill="#213437" font-size="20" font-weight="700">现场业务</text>
+    <text x="72" y="204" fill="#5D6A6E" font-size="16">笼卡管理</text>
+    <text x="72" y="236" fill="#5D6A6E" font-size="16">笼位与房间</text>
+    <text x="72" y="268" fill="#5D6A6E" font-size="16">IACUC 索引</text>
+    <rect x="355" y="130" width="250" height="190" rx="18" fill="#FFFFFF"/>
+    <text x="379" y="166" fill="#213437" font-size="20" font-weight="700">核算链路</text>
+    <text x="379" y="204" fill="#5D6A6E" font-size="16">动态笼位图</text>
+    <text x="379" y="236" fill="#5D6A6E" font-size="16">数量统计表</text>
+    <text x="379" y="268" fill="#5D6A6E" font-size="16">结算流程中心</text>
+    <rect x="662" y="130" width="250" height="190" rx="18" fill="#FFFFFF"/>
+    <text x="686" y="166" fill="#213437" font-size="20" font-weight="700">系统支撑</text>
+    <text x="686" y="204" fill="#5D6A6E" font-size="16">权限控制</text>
+    <text x="686" y="236" fill="#5D6A6E" font-size="16">审计日志</text>
+    <text x="686" y="268" fill="#5D6A6E" font-size="16">Gitea 发布链</text>
+  </g>
+  <path d="M298 225H355" stroke="#2F7A72" stroke-width="4" stroke-linecap="round"/>
+  <path d="M605 225H662" stroke="#2F7A72" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="326.5" cy="225" r="8" fill="#2F7A72"/>
+  <circle cx="633.5" cy="225" r="8" fill="#2F7A72"/>
+</svg>
