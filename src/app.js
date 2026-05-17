@@ -30,6 +30,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.4.10",
+    title: "性能优化与系统 Wiki 整合",
+    items: [
+      "数量统计表保存改为按受影响目标表同步，并以局部刷新和后台补偿减少保存后的等待",
+      "基础设施 bootstrap 增加短时缓存和轻量性能诊断，优化首屏与按需加载路径",
+      "项目文档统一迁移到仓库内 wiki，并自动同步到 Gitea Wiki",
+      "关于系统页面改为系统 Wiki 单一入口，并补充可直接跳转的 Wiki 导航与示意图",
+    ],
+  },
+  {
     version: "0.4.9h",
     title: "最新发布版检查",
     items: [
@@ -487,7 +497,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.4.9h",
+  version: "0.4.10",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
