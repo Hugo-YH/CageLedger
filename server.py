@@ -12,7 +12,7 @@ import secrets
 import sqlite3
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.utils import format_datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -95,6 +95,7 @@ TABLES = (
     "billing_adjustments",
     "billing_rules",
     "occupancies",
+    "placement_tasks",
     "cage_slots",
     "intake_batches",
     "racks",
@@ -106,6 +107,7 @@ ENTITY_ENDPOINTS = {
     "/api/racks": "racks",
     "/api/cage-slots": "cage_slots",
     "/api/occupancies": "occupancies",
+    "/api/placement-tasks": "placement_tasks",
     "/api/billing-rules": "billing_rules",
     "/api/billing-adjustments": "billing_adjustments",
     "/api/intake-batches": "intake_batches",
@@ -119,6 +121,7 @@ ENTITY_ORDER_BY = {
     "racks": "room_id, index_no, rowid",
     "cage_slots": "rack_id, row_no, col_no, rowid",
     "occupancies": "start_date, rowid",
+    "placement_tasks": "planned_move_in_date, rowid",
     "billing_rules": "rowid",
     "billing_adjustments": "rowid",
     "intake_batches": "updated_at DESC, rowid DESC",
@@ -131,6 +134,7 @@ WRITABLE_ENTITY_ENDPOINTS = {
     "/api/racks": {"collection": "racks", "id_prefix": "rack"},
     "/api/cage-slots": {"collection": "slots", "id_prefix": "slot"},
     "/api/occupancies": {"collection": "occupancies", "id_prefix": "occ"},
+    "/api/placement-tasks": {"collection": "placementTasks", "id_prefix": "ptask"},
     "/api/billing-rules": {"collection": "billingRules", "id_prefix": "rule"},
     "/api/billing-adjustments": {"collection": "adjustments", "id_prefix": "adj"},
     "/api/intake-batches": {"collection": "intakeBatches", "id_prefix": "batch"},
@@ -292,6 +296,22 @@ def initialize_schema(conn):
             end_date TEXT,
             end_reason TEXT,
             notes TEXT,
+            updated_at TEXT,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS placement_tasks (
+            id TEXT PRIMARY KEY,
+            source_batch_id TEXT NOT NULL,
+            source_receipt_id TEXT NOT NULL,
+            target_room_id TEXT,
+            planned_move_in_date TEXT NOT NULL,
+            status TEXT NOT NULL,
+            reserved_occupancy_id TEXT,
+            actual_move_in_date TEXT,
             updated_at TEXT,
             payload TEXT NOT NULL
         )
@@ -553,6 +573,9 @@ def create_performance_indexes(conn):
         "CREATE INDEX IF NOT EXISTS idx_occupancies_billing_item ON occupancies(billing_item)",
         "CREATE INDEX IF NOT EXISTS idx_occupancies_customer_type ON occupancies(customer_type)",
         "CREATE INDEX IF NOT EXISTS idx_occupancies_start_end ON occupancies(start_date, end_date)",
+        "CREATE INDEX IF NOT EXISTS idx_placement_tasks_room_id ON placement_tasks(target_room_id)",
+        "CREATE INDEX IF NOT EXISTS idx_placement_tasks_status ON placement_tasks(status)",
+        "CREATE INDEX IF NOT EXISTS idx_placement_tasks_move_in_date ON placement_tasks(planned_move_in_date)",
         "CREATE INDEX IF NOT EXISTS idx_experiment_applications_iacuc ON experiment_applications(iacuc)",
         "CREATE INDEX IF NOT EXISTS idx_experiment_applications_raw_iacuc ON experiment_applications(raw_iacuc)",
         "CREATE INDEX IF NOT EXISTS idx_experiment_applications_pi ON experiment_applications(pi)",
@@ -1187,6 +1210,7 @@ def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
         "billingRules": state.get("billingRules", []),
         "adjustments": state.get("adjustments", []),
         "intakeBatches": state.get("intakeBatches", []),
+        "placementTasks": state.get("placementTasks", []),
         **summary,
     }
     if scope == "full":
@@ -1220,6 +1244,7 @@ def filter_state_for_actor(state, actor):
     slots = [slot for slot in state.get("slots", []) if slot.get("rackId") in rack_ids]
     slot_ids = {slot.get("id") for slot in slots}
     occupancies = [item for item in state.get("occupancies", []) if item.get("slotId") in slot_ids]
+    placement_tasks = [item for item in state.get("placementTasks", []) if item.get("targetRoomId") in room_ids]
 
     return {
         **state,
@@ -1227,6 +1252,7 @@ def filter_state_for_actor(state, actor):
         "racks": racks,
         "slots": slots,
         "occupancies": occupancies,
+        "placementTasks": placement_tasks,
     }
 
 
@@ -1237,7 +1263,7 @@ def filter_entity_payloads_for_actor(collection, items, actor):
     allowed_rooms = set(actor.get("roomIds", []))
     if collection == "rooms":
         return [item for item in items if item.get("id") in allowed_rooms]
-    if collection in ("racks", "slots", "occupancies"):
+    if collection in ("racks", "slots", "occupancies", "placementTasks"):
         with connect_db() as conn:
             state = assemble_state(conn) or empty_state()
         visible = filter_state_for_actor(state, actor)
@@ -1245,16 +1271,18 @@ def filter_entity_payloads_for_actor(collection, items, actor):
             "racks": {item.get("id") for item in visible.get("racks", [])},
             "slots": {item.get("id") for item in visible.get("slots", [])},
             "occupancies": {item.get("id") for item in visible.get("occupancies", [])},
+            "placementTasks": {item.get("id") for item in visible.get("placementTasks", [])},
         }[collection]
         return [item for item in items if item.get("id") in visible_ids]
     return items
 
 
-def write_state(state, actor):
+def write_state(state, actor, skip_permission=False):
     updated_at = datetime.now(timezone.utc).isoformat()
     with connect_db() as conn:
         old_state = assemble_state(conn) or {}
-        validate_state_write_permission(conn, actor, old_state, state)
+        if not skip_permission:
+            validate_state_write_permission(conn, actor, old_state, state)
         events = build_audit_events(actor, old_state, state, updated_at)
         state["auditLogs"] = merge_audit_logs(state.get("auditLogs", []), events)
         write_normalized_state(conn, state, updated_at)
@@ -1497,6 +1525,7 @@ def empty_state():
         "racks": [],
         "slots": [],
         "occupancies": [],
+        "placementTasks": [],
         "billingRules": [],
         "adjustments": [],
         "intakeBatches": [],
@@ -1540,6 +1569,13 @@ def validate_entity_payload(collection, item):
         status = item.get("status")
         if status not in ("reserved", "active", "ended"):
             raise ValueError("占用状态只能是 reserved、active 或 ended")
+    elif collection == "placementTasks":
+        require_text(item, "sourceBatchId", "来源批次不能为空")
+        require_text(item, "sourceReceiptId", "来源接收记录不能为空")
+        require_text(item, "plannedMoveInDate", "计划入驻日期不能为空")
+        status = item.get("status")
+        if status not in ("pending", "reserved", "active", "cancelled"):
+            raise ValueError("待进驻状态只能是 pending、reserved、active 或 cancelled")
     elif collection == "billingRules":
         require_text(item, "unit", "计费规则单位不能为空")
     elif collection == "adjustments":
@@ -1607,6 +1643,8 @@ def validate_entity_references(state, collection, item):
         raise ValueError("关联的笼架不存在")
     if collection == "occupancies" and not entity_exists(state, "slots", item.get("slotId")):
         raise ValueError("关联的笼位不存在")
+    if collection == "placementTasks" and item.get("targetRoomId") and not entity_exists(state, "rooms", item.get("targetRoomId")):
+        raise ValueError("关联的目标饲养间不存在")
 
 
 def entity_exists(state, collection, item_id):
@@ -1623,6 +1661,190 @@ def sync_slot_statuses(state):
         {**slot, "status": status_by_slot.get(slot.get("id"), "empty")}
         for slot in state.get("slots", [])
     ]
+
+
+def next_monday_after(date_text):
+    try:
+        current = date.fromisoformat(clean_text(date_text))
+    except ValueError as exc:
+        raise ValueError("实际接收日期无效") from exc
+    days_until_next_monday = 7 - current.weekday()
+    return (current + timedelta(days=days_until_next_monday)).isoformat()
+
+
+def room_by_name(state, room_name):
+    target = clean_text(room_name)
+    return next((room for room in state.get("rooms", []) if clean_text(room.get("name")) == target), None)
+
+
+def intake_receipt_total(batch):
+    return sum(max(as_int(item.get("cardCount")) or 0, 0) for item in batch.get("receipts", []))
+
+
+def confirm_intake_receipt(state, batch_id, payload, actor):
+    batch = next((item for item in state.get("intakeBatches", []) if item.get("id") == batch_id), None)
+    if not batch:
+        raise LookupError("待接收批次不存在")
+    if batch.get("status") not in ("printed", "received"):
+        raise ValueError("只有已打印批次可以确认接收")
+    actual_date = clean_text(payload.get("actualReceiptDate"))
+    if not actual_date:
+        raise ValueError("实际接收日期不能为空")
+    card_count = as_int(payload.get("cardCount"))
+    if card_count is None or card_count <= 0:
+        raise ValueError("实际到货笼卡数必须大于 0")
+    confirmed_total = intake_receipt_total(batch)
+    final_count = max(as_int(batch.get("finalCardCount")) or 0, 0)
+    if confirmed_total + card_count > final_count:
+        raise ValueError("实际到货笼卡数超过打印张数")
+    target_room = room_by_name(state, batch.get("roomName"))
+    if not target_room:
+        raise ValueError("目标饲养间不存在，请先确认房间名称")
+    receipt_id = new_id("receipt")
+    planned_date = next_monday_after(actual_date)
+    now = now_iso()
+    receipt = {
+        "id": receipt_id,
+        "actualReceiptDate": actual_date,
+        "cardCount": card_count,
+        "confirmedBy": actor.get("displayName", ""),
+        "confirmedAt": now,
+        "plannedMoveInDate": planned_date,
+    }
+    batch.setdefault("receipts", []).append(receipt)
+    batch["confirmedCardCount"] = confirmed_total + card_count
+    batch["remainingCardCount"] = max(final_count - batch["confirmedCardCount"], 0)
+    batch["status"] = "received" if batch["remainingCardCount"] == 0 else "printed"
+    batch["updatedAt"] = now
+    tasks = []
+    for index in range(card_count):
+        task = {
+            "id": new_id("ptask"),
+            "sourceBatchId": batch["id"],
+            "sourceReceiptId": receipt_id,
+            "batchNo": batch.get("batchNo", ""),
+            "targetRoomId": target_room.get("id", ""),
+            "targetRoomName": target_room.get("name", ""),
+            "plannedMoveInDate": planned_date,
+            "status": "pending",
+            "reservedOccupancyId": "",
+            "actualMoveInDate": "",
+            "roomChangeHistory": [],
+            "iacuc": batch.get("iacuc", ""),
+            "project": batch.get("project", ""),
+            "pi": batch.get("pi", ""),
+            "owner": batch.get("owner", ""),
+            "species": batch.get("species", ""),
+            "strainStandard": batch.get("strainStandard", ""),
+            "animalCount": max(as_int(batch.get("suggestedAnimalsPerCage")) or 1, 1),
+            "cardSequence": confirmed_total + index + 1,
+            "updatedAt": now,
+        }
+        state.setdefault("placementTasks", []).append(task)
+        tasks.append(task)
+    return batch, receipt, tasks
+
+
+def ensure_task_room_permission(actor, task):
+    if actor.get("role") == "admin":
+        return
+    if task.get("targetRoomId") not in set(actor.get("roomIds", [])):
+        raise PermissionError("不能操作未授权饲养间的待进驻任务")
+
+
+def reserve_placement_task(state, task_id, slot_id, actor):
+    task = next((item for item in state.get("placementTasks", []) if item.get("id") == task_id), None)
+    if not task:
+        raise LookupError("待进驻任务不存在")
+    ensure_task_room_permission(actor, task)
+    if task.get("status") not in ("pending", "reserved"):
+        raise ValueError("当前任务不能预留笼位")
+    slot = next((item for item in state.get("slots", []) if item.get("id") == slot_id), None)
+    if not slot:
+        raise LookupError("笼位不存在")
+    rack = next((item for item in state.get("racks", []) if item.get("id") == slot.get("rackId")), None)
+    if not rack or rack.get("roomId") != task.get("targetRoomId"):
+        raise ValueError("只能在目标饲养间内预留笼位")
+    if any(item.get("slotId") == slot_id and item.get("status") in ("reserved", "active") for item in state.get("occupancies", [])):
+        raise ValueError("该笼位当前不可用")
+    now = now_iso()
+    occupancy = {
+        "id": new_id("occ"),
+        "slotId": slot_id,
+        "cageCode": "",
+        "status": "reserved",
+        "iacuc": task.get("iacuc", ""),
+        "project": task.get("project", ""),
+        "pi": task.get("pi", ""),
+        "owner": task.get("owner", ""),
+        "species": task.get("species", ""),
+        "animalCount": task.get("animalCount"),
+        "startDate": "",
+        "endDate": "",
+        "notes": f"来自待进驻任务 {task.get('batchNo', '')}",
+        "placementTaskId": task["id"],
+        "updatedAt": now,
+    }
+    state.setdefault("occupancies", []).append(occupancy)
+    task["status"] = "reserved"
+    task["reservedOccupancyId"] = occupancy["id"]
+    task["updatedAt"] = now
+    sync_slot_statuses(state)
+    return task, occupancy
+
+
+def move_in_placement_task(state, task_id, actual_move_in_date, actor):
+    task = next((item for item in state.get("placementTasks", []) if item.get("id") == task_id), None)
+    if not task:
+        raise LookupError("待进驻任务不存在")
+    ensure_task_room_permission(actor, task)
+    if task.get("status") != "reserved":
+        raise ValueError("请先为待进驻任务预留笼位")
+    occupancy = next((item for item in state.get("occupancies", []) if item.get("id") == task.get("reservedOccupancyId")), None)
+    if not occupancy:
+        raise LookupError("预留占用不存在")
+    move_in_date = clean_text(actual_move_in_date)
+    if not move_in_date:
+        raise ValueError("实际入驻日期不能为空")
+    occupancy["status"] = "active"
+    occupancy["startDate"] = move_in_date
+    occupancy["updatedAt"] = now_iso()
+    task["status"] = "active"
+    task["actualMoveInDate"] = move_in_date
+    task["updatedAt"] = occupancy["updatedAt"]
+    sync_slot_statuses(state)
+    return task, occupancy
+
+
+def reassign_placement_task_room(state, task_id, room_id, actor):
+    if actor.get("role") != "admin":
+        raise PermissionError("只有系统管理员可以改签目标房间")
+    task = next((item for item in state.get("placementTasks", []) if item.get("id") == task_id), None)
+    if not task:
+        raise LookupError("待进驻任务不存在")
+    if task.get("status") == "active":
+        raise ValueError("已入驻任务不能改签房间")
+    room = next((item for item in state.get("rooms", []) if item.get("id") == room_id), None)
+    if not room:
+        raise LookupError("目标饲养间不存在")
+    if task.get("reservedOccupancyId"):
+        raise ValueError("已预留笼位的任务需先取消预留后再改签")
+    if task.get("targetRoomId") == room_id:
+        return task
+    task.setdefault("roomChangeHistory", []).append(
+        {
+            "fromRoomId": task.get("targetRoomId", ""),
+            "fromRoomName": task.get("targetRoomName", ""),
+            "toRoomId": room["id"],
+            "toRoomName": room["name"],
+            "changedAt": now_iso(),
+            "changedBy": actor.get("displayName", ""),
+        }
+    )
+    task["targetRoomId"] = room["id"]
+    task["targetRoomName"] = room["name"]
+    task["updatedAt"] = now_iso()
+    return task
 
 
 def migrate_legacy_state(conn):
@@ -1734,6 +1956,29 @@ def write_normalized_state(conn, state, updated_at):
             ),
         )
 
+    for task in state.get("placementTasks", []):
+        conn.execute(
+            """
+            INSERT INTO placement_tasks (
+                id, source_batch_id, source_receipt_id, target_room_id, planned_move_in_date,
+                status, reserved_occupancy_id, actual_move_in_date, updated_at, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                task.get("id"),
+                task.get("sourceBatchId", ""),
+                task.get("sourceReceiptId", ""),
+                task.get("targetRoomId", ""),
+                task.get("plannedMoveInDate", ""),
+                task.get("status", "pending"),
+                task.get("reservedOccupancyId", ""),
+                task.get("actualMoveInDate", ""),
+                task.get("updatedAt", updated_at),
+                dump_json(task),
+            ),
+        )
+
     for rule in state.get("billingRules", []):
         conn.execute(
             """
@@ -1816,6 +2061,7 @@ def assemble_state(conn):
         "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
         "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
         "occupancies": read_payloads(conn, "occupancies", "start_date, rowid"),
+        "placementTasks": read_payloads(conn, "placement_tasks", "planned_move_in_date, rowid"),
         "billingRules": read_payloads(conn, "billing_rules", "rowid"),
         "adjustments": read_payloads(conn, "billing_adjustments", "rowid"),
         "intakeBatches": read_payloads(conn, "intake_batches", "updated_at DESC, rowid DESC"),
@@ -2214,6 +2460,13 @@ def validate_state_write_permission(conn, actor, old_state, new_state):
         if slot_rooms.get(item.get("slotId")) not in allowed_rooms:
             raise PermissionError("不能修改未授权饲养间的笼位信息")
 
+    old_tasks = {item.get("id"): item for item in old_state.get("placementTasks", [])}
+    new_tasks = {item.get("id"): item for item in new_state.get("placementTasks", [])}
+    for task_id in changed_keys(old_tasks, new_tasks):
+        item = new_tasks.get(task_id) or old_tasks.get(task_id) or {}
+        if item.get("targetRoomId") not in allowed_rooms:
+            raise PermissionError("不能修改未授权饲养间的待进驻任务")
+
 
 def comparable_items(items):
     return {item.get("id"): item for item in items}
@@ -2292,6 +2545,20 @@ def build_audit_events(actor, old_state, new_state, at):
         label = (new_item or old_item or {}).get("batchNo", batch_id)
         message = f"{actor['displayName']} {action_label(action)}待接收批次 {label}"
         events.append(audit_event(actor, action, "intake_batch", batch_id, message, [], at, old_item, new_item))
+
+    old_tasks = {item.get("id"): item for item in old_state.get("placementTasks", [])}
+    new_tasks = {item.get("id"): item for item in new_state.get("placementTasks", [])}
+    for task_id in sorted(changed_keys(old_tasks, new_tasks)):
+        old_item = old_tasks.get(task_id)
+        new_item = new_tasks.get(task_id)
+        action = "placement_task.updated"
+        if old_item is None:
+            action = "placement_task.created"
+        elif new_item is None:
+            action = "placement_task.deleted"
+        label = (new_item or old_item or {}).get("batchNo", task_id)
+        message = f"{actor['displayName']} {action_label(action)}待进驻任务 {label}"
+        events.append(audit_event(actor, action, "placement_task", task_id, message, [], at, old_item, new_item))
 
     return events[:100]
 
@@ -5117,6 +5384,22 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if path == "/api/quantity-sheets":
             self.handle_quantity_sheet_save(None)
             return
+        batch_id = self.intake_batch_confirm_route(path)
+        if batch_id:
+            self.handle_intake_batch_confirm(batch_id)
+            return
+        task_id = self.placement_task_action_route(path, "reserve")
+        if task_id:
+            self.handle_placement_task_reserve(task_id)
+            return
+        task_id = self.placement_task_action_route(path, "move-in")
+        if task_id:
+            self.handle_placement_task_move_in(task_id)
+            return
+        task_id = self.placement_task_action_route(path, "reassign-room")
+        if task_id:
+            self.handle_placement_task_reassign_room(task_id)
+            return
         if path == "/api/users":
             user = self.require_user()
             if not user:
@@ -5545,6 +5828,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             "racks": "racks",
             "cage_slots": "slots",
             "occupancies": "occupancies",
+            "placement_tasks": "placementTasks",
         }.get(table)
         if collection:
             items = filter_entity_payloads_for_actor(collection, items, actor)
@@ -5597,6 +5881,26 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if "/" in workflow_id or not workflow_id:
             return None
         return workflow_id
+
+    def intake_batch_confirm_route(self, path):
+        prefix = "/api/intake-batches/"
+        suffix = "/confirm-receipt"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        batch_id = unquote(path[len(prefix) : -len(suffix)])
+        if "/" in batch_id or not batch_id:
+            return None
+        return batch_id
+
+    def placement_task_action_route(self, path, action):
+        prefix = "/api/placement-tasks/"
+        suffix = f"/{action}"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        task_id = unquote(path[len(prefix) : -len(suffix)])
+        if "/" in task_id or not task_id:
+            return None
+        return task_id
 
     def quantity_sheet_generate_route(self, path):
         prefix = "/api/quantity-sheets/"
@@ -5701,6 +6005,84 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 statement, lines, audit_logs = generate_quantity_sheet_statement(conn, sheet_id, body, user)
                 conn.commit()
             self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_intake_batch_confirm(self, batch_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            current = read_state()
+            state = current.get("state") or empty_state()
+            batch, receipt, tasks = confirm_intake_receipt(state, batch_id, body, user)
+            result = write_state(state, user, skip_permission=True)
+            self.send_json(
+                {
+                    "batch": batch,
+                    "receipt": receipt,
+                    "tasks": tasks,
+                    "auditLogs": result["auditLogs"],
+                },
+                HTTPStatus.CREATED,
+            )
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_placement_task_reserve(self, task_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            current = read_state()
+            state = current.get("state") or empty_state()
+            task, occupancy = reserve_placement_task(state, task_id, clean_text(body.get("slotId")), user)
+            result = write_state(state, user)
+            self.send_json({"task": task, "occupancy": occupancy, "auditLogs": result["auditLogs"]})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_placement_task_move_in(self, task_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            current = read_state()
+            state = current.get("state") or empty_state()
+            task, occupancy = move_in_placement_task(state, task_id, body.get("actualMoveInDate"), user)
+            result = write_state(state, user)
+            self.send_json({"task": task, "occupancy": occupancy, "auditLogs": result["auditLogs"]})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_placement_task_reassign_room(self, task_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            current = read_state()
+            state = current.get("state") or empty_state()
+            task = reassign_placement_task_room(state, task_id, clean_text(body.get("roomId")), user)
+            result = write_state(state, user)
+            self.send_json({"task": task, "auditLogs": result["auditLogs"]})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:
