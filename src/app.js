@@ -32,6 +32,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.2",
+    title: "首页总览与演示数据完善",
+    items: [
+      "首页新增运营总览卡片、两设施摘要和快捷入口，汇总待接收、待进驻、本月流程与异常项",
+      "笼卡接收、待进驻、结算和流程中心补齐演示级提示文案、空状态引导和计费口径说明",
+      "新增演示数据生成脚本与演示路径文档，覆盖珠江新城按笼收费、生物岛按只收费和同 PI 合表场景",
+    ],
+  },
+  {
     version: "0.5.1a",
     title: "接收回退与分页交互修正",
     items: [
@@ -529,7 +538,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.1a",
+  version: "0.5.2",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1083,6 +1092,7 @@ const seedData = {
   selectedPlacementTaskId: "",
   selectedPlacementTaskIds: [],
   placementAssignmentMode: false,
+  showPlacementTaskPanel: true,
   reassigningPlacementReceiptId: "",
   intakeBatchFilter: "unprinted",
   intakeBatchDraft: makeIncomingBatchDraft(),
@@ -1090,6 +1100,7 @@ const seedData = {
   editingIntakeBatchDraft: null,
   showIntakeCardPreview: false,
   billingWorkflows: [],
+  facilitySummaries: [],
   principalIdentityFilter: "",
   slotFilter: "all",
   baseRate: 4.5,
@@ -1475,6 +1486,7 @@ async function loadBootstrapState() {
     roomSummaries: entityData.roomSummaries || [],
     rackSummaries: entityData.rackSummaries || [],
     dashboardSummary: entityData.dashboardSummary || null,
+    facilitySummaries: entityData.facilitySummaries || [],
     billingRules: [],
     adjustments: [],
     auditLogs: [],
@@ -1498,9 +1510,10 @@ async function loadFullInfrastructure() {
     if (!response.ok) throw new Error(payload.error || "加载设施数据失败");
     state.slots = payload.slots || [];
     state.occupancies = payload.occupancies || [];
-    state.roomSummaries = payload.roomSummaries || state.roomSummaries;
-    state.rackSummaries = payload.rackSummaries || state.rackSummaries;
-    state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
+  state.roomSummaries = payload.roomSummaries || state.roomSummaries;
+  state.rackSummaries = payload.rackSummaries || state.rackSummaries;
+  state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
+  state.facilitySummaries = payload.facilitySummaries || state.facilitySummaries;
     infrastructureLoadState.scope = "full";
     infrastructureLoadState.roomId = "";
     logClientPerf("bootstrap.full", startedAt, { rooms: state.rooms.length, slots: state.slots.length });
@@ -1529,9 +1542,10 @@ async function loadRoomInfrastructure(roomId) {
     if (!response.ok) throw new Error(payload.error || "加载饲养间笼位失败");
     state.slots = payload.slots || [];
     state.occupancies = payload.occupancies || [];
-    state.roomSummaries = payload.roomSummaries || state.roomSummaries;
-    state.rackSummaries = payload.rackSummaries || state.rackSummaries;
-    state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
+  state.roomSummaries = payload.roomSummaries || state.roomSummaries;
+  state.rackSummaries = payload.rackSummaries || state.rackSummaries;
+  state.dashboardSummary = payload.dashboardSummary || state.dashboardSummary;
+  state.facilitySummaries = payload.facilitySummaries || state.facilitySummaries;
     infrastructureLoadState.scope = "room";
     infrastructureLoadState.roomId = roomId;
     logClientPerf("bootstrap.room", startedAt, { roomId, slots: payload.slots?.length || 0 });
@@ -1563,6 +1577,7 @@ function localUiOnlyState(source = {}) {
     selectedQuantitySheetId: source.selectedQuantitySheetId || "",
     selectedIntakeBatchId: source.selectedIntakeBatchId || "",
     selectedIntakeBatchIds: Array.isArray(source.selectedIntakeBatchIds) ? source.selectedIntakeBatchIds.slice(0, 200) : [],
+    showPlacementTaskPanel: Boolean(source.showPlacementTaskPanel ?? true),
     intakeBatchFilter: source.intakeBatchFilter || "unprinted",
     principalIdentityFilter: source.principalIdentityFilter || "",
   };
@@ -2123,6 +2138,26 @@ async function deleteEntityRequest(collection, itemId) {
   return entityRequest(collection, "DELETE", null, itemId);
 }
 
+async function fetchEntityById(collection, itemId) {
+  if (!remotePersistence) {
+    const item = state[collection]?.find?.((entry) => entry.id === itemId) || null;
+    if (!item) throw new Error("记录不存在");
+    return { item };
+  }
+  const baseUrl = ENTITY_API_URLS[collection];
+  const response = await fetch(`${baseUrl}/${encodeURIComponent(itemId)}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "加载详情失败");
+  }
+  return payload;
+}
+
 function mergeServerAuditLogs(payload) {
   if (Array.isArray(payload?.auditLogs) && payload.auditLogs.length) {
     state.auditLogs = mergeAuditLogs(payload.auditLogs, state.auditLogs || []);
@@ -2216,6 +2251,7 @@ function normalize(data) {
   next.selectedPlacementTaskId = String(next.selectedPlacementTaskId || "");
   next.selectedPlacementTaskIds = Array.isArray(next.selectedPlacementTaskIds) ? next.selectedPlacementTaskIds.filter(Boolean) : [];
   next.placementAssignmentMode = Boolean(next.placementAssignmentMode);
+  next.showPlacementTaskPanel = Boolean(next.showPlacementTaskPanel);
   next.reassigningPlacementReceiptId = String(next.reassigningPlacementReceiptId || "");
   next.intakeBatchFilter = INTAKE_BATCH_FILTER_OPTIONS.some(([value]) => value === next.intakeBatchFilter) ? next.intakeBatchFilter : "unprinted";
   next.intakeBatchDraft = normalizeIncomingBatchDraft(next.intakeBatchDraft || next.intakeBatches.find((item) => item.id === next.selectedIntakeBatchId) || makeIncomingBatchDraft());
@@ -2235,6 +2271,7 @@ function normalize(data) {
   next.rooms = Array.isArray(next.rooms) ? next.rooms.map(normalizeRoomDefaults) : [];
   next.roomSummaries = Array.isArray(next.roomSummaries) ? next.roomSummaries.map((item) => ({ ...item })) : [];
   next.rackSummaries = Array.isArray(next.rackSummaries) ? next.rackSummaries.map((item) => ({ ...item })) : [];
+  next.facilitySummaries = Array.isArray(next.facilitySummaries) ? next.facilitySummaries.map((item) => ({ ...item })) : [];
   next.dashboardSummary = next.dashboardSummary && typeof next.dashboardSummary === "object" ? { ...next.dashboardSummary } : null;
   next.occupancies = Array.isArray(next.occupancies)
     ? next.occupancies.map((item) => ({
@@ -2867,7 +2904,19 @@ function metric(label, value, tone) {
   `;
 }
 
+function occupancyOverlapsMonthLocal(item, month) {
+  if (!month || !item?.startDate) return false;
+  const [year, monthNumber] = month.split("-").map(Number);
+  if (!year || !monthNumber) return false;
+  const monthStart = `${year}-${String(monthNumber).padStart(2, "0")}-01`;
+  const monthEnd = `${year}-${String(monthNumber).padStart(2, "0")}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`;
+  if (item.startDate > monthEnd) return false;
+  if (item.endDate && item.endDate < monthStart) return false;
+  return true;
+}
+
 function computeInfrastructureSummaries(source = state) {
+  const roomById = new Map((source.rooms || []).map((room) => [room.id, room]));
   const roomSummaries = new Map((source.rooms || []).map((room) => [room.id, {
     roomId: room.id,
     rackCount: 0,
@@ -2894,6 +2943,23 @@ function computeInfrastructureSummaries(source = state) {
   }]));
   const rackById = new Map((source.racks || []).map((rack) => [rack.id, rack]));
   const slotById = new Map((source.slots || []).map((slot) => [slot.id, slot]));
+  const facilitySummaries = new Map();
+  const currentMonth = today.slice(0, 7);
+  const ensureFacilitySummary = (facility) => {
+    const key = facility || "zhujiang";
+    if (!facilitySummaries.has(key)) {
+      facilitySummaries.set(key, {
+        facility: key,
+        roomCount: 0,
+        activeCageCount: 0,
+        activeAnimalCount: 0,
+        openPlacementTaskCount: 0,
+        currentMonthWorkflowTodoCount: 0,
+        currentMonthWorkflowDoneCount: 0,
+      });
+    }
+    return facilitySummaries.get(key);
+  };
   const currentBySlot = new Map();
   (source.occupancies || []).forEach((item) => {
     if ((item.status === "active" || item.status === "reserved") && item.slotId) currentBySlot.set(item.slotId, item);
@@ -2901,15 +2967,35 @@ function computeInfrastructureSummaries(source = state) {
     const rackId = item.rackId || slot?.rackId || "";
     const roomId = item.roomId || rackById.get(rackId)?.roomId || "";
     if (rackSummaries.has(rackId)) rackSummaries.get(rackId).occupancyRecordCount += 1;
-    if (roomSummaries.has(roomId)) roomSummaries.get(roomId).occupancyRecordCount += 1;
+      if (roomSummaries.has(roomId)) roomSummaries.get(roomId).occupancyRecordCount += 1;
   });
-  const dashboardSummary = { total: 0, active: 0, reserved: 0, empty: 0, periodOpen: 0, periodNormal: 0, periodOverdue: 0 };
+  const dashboardSummary = {
+    total: 0,
+    active: 0,
+    reserved: 0,
+    empty: 0,
+    periodOpen: 0,
+    periodNormal: 0,
+    periodOverdue: 0,
+    intakePendingCount: 0,
+    openPlacementTaskCount: 0,
+    currentMonthWorkflowTodoCount: 0,
+    currentMonthWorkflowDoneCount: 0,
+    unmatchedIntakeCount: 0,
+    overduePlacementCount: 0,
+    stalledWorkflowCount: 0,
+    exceptionCount: 0,
+  };
+  (source.rooms || []).forEach((room) => {
+    ensureFacilitySummary(normalizeRoomDefaults(room).facility).roomCount += 1;
+  });
   (source.racks || []).forEach((rack) => {
     if (roomSummaries.has(rack.roomId)) roomSummaries.get(rack.roomId).rackCount += 1;
   });
   (source.slots || []).forEach((slot) => {
     const rackSummary = rackSummaries.get(slot.rackId);
     const roomId = rackById.get(slot.rackId)?.roomId || "";
+    const room = roomById.get(roomId) || {};
     const roomSummary = roomSummaries.get(roomId);
     const occupancy = currentBySlot.get(slot.id);
     const tone = occupancyPeriodTone(occupancy);
@@ -2918,6 +3004,7 @@ function computeInfrastructureSummaries(source = state) {
     if (roomSummary) roomSummary.slotCount += 1;
     if (slot.status === "active") {
       dashboardSummary.active += 1;
+      ensureFacilitySummary(billingProfileForRoom(room).facility).activeCageCount += 1;
       if (rackSummary) rackSummary.activeCount += 1;
       if (roomSummary) roomSummary.activeCount += 1;
     } else if (slot.status === "reserved") {
@@ -2943,10 +3030,75 @@ function computeInfrastructureSummaries(source = state) {
       if (roomSummary) roomSummary.periodOverdueCount += 1;
     }
   });
+  (source.occupancies || []).forEach((item) => {
+    if (item.status !== "active") return;
+    const slot = slotById.get(item.slotId);
+    const rackId = item.rackId || slot?.rackId || "";
+    const roomId = item.roomId || rackById.get(rackId)?.roomId || "";
+    const room = roomById.get(roomId) || {};
+    const base = billingProfileForRoom(room);
+    const rule = BILLING_RULES[normalizeBillingItem(item.billingItem || base.billingItem)] || BILLING_RULES.mouse_standard;
+    const customerType = normalizeCustomerType(item.customerType || base.customerType);
+    const profile = {
+      ...base,
+      facility: base.facility,
+      unit: rule.unit,
+      unitPrice: customerType === "external" ? rule.externalPrice : rule.internalPrice,
+      defaultAnimalCount: base.defaultAnimalCount,
+    };
+    ensureFacilitySummary(profile.facility).activeAnimalCount += occupancyAnimalCount(item, profile);
+  });
+  (source.intakeBatches || []).forEach((batch) => {
+    if (batch.status !== "received") dashboardSummary.intakePendingCount += 1;
+    if (batch.roomName && !batch.roomMatched) dashboardSummary.unmatchedIntakeCount += 1;
+  });
+  (source.placementTasks || []).forEach((task) => {
+    if (task.status === "active" || task.status === "cancelled") return;
+    const room = roomById.get(task.targetRoomId) || {};
+    ensureFacilitySummary(billingProfileForRoom(room).facility).openPlacementTaskCount += 1;
+    dashboardSummary.openPlacementTaskCount += 1;
+    if (task.plannedMoveInDate && task.plannedMoveInDate < today) dashboardSummary.overduePlacementCount += 1;
+  });
+  (source.billingWorkflows || []).forEach((workflow) => {
+    if ((workflow.month || "") !== currentMonth) return;
+    const facilityKeys = new Set();
+    const roomName = workflow.currentVersion?.statement?.roomName || "";
+    if (roomName) {
+      const room = (source.rooms || []).find((item) => item.name === roomName);
+      if (room) facilityKeys.add(billingProfileForRoom(room).facility);
+    }
+    if (!facilityKeys.size && workflow.sourceType === "cage_map" && workflow.pi) {
+      (source.occupancies || [])
+        .filter((item) => normalizePersonName(item.pi) === normalizePersonName(workflow.pi))
+        .filter((item) => occupancyOverlapsMonthLocal(item, currentMonth))
+        .forEach((item) => {
+          const slot = slotById.get(item.slotId);
+          const rackId = item.rackId || slot?.rackId || "";
+          const roomId = item.roomId || rackById.get(rackId)?.roomId || "";
+          facilityKeys.add(billingProfileForRoom(roomById.get(roomId) || {}).facility);
+        });
+    }
+    if (!facilityKeys.size) facilityKeys.add("zhujiang");
+    if (workflow.workflowStatus === "submitted_to_finance") {
+      dashboardSummary.currentMonthWorkflowDoneCount += 1;
+      facilityKeys.forEach((key) => ensureFacilitySummary(key).currentMonthWorkflowDoneCount += 1);
+      return;
+    }
+    dashboardSummary.currentMonthWorkflowTodoCount += 1;
+    if (["statement_generated", "statement_sent", "statement_signed_returned"].includes(workflow.workflowStatus)) {
+      dashboardSummary.stalledWorkflowCount += 1;
+    }
+    facilityKeys.forEach((key) => ensureFacilitySummary(key).currentMonthWorkflowTodoCount += 1);
+  });
+  dashboardSummary.exceptionCount =
+    dashboardSummary.unmatchedIntakeCount +
+    dashboardSummary.overduePlacementCount +
+    dashboardSummary.stalledWorkflowCount;
   return {
     roomSummaries: [...roomSummaries.values()],
     rackSummaries: [...rackSummaries.values()],
     dashboardSummary,
+    facilitySummaries: [...facilitySummaries.values()],
   };
 }
 
@@ -2961,7 +3113,7 @@ function refreshInfrastructureSummaries() {
 
 async function reloadInfrastructureOverview() {
   if (!remotePersistence) {
-    await reloadInfrastructureOverview();
+    refreshInfrastructureSummaries();
     return;
   }
   const response = await fetch(buildBootstrapUrl("summary"), { cache: "no-store" });
@@ -2975,6 +3127,7 @@ async function reloadInfrastructureOverview() {
   state.roomSummaries = payload.roomSummaries || [];
   state.rackSummaries = payload.rackSummaries || [];
   state.dashboardSummary = payload.dashboardSummary || null;
+  state.facilitySummaries = payload.facilitySummaries || [];
 }
 
 function roomSummaryById(roomId) {
@@ -2987,6 +3140,8 @@ function rackSummaryById(rackId) {
 
 function renderDashboardView() {
   const counts = slotStatusCounts();
+  const overview = dashboardOverviewCounts();
+  const facilities = dashboardFacilityRows();
   const occupied = counts.active + counts.reserved;
   const activePct = percent(counts.active, counts.total);
   const reservedPct = percent(counts.reserved, counts.total);
@@ -3021,6 +3176,31 @@ function renderDashboardView() {
         ${metric("正常周期", counts.periodNormal, "active")}
         ${metric("超期饲养", counts.periodOverdue, "reserved")}
       </div>
+
+      <div class="dashboard-overview-grid">
+        ${dashboardOverviewCard("待接收批次", overview.intakePendingCount, "接收笼卡后统一打印，已接收会进入待进驻。", "intake")}
+        ${dashboardOverviewCard("待进驻任务", overview.openPlacementTaskCount, "预留或正式入驻后会从当前房间待办中移除。", "cages")}
+        ${dashboardOverviewCard("本月待办流程", overview.currentMonthWorkflowTodoCount, "已生成、已发送、已签字交回都会留在待办链。", "workflow-todo")}
+        ${dashboardOverviewCard("异常项", overview.exceptionCount, `房间未匹配 ${overview.unmatchedIntakeCount} · 待进驻超期 ${overview.overduePlacementCount} · 流程待推进 ${overview.stalledWorkflowCount}`, "workflow-all")}
+      </div>
+
+      <section class="panel dashboard-quick-panel">
+        <div class="panel-head compact">
+          <div>
+            <h2>运营总览</h2>
+            <p>围绕接收、入驻、结算和流程推进给出本周汇报入口。</p>
+          </div>
+        </div>
+        <div class="dashboard-facility-grid">
+          ${facilities.map(renderDashboardFacilityCard).join("")}
+        </div>
+        <div class="dashboard-shortcuts">
+          <button class="secondary" type="button" data-dashboard-action="intake">${iconSvg("receipt")}进入笼卡管理</button>
+          <button class="secondary" type="button" data-dashboard-action="cages">${iconSvg("grid")}进入笼位管理</button>
+          <button class="secondary" type="button" data-dashboard-action="billing">${iconSvg("calculator")}进入饲养费管理</button>
+          <button class="secondary" type="button" data-dashboard-action="workflow-todo">${iconSvg("book")}进入流程中心待办</button>
+        </div>
+      </section>
 
       <div class="dashboard-grid">
         <section class="panel">
@@ -3063,6 +3243,61 @@ function renderDashboardView() {
         </section>
       </div>
     </section>
+  `;
+}
+
+function dashboardOverviewCounts() {
+  const summary = state.dashboardSummary || {};
+  return {
+    intakePendingCount: numericOrZero(summary.intakePendingCount),
+    openPlacementTaskCount: numericOrZero(summary.openPlacementTaskCount),
+    currentMonthWorkflowTodoCount: numericOrZero(summary.currentMonthWorkflowTodoCount),
+    unmatchedIntakeCount: numericOrZero(summary.unmatchedIntakeCount),
+    overduePlacementCount: numericOrZero(summary.overduePlacementCount),
+    stalledWorkflowCount: numericOrZero(summary.stalledWorkflowCount),
+    exceptionCount: numericOrZero(summary.exceptionCount),
+  };
+}
+
+function dashboardFacilityRows() {
+  const existing = new Map((state.facilitySummaries || []).map((item) => [item.facility, item]));
+  return ["zhujiang", "bioisland"].map((facility) => ({
+    facility,
+    roomCount: numericOrZero(existing.get(facility)?.roomCount),
+    activeCageCount: numericOrZero(existing.get(facility)?.activeCageCount),
+    activeAnimalCount: numericOrZero(existing.get(facility)?.activeAnimalCount),
+    openPlacementTaskCount: numericOrZero(existing.get(facility)?.openPlacementTaskCount),
+    currentMonthWorkflowTodoCount: numericOrZero(existing.get(facility)?.currentMonthWorkflowTodoCount),
+    currentMonthWorkflowDoneCount: numericOrZero(existing.get(facility)?.currentMonthWorkflowDoneCount),
+  }));
+}
+
+function dashboardOverviewCard(title, value, note, action) {
+  return `
+    <button class="dashboard-overview-card" type="button" data-dashboard-action="${escapeAttr(action)}">
+      <span>${escapeText(title)}</span>
+      <strong>${value}</strong>
+      <small>${escapeText(note)}</small>
+    </button>
+  `;
+}
+
+function renderDashboardFacilityCard(item) {
+  return `
+    <article class="dashboard-facility-card">
+      <div class="dashboard-facility-head">
+        <div>
+          <strong>${escapeText(facilityLabel(item.facility))}</strong>
+          <span>${item.roomCount} 个饲养间</span>
+        </div>
+        <span class="pill active">${item.currentMonthWorkflowTodoCount ? `本月待办 ${item.currentMonthWorkflowTodoCount}` : `本月完成 ${item.currentMonthWorkflowDoneCount}`}</span>
+      </div>
+      <div class="dashboard-facility-metrics">
+        ${summaryTile("在养笼数", item.activeCageCount)}
+        ${summaryTile("在养只数", item.activeAnimalCount)}
+        ${summaryTile("待进驻", item.openPlacementTaskCount)}
+      </div>
+    </article>
   `;
 }
 
@@ -3219,11 +3454,12 @@ function renderCageView() {
   const selectedSlot = getSelectedSlot(visibleSlots, slots);
   const selectedBatchSlots = slots.filter((slot) => state.selectedSlotIds.includes(slot.id));
   const roomPlacementTasks = visiblePlacementTasksForRoom(selectedRoom.id);
+  const floatingPlacement = renderPlacementTaskFloating(roomPlacementTasks, selectedRoom);
 
   return `
     <section class="cage-layout">
       <div class="panel large cage-preview">
-        ${renderPlacementTaskPanel(roomPlacementTasks, selectedRoom)}
+        ${floatingPlacement}
         <div class="panel-head">
           <div>
             <h2>动态笼位图</h2>
@@ -3293,40 +3529,51 @@ function visiblePlacementTasksForRoom(roomId) {
     .sort((left, right) => String(left.plannedMoveInDate).localeCompare(String(right.plannedMoveInDate)));
 }
 
-function renderPlacementTaskPanel(tasks, room) {
+function renderPlacementTaskFloating(tasks, room) {
+  if (!tasks.length) return "";
+  const totalTasks = tasks.length;
+  const totalGroups = placementTaskGroups(tasks).length;
+  if (!state.showPlacementTaskPanel) {
+    return `
+      <button class="placement-task-fab" type="button" data-toggle-placement-task-panel="open">
+        <strong>待进驻动物</strong>
+        <span>${totalGroups} 批 · ${totalTasks} 笼</span>
+      </button>
+    `;
+  }
+  return renderPlacementTaskPanel(tasks, room, { floating: true, totalTasks, totalGroups });
+}
+
+function renderPlacementTaskPanel(tasks, room, options = {}) {
+  const { floating = false } = options;
   const allGroups = placementTaskGroups(tasks);
   const placementPage = paginationState.placementTasks;
   const groups = remotePersistence ? allGroups : allGroups.slice((placementPage.page - 1) * placementPage.limit, placementPage.page * placementPage.limit);
   const selectedCount = state.selectedPlacementTaskIds.filter((id) => groups.some((group) => group.some((task) => task.id === id))).length;
   return `
-    <div class="placement-task-panel panel">
+    <div class="placement-task-panel panel ${floating ? "placement-task-floating-card" : ""}">
       <div class="panel-head compact">
         <div>
           <h2>待进驻动物</h2>
-              <p>${escapeText(room.name)} · ${remotePersistence ? placementPage.total || tasks.length : tasks.length} 个待处理任务</p>
+          <p>${escapeText(room.name)} · ${remotePersistence ? placementPage.total || tasks.length : tasks.length} 个待处理任务</p>
         </div>
-        ${
-          selectedCount
-            ? `
-              <div class="toolbar placement-task-toolbar">
-                <span class="muted">当前页已选择 ${selectedCount} 笼，请在下方笼位图选择空笼位。</span>
-                <button class="secondary" type="button" id="clearSelectedPlacementTasks">清空勾选</button>
-              </div>
-            `
-            : ""
-        }
+        <div class="toolbar placement-task-toolbar">
+          ${selectedCount ? `<span class="muted">当前页已选择 ${selectedCount} 笼，请在下方笼位图选择空笼位。</span>` : ""}
+          ${selectedCount ? `<button class="secondary" type="button" id="clearSelectedPlacementTasks">清空勾选</button>` : ""}
+          ${floating ? `<button class="secondary" type="button" data-toggle-placement-task-panel="close">${iconSvg("chevronRight")}收起</button>` : ""}
+        </div>
       </div>
       ${
         groups.length
           ? `
             <div class="table-wrap">
               <table class="workflow-table placement-task-table">
-                <thead><tr><th></th><th>状态</th><th>计划入驻</th><th>批次号</th><th>IACUC</th><th>项目负责人</th><th>实验负责人</th><th>品系</th><th>笼数</th><th>预留情况</th><th></th></tr></thead>
+                <thead><tr><th></th><th>状态</th><th>计划入驻</th><th>批次号</th><th>项目负责人</th><th>实验负责人</th><th>品系</th><th>笼数</th><th>预留情况</th><th></th></tr></thead>
                 <tbody>${groups.map(renderPlacementTaskGroupRow).join("")}</tbody>
               </table>
             </div>
           `
-          : `<p class="muted">当前房间没有待进驻动物。</p>`
+          : `<p class="muted">当前房间没有待进驻动物。确认接收批次后，会在对应房间出现待分配任务。</p>`
       }
       ${renderPager("placementTasks", placementPage, remotePersistence ? placementPage.total || allGroups.length : allGroups.length)}
     </div>
@@ -3336,11 +3583,19 @@ function renderPlacementTaskPanel(tasks, room) {
 function placementTaskGroups(tasks) {
   const groups = new Map();
   tasks.forEach((task) => {
-    const key = [task.batchNo, task.sourceReceiptId, task.targetRoomId, task.plannedMoveInDate].join("|");
+    const key = placementTaskGroupKey(task);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(task);
   });
   return [...groups.values()];
+}
+
+function placementTaskGroupKey(task = {}) {
+  return [task.batchNo, task.sourceReceiptId, task.targetRoomId, task.plannedMoveInDate].join("|");
+}
+
+function placementTasksForGroupKey(groupKey) {
+  return state.placementTasks.filter((task) => placementTaskGroupKey(task) === groupKey);
 }
 
 function pagedPlacementTaskGroups(roomId) {
@@ -3352,6 +3607,7 @@ function pagedPlacementTaskGroups(roomId) {
 
 function renderPlacementTaskGroupRow(group) {
   const first = group[0];
+  const groupKey = placementTaskGroupKey(first);
   const pendingTasks = group.filter((task) => task.status === "pending");
   const reservedTasks = group.filter((task) => task.status === "reserved");
   const checked = pendingTasks.length > 0 && pendingTasks.every((task) => state.selectedPlacementTaskIds.includes(task.id));
@@ -3361,23 +3617,24 @@ function renderPlacementTaskGroupRow(group) {
     .map((item) => cageCodeForSlot(item.slotId));
   return `
     <tr class="${placementDateTone(first.plannedMoveInDate)}">
-      <td>${pendingTasks.length ? `<input type="checkbox" data-select-placement-task-group="${escapeAttr(first.sourceReceiptId)}" ${checked ? "checked" : ""} />` : ""}</td>
+      <td>${pendingTasks.length ? `<input type="checkbox" data-select-placement-task-group="${escapeAttr(groupKey)}" ${checked ? "checked" : ""} />` : ""}</td>
       <td><span class="pill ${pendingTasks.length ? "active" : "reserved"}">${pendingTasks.length ? "待进驻" : "已预留"}</span></td>
       <td>${escapeText(first.plannedMoveInDate || "-")}</td>
       <td>${escapeText(first.batchNo || "-")}</td>
-      <td>${escapeText(first.iacuc || "-")}</td>
       <td>${escapeText(first.pi || "-")}</td>
       <td>${escapeText(first.owner || "-")}</td>
       <td>${escapeText(first.strainStandard || first.species || "-")}</td>
       <td>${escapeText(group.length)} 笼</td>
       <td>${pendingTasks.length ? `${reservedTasks.length} 已预留 / ${pendingTasks.length} 待分配` : escapeText(occupancyCodes.join("、") || "-")}</td>
       <td>
+        <button class="ghost" type="button" data-print-placement-task-group="${escapeAttr(groupKey)}">打印笼卡</button>
         ${!pendingTasks.length ? reservedTasks.map((task) => `<button class="primary" type="button" data-move-in-placement-task="${escapeAttr(task.id)}">正式入驻</button>`).join("") : ""}
         ${
           currentUser?.role === "admin" && pendingTasks.length
             ? `<button class="ghost" type="button" data-open-placement-room-change="${escapeAttr(first.sourceReceiptId)}">变更饲养间</button>`
             : ""
         }
+        <button class="ghost danger-text" type="button" data-delete-placement-task-group="${escapeAttr(groupKey)}">删除</button>
       </td>
     </tr>
   `;
@@ -4099,7 +4356,7 @@ function renderIntakeBatchView() {
           <div class="panel-head compact">
             <div>
               <h2>待接收批次列表</h2>
-              <p>支持攒单后一起打印；打印后可将状态切到“已打印”。</p>
+              <p>流程：未打印 → 已打印 → 已接收。已接收批次会同步进入目标房间的待进驻任务。</p>
             </div>
             <div class="toolbar intake-batch-toolbar">
               <div class="filter-row intake-filter-row" role="group" aria-label="待接收批次筛选">
@@ -4122,7 +4379,7 @@ function renderIntakeBatchView() {
                 ${
                   visibleBatches.length
                     ? visibleBatches.map(renderIntakeBatchRow).join("")
-                    : `<tr><td colspan="11">${state.intakeBatches.length ? "当前筛选下没有待接收批次。" : "还没有保存待接收批次。"}</td></tr>`
+                    : `<tr><td colspan="11">${state.intakeBatches.length ? "当前筛选下没有待接收批次，可切换状态或翻页查看。" : "当前没有待接收批次，先在上方粘贴预约消息并保存。"} </td></tr>`
                 }
               </tbody>
             </table>
@@ -4364,8 +4621,47 @@ function renderBillingView() {
       <button class="segmented ${state.billingSource === "cage_map" ? "active" : ""}" type="button" data-billing-source="cage_map">动态笼位图（自动）</button>
       <button class="segmented ${state.billingSource === "quantity_sheet" ? "active" : ""}" type="button" data-billing-source="quantity_sheet">数量统计表（录入）</button>
     </section>
+    <section class="panel billing-guide-panel">
+      <div class="billing-guide-grid">
+        <div>
+          <strong>动态笼位图</strong>
+          <p>按真实占用时间线计算，适合日常维护完整的房间。</p>
+        </div>
+        <div>
+          <strong>数量统计表</strong>
+          <p>按纸质台账录入变更行，适合人工月度核对和过渡期补录。</p>
+        </div>
+      </div>
+    </section>
     ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
   `;
+}
+
+function billingStatementScopeSummary(statement) {
+  const occupancies = state.billingPi ? occupanciesForPi(state.billingPi) : [];
+  const facilities = new Set();
+  const units = new Set();
+  occupancies
+    .filter((item) => occupancyOverlapsMonthLocal(item, state.billingMonth || today.slice(0, 7)))
+    .forEach((item) => {
+      const profile = billingProfileForOccupancy(item);
+      facilities.add(facilityLabel(profile.facility));
+      units.add(billingUnitLabel(profile.unit));
+    });
+  if (!facilities.size && statement.iacucs?.length) {
+    visibleRooms().forEach((room) => {
+      const profile = billingProfileForRoom(room);
+      facilities.add(facilityLabel(profile.facility));
+      units.add(billingUnitLabel(profile.unit));
+    });
+  }
+  const facilityLabelText = [...facilities].join("、") || "当前授权范围";
+  const unitLabelText = [...units].join("、") || "笼/天";
+  return {
+    facilities: facilityLabelText,
+    unitLabel: unitLabelText,
+    note: statement.iacucs?.length ? `当前项目负责人名下共 ${statement.iacucs.length} 个伦理号参与汇总。` : "当前未找到可汇总的伦理号。",
+  };
 }
 
 function renderWorkflowCenterView() {
@@ -4393,6 +4689,7 @@ function renderWorkflowCenterView() {
 function renderCageMapBillingView() {
   const statement = buildStatement(state.billingPi, state.billingMonth);
   const canGenerateStatement = !remotePersistence || currentUser?.role === "admin";
+  const scope = billingStatementScopeSummary(statement);
 
   return `
     <section class="billing-layout quantity-billing-layout">
@@ -4400,7 +4697,7 @@ function renderCageMapBillingView() {
         <div class="panel-head">
           <div>
             <h2>动态笼位图结算</h2>
-            <p>按每天实际在养笼数计算，已预约默认不计费。</p>
+            <p>按每天实际在养数量计算，已预约默认不计费，适合完整维护中的房间。</p>
           </div>
           <div class="billing-sheet-actions">
             <div class="billing-filter-grid">
@@ -4417,6 +4714,13 @@ function renderCageMapBillingView() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="billing-scope-banner">
+          <span>来源：动态笼位图</span>
+          <span>设施：${escapeText(scope.facilities)}</span>
+          <span>计费单位：${escapeText(scope.unitLabel)}</span>
+          <span>说明：${escapeText(scope.note)}</span>
         </div>
 
         <datalist id="billingPiOptions">
@@ -4479,7 +4783,7 @@ function renderQuantitySheetBillingView() {
           <div class="panel-head">
             <div>
               <h2>数量统计表结算</h2>
-              <p>录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细。</p>
+              <p>录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。</p>
             </div>
             <div class="quantity-sheet-actions">
               <select id="quantitySheetSelect" aria-label="选择数量统计表">
@@ -4579,6 +4883,12 @@ function renderQuantitySheetBillingView() {
               <span>${escapeText(customerTypeLabel(quantityProfile.customerType))}</span>
               <span>单价 ¥${MONEY_FORMAT.format(quantityProfile.unitPrice)} / ${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
             </div>
+            <div class="billing-scope-banner compact">
+              <span>来源：数量统计表</span>
+              <span>设施：${escapeText(facilityLabel(quantityProfile.facility))}</span>
+              <span>计费单位：${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
+              <span>说明：${isAnimalBilling ? "按只计费房间会同步展示累计动物日。" : "按笼计费房间会保留阶梯与减免逻辑。"}</span>
+            </div>
           </div>
           <div class="table-wrap quantity-entry-wrap">
             <table class="quantity-entry-table">
@@ -4605,7 +4915,7 @@ function renderQuantitySheetBillingView() {
           <div class="panel-head compact">
             <div>
               <h2>结算预览</h2>
-              <p>预览会按同月同项目负责人名下全部统计表汇总展开。</p>
+              <p>预览会按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。</p>
             </div>
           </div>
           <div class="statement-summary compact-summary">
@@ -4667,7 +4977,7 @@ function renderBillingWorkflowPanel() {
                   ? `<tr><td colspan="8">正在加载结算流程。</td></tr>`
                   : items.length
                   ? items.map(renderBillingWorkflowRow).join("")
-                  : `<tr><td colspan="8">当前筛选下没有结算流程。</td></tr>`
+                  : `<tr><td colspan="8">当前筛选下没有结算流程。生成结算单后可在这里继续发送、签回和交财务跟踪。</td></tr>`
               }
             </tbody>
           </table>
@@ -5756,9 +6066,45 @@ function bindEvents() {
       render();
     });
   });
+  document.querySelectorAll("[data-dashboard-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const action = button.dataset.dashboardAction;
+      if (action === "intake") {
+        state.activeView = "intake";
+      } else if (action === "cages") {
+        state.activeView = "cages";
+        state.showPlacementTaskPanel = true;
+      } else if (action === "billing") {
+        state.activeView = "billing";
+        state.billingMonth = today.slice(0, 7);
+      } else if (action === "workflow-todo") {
+        state.activeView = "workflow-center";
+        state.billingWorkflowFilter = "todo";
+      } else if (action === "workflow-all") {
+        state.activeView = "workflow-center";
+        state.billingWorkflowFilter = "all";
+      }
+      render();
+      try {
+        await ensureViewDataLoaded(state.activeView);
+        if (state.activeView === "workflow-center" && remotePersistence) {
+          await loadBillingWorkflows({
+            month: paginationState.billingWorkflows.month || state.billingMonth || today.slice(0, 7),
+            status: state.billingWorkflowFilter,
+            limit: paginationState.billingWorkflows.limit,
+            offset: 0,
+          });
+        }
+      } catch (error) {
+        reportSaveError(error);
+      }
+      render();
+    });
+  });
 
   document.querySelector("#roomSelect")?.addEventListener("change", async (event) => {
     state.selectedRoomId = event.target.value;
+    state.showPlacementTaskPanel = true;
     paginationState.placementTasks.page = 1;
     state.selectedRackId = state.racks.find((rack) => rack.roomId === state.selectedRoomId)?.id;
     state.selectedSlotId = "";
@@ -5779,6 +6125,12 @@ function bindEvents() {
     state.selectedSlotId = state.slots.find((slot) => slot.rackId === state.selectedRackId)?.id;
     state.selectedSlotIds = [];
     render();
+  });
+  document.querySelectorAll("[data-toggle-placement-task-panel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.showPlacementTaskPanel = button.dataset.togglePlacementTaskPanel === "open";
+      render();
+    });
   });
 
   document.querySelectorAll("[data-slot]").forEach((button) => {
@@ -5844,7 +6196,7 @@ function bindEvents() {
       const pageGroups = pagedPlacementTaskGroups(getSelectedRoom()?.id || "");
       const tasks = pageGroups
         .flat()
-        .filter((task) => task.sourceReceiptId === input.dataset.selectPlacementTaskGroup && task.status === "pending");
+        .filter((task) => placementTaskGroupKey(task) === input.dataset.selectPlacementTaskGroup && task.status === "pending");
       const next = new Set(state.selectedPlacementTaskIds);
       tasks.forEach((task) => {
         if (input.checked) next.add(task.id);
@@ -5855,7 +6207,6 @@ function bindEvents() {
       state.batchMode = state.placementAssignmentMode;
       if (state.placementAssignmentMode) {
         state.selectedSlotIds = [];
-        state.slotFilter = "empty";
       }
       render();
     });
@@ -5873,6 +6224,37 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-move-in-placement-task]").forEach((button) => {
     button.addEventListener("click", () => moveInPlacementTask(button.dataset.moveInPlacementTask));
+  });
+  document.querySelectorAll("[data-print-placement-task-group]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await printPlacementTaskGroup(button.dataset.printPlacementTaskGroup || "");
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-delete-placement-task-group]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const groupKey = button.dataset.deletePlacementTaskGroup || "";
+      const tasks = placementTasksForGroupKey(groupKey);
+      if (!tasks.length) return;
+      const first = tasks[0];
+      const hasReserved = tasks.some((task) => task.status === "reserved");
+      openConfirmDialog({
+        type: "delete-placement-task-group",
+        id: groupKey,
+        title: "删除待进驻动物",
+        message: `确认删除 ${first.batchNo || "当前批次"} 的待进驻记录？${hasReserved ? "已预留笼位会同步释放。" : ""}`,
+        confirmLabel: "删除",
+        payload: {
+          batchNo: first.batchNo || "",
+          count: tasks.length,
+        },
+      });
+    });
   });
   document.querySelectorAll("[data-open-placement-room-change]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -7196,6 +7578,9 @@ async function submitIntakeReceipt(batchId, actualReceiptDate, cardCount) {
     if (!response.ok) throw new Error(payload.error || "确认接收失败");
     upsertById(state.intakeBatches, normalizeIncomingBatchDraft(payload.batch));
     payload.tasks?.map(normalizePlacementTask).forEach((task) => upsertById(state.placementTasks, task));
+    if (payload.tasks?.some((task) => task.targetRoomId === state.selectedRoomId)) {
+      state.showPlacementTaskPanel = true;
+    }
     if (state.selectedRoomId) {
       paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
     }
@@ -7373,6 +7758,94 @@ async function submitPlacementRoomChange(event) {
   await reassignPlacementGroup(receiptId, roomId);
   state.reassigningPlacementReceiptId = "";
   render();
+}
+
+function intakeBatchById(batchId) {
+  return state.intakeBatches.find((item) => item.id === batchId) || null;
+}
+
+async function placementPrintItemsForGroup(groupKey) {
+  const tasks = placementTasksForGroupKey(groupKey);
+  const batchCache = new Map();
+  const items = [];
+  for (const task of tasks) {
+    if (!task.sourceBatchId) continue;
+    if (!batchCache.has(task.sourceBatchId)) {
+      let batch = intakeBatchById(task.sourceBatchId);
+      if (!batch) {
+        const payload = await fetchEntityById("intakeBatches", task.sourceBatchId);
+        batch = normalizeIncomingBatchDraft(payload.item || {});
+      }
+      if (batch) batchCache.set(task.sourceBatchId, batch);
+    }
+    const batch = batchCache.get(task.sourceBatchId);
+    const card = batch?.cards?.find((item) => Number(item.cardSequence) === Number(task.cardSequence));
+    if (batch && card) items.push({ batch, card });
+  }
+  return items;
+}
+
+function printIntakeCardItems(items) {
+  if (!items.length) {
+    showFlashNotice("当前无法打印", "当前没有可打印的笼卡。", "warning");
+    return false;
+  }
+  const opened = window.open("", "_blank");
+  if (!opened) {
+    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
+    return false;
+  }
+  opened.document.write(intakeCardsPrintHtml(items));
+  opened.document.close();
+  opened.focus();
+  opened.print();
+  return true;
+}
+
+async function printPlacementTaskGroup(groupKey) {
+  const items = await placementPrintItemsForGroup(groupKey);
+  if (!items.length) {
+    showFlashNotice("当前无法打印", "当前待进驻分组没有可打印的笼卡。", "warning");
+    return;
+  }
+  printIntakeCardItems(items);
+}
+
+async function deletePlacementTaskGroupConfirmed(groupKey) {
+  const tasks = placementTasksForGroupKey(groupKey);
+  if (!tasks.length) return;
+  const limit = paginationState.placementTasks.limit;
+  const currentPageValue = paginationState.placementTasks.page;
+  const nextTotal = Math.max(Number(paginationState.placementTasks.total || state.placementTasks.length) - 1, 0);
+  const nextPage = Math.min(currentPageValue, pageCount(nextTotal, limit));
+
+  if (!remotePersistence) {
+    const reservedIds = new Set(tasks.map((task) => task.reservedOccupancyId).filter(Boolean));
+    state.placementTasks = state.placementTasks.filter((task) => placementTaskGroupKey(task) !== groupKey);
+    if (reservedIds.size) {
+      state.occupancies = state.occupancies.filter((item) => !reservedIds.has(item.id));
+      updateSlotStatuses();
+    }
+    state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => !tasks.some((task) => task.id === id));
+    state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+    state.batchMode = state.placementAssignmentMode;
+    paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId || "")).length;
+    render();
+    return;
+  }
+
+  for (const task of tasks) {
+    await deleteEntityRequest("placementTasks", task.id);
+    state.placementTasks = state.placementTasks.filter((item) => item.id !== task.id);
+    if (task.reservedOccupancyId) {
+      state.occupancies = state.occupancies.filter((item) => item.id !== task.reservedOccupancyId);
+    }
+  }
+  state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => !tasks.some((task) => task.id === id));
+  state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+  state.batchMode = state.placementAssignmentMode;
+  updateSlotStatuses();
+  await goToPlacementTasksPage(nextPage, limit);
 }
 
 async function handleRateSubmit(event) {
@@ -7725,19 +8198,7 @@ async function deleteIntakeBatch(batchId) {
 
 function printIntakeBatches(batches) {
   const items = batches.flatMap((batch) => batch.cards.map((card) => ({ batch, card })));
-  if (!items.length) {
-    showFlashNotice("当前无法打印", "当前没有可打印的笼卡。", "warning");
-    return;
-  }
-  const opened = window.open("", "_blank");
-  if (!opened) {
-    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
-    return;
-  }
-  opened.document.write(intakeCardsPrintHtml(items));
-  opened.document.close();
-  opened.focus();
-  opened.print();
+  printIntakeCardItems(items);
 }
 
 async function printAndMarkIntakeBatches(batches) {
@@ -10572,6 +11033,13 @@ async function handleConfirmDialogAction() {
       await deleteIntakeBatch(dialog.id);
       pushLog(`删除待接收批次：${batch?.batchNo || dialog.id}`);
       showFlashNotice("删除成功", `待接收批次已删除：${batch?.batchNo || dialog.id}`);
+      return;
+    }
+    if (dialog.type === "delete-placement-task-group") {
+      await deletePlacementTaskGroupConfirmed(dialog.id);
+      pushLog(`删除待进驻记录：${dialog.payload?.batchNo || dialog.id}`);
+      showFlashNotice("删除成功", `待进驻记录已删除：${dialog.payload?.batchNo || dialog.id}`);
+      render();
       return;
     }
     if (dialog.type === "delete-workflow") {

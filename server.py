@@ -1108,7 +1108,10 @@ def occupancy_period_tone(occupancy):
 def summarize_infrastructure(state):
     current_by_slot = current_occupancy_by_slot(state)
     rack_by_id = {rack.get("id"): rack for rack in state.get("racks", [])}
+    room_by_id = {room.get("id"): room for room in state.get("rooms", [])}
     slot_to_rack_id = {slot.get("id"): slot.get("rackId") for slot in state.get("slots", [])}
+    facility_summaries = {}
+    current_month = date.today().strftime("%Y-%m")
     room_summaries = {
         room.get("id"): {
             "roomId": room.get("id"),
@@ -1147,7 +1150,32 @@ def summarize_infrastructure(state):
         "periodOpen": 0,
         "periodNormal": 0,
         "periodOverdue": 0,
+        "intakePendingCount": 0,
+        "openPlacementTaskCount": 0,
+        "currentMonthWorkflowTodoCount": 0,
+        "currentMonthWorkflowDoneCount": 0,
+        "unmatchedIntakeCount": 0,
+        "overduePlacementCount": 0,
+        "stalledWorkflowCount": 0,
+        "exceptionCount": 0,
     }
+
+    def ensure_facility_summary(facility):
+        key = clean_text(facility or "zhujiang") or "zhujiang"
+        if key not in facility_summaries:
+            facility_summaries[key] = {
+                "facility": key,
+                "roomCount": 0,
+                "activeCageCount": 0,
+                "activeAnimalCount": 0,
+                "openPlacementTaskCount": 0,
+                "currentMonthWorkflowTodoCount": 0,
+                "currentMonthWorkflowDoneCount": 0,
+            }
+        return facility_summaries[key]
+
+    for room in state.get("rooms", []):
+        ensure_facility_summary(room.get("facility"))["roomCount"] += 1
 
     for rack in state.get("racks", []):
         room_summary = room_summaries.get(rack.get("roomId"))
@@ -1168,6 +1196,7 @@ def summarize_infrastructure(state):
             room_summary["slotCount"] += 1
         if status == "active":
             dashboard["active"] += 1
+            ensure_facility_summary((room_summary and room_by_id.get(room_summary["roomId"], {}).get("facility")) or rack.get("facility"))["activeCageCount"] += 1
             if rack_summary:
                 rack_summary["activeCount"] += 1
             if room_summary:
@@ -1207,15 +1236,76 @@ def summarize_infrastructure(state):
         slot_id = item.get("slotId")
         rack_id = item.get("rackId") or slot_to_rack_id.get(slot_id)
         room_id = item.get("roomId") or rack_by_id.get(rack_id, {}).get("roomId")
+        room = room_by_id.get(room_id, {})
+        if item.get("status") == "active":
+            facility_profile = billing_profile_for_room(room)
+            ensure_facility_summary(facility_profile.get("facility"))["activeAnimalCount"] += occupancy_animal_count(item, facility_profile)
         if rack_id and rack_id in rack_summaries:
             rack_summaries[rack_id]["occupancyRecordCount"] += 1
         if room_id and room_id in room_summaries:
             room_summaries[room_id]["occupancyRecordCount"] += 1
 
+    for batch in state.get("intakeBatches", []):
+        if clean_text(batch.get("status")) != "received":
+            dashboard["intakePendingCount"] += 1
+        if clean_text(batch.get("roomName")) and not batch.get("roomMatched"):
+            dashboard["unmatchedIntakeCount"] += 1
+
+    for task in state.get("placementTasks", []):
+        status = clean_text(task.get("status"))
+        if status in ("active", "cancelled"):
+            continue
+        room = room_by_id.get(task.get("targetRoomId"), {})
+        ensure_facility_summary(billing_profile_for_room(room).get("facility"))["openPlacementTaskCount"] += 1
+        dashboard["openPlacementTaskCount"] += 1
+        planned_move_in = clean_text(task.get("plannedMoveInDate"))
+        if planned_move_in and planned_move_in < today_iso():
+            dashboard["overduePlacementCount"] += 1
+
+    for workflow in state.get("billingWorkflows", []):
+        if clean_text(workflow.get("month")) != current_month:
+            continue
+        workflow_status = clean_text(workflow.get("workflowStatus"))
+        facility_keys = set()
+        statement = (workflow.get("currentVersion") or {}).get("statement") or {}
+        room_name = clean_text(statement.get("roomName"))
+        if room_name:
+            room = next((item for item in state.get("rooms", []) if clean_text(item.get("name")) == room_name), None)
+            if room:
+                facility_keys.add(billing_profile_for_room(room).get("facility"))
+        if not facility_keys and clean_text(workflow.get("sourceType")) == "cage_map":
+            pi = clean_text(workflow.get("pi"))
+            if pi:
+                for item in state.get("occupancies", []):
+                    if clean_text(item.get("pi")) != pi or not occupancy_overlaps_month(item, current_month):
+                        continue
+                    rack_id = item.get("rackId") or slot_to_rack_id.get(item.get("slotId"))
+                    room_id = item.get("roomId") or rack_by_id.get(rack_id, {}).get("roomId")
+                    facility_keys.add(billing_profile_for_room(room_by_id.get(room_id, {})).get("facility"))
+        if not facility_keys:
+            facility_keys.add("zhujiang")
+        if workflow_status == WORKFLOW_STATUS_FINANCE:
+            dashboard["currentMonthWorkflowDoneCount"] += 1
+            for key in facility_keys:
+                ensure_facility_summary(key)["currentMonthWorkflowDoneCount"] += 1
+            continue
+        dashboard["currentMonthWorkflowTodoCount"] += 1
+        if workflow_status in (WORKFLOW_STATUS_GENERATED, WORKFLOW_STATUS_SENT, WORKFLOW_STATUS_SIGNED):
+            dashboard["stalledWorkflowCount"] += 1
+        for key in facility_keys:
+            ensure_facility_summary(key)["currentMonthWorkflowTodoCount"] += 1
+
+    dashboard["exceptionCount"] = (
+        dashboard["unmatchedIntakeCount"]
+        + dashboard["overduePlacementCount"]
+        + dashboard["stalledWorkflowCount"]
+    )
+
     return {
         "dashboardSummary": dashboard,
         "roomSummaries": list(room_summaries.values()),
         "rackSummaries": list(rack_summaries.values()),
+        "facilitySummaries": list(facility_summaries.values()),
     }
 
 
@@ -1807,6 +1897,14 @@ def delete_entity(state, collection, item_id):
         state["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") not in rack_ids]
     elif collection == "racks":
         state["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") != item_id]
+    elif collection == "placementTasks":
+        reserved_occupancy_id = clean_text(deleted.get("reservedOccupancyId", ""))
+        task_status = clean_text(deleted.get("status", ""))
+        if task_status == "active":
+            raise ValueError("已正式入驻的待进驻任务不能直接删除")
+        if reserved_occupancy_id:
+            state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("id") != reserved_occupancy_id]
+            sync_slot_statuses(state)
 
     return deleted
 
@@ -5620,6 +5718,20 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             if not user:
                 return
             self.send_entity_list(ENTITY_ENDPOINTS[path], user)
+            return
+        endpoint, item_id = self.entity_route(path)
+        if endpoint and item_id:
+            user = self.require_user()
+            if not user:
+                return
+            collection = WRITABLE_ENTITY_ENDPOINTS[endpoint]["collection"]
+            with connect_db() as conn:
+                state = filter_state_for_actor(read_cached_state(conn), user)
+            item = next((entry for entry in state.get(collection, []) if entry.get("id") == item_id), None)
+            if not item:
+                self.send_json({"error": "记录不存在"}, HTTPStatus.NOT_FOUND)
+                return
+            self.send_json({"item": item})
             return
         super().do_GET()
 
