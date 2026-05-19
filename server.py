@@ -1754,10 +1754,34 @@ def insert_entity(state, collection, item):
     items.append(item)
 
 
+def reconcile_intake_batch_update(state, old_item, item):
+    next_item = {**old_item, **item}
+    next_item["receipts"] = [dict(receipt) for receipt in (item.get("receipts") if isinstance(item.get("receipts"), list) else old_item.get("receipts", []))]
+    final_count = max(as_int(next_item.get("finalCardCount")) or 0, 0)
+    confirmed_count = max(as_int(next_item.get("confirmedCardCount")) or intake_receipt_total(next_item), 0)
+    next_item["confirmedCardCount"] = confirmed_count
+    next_item["remainingCardCount"] = max(as_int(next_item.get("remainingCardCount")) if next_item.get("remainingCardCount") not in (None, "") else final_count - confirmed_count, 0)
+
+    old_status = clean_text(old_item.get("status", ""))
+    new_status = clean_text(next_item.get("status", ""))
+    if old_status == "received" and new_status == "printed":
+        related_tasks = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")]
+        blocking = [task for task in related_tasks if task.get("status") in ("reserved", "active")]
+        if blocking:
+            raise ValueError("该批次已有已预留或已入驻的待进驻任务，请先处理相关任务后再回退为已打印")
+        state["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") != old_item.get("id")]
+        next_item["receipts"] = []
+        next_item["confirmedCardCount"] = 0
+        next_item["remainingCardCount"] = final_count
+    return next_item
+
+
 def replace_entity(state, collection, item_id, item):
     items = state.setdefault(collection, [])
     for index, existing in enumerate(items):
         if existing.get("id") == item_id:
+            if collection == "intakeBatches":
+                item = reconcile_intake_batch_update(state, existing, item)
             validate_entity_references(state, collection, item)
             items[index] = item
             return

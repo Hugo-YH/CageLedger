@@ -32,6 +32,16 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.1a",
+    title: "接收回退与分页交互修正",
+    items: [
+      "待接收批次从已接收回退到已打印时，会同步撤回尚未真正入驻的待进驻任务",
+      "已预留或已入驻的待进驻任务会阻止批次状态回退，避免房间侧任务与批次状态脱节",
+      "修复待接收批次列表在远端分页下勾选后页码跳乱的问题，并统一限制分页显示范围",
+      "修复待接收批次与待进驻动物切换每页条数后列表不立即刷新的问题",
+    ],
+  },
+  {
     version: "0.5.1",
     title: "分页加载与结算链路提速",
     items: [
@@ -519,7 +529,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.1",
+  version: "0.5.1a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1674,11 +1684,13 @@ async function loadIntakeBatchesPage(page = 1, limit = paginationState.intakeBat
   }
   if (!response.ok) throw new Error(payload.error || "加载待接收批次失败");
   state.intakeBatches = (payload.items || []).map((item) => normalizeIncomingBatchDraft(item));
+  const total = Number(payload.page?.total || state.intakeBatches.length);
+  const maxPage = pageCount(total, nextLimit);
   paginationState.intakeBatches = {
     ...paginationState.intakeBatches,
     limit: nextLimit,
-    page: nextPage,
-    total: payload.page?.total || state.intakeBatches.length,
+    page: Math.min(nextPage, maxPage),
+    total,
     hasMore: Boolean(payload.page?.hasMore),
     offset: Number(payload.page?.offset || 0),
   };
@@ -1716,11 +1728,13 @@ async function loadPlacementTasksPage(page = 1, limit = paginationState.placemen
   }
   if (!response.ok) throw new Error(payload.error || "加载待进驻任务失败");
   state.placementTasks = (payload.items || []).map((item) => normalizePlacementTask(item));
+  const total = Number(payload.page?.total || state.placementTasks.length);
+  const maxPage = pageCount(total, nextLimit);
   paginationState.placementTasks = {
     ...paginationState.placementTasks,
     limit: nextLimit,
-    page: nextPage,
-    total: payload.page?.total || state.placementTasks.length,
+    page: Math.min(nextPage, maxPage),
+    total,
     hasMore: Boolean(payload.page?.hasMore),
     offset: Number(payload.page?.offset || 0),
   };
@@ -4167,6 +4181,7 @@ function filteredIntakeBatches() {
 function pagedIntakeBatches() {
   const items = filteredIntakeBatches();
   const page = paginationState.intakeBatches;
+  if (remotePersistence) return items;
   return items.slice((page.page - 1) * page.limit, page.page * page.limit);
 }
 
@@ -5574,8 +5589,8 @@ function currentPage(pageState) {
 
 function renderPager(kind, pageState, total) {
   const limit = Math.max(Number(pageState.limit) || 10, 1);
-  const page = pageState.page || currentPage(pageState);
   const pages = pageCount(total, limit);
+  const page = Math.min(Math.max(Number(pageState.page || currentPage(pageState) || 1), 1), pages);
   const prevDisabled = page <= 1 ? "disabled" : "";
   const nextDisabled = page >= pages ? "disabled" : "";
   return `
@@ -6245,8 +6260,8 @@ function bindEvents() {
         if (kind === "quantitySheets") await goToQuantitySheetsPage(1, limit);
         if (kind === "billingWorkflows") await goToBillingWorkflowsPage(1, limit);
         if (kind === "auditLogs") await goToAuditLogsPage(1, limit);
-        if (kind === "intakeBatches") goToIntakeBatchesPage(1, limit);
-        if (kind === "placementTasks") goToPlacementTasksPage(1, limit);
+        if (kind === "intakeBatches") await goToIntakeBatchesPage(1, limit);
+        if (kind === "placementTasks") await goToPlacementTasksPage(1, limit);
         if (kind === "releaseNotes") goToReleaseNotesPage(1, limit);
         scheduleRender(`pager.size.${kind}`);
       } catch (error) {
@@ -6261,8 +6276,8 @@ function bindEvents() {
         if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) - 1);
         if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) - 1);
         if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) - 1);
-        if (kind === "intakeBatches") goToIntakeBatchesPage(paginationState.intakeBatches.page - 1);
-        if (kind === "placementTasks") goToPlacementTasksPage(paginationState.placementTasks.page - 1);
+        if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page - 1);
+        if (kind === "placementTasks") await goToPlacementTasksPage(paginationState.placementTasks.page - 1);
         if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page - 1);
         scheduleRender(`pager.prev.${kind}`);
       } catch (error) {
@@ -6277,8 +6292,8 @@ function bindEvents() {
         if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) + 1);
         if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) + 1);
         if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) + 1);
-        if (kind === "intakeBatches") goToIntakeBatchesPage(paginationState.intakeBatches.page + 1);
-        if (kind === "placementTasks") goToPlacementTasksPage(paginationState.placementTasks.page + 1);
+        if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page + 1);
+        if (kind === "placementTasks") await goToPlacementTasksPage(paginationState.placementTasks.page + 1);
         if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page + 1);
         scheduleRender(`pager.next.${kind}`);
       } catch (error) {
@@ -7575,7 +7590,14 @@ async function saveIntakeBatchDraft() {
 }
 
 async function saveIntakeBatch(batch) {
-  const normalizedBatch = normalizeIncomingBatchDraft(batch);
+  const existingBatch = state.intakeBatches.find((item) => item.id === batch.id) || state.editingIntakeBatchDraft || null;
+  const normalizedBatch = normalizeIncomingBatchDraft({
+    ...existingBatch,
+    ...batch,
+    receipts: Array.isArray(batch.receipts) ? batch.receipts : existingBatch?.receipts || [],
+    confirmedCardCount: batch.confirmedCardCount ?? existingBatch?.confirmedCardCount ?? 0,
+    remainingCardCount: batch.remainingCardCount ?? existingBatch?.remainingCardCount ?? 0,
+  });
   if (normalizedBatch.roomName && !normalizedBatch.roomMatched) {
     showFlashNotice("房间未匹配", `房间 ${normalizedBatch.roomName} 尚未在系统中配置，后续无法生成待进驻任务。`, "warning");
   }
