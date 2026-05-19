@@ -1824,6 +1824,32 @@ textarea:focus {
   min-width: 170px;
 }
 
+.pager-toolbar {
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.pager-size select {
+  min-width: 88px;
+}
+
+.pager-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.quantity-page-meta {
+  min-width: 110px;
+  text-align: right;
+}
+
 .quantity-sheet-actions {
   display: flex;
   align-items: flex-start;

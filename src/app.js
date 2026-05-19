@@ -13,6 +13,7 @@ const API_PRINCIPAL_IDENTITIES_URL = "/api/principal-identities";
 const API_SYSTEM_INFO_URL = "/api/system/info";
 const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
 const API_BOOTSTRAP_URL = "/api/bootstrap";
+const API_BILLING_OCCUPANCIES_URL = "/api/infrastructure/occupancies";
 const API_BILLING_STATEMENT_GENERATE_BY_PI_URL = "/api/billing-statements/generate-by-pi";
 const API_BILLING_WORKFLOWS_URL = "/api/billing-workflows";
 const API_BILLING_WORKFLOW_ADVANCE_URL = "/api/billing-workflows/advance";
@@ -30,6 +31,16 @@ const ENTITY_API_URLS = {
   auditLogs: "/api/audit-events",
 };
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.5.1",
+    title: "分页加载与结算链路提速",
+    items: [
+      "待接收批次和待进驻动物改为按页加载，减少 intake 页面首次进入和翻页时的传输与渲染压力",
+      "保存待接收批次后改为局部更新批次和待进驻任务，去掉整套 bootstrap 重载",
+      "结算单深链改为按单条查询，流程详情改为先加载摘要再按需加载结算单明细",
+      "结算生成与数量统计表转入转出同步收紧到按月份和目标范围查询，减少全量占用与整月统计表扫描",
+    ],
+  },
   {
     version: "0.5.0",
     title: "笼卡接收与待进驻流程串联",
@@ -508,7 +519,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.0",
+  version: "0.5.1",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -519,10 +530,15 @@ let systemInfo = {
 let remotePersistence = false;
 let currentUser = null;
 let users = [];
+let state = { rooms: [] };
 let batchSlotDrag = null;
 let suppressNextSlotClick = false;
 let flashNoticeTimer = null;
+let renderScheduled = false;
+let persistScheduled = false;
 const lazyDataState = {
+  intakeBatchesLoaded: false,
+  intakeBatchesLoading: false,
   quantitySheetsLoaded: false,
   quantitySheetsLoading: false,
   billingWorkflowsLoaded: false,
@@ -538,6 +554,22 @@ const infrastructureLoadState = {
   scope: "full",
   roomId: "",
   loading: false,
+};
+const paginationState = {
+  quantitySheets: { limit: 5, offset: 0, total: 0, hasMore: false, month: "", pi: "", iacuc: "", roomId: "" },
+  billingWorkflows: { limit: 5, offset: 0, total: 0, hasMore: false, month: "", status: "todo" },
+  auditLogs: { limit: 5, offset: 0, total: 0, hasMore: false },
+  intakeBatches: { limit: 5, page: 1 },
+  placementTasks: { limit: 5, page: 1 },
+  releaseNotes: { limit: 5, page: 1 },
+};
+const billingInfrastructureState = {
+  month: "",
+  pi: "",
+  iacuc: "",
+  loading: false,
+  slots: [],
+  occupancies: [],
 };
 let STATE_INDEX_CACHE = null;
 const MONEY_FORMAT = new Intl.NumberFormat("zh-CN", {
@@ -1155,8 +1187,7 @@ const seedData = {
   placementTasks: [],
 };
 
-let state = structuredClone(seedData);
-state = normalize(state);
+state = normalize(structuredClone(seedData));
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -1180,22 +1211,113 @@ function saveState() {
   invalidateIacucSearchCache();
   invalidateStateIndexCache();
   const payload = remotePersistence ? localUiStateSnapshot() : { ...state };
+  const startedAt = performance.now();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null }));
+    logClientPerf("state.persist", startedAt, { remote: remotePersistence ? 1 : 0 });
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
 }
 
+function scheduleStatePersist() {
+  if (persistScheduled) return;
+  persistScheduled = true;
+  window.setTimeout(() => {
+    persistScheduled = false;
+    saveState();
+  }, 200);
+}
+
+function persistStateNow() {
+  persistScheduled = false;
+  saveState();
+}
+
 function localUiStateSnapshot() {
   return localUiOnlyState(state);
+}
+
+function scheduleRender(reason = "") {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  queueMicrotask(() => {
+    renderScheduled = false;
+    const startedAt = performance.now();
+    render();
+    logClientPerf("render.scheduled", startedAt, { reason });
+  });
 }
 
 function buildBootstrapUrl(scope = "summary", roomId = "") {
   const url = new URL(API_BOOTSTRAP_URL, window.location.origin);
   url.searchParams.set("scope", scope);
   if (roomId) url.searchParams.set("roomId", roomId);
+  return `${url.pathname}${url.search}`;
+}
+
+function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId = "", limit = 50, offset = 0 } = {}) {
+  const url = new URL(API_QUANTITY_SHEETS_URL, window.location.origin);
+  if (month) url.searchParams.set("month", month);
+  if (iacuc) url.searchParams.set("iacuc", iacuc);
+  if (pi) url.searchParams.set("pi", pi);
+  if (roomId) url.searchParams.set("roomId", roomId);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return `${url.pathname}${url.search}`;
+}
+
+function buildBillingWorkflowsUrl({ month = "", status = "todo", limit = 50, offset = 0 } = {}) {
+  const url = new URL(API_BILLING_WORKFLOWS_URL, window.location.origin);
+  if (month) url.searchParams.set("month", month);
+  if (status) url.searchParams.set("status", status);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return `${url.pathname}${url.search}`;
+}
+
+function buildAuditLogsUrl({ limit = 200, offset = 0 } = {}) {
+  const url = new URL(ENTITY_API_URLS.auditLogs, window.location.origin);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return `${url.pathname}${url.search}`;
+}
+
+function buildBillingOccupanciesUrl({ month = "", iacuc = "", pi = "" } = {}) {
+  const url = new URL(API_BILLING_OCCUPANCIES_URL, window.location.origin);
+  if (month) url.searchParams.set("month", month);
+  if (iacuc) url.searchParams.set("iacuc", iacuc);
+  if (pi) url.searchParams.set("pi", pi);
+  return `${url.pathname}${url.search}`;
+}
+
+function buildIntakeBatchesUrl({ status = "", month = "", limit = 5, offset = 0 } = {}) {
+  const url = new URL(ENTITY_API_URLS.intakeBatches, window.location.origin);
+  if (status && status !== "all") url.searchParams.set("status", status);
+  if (month) url.searchParams.set("month", month);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return `${url.pathname}${url.search}`;
+}
+
+function buildPlacementTasksUrl({ roomId = "", month = "", status = "", limit = 5, offset = 0 } = {}) {
+  const url = new URL(ENTITY_API_URLS.placementTasks, window.location.origin);
+  if (roomId) url.searchParams.set("roomId", roomId);
+  if (month) url.searchParams.set("month", month);
+  if (status) url.searchParams.set("status", status);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return `${url.pathname}${url.search}`;
+}
+
+function buildBillingStatementUrl(statementId) {
+  return `/api/billing-statements/${encodeURIComponent(statementId)}`;
+}
+
+function buildBillingWorkflowLinesUrl(workflowId, versionId = "") {
+  const url = new URL(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}/lines`, window.location.origin);
+  if (versionId) url.searchParams.set("versionId", versionId);
   return `${url.pathname}${url.search}`;
 }
 
@@ -1207,6 +1329,8 @@ async function loadPersistedState() {
     state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
     invalidateIacucSearchCache();
     invalidateStateIndexCache();
+    lazyDataState.intakeBatchesLoaded = false;
+    lazyDataState.intakeBatchesLoading = false;
     lazyDataState.quantitySheetsLoaded = false;
     lazyDataState.quantitySheetsLoading = false;
     lazyDataState.billingWorkflowsLoaded = false;
@@ -1220,6 +1344,26 @@ async function loadPersistedState() {
     infrastructureLoadState.scope = "summary";
     infrastructureLoadState.roomId = "";
     infrastructureLoadState.loading = false;
+    billingInfrastructureState.month = "";
+    billingInfrastructureState.pi = "";
+    billingInfrastructureState.iacuc = "";
+    billingInfrastructureState.slots = [];
+    billingInfrastructureState.occupancies = [];
+    paginationState.quantitySheets.offset = 0;
+    paginationState.quantitySheets.total = 0;
+    paginationState.quantitySheets.hasMore = false;
+    paginationState.quantitySheets.month = state.billingMonth || today.slice(0, 7);
+    paginationState.quantitySheets.pi = "";
+    paginationState.quantitySheets.iacuc = "";
+    paginationState.quantitySheets.roomId = "";
+    paginationState.billingWorkflows.offset = 0;
+    paginationState.billingWorkflows.total = 0;
+    paginationState.billingWorkflows.hasMore = false;
+    paginationState.billingWorkflows.month = state.billingMonth || today.slice(0, 7);
+    paginationState.billingWorkflows.status = state.billingWorkflowFilter || "todo";
+    paginationState.auditLogs.offset = 0;
+    paginationState.auditLogs.total = 0;
+    paginationState.auditLogs.hasMore = false;
     selectFirstAvailableCage();
     return;
   } catch (error) {
@@ -1238,6 +1382,8 @@ async function loadPersistedState() {
       });
       invalidateIacucSearchCache();
       invalidateStateIndexCache();
+      lazyDataState.intakeBatchesLoaded = false;
+      lazyDataState.intakeBatchesLoading = false;
       lazyDataState.quantitySheetsLoaded = false;
       lazyDataState.quantitySheetsLoading = false;
       lazyDataState.billingWorkflowsLoaded = false;
@@ -1260,6 +1406,8 @@ async function loadPersistedState() {
   state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   invalidateIacucSearchCache();
   invalidateStateIndexCache();
+  lazyDataState.intakeBatchesLoaded = true;
+  lazyDataState.intakeBatchesLoading = false;
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
   lazyDataState.billingWorkflowsLoaded = true;
@@ -1282,10 +1430,6 @@ async function loadBootstrapState() {
   if (!response.ok) throw new Error(`Failed to load ${API_BOOTSTRAP_URL}`);
   const entityData = await response.json();
 
-  const billingRules = entityData.billingRules || [];
-  const intakeBatches = entityData.intakeBatches || [];
-  const selectedIntakeBatch = intakeBatches.find((item) => item.id === localState.selectedIntakeBatchId) || intakeBatches[0];
-
   const nextState = {
     ...structuredClone(seedData),
     activeView: localState.activeView || seedData.activeView,
@@ -1305,17 +1449,15 @@ async function loadBootstrapState() {
     selectedQuantitySheetId: "",
     quantitySheetDraft: makeQuantitySheetDraft(localState.billingMonth || today.slice(0, 7)),
     quantitySheets: [],
-    selectedIntakeBatchId: selectedIntakeBatch?.id || "",
-    selectedIntakeBatchIds: Array.isArray(localState.selectedIntakeBatchIds)
-      ? localState.selectedIntakeBatchIds.filter((id) => intakeBatches.some((item) => item.id === id))
-      : [],
-    intakeBatchDraft: selectedIntakeBatch || makeIncomingBatchDraft(),
-    intakeBatches,
-    placementTasks: entityData.placementTasks || [],
+    selectedIntakeBatchId: localState.selectedIntakeBatchId || "",
+    selectedIntakeBatchIds: Array.isArray(localState.selectedIntakeBatchIds) ? localState.selectedIntakeBatchIds.slice(0, 200) : [],
+    intakeBatchDraft: makeIncomingBatchDraft(),
+    intakeBatches: [],
+    placementTasks: [],
     billingWorkflows: [],
     principalIdentityFilter: localState.principalIdentityFilter || "",
     slotFilter: localState.slotFilter || "all",
-    baseRate: Number(billingRules.find((item) => item.unit === "cage_day")?.price ?? localState.baseRate ?? seedData.baseRate),
+    baseRate: Number(localState.baseRate ?? seedData.baseRate),
     rooms: entityData.rooms || [],
     racks: entityData.racks || [],
     slots: entityData.slots || [],
@@ -1323,8 +1465,8 @@ async function loadBootstrapState() {
     roomSummaries: entityData.roomSummaries || [],
     rackSummaries: entityData.rackSummaries || [],
     dashboardSummary: entityData.dashboardSummary || null,
-    billingRules,
-    adjustments: entityData.adjustments || [],
+    billingRules: [],
+    adjustments: [],
     auditLogs: [],
   };
   logClientPerf("bootstrap.summary", startedAt, { rooms: nextState.rooms.length, racks: nextState.racks.length });
@@ -1488,7 +1630,145 @@ async function createInfrastructure(payload) {
   return result;
 }
 
-async function loadBillingWorkflows() {
+async function loadIntakeResources() {
+  if (!remotePersistence) {
+    lazyDataState.intakeBatchesLoaded = true;
+    lazyDataState.intakeBatchesLoading = false;
+    paginationState.intakeBatches.total = state.intakeBatches.length;
+    paginationState.placementTasks.total = state.placementTasks.length;
+    return state.intakeBatches;
+  }
+  if (lazyDataState.intakeBatchesLoading) return state.intakeBatches;
+  lazyDataState.intakeBatchesLoading = true;
+  try {
+    await Promise.all([loadIntakeBatchesPage(1, paginationState.intakeBatches.limit), loadPlacementTasksPage(1, paginationState.placementTasks.limit)]);
+    lazyDataState.intakeBatchesLoaded = true;
+    return state.intakeBatches;
+  } finally {
+    lazyDataState.intakeBatchesLoading = false;
+  }
+}
+
+async function loadIntakeBatchesPage(page = 1, limit = paginationState.intakeBatches.limit) {
+  if (!remotePersistence) {
+    paginationState.intakeBatches.page = Math.max(Number(page) || 1, 1);
+    paginationState.intakeBatches.limit = Math.max(Number(limit) || 10, 1);
+    paginationState.intakeBatches.total = filteredIntakeBatches().length;
+    return state.intakeBatches;
+  }
+  const nextLimit = Math.max(Number(limit) || 10, 1);
+  const nextPage = Math.max(Number(page) || 1, 1);
+  const response = await fetch(
+    buildIntakeBatchesUrl({
+      status: state.intakeBatchFilter || "unprinted",
+      limit: nextLimit,
+      offset: (nextPage - 1) * nextLimit,
+    }),
+    { cache: "no-store" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    scheduleRender("auth.expired");
+    throw new Error("请先登录");
+  }
+  if (!response.ok) throw new Error(payload.error || "加载待接收批次失败");
+  state.intakeBatches = (payload.items || []).map((item) => normalizeIncomingBatchDraft(item));
+  paginationState.intakeBatches = {
+    ...paginationState.intakeBatches,
+    limit: nextLimit,
+    page: nextPage,
+    total: payload.page?.total || state.intakeBatches.length,
+    hasMore: Boolean(payload.page?.hasMore),
+    offset: Number(payload.page?.offset || 0),
+  };
+  const selected = state.intakeBatches.find((item) => item.id === state.selectedIntakeBatchId) || state.intakeBatches[0] || null;
+  state.selectedIntakeBatchId = selected?.id || "";
+  state.intakeBatchDraft = selected || makeIncomingBatchDraft();
+  state.selectedIntakeBatchIds = state.selectedIntakeBatchIds.filter((id) => state.intakeBatches.some((item) => item.id === id));
+  return state.intakeBatches;
+}
+
+async function loadPlacementTasksPage(page = 1, limit = paginationState.placementTasks.limit) {
+  if (!remotePersistence) {
+    paginationState.placementTasks.page = Math.max(Number(page) || 1, 1);
+    paginationState.placementTasks.limit = Math.max(Number(limit) || 10, 1);
+    paginationState.placementTasks.total = state.placementTasks.length;
+    return state.placementTasks;
+  }
+  const nextLimit = Math.max(Number(limit) || 10, 1);
+  const nextPage = Math.max(Number(page) || 1, 1);
+  const roomId = state.selectedRoomId || "";
+  const response = await fetch(
+    buildPlacementTasksUrl({
+      roomId,
+      status: "open",
+      limit: nextLimit,
+      offset: (nextPage - 1) * nextLimit,
+    }),
+    { cache: "no-store" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    scheduleRender("auth.expired");
+    throw new Error("请先登录");
+  }
+  if (!response.ok) throw new Error(payload.error || "加载待进驻任务失败");
+  state.placementTasks = (payload.items || []).map((item) => normalizePlacementTask(item));
+  paginationState.placementTasks = {
+    ...paginationState.placementTasks,
+    limit: nextLimit,
+    page: nextPage,
+    total: payload.page?.total || state.placementTasks.length,
+    hasMore: Boolean(payload.page?.hasMore),
+    offset: Number(payload.page?.offset || 0),
+  };
+  state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => state.placementTasks.some((item) => item.id === id));
+  state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+  state.batchMode = state.placementAssignmentMode;
+  return state.placementTasks;
+}
+
+async function loadBillingContextInfrastructure() {
+  const month = state.billingMonth || today.slice(0, 7);
+  const pi = state.billingPi || "";
+  const iacuc = state.billingIacuc || "";
+  if (!remotePersistence || !month || !pi) return billingInfrastructureState.occupancies;
+  if (billingInfrastructureState.loading) return billingInfrastructureState.occupancies;
+  if (
+    billingInfrastructureState.month === month &&
+    billingInfrastructureState.pi === pi &&
+    billingInfrastructureState.iacuc === iacuc &&
+    billingInfrastructureState.occupancies.length
+  ) {
+    return billingInfrastructureState.occupancies;
+  }
+  billingInfrastructureState.loading = true;
+  const startedAt = performance.now();
+  try {
+    const response = await fetch(buildBillingOccupanciesUrl({ month, pi, iacuc }), { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      currentUser = null;
+      scheduleRender("auth.expired");
+      throw new Error("请先登录");
+    }
+    if (!response.ok) throw new Error(payload.error || "加载结算占用数据失败");
+    billingInfrastructureState.month = month;
+    billingInfrastructureState.pi = pi;
+    billingInfrastructureState.iacuc = iacuc;
+    billingInfrastructureState.slots = payload.slots || [];
+    billingInfrastructureState.occupancies = payload.occupancies || [];
+    logClientPerf("billing.infrastructure", startedAt, { month, occupancies: billingInfrastructureState.occupancies.length });
+    invalidateStateIndexCache();
+    return billingInfrastructureState.occupancies;
+  } finally {
+    billingInfrastructureState.loading = false;
+  }
+}
+
+async function loadBillingWorkflows(options = {}) {
   if (!remotePersistence) {
     state.billingWorkflows = [];
     lazyDataState.billingWorkflowsLoaded = true;
@@ -1496,45 +1776,75 @@ async function loadBillingWorkflows() {
     return [];
   }
   lazyDataState.billingWorkflowsLoading = true;
-  const response = await fetch(API_BILLING_WORKFLOWS_URL, { cache: "no-store" });
+  const filters = {
+    month: options.month ?? paginationState.billingWorkflows.month ?? state.billingMonth ?? today.slice(0, 7),
+    status: options.status ?? paginationState.billingWorkflows.status ?? state.billingWorkflowFilter ?? "todo",
+    limit: options.limit ?? paginationState.billingWorkflows.limit,
+    offset: options.offset ?? 0,
+  };
+  const response = await fetch(buildBillingWorkflowsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     lazyDataState.billingWorkflowsLoading = false;
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
     lazyDataState.billingWorkflowsLoading = false;
     throw new Error(payload.error || "加载结算流程失败");
   }
-  state.billingWorkflows = payload.items || [];
+  const items = payload.items || [];
+  state.billingWorkflows = items;
+  paginationState.billingWorkflows = {
+    ...paginationState.billingWorkflows,
+    ...filters,
+    total: payload.page?.total || items.length,
+    hasMore: Boolean(payload.page?.hasMore),
+    offset: Number(payload.page?.offset || filters.offset),
+  };
   lazyDataState.billingWorkflowsLoaded = true;
   lazyDataState.billingWorkflowsLoading = false;
   invalidateStateIndexCache();
   return state.billingWorkflows;
 }
 
-async function loadQuantitySheets() {
+async function loadQuantitySheets(options = {}) {
   if (!remotePersistence) {
     lazyDataState.quantitySheetsLoaded = true;
     lazyDataState.quantitySheetsLoading = false;
     return state.quantitySheets;
   }
   lazyDataState.quantitySheetsLoading = true;
-  const response = await fetch(API_QUANTITY_SHEETS_URL, { cache: "no-store" });
+  const filters = {
+    month: options.month ?? paginationState.quantitySheets.month ?? state.billingMonth ?? today.slice(0, 7),
+    iacuc: options.iacuc ?? paginationState.quantitySheets.iacuc ?? "",
+    pi: options.pi ?? paginationState.quantitySheets.pi ?? "",
+    roomId: options.roomId ?? paginationState.quantitySheets.roomId ?? "",
+    limit: options.limit ?? paginationState.quantitySheets.limit,
+    offset: options.offset ?? 0,
+  };
+  const response = await fetch(buildQuantitySheetsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     lazyDataState.quantitySheetsLoading = false;
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
     lazyDataState.quantitySheetsLoading = false;
     throw new Error(payload.error || "加载数量统计表失败");
   }
-  state.quantitySheets = payload.items || [];
+  const items = payload.items || [];
+  state.quantitySheets = items;
+  paginationState.quantitySheets = {
+    ...paginationState.quantitySheets,
+    ...filters,
+    total: payload.page?.total || items.length,
+    hasMore: Boolean(payload.page?.hasMore),
+    offset: Number(payload.page?.offset || filters.offset),
+  };
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
   const selected = state.quantitySheets.find((sheet) => sheet.id === state.selectedQuantitySheetId) || state.quantitySheets[0] || null;
@@ -1565,53 +1875,126 @@ async function refreshQuantitySheet(sheetId) {
   return payload.item || null;
 }
 
-async function loadAuditEvents() {
+async function loadAuditEvents(options = {}) {
   if (!remotePersistence) {
     lazyDataState.auditLogsLoaded = true;
     lazyDataState.auditLogsLoading = false;
     return state.auditLogs;
   }
   lazyDataState.auditLogsLoading = true;
-  const response = await fetch(`${ENTITY_API_URLS.auditLogs}?limit=500`, { cache: "no-store" });
+  const filters = {
+    limit: options.limit ?? paginationState.auditLogs.limit,
+    offset: options.offset ?? 0,
+  };
+  const response = await fetch(buildAuditLogsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     lazyDataState.auditLogsLoading = false;
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
     lazyDataState.auditLogsLoading = false;
     throw new Error(payload.error || "加载操作日志失败");
   }
-  state.auditLogs = payload.items || [];
+  const items = payload.items || [];
+  state.auditLogs = items;
+  paginationState.auditLogs = {
+    ...paginationState.auditLogs,
+    ...filters,
+    total: payload.page?.total || items.length,
+    hasMore: Boolean(payload.page?.hasMore),
+    offset: Number(payload.page?.offset || filters.offset),
+  };
   lazyDataState.auditLogsLoaded = true;
   lazyDataState.auditLogsLoading = false;
   return state.auditLogs;
 }
 
+async function goToQuantitySheetsPage(page, limit = paginationState.quantitySheets.limit) {
+  const nextPage = Math.max(Number(page) || 1, 1);
+  const nextLimit = Math.max(Number(limit) || 10, 1);
+  await loadQuantitySheets({
+    month: paginationState.quantitySheets.month || state.billingMonth || today.slice(0, 7),
+    iacuc: paginationState.quantitySheets.iacuc,
+    pi: paginationState.quantitySheets.pi,
+    roomId: paginationState.quantitySheets.roomId,
+    limit: nextLimit,
+    offset: (nextPage - 1) * nextLimit,
+  });
+}
+
+async function goToBillingWorkflowsPage(page, limit = paginationState.billingWorkflows.limit) {
+  const nextPage = Math.max(Number(page) || 1, 1);
+  const nextLimit = Math.max(Number(limit) || 10, 1);
+  await loadBillingWorkflows({
+    month: paginationState.billingWorkflows.month || state.billingMonth || today.slice(0, 7),
+    status: paginationState.billingWorkflows.status || state.billingWorkflowFilter || "todo",
+    limit: nextLimit,
+    offset: (nextPage - 1) * nextLimit,
+  });
+}
+
+async function goToAuditLogsPage(page, limit = paginationState.auditLogs.limit) {
+  const nextPage = Math.max(Number(page) || 1, 1);
+  const nextLimit = Math.max(Number(limit) || 10, 1);
+  await loadAuditEvents({
+    limit: nextLimit,
+    offset: (nextPage - 1) * nextLimit,
+  });
+}
+
+function goToReleaseNotesPage(page, limit = paginationState.releaseNotes.limit) {
+  paginationState.releaseNotes.limit = Math.max(Number(limit) || 10, 1);
+  paginationState.releaseNotes.page = Math.max(Number(page) || 1, 1);
+}
+
+async function goToIntakeBatchesPage(page, limit = paginationState.intakeBatches.limit) {
+  if (remotePersistence) {
+    await loadIntakeBatchesPage(page, limit);
+    return;
+  }
+  paginationState.intakeBatches.limit = Math.max(Number(limit) || 10, 1);
+  paginationState.intakeBatches.page = Math.max(Number(page) || 1, 1);
+  paginationState.intakeBatches.total = filteredIntakeBatches().length;
+}
+
+async function goToPlacementTasksPage(page, limit = paginationState.placementTasks.limit) {
+  if (remotePersistence) {
+    await loadPlacementTasksPage(page, limit);
+    return;
+  }
+  paginationState.placementTasks.limit = Math.max(Number(limit) || 10, 1);
+  paginationState.placementTasks.page = Math.max(Number(page) || 1, 1);
+  paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId || "")).length;
+}
+
 async function ensureViewDataLoaded(view) {
   const tasks = [];
+  if (view === "intake" && !lazyDataState.intakeBatchesLoaded && !lazyDataState.intakeBatchesLoading) {
+    tasks.push(loadIntakeResources());
+  }
   if (view === "data" && !IACUC_INDEX_LOADED && !IACUC_INDEX_LOADING) {
     tasks.push(ensureIacucIndexLoaded());
   }
   if (view === "cages" && state.selectedRoomId && infrastructureLoadState.scope !== "full" && infrastructureLoadState.roomId !== state.selectedRoomId) {
     tasks.push(loadRoomInfrastructure(state.selectedRoomId));
   }
-  if (view === "billing" && infrastructureLoadState.scope !== "full") {
-    tasks.push(loadFullInfrastructure());
+  if (view === "billing" && state.billingSource === "cage_map" && state.billingMonth && state.billingPi) {
+    tasks.push(loadBillingContextInfrastructure());
   }
   if ((view === "billing" || view === "data") && !lazyDataState.principalIdentitiesLoaded && !lazyDataState.principalIdentitiesLoading) {
     tasks.push(loadPrincipalIdentities());
   }
   if (view === "billing" && !lazyDataState.quantitySheetsLoaded && !lazyDataState.quantitySheetsLoading) {
-    tasks.push(loadQuantitySheets());
+    tasks.push(loadQuantitySheets({ month: state.billingMonth || today.slice(0, 7), offset: 0 }));
   }
   if (view === "workflow-center" && !lazyDataState.billingWorkflowsLoaded && !lazyDataState.billingWorkflowsLoading) {
-    tasks.push(loadBillingWorkflows());
+    tasks.push(loadBillingWorkflows({ month: state.billingMonth || today.slice(0, 7), status: state.billingWorkflowFilter || "todo", offset: 0 }));
   }
   if (view === "logs" && !lazyDataState.auditLogsLoaded && !lazyDataState.auditLogsLoading) {
-    tasks.push(loadAuditEvents());
+    tasks.push(loadAuditEvents({ offset: 0 }));
   }
   if (view === "users" && !lazyDataState.usersLoaded && !lazyDataState.usersLoading) {
     tasks.push(loadUsers());
@@ -1661,10 +2044,37 @@ async function loadBillingWorkflowDetail(workflowId) {
     throw new Error(payload.error || "加载流程详情失败");
   }
   state.selectedBillingWorkflowId = workflowId;
-  state.selectedBillingWorkflowDetail = payload;
+  state.selectedBillingWorkflowDetail = { ...payload, linesByVersion: {} };
   state.showWorkflowStatements = false;
   if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
   return payload;
+}
+
+async function loadBillingWorkflowLines(workflowId, versionId = "") {
+  if (!remotePersistence || !workflowId) return [];
+  const detail = state.selectedBillingWorkflowDetail || {};
+  const linesByVersion = detail.linesByVersion || {};
+  const workflow = detail.workflow || {};
+  const resolvedVersionId = versionId || workflow.currentVersionId || "";
+  if (resolvedVersionId && Array.isArray(linesByVersion[resolvedVersionId])) return linesByVersion[resolvedVersionId];
+  const response = await fetch(buildBillingWorkflowLinesUrl(workflowId, resolvedVersionId), { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "加载结算单明细失败");
+  }
+  state.selectedBillingWorkflowDetail = {
+    ...detail,
+    linesByVersion: {
+      ...linesByVersion,
+      [payload.versionId || resolvedVersionId || "current"]: payload.lines || [],
+    },
+  };
+  return payload.lines || [];
 }
 
 async function deleteBillingWorkflow(workflowId) {
@@ -1703,6 +2113,12 @@ function mergeServerAuditLogs(payload) {
   if (Array.isArray(payload?.auditLogs) && payload.auditLogs.length) {
     state.auditLogs = mergeAuditLogs(payload.auditLogs, state.auditLogs || []);
   }
+}
+
+function replacePlacementTasksForBatch(batchId, tasks) {
+  const incoming = Array.isArray(tasks) ? tasks.map((item) => normalizePlacementTask(item)) : [];
+  const kept = state.placementTasks.filter((item) => item.sourceBatchId !== batchId);
+  state.placementTasks = [...kept, ...incoming];
 }
 
 function logClientPerf(label, startedAt, details = {}) {
@@ -2123,6 +2539,7 @@ function syncInfrastructureSummariesForLoadedState(targetState = state) {
 }
 
 function render() {
+  const startedAt = performance.now();
   const previousView = lastRenderedView;
   const previousScrollY = window.scrollY;
   const previousWorkspaceScrollTop = document.querySelector(".workspace")?.scrollTop ?? 0;
@@ -2131,6 +2548,8 @@ function render() {
     document.querySelector("#app").innerHTML = renderLoginView();
     bindAuthEvents();
     lastRenderedView = "login";
+    scheduleStatePersist();
+    logClientPerf("render", startedAt, { view: "login" });
     return;
   }
   const adminViews = new Set(["data", "users"]);
@@ -2138,7 +2557,7 @@ function render() {
     state.activeView = "cages";
   }
 
-  saveState();
+  scheduleStatePersist();
   document.querySelector("#app").innerHTML = `
     <div class="shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       ${renderSidebar()}
@@ -2173,6 +2592,7 @@ function render() {
       }
     });
   }
+  logClientPerf("render", startedAt, { view: state.activeView });
 }
 
 function renderConfirmDialog() {
@@ -2860,20 +3280,22 @@ function visiblePlacementTasksForRoom(roomId) {
 }
 
 function renderPlacementTaskPanel(tasks, room) {
-  const groups = placementTaskGroups(tasks);
-  const selectedCount = state.selectedPlacementTaskIds.filter((id) => tasks.some((task) => task.id === id)).length;
+  const allGroups = placementTaskGroups(tasks);
+  const placementPage = paginationState.placementTasks;
+  const groups = remotePersistence ? allGroups : allGroups.slice((placementPage.page - 1) * placementPage.limit, placementPage.page * placementPage.limit);
+  const selectedCount = state.selectedPlacementTaskIds.filter((id) => groups.some((group) => group.some((task) => task.id === id))).length;
   return `
     <div class="placement-task-panel panel">
       <div class="panel-head compact">
         <div>
           <h2>待进驻动物</h2>
-          <p>${escapeText(room.name)} · ${tasks.length} 个待处理任务</p>
+              <p>${escapeText(room.name)} · ${remotePersistence ? placementPage.total || tasks.length : tasks.length} 个待处理任务</p>
         </div>
         ${
           selectedCount
             ? `
               <div class="toolbar placement-task-toolbar">
-                <span class="muted">已选择 ${selectedCount} 笼，请在下方笼位图选择空笼位。</span>
+                <span class="muted">当前页已选择 ${selectedCount} 笼，请在下方笼位图选择空笼位。</span>
                 <button class="secondary" type="button" id="clearSelectedPlacementTasks">清空勾选</button>
               </div>
             `
@@ -2892,6 +3314,7 @@ function renderPlacementTaskPanel(tasks, room) {
           `
           : `<p class="muted">当前房间没有待进驻动物。</p>`
       }
+      ${renderPager("placementTasks", placementPage, remotePersistence ? placementPage.total || allGroups.length : allGroups.length)}
     </div>
   `;
 }
@@ -2904,6 +3327,13 @@ function placementTaskGroups(tasks) {
     groups.get(key).push(task);
   });
   return [...groups.values()];
+}
+
+function pagedPlacementTaskGroups(roomId) {
+  const groups = placementTaskGroups(visiblePlacementTasksForRoom(roomId));
+  const page = paginationState.placementTasks;
+  if (remotePersistence) return groups;
+  return groups.slice((page.page - 1) * page.limit, page.page * page.limit);
 }
 
 function renderPlacementTaskGroupRow(group) {
@@ -3526,9 +3956,11 @@ function renderHistoryItem(item) {
 
 function renderIntakeBatchView() {
   const draft = state.intakeBatchDraft || makeIncomingBatchDraft();
-  const selectedCount = state.selectedIntakeBatchIds.length;
+  const intakePage = paginationState.intakeBatches;
+  const allVisibleBatches = filteredIntakeBatches();
+  const visibleBatches = remotePersistence ? allVisibleBatches : allVisibleBatches.slice((intakePage.page - 1) * intakePage.limit, intakePage.page * intakePage.limit);
+  const selectedCount = state.selectedIntakeBatchIds.filter((id) => visibleBatches.some((batch) => batch.id === id)).length;
   const canPrintCurrent = draft.cards.length > 0;
-  const visibleBatches = filteredIntakeBatches();
   return `
     <section class="billing-layout quantity-billing-layout intake-layout">
       <div class="panel large">
@@ -3662,8 +4094,8 @@ function renderIntakeBatchView() {
               ${
                 selectedCount
                   ? `
-                    <button id="printSelectedCageCards" class="primary" type="button">${iconSvg("download")}打印勾选批次（${selectedCount}）</button>
-                    <button id="confirmSelectedIntakeBatches" class="secondary" type="button">${iconSvg("check")}批量标记接收（${selectedCount}）</button>
+                    <button id="printSelectedCageCards" class="primary" type="button">${iconSvg("download")}打印当前页勾选批次（${selectedCount}）</button>
+                    <button id="confirmSelectedIntakeBatches" class="secondary" type="button">${iconSvg("check")}当前页批量标记接收（${selectedCount}）</button>
                   `
                   : ""
               }
@@ -3681,6 +4113,7 @@ function renderIntakeBatchView() {
               </tbody>
             </table>
           </div>
+          ${renderPager("intakeBatches", intakePage, remotePersistence ? intakePage.total || allVisibleBatches.length : allVisibleBatches.length)}
         </div>
         ${renderIntakeBatchEditorModal()}
         ${state.showIntakeCardPreview ? renderIntakeCardPreviewModal(draft) : ""}
@@ -3727,7 +4160,14 @@ function renderIntakeCardPreviewModal(batch) {
 }
 
 function filteredIntakeBatches() {
+  if (remotePersistence) return state.intakeBatches;
   return state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, state.intakeBatchFilter));
+}
+
+function pagedIntakeBatches() {
+  const items = filteredIntakeBatches();
+  const page = paginationState.intakeBatches;
+  return items.slice((page.page - 1) * page.limit, page.page * page.limit);
 }
 
 function intakeBatchMatchesFilter(batch, filter) {
@@ -3737,8 +4177,8 @@ function intakeBatchMatchesFilter(batch, filter) {
 }
 
 function intakeBatchFilterButton(value, label) {
-  const count = state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, value)).length;
-  return `<button class="segmented ${state.intakeBatchFilter === value ? "active" : ""}" type="button" data-intake-batch-filter="${value}">${escapeText(label)} ${count}</button>`;
+  const count = remotePersistence ? "" : ` ${state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, value)).length}`;
+  return `<button class="segmented ${state.intakeBatchFilter === value ? "active" : ""}" type="button" data-intake-batch-filter="${value}">${escapeText(label)}${count}</button>`;
 }
 
 function renderIntakeBatchRow(batch) {
@@ -4011,6 +4451,7 @@ function renderQuantitySheetBillingView() {
   const statement = buildQuantitySheetStatement(draft);
   const canGenerateStatement = !remotePersistence || Boolean(currentUser);
   const quantityLoading = remotePersistence && lazyDataState.quantitySheetsLoading && !state.quantitySheets.length;
+  const quantityPage = paginationState.quantitySheets;
   const managerValue = draft.manager || currentUser?.displayName || "";
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
@@ -4032,6 +4473,11 @@ function renderQuantitySheetBillingView() {
                   .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
                   .join("")}
               </select>
+              ${
+                remotePersistence
+                  ? `<span class="muted quantity-page-meta">当前页 ${currentPage(quantityPage)} / ${pageCount(quantityPage.total || state.quantitySheets.length, quantityPage.limit)}</span>`
+                  : ""
+              }
               <div class="quantity-action-stack">
                 <div class="quantity-action-grid">
                   <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
@@ -4047,6 +4493,7 @@ function renderQuantitySheetBillingView() {
             </div>
           </div>
           ${quantityLoading ? `<p class="muted">正在加载数量统计表，请稍候。</p>` : ""}
+          ${remotePersistence ? renderPager("quantitySheets", quantityPage, quantityPage.total || state.quantitySheets.length) : ""}
 
           <div class="quantity-sheet-fields">
             <div class="quantity-field-group quantity-field-group-basic">
@@ -4170,11 +4617,7 @@ function renderQuantitySheetBillingView() {
 function renderBillingWorkflowPanel() {
   const items = filteredBillingWorkflows();
   const workflowLoading = remotePersistence && lazyDataState.billingWorkflowsLoading && !state.billingWorkflows.length;
-  const counts = {
-    todo: state.billingWorkflows.filter((item) => workflowIsTodo(item)).length,
-    done: state.billingWorkflows.filter((item) => item.workflowStatus === "submitted_to_finance").length,
-    all: state.billingWorkflows.length,
-  };
+  const workflowPage = paginationState.billingWorkflows;
   return `
     <section class="workflow-center-panel">
       <div class="panel">
@@ -4184,9 +4627,9 @@ function renderBillingWorkflowPanel() {
             <p>按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号，发送后重生成为修订版并自动保留旧版本留痕。</p>
           </div>
           <div class="toolbar workflow-filter-toolbar">
-            <button class="segmented ${state.billingWorkflowFilter === "todo" ? "active" : ""}" type="button" data-workflow-filter="todo">待办 ${counts.todo}</button>
-            <button class="segmented ${state.billingWorkflowFilter === "all" ? "active" : ""}" type="button" data-workflow-filter="all">全部 ${counts.all}</button>
-            <button class="segmented ${state.billingWorkflowFilter === "done" ? "active" : ""}" type="button" data-workflow-filter="done">已完成 ${counts.done}</button>
+            <button class="segmented ${state.billingWorkflowFilter === "todo" ? "active" : ""}" type="button" data-workflow-filter="todo">待办</button>
+            <button class="segmented ${state.billingWorkflowFilter === "all" ? "active" : ""}" type="button" data-workflow-filter="all">全部</button>
+            <button class="segmented ${state.billingWorkflowFilter === "done" ? "active" : ""}" type="button" data-workflow-filter="done">已完成</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -4214,6 +4657,9 @@ function renderBillingWorkflowPanel() {
             </tbody>
           </table>
         </div>
+        ${
+          remotePersistence ? renderPager("billingWorkflows", workflowPage, workflowPage.total || items.length) : ""
+        }
       </div>
     </section>
   `;
@@ -4258,8 +4704,9 @@ function renderBillingWorkflowDetailModal() {
   const workflow = detail.workflow || {};
   const versions = detail.versions || [];
   const events = detail.events || [];
-  const lines = detail.lines || [];
   const currentVersion = workflow.currentVersion || {};
+  const currentVersionId = currentVersion.id || workflow.currentVersionId || "";
+  const lines = (detail.linesByVersion || {})[currentVersionId] || [];
   const statement = currentVersion.statement || {};
   const timeline = workflowTimelineItems(workflow);
   const currentNode = timeline.find((item) => item.state === "current") || timeline.find((item) => item.state === "done") || timeline[0] || {};
@@ -4930,6 +5377,10 @@ function renderSystemUpdateCard() {
 }
 
 function renderReleaseNotes() {
+  const page = paginationState.releaseNotes;
+  const total = SYSTEM_RELEASE_NOTES.length;
+  const start = (page.page - 1) * page.limit;
+  const items = SYSTEM_RELEASE_NOTES.slice(start, start + page.limit);
   return `
     <div class="system-section">
       <div class="panel-head compact">
@@ -4939,8 +5390,9 @@ function renderReleaseNotes() {
         </div>
       </div>
       <div class="release-list">
-        ${SYSTEM_RELEASE_NOTES.map(renderReleaseNote).join("")}
+        ${items.map(renderReleaseNote).join("")}
       </div>
+      ${renderPager("releaseNotes", page, total)}
     </div>
   `;
 }
@@ -5089,6 +5541,7 @@ function renderUserRow(user) {
 function renderAuditView() {
   const logs = state.auditLogs || [];
   const loading = remotePersistence && lazyDataState.auditLogsLoading && !logs.length;
+  const page = paginationState.auditLogs;
   return `
     <section class="panel large">
       <div class="panel-head">
@@ -5106,7 +5559,40 @@ function renderAuditView() {
             : `<div class="empty-state">${iconSvg("receipt")}<h2>暂无操作日志</h2></div>`
         }
       </div>
+      ${remotePersistence ? renderPager("auditLogs", page, page.total || logs.length) : ""}
     </section>
+  `;
+}
+
+function pageCount(total, limit) {
+  return Math.max(Math.ceil(Math.max(Number(total) || 0, 0) / Math.max(Number(limit) || 1, 1)), 1);
+}
+
+function currentPage(pageState) {
+  return Math.floor((Number(pageState.offset) || 0) / Math.max(Number(pageState.limit) || 1, 1)) + 1;
+}
+
+function renderPager(kind, pageState, total) {
+  const limit = Math.max(Number(pageState.limit) || 10, 1);
+  const page = pageState.page || currentPage(pageState);
+  const pages = pageCount(total, limit);
+  const prevDisabled = page <= 1 ? "disabled" : "";
+  const nextDisabled = page >= pages ? "disabled" : "";
+  return `
+    <div class="toolbar pager-toolbar" data-pager="${escapeAttr(kind)}">
+      <label class="pager-size">
+        每页
+        <select data-page-size="${escapeAttr(kind)}">
+          ${[5, 10, 15, 20].map((value) => `<option value="${value}" ${value === limit ? "selected" : ""}>${value}</option>`).join("")}
+        </select>
+        条
+      </label>
+      <span class="muted">第 ${page} / ${pages} 页 · 共 ${total} 条</span>
+      <div class="pager-actions">
+        <button class="secondary" type="button" data-page-prev="${escapeAttr(kind)}" ${prevDisabled}>上一页</button>
+        <button class="secondary" type="button" data-page-next="${escapeAttr(kind)}" ${nextDisabled}>下一页</button>
+      </div>
+    </div>
   `;
 }
 
@@ -5258,12 +5744,14 @@ function bindEvents() {
 
   document.querySelector("#roomSelect")?.addEventListener("change", async (event) => {
     state.selectedRoomId = event.target.value;
+    paginationState.placementTasks.page = 1;
     state.selectedRackId = state.racks.find((rack) => rack.roomId === state.selectedRoomId)?.id;
     state.selectedSlotId = "";
     state.selectedSlotIds = [];
     if (remotePersistence) {
       try {
         await loadRoomInfrastructure(state.selectedRoomId);
+        await loadPlacementTasksPage(1, paginationState.placementTasks.limit);
       } catch (error) {
         reportSaveError(error);
       }
@@ -5338,7 +5826,10 @@ function bindEvents() {
   document.querySelectorAll("[data-select-placement-task-group]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());
     input.addEventListener("change", () => {
-      const tasks = pendingPlacementTasksForReceipt(input.dataset.selectPlacementTaskGroup);
+      const pageGroups = pagedPlacementTaskGroups(getSelectedRoom()?.id || "");
+      const tasks = pageGroups
+        .flat()
+        .filter((task) => task.sourceReceiptId === input.dataset.selectPlacementTaskGroup && task.status === "pending");
       const next = new Set(state.selectedPlacementTaskIds);
       tasks.forEach((task) => {
         if (input.checked) next.add(task.id);
@@ -5355,9 +5846,10 @@ function bindEvents() {
     });
   });
   document.querySelector("#clearSelectedPlacementTasks")?.addEventListener("click", () => {
-    state.selectedPlacementTaskIds = [];
-    state.placementAssignmentMode = false;
-    state.batchMode = false;
+    const pageTaskIds = new Set(pagedPlacementTaskGroups(getSelectedRoom()?.id || "").flat().map((task) => task.id));
+    state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => !pageTaskIds.has(id));
+    state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+    state.batchMode = state.placementAssignmentMode;
     render();
   });
   document.querySelector("#confirmPlacementBatchMoveIn")?.addEventListener("click", batchMoveInSelectedPlacementTasks);
@@ -5411,7 +5903,7 @@ function bindEvents() {
     button.addEventListener("click", async () => {
       captureQuantitySheetDraft();
       state.billingSource = button.dataset.billingSource;
-      render();
+      scheduleRender("billing.source");
       if (state.activeView === "billing") {
         try {
           await ensureViewDataLoaded("billing");
@@ -5419,12 +5911,23 @@ function bindEvents() {
           reportSaveError(error);
         }
       }
-      render();
+      scheduleRender("billing.source.loaded");
     });
   });
-  document.querySelector("#billingMonth")?.addEventListener("change", (event) => {
+  document.querySelector("#billingMonth")?.addEventListener("change", async (event) => {
     state.billingMonth = event.target.value;
-    render();
+    paginationState.quantitySheets.month = state.billingMonth;
+    paginationState.billingWorkflows.month = state.billingMonth;
+    billingInfrastructureState.month = "";
+    if (state.activeView === "billing") {
+      try {
+        if (state.billingSource === "quantity_sheet") await goToQuantitySheetsPage(1, paginationState.quantitySheets.limit);
+        if (state.billingSource === "cage_map" && state.billingPi) await loadBillingContextInfrastructure();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    }
+    scheduleRender("billing.month");
   });
   document.querySelector("#billingPi")?.addEventListener("change", (event) => {
     updateBillingPi(event.target.value);
@@ -5510,13 +6013,22 @@ function bindEvents() {
     render();
   });
   document.querySelector("#printSelectedCageCards")?.addEventListener("click", async () => {
-    const batches = state.intakeBatches.filter((item) => state.selectedIntakeBatchIds.includes(item.id));
+    const pageBatchIds = new Set(pagedIntakeBatches().map((item) => item.id));
+    const batches = state.intakeBatches.filter((item) => pageBatchIds.has(item.id) && state.selectedIntakeBatchIds.includes(item.id));
     await printAndMarkIntakeBatches(batches);
   });
   document.querySelector("#confirmSelectedIntakeBatches")?.addEventListener("click", () => confirmSelectedIntakeBatches());
   document.querySelectorAll("[data-intake-batch-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.intakeBatchFilter = button.dataset.intakeBatchFilter || "unprinted";
+      paginationState.intakeBatches.page = 1;
+      if (remotePersistence) {
+        try {
+          await loadIntakeBatchesPage(1, paginationState.intakeBatches.limit);
+        } catch (error) {
+          reportSaveError(error);
+        }
+      }
       render();
     });
   });
@@ -5591,9 +6103,15 @@ function bindEvents() {
     button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
   });
   document.querySelectorAll("[data-workflow-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.billingWorkflowFilter = button.dataset.workflowFilter;
-      render();
+      paginationState.billingWorkflows.status = state.billingWorkflowFilter;
+      try {
+        await goToBillingWorkflowsPage(1, paginationState.billingWorkflows.limit);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      scheduleRender("workflow.filter");
     });
   });
   document.querySelectorAll("[data-open-workflow]").forEach((row) => {
@@ -5647,8 +6165,16 @@ function bindEvents() {
   });
   document.querySelector("#closeWorkflowDetail")?.addEventListener("click", closeBillingWorkflowDetail);
   document.querySelector("#closeWorkflowDetailButton")?.addEventListener("click", closeBillingWorkflowDetail);
-  document.querySelector("[data-toggle-workflow-statements]")?.addEventListener("click", () => {
+  document.querySelector("[data-toggle-workflow-statements]")?.addEventListener("click", async () => {
     state.showWorkflowStatements = !state.showWorkflowStatements;
+    if (state.showWorkflowStatements && state.selectedBillingWorkflowId) {
+      try {
+        const workflow = state.selectedBillingWorkflowDetail?.workflow || {};
+        await loadBillingWorkflowLines(state.selectedBillingWorkflowId, workflow.currentVersionId || "");
+      } catch (error) {
+        reportSaveError(error);
+      }
+    }
     render();
   });
   bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
@@ -5711,6 +6237,55 @@ function bindEvents() {
     });
   });
   document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
+  document.querySelectorAll("[data-page-size]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      const kind = select.dataset.pageSize;
+      const limit = Number(select.value) || 10;
+      try {
+        if (kind === "quantitySheets") await goToQuantitySheetsPage(1, limit);
+        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(1, limit);
+        if (kind === "auditLogs") await goToAuditLogsPage(1, limit);
+        if (kind === "intakeBatches") goToIntakeBatchesPage(1, limit);
+        if (kind === "placementTasks") goToPlacementTasksPage(1, limit);
+        if (kind === "releaseNotes") goToReleaseNotesPage(1, limit);
+        scheduleRender(`pager.size.${kind}`);
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-page-prev]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const kind = button.dataset.pagePrev;
+      try {
+        if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) - 1);
+        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) - 1);
+        if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) - 1);
+        if (kind === "intakeBatches") goToIntakeBatchesPage(paginationState.intakeBatches.page - 1);
+        if (kind === "placementTasks") goToPlacementTasksPage(paginationState.placementTasks.page - 1);
+        if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page - 1);
+        scheduleRender(`pager.prev.${kind}`);
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-page-next]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const kind = button.dataset.pageNext;
+      try {
+        if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) + 1);
+        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) + 1);
+        if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) + 1);
+        if (kind === "intakeBatches") goToIntakeBatchesPage(paginationState.intakeBatches.page + 1);
+        if (kind === "placementTasks") goToPlacementTasksPage(paginationState.placementTasks.page + 1);
+        if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page + 1);
+        scheduleRender(`pager.next.${kind}`);
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
   document.querySelector("#clearClientCache")?.addEventListener("click", () => {
     openConfirmDialog({
       type: "clear-client-cache",
@@ -5928,6 +6503,7 @@ async function login(event) {
 
 async function logout() {
   await fetch(API_LOGOUT_URL, { method: "POST" }).catch(() => {});
+  persistStateNow();
   currentUser = null;
   users = [];
   IACUC_INDEX = [];
@@ -5937,6 +6513,8 @@ async function logout() {
   IACUC_INDEX_PROMISE = null;
   iacucIndexMeta = null;
   invalidateIacucSearchCache();
+  lazyDataState.intakeBatchesLoaded = false;
+  lazyDataState.intakeBatchesLoading = false;
   lazyDataState.quantitySheetsLoaded = false;
   lazyDataState.quantitySheetsLoading = false;
   lazyDataState.billingWorkflowsLoaded = false;
@@ -5949,6 +6527,11 @@ async function logout() {
   lazyDataState.principalIdentitiesLoading = false;
   PRINCIPAL_IDENTITIES = [];
   PRINCIPAL_IDENTITY_BY_NAME = new Map();
+  billingInfrastructureState.month = "";
+  billingInfrastructureState.pi = "";
+  billingInfrastructureState.iacuc = "";
+  billingInfrastructureState.slots = [];
+  billingInfrastructureState.occupancies = [];
   render();
 }
 
@@ -6207,6 +6790,7 @@ async function checkSystemUpdate() {
 async function clearClientCacheAndReload() {
   if (typeof window === "undefined") return;
 
+  persistStateNow();
   localStorage.clear();
   sessionStorage.clear();
 
@@ -6597,6 +7181,9 @@ async function submitIntakeReceipt(batchId, actualReceiptDate, cardCount) {
     if (!response.ok) throw new Error(payload.error || "确认接收失败");
     upsertById(state.intakeBatches, normalizeIncomingBatchDraft(payload.batch));
     payload.tasks?.map(normalizePlacementTask).forEach((task) => upsertById(state.placementTasks, task));
+    if (state.selectedRoomId) {
+      paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
+    }
     mergeServerAuditLogs(payload);
     state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(payload.batch);
     pushLog(`确认接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务`);
@@ -6794,13 +7381,21 @@ async function handleRateSubmit(event) {
   }
 }
 
-function updateBillingPi(value) {
+async function updateBillingPi(value) {
   const trimmed = value.trim();
   const match = piOptions(trimmed).find((item) => normalizePersonName(item.pi) === normalizePersonName(trimmed));
   state.billingPi = match?.pi || trimmed;
   state.billingPrincipalType = principalTypeForPi(state.billingPi);
   state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
-  render();
+  billingInfrastructureState.pi = "";
+  if (state.activeView === "billing" && state.billingSource === "cage_map" && state.billingMonth && state.billingPi) {
+    try {
+      await loadBillingContextInfrastructure();
+    } catch (error) {
+      reportSaveError(error);
+    }
+  }
+  scheduleRender("billing.pi");
 }
 
 async function handleQuantitySheetSubmit(event) {
@@ -6825,7 +7420,7 @@ function handleQuantitySheetSelect(event) {
   state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
   state.billingPrincipalType = principalTypeForPi(state.billingPi);
   state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
-  render();
+  scheduleRender("quantity_sheet.select");
 }
 
 function newQuantitySheetDraft() {
@@ -7008,11 +7603,14 @@ async function saveIntakeBatch(batch) {
   mergeServerAuditLogs(payload);
   const savedBatch = normalizeIncomingBatchDraft(payload.item || normalizedBatch);
   state.selectedIntakeBatchId = savedBatch.id;
-  try {
-    await loadPersistedState();
-  } catch (refreshError) {
-    console.error(refreshError);
-    upsertById(state.intakeBatches, savedBatch);
+  upsertById(state.intakeBatches, savedBatch);
+  if (Array.isArray(payload.placementTasks)) replacePlacementTasksForBatch(savedBatch.id, payload.placementTasks);
+  if (paginationState.intakeBatches.total >= 0) {
+    const delta = !exists && intakeBatchMatchesFilter(savedBatch, state.intakeBatchFilter) ? 1 : 0;
+    paginationState.intakeBatches.total = Math.max(Number(paginationState.intakeBatches.total || 0) + delta, state.intakeBatches.length);
+  }
+  if (state.selectedRoomId) {
+    paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
   }
   return state.intakeBatches.find((item) => item.id === savedBatch.id) || savedBatch;
 }
@@ -7088,8 +7686,15 @@ async function deleteIntakeBatch(batchId) {
     return;
   }
   await deleteEntityRequest("intakeBatches", batchId);
+  const deleted = state.intakeBatches.find((item) => item.id === batchId);
   state.intakeBatches = state.intakeBatches.filter((item) => item.id !== batchId);
+  state.placementTasks = state.placementTasks.filter((item) => item.sourceBatchId !== batchId);
   state.selectedIntakeBatchIds = state.selectedIntakeBatchIds.filter((id) => id !== batchId);
+  const delta = deleted && intakeBatchMatchesFilter(deleted, state.intakeBatchFilter) ? 1 : 0;
+  paginationState.intakeBatches.total = Math.max(Number(paginationState.intakeBatches.total || state.intakeBatches.length + delta) - delta, 0);
+  if (state.selectedRoomId) {
+    paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
+  }
   if (state.selectedIntakeBatchId === batchId) {
     state.selectedIntakeBatchId = "";
     state.intakeBatchDraft = makeIncomingBatchDraft();
@@ -7136,9 +7741,10 @@ async function confirmIntakeBatchDirect(batchId) {
 }
 
 async function confirmSelectedIntakeBatches() {
-  const batches = state.intakeBatches.filter((item) => state.selectedIntakeBatchIds.includes(item.id) && item.status === "printed");
+  const pageBatchIds = new Set(pagedIntakeBatches().map((item) => item.id));
+  const batches = state.intakeBatches.filter((item) => pageBatchIds.has(item.id) && state.selectedIntakeBatchIds.includes(item.id) && item.status === "printed");
   if (!batches.length) {
-    showFlashNotice("没有可接收批次", "当前勾选项里没有已打印批次。", "warning");
+    showFlashNotice("没有可接收批次", "当前页勾选项里没有已打印批次。", "warning");
     return;
   }
   for (const batch of batches) {
@@ -9545,14 +10151,16 @@ function stateIndexes() {
   if (STATE_INDEX_CACHE) return STATE_INDEX_CACHE;
   const roomById = new Map(state.rooms.map((room) => [room.id, room]));
   const rackById = new Map(state.racks.map((rack) => [rack.id, rack]));
-  const slotById = new Map(state.slots.map((slot) => [slot.id, slot]));
+  const indexedSlots = [...state.slots, ...billingInfrastructureState.slots.filter((slot) => !state.slots.some((item) => item.id === slot.id))];
+  const indexedOccupancies = [...state.occupancies, ...billingInfrastructureState.occupancies.filter((item) => !state.occupancies.some((current) => current.id === item.id))];
+  const slotById = new Map(indexedSlots.map((slot) => [slot.id, slot]));
   const racksByRoomId = new Map();
   state.racks.forEach((rack) => {
     if (!racksByRoomId.has(rack.roomId)) racksByRoomId.set(rack.roomId, []);
     racksByRoomId.get(rack.roomId).push(rack);
   });
   const slotsByRackId = new Map();
-  state.slots.forEach((slot) => {
+  indexedSlots.forEach((slot) => {
     if (!slotsByRackId.has(slot.rackId)) slotsByRackId.set(slot.rackId, []);
     slotsByRackId.get(slot.rackId).push(slot);
   });
@@ -9560,7 +10168,7 @@ function stateIndexes() {
   const occupanciesByPi = new Map();
   const occupanciesByIacuc = new Map();
   const billableOccupancies = [];
-  state.occupancies.forEach((item) => {
+  indexedOccupancies.forEach((item) => {
     if ((item.status === "active" || item.status === "reserved") && item.slotId) {
       currentOccupancyBySlotId.set(item.slotId, item);
     }
@@ -9907,11 +10515,11 @@ function showFlashNotice(title, message, type = "success") {
     title,
     message,
   };
-  render();
+  scheduleRender("flash.show");
   flashNoticeTimer = window.setTimeout(() => {
     state.flashNotice = null;
     flashNoticeTimer = null;
-    render();
+    scheduleRender("flash.hide");
   }, type === "success" ? 3200 : 4200);
 }
 
@@ -9924,12 +10532,12 @@ function openConfirmDialog(config) {
     confirmLabel: config.confirmLabel || "确认",
     payload: config.payload || {},
   };
-  render();
+  scheduleRender("confirm.open");
 }
 
 function closeConfirmDialog() {
   state.confirmDialog = null;
-  render();
+  scheduleRender("confirm.close");
 }
 
 async function handleConfirmDialogAction() {
@@ -10084,6 +10692,10 @@ function decorateRequiredFields() {
   });
 }
 
+window.addEventListener("beforeunload", () => {
+  persistStateNow();
+});
+
 initialize();
 
 async function initialize() {
@@ -10117,10 +10729,10 @@ async function applyStatementDeepLink() {
   if (!statementId || !remotePersistence || !currentUser) return;
 
   try {
-    const response = await fetch("/api/billing-statements", { cache: "no-store" });
+    const response = await fetch(buildBillingStatementUrl(statementId), { cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
-    const statement = (payload.items || []).find((item) => item.id === statementId);
+    const statement = payload.item || null;
     if (!statement) return;
     state.billingSource = statement.sourceType === "quantity_sheet" ? "quantity_sheet" : "cage_map";
     state.billingMonth = statement.month || state.billingMonth;

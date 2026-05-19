@@ -2,7 +2,6 @@
 
 ## Pending
 
-- Continue shrinking infrastructure payloads: bootstrap now returns summaries, cage view loads per-room details, billing still upgrades to full infrastructure on demand.
-- Add short-lived in-process caches for read-heavy data such as IACUC index, principal identities, and bootstrap room/rack/slot snapshots, then invalidate them explicitly after writes.
-- Narrow quantity-sheet transfer synchronization to only the affected target sheets instead of scanning every sheet in the month on each save.
-- Continue replacing full-list refreshes after writes with targeted reloads or optimistic local updates in the frontend, especially around quantity sheets and workflow detail views.
+- Continue shrinking billing data loads: quantity-sheet and workflow lists are paged, billing now queries occupancies by month and scope, and the next step is field-level trimming for large statement payloads.
+- Continue replacing full-list refreshes after writes with targeted reloads or optimistic local updates in the frontend, especially around workflow status changes, quantity-sheet-related derived previews, and any remaining admin tables.
+- Reduce full-app DOM rebuild frequency further by splitting heavyweight views into localized rerender zones once the current scheduled-render path is stable.

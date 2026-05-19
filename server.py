@@ -204,11 +204,30 @@ def invalidate_data_cache(*keys):
             DATA_CACHE.pop(key, None)
 
 
+def invalidate_data_cache_prefixes(*prefixes):
+    if not prefixes:
+        return
+    with DATA_CACHE_LOCK:
+        for key in list(DATA_CACHE.keys()):
+            if any(key.startswith(prefix) for prefix in prefixes):
+                DATA_CACHE.pop(key, None)
+
+
 def log_perf(label, started_at, **fields):
     elapsed_ms = round((time.perf_counter() - started_at) * 1000, 1)
     details = " ".join(f"{key}={value}" for key, value in fields.items() if value not in (None, ""))
     suffix = f" {details}" if details else ""
     print(f"[perf] {label} {elapsed_ms}ms{suffix}", flush=True)
+
+
+def cache_key(prefix, **fields):
+    normalized = []
+    for key in sorted(fields):
+        value = fields[key]
+        if isinstance(value, (list, tuple, set)):
+            value = ",".join(str(item) for item in value)
+        normalized.append(f"{key}={value}")
+    return f"{prefix}::" + "|".join(normalized)
 
 
 def initialize_schema(conn):
@@ -1203,23 +1222,31 @@ def summarize_infrastructure(state):
 def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
     started_at = time.perf_counter()
     state = filter_state_for_actor(read_cached_state(conn), actor)
+    actor_scope = actor_cache_scope(actor)
+    if scope == "summary":
+        key = cache_key("bootstrap_summary", actor=actor_scope)
+        cached = cache_get(key)
+        if cached is not None:
+            log_perf("bootstrap", started_at, scope=scope, cached=1, rooms=len(cached.get("rooms", [])))
+            return cached
     summary = summarize_infrastructure(state)
     payload = {
         "rooms": state.get("rooms", []),
         "racks": state.get("racks", []),
-        "billingRules": state.get("billingRules", []),
-        "adjustments": state.get("adjustments", []),
-        "intakeBatches": state.get("intakeBatches", []),
-        "placementTasks": state.get("placementTasks", []),
         **summary,
     }
     if scope == "full":
+        payload["billingRules"] = state.get("billingRules", [])
+        payload["adjustments"] = state.get("adjustments", [])
+        payload["intakeBatches"] = state.get("intakeBatches", [])
+        payload["placementTasks"] = state.get("placementTasks", [])
         payload["slots"] = state.get("slots", [])
         payload["occupancies"] = state.get("occupancies", [])
         log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]), slots=len(payload["slots"]))
         return payload
     if scope == "room":
         room_id = clean_text(room_id)
+        payload["placementTasks"] = [item for item in state.get("placementTasks", []) if item.get("targetRoomId") == room_id]
         rack_ids = {rack.get("id") for rack in state.get("racks", []) if rack.get("roomId") == room_id}
         payload["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") in rack_ids]
         slot_ids = {slot.get("id") for slot in payload["slots"]}
@@ -1228,8 +1255,127 @@ def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
         return payload
     payload["slots"] = []
     payload["occupancies"] = []
+    cached_payload = cache_set(key, payload) if scope == "summary" else payload
     log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]))
+    return cached_payload
+
+
+def actor_cache_scope(actor):
+    if not actor:
+        return "anonymous"
+    role = actor.get("role", "")
+    rooms = ",".join(sorted(clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)))
+    return f"{role}:{rooms}"
+
+
+def month_range(month):
+    normalized = clean_text(month)
+    if not re.fullmatch(r"\d{4}-\d{2}", normalized):
+        raise ValueError("结算月份格式应为 YYYY-MM")
+    year, month_no = normalized.split("-")
+    start = f"{year}-{month_no}-01"
+    last_day = calendar.monthrange(int(year), int(month_no))[1]
+    end = f"{year}-{month_no}-{last_day:02d}"
+    return start, end
+
+
+def occupancy_overlaps_month(item, month):
+    start, end = month_range(month)
+    start_date = clean_text(item.get("startDate") or item.get("start_date"))
+    end_date = clean_text(item.get("endDate") or item.get("end_date"))
+    if not start_date:
+        return False
+    if start_date > end:
+        return False
+    if end_date and end_date < start:
+        return False
+    return True
+
+
+def read_billing_occupancies(conn, actor, filters):
+    started_at = time.perf_counter()
+    state = filter_state_for_actor(read_cached_state(conn), actor)
+    month = clean_text(filters.get("month", ""))
+    iacuc = clean_text(filters.get("iacuc", ""))
+    pi = clean_text(filters.get("pi", ""))
+    if not month:
+        raise ValueError("请提供结算月份")
+    key = cache_key(
+        "billing_occupancies",
+        actor=actor_cache_scope(actor),
+        month=month,
+        iacuc=iacuc,
+        pi=pi,
+    )
+    cached = cache_get(key)
+    if cached is not None:
+        log_perf("billing_occupancies", started_at, cached=1, month=month, occupancies=len(cached.get("occupancies", [])))
+        return cached
+
+    slots = state.get("slots", [])
+    occupancies = []
+    matched_slot_ids = set()
+    normalized_iacuc = normalize_iacuc_number(iacuc)
+    normalized_pi = clean_text(pi)
+    for item in state.get("occupancies", []):
+        if item.get("status") not in ("active", "ended"):
+            continue
+        if not occupancy_overlaps_month(item, month):
+            continue
+        if normalized_iacuc and normalize_iacuc_number(item.get("iacuc")) != normalized_iacuc:
+            continue
+        if normalized_pi and clean_text(item.get("pi")) != normalized_pi:
+            continue
+        occupancies.append(item)
+        if item.get("slotId"):
+            matched_slot_ids.add(item["slotId"])
+    payload = {
+        "month": month,
+        "pi": pi,
+        "iacuc": iacuc,
+        "slots": [slot for slot in slots if slot.get("id") in matched_slot_ids],
+        "occupancies": occupancies,
+    }
+    cache_set(key, payload)
+    log_perf("billing_occupancies", started_at, month=month, occupancies=len(occupancies), slots=len(payload["slots"]))
     return payload
+
+
+def read_occupancies_for_billing(conn, month, iacuc="", pi=""):
+    start, end = month_range(month)
+    clauses = [
+        "status IN ('active', 'ended')",
+        "start_date <> ''",
+        "start_date <= ?",
+        "(end_date IS NULL OR end_date = '' OR end_date >= ?)",
+    ]
+    params = [end, start]
+    normalized_iacuc = normalize_iacuc_number(iacuc)
+    normalized_pi = clean_text(pi)
+    if normalized_iacuc:
+        clauses.append("iacuc = ?")
+        params.append(normalized_iacuc)
+    if normalized_pi:
+        clauses.append("pi = ?")
+        params.append(normalized_pi)
+
+    rows = conn.execute(
+        f"SELECT payload FROM occupancies WHERE {' AND '.join(clauses)} ORDER BY start_date, rowid",
+        tuple(params),
+    ).fetchall()
+    items = [json.loads(row["payload"]) for row in rows]
+    slot_ids = {item.get("slotId") for item in items if item.get("slotId")}
+    slots = read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid") if slot_ids else []
+    slots = [slot for slot in slots if slot.get("id") in slot_ids]
+    rack_ids = {slot.get("rackId") for slot in slots if slot.get("rackId")}
+    racks = read_payloads(conn, "racks", "room_id, index_no, rowid") if rack_ids else []
+    racks = [rack for rack in racks if rack.get("id") in rack_ids]
+    room_ids = {rack.get("roomId") for rack in racks if rack.get("roomId")}
+    rooms = read_payloads(conn, "rooms", "rowid") if room_ids else []
+    rooms = [room for room in rooms if room.get("id") in room_ids]
+    applications_by_iacuc = read_applications_by_iacuc(conn)
+    state = {"rooms": rooms, "racks": racks, "slots": slots}
+    return [occupancy_with_snapshots(item, state, applications_by_iacuc) for item in items]
 
 
 def filter_state_for_actor(state, actor):
@@ -1289,6 +1435,7 @@ def write_state(state, actor, skip_permission=False):
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state", "principal_identities")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "quantity_sheets::", "billing_workflows::")
     return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
 
 
@@ -1314,7 +1461,10 @@ def write_entity_state(endpoint, method, item_id, payload, actor):
         sync_slot_statuses(state)
 
     result = write_state(state, actor)
-    return {"item": item, "updatedAt": result["updatedAt"], "auditLogs": result["auditLogs"]}, status
+    response = {"item": item, "updatedAt": result["updatedAt"], "auditLogs": result["auditLogs"]}
+    if collection == "intakeBatches" and method != "DELETE":
+        response["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")]
+    return response, status
 
 
 def write_infrastructure_state(payload, actor):
@@ -1372,6 +1522,7 @@ def write_infrastructure_state(payload, actor):
         conn.commit()
 
     invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
     return {
         "rooms": created_rooms,
         "roomUpdates": updated_rooms,
@@ -2099,6 +2250,25 @@ def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200
     }
 
 
+def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, where_sql="", params=()):
+    key = cache_key(
+        cache_prefix,
+        limit=filters["limit"],
+        offset=filters["offset"],
+        status=clean_text(filters.get("status", "")),
+        month=clean_text(filters.get("month", "")),
+        iacuc=clean_text(filters.get("iacuc", "")),
+        pi=clean_text(filters.get("pi", "")),
+        room_id=clean_text(filters.get("roomId", "")),
+        room_name=clean_text(filters.get("roomName", "")),
+        source_type=clean_text(filters.get("sourceType", "")),
+    )
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    return cache_set(key, paginated_payloads(conn, table, order_by, where_sql, params, filters["limit"], filters["offset"]))
+
+
 def read_applications_by_iacuc(conn):
     rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
     applications = {}
@@ -2721,6 +2891,7 @@ def write_experiment_applications(conn, items, imported_at):
             ),
         )
     invalidate_data_cache("iacuc_index", "principal_identities")
+    invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
 
 
 def list_principal_identities(conn):
@@ -2802,6 +2973,7 @@ def save_principal_identity(conn, payload, actor, pi_name):
     )
     write_audit_events(conn, [event])
     invalidate_data_cache("principal_identities")
+    invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
     return item, merge_audit_logs([], [event])
 
 
@@ -3158,7 +3330,7 @@ def list_quantity_sheets_page(conn, filters):
         ],
         filters,
     )
-    return paginated_payloads(conn, "quantity_sheets", "month DESC, iacuc, updated_at DESC", where, params, filters["limit"], filters["offset"])
+    return cached_paginated_payloads(conn, "quantity_sheets", "quantity_sheets", "month DESC, iacuc, updated_at DESC", filters, where, params)
 
 
 def get_quantity_sheet(conn, sheet_id):
@@ -3166,6 +3338,13 @@ def get_quantity_sheet(conn, sheet_id):
     if not row:
         raise LookupError("数量统计表不存在")
     return json.loads(row["payload"])
+
+
+def get_current_billing_statement(conn, statement_id):
+    for statement in list_current_billing_statements(conn):
+        if clean_text(statement.get("id", "")) == clean_text(statement_id):
+            return statement
+    return None
 
 
 def save_quantity_sheet(conn, payload, actor, sheet_id=None):
@@ -3300,17 +3479,22 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
             )
 
     target_iacucs = sorted({transfer["targetIacuc"] for transfer in transfer_rows if transfer["targetIacuc"]})
+    source_row_ids = sorted({transfer["sourceRowId"] for transfer in transfer_rows if transfer.get("sourceRowId")})
     where_parts = ["month = ?", "id != ?"]
     params = [month, source_sheet_id]
-    mirror_probe = f"%{source_sheet_id}%"
+    mirror_clauses = []
+    if source_row_ids:
+        mirror_clauses = ["payload LIKE ?" for _ in source_row_ids]
+    else:
+        mirror_clauses = ["payload LIKE ?"]
     if target_iacucs:
         placeholders = ", ".join("?" for _ in target_iacucs)
-        where_parts.append(f"(iacuc IN ({placeholders}) OR payload LIKE ?)")
+        where_parts.append(f"(iacuc IN ({placeholders}) OR {' OR '.join(mirror_clauses)})")
         params.extend(target_iacucs)
-        params.append(mirror_probe)
+        params.extend([f"%{source_sheet_id}:{row_id}:%" for row_id in source_row_ids] or [f"%{source_sheet_id}%"])
     else:
-        where_parts.append("payload LIKE ?")
-        params.append(mirror_probe)
+        where_parts.append(f"({' OR '.join(mirror_clauses)})")
+        params.extend([f"%{source_sheet_id}:{row_id}:%" for row_id in source_row_ids] or [f"%{source_sheet_id}%"])
     sheet_rows = conn.execute(
         f"SELECT id, payload FROM quantity_sheets WHERE {' AND '.join(where_parts)}",
         params,
@@ -3827,16 +4011,13 @@ def generate_billing_statement(conn, payload, actor):
     if not iacuc:
         raise ValueError("请先选择伦理号后再生成结算单")
 
+    occupancies = read_occupancies_for_billing(conn, month, iacuc=iacuc)
     applications_by_iacuc = read_applications_by_iacuc(conn)
     state = {
         "rooms": read_payloads(conn, "rooms", "rowid"),
         "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
         "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
     }
-    occupancies = [
-        occupancy_with_snapshots(item, state, applications_by_iacuc)
-        for item in read_payloads(conn, "occupancies", "start_date, rowid")
-    ]
     dates = dates_in_month(month)
     generated_at = now_iso()
     cumulative = 0
@@ -3990,15 +4171,12 @@ def generate_billing_statement_by_pi(conn, payload, actor):
 
     if source_type == "cage_map":
         applications_by_iacuc = read_applications_by_iacuc(conn)
+        occupancies = read_occupancies_for_billing(conn, month, pi=pi_name)
         state = {
             "rooms": read_payloads(conn, "rooms", "rowid"),
             "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
             "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
         }
-        occupancies = [
-            occupancy_with_snapshots(item, state, applications_by_iacuc)
-            for item in read_payloads(conn, "occupancies", "start_date, rowid")
-        ]
         iacucs = sorted(
             {
                 normalize_iacuc_number(item.get("iacuc", ""))
@@ -4701,16 +4879,43 @@ def list_billing_workflows(conn):
 
 
 def list_billing_workflows_page(conn, filters):
-    where, params = filtered_where(
-        [
-            ("month", "month = ?"),
-            ("status", "workflow_status = ?"),
-            ("sourceType", "source_type = ?"),
-            ("iacuc", "iacuc = ?"),
-        ],
-        filters,
-    )
-    return paginated_payloads(conn, "billing_workflows", "month DESC, rowid DESC", where, params, filters["limit"], filters["offset"])
+    clauses = []
+    params = []
+    if clean_text(filters.get("month", "")):
+        clauses.append("month = ?")
+        params.append(filters["month"])
+    status = clean_text(filters.get("status", ""))
+    if status == "todo":
+        clauses.append("workflow_status <> ?")
+        params.append(WORKFLOW_STATUS_FINANCE)
+    elif status == "done":
+        clauses.append("workflow_status = ?")
+        params.append(WORKFLOW_STATUS_FINANCE)
+    elif status:
+        clauses.append("workflow_status = ?")
+        params.append(status)
+    if clean_text(filters.get("sourceType", "")):
+        clauses.append("source_type = ?")
+        params.append(filters["sourceType"])
+    if clean_text(filters.get("iacuc", "")):
+        clauses.append("iacuc = ?")
+        params.append(filters["iacuc"])
+    where = " AND ".join(clauses)
+    return cached_paginated_payloads(conn, "billing_workflows", "billing_workflows", "month DESC, rowid DESC", filters, where, tuple(params))
+
+
+def list_billing_workflow_lines(conn, workflow_id, version_id=""):
+    workflow = get_billing_workflow(conn, workflow_id)
+    if not workflow:
+        raise LookupError("结算流程不存在")
+    selected_version_id = clean_text(version_id) or clean_text(workflow.get("currentVersionId", ""))
+    if not selected_version_id:
+        return {"workflowId": workflow_id, "versionId": "", "lines": []}
+    return {
+        "workflowId": workflow_id,
+        "versionId": selected_version_id,
+        "lines": list_billing_statement_lines_for_version(conn, selected_version_id),
+    }
 
 
 def delete_billing_workflow(conn, workflow_id):
@@ -5313,12 +5518,41 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             self.send_json({"items": read_principal_identities()})
             return
+        if path == "/api/infrastructure/occupancies":
+            user = self.require_user()
+            if not user:
+                return
+            query = parse_qs(urlparse(self.path).query)
+            filters = {
+                "month": clean_text(query.get("month", [""])[0]),
+                "iacuc": clean_text(query.get("iacuc", [""])[0]),
+                "pi": clean_text(query.get("pi", [""])[0]),
+            }
+            try:
+                with connect_db() as conn:
+                    self.send_json(read_billing_occupancies(conn, user, filters))
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if path == "/api/billing-workflows":
             user = self.require_user()
             if not user:
                 return
             with connect_db() as conn:
                 self.send_json(list_billing_workflows_page(conn, self.list_filters()))
+            return
+        workflow_id = self.billing_workflow_lines_route(path)
+        if workflow_id:
+            user = self.require_user()
+            if not user:
+                return
+            query = parse_qs(urlparse(self.path).query)
+            version_id = clean_text(query.get("versionId", [""])[0])
+            try:
+                with connect_db() as conn:
+                    self.send_json(list_billing_workflow_lines(conn, workflow_id, version_id))
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             return
         workflow_id = self.billing_workflow_route(path)
         if workflow_id:
@@ -5335,7 +5569,6 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                         "workflow": workflow,
                         "versions": list_billing_workflow_versions(conn, workflow_id),
                         "events": list_billing_workflow_events(conn, workflow_id),
-                        "lines": list_billing_statement_lines_for_version(conn, workflow.get("currentVersionId", "")),
                     }
                 )
             return
@@ -5345,6 +5578,18 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             with connect_db() as conn:
                 self.send_json({"items": list_current_billing_statements(conn)})
+            return
+        statement_id = self.billing_statement_route(path)
+        if statement_id:
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                statement = get_current_billing_statement(conn, statement_id)
+                if not statement:
+                    self.send_json({"error": "结算单不存在"}, HTTPStatus.NOT_FOUND)
+                    return
+                self.send_json({"item": statement})
             return
         if path in ENTITY_ENDPOINTS:
             user = self.require_user()
@@ -5717,6 +5962,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
+            invalidate_data_cache_prefixes("billing_workflows::")
             self.send_json({"workflow": workflow, "event": event, "auditLogs": merge_audit_logs([], [audit])})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -5747,6 +5993,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
+            invalidate_data_cache_prefixes("billing_workflows::")
             self.send_json({"ok": True, "workflow": workflow, "auditLogs": merge_audit_logs([], [audit])})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -5819,6 +6066,27 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 payload = paginated_payloads(conn, "intake_batches", ENTITY_ORDER_BY.get(table, "rowid"), where, params, filters["limit"], filters["offset"])
                 items = payload["items"]
                 page = payload["page"]
+            elif table == "placement_tasks":
+                filters = self.list_filters()
+                where_parts = []
+                params = []
+                status = clean_text(filters.get("status", ""))
+                if status == "open":
+                    where_parts.append("status NOT IN ('active', 'cancelled')")
+                elif status:
+                    where_parts.append("status = ?")
+                    params.append(status)
+                room_id = clean_text(filters.get("roomId", ""))
+                if room_id:
+                    where_parts.append("target_room_id = ?")
+                    params.append(room_id)
+                where = " AND ".join(where_parts)
+                if filters.get("month"):
+                    where = " AND ".join([part for part in (where, "planned_move_in_date LIKE ?") if part])
+                    params = (*params, f"{filters['month']}%")
+                payload = paginated_payloads(conn, "placement_tasks", ENTITY_ORDER_BY.get(table, "rowid"), where, params, filters["limit"], filters["offset"])
+                items = payload["items"]
+                page = payload["page"]
             else:
                 rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {ENTITY_ORDER_BY.get(table, 'rowid')}").fetchall()
                 items = [json.loads(row["payload"]) for row in rows]
@@ -5864,6 +6132,15 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return None
         return sheet_id
 
+    def billing_statement_route(self, path):
+        prefix = "/api/billing-statements/"
+        if not path.startswith(prefix):
+            return None
+        statement_id = unquote(path[len(prefix) :])
+        if "/" in statement_id or not statement_id:
+            return None
+        return statement_id
+
     def principal_identity_route(self, path):
         prefix = "/api/principal-identities/"
         if not path.startswith(prefix):
@@ -5878,6 +6155,16 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if not path.startswith(prefix):
             return None
         workflow_id = unquote(path[len(prefix) :])
+        if "/" in workflow_id or not workflow_id:
+            return None
+        return workflow_id
+
+    def billing_workflow_lines_route(self, path):
+        prefix = "/api/billing-workflows/"
+        suffix = "/lines"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        workflow_id = unquote(path[len(prefix) : -len(suffix)])
         if "/" in workflow_id or not workflow_id:
             return None
         return workflow_id
@@ -5956,6 +6243,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 sheet, affected_sheets, audit_logs, status = save_quantity_sheet(conn, body, user, sheet_id)
                 conn.commit()
             invalidate_data_cache("principal_identities")
+            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
             self.send_json({"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs}, status)
         except sqlite3.IntegrityError:
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
@@ -5989,6 +6277,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 audit_logs = delete_quantity_sheet(conn, user, sheet_id)
                 conn.commit()
             invalidate_data_cache("principal_identities")
+            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
             self.send_json({"ok": True, "auditLogs": audit_logs})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
