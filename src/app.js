@@ -32,6 +32,15 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.2c",
+    title: "系统设置抽屉与列表控件细节修正",
+    items: [
+      "系统设置二级抽屉新增独立遮罩层，页面问号图标与提示气泡会退到抽屉下方，避免与抽屉卡片叠层穿插",
+      "系统设置抽屉支持点击遮罩直接收起，保持桌面端与移动端一致的关闭路径",
+      "待接收批次和待进驻动物列表中的勾选框收紧为表格尺寸，修复 checkbox 继承通用输入框高度后过大的问题",
+    ],
+  },
+  {
     version: "0.5.2b",
     title: "核算界面与系统百科入口整理",
     items: [
@@ -598,7 +607,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.2b",
+  version: "0.5.2c",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -2815,23 +2824,26 @@ function renderSettingsDrawer(settingsNavItems, expanded) {
   if (!expanded) return "";
   const activeItem = settingsNavItems.find(([view]) => view === state.activeView) || settingsNavItems.find(([view]) => view === state.lastSettingsView) || settingsNavItems[0];
   return `
-    <div class="settings-drawer ${isCompactViewport() ? "settings-drawer-mobile" : "settings-drawer-desktop"}">
-      <div class="settings-drawer-head">
-        <strong>系统设置</strong>
-        <span>当前页面：${escapeText(activeItem?.[1] || "房间管理")}</span>
-      </div>
-      <div class="settings-drawer-grid">
-        ${settingsNavItems
-          .map(
-            ([view, label, icon]) => `
-              <button class="settings-drawer-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
-                ${iconSvg(icon)}
-                <span>${label}</span>
-                <small>${escapeText(pageMeta(view).description)}</small>
-              </button>
-            `,
-          )
-          .join("")}
+    <div class="settings-drawer-layer" id="settingsDrawerLayer">
+      <button class="settings-drawer-backdrop" id="settingsDrawerBackdrop" type="button" aria-label="关闭系统设置抽屉"></button>
+      <div class="settings-drawer ${isCompactViewport() ? "settings-drawer-mobile" : "settings-drawer-desktop"}">
+        <div class="settings-drawer-head">
+          <strong>系统设置</strong>
+          <span>当前页面：${escapeText(activeItem?.[1] || "房间管理")}</span>
+        </div>
+        <div class="settings-drawer-grid">
+          ${settingsNavItems
+            .map(
+              ([view, label, icon]) => `
+                <button class="settings-drawer-item ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(pageMeta(view).description)}" aria-label="${escapeAttr(label)}">
+                  ${iconSvg(icon)}
+                  <span>${label}</span>
+                  <small>${escapeText(pageMeta(view).description)}</small>
+                </button>
+              `,
+            )
+            .join("")}
+        </div>
       </div>
     </div>
   `;
@@ -2914,7 +2926,7 @@ function renderHelpHint(helpKey) {
   const text = HELP_TEXTS[helpKey];
   if (!text) return "";
   return `
-    <span class="help-hint" aria-label="${escapeAttr(text)}">
+    <span class="help-hint" aria-label="${escapeAttr(text)}" tabindex="0">
       <span class="help-hint-icon">?</span>
       <span class="help-hint-bubble" role="tooltip">${escapeText(text)}</span>
     </span>
@@ -2934,6 +2946,44 @@ function renderPanelHead({ title, subtitle = "", helpKey = "", actions = "", com
       ${actions || ""}
     </div>
   `;
+}
+
+function renderWorkspaceHeader({ kicker = "", title = "", helpKey = "", summary = "", status = "", metrics = [], actions = "" } = {}) {
+  return `
+    <section class="workspace-head">
+      <div class="workspace-head-main">
+        ${kicker ? `<span class="workspace-kicker">${escapeText(kicker)}</span>` : ""}
+        <div class="workspace-title-line">
+          <h1>${escapeText(title || "")}</h1>
+          ${renderHelpHint(helpKey)}
+          ${status ? `<span class="workspace-status-badge">${escapeText(status)}</span>` : ""}
+        </div>
+        ${summary ? `<p class="workspace-summary">${escapeText(summary)}</p>` : ""}
+        ${
+          metrics.length
+            ? `<div class="workspace-meta-strip">${metrics.map((item) => renderWorkspaceMeta(item.label, item.value, item.tone)).join("")}</div>`
+            : ""
+        }
+      </div>
+      ${actions ? `<div class="workspace-head-actions">${actions}</div>` : ""}
+    </section>
+  `;
+}
+
+function renderWorkspaceMeta(label, value, tone = "neutral") {
+  return `
+    <div class="workspace-meta-card ${escapeAttr(tone)}">
+      <span>${escapeText(label)}</span>
+      <strong>${escapeText(String(value ?? "-"))}</strong>
+    </div>
+  `;
+}
+
+function formatMonthDisplay(value) {
+  if (!value) return "-";
+  const [year, month] = String(value).split("-");
+  if (!year || !month) return value;
+  return `${year}年${month}月`;
 }
 
 function renderSidebarAccount() {
@@ -2979,6 +3029,35 @@ function renderVersionMeta(className) {
       <small>${escapeText(systemInfo.copyright || "")}</small>
     </div>
   `;
+}
+
+function updateHelpHintPosition(hint) {
+  if (!hint) return;
+  const bubble = hint.querySelector(".help-hint-bubble");
+  if (!bubble) return;
+  const workspaceRect = document.querySelector(".workspace")?.getBoundingClientRect();
+  const hintRect = hint.getBoundingClientRect();
+  const bubbleWidth = bubble.offsetWidth || Math.min(360, Math.max(240, bubble.scrollWidth || 320));
+  const viewportPadding = 16;
+  const leftLimit = Math.max((workspaceRect?.left || 0) + 12, viewportPadding);
+  const rightLimit = Math.min((workspaceRect?.right || window.innerWidth) - 12, window.innerWidth - viewportPadding);
+  const hintCenter = hintRect.left + hintRect.width / 2;
+  const defaultLeft = hintRect.left;
+  let shift = 0;
+  if (defaultLeft < leftLimit) shift = leftLimit - defaultLeft;
+  const overflowRight = defaultLeft + bubbleWidth + shift - rightLimit;
+  if (overflowRight > 0) shift -= overflowRight;
+  const arrowLeft = Math.max(18, Math.min(bubbleWidth - 18, hintCenter - (defaultLeft + shift)));
+  hint.style.setProperty("--help-bubble-shift", `${shift}px`);
+  hint.style.setProperty("--help-arrow-left", `${arrowLeft}px`);
+}
+
+function bindHelpHints() {
+  document.querySelectorAll(".help-hint").forEach((hint) => {
+    const sync = () => updateHelpHintPosition(hint);
+    hint.addEventListener("mouseenter", sync);
+    hint.addEventListener("focus", sync);
+  });
 }
 
 function metric(label, value, tone) {
@@ -3239,22 +3318,19 @@ function renderDashboardView() {
   const periodOverduePct = percent(counts.periodOverdue, periodTotal);
 
   return `
-    <section class="dashboard-view">
-      <div class="dashboard-hero">
-        <div class="dashboard-title-block">
-          <span class="dashboard-kicker">CageLedger · CL</span>
-          <div class="hero-title-line">
-            <h1>实验动物笼位管理与计费系统</h1>
-            ${renderHelpHint("dashboard")}
-          </div>
-        </div>
-        <div class="dashboard-hero-stat">
-          <span>总笼位</span>
-          <strong>${counts.total}</strong>
-          <small>${state.rooms.length} 个饲养间 · ${state.racks.length} 个笼架</small>
-        </div>
-      </div>
-
+    <section class="workspace-view dashboard-view">
+      ${renderWorkspaceHeader({
+        kicker: "运营工作台",
+        title: "实验动物笼位管理与计费系统",
+        helpKey: "dashboard",
+        summary: "围绕接收、入驻、结算和流程推进组织日常工作，首屏直接显示本周待办、异常项和两设施口径。",
+        status: systemInfo.version ? `当前版本 v${systemInfo.version}` : "当前版本未设置",
+        metrics: [
+          { label: "总笼位", value: counts.total },
+          { label: "本周待办", value: overview.intakePendingCount + overview.openPlacementTaskCount + overview.currentMonthWorkflowTodoCount, tone: "todo" },
+          { label: "异常项", value: overview.exceptionCount, tone: overview.exceptionCount ? "warning" : "success" },
+        ],
+      })}
       <div class="dashboard-metrics">
         ${metric("总笼位", counts.total, "neutral")}
         ${metric("在用", counts.active, "active")}
@@ -3272,21 +3348,14 @@ function renderDashboardView() {
         ${dashboardOverviewCard("异常项", overview.exceptionCount, `房间未匹配 ${overview.unmatchedIntakeCount} · 待进驻超期 ${overview.overduePlacementCount} · 流程待推进 ${overview.stalledWorkflowCount}`, "workflow-all")}
       </div>
 
-      <section class="panel dashboard-quick-panel">
-        ${renderPanelHead({ title: "运营总览", helpKey: "dashboardOverview", compact: true })}
-        <div class="dashboard-facility-grid">
-          ${facilities.map(renderDashboardFacilityCard).join("")}
-        </div>
-        <div class="dashboard-shortcuts">
-          <button class="secondary" type="button" data-dashboard-action="intake">${iconSvg("receipt")}进入笼卡管理</button>
-          <button class="secondary" type="button" data-dashboard-action="cages">${iconSvg("grid")}进入笼位管理</button>
-          <button class="secondary" type="button" data-dashboard-action="billing">${iconSvg("calculator")}进入饲养费管理</button>
-          <button class="secondary" type="button" data-dashboard-action="workflow-todo">${iconSvg("book")}进入流程中心待办</button>
-        </div>
-      </section>
-
-      <div class="dashboard-grid">
-        <section class="panel">
+      <div class="dashboard-main-grid">
+        <section class="panel dashboard-quick-panel">
+          ${renderPanelHead({ title: "两设施运营摘要", helpKey: "dashboardOverview", compact: true })}
+          <div class="dashboard-facility-grid">
+            ${facilities.map(renderDashboardFacilityCard).join("")}
+          </div>
+        </section>
+        <section class="panel dashboard-status-panel">
           ${renderPanelHead({ title: "笼位状态分布", helpKey: "dashboardStatus", compact: true })}
           <div class="status-chart">
             <div
@@ -3307,14 +3376,13 @@ function renderDashboardView() {
             </div>
           </div>
         </section>
-
-        <section class="panel">
-          ${renderPanelHead({ title: "饲养间使用情况", helpKey: "dashboardRooms", compact: true })}
-          <div class="room-capacity-list">
-            ${roomCapacityRows().map(renderRoomCapacityRow).join("")}
-          </div>
-        </section>
       </div>
+      <section class="panel dashboard-room-panel">
+        ${renderPanelHead({ title: "饲养间使用情况", helpKey: "dashboardRooms", compact: true })}
+        <div class="room-capacity-list">
+          ${roomCapacityRows().map(renderRoomCapacityRow).join("")}
+        </div>
+      </section>
     </section>
   `;
 }
@@ -4692,20 +4760,33 @@ function renderBillingView() {
   const cageMapActive = state.billingSource === "cage_map";
   const quantitySheetActive = state.billingSource === "quantity_sheet";
   return `
-    <section class="panel billing-guide-panel">
-      ${renderPanelHead({ title: "核算入口", helpKey: "billingGuide", compact: true })}
-      <div class="billing-guide-grid" role="tablist" aria-label="饲养费核算方式">
-        <button class="billing-guide-card ${cageMapActive ? "active" : ""}" type="button" data-billing-source="cage_map" aria-selected="${cageMapActive}">
-          <strong>动态笼位图（自动）</strong>
-          <span>按笼位真实占用时间线核算。</span>
-        </button>
-        <button class="billing-guide-card ${quantitySheetActive ? "active" : ""}" type="button" data-billing-source="quantity_sheet" aria-selected="${quantitySheetActive}">
-          <strong>数量统计表（录入）</strong>
-          <span>按月度台账录入数据核算。</span>
-        </button>
-      </div>
+    <section class="workspace-view billing-workspace">
+      ${renderWorkspaceHeader({
+        kicker: "财务核算工作台",
+        title: "饲养费管理",
+        helpKey: "billingGuide",
+        summary: "统一管理动态笼位图和数量统计表两条结算入口，保持口径说明、导出单据和流程发起一致。",
+        status: cageMapActive ? "当前来源：动态笼位图" : "当前来源：数量统计表",
+        metrics: [
+          { label: "结算月份", value: formatMonthDisplay(state.billingMonth) },
+          { label: "核算入口", value: cageMapActive ? "自动" : "录入", tone: cageMapActive ? "todo" : "success" },
+        ],
+      })}
+      <section class="panel billing-guide-panel">
+        ${renderPanelHead({ title: "核算入口", helpKey: "billingGuide", compact: true })}
+        <div class="billing-guide-grid" role="tablist" aria-label="饲养费核算方式">
+          <button class="billing-guide-card ${cageMapActive ? "active" : ""}" type="button" data-billing-source="cage_map" aria-selected="${cageMapActive}">
+            <strong>动态笼位图（自动）</strong>
+            <span>按笼位真实占用时间线核算。</span>
+          </button>
+          <button class="billing-guide-card ${quantitySheetActive ? "active" : ""}" type="button" data-billing-source="quantity_sheet" aria-selected="${quantitySheetActive}">
+            <strong>数量统计表（录入）</strong>
+            <span>按月度台账录入数据核算。</span>
+          </button>
+        </div>
+      </section>
+      ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
     </section>
-    ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
   `;
 }
 
@@ -4750,8 +4831,23 @@ function renderWorkflowCenterView() {
       </section>
     `;
   }
+  const allItems = stateIndexes().billingWorkflowsSorted || [];
+  const doneCount = allItems.filter((item) => item.workflowStatus === "submitted_to_finance").length;
+  const todoCount = allItems.filter((item) => workflowIsTodo(item)).length;
   return `
-    <section class="workflow-center-view">
+    <section class="workspace-view workflow-center-view">
+      ${renderWorkspaceHeader({
+        kicker: "流程推进工作台",
+        title: "结算流程中心",
+        helpKey: "workflow",
+        summary: "按项目负责人汇总跟踪结算单生成、发送、签回和交财务进度，流程状态与导出单据保持同步。",
+        status: state.billingWorkflowFilter === "done" ? "当前筛选：已完成" : state.billingWorkflowFilter === "all" ? "当前筛选：全部" : "当前筛选：待办",
+        metrics: [
+          { label: "流程总数", value: allItems.length },
+          { label: "待办", value: todoCount, tone: todoCount ? "warning" : "success" },
+          { label: "已完成", value: doneCount, tone: "success" },
+        ],
+      })}
       ${renderBillingWorkflowPanel()}
       ${state.selectedBillingWorkflowDetail ? renderBillingWorkflowDetailModal() : ""}
     </section>
@@ -5590,19 +5686,34 @@ function renderDataManagementView() {
 }
 
 function renderSystemManagementView() {
+  const latestVersion = systemUpdateInfo?.latestVersion ? `v${systemUpdateInfo.latestVersion}` : "未检查";
   return `
-    <section class="system-layout">
-      <div class="panel large">
-        ${renderPanelHead({ title: "关于系统", helpKey: "system" })}
-        ${renderSystemUpdateCard()}
-        ${renderReleaseNotes()}
-      </div>
-      <div class="system-side">
-        <div class="panel">
-          ${renderSystemWikiHomeCard()}
+    <section class="workspace-view system-workspace">
+      ${renderWorkspaceHeader({
+        kicker: "系统与文档工作台",
+        title: "关于系统",
+        helpKey: "system",
+        summary: "集中查看版本、更新、系统百科和反馈入口，保持发布信息、正式文档和反馈通道一致。",
+        status: systemInfo.version ? `当前版本 v${systemInfo.version}` : "当前版本未设置",
+        metrics: [
+          { label: "最新发布版", value: latestVersion },
+          { label: "正式文档", value: "系统百科" },
+          { label: "反馈入口", value: "问卷 + Gitea", tone: "todo" },
+        ],
+      })}
+      <div class="system-layout">
+        <div class="panel large">
+          ${renderPanelHead({ title: "系统状态与更新", helpKey: "system" })}
+          ${renderSystemUpdateCard()}
+          ${renderReleaseNotes()}
         </div>
-        <div class="panel">
-          ${renderFeedbackDemandCard()}
+        <div class="system-side">
+          <div class="panel">
+            ${renderSystemWikiHomeCard()}
+          </div>
+          <div class="panel">
+            ${renderFeedbackDemandCard()}
+          </div>
         </div>
       </div>
     </section>
@@ -6030,6 +6141,7 @@ function renderRackEditForm(room, rack) {
 
 function bindEvents() {
   decorateRequiredFields();
+  bindHelpHints();
   document.querySelector("#logoutButton")?.addEventListener("click", logout);
   document.querySelector("#sidebarToggle")?.addEventListener("click", () => {
     state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -6043,6 +6155,10 @@ function bindEvents() {
     } else {
       state.settingsNavExpanded = !state.settingsNavExpanded;
     }
+    render();
+  });
+  document.querySelector("#settingsDrawerBackdrop")?.addEventListener("click", () => {
+    state.settingsNavExpanded = false;
     render();
   });
   document.querySelectorAll("[data-view]").forEach((button) => {
