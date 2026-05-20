@@ -32,6 +32,24 @@ const ENTITY_API_URLS = {
 };
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.2b",
+    title: "核算界面与系统百科入口整理",
+    items: [
+      "重排动态笼位图和数量统计表结算入口，统一月份、课题组与 IACUC 的横向控件布局，并收紧操作区避免溢出工作区",
+      "移除数量统计表结算顶部脱节的分页提示，补齐系统百科与反馈需求入口，并更新问卷反馈链接",
+      "演示数据中的项目负责人统一调整为柯琼（演示），保持页面展示与演示脚本一致",
+    ],
+  },
+  {
+    version: "0.5.2a",
+    title: "全系统 UI 与提示体系优化",
+    items: [
+      "全系统标题区新增悬停帮助提示，将普通说明文案收纳到标题旁问号中",
+      "统一面板、工具栏、按钮、表格和分页密度，保持青绿色主色并提升页面扫描效率",
+      "待进驻动物提示改为右下角淡黄色气泡，默认收起，点击气泡后展开列表",
+    ],
+  },
+  {
     version: "0.5.2",
     title: "首页总览与演示数据完善",
     items: [
@@ -508,7 +526,10 @@ const SYSTEM_RELEASE_NOTES = [
     items: ["SQLite 拆表存储", "系统管理员和房间管理员账号", "IACUC CSV 上传、审计日志和系统更新检查"],
   },
 ];
-const SYSTEM_WIKI_URL = "https://git.cellnucle.us/hugo/cageledger/wiki";
+const SYSTEM_REPO_URL = "https://git.cellnucle.us/hugo/cageledger";
+const SYSTEM_WIKI_URL = `${SYSTEM_REPO_URL}/wiki`;
+const SYSTEM_ISSUES_URL = "https://v.wjx.cn/vm/Y1pspgE.aspx#";
+const SYSTEM_PROJECTS_URL = `${SYSTEM_REPO_URL}/projects`;
 const SYSTEM_WIKI_GROUPS = [
   {
     title: "使用者",
@@ -523,6 +544,45 @@ const SYSTEM_WIKI_GROUPS = [
     pages: ["项目结构", "API与数据模型", "发布与CI-CD", "开发规范"],
   },
 ];
+const HELP_TEXTS = {
+  dashboard: "以笼位占用时间线作为计费依据，集中管理笼位状态、IACUC 项目归属和饲养费核算。",
+  dashboardOverview: "围绕接收、入驻、结算和流程推进给出本周汇报入口。",
+  dashboardStatus: "同时展示笼位状态和饲养周期分类，便于快速识别超期风险。",
+  dashboardRooms: "按饲养间展示状态与饲养周期分类，便于比较容量与超期分布。",
+  intake: "粘贴课题组预约接收消息，系统解析批次、项目和装笼建议，并保存为待打印批次。",
+  intakeList: "流程：未打印 -> 已打印 -> 已接收。已接收批次会同步进入目标房间的待进驻任务。",
+  intakePreview: "按实际打印模板预览第一张笼卡；完整张数仍以打印张数为准。",
+  intakeEdit: "修改后只更新这条记录，预约消息识别区保持当前输入。",
+  cages: "按饲养间和笼架查看笼位状态。点击笼位可查看或编辑占用信息。",
+  placementTasks: "确认接收批次后，目标房间会出现待进驻动物；勾选批次后可在笼位图中选择空笼位。",
+  placementRoomChange: "把尚未入驻的待进驻任务变更到其他饲养间，已预留或已入驻任务会保留当前状态。",
+  slotDetail: "编辑当前笼位的状态、IACUC、负责人、日期和计费相关信息。",
+  batchConflict: "批量编辑需要选择相同 IACUC 的笼位，避免覆盖不同项目归属。",
+  batchEdit: "把已选择笼位写入同一项目信息，适合多笼同批次录入。",
+  billingGuide: "动态笼位图适合日常完整维护的房间；数量统计表适合纸质台账和人工月度核对。",
+  cageMapBilling: "按每天实际在养数量计算，已预约默认不计费，适合完整维护中的房间。",
+  quantityBilling: "录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。",
+  quantityPreview: "预览按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。",
+  workflow: "按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号。",
+  workflowSummary: "当前有效版本对应的汇总信息。",
+  workflowVersions: "发送后修订会生成新版本，并保留旧版本留痕。",
+  workflowEvents: "记录生成、发送、签回、交财务和修订等关键动作。",
+  workflowLines: "当前有效版本对应的每日结算内容。",
+  rooms: "饲养间下可维护多个笼架，每个笼架可设置独立行列数。",
+  roomActions: "默认展示预览，点击按钮后弹出对应编辑窗口。",
+  roomForm: "维护饲养间基础信息、所属设施、默认动物和默认计费配置。",
+  rackForm: "给已创建饲养间添加一个独立规格的笼架。",
+  users: "维护系统管理员和房间管理员账号。房间管理员按授权饲养间工作。",
+  userCreate: "为房间管理员创建独立账号，并配置可编辑的饲养间范围。",
+  data: "维护系统外部数据源、IACUC 索引和负责人身份规则。",
+  principalIdentity: "默认按独立科研人员计算 10 笼/天免费；需要减免 20 笼/天的负责人改为 PI。",
+  iacucUpload: "上传 CSV 汇总表后，用于自动回填项目名称、项目负责人和实验负责人。",
+  system: "查看系统状态、版本更新、更新记录和系统 Wiki。",
+  releaseNotes: "记录当前系统主要版本变化。",
+  wiki: "统一查看用户手册、部署说明、API 与开发维护文档。",
+  feedbackDemand: "集中查看反馈入口、需求收集渠道和项目推进位置，后续远端协同同步状态也会显示在这里。",
+  logs: "记录账号、动作、笼位和时间，便于追溯。",
+};
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let IACUC_SEARCH_CACHE = null;
@@ -538,7 +598,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.2",
+  version: "0.5.2b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1092,7 +1152,7 @@ const seedData = {
   selectedPlacementTaskId: "",
   selectedPlacementTaskIds: [],
   placementAssignmentMode: false,
-  showPlacementTaskPanel: true,
+  showPlacementTaskPanel: false,
   reassigningPlacementReceiptId: "",
   intakeBatchFilter: "unprinted",
   intakeBatchDraft: makeIncomingBatchDraft(),
@@ -1577,7 +1637,7 @@ function localUiOnlyState(source = {}) {
     selectedQuantitySheetId: source.selectedQuantitySheetId || "",
     selectedIntakeBatchId: source.selectedIntakeBatchId || "",
     selectedIntakeBatchIds: Array.isArray(source.selectedIntakeBatchIds) ? source.selectedIntakeBatchIds.slice(0, 200) : [],
-    showPlacementTaskPanel: Boolean(source.showPlacementTaskPanel ?? true),
+    showPlacementTaskPanel: Boolean(source.showPlacementTaskPanel ?? false),
     intakeBatchFilter: source.intakeBatchFilter || "unprinted",
     principalIdentityFilter: source.principalIdentityFilter || "",
   };
@@ -2850,6 +2910,32 @@ function pageMeta(view) {
   };
 }
 
+function renderHelpHint(helpKey) {
+  const text = HELP_TEXTS[helpKey];
+  if (!text) return "";
+  return `
+    <span class="help-hint" aria-label="${escapeAttr(text)}">
+      <span class="help-hint-icon">?</span>
+      <span class="help-hint-bubble" role="tooltip">${escapeText(text)}</span>
+    </span>
+  `;
+}
+
+function renderPanelHead({ title, subtitle = "", helpKey = "", actions = "", compact = false } = {}) {
+  return `
+    <div class="panel-head ${compact ? "compact" : ""}">
+      <div class="panel-title-block">
+        <div class="panel-title-line">
+          <h2>${escapeText(title || "")}</h2>
+          ${renderHelpHint(helpKey)}
+        </div>
+        ${subtitle ? `<p>${escapeText(subtitle)}</p>` : ""}
+      </div>
+      ${actions || ""}
+    </div>
+  `;
+}
+
 function renderSidebarAccount() {
   if (!currentUser) {
     return `
@@ -3155,10 +3241,12 @@ function renderDashboardView() {
   return `
     <section class="dashboard-view">
       <div class="dashboard-hero">
-        <div>
+        <div class="dashboard-title-block">
           <span class="dashboard-kicker">CageLedger · CL</span>
-          <h1>实验动物笼位管理与计费系统</h1>
-          <p>以笼位占用时间线作为计费依据，集中管理笼位状态、IACUC 项目归属和饲养费核算。</p>
+          <div class="hero-title-line">
+            <h1>实验动物笼位管理与计费系统</h1>
+            ${renderHelpHint("dashboard")}
+          </div>
         </div>
         <div class="dashboard-hero-stat">
           <span>总笼位</span>
@@ -3185,12 +3273,7 @@ function renderDashboardView() {
       </div>
 
       <section class="panel dashboard-quick-panel">
-        <div class="panel-head compact">
-          <div>
-            <h2>运营总览</h2>
-            <p>围绕接收、入驻、结算和流程推进给出本周汇报入口。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "运营总览", helpKey: "dashboardOverview", compact: true })}
         <div class="dashboard-facility-grid">
           ${facilities.map(renderDashboardFacilityCard).join("")}
         </div>
@@ -3204,12 +3287,7 @@ function renderDashboardView() {
 
       <div class="dashboard-grid">
         <section class="panel">
-          <div class="panel-head compact">
-            <div>
-              <h2>笼位状态分布</h2>
-              <p>同时展示笼位状态和饲养周期分类，便于快速识别超期风险。</p>
-            </div>
-          </div>
+          ${renderPanelHead({ title: "笼位状态分布", helpKey: "dashboardStatus", compact: true })}
           <div class="status-chart">
             <div
               class="donut-chart"
@@ -3231,12 +3309,7 @@ function renderDashboardView() {
         </section>
 
         <section class="panel">
-          <div class="panel-head compact">
-            <div>
-              <h2>饲养间使用情况</h2>
-              <p>按饲养间展示状态与饲养周期分类，便于比较容量与超期分布。</p>
-            </div>
-          </div>
+          ${renderPanelHead({ title: "饲养间使用情况", helpKey: "dashboardRooms", compact: true })}
           <div class="room-capacity-list">
             ${roomCapacityRows().map(renderRoomCapacityRow).join("")}
           </div>
@@ -3460,11 +3533,11 @@ function renderCageView() {
     <section class="cage-layout">
       <div class="panel large cage-preview">
         ${floatingPlacement}
-        <div class="panel-head">
-          <div>
-            <h2>动态笼位图</h2>
-            <p>${selectedRoom.name} · ${rackDisplayName(selectedRack, selectedRoom)}</p>
-          </div>
+        ${renderPanelHead({
+          title: "动态笼位图",
+          subtitle: `${selectedRoom.name} · ${rackDisplayName(selectedRack, selectedRoom)}`,
+          helpKey: "cages",
+          actions: `
           <div class="toolbar">
             <select id="roomSelect">
               ${visibleRooms().map((room) => `<option value="${room.id}" ${room.id === selectedRoom.id ? "selected" : ""}>${room.name}</option>`).join("")}
@@ -3473,7 +3546,8 @@ function renderCageView() {
               ${racks.map((rack) => `<option value="${rack.id}" ${rack.id === selectedRack.id ? "selected" : ""}>${escapeText(rackDisplayName(rack, selectedRoom))}</option>`).join("")}
             </select>
           </div>
-        </div>
+          `,
+        })}
         <div class="legend">
           ${legend("empty", "空")}
           ${legend("reserved", "已预约")}
@@ -3533,15 +3607,21 @@ function renderPlacementTaskFloating(tasks, room) {
   if (!tasks.length) return "";
   const totalTasks = tasks.length;
   const totalGroups = placementTaskGroups(tasks).length;
-  if (!state.showPlacementTaskPanel) {
-    return `
-      <button class="placement-task-fab" type="button" data-toggle-placement-task-panel="open">
+  const trigger = !state.showPlacementTaskPanel
+    ? `
+      <button class="placement-task-chat-trigger" type="button" data-toggle-placement-task-panel="open">
         <strong>待进驻动物</strong>
         <span>${totalGroups} 批 · ${totalTasks} 笼</span>
       </button>
-    `;
-  }
-  return renderPlacementTaskPanel(tasks, room, { floating: true, totalTasks, totalGroups });
+    `
+    : "";
+  const bubble = state.showPlacementTaskPanel ? renderPlacementTaskPanel(tasks, room, { floating: true, totalTasks, totalGroups }) : "";
+  return `
+    <div class="placement-task-floating-stack">
+      ${bubble}
+      ${trigger}
+    </div>
+  `;
 }
 
 function renderPlacementTaskPanel(tasks, room, options = {}) {
@@ -3552,17 +3632,19 @@ function renderPlacementTaskPanel(tasks, room, options = {}) {
   const selectedCount = state.selectedPlacementTaskIds.filter((id) => groups.some((group) => group.some((task) => task.id === id))).length;
   return `
     <div class="placement-task-panel panel ${floating ? "placement-task-floating-card" : ""}">
-      <div class="panel-head compact">
-        <div>
-          <h2>待进驻动物</h2>
-          <p>${escapeText(room.name)} · ${remotePersistence ? placementPage.total || tasks.length : tasks.length} 个待处理任务</p>
-        </div>
+      ${renderPanelHead({
+        title: "待进驻动物",
+        subtitle: `${room.name} · ${remotePersistence ? placementPage.total || tasks.length : tasks.length} 个待处理任务`,
+        helpKey: "placementTasks",
+        compact: true,
+        actions: `
         <div class="toolbar placement-task-toolbar">
           ${selectedCount ? `<span class="muted">当前页已选择 ${selectedCount} 笼，请在下方笼位图选择空笼位。</span>` : ""}
           ${selectedCount ? `<button class="secondary" type="button" id="clearSelectedPlacementTasks">清空勾选</button>` : ""}
           ${floating ? `<button class="secondary" type="button" data-toggle-placement-task-panel="close">${iconSvg("chevronRight")}收起</button>` : ""}
         </div>
-      </div>
+        `,
+      })}
       ${
         groups.length
           ? `
@@ -3659,12 +3741,12 @@ function renderPlacementRoomChangeModal() {
       <div class="editor-modal-actions">
         <button class="secondary" type="button" id="closePlacementRoomChangeButton">${iconSvg("chevronRight")}关闭</button>
       </div>
-      <div class="panel-head compact">
-        <div>
-          <h2>变更饲养间</h2>
-          <p>${escapeText(first.batchNo || "未命名批次")} · 剩余 ${tasks.length} 笼待进驻</p>
-        </div>
-      </div>
+      ${renderPanelHead({
+        title: "变更饲养间",
+        subtitle: `${first.batchNo || "未命名批次"} · 剩余 ${tasks.length} 笼待进驻`,
+        helpKey: "placementRoomChange",
+        compact: true,
+      })}
       <form id="placementRoomChangeForm" class="form">
         <label class="field-required">
           目标饲养间
@@ -3808,13 +3890,13 @@ function renderSlotDetail(slot) {
   const pendingTasks = selectedRoom ? visiblePlacementTasksForRoom(selectedRoom.id).filter((task) => task.status === "pending") : [];
 
   return `
-    <div class="panel-head compact">
-      <div>
-        <h2>笼位 ${slotPositionCode(slot)}</h2>
-        <p>${statusLabel(slot.status)}</p>
-      </div>
-      <span class="pill ${slot.status}">${statusLabel(slot.status)}</span>
-    </div>
+    ${renderPanelHead({
+      title: `笼位 ${slotPositionCode(slot)}`,
+      subtitle: statusLabel(slot.status),
+      helpKey: "slotDetail",
+      compact: true,
+      actions: `<span class="pill ${slot.status}">${statusLabel(slot.status)}</span>`,
+    })}
 
     <form id="slotForm" class="form compact-slot-form">
       <input type="hidden" name="slotId" value="${slot.id}" />
@@ -3961,13 +4043,13 @@ function renderBatchSlotDetail(slots) {
   const activeCount = selectedActiveOccupancies(slots).length;
   if (batchState.hasConflict) {
     return `
-      <div class="panel-head compact">
-        <div>
-          <h2>批量编辑冲突</h2>
-          <p>已选择 ${slots.length} 个笼位，但包含多个不同 IACUC 编号。</p>
-        </div>
-        <span class="pill ended">需重新选择</span>
-      </div>
+      ${renderPanelHead({
+        title: "批量编辑冲突",
+        subtitle: `已选择 ${slots.length} 个笼位，但包含多个不同 IACUC 编号。`,
+        helpKey: "batchConflict",
+        compact: true,
+        actions: `<span class="pill ended">需重新选择</span>`,
+      })}
 
       <div class="selected-list">
         ${slots.map((slot) => `<span>${slotPositionCode(slot)}</span>`).join("")}
@@ -3994,13 +4076,13 @@ function renderBatchSlotDetail(slots) {
   const draft = batchState.draft;
 
   return `
-    <div class="panel-head compact">
-      <div>
-        <h2>批量录入</h2>
-        <p>${draft.iacuc ? `已自动带入 ${escapeText(draft.iacuc)} 的项目信息。` : `已选择 ${slots.length} 个笼位，保存后写入相同项目信息。`}</p>
-      </div>
-      <span class="pill active">${slots.length} 个笼位</span>
-    </div>
+    ${renderPanelHead({
+      title: "批量录入",
+      subtitle: draft.iacuc ? `已自动带入 ${draft.iacuc} 的项目信息。` : `已选择 ${slots.length} 个笼位，保存后写入相同项目信息。`,
+      helpKey: "batchEdit",
+      compact: true,
+      actions: `<span class="pill active">${slots.length} 个笼位</span>`,
+    })}
 
     <div class="selected-list">
       ${slots.map((slot) => `<span>${slotPositionCode(slot)}</span>`).join("")}
@@ -4236,12 +4318,7 @@ function renderIntakeBatchView() {
     <section class="billing-layout quantity-billing-layout intake-layout">
       <div class="panel large">
         <form id="intakeBatchForm">
-          <div class="panel-head">
-            <div>
-              <h2>接收笼卡</h2>
-              <p>粘贴课题组预约接收消息，系统解析批次、项目和装笼建议，并保存为待打印批次。</p>
-            </div>
-          </div>
+          ${renderPanelHead({ title: "接收笼卡", helpKey: "intake" })}
 
           <div class="intake-entry-layout">
             <div class="intake-message-field">
@@ -4353,11 +4430,11 @@ function renderIntakeBatchView() {
         </form>
 
         <div class="panel intake-batch-list-panel">
-          <div class="panel-head compact">
-            <div>
-              <h2>待接收批次列表</h2>
-              <p>流程：未打印 → 已打印 → 已接收。已接收批次会同步进入目标房间的待进驻任务。</p>
-            </div>
+          ${renderPanelHead({
+            title: "待接收批次列表",
+            helpKey: "intakeList",
+            compact: true,
+            actions: `
             <div class="toolbar intake-batch-toolbar">
               <div class="filter-row intake-filter-row" role="group" aria-label="待接收批次筛选">
                 ${INTAKE_BATCH_FILTER_OPTIONS.map(([value, label]) => intakeBatchFilterButton(value, label)).join("")}
@@ -4371,7 +4448,8 @@ function renderIntakeBatchView() {
                   : ""
               }
             </div>
-          </div>
+            `,
+          })}
           <div class="table-wrap">
             <table class="workflow-table intake-batch-table">
               <thead><tr><th></th><th>状态</th><th>批次号</th><th>购买单位</th><th>项目负责人</th><th>实验负责人</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
@@ -4419,12 +4497,7 @@ function renderIntakeCardPreviewModal(batch) {
       <div class="editor-modal-actions">
         <button class="secondary" type="button" id="closeIntakeCardPreviewButton">${iconSvg("chevronRight")}关闭预览</button>
       </div>
-      <div class="panel-head compact">
-        <div>
-          <h2>预览当前笼卡</h2>
-          <p>按实际打印模板预览第一张笼卡；完整张数仍以打印张数为准。</p>
-        </div>
-      </div>
+      ${renderPanelHead({ title: "预览当前笼卡", helpKey: "intakePreview", compact: true })}
       ${renderIntakeCardVisualPreview(normalized)}
     </div>
   `;
@@ -4487,13 +4560,13 @@ function renderIntakeBatchEditorModal() {
       <div class="editor-modal-actions">
         <button class="secondary" type="button" id="closeIntakeBatchEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
       </div>
-      <div class="panel-head compact">
-        <div>
-          <h2>编辑待接收批次</h2>
-          <p>${escapeText(draft.batchNo || "未命名批次")} · 修改后只更新这条记录，不影响上方预约消息识别。</p>
-        </div>
-        <span class="pill ${draft.status === "printed" ? "active" : "reserved"}">${escapeText(intakeStatusLabel(draft.status))}</span>
-      </div>
+      ${renderPanelHead({
+        title: "编辑待接收批次",
+        subtitle: `${draft.batchNo || "未命名批次"} · ${intakeStatusLabel(draft.status)}`,
+        helpKey: "intakeEdit",
+        compact: true,
+        actions: `<span class="pill ${draft.status === "printed" ? "active" : "reserved"}">${escapeText(intakeStatusLabel(draft.status))}</span>`,
+      })}
       <form id="intakeBatchEditForm" class="form intake-edit-form">
         <input type="hidden" name="id" value="${escapeAttr(draft.id)}" />
         <input type="hidden" name="rawMessage" value="${escapeAttr(draft.rawMessage)}" />
@@ -4616,21 +4689,20 @@ function formatShortDate(value) {
 }
 
 function renderBillingView() {
+  const cageMapActive = state.billingSource === "cage_map";
+  const quantitySheetActive = state.billingSource === "quantity_sheet";
   return `
-    <section class="billing-source-tabs" role="tablist" aria-label="饲养费核算方式">
-      <button class="segmented ${state.billingSource === "cage_map" ? "active" : ""}" type="button" data-billing-source="cage_map">动态笼位图（自动）</button>
-      <button class="segmented ${state.billingSource === "quantity_sheet" ? "active" : ""}" type="button" data-billing-source="quantity_sheet">数量统计表（录入）</button>
-    </section>
     <section class="panel billing-guide-panel">
-      <div class="billing-guide-grid">
-        <div>
-          <strong>动态笼位图</strong>
-          <p>按真实占用时间线计算，适合日常维护完整的房间。</p>
-        </div>
-        <div>
-          <strong>数量统计表</strong>
-          <p>按纸质台账录入变更行，适合人工月度核对和过渡期补录。</p>
-        </div>
+      ${renderPanelHead({ title: "核算入口", helpKey: "billingGuide", compact: true })}
+      <div class="billing-guide-grid" role="tablist" aria-label="饲养费核算方式">
+        <button class="billing-guide-card ${cageMapActive ? "active" : ""}" type="button" data-billing-source="cage_map" aria-selected="${cageMapActive}">
+          <strong>动态笼位图（自动）</strong>
+          <span>按笼位真实占用时间线核算。</span>
+        </button>
+        <button class="billing-guide-card ${quantitySheetActive ? "active" : ""}" type="button" data-billing-source="quantity_sheet" aria-selected="${quantitySheetActive}">
+          <strong>数量统计表（录入）</strong>
+          <span>按月度台账录入数据核算。</span>
+        </button>
       </div>
     </section>
     ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
@@ -4694,27 +4766,32 @@ function renderCageMapBillingView() {
   return `
     <section class="billing-layout quantity-billing-layout">
       <div class="panel large">
-        <div class="panel-head">
-          <div>
-            <h2>动态笼位图结算</h2>
-            <p>按每天实际在养数量计算，已预约默认不计费，适合完整维护中的房间。</p>
-          </div>
+        ${renderPanelHead({
+          title: "动态笼位图结算",
+          helpKey: "cageMapBilling",
+          actions: `
           <div class="billing-sheet-actions">
-            <div class="billing-filter-grid">
-              <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
-              <input id="billingPi" type="text" value="${escapeAttr(state.billingPi)}" list="billingPiOptions" placeholder="请输入或选择项目负责人" />
-            </div>
-            <div class="billing-action-stack">
+            <div class="billing-control-matrix">
+              <label>
+                月份
+                <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
+              </label>
               <div class="billing-action-grid">
                 <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
                 <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+                <span class="billing-action-spacer" aria-hidden="true"></span>
               </div>
-              <div class="billing-action-grid single">
+              <label>
+                课题组
+                <input id="billingPi" type="text" value="${escapeAttr(state.billingPi)}" list="billingPiOptions" placeholder="请输入或选择项目负责人" />
+              </label>
+              <div class="billing-action-grid">
                 <button id="generateBillingWorkflow" class="primary billing-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
               </div>
             </div>
           </div>
-        </div>
+          `,
+        })}
 
         <div class="billing-scope-banner">
           <span>来源：动态笼位图</span>
@@ -4780,29 +4857,25 @@ function renderQuantitySheetBillingView() {
     <section class="billing-layout quantity-billing-layout">
       <div class="panel large">
         <form id="quantitySheetForm">
-          <div class="panel-head">
-            <div>
-              <h2>数量统计表结算</h2>
-              <p>录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。</p>
-            </div>
+          ${renderPanelHead({
+            title: "数量统计表结算",
+            helpKey: "quantityBilling",
+            actions: `
             <div class="quantity-sheet-actions">
-              <select id="quantitySheetSelect" aria-label="选择数量统计表">
-                <option value="">${quantityLoading ? "正在加载统计表" : "请选择统计表或新建"}</option>
-                ${state.quantitySheets
-                  .map((sheet) => `<option value="${escapeAttr(sheet.id)}" ${sheet.id === draft.id ? "selected" : ""}>${escapeText(sheet.month)} · ${escapeText(sheet.iacuc)}</option>`)
-                  .join("")}
-              </select>
-              ${
-                remotePersistence
-                  ? `<span class="muted quantity-page-meta">当前页 ${currentPage(quantityPage)} / ${pageCount(quantityPage.total || state.quantitySheets.length, quantityPage.limit)}</span>`
-                  : ""
-              }
-              <div class="quantity-action-stack">
+              <div class="billing-control-matrix">
+                <label class="field-required">
+                  月份
+                  <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
+                </label>
                 <div class="quantity-action-grid">
                   <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
                   <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
                   <button id="deleteQuantitySheet" class="ghost danger-text" type="button" ${state.quantitySheets.some((sheet) => sheet.id === draft.id) ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
                 </div>
+                <label class="field-required">
+                  IACUC 编号
+                  ${renderIacucLookupInput("iacuc", draft.iacuc, { required: true })}
+                </label>
                 <div class="quantity-action-grid">
                   <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
                   <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
@@ -4810,16 +4883,11 @@ function renderQuantitySheetBillingView() {
                 </div>
               </div>
             </div>
-          </div>
+            `,
+          })}
           ${quantityLoading ? `<p class="muted">正在加载数量统计表，请稍候。</p>` : ""}
-          ${remotePersistence ? renderPager("quantitySheets", quantityPage, quantityPage.total || state.quantitySheets.length) : ""}
-
           <div class="quantity-sheet-fields">
             <div class="quantity-field-group quantity-field-group-basic">
-              <label class="field-required">
-                结算月份
-                <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
-              </label>
               <label>
                 房间号
                 <select name="roomId">
@@ -4835,10 +4903,6 @@ function renderQuantitySheetBillingView() {
               </label>
             </div>
             <div class="quantity-field-group quantity-field-group-project">
-              <label class="field-required">
-                IACUC 编号
-                ${renderIacucLookupInput("iacuc", draft.iacuc, { required: true })}
-              </label>
               <label class="wide field-auto">
                 项目名称
                 <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
@@ -4912,12 +4976,7 @@ function renderQuantitySheetBillingView() {
         </form>
 
         <div class="quantity-preview-section">
-          <div class="panel-head compact">
-            <div>
-              <h2>结算预览</h2>
-              <p>预览会按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。</p>
-            </div>
-          </div>
+          ${renderPanelHead({ title: "结算预览", helpKey: "quantityPreview", compact: true })}
           <div class="statement-summary compact-summary">
             ${summaryTile("项目负责人", statement.pi || draft.pi || "-")}
             ${summaryTile("伦理编号", statement.iacucs.length ? statement.iacucs.join("、") : "-")}
@@ -4946,17 +5005,17 @@ function renderBillingWorkflowPanel() {
   return `
     <section class="workflow-center-panel">
       <div class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>结算流程跟踪</h2>
-            <p>按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号，发送后重生成为修订版并自动保留旧版本留痕。</p>
-          </div>
+        ${renderPanelHead({
+          title: "结算流程跟踪",
+          helpKey: "workflow",
+          actions: `
           <div class="toolbar workflow-filter-toolbar">
             <button class="segmented ${state.billingWorkflowFilter === "todo" ? "active" : ""}" type="button" data-workflow-filter="todo">待办</button>
             <button class="segmented ${state.billingWorkflowFilter === "all" ? "active" : ""}" type="button" data-workflow-filter="all">全部</button>
             <button class="segmented ${state.billingWorkflowFilter === "done" ? "active" : ""}" type="button" data-workflow-filter="done">已完成</button>
           </div>
-        </div>
+          `,
+        })}
         <div class="table-wrap">
           <table class="workflow-table">
             <thead>
@@ -5093,12 +5152,7 @@ function renderBillingWorkflowDetailModal() {
           ? `
       <div class="workflow-detail-grid">
         <section class="panel workflow-detail-card">
-          <div class="panel-head compact">
-            <div>
-              <h2>结算单摘要</h2>
-              <p>当前有效版本对应的汇总信息。</p>
-            </div>
-          </div>
+          ${renderPanelHead({ title: "结算单摘要", helpKey: "workflowSummary", compact: true })}
           <div class="statement-summary">
             ${summaryTile("项目负责人", workflow.pi || "-")}
             ${summaryTile("结算月份", workflow.month || "-")}
@@ -5114,12 +5168,7 @@ function renderBillingWorkflowDetailModal() {
         </section>
 
         <section class="panel workflow-detail-card">
-          <div class="panel-head compact">
-            <div>
-              <h2>版本记录</h2>
-              <p>发送后修订会生成新版本并保留旧版本作废留痕。</p>
-            </div>
-          </div>
+          ${renderPanelHead({ title: "版本记录", helpKey: "workflowVersions", compact: true })}
           <div class="workflow-version-list">
             ${
               versions.length
@@ -5142,12 +5191,7 @@ function renderBillingWorkflowDetailModal() {
       </div>
 
       <section class="panel workflow-detail-card">
-        <div class="panel-head compact">
-          <div>
-            <h2>流程事件</h2>
-            <p>记录生成、发送、签回、交财务和修订等关键动作。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "流程事件", helpKey: "workflowEvents", compact: true })}
         <div class="workflow-event-list">
           ${
             events.length
@@ -5170,12 +5214,7 @@ function renderBillingWorkflowDetailModal() {
       </section>
 
       <section class="panel workflow-detail-card">
-        <div class="panel-head compact">
-          <div>
-            <h2>当前结算单明细</h2>
-            <p>当前有效版本对应的每日结算内容。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "当前结算单明细", helpKey: "workflowLines", compact: true })}
         <div class="table-wrap workflow-lines-wrap">
           <table>
             <thead>
@@ -5322,24 +5361,17 @@ function renderRoomManagementView() {
   return `
     <section class="content-grid">
       <div class="panel large">
-        <div class="panel-head">
-          <div>
-            <h2>饲养间与笼架</h2>
-            <p>饲养间下可维护多个笼架，每个笼架可设置独立行列数。</p>
-          </div>
-          ${canManageRooms ? `<button id="resetDemo" class="secondary">${iconSvg("refresh")}重置示例数据</button>` : ""}
-        </div>
+        ${renderPanelHead({
+          title: "饲养间与笼架",
+          helpKey: "rooms",
+          actions: canManageRooms ? `<button id="resetDemo" class="secondary">${iconSvg("refresh")}重置示例数据</button>` : "",
+        })}
         <div class="room-list">
           ${visibleRooms().map(renderRoomCard).join("") || `<p class="muted">当前账号没有授权饲养间。</p>`}
         </div>
       </div>
       <div class="panel">
-        <div class="panel-head compact">
-          <div>
-            <h2>编辑操作</h2>
-            <p>默认展示预览，点击按钮后弹出对应编辑窗口。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "编辑操作", helpKey: "roomActions", compact: true })}
         <div class="form-actions">
           ${canManageRooms ? `<button class="secondary" type="button" id="openRoomForm">${iconSvg("plus")}新增饲养间</button>` : ""}
           <button class="secondary" type="button" id="openRackForm" ${visibleRooms().length ? "" : "disabled"}>${iconSvg("plus")}新增笼架</button>
@@ -5358,12 +5390,7 @@ function renderRoomManagementView() {
               <div class="editor-modal-actions">
                 <button class="secondary" type="button" id="closeRackFormButton">${iconSvg("chevronRight")}关闭编辑</button>
               </div>
-              <div class="panel-head compact">
-                <div>
-                  <h2>新增笼架</h2>
-                  <p>给已创建饲养间添加一个独立规格的笼架。</p>
-                </div>
-              </div>
+              ${renderPanelHead({ title: "新增笼架", helpKey: "rackForm", compact: true })}
               <form id="rackForm" class="form">
                 <label class="field-required">
                   所属饲养间
@@ -5408,12 +5435,7 @@ function renderRoomForm(room) {
       <div class="editor-modal-actions">
         <button class="secondary" type="button" id="closeRoomFormButton">${iconSvg("chevronRight")}关闭编辑</button>
       </div>
-      <div class="panel-head compact">
-        <div>
-          <h2>${isEditing ? "编辑饲养间" : "新增饲养间"}</h2>
-          <p>${isEditing ? "修改饲养间基础信息和默认计费配置。" : "先建立饲养间，再按实际摆放新增笼架。"}</p>
-        </div>
-      </div>
+      ${renderPanelHead({ title: isEditing ? "编辑饲养间" : "新增饲养间", helpKey: "roomForm", compact: true })}
       <form id="roomForm" class="form">
         <input type="hidden" name="roomId" value="${escapeAttr(room?.id || "")}" />
         <label class="field-required">
@@ -5472,23 +5494,13 @@ function renderUserManagementView() {
   return `
     <section class="content-grid">
       <div class="panel large">
-        <div class="panel-head">
-          <div>
-            <h2>账号管理</h2>
-            <p>查看系统管理员和房间管理员账号。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "账号管理", helpKey: "users" })}
         <div class="user-list">
           ${users.map(renderUserRow).join("") || `<p class="muted">暂无账号。</p>`}
         </div>
       </div>
       <div class="panel">
-        <div class="panel-head compact">
-          <div>
-            <h2>创建账号</h2>
-            <p>为各饲养间管理员创建独立账号。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "创建账号", helpKey: "userCreate", compact: true })}
         <form id="userForm" class="form">
           <label class="field-required">
             用户名
@@ -5566,12 +5578,7 @@ function renderDataManagementView() {
   return `
     <section class="content-grid">
       <div class="panel large">
-        <div class="panel-head">
-          <div>
-            <h2>数据管理</h2>
-            <p>维护系统外部数据源和后续导入导出任务。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "数据管理", helpKey: "data" })}
         ${renderIacucStatusCard()}
         ${renderPrincipalIdentityPanel()}
       </div>
@@ -5586,18 +5593,16 @@ function renderSystemManagementView() {
   return `
     <section class="system-layout">
       <div class="panel large">
-        <div class="panel-head">
-          <div>
-            <h2>关于系统</h2>
-            <p>查看系统状态、版本更新和系统 Wiki。</p>
-          </div>
-        </div>
+        ${renderPanelHead({ title: "关于系统", helpKey: "system" })}
         ${renderSystemUpdateCard()}
         ${renderReleaseNotes()}
       </div>
       <div class="system-side">
         <div class="panel">
           ${renderSystemWikiHomeCard()}
+        </div>
+        <div class="panel">
+          ${renderFeedbackDemandCard()}
         </div>
       </div>
     </section>
@@ -5621,12 +5626,7 @@ function renderPrincipalIdentityPanel() {
   const items = filteredPrincipalIdentityRows(allItems);
   return `
     <div class="system-section">
-      <div class="panel-head compact">
-        <div>
-          <h2>项目负责人身份</h2>
-          <p>默认按独立科研人员计算 10 笼/天免费；需要减免 20 笼/天的负责人改为 PI。</p>
-        </div>
-      </div>
+      ${renderPanelHead({ title: "项目负责人身份", helpKey: "principalIdentity", compact: true })}
       <div class="toolbar">
         <input id="principalIdentityFilter" type="search" value="${escapeAttr(state.principalIdentityFilter)}" placeholder="检索姓名、PI、独立科研人员、10 或 20" />
         <button id="applyPrincipalIdentityFilter" class="secondary" type="button">${iconSvg("search")}检索</button>
@@ -5708,12 +5708,7 @@ function renderReleaseNotes() {
   const items = SYSTEM_RELEASE_NOTES.slice(start, start + page.limit);
   return `
     <div class="system-section">
-      <div class="panel-head compact">
-        <div>
-          <h2>更新记录</h2>
-          <p>记录当前系统主要版本变化。</p>
-        </div>
-      </div>
+      ${renderPanelHead({ title: "更新记录", helpKey: "releaseNotes", compact: true })}
       <div class="release-list">
         ${items.map(renderReleaseNote).join("")}
       </div>
@@ -5744,12 +5739,7 @@ function renderReleaseItem(item) {
 
 function renderSystemWikiHomeCard() {
   return `
-    <div class="panel-head compact">
-      <div>
-        <h2>系统 Wiki</h2>
-        <p>统一查看用户手册、部署说明、API 与开发维护文档。</p>
-      </div>
-    </div>
+    ${renderPanelHead({ title: "系统百科", helpKey: "wiki", compact: true })}
     <div class="wiki-home-card">
       <div class="wiki-home-hero">
         ${iconSvg("book")}
@@ -5762,9 +5752,26 @@ function renderSystemWikiHomeCard() {
         ${SYSTEM_WIKI_GROUPS.map(renderSystemWikiGroup).join("")}
       </div>
       <a class="doc-link" href="${escapeAttr(SYSTEM_WIKI_URL)}" target="_blank" rel="noreferrer">
-        <strong>打开系统 Wiki</strong>
+        <strong>打开系统百科</strong>
         <span>进入 Gitea Wiki 查看全部正式文档。</span>
       </a>
+    </div>
+  `;
+}
+
+function renderFeedbackDemandCard() {
+  return `
+    ${renderPanelHead({ title: "反馈与需求", helpKey: "feedbackDemand", compact: true })}
+    <div class="wiki-home-collab">
+      <div class="wiki-home-collab-header">
+        <strong>Gitea 协同入口</strong>
+        <span>集中查看需求、问题和项目推进状态。后续 issue / project 自动同步也会扩展在这里。</span>
+      </div>
+      <div class="wiki-home-links">
+        <a href="${escapeAttr(SYSTEM_ISSUES_URL)}" target="_blank" rel="noreferrer">问题与需求 Issue</a>
+        <a href="${escapeAttr(SYSTEM_PROJECTS_URL)}" target="_blank" rel="noreferrer">项目看板 Project</a>
+        <a href="${escapeAttr(SYSTEM_REPO_URL)}" target="_blank" rel="noreferrer">代码仓库</a>
+      </div>
     </div>
   `;
 }
@@ -5797,12 +5804,7 @@ function updateStatusText(info) {
 
 function renderIacucAdminPanel() {
   return `
-    <div class="panel-head compact">
-      <div>
-        <h2>IACUC 索引</h2>
-        <p>上传 CSV 汇总表后，用于自动回填项目名称、项目负责人和实验负责人。</p>
-      </div>
-    </div>
+    ${renderPanelHead({ title: "IACUC 索引", helpKey: "iacucUpload", compact: true })}
     <form id="iacucUploadForm" class="form">
           <label class="field-required">
             动物实验申请汇总表 CSV
@@ -5869,12 +5871,7 @@ function renderAuditView() {
   const page = paginationState.auditLogs;
   return `
     <section class="panel large">
-      <div class="panel-head">
-        <div>
-          <h2>操作日志</h2>
-          <p>记录账号、动作、笼位和时间，便于追溯。</p>
-        </div>
-      </div>
+      ${renderPanelHead({ title: "操作日志", helpKey: "logs" })}
       <div class="audit-list">
         ${
           loading
@@ -6073,7 +6070,6 @@ function bindEvents() {
         state.activeView = "intake";
       } else if (action === "cages") {
         state.activeView = "cages";
-        state.showPlacementTaskPanel = true;
       } else if (action === "billing") {
         state.activeView = "billing";
         state.billingMonth = today.slice(0, 7);
@@ -6104,7 +6100,6 @@ function bindEvents() {
 
   document.querySelector("#roomSelect")?.addEventListener("change", async (event) => {
     state.selectedRoomId = event.target.value;
-    state.showPlacementTaskPanel = true;
     paginationState.placementTasks.page = 1;
     state.selectedRackId = state.racks.find((rack) => rack.roomId === state.selectedRoomId)?.id;
     state.selectedSlotId = "";
@@ -6577,6 +6572,14 @@ function bindEvents() {
   bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
+    if (event.target?.id === "quantitySheetMonth") {
+      handleQuantitySheetFilterChange();
+      return;
+    }
+    if (name === "iacuc") {
+      handleQuantitySheetFilterChange();
+      return;
+    }
     if (name === "addedType" || name === "removedType") {
       captureQuantitySheetDraft();
       render();
@@ -7578,9 +7581,6 @@ async function submitIntakeReceipt(batchId, actualReceiptDate, cardCount) {
     if (!response.ok) throw new Error(payload.error || "确认接收失败");
     upsertById(state.intakeBatches, normalizeIncomingBatchDraft(payload.batch));
     payload.tasks?.map(normalizePlacementTask).forEach((task) => upsertById(state.placementTasks, task));
-    if (payload.tasks?.some((task) => task.targetRoomId === state.selectedRoomId)) {
-      state.showPlacementTaskPanel = true;
-    }
     if (state.selectedRoomId) {
       paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
     }
@@ -7909,6 +7909,43 @@ function handleQuantitySheetSelect(event) {
   state.billingPrincipalType = principalTypeForPi(state.billingPi);
   state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
   scheduleRender("quantity_sheet.select");
+}
+
+async function handleQuantitySheetFilterChange() {
+  captureQuantitySheetDraft();
+  const month = state.quantitySheetDraft?.month || state.billingMonth || today.slice(0, 7);
+  const iacuc = normalizeIacucNumber(state.quantitySheetDraft?.iacuc || "");
+  state.billingMonth = month;
+  state.billingIacuc = iacuc || state.billingIacuc;
+  paginationState.quantitySheets.month = month;
+  paginationState.quantitySheets.iacuc = iacuc;
+  if (remotePersistence) {
+    try {
+      await goToQuantitySheetsPage(1, paginationState.quantitySheets.limit);
+      const selected =
+        state.quantitySheets.find((sheet) => sheet.month === month && normalizeIacucNumber(sheet.iacuc) === iacuc) ||
+        state.quantitySheets[0] ||
+        null;
+      state.selectedQuantitySheetId = selected?.id || "";
+      state.quantitySheetDraft = selected
+        ? hydrateQuantitySheetIacucInfo(selected)
+        : hydrateQuantitySheetIacucInfo({ ...makeQuantitySheetDraft(month), iacuc });
+    } catch (error) {
+      reportSaveError(error);
+    }
+  } else {
+    const selected =
+      state.quantitySheets.find((sheet) => sheet.month === month && normalizeIacucNumber(sheet.iacuc) === iacuc) ||
+      null;
+    state.selectedQuantitySheetId = selected?.id || "";
+    state.quantitySheetDraft = selected
+      ? hydrateQuantitySheetIacucInfo(selected)
+      : hydrateQuantitySheetIacucInfo({ ...state.quantitySheetDraft, month, iacuc });
+  }
+  state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
+  state.billingPrincipalType = principalTypeForPi(state.billingPi);
+  state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
+  scheduleRender("quantity_sheet.filter");
 }
 
 function newQuantitySheetDraft() {

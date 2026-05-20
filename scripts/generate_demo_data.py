@@ -92,7 +92,7 @@ DEMO_ROOMS = {
         "billingProfileConfirmed": True,
     },
 }
-DEMO_PI_MOUSE = "毛富祥（演示）"
+DEMO_PI_MOUSE = "柯琼（演示）"
 DEMO_PI_MONKEY = "周孝来（演示）"
 DEMO_PI_GUINEA = "苏玉霞（演示）"
 DEMO_IACUCS = {
