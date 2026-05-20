@@ -6,31 +6,114 @@ import hashlib
 import hmac
 import io
 import json
-import os
 import re
 import secrets
 import sqlite3
-import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from email.utils import format_datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from server_app.cache import cache_get, cache_key, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes, log_perf
+from server_app.config import (
+    CAGELEDGER_APP_VERSION,
+    CAGELEDGER_BRANCH,
+    CAGELEDGER_CONTACT_EMAIL,
+    CAGELEDGER_COPYRIGHT,
+    CAGELEDGER_DEPARTMENT,
+    CAGELEDGER_DEVELOPER,
+    CAGELEDGER_GITEA_TOKEN,
+    CAGELEDGER_LICENSE,
+    CAGELEDGER_ORGANIZATION,
+    CAGELEDGER_REPOSITORY_URL,
+    CAGELEDGER_UPDATE_CHECK_ENABLED,
+    CAGELEDGER_VERSION,
+    DB_PATH,
+    DEFAULT_ADMIN_PASSWORD,
+    DEFAULT_ADMIN_USERNAME,
+    HOST,
+    IACUC_INDEX_PATH,
+    LEGACY_IACUC_INDEX_PATH,
+    MAX_BODY_BYTES,
+    PORT,
+    ROOT,
+    SESSION_COOKIE,
+    SESSION_TTL_DAYS,
+)
+from server_app.db import configure_database, connect_db, ensure_database_ready
+from server_app.http import add_default_headers, send_json as send_json_response
+from server_app.repositories.audit import insert_audit_events
+from server_app.repositories.billing import (
+    delete_billing_workflow_tree as delete_billing_workflow_tree_repository,
+    delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
+    get_billing_version as get_billing_version_repository,
+    get_billing_workflow as get_billing_workflow_repository,
+    get_billing_workflow_by_key as get_billing_workflow_by_key_repository,
+    get_quantity_sheet as get_quantity_sheet_repository,
+    insert_billing_version as insert_billing_version_repository,
+    insert_billing_workflow as insert_billing_workflow_repository,
+    insert_billing_workflow_event as insert_billing_workflow_event_repository,
+    insert_quantity_sheet as insert_quantity_sheet_repository,
+    list_billing_workflows as list_billing_workflows_repository,
+    list_billing_statement_lines_for_version as list_billing_statement_lines_for_version_repository,
+    list_billing_workflow_events as list_billing_workflow_events_repository,
+    list_billing_workflow_versions as list_billing_workflow_versions_repository,
+    list_billing_workflows_page as list_billing_workflows_page_repository,
+    list_current_billing_statements as list_current_billing_statements_repository,
+    list_quantity_sheets as list_quantity_sheets_repository,
+    list_quantity_sheets_page as list_quantity_sheets_page_repository,
+    replace_billing_statement_version_lines as replace_billing_statement_version_lines_repository,
+    select_quantity_sheets_for_transfer as select_quantity_sheets_for_transfer_repository,
+    update_billing_version as update_billing_version_repository,
+    update_billing_workflow as update_billing_workflow_repository,
+    update_quantity_sheet as update_quantity_sheet_repository,
+)
+from server_app.repositories.entities import (
+    list_audit_events_page,
+    list_intake_batches_page,
+    list_placement_tasks_page,
+    list_distinct_principal_names,
+    read_principal_identity_payloads,
+    read_principal_type_by_pi as read_principal_type_by_pi_repository,
+    upsert_principal_identity,
+)
+from server_app.repositories.infrastructure import insert_rack_record, insert_room_record, insert_slot_record, update_rack_record, update_room_record
+from server_app.repositories.iacuc import read_iacuc_index as read_iacuc_index_repository
+from server_app.repositories.iacuc import replace_experiment_applications, save_iacuc_index_file as save_iacuc_index_file_repository
+from server_app.repositories.payload import (
+    cached_paginated_payloads,
+    dump_json,
+    paginated_payloads,
+    read_payloads,
+    read_setting,
+    read_updated_at,
+    set_setting,
+    table_has_rows,
+)
+from server_app.repositories.state import assemble_state as assemble_state_repository, read_applications_by_iacuc as read_applications_by_iacuc_repository, read_cached_state as read_cached_state_repository
+from server_app.repositories.users import (
+    delete_session_by_token_hash,
+    delete_sessions_by_user_id,
+    delete_user_by_id,
+    get_active_user_by_username,
+    has_any_user,
+    get_user_by_id,
+    get_user_by_session_token_hash,
+    insert_user,
+    insert_session,
+    list_users as list_users_repository,
+    update_user_with_password,
+    update_user_without_password,
+)
+from server_app.services.billing import save_billing_statement_workflow as save_billing_statement_workflow_service, update_workflow_status as update_workflow_status_service
+from server_app.services.intake import confirm_intake_receipt as confirm_intake_receipt_service
+from server_app.services.placement import move_in_placement_task as move_in_placement_task_service, reassign_placement_task_room as reassign_placement_task_room_service, reserve_placement_task as reserve_placement_task_service
+from server_app.services.quantity import sync_quantity_sheet_transfer_rows as sync_quantity_sheet_transfer_rows_service
 
-ROOT = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("CAGELEDGER_DB", ROOT / "data" / "cageledger.sqlite"))
-IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DB_PATH.parent / "iacuc-index.json"))
-LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
-HOST = os.environ.get("CAGELEDGER_HOST", "0.0.0.0")
-PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))
-MAX_BODY_BYTES = 10 * 1024 * 1024
-SESSION_COOKIE = "cageledger_session"
-SESSION_TTL_DAYS = 14
 BILLING_PRINCIPAL_PI = "pi"
 BILLING_PRINCIPAL_INDEPENDENT = "independent"
 FREE_CAGES_PI = 20
@@ -64,31 +147,6 @@ WORKFLOW_STATUSES = (
 )
 VERSION_STATUS_ACTIVE = "active"
 VERSION_STATUS_VOIDED = "voided"
-DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
-DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")
-CAGELEDGER_VERSION = os.environ.get("CAGELEDGER_VERSION", "").strip()
-CAGELEDGER_APP_VERSION = os.environ.get("CAGELEDGER_APP_VERSION", "").strip()
-CAGELEDGER_ORGANIZATION = os.environ.get("CAGELEDGER_ORGANIZATION", "中山大学中山眼科中心").strip()
-CAGELEDGER_DEPARTMENT = os.environ.get("CAGELEDGER_DEPARTMENT", "实验动物中心").strip()
-CAGELEDGER_DEVELOPER = os.environ.get("CAGELEDGER_DEVELOPER", "Hugo").strip()
-CAGELEDGER_CONTACT_EMAIL = os.environ.get("CAGELEDGER_CONTACT_EMAIL", "info@cellnucle.us").strip()
-CAGELEDGER_LICENSE = os.environ.get("CAGELEDGER_LICENSE", "Apache-2.0").strip()
-CAGELEDGER_COPYRIGHT = os.environ.get(
-    "CAGELEDGER_COPYRIGHT",
-    f"© 2026 {CAGELEDGER_ORGANIZATION} {CAGELEDGER_DEPARTMENT}. Licensed under Apache-2.0.",
-).strip()
-CAGELEDGER_REPOSITORY_URL = os.environ.get(
-    "CAGELEDGER_REPOSITORY_URL",
-    os.environ.get("CAGELEDGER_REPOSITORY", "https://git.cellnucle.us/hugo/cageledger"),
-).strip()
-CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
-CAGELEDGER_GITEA_TOKEN = os.environ.get("CAGELEDGER_GITEA_TOKEN", "").strip()
-CAGELEDGER_UPDATE_CHECK_ENABLED = os.environ.get("CAGELEDGER_UPDATE_CHECK_ENABLED", "false").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
 BILLING_WORKFLOW_MIGRATION_KEY = "billingWorkflowMigrationDone"
 TABLES = (
     "audit_logs",
@@ -139,97 +197,6 @@ WRITABLE_ENTITY_ENDPOINTS = {
     "/api/billing-adjustments": {"collection": "adjustments", "id_prefix": "adj"},
     "/api/intake-batches": {"collection": "intakeBatches", "id_prefix": "batch"},
 }
-DB_INIT_LOCK = threading.Lock()
-DB_READY = False
-CACHE_TTL_SECONDS = 15
-DATA_CACHE_LOCK = threading.Lock()
-DATA_CACHE = {}
-
-
-def connect_db():
-    ensure_database_ready()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
-
-
-def ensure_database_ready():
-    global DB_READY
-    if DB_READY:
-        return
-    with DB_INIT_LOCK:
-        if DB_READY:
-            return
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
-        try:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.execute("PRAGMA busy_timeout=5000")
-            initialize_schema(conn)
-            conn.commit()
-            DB_READY = True
-        finally:
-            conn.close()
-
-
-def cache_get(key):
-    with DATA_CACHE_LOCK:
-        entry = DATA_CACHE.get(key)
-        if not entry:
-            return None
-        if entry["expiresAt"] <= datetime.now(timezone.utc):
-            DATA_CACHE.pop(key, None)
-            return None
-        return entry["value"]
-
-
-def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS):
-    with DATA_CACHE_LOCK:
-        DATA_CACHE[key] = {
-            "value": value,
-            "expiresAt": datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds),
-        }
-    return value
-
-
-def invalidate_data_cache(*keys):
-    if not keys:
-        return
-    with DATA_CACHE_LOCK:
-        for key in keys:
-            DATA_CACHE.pop(key, None)
-
-
-def invalidate_data_cache_prefixes(*prefixes):
-    if not prefixes:
-        return
-    with DATA_CACHE_LOCK:
-        for key in list(DATA_CACHE.keys()):
-            if any(key.startswith(prefix) for prefix in prefixes):
-                DATA_CACHE.pop(key, None)
-
-
-def log_perf(label, started_at, **fields):
-    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 1)
-    details = " ".join(f"{key}={value}" for key, value in fields.items() if value not in (None, ""))
-    suffix = f" {details}" if details else ""
-    print(f"[perf] {label} {elapsed_ms}ms{suffix}", flush=True)
-
-
-def cache_key(prefix, **fields):
-    normalized = []
-    for key in sorted(fields):
-        value = fields[key]
-        if isinstance(value, (list, tuple, set)):
-            value = ",".join(str(item) for item in value)
-        normalized.append(f"{key}={value}")
-    return f"{prefix}::" + "|".join(normalized)
-
-
 def initialize_schema(conn):
     conn.execute(
         """
@@ -1665,98 +1632,6 @@ def validate_infrastructure_slot_deletes(state, slot_ids):
         raise ValueError("不能移除仍在用或已预约的笼位")
 
 
-def insert_room_record(conn, room):
-    conn.execute(
-        """
-        INSERT INTO rooms (id, name, area, rack_count, rows, cols, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            room.get("id"),
-            room.get("name", ""),
-            room.get("area", ""),
-            as_int(room.get("rackCount")),
-            as_int(room.get("rows")),
-            as_int(room.get("cols")),
-            dump_json(room),
-        ),
-    )
-
-
-def update_room_record(conn, room):
-    conn.execute(
-        """
-        UPDATE rooms
-        SET name = ?, area = ?, rack_count = ?, rows = ?, cols = ?, payload = ?
-        WHERE id = ?
-        """,
-        (
-            room.get("name", ""),
-            room.get("area", ""),
-            as_int(room.get("rackCount")),
-            as_int(room.get("rows")),
-            as_int(room.get("cols")),
-            dump_json(room),
-            room.get("id"),
-        ),
-    )
-
-
-def insert_rack_record(conn, rack):
-    conn.execute(
-        """
-        INSERT INTO racks (id, room_id, name, rows, cols, index_no, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            rack.get("id"),
-            rack.get("roomId"),
-            rack.get("name", ""),
-            as_int(rack.get("rows")),
-            as_int(rack.get("cols")),
-            as_int(rack.get("index")),
-            dump_json(rack),
-        ),
-    )
-
-
-def update_rack_record(conn, rack):
-    conn.execute(
-        """
-        UPDATE racks
-        SET room_id = ?, name = ?, rows = ?, cols = ?, index_no = ?, payload = ?
-        WHERE id = ?
-        """,
-        (
-            rack.get("roomId"),
-            rack.get("name", ""),
-            as_int(rack.get("rows")),
-            as_int(rack.get("cols")),
-            as_int(rack.get("index")),
-            dump_json(rack),
-            rack.get("id"),
-        ),
-    )
-
-
-def insert_slot_record(conn, slot):
-    conn.execute(
-        """
-        INSERT INTO cage_slots (id, rack_id, row_no, col_no, code, status, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            slot.get("id"),
-            slot.get("rackId"),
-            as_int(slot.get("row")),
-            as_int(slot.get("col")),
-            slot.get("code", ""),
-            slot.get("status", "empty"),
-            dump_json(slot),
-        ),
-    )
-
-
 def empty_state():
     return {
         "baseRate": 4.5,
@@ -1924,200 +1799,82 @@ def entity_exists(state, collection, item_id):
     return any(item.get("id") == item_id for item in state.get(collection, []))
 
 
-def sync_slot_statuses(state):
-    status_by_slot = {
-        item.get("slotId"): item.get("status")
-        for item in state.get("occupancies", [])
-        if item.get("status") in ("active", "reserved")
+def intake_service_deps():
+    return {
+        "as_int": as_int,
+        "clean_text": clean_text,
+        "new_id": new_id,
+        "now_iso": now_iso,
     }
-    state["slots"] = [
-        {**slot, "status": status_by_slot.get(slot.get("id"), "empty")}
-        for slot in state.get("slots", [])
-    ]
 
 
-def next_monday_after(date_text):
-    try:
-        current = date.fromisoformat(clean_text(date_text))
-    except ValueError as exc:
-        raise ValueError("实际接收日期无效") from exc
-    days_until_next_monday = 7 - current.weekday()
-    return (current + timedelta(days=days_until_next_monday)).isoformat()
+def placement_service_deps():
+    return {
+        "clean_text": clean_text,
+        "new_id": new_id,
+        "now_iso": now_iso,
+    }
 
 
-def room_by_name(state, room_name):
-    target = clean_text(room_name)
-    return next((room for room in state.get("rooms", []) if clean_text(room.get("name")) == target), None)
+def quantity_service_deps():
+    return {
+        "as_int": as_int,
+        "audit_event": audit_event,
+        "clean_text": clean_text,
+        "insert_quantity_sheet": insert_quantity_sheet_repository,
+        "new_id": new_id,
+        "normalize_iacuc_number": normalize_iacuc_number,
+        "quantity_sheet_db_values": quantity_sheet_db_values,
+        "read_applications_by_iacuc": read_applications_by_iacuc,
+        "select_quantity_sheets_for_transfer": select_quantity_sheets_for_transfer_repository,
+        "update_quantity_sheet": update_quantity_sheet_repository,
+    }
 
 
-def intake_receipt_total(batch):
-    return sum(max(as_int(item.get("cardCount")) or 0, 0) for item in batch.get("receipts", []))
+def billing_workflow_service_deps():
+    return {
+        "VERSION_STATUS_ACTIVE": VERSION_STATUS_ACTIVE,
+        "VERSION_STATUS_VOIDED": VERSION_STATUS_VOIDED,
+        "WORKFLOW_STATUS_FINANCE": WORKFLOW_STATUS_FINANCE,
+        "WORKFLOW_STATUS_GENERATED": WORKFLOW_STATUS_GENERATED,
+        "WORKFLOW_STATUS_SENT": WORKFLOW_STATUS_SENT,
+        "WORKFLOW_STATUS_SIGNED": WORKFLOW_STATUS_SIGNED,
+        "billing_workflow_business_key": billing_workflow_business_key,
+        "build_version_payload": build_version_payload,
+        "build_workflow_event_payload": build_workflow_event_payload,
+        "build_workflow_payload": build_workflow_payload,
+        "enrich_statement_for_workflow": enrich_statement_for_workflow,
+        "get_billing_version": get_billing_version,
+        "get_billing_workflow": get_billing_workflow,
+        "get_billing_workflow_by_key": get_billing_workflow_by_key,
+        "insert_billing_version": insert_billing_version,
+        "insert_billing_workflow": insert_billing_workflow,
+        "insert_billing_workflow_event": insert_billing_workflow_event,
+        "make_statement_document_number": make_statement_document_number,
+        "new_id": new_id,
+        "normalize_workflow_source": normalize_workflow_source,
+        "now_iso": now_iso,
+        "replace_version_lines": replace_version_lines,
+        "update_billing_version": update_billing_version,
+        "update_billing_workflow": update_billing_workflow,
+        "workflow_scope_for_statement": workflow_scope_for_statement,
+    }
 
 
 def confirm_intake_receipt(state, batch_id, payload, actor):
-    batch = next((item for item in state.get("intakeBatches", []) if item.get("id") == batch_id), None)
-    if not batch:
-        raise LookupError("待接收批次不存在")
-    if batch.get("status") not in ("printed", "received"):
-        raise ValueError("只有已打印批次可以确认接收")
-    actual_date = clean_text(payload.get("actualReceiptDate"))
-    if not actual_date:
-        raise ValueError("实际接收日期不能为空")
-    card_count = as_int(payload.get("cardCount"))
-    if card_count is None or card_count <= 0:
-        raise ValueError("实际到货笼卡数必须大于 0")
-    confirmed_total = intake_receipt_total(batch)
-    final_count = max(as_int(batch.get("finalCardCount")) or 0, 0)
-    if confirmed_total + card_count > final_count:
-        raise ValueError("实际到货笼卡数超过打印张数")
-    target_room = room_by_name(state, batch.get("roomName"))
-    if not target_room:
-        raise ValueError("目标饲养间不存在，请先确认房间名称")
-    receipt_id = new_id("receipt")
-    planned_date = next_monday_after(actual_date)
-    now = now_iso()
-    receipt = {
-        "id": receipt_id,
-        "actualReceiptDate": actual_date,
-        "cardCount": card_count,
-        "confirmedBy": actor.get("displayName", ""),
-        "confirmedAt": now,
-        "plannedMoveInDate": planned_date,
-    }
-    batch.setdefault("receipts", []).append(receipt)
-    batch["confirmedCardCount"] = confirmed_total + card_count
-    batch["remainingCardCount"] = max(final_count - batch["confirmedCardCount"], 0)
-    batch["status"] = "received" if batch["remainingCardCount"] == 0 else "printed"
-    batch["updatedAt"] = now
-    tasks = []
-    for index in range(card_count):
-        task = {
-            "id": new_id("ptask"),
-            "sourceBatchId": batch["id"],
-            "sourceReceiptId": receipt_id,
-            "batchNo": batch.get("batchNo", ""),
-            "targetRoomId": target_room.get("id", ""),
-            "targetRoomName": target_room.get("name", ""),
-            "plannedMoveInDate": planned_date,
-            "status": "pending",
-            "reservedOccupancyId": "",
-            "actualMoveInDate": "",
-            "roomChangeHistory": [],
-            "iacuc": batch.get("iacuc", ""),
-            "project": batch.get("project", ""),
-            "pi": batch.get("pi", ""),
-            "owner": batch.get("owner", ""),
-            "species": batch.get("species", ""),
-            "strainStandard": batch.get("strainStandard", ""),
-            "animalCount": max(as_int(batch.get("suggestedAnimalsPerCage")) or 1, 1),
-            "cardSequence": confirmed_total + index + 1,
-            "updatedAt": now,
-        }
-        state.setdefault("placementTasks", []).append(task)
-        tasks.append(task)
-    return batch, receipt, tasks
-
-
-def ensure_task_room_permission(actor, task):
-    if actor.get("role") == "admin":
-        return
-    if task.get("targetRoomId") not in set(actor.get("roomIds", [])):
-        raise PermissionError("不能操作未授权饲养间的待进驻任务")
+    return confirm_intake_receipt_service(state, batch_id, payload, actor, intake_service_deps())
 
 
 def reserve_placement_task(state, task_id, slot_id, actor):
-    task = next((item for item in state.get("placementTasks", []) if item.get("id") == task_id), None)
-    if not task:
-        raise LookupError("待进驻任务不存在")
-    ensure_task_room_permission(actor, task)
-    if task.get("status") not in ("pending", "reserved"):
-        raise ValueError("当前任务不能预留笼位")
-    slot = next((item for item in state.get("slots", []) if item.get("id") == slot_id), None)
-    if not slot:
-        raise LookupError("笼位不存在")
-    rack = next((item for item in state.get("racks", []) if item.get("id") == slot.get("rackId")), None)
-    if not rack or rack.get("roomId") != task.get("targetRoomId"):
-        raise ValueError("只能在目标饲养间内预留笼位")
-    if any(item.get("slotId") == slot_id and item.get("status") in ("reserved", "active") for item in state.get("occupancies", [])):
-        raise ValueError("该笼位当前不可用")
-    now = now_iso()
-    occupancy = {
-        "id": new_id("occ"),
-        "slotId": slot_id,
-        "cageCode": "",
-        "status": "reserved",
-        "iacuc": task.get("iacuc", ""),
-        "project": task.get("project", ""),
-        "pi": task.get("pi", ""),
-        "owner": task.get("owner", ""),
-        "species": task.get("species", ""),
-        "animalCount": task.get("animalCount"),
-        "startDate": "",
-        "endDate": "",
-        "notes": f"来自待进驻任务 {task.get('batchNo', '')}",
-        "placementTaskId": task["id"],
-        "updatedAt": now,
-    }
-    state.setdefault("occupancies", []).append(occupancy)
-    task["status"] = "reserved"
-    task["reservedOccupancyId"] = occupancy["id"]
-    task["updatedAt"] = now
-    sync_slot_statuses(state)
-    return task, occupancy
+    return reserve_placement_task_service(state, task_id, slot_id, actor, placement_service_deps())
 
 
 def move_in_placement_task(state, task_id, actual_move_in_date, actor):
-    task = next((item for item in state.get("placementTasks", []) if item.get("id") == task_id), None)
-    if not task:
-        raise LookupError("待进驻任务不存在")
-    ensure_task_room_permission(actor, task)
-    if task.get("status") != "reserved":
-        raise ValueError("请先为待进驻任务预留笼位")
-    occupancy = next((item for item in state.get("occupancies", []) if item.get("id") == task.get("reservedOccupancyId")), None)
-    if not occupancy:
-        raise LookupError("预留占用不存在")
-    move_in_date = clean_text(actual_move_in_date)
-    if not move_in_date:
-        raise ValueError("实际入驻日期不能为空")
-    occupancy["status"] = "active"
-    occupancy["startDate"] = move_in_date
-    occupancy["updatedAt"] = now_iso()
-    task["status"] = "active"
-    task["actualMoveInDate"] = move_in_date
-    task["updatedAt"] = occupancy["updatedAt"]
-    sync_slot_statuses(state)
-    return task, occupancy
+    return move_in_placement_task_service(state, task_id, actual_move_in_date, actor, placement_service_deps())
 
 
 def reassign_placement_task_room(state, task_id, room_id, actor):
-    if actor.get("role") != "admin":
-        raise PermissionError("只有系统管理员可以改签目标房间")
-    task = next((item for item in state.get("placementTasks", []) if item.get("id") == task_id), None)
-    if not task:
-        raise LookupError("待进驻任务不存在")
-    if task.get("status") == "active":
-        raise ValueError("已入驻任务不能改签房间")
-    room = next((item for item in state.get("rooms", []) if item.get("id") == room_id), None)
-    if not room:
-        raise LookupError("目标饲养间不存在")
-    if task.get("reservedOccupancyId"):
-        raise ValueError("已预留笼位的任务需先取消预留后再改签")
-    if task.get("targetRoomId") == room_id:
-        return task
-    task.setdefault("roomChangeHistory", []).append(
-        {
-            "fromRoomId": task.get("targetRoomId", ""),
-            "fromRoomName": task.get("targetRoomName", ""),
-            "toRoomId": room["id"],
-            "toRoomName": room["name"],
-            "changedAt": now_iso(),
-            "changedBy": actor.get("displayName", ""),
-        }
-    )
-    task["targetRoomId"] = room["id"]
-    task["targetRoomName"] = room["name"]
-    task["updatedAt"] = now_iso()
-    return task
+    return reassign_placement_task_room_service(state, task_id, room_id, actor, placement_service_deps())
 
 
 def migrate_legacy_state(conn):
@@ -2323,83 +2080,15 @@ def write_normalized_state(conn, state, updated_at):
 
 
 def assemble_state(conn):
-    if not any(table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies", "intake_batches")):
-        return None
-
-    return {
-        "baseRate": read_setting(conn, "baseRate", 4.5),
-        "billingMonth": read_setting(conn, "billingMonth", ""),
-        "billingIacuc": read_setting(conn, "billingIacuc", ""),
-        "rooms": read_payloads(conn, "rooms", "rowid"),
-        "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
-        "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
-        "occupancies": read_payloads(conn, "occupancies", "start_date, rowid"),
-        "placementTasks": read_payloads(conn, "placement_tasks", "planned_move_in_date, rowid"),
-        "billingRules": read_payloads(conn, "billing_rules", "rowid"),
-        "adjustments": read_payloads(conn, "billing_adjustments", "rowid"),
-        "intakeBatches": read_payloads(conn, "intake_batches", "updated_at DESC, rowid DESC"),
-        "auditLogs": read_payloads(conn, "audit_logs", "at DESC, rowid DESC"),
-    }
+    return assemble_state_repository(conn)
 
 
 def read_cached_state(conn):
-    cached = cache_get("assembled_state")
-    if cached is not None:
-        return cached
-    return cache_set("assembled_state", assemble_state(conn) or empty_state())
-
-
-def read_payloads(conn, table, order_by):
-    rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {order_by}").fetchall()
-    return [json.loads(row["payload"]) for row in rows]
-
-
-def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200, offset=0):
-    where_clause = f" WHERE {where_sql}" if where_sql else ""
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM {table}{where_clause}", params).fetchone()["total"]
-    rows = conn.execute(
-        f"SELECT payload FROM {table}{where_clause} ORDER BY {order_by} LIMIT ? OFFSET ?",
-        (*params, limit, offset),
-    ).fetchall()
-    return {
-        "items": [json.loads(row["payload"]) for row in rows],
-        "page": {
-            "limit": limit,
-            "offset": offset,
-            "total": total,
-            "hasMore": offset + limit < total,
-        },
-    }
-
-
-def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, where_sql="", params=()):
-    key = cache_key(
-        cache_prefix,
-        limit=filters["limit"],
-        offset=filters["offset"],
-        status=clean_text(filters.get("status", "")),
-        month=clean_text(filters.get("month", "")),
-        iacuc=clean_text(filters.get("iacuc", "")),
-        pi=clean_text(filters.get("pi", "")),
-        room_id=clean_text(filters.get("roomId", "")),
-        room_name=clean_text(filters.get("roomName", "")),
-        source_type=clean_text(filters.get("sourceType", "")),
-    )
-    cached = cache_get(key)
-    if cached is not None:
-        return cached
-    return cache_set(key, paginated_payloads(conn, table, order_by, where_sql, params, filters["limit"], filters["offset"]))
+    return read_cached_state_repository(conn, empty_state)
 
 
 def read_applications_by_iacuc(conn):
-    rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
-    applications = {}
-    for row in rows:
-        item = json.loads(row["payload"])
-        key = normalize_iacuc_number(item.get("iacuc", ""))
-        if key and key not in applications:
-            applications[key] = item
-    return applications
+    return read_applications_by_iacuc_repository(conn, normalize_iacuc_number)
 
 
 def occupancy_with_snapshots(occupancy, state, applications_by_iacuc):
@@ -2453,38 +2142,6 @@ def occupancy_structured_values(occupancy):
     }
 
 
-def set_setting(conn, key, value, updated_at):
-    conn.execute(
-        """
-        INSERT INTO app_settings (key, value, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        """,
-        (key, json.dumps(value, ensure_ascii=False), updated_at),
-    )
-
-
-def read_setting(conn, key, default):
-    row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
-    if not row:
-        return default
-    return json.loads(row["value"])
-
-
-def read_updated_at(conn):
-    row = conn.execute("SELECT MAX(updated_at) AS updated_at FROM app_settings").fetchone()
-    return row["updated_at"] if row else None
-
-
-def table_has_rows(conn, table):
-    row = conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
-    return row is not None
-
-
-def dump_json(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
 def as_int(value):
     return int(value) if value not in (None, "") else None
 
@@ -2494,26 +2151,22 @@ def as_float(value):
 
 
 def ensure_default_admin(conn):
-    row = conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
-    if row:
+    if has_any_user(conn):
         return
     now = now_iso()
-    conn.execute(
-        """
-        INSERT INTO users (id, username, display_name, password_hash, role, room_ids, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            new_id("user"),
-            DEFAULT_ADMIN_USERNAME,
-            "系统管理员",
-            hash_password(DEFAULT_ADMIN_PASSWORD),
-            "admin",
-            "[]",
-            1,
-            now,
-            now,
-        ),
+    insert_user(
+        conn,
+        {
+            "id": new_id("user"),
+            "username": DEFAULT_ADMIN_USERNAME,
+            "display_name": "系统管理员",
+            "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
+            "role": "admin",
+            "room_ids": "[]",
+            "active": 1,
+            "created_at": now,
+            "updated_at": now,
+        },
     )
     conn.commit()
 
@@ -2542,13 +2195,7 @@ def create_session(conn, user_id):
     token_hash = hash_token(token)
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=SESSION_TTL_DAYS)
-    conn.execute(
-        """
-        INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
-        VALUES (?, ?, ?, ?)
-        """,
-        (token_hash, user_id, now.isoformat(), expires_at.isoformat()),
-    )
+    insert_session(conn, token_hash, user_id, now.isoformat(), expires_at.isoformat())
     conn.commit()
     return token, expires_at
 
@@ -2556,7 +2203,7 @@ def create_session(conn, user_id):
 def delete_session(conn, token):
     if not token:
         return
-    conn.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
+    delete_session_by_token_hash(conn, hash_token(token))
     conn.commit()
 
 
@@ -2567,20 +2214,11 @@ def hash_token(token):
 def user_from_token(conn, token):
     if not token:
         return None
-    row = conn.execute(
-        """
-        SELECT users.*
-        FROM sessions
-        JOIN users ON users.id = sessions.user_id
-        WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.active = 1
-        """,
-        (hash_token(token), now_iso()),
-    ).fetchone()
-    return sanitize_user(row) if row else None
+    return get_user_by_session_token_hash(conn, hash_token(token), now_iso(), sanitize_user)
 
 
 def authenticate(conn, username, password):
-    row = conn.execute("SELECT * FROM users WHERE username = ? AND active = 1", (username,)).fetchone()
+    row = get_active_user_by_username(conn, username)
     if not row or not verify_password(password, row["password_hash"]):
         return None
     return sanitize_user(row)
@@ -2600,8 +2238,7 @@ def sanitize_user(row):
 
 
 def list_users(conn):
-    rows = conn.execute("SELECT * FROM users ORDER BY role, username").fetchall()
-    return [sanitize_user(row) for row in rows]
+    return list_users_repository(conn, sanitize_user)
 
 
 def create_user(conn, payload):
@@ -2619,15 +2256,22 @@ def create_user(conn, payload):
 
     now = now_iso()
     user_id = new_id("user")
-    conn.execute(
-        """
-        INSERT INTO users (id, username, display_name, password_hash, role, room_ids, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (user_id, username, display_name, hash_password(password), role, dump_json(room_ids), 1, now, now),
+    insert_user(
+        conn,
+        {
+            "id": user_id,
+            "username": username,
+            "display_name": display_name,
+            "password_hash": hash_password(password),
+            "role": role,
+            "room_ids": dump_json(room_ids),
+            "active": 1,
+            "created_at": now,
+            "updated_at": now,
+        },
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = get_user_by_id(conn, user_id)
     return sanitize_user(row)
 
 
@@ -2635,7 +2279,7 @@ def update_user(conn, actor, user_id, payload):
     if user_id == actor["id"]:
         raise PermissionError("不能在账号管理中修改当前登录账号")
 
-    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = get_user_by_id(conn, user_id)
     if not row:
         raise LookupError("账号不存在")
 
@@ -2654,26 +2298,12 @@ def update_user(conn, actor, user_id, payload):
 
     now = now_iso()
     if password:
-        conn.execute(
-            """
-            UPDATE users
-            SET username = ?, display_name = ?, password_hash = ?, role = ?, room_ids = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (username, display_name, hash_password(password), role, dump_json(room_ids), now, user_id),
-        )
+        update_user_with_password(conn, user_id, username, display_name, hash_password(password), role, dump_json(room_ids), now)
     else:
-        conn.execute(
-            """
-            UPDATE users
-            SET username = ?, display_name = ?, role = ?, room_ids = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (username, display_name, role, dump_json(room_ids), now, user_id),
-        )
-    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        update_user_without_password(conn, user_id, username, display_name, role, dump_json(room_ids), now)
+    delete_sessions_by_user_id(conn, user_id)
     conn.commit()
-    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = get_user_by_id(conn, user_id)
     return sanitize_user(row)
 
 
@@ -2681,12 +2311,12 @@ def delete_user(conn, actor, user_id):
     if user_id == actor["id"]:
         raise PermissionError("不能删除当前登录账号")
 
-    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = get_user_by_id(conn, user_id)
     if not row:
         raise LookupError("账号不存在")
 
-    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    delete_sessions_by_user_id(conn, user_id)
+    delete_user_by_id(conn, user_id)
     conn.commit()
 
 
@@ -2881,29 +2511,7 @@ def audit_event(actor, action, entity_type, entity_id, message, slot_ids, at, be
 
 
 def write_audit_events(conn, events):
-    for event in events:
-        conn.execute(
-            """
-            INSERT INTO audit_events (
-                id, actor_user_id, actor_username, actor_display_name, action,
-                entity_type, entity_id, message, slot_ids, at, payload
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event["id"],
-                event["actorUserId"],
-                event["actorUsername"],
-                event["actorDisplayName"],
-                event["action"],
-                event["entityType"],
-                event["entityId"],
-                event["message"],
-                dump_json(event["slotIds"]),
-                event["at"],
-                dump_json(event),
-            ),
-        )
+    insert_audit_events(conn, events)
 
 
 def merge_audit_logs(client_logs, events):
@@ -2960,81 +2568,21 @@ def format_http_date(value):
 
 
 def read_iacuc_index():
-    cached = cache_get("iacuc_index")
-    if cached is not None:
-        return cached
     with connect_db() as conn:
-        rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY rowid").fetchall()
-        if rows:
-            items = [json.loads(row["payload"]) for row in rows]
-            updated_at = max(row["imported_at"] for row in rows)
-            return cache_set("iacuc_index", {
-                "items": items,
-                "count": len(items),
-                "updatedAt": updated_at,
-                "source": "database",
-            })
-
-    path = IACUC_INDEX_PATH if IACUC_INDEX_PATH.exists() else LEGACY_IACUC_INDEX_PATH
-    if not path.exists():
-        return cache_set("iacuc_index", {"items": [], "count": 0, "updatedAt": None, "source": None})
-
-    items = json.loads(path.read_text(encoding="utf-8"))
-    stat = path.stat()
-    return cache_set("iacuc_index", {
-        "items": items,
-        "count": len(items),
-        "updatedAt": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-        "source": "data" if path == IACUC_INDEX_PATH else "legacy",
-    })
+        return read_iacuc_index_repository(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
 
 
 def write_experiment_applications(conn, items, imported_at):
-    conn.execute("DELETE FROM experiment_applications")
-    for index, item in enumerate(items, start=1):
-        normalized = application_payload(item, imported_at)
-        conn.execute(
-            """
-            INSERT INTO experiment_applications (
-                id, iacuc, raw_iacuc, project, pi, owner, funding, imported_at, payload
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                normalized.get("id") or f"app-{index:06d}",
-                normalized["iacuc"],
-                normalized.get("rawIacuc", ""),
-                normalized.get("project", ""),
-                normalized.get("pi", ""),
-                normalized.get("owner", ""),
-                normalized.get("funding", ""),
-                imported_at,
-                dump_json(normalized),
-            ),
-        )
-    invalidate_data_cache("iacuc_index", "principal_identities")
-    invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
+    replace_experiment_applications(conn, items, imported_at, application_payload)
 
 
 def list_principal_identities(conn):
-    rows = conn.execute("SELECT payload FROM principal_identities").fetchall()
     identity_by_pi = {
         clean_text(item.get("pi", "")): item
-        for item in (json.loads(row["payload"]) for row in rows)
+        for item in read_principal_identity_payloads(conn)
         if clean_text(item.get("pi", ""))
     }
-    principal_names = {
-        clean_text(row["pi"])
-        for row in conn.execute("SELECT DISTINCT pi FROM experiment_applications WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
-    }
-    principal_names.update(
-        clean_text(row["pi"])
-        for row in conn.execute("SELECT DISTINCT pi FROM quantity_sheets WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
-    )
-    principal_names.update(
-        clean_text(row["pi"])
-        for row in conn.execute("SELECT DISTINCT pi FROM occupancies WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
-    )
+    principal_names = {clean_text(name) for name in list_distinct_principal_names(conn)}
     principal_names.update(identity_by_pi.keys())
     items = []
     for pi_name in sorted((name for name in principal_names if name), key=lambda value: value.lower()):
@@ -3071,17 +2619,7 @@ def save_principal_identity(conn, payload, actor, pi_name):
         "freeCageAllowance": free_cages_for_principal_type(principal_type),
         "updatedAt": now,
     }
-    conn.execute(
-        """
-        INSERT INTO principal_identities (pi, principal_type, updated_at, payload)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(pi) DO UPDATE SET
-            principal_type = excluded.principal_type,
-            updated_at = excluded.updated_at,
-            payload = excluded.payload
-        """,
-        (pi_name, principal_type, now, dump_json(item)),
-    )
+    upsert_principal_identity(conn, pi_name, principal_type, now, dump_json(item))
     event = audit_event(
         actor,
         "principal_identity.updated",
@@ -3115,8 +2653,7 @@ def application_payload(item, imported_at):
 
 
 def save_iacuc_index_file(items):
-    IACUC_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
-    IACUC_INDEX_PATH.write_text(json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    save_iacuc_index_file_repository(IACUC_INDEX_PATH, items)
 
 
 def system_update_status():
@@ -3438,28 +2975,18 @@ def is_valid_iacuc_number(value):
 
 
 def list_quantity_sheets(conn):
-    rows = conn.execute("SELECT payload FROM quantity_sheets ORDER BY month DESC, iacuc, updated_at DESC").fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return list_quantity_sheets_repository(conn)
 
 
 def list_quantity_sheets_page(conn, filters):
-    where, params = filtered_where(
-        [
-            ("month", "month = ?"),
-            ("iacuc", "iacuc = ?"),
-            ("pi", "pi = ?"),
-            ("roomId", "room_id = ?"),
-        ],
-        filters,
-    )
-    return cached_paginated_payloads(conn, "quantity_sheets", "quantity_sheets", "month DESC, iacuc, updated_at DESC", filters, where, params)
+    return list_quantity_sheets_page_repository(conn, filters, filtered_where)
 
 
 def get_quantity_sheet(conn, sheet_id):
-    row = conn.execute("SELECT payload FROM quantity_sheets WHERE id = ?", (sheet_id,)).fetchone()
+    row = get_quantity_sheet_repository(conn, sheet_id)
     if not row:
         raise LookupError("数量统计表不存在")
-    return json.loads(row["payload"])
+    return row
 
 
 def get_current_billing_statement(conn, statement_id):
@@ -3475,30 +3002,14 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     sheet = normalize_quantity_sheet(payload, sheet_id, now)
     validate_quantity_sheet_permission(actor, sheet)
     exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
+    db_values = quantity_sheet_db_values(sheet)
     if exists:
-        conn.execute(
-            """
-            UPDATE quantity_sheets
-            SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
-                project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
-            WHERE id = ?
-            """,
-            quantity_sheet_db_values(sheet) + (sheet["id"],),
-        )
+        update_quantity_sheet_repository(conn, sheet, db_values)
         action = "quantity_sheet.updated"
         message = f"{actor['displayName']} 更新 {sheet['iacuc']} {sheet['month']} 数量统计表"
         status = HTTPStatus.OK
     else:
-        conn.execute(
-            """
-            INSERT INTO quantity_sheets (
-                month, iacuc, room_id, room_name, manager, project, pi, owner,
-                funding, updated_at, payload, id
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            quantity_sheet_db_values(sheet) + (sheet["id"],),
-        )
+        insert_quantity_sheet_repository(conn, sheet, db_values)
         action = "quantity_sheet.created"
         message = f"{actor['displayName']} 创建 {sheet['iacuc']} {sheet['month']} 数量统计表"
         status = HTTPStatus.CREATED
@@ -3521,7 +3032,7 @@ def delete_quantity_sheet(conn, actor, sheet_id):
     sheet = get_quantity_sheet(conn, sheet_id)
     validate_quantity_sheet_permission(actor, sheet)
     now = now_iso()
-    conn.execute("DELETE FROM quantity_sheets WHERE id = ?", (sheet_id,))
+    delete_quantity_sheet_by_id_repository(conn, sheet_id)
     event = audit_event(
         actor,
         "quantity_sheet.deleted",
@@ -3554,277 +3065,7 @@ def quantity_sheet_db_values(sheet):
 
 
 def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now):
-    month = source_sheet.get("month", "")
-    source_sheet_id = source_sheet.get("id", "")
-    source_iacuc = normalize_iacuc_number(source_sheet.get("iacuc", ""))
-    if not month or not source_sheet_id or not source_iacuc:
-        return [], []
-
-    applications_by_iacuc = read_applications_by_iacuc(conn)
-    rows = source_sheet.get("rows", [])
-    transfer_rows = []
-    for row in rows:
-        if clean_text(row.get("transferSourceSheetId", "")):
-            continue
-        row_id = clean_text(row.get("id", "")) or new_id("qrow")
-        row_date = clean_text(row.get("date", "")) or f"{month}-01"
-        row_notes = clean_text(row.get("notes", ""))
-        added_count = as_int(row.get("addedCount")) or 0
-        removed_count = as_int(row.get("removedCount")) or 0
-        target_iacuc = normalize_iacuc_number(row.get("transferOutToIacuc", ""))
-        if target_iacuc and removed_count > 0 and target_iacuc != source_iacuc:
-            transfer_rows.append(
-                {
-                    "direction": "out_to_in",
-                    "sourceRowId": row_id,
-                    "date": row_date,
-                    "notes": row_notes,
-                    "targetIacuc": target_iacuc,
-                    "count": removed_count,
-                    "fromIacuc": source_iacuc,
-                    "toIacuc": target_iacuc,
-                }
-            )
-        from_iacuc = normalize_iacuc_number(row.get("transferInFromIacuc", ""))
-        if from_iacuc and added_count > 0 and from_iacuc != source_iacuc:
-            transfer_rows.append(
-                {
-                    "direction": "in_to_out",
-                    "sourceRowId": row_id,
-                    "date": row_date,
-                    "notes": row_notes,
-                    "targetIacuc": from_iacuc,
-                    "count": added_count,
-                    "fromIacuc": from_iacuc,
-                    "toIacuc": source_iacuc,
-                }
-            )
-
-    target_iacucs = sorted({transfer["targetIacuc"] for transfer in transfer_rows if transfer["targetIacuc"]})
-    source_row_ids = sorted({transfer["sourceRowId"] for transfer in transfer_rows if transfer.get("sourceRowId")})
-    where_parts = ["month = ?", "id != ?"]
-    params = [month, source_sheet_id]
-    mirror_clauses = []
-    if source_row_ids:
-        mirror_clauses = ["payload LIKE ?" for _ in source_row_ids]
-    else:
-        mirror_clauses = ["payload LIKE ?"]
-    if target_iacucs:
-        placeholders = ", ".join("?" for _ in target_iacucs)
-        where_parts.append(f"(iacuc IN ({placeholders}) OR {' OR '.join(mirror_clauses)})")
-        params.extend(target_iacucs)
-        params.extend([f"%{source_sheet_id}:{row_id}:%" for row_id in source_row_ids] or [f"%{source_sheet_id}%"])
-    else:
-        where_parts.append(f"({' OR '.join(mirror_clauses)})")
-        params.extend([f"%{source_sheet_id}:{row_id}:%" for row_id in source_row_ids] or [f"%{source_sheet_id}%"])
-    sheet_rows = conn.execute(
-        f"SELECT id, payload FROM quantity_sheets WHERE {' AND '.join(where_parts)}",
-        params,
-    ).fetchall()
-    sheets = [json.loads(row["payload"]) for row in sheet_rows]
-    events = []
-    affected_sheet_by_id = {}
-
-    for target_sheet in sheets:
-        if target_sheet.get("id") == source_sheet_id:
-            continue
-        original_rows = target_sheet.get("rows", [])
-        next_rows = []
-        changed = False
-        for row in original_rows:
-            if clean_text(row.get("transferSourceSheetId", "")) == source_sheet_id:
-                changed = True
-                continue
-            contrib = row.get("transferMirrorContrib")
-            if isinstance(contrib, dict):
-                next_contrib = {}
-                row_changed = False
-                for key, value in contrib.items():
-                    if not str(key).startswith(f"{source_sheet_id}:"):
-                        next_contrib[key] = as_int(value) or 0
-                        continue
-                    amount = as_int(value) or 0
-                    if amount <= 0:
-                        continue
-                    direction = "out_to_in" if key.endswith(":out_to_in") else "in_to_out"
-                    if direction == "out_to_in":
-                        row["addedCount"] = max((as_int(row.get("addedCount")) or 0) - amount, 0)
-                    else:
-                        row["removedCount"] = max((as_int(row.get("removedCount")) or 0) - amount, 0)
-                    row_changed = True
-                    changed = True
-                if row_changed:
-                    if next_contrib:
-                        row["transferMirrorContrib"] = next_contrib
-                    else:
-                        row.pop("transferMirrorContrib", None)
-            next_rows.append(row)
-        if changed:
-            target_sheet["rows"] = sorted(next_rows, key=lambda item: (item.get("date", ""), item.get("id", "")))
-            target_sheet["updatedAt"] = now
-            conn.execute(
-                """
-                UPDATE quantity_sheets
-                SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
-                    project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
-                WHERE id = ?
-                """,
-                quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
-            )
-            affected_sheet_by_id[target_sheet["id"]] = target_sheet
-
-    target_sheet_by_iacuc = {}
-    for target_sheet in sheets:
-        key = normalize_iacuc_number(target_sheet.get("iacuc", ""))
-        if key and key != source_iacuc and key not in target_sheet_by_iacuc:
-            target_sheet_by_iacuc[key] = target_sheet
-
-    for transfer in transfer_rows:
-        target_iacuc = transfer["targetIacuc"]
-        target_sheet = target_sheet_by_iacuc.get(target_iacuc)
-        if not target_sheet:
-            app = applications_by_iacuc.get(target_iacuc, {})
-            target_sheet = {
-                "id": new_id("qsheet"),
-                "month": month,
-                "roomId": "",
-                "roomName": "",
-                "manager": actor.get("displayName", ""),
-                "iacuc": target_iacuc,
-                "project": clean_text(app.get("project", "")),
-                "pi": clean_text(app.get("pi", "")),
-                "owner": clean_text(app.get("owner", "")),
-                "contact": "",
-                "funding": clean_text(app.get("funding", "")),
-                "billingUnit": "cage_day",
-                "initialAnimalCount": 0,
-                "initialCageCount": 0,
-                "rows": [],
-                "updatedAt": now,
-            }
-            conn.execute(
-                """
-                INSERT INTO quantity_sheets (
-                    month, iacuc, room_id, room_name, manager, project, pi, owner,
-                    funding, updated_at, payload, id
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
-            )
-            target_sheet_by_iacuc[target_iacuc] = target_sheet
-            sheets.append(target_sheet)
-            affected_sheet_by_id[target_sheet["id"]] = target_sheet
-            events.append(
-                audit_event(
-                    actor,
-                    "quantity_sheet.transfer_placeholder_created",
-                    "quantity_sheet",
-                    target_sheet["id"],
-                    f"{actor['displayName']} 自动创建 {target_iacuc} {month} 数量统计表（转移入账）",
-                    [],
-                    now,
-                    None,
-                    target_sheet,
-                )
-            )
-
-        row_id = f"xfer-{source_sheet_id}-{transfer['sourceRowId']}-{target_iacuc}-{transfer['direction']}"
-        contrib_key = f"{source_sheet_id}:{transfer['sourceRowId']}:{target_iacuc}:{transfer['direction']}"
-        if transfer["direction"] == "out_to_in":
-            mirrored_row = {
-                "id": row_id,
-                "date": transfer["date"],
-                "addedCount": transfer["count"],
-                "addedType": "转入",
-                "transferInFromIacuc": transfer["fromIacuc"],
-                "removedCount": None,
-                "removedType": "",
-                "transferOutToIacuc": "",
-                "animalCount": None,
-                "cageCount": None,
-                "notes": transfer["notes"],
-                "transferSourceSheetId": source_sheet_id,
-                "transferSourceIacuc": source_iacuc,
-            }
-        else:
-            mirrored_row = {
-                "id": row_id,
-                "date": transfer["date"],
-                "addedCount": None,
-                "addedType": "",
-                "transferInFromIacuc": "",
-                "removedCount": transfer["count"],
-                "removedType": "转出",
-                "transferOutToIacuc": transfer["toIacuc"],
-                "animalCount": None,
-                "cageCount": None,
-                "notes": transfer["notes"],
-                "transferSourceSheetId": source_sheet_id,
-                "transferSourceIacuc": source_iacuc,
-            }
-        target_rows = [row for row in target_sheet.get("rows", []) if row.get("id") != row_id]
-        merged = False
-        for row in target_rows:
-            if clean_text(row.get("transferSourceSheetId", "")):
-                continue
-            if clean_text(row.get("date", "")) != transfer["date"]:
-                continue
-            if transfer["direction"] == "out_to_in":
-                if clean_text(row.get("addedType", "")) not in ("", "转入"):
-                    continue
-                if row.get("cageCount") is not None:
-                    continue
-                existing = row.get("transferMirrorContrib")
-                contrib = existing if isinstance(existing, dict) else {}
-                row["addedType"] = "转入"
-                row["transferInFromIacuc"] = transfer["fromIacuc"]
-                row["addedCount"] = (as_int(row.get("addedCount")) or 0) + transfer["count"]
-                contrib[contrib_key] = transfer["count"]
-                row["transferMirrorContrib"] = contrib
-                merged = True
-                break
-            if clean_text(row.get("removedType", "")) not in ("", "转出"):
-                continue
-            if row.get("cageCount") is not None:
-                continue
-            existing = row.get("transferMirrorContrib")
-            contrib = existing if isinstance(existing, dict) else {}
-            row["removedType"] = "转出"
-            row["transferOutToIacuc"] = transfer["toIacuc"]
-            row["removedCount"] = (as_int(row.get("removedCount")) or 0) + transfer["count"]
-            contrib[contrib_key] = transfer["count"]
-            row["transferMirrorContrib"] = contrib
-            merged = True
-            break
-        if not merged:
-            target_rows.append(mirrored_row)
-        target_sheet["rows"] = sorted(target_rows, key=lambda item: (item.get("date", ""), item.get("id", "")))
-        target_sheet["updatedAt"] = now
-        conn.execute(
-            """
-            UPDATE quantity_sheets
-            SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
-                project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
-            WHERE id = ?
-            """,
-            quantity_sheet_db_values(target_sheet) + (target_sheet["id"],),
-        )
-        affected_sheet_by_id[target_sheet["id"]] = target_sheet
-        events.append(
-            audit_event(
-                actor,
-                "quantity_sheet.transfer_synced",
-                "quantity_sheet",
-                target_sheet["id"],
-                f"{actor['displayName']} 将 {source_iacuc} 转移记录同步到 {target_iacuc} 数量统计表",
-                [],
-                now,
-                None,
-                {"targetSheetId": target_sheet["id"], "targetIacuc": target_iacuc, "rowId": row_id},
-            )
-        )
-    return events, list(affected_sheet_by_id.values())
+    return sync_quantity_sheet_transfer_rows_service(conn, source_sheet, actor, now, quantity_service_deps())
 
 
 def normalize_quantity_sheet(payload, sheet_id, updated_at):
@@ -4762,11 +4003,10 @@ def billing_free_cages_for(adjustments, pi_name):
 
 
 def read_principal_type_by_pi(conn):
-    rows = conn.execute("SELECT payload FROM principal_identities").fetchall()
     return {
-        clean_text(item.get("pi", "")): normalize_principal_type(item.get("principalType", ""))
-        for item in (json.loads(row["payload"]) for row in rows)
-        if clean_text(item.get("pi", ""))
+        clean_text(pi_name): normalize_principal_type(principal_type)
+        for pi_name, principal_type in read_principal_type_by_pi_repository(conn).items()
+        if clean_text(pi_name)
     }
 
 
@@ -4981,49 +4221,23 @@ def build_workflow_event_payload(event_id, workflow_id, version_id, event_type, 
 
 
 def get_billing_workflow_by_key(conn, business_key):
-    row = conn.execute("SELECT payload FROM billing_workflows WHERE business_key = ?", (business_key,)).fetchone()
-    return json.loads(row["payload"]) if row else None
+    return get_billing_workflow_by_key_repository(conn, business_key)
 
 
 def get_billing_workflow(conn, workflow_id):
-    row = conn.execute("SELECT payload FROM billing_workflows WHERE id = ?", (workflow_id,)).fetchone()
-    return json.loads(row["payload"]) if row else None
+    return get_billing_workflow_repository(conn, workflow_id)
 
 
 def get_billing_version(conn, version_id):
-    row = conn.execute("SELECT payload FROM billing_statement_versions WHERE id = ?", (version_id,)).fetchone()
-    return json.loads(row["payload"]) if row else None
+    return get_billing_version_repository(conn, version_id)
 
 
 def list_billing_workflows(conn):
-    rows = conn.execute("SELECT payload FROM billing_workflows ORDER BY month DESC, rowid DESC").fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return list_billing_workflows_repository(conn)
 
 
 def list_billing_workflows_page(conn, filters):
-    clauses = []
-    params = []
-    if clean_text(filters.get("month", "")):
-        clauses.append("month = ?")
-        params.append(filters["month"])
-    status = clean_text(filters.get("status", ""))
-    if status == "todo":
-        clauses.append("workflow_status <> ?")
-        params.append(WORKFLOW_STATUS_FINANCE)
-    elif status == "done":
-        clauses.append("workflow_status = ?")
-        params.append(WORKFLOW_STATUS_FINANCE)
-    elif status:
-        clauses.append("workflow_status = ?")
-        params.append(status)
-    if clean_text(filters.get("sourceType", "")):
-        clauses.append("source_type = ?")
-        params.append(filters["sourceType"])
-    if clean_text(filters.get("iacuc", "")):
-        clauses.append("iacuc = ?")
-        params.append(filters["iacuc"])
-    where = " AND ".join(clauses)
-    return cached_paginated_payloads(conn, "billing_workflows", "billing_workflows", "month DESC, rowid DESC", filters, where, tuple(params))
+    return list_billing_workflows_page_repository(conn, filters, clean_text, WORKFLOW_STATUS_FINANCE)
 
 
 def list_billing_workflow_lines(conn, workflow_id, version_id=""):
@@ -5044,452 +4258,80 @@ def delete_billing_workflow(conn, workflow_id):
     workflow = get_billing_workflow(conn, workflow_id)
     if not workflow:
         raise LookupError("结算流程不存在")
-    conn.execute(
-        """
-        DELETE FROM billing_statement_version_lines
-        WHERE version_id IN (
-            SELECT id FROM billing_statement_versions WHERE workflow_id = ?
-        )
-        """,
-        (workflow_id,),
-    )
-    conn.execute("DELETE FROM billing_workflow_events WHERE workflow_id = ?", (workflow_id,))
-    conn.execute("DELETE FROM billing_statement_versions WHERE workflow_id = ?", (workflow_id,))
-    conn.execute("DELETE FROM billing_workflows WHERE id = ?", (workflow_id,))
+    delete_billing_workflow_tree_repository(conn, workflow_id)
     return workflow
 
 
 def list_billing_workflow_versions(conn, workflow_id):
-    rows = conn.execute(
-        "SELECT payload FROM billing_statement_versions WHERE workflow_id = ? ORDER BY version_no DESC, rowid DESC",
-        (workflow_id,),
-    ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return list_billing_workflow_versions_repository(conn, workflow_id)
 
 
 def list_billing_workflow_events(conn, workflow_id):
-    rows = conn.execute(
-        "SELECT payload FROM billing_workflow_events WHERE workflow_id = ? ORDER BY at DESC, rowid DESC",
-        (workflow_id,),
-    ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return list_billing_workflow_events_repository(conn, workflow_id)
 
 
 def list_billing_statement_lines_for_version(conn, version_id):
-    rows = conn.execute(
-        "SELECT payload FROM billing_statement_version_lines WHERE version_id = ? ORDER BY line_date, rowid",
-        (version_id,),
-    ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return list_billing_statement_lines_for_version_repository(conn, version_id)
 
 
 def list_current_billing_statements(conn):
-    statements = []
-    for workflow in list_billing_workflows(conn):
-        current_version = workflow.get("currentVersion") or {}
-        statement = dict((current_version.get("statement") or {}))
-        if statement:
-            statements.append(statement)
-    return statements
+    return list_current_billing_statements_repository(conn)
 
 
 def save_billing_statement_workflow(conn, statement, lines, actor, note=""):
-    source_type = normalize_workflow_source(statement.get("sourceType", ""))
-    scope_type, scope_key = workflow_scope_for_statement(statement)
-    business_key = billing_workflow_business_key(scope_type, scope_key, statement.get("month", ""), source_type)
-    existing = get_billing_workflow_by_key(conn, business_key)
-    generated_at = statement.get("generatedAt") or now_iso()
-    default_note = note or "生成饲养费结算单"
-    events = []
-
-    if not existing:
-        workflow_id = new_id("bwf")
-        version_id = new_id("stmt")
-        version_no = 1
-        lines = [{**line, "statementId": version_id} for line in lines]
-        document_number = make_statement_document_number(statement, version_no)
-        statement = enrich_statement_for_workflow(
-            statement,
-            workflow_id=workflow_id,
-            version_id=version_id,
-            version_no=version_no,
-            version_status=VERSION_STATUS_ACTIVE,
-            workflow_status=WORKFLOW_STATUS_GENERATED,
-            document_number=document_number,
-        )
-        version_payload = build_version_payload(
-            statement,
-            workflow_id,
-            version_no,
-            VERSION_STATUS_ACTIVE,
-            WORKFLOW_STATUS_GENERATED,
-            generated_at,
-            "",
-            "",
-            "",
-        )
-        workflow_payload = build_workflow_payload(
-            workflow_id,
-            statement.get("iacuc", ""),
-            statement.get("month", ""),
-            source_type,
-            WORKFLOW_STATUS_GENERATED,
-            version_payload,
-            generated_at,
-        )
-        insert_billing_workflow(conn, workflow_payload)
-        insert_billing_version(conn, version_payload)
-        replace_version_lines(conn, version_id, lines)
-        event = build_workflow_event_payload(
-            new_id("wevt"),
-            workflow_id,
-            version_id,
-            "statement_generated",
-            "",
-            WORKFLOW_STATUS_GENERATED,
-            actor,
-            generated_at,
-            "manual",
-            default_note,
-        )
-        insert_billing_workflow_event(conn, event)
-        events.append(event)
-        return workflow_payload, version_payload, statement, lines, events
-
-    workflow_id = existing["id"]
-    current_version = existing.get("currentVersion") or {}
-    current_version_id = current_version.get("id")
-    current_workflow_status = existing.get("workflowStatus", WORKFLOW_STATUS_GENERATED)
-
-    if current_workflow_status == WORKFLOW_STATUS_GENERATED and current_version_id:
-        version_id = current_version_id
-        version_no = int(current_version.get("versionNo") or existing.get("currentVersionNo") or 1)
-        lines = [{**line, "statementId": version_id} for line in lines]
-        document_number = current_version.get("documentNumber") or make_statement_document_number(statement, version_no)
-        statement = enrich_statement_for_workflow(
-            statement,
-            workflow_id=workflow_id,
-            version_id=version_id,
-            version_no=version_no,
-            version_status=VERSION_STATUS_ACTIVE,
-            workflow_status=WORKFLOW_STATUS_GENERATED,
-            document_number=document_number,
-        )
-        version_payload = build_version_payload(
-            statement,
-            workflow_id,
-            version_no,
-            VERSION_STATUS_ACTIVE,
-            WORKFLOW_STATUS_GENERATED,
-            generated_at,
-            "",
-            "",
-            "",
-        )
-        update_billing_version(conn, version_payload)
-        replace_version_lines(conn, version_id, lines)
-        workflow_payload = build_workflow_payload(
-            workflow_id,
-            statement.get("iacuc", ""),
-            statement.get("month", ""),
-            source_type,
-            WORKFLOW_STATUS_GENERATED,
-            version_payload,
-            generated_at,
-        )
-        update_billing_workflow(conn, workflow_payload)
-        event = build_workflow_event_payload(
-            new_id("wevt"),
-            workflow_id,
-            version_id,
-            "statement_generated",
-            WORKFLOW_STATUS_GENERATED,
-            WORKFLOW_STATUS_GENERATED,
-            actor,
-            generated_at,
-            "manual",
-            default_note,
-        )
-        insert_billing_workflow_event(conn, event)
-        events.append(event)
-        return workflow_payload, version_payload, statement, lines, events
-
-    void_at = generated_at
-    if current_version_id:
-        previous = get_billing_version(conn, current_version_id) or current_version
-        previous_statement = dict(previous.get("statement") or {})
-        previous_statement["workflowStatus"] = current_workflow_status
-        previous_payload = build_version_payload(
-            previous_statement,
-            workflow_id,
-            int(previous.get("versionNo") or existing.get("currentVersionNo") or 1),
-            VERSION_STATUS_VOIDED,
-            current_workflow_status,
-            previous.get("generatedAt") or generated_at,
-            void_at,
-            actor.get("displayName", ""),
-            note or "根据更正数据生成修订版",
-        )
-        update_billing_version(conn, previous_payload)
-        void_event = build_workflow_event_payload(
-            new_id("wevt"),
-            workflow_id,
-            current_version_id,
-            "statement_voided",
-            current_workflow_status,
-            current_workflow_status,
-            actor,
-            void_at,
-            "manual",
-            note or "旧版本作废，生成修订版",
-        )
-        insert_billing_workflow_event(conn, void_event)
-        events.append(void_event)
-
-    version_no = int(existing.get("currentVersionNo") or 0) + 1
-    version_id = new_id("stmt")
-    lines = [{**line, "statementId": version_id} for line in lines]
-    document_number = make_statement_document_number(statement, version_no)
-    statement = enrich_statement_for_workflow(
-        statement,
-        workflow_id=workflow_id,
-        version_id=version_id,
-        version_no=version_no,
-        version_status=VERSION_STATUS_ACTIVE,
-        workflow_status=WORKFLOW_STATUS_GENERATED,
-        document_number=document_number,
-    )
-    version_payload = build_version_payload(
-        statement,
-        workflow_id,
-        version_no,
-        VERSION_STATUS_ACTIVE,
-        WORKFLOW_STATUS_GENERATED,
-        generated_at,
-        "",
-        "",
-        "",
-    )
-    insert_billing_version(conn, version_payload)
-    replace_version_lines(conn, version_id, lines)
-    workflow_payload = build_workflow_payload(
-        workflow_id,
-        statement.get("iacuc", ""),
-        statement.get("month", ""),
-        source_type,
-        WORKFLOW_STATUS_GENERATED,
-        version_payload,
-        generated_at,
-    )
-    update_billing_workflow(conn, workflow_payload)
-    revise_event = build_workflow_event_payload(
-        new_id("wevt"),
-        workflow_id,
-        version_id,
-        "statement_revised",
-        current_workflow_status,
-        WORKFLOW_STATUS_GENERATED,
-        actor,
-        generated_at,
-        "manual",
-        note or "基于当前有效版本生成修订版",
-    )
-    insert_billing_workflow_event(conn, revise_event)
-    events.append(revise_event)
-    return workflow_payload, version_payload, statement, lines, events
+    return save_billing_statement_workflow_service(conn, statement, lines, actor, note, billing_workflow_service_deps())
 
 
 def insert_billing_workflow(conn, payload):
-    conn.execute(
-        """
-        INSERT INTO billing_workflows (
-            id, business_key, iacuc, month, source_type, workflow_status,
-            current_version_id, current_version_no, latest_event_at, payload
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            payload["id"],
-            payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
-            payload.get("iacuc", ""),
-            payload.get("month", ""),
-            payload.get("sourceType", ""),
-            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
-            payload.get("currentVersionId", ""),
-            as_int(payload.get("currentVersionNo")) or 0,
-            payload.get("latestEventAt", ""),
-            dump_json(payload),
-        ),
+    insert_billing_workflow_repository(
+        conn,
+        payload,
+        payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
+        payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
+        as_int(payload.get("currentVersionNo")) or 0,
     )
 
 
 def update_billing_workflow(conn, payload):
-    conn.execute(
-        """
-        UPDATE billing_workflows
-        SET business_key = ?, iacuc = ?, month = ?, source_type = ?, workflow_status = ?,
-            current_version_id = ?, current_version_no = ?, latest_event_at = ?, payload = ?
-        WHERE id = ?
-        """,
-        (
-            payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
-            payload.get("iacuc", ""),
-            payload.get("month", ""),
-            payload.get("sourceType", ""),
-            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
-            payload.get("currentVersionId", ""),
-            as_int(payload.get("currentVersionNo")) or 0,
-            payload.get("latestEventAt", ""),
-            dump_json(payload),
-            payload["id"],
-        ),
+    update_billing_workflow_repository(
+        conn,
+        payload,
+        payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
+        payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
+        as_int(payload.get("currentVersionNo")) or 0,
     )
 
 
 def insert_billing_version(conn, payload):
-    conn.execute(
-        """
-        INSERT INTO billing_statement_versions (
-            id, workflow_id, version_no, version_status, workflow_status,
-            generated_at, voided_at, created_by, payload
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            payload["id"],
-            payload.get("workflowId", ""),
-            as_int(payload.get("versionNo")) or 1,
-            payload.get("versionStatus", VERSION_STATUS_ACTIVE),
-            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
-            payload.get("generatedAt", ""),
-            payload.get("voidedAt", ""),
-            payload.get("statement", {}).get("createdBy", ""),
-            dump_json(payload),
-        ),
+    insert_billing_version_repository(
+        conn,
+        payload,
+        as_int(payload.get("versionNo")) or 1,
+        payload.get("versionStatus", VERSION_STATUS_ACTIVE),
+        payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
     )
 
 
 def update_billing_version(conn, payload):
-    conn.execute(
-        """
-        UPDATE billing_statement_versions
-        SET version_no = ?, version_status = ?, workflow_status = ?, generated_at = ?,
-            voided_at = ?, created_by = ?, payload = ?
-        WHERE id = ?
-        """,
-        (
-            as_int(payload.get("versionNo")) or 1,
-            payload.get("versionStatus", VERSION_STATUS_ACTIVE),
-            payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
-            payload.get("generatedAt", ""),
-            payload.get("voidedAt", ""),
-            payload.get("statement", {}).get("createdBy", ""),
-            dump_json(payload),
-            payload["id"],
-        ),
+    update_billing_version_repository(
+        conn,
+        payload,
+        as_int(payload.get("versionNo")) or 1,
+        payload.get("versionStatus", VERSION_STATUS_ACTIVE),
+        payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
     )
 
 
 def replace_version_lines(conn, version_id, lines):
-    conn.execute("DELETE FROM billing_statement_version_lines WHERE version_id = ?", (version_id,))
-    for index, line in enumerate(lines, start=1):
-        normalized = {**line, "versionId": version_id}
-        line_id = normalized.get("id") or f"{version_id}-line-{index}"
-        conn.execute(
-            """
-            INSERT INTO billing_statement_version_lines (id, version_id, line_date, payload)
-            VALUES (?, ?, ?, ?)
-            """,
-            (line_id, version_id, normalized.get("date", ""), dump_json(normalized)),
-        )
+    replace_billing_statement_version_lines_repository(conn, version_id, lines)
 
 
 def insert_billing_workflow_event(conn, payload):
-    conn.execute(
-        """
-        INSERT INTO billing_workflow_events (
-            id, workflow_id, version_id, event_type, from_status, to_status, at, payload
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            payload["id"],
-            payload.get("workflowId", ""),
-            payload.get("versionId", ""),
-            payload.get("eventType", ""),
-            payload.get("fromStatus", ""),
-            payload.get("toStatus", ""),
-            payload.get("at", ""),
-            dump_json(payload),
-        ),
-    )
+    insert_billing_workflow_event_repository(conn, payload)
 
 
 def update_workflow_status(conn, workflow_id, next_status, actor, note=""):
-    workflow = get_billing_workflow(conn, workflow_id)
-    if not workflow:
-        raise LookupError("结算流程不存在")
-    current_status = workflow.get("workflowStatus", WORKFLOW_STATUS_GENERATED)
-    allowed = {
-        WORKFLOW_STATUS_GENERATED: WORKFLOW_STATUS_SENT,
-        WORKFLOW_STATUS_SENT: WORKFLOW_STATUS_SIGNED,
-        WORKFLOW_STATUS_SIGNED: WORKFLOW_STATUS_FINANCE,
-    }
-    if allowed.get(current_status) != next_status:
-        raise ValueError("当前流程状态不允许执行该操作")
-
-    version = get_billing_version(conn, workflow.get("currentVersionId", ""))
-    if not version:
-        raise LookupError("当前有效结算单不存在")
-    statement = dict(version.get("statement") or {})
-    at = now_iso()
-    statement["workflowStatus"] = next_status
-    if next_status == WORKFLOW_STATUS_SENT:
-        statement["sentAt"] = at
-    elif next_status == WORKFLOW_STATUS_SIGNED:
-        statement["signedReturnedAt"] = at
-    elif next_status == WORKFLOW_STATUS_FINANCE:
-        statement["submittedToFinanceAt"] = at
-    updated_version = build_version_payload(
-        statement,
-        workflow_id,
-        version.get("versionNo", 1),
-        version.get("versionStatus", VERSION_STATUS_ACTIVE),
-        next_status,
-        version.get("generatedAt", at),
-        version.get("voidedAt", ""),
-        version.get("voidedBy", ""),
-        version.get("voidReason", ""),
-    )
-    update_billing_version(conn, updated_version)
-    updated_workflow = build_workflow_payload(
-        workflow_id,
-        workflow.get("iacuc", ""),
-        workflow.get("month", ""),
-        workflow.get("sourceType", ""),
-        next_status,
-        updated_version,
-        at,
-    )
-    update_billing_workflow(conn, updated_workflow)
-    event = build_workflow_event_payload(
-        new_id("wevt"),
-        workflow_id,
-        updated_version["id"],
-        {
-            WORKFLOW_STATUS_SENT: "statement_sent",
-            WORKFLOW_STATUS_SIGNED: "statement_signed_returned",
-            WORKFLOW_STATUS_FINANCE: "submitted_to_finance",
-        }[next_status],
-        current_status,
-        next_status,
-        actor,
-        at,
-        "manual",
-        note,
-    )
-    insert_billing_workflow_event(conn, event)
-    return updated_workflow, updated_version, event
+    return update_workflow_status_service(conn, workflow_id, next_status, actor, note, billing_workflow_service_deps())
 
 
 def parse_multipart_upload(content_type, raw):
@@ -5534,11 +4376,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def end_headers(self):
-        if not urlparse(self.path).path.startswith("/api/"):
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-        self.send_header("X-Content-Type-Options", "nosniff")
+        add_default_headers(self)
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -5927,13 +4765,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             raise ValueError("Invalid JSON body") from exc
 
     def send_json(self, payload, status=HTTPStatus.OK):
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        send_json_response(self, payload, status)
 
     def handle_login(self):
         try:
@@ -6176,51 +5008,17 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         with connect_db() as conn:
             if table == "audit_events":
                 filters = self.list_filters(default_limit=500, max_limit=1000)
-                where, params = filtered_where(
-                    [
-                        ("entityType", "entity_type = ?"),
-                        ("action", "action = ?"),
-                    ],
-                    filters,
-                )
-                payload = paginated_payloads(conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"])
+                payload = list_audit_events_page(conn, filters, filtered_where)
                 items = payload["items"]
                 page = payload["page"]
             elif table == "intake_batches":
                 filters = self.list_filters()
-                where, params = filtered_where(
-                    [
-                        ("status", "status = ?"),
-                        ("iacuc", "iacuc = ?"),
-                        ("roomName", "room_name = ?"),
-                    ],
-                    filters,
-                )
-                if filters.get("month"):
-                    where = " AND ".join([part for part in (where, "intake_date LIKE ?") if part])
-                    params = (*params, f"{filters['month']}%")
-                payload = paginated_payloads(conn, "intake_batches", ENTITY_ORDER_BY.get(table, "rowid"), where, params, filters["limit"], filters["offset"])
+                payload = list_intake_batches_page(conn, filters, filtered_where, ENTITY_ORDER_BY)
                 items = payload["items"]
                 page = payload["page"]
             elif table == "placement_tasks":
                 filters = self.list_filters()
-                where_parts = []
-                params = []
-                status = clean_text(filters.get("status", ""))
-                if status == "open":
-                    where_parts.append("status NOT IN ('active', 'cancelled')")
-                elif status:
-                    where_parts.append("status = ?")
-                    params.append(status)
-                room_id = clean_text(filters.get("roomId", ""))
-                if room_id:
-                    where_parts.append("target_room_id = ?")
-                    params.append(room_id)
-                where = " AND ".join(where_parts)
-                if filters.get("month"):
-                    where = " AND ".join([part for part in (where, "planned_move_in_date LIKE ?") if part])
-                    params = (*params, f"{filters['month']}%")
-                payload = paginated_payloads(conn, "placement_tasks", ENTITY_ORDER_BY.get(table, "rowid"), where, params, filters["limit"], filters["offset"])
+                payload = list_placement_tasks_page(conn, filters, ENTITY_ORDER_BY, clean_text)
                 items = payload["items"]
                 page = payload["page"]
             else:
@@ -6514,6 +5312,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+
+configure_database(initialize_schema)
 
 
 def main():

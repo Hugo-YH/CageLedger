@@ -1,36 +1,42 @@
-const STORAGE_KEY = "cageledger.v1";
-const LEGACY_STORAGE_KEY = "lahcas.v1";
-const VERSION_REFRESH_KEY = "cageledger.version-refresh";
-const CACHE_RESET_NOTICE_KEY = "cageledger.cache-reset-notice";
-const MAX_LOCAL_STATE_BYTES = 800_000;
-const API_AUTH_ME_URL = "/api/auth/me";
-const API_LOGIN_URL = "/api/auth/login";
-const API_LOGOUT_URL = "/api/auth/logout";
-const API_USERS_URL = "/api/users";
-const API_IACUC_INDEX_URL = "/api/iacuc-index";
-const API_IACUC_UPLOAD_URL = "/api/iacuc-index/upload";
-const API_PRINCIPAL_IDENTITIES_URL = "/api/principal-identities";
-const API_SYSTEM_INFO_URL = "/api/system/info";
-const API_SYSTEM_UPDATE_URL = "/api/system/update-check";
-const API_BOOTSTRAP_URL = "/api/bootstrap";
-const API_BILLING_OCCUPANCIES_URL = "/api/infrastructure/occupancies";
-const API_BILLING_STATEMENT_GENERATE_BY_PI_URL = "/api/billing-statements/generate-by-pi";
-const API_BILLING_WORKFLOWS_URL = "/api/billing-workflows";
-const API_BILLING_WORKFLOW_ADVANCE_URL = "/api/billing-workflows/advance";
-const API_QUANTITY_SHEETS_URL = "/api/quantity-sheets";
-const API_INFRASTRUCTURE_URL = "/api/infrastructure";
-const ENTITY_API_URLS = {
-  rooms: "/api/rooms",
-  racks: "/api/racks",
-  slots: "/api/cage-slots",
-  occupancies: "/api/occupancies",
-  placementTasks: "/api/placement-tasks",
-  billingRules: "/api/billing-rules",
-  adjustments: "/api/billing-adjustments",
-  intakeBatches: "/api/intake-batches",
-  auditLogs: "/api/audit-events",
-};
+import {
+  API_AUTH_ME_URL,
+  API_BILLING_STATEMENT_GENERATE_BY_PI_URL,
+  API_BILLING_WORKFLOW_ADVANCE_URL,
+  API_BILLING_WORKFLOWS_URL,
+  API_BOOTSTRAP_URL,
+  API_IACUC_INDEX_URL,
+  API_IACUC_UPLOAD_URL,
+  API_INFRASTRUCTURE_URL,
+  API_LOGIN_URL,
+  API_LOGOUT_URL,
+  API_PRINCIPAL_IDENTITIES_URL,
+  API_QUANTITY_SHEETS_URL,
+  API_SYSTEM_INFO_URL,
+  API_SYSTEM_UPDATE_URL,
+  API_USERS_URL,
+  ENTITY_API_URLS,
+} from "./api/endpoints.js";
+import { buildBootstrapUrl as buildBootstrapApiUrl } from "./api/bootstrap.js";
+import {
+  buildAuditLogsUrl as buildAuditLogsApiUrl,
+  buildBillingOccupanciesUrl as buildBillingOccupanciesApiUrl,
+  buildBillingStatementUrl as buildBillingStatementApiUrl,
+  buildBillingWorkflowLinesUrl as buildBillingWorkflowLinesApiUrl,
+  buildBillingWorkflowsUrl as buildBillingWorkflowsApiUrl,
+  buildQuantitySheetsUrl as buildQuantitySheetsApiUrl,
+} from "./api/billing.js";
+import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksUrl as buildPlacementTasksApiUrl } from "./api/intake.js";
+import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.5.3",
+    title: "Spec-Driven 全项目整理",
+    items: [
+      "后端拆分为配置、数据库、缓存、HTTP、仓储和服务层，结算、数量统计表、笼卡接收与待进驻主链迁入 server_app",
+      "前端建立 api、state、domain、views、print 模块边界，API URL 构造和本地状态常量从主入口拆出",
+      "新增 API smoke 验证脚本，并同步更新 Wiki、进度追踪和项目级代理规范",
+    ],
+  },
   {
     version: "0.5.2c",
     title: "系统设置抽屉与列表控件细节修正",
@@ -607,7 +613,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.2c",
+  version: "0.5.3",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1341,74 +1347,39 @@ function scheduleRender(reason = "") {
 }
 
 function buildBootstrapUrl(scope = "summary", roomId = "") {
-  const url = new URL(API_BOOTSTRAP_URL, window.location.origin);
-  url.searchParams.set("scope", scope);
-  if (roomId) url.searchParams.set("roomId", roomId);
-  return `${url.pathname}${url.search}`;
+  return buildBootstrapApiUrl(scope, roomId);
 }
 
 function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId = "", limit = 50, offset = 0 } = {}) {
-  const url = new URL(API_QUANTITY_SHEETS_URL, window.location.origin);
-  if (month) url.searchParams.set("month", month);
-  if (iacuc) url.searchParams.set("iacuc", iacuc);
-  if (pi) url.searchParams.set("pi", pi);
-  if (roomId) url.searchParams.set("roomId", roomId);
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("offset", String(offset));
-  return `${url.pathname}${url.search}`;
+  return buildQuantitySheetsApiUrl({ month, iacuc, pi, roomId, limit, offset });
 }
 
 function buildBillingWorkflowsUrl({ month = "", status = "todo", limit = 50, offset = 0 } = {}) {
-  const url = new URL(API_BILLING_WORKFLOWS_URL, window.location.origin);
-  if (month) url.searchParams.set("month", month);
-  if (status) url.searchParams.set("status", status);
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("offset", String(offset));
-  return `${url.pathname}${url.search}`;
+  return buildBillingWorkflowsApiUrl({ month, status, limit, offset });
 }
 
 function buildAuditLogsUrl({ limit = 200, offset = 0 } = {}) {
-  const url = new URL(ENTITY_API_URLS.auditLogs, window.location.origin);
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("offset", String(offset));
-  return `${url.pathname}${url.search}`;
+  return buildAuditLogsApiUrl({ limit, offset });
 }
 
 function buildBillingOccupanciesUrl({ month = "", iacuc = "", pi = "" } = {}) {
-  const url = new URL(API_BILLING_OCCUPANCIES_URL, window.location.origin);
-  if (month) url.searchParams.set("month", month);
-  if (iacuc) url.searchParams.set("iacuc", iacuc);
-  if (pi) url.searchParams.set("pi", pi);
-  return `${url.pathname}${url.search}`;
+  return buildBillingOccupanciesApiUrl({ month, iacuc, pi });
 }
 
 function buildIntakeBatchesUrl({ status = "", month = "", limit = 5, offset = 0 } = {}) {
-  const url = new URL(ENTITY_API_URLS.intakeBatches, window.location.origin);
-  if (status && status !== "all") url.searchParams.set("status", status);
-  if (month) url.searchParams.set("month", month);
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("offset", String(offset));
-  return `${url.pathname}${url.search}`;
+  return buildIntakeBatchesApiUrl({ status, month, limit, offset });
 }
 
 function buildPlacementTasksUrl({ roomId = "", month = "", status = "", limit = 5, offset = 0 } = {}) {
-  const url = new URL(ENTITY_API_URLS.placementTasks, window.location.origin);
-  if (roomId) url.searchParams.set("roomId", roomId);
-  if (month) url.searchParams.set("month", month);
-  if (status) url.searchParams.set("status", status);
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("offset", String(offset));
-  return `${url.pathname}${url.search}`;
+  return buildPlacementTasksApiUrl({ roomId, month, status, limit, offset });
 }
 
 function buildBillingStatementUrl(statementId) {
-  return `/api/billing-statements/${encodeURIComponent(statementId)}`;
+  return buildBillingStatementApiUrl(statementId);
 }
 
 function buildBillingWorkflowLinesUrl(workflowId, versionId = "") {
-  const url = new URL(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}/lines`, window.location.origin);
-  if (versionId) url.searchParams.set("versionId", versionId);
-  return `${url.pathname}${url.search}`;
+  return buildBillingWorkflowLinesApiUrl(workflowId, versionId);
 }
 
 async function loadPersistedState() {

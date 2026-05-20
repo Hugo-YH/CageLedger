@@ -1,66 +1,59 @@
 # Risk Assessment
 
-## S.U.P.E.R Architecture Health Summary
+> Baseline: CageLedger `0.5.2c`
 
-> 当前代码库具备可运行、可部署、可发布的业务能力，规范化改造的关键点是把隐式契约变成显式契约，把单文件复合职责拆成稳定边界。
+## S.U.P.E.R Architecture Health Summary
 
 | Principle | Status | Key Findings | Transformation Priority |
 |:----------|:-------|:-------------|:------------------------|
-| **S** Single Purpose | 🔴 | `src/app.js` 和 `server.py` 都承担多类职责，单文件复杂度过高 | High |
-| **U** Unidirectional Flow | 🟡 | 主要数据流能描述，状态回写、页面重绘和服务端辅助函数仍有跨层耦合 | High |
-| **P** Ports over Implementation | 🔴 | 接口返回结构、前端状态结构、脚本输入输出多依赖内联字典和隐式格式 | High |
-| **E** Environment-Agnostic | 🟡 | 环境变量基础完整，静态模式、共享模式、打印模式和 runner 差异仍有实现层散布 | Medium |
-| **R** Replaceable Parts | 🔴 | 替换前端状态层、后端存储层或流程模块都会波及大面积调用点 | High |
+| **S** Single Purpose | 🔴 | `src/app.js` 和 `server.py` 仍承担跨层复合职责 | High |
+| **U** Unidirectional Flow | 🟡 | 主数据流可描述，局部写入、缓存失效、补拉路径需要集中化 | High |
+| **P** Ports over Implementation | 🟡 | 本轮新增契约文档，代码层仍待按契约迁移 | High |
+| **E** Environment-Agnostic | 🟡 | static/shared/runner/Docker 模式已可用，环境能力边界仍需收敛 | Medium |
+| **R** Replaceable Parts | 🔴 | 前端页面、后端服务、仓储和发布链替换成本仍高 | High |
 
-**Overall Health**: _1/5 principles healthy_ — Technical Debt Alert
-
-### S.U.P.E.R Violation Hotspots
-
-1. `src/app.js`
-2. `server.py`
-3. `src/styles.css`
-4. `scripts/release_local.sh` 与版本同步链
-5. `.gitea/workflows/*` 的发布约定
+**Overall Health**: `1/5` principles healthy. 当前重点是把已经文档化的契约推进到代码层。
 
 ## Risk Matrix
 
 | Risk | Impact | Likelihood | Severity | Mitigation |
 |:-----|:-------|:-----------|:---------|:-----------|
-| 单文件改动触发连锁回归 | High | High | Critical | 先定义契约与边界，再做物理拆分 |
-| 结算链 UI 与数据链路偏离 | High | Medium | High | 每个结算相关任务同时验证前后端与导出结果 |
-| 本地静态模式与共享模式行为漂移 | Medium | High | High | 把模式差异归入显式配置层并补行为清单 |
-| 发布链 tag、release、镜像语义失配 | High | Medium | High | 固化 release contract，保留版本同步和发布顺序约束 |
-| Gitea runner / shell / 内网环境差异引入发布失败 | Medium | Medium | Medium | 为 workflow 补执行环境约束和兼容检查 |
-| 旧库兼容与迁移逻辑被重构破坏 | High | Medium | High | 迁移逻辑分层前先抽兼容 contract 和回归样本 |
-| 演示和正式数据边界混淆 | Medium | Low | Medium | 脚本化生成演示数据，保持 `data/` 不入库 |
+| 单文件拆分触发连锁回归 | High | High | Critical | 按契约先抽 API/state/db/service，保持旧入口兼容 |
+| 笼卡到待进驻链路状态漂移 | High | Medium | High | 确认接收、任务预留、正式入驻使用同一 service contract |
+| 数量统计表转入转出镜像失配 | High | Medium | High | 写入接口返回 `sheet + affectedSheets + auditLogs`，前端局部合并 |
+| 结算流程列表和详情不同步 | Medium | Medium | Medium | workflow 写入返回可合并对象和事件增量 |
+| 房间管理员权限边界回退 | High | Medium | High | repository/service 层保留 actor 过滤和 roomIds 校验 |
+| static/shared 模式行为分裂 | Medium | High | High | state/API 层显式声明 remote/local 分支 |
+| Gitea 发布链语义漂移 | High | Medium | High | Phase 4 固化 tag -> release -> package -> wiki sync contract |
+| Wiki 与内部 spec docs 混淆 | Medium | Medium | Medium | `wiki/` 面向用户运维，`docs/` 面向改造执行 |
 
-## High-Severity Risks
+## High-Severity Hotspots
 
-### 1. 业务核心集中在两个超大文件
+### 1. `src/app.js`
 
-`src/app.js` 和 `server.py` 已经具备完整业务能力，同时也积累了隐式依赖。直接按功能点横切改动，回归面会持续扩大。规范化的第一步是把状态、契约、仓储、服务、视图分层清单写出来。
+当前同一文件承载 app shell、state、API、view、domain helper、print/export。Phase 3 之前先使用 [Frontend State Contract](../contracts/frontend-state.md) 约束所有写入策略。
 
-### 2. 结算链路对隐式数据结构依赖很重
+### 2. `server.py`
 
-数量统计表、动态笼位图、结算预览、导出 PDF、流程中心之间共享大量结构化对象。当前对象格式主要依赖实现细节和命名约定。任何前后端字段调整都需要显式 schema 和回归样本。
+当前同一文件承载 HTTP、schema、migration、repository-like access、service-like workflows。Phase 2 先使用 [API Contracts](../contracts/api-contracts.md) 和 [Module Boundaries](../contracts/module-boundaries.md) 固定迁移顺序。
 
-### 3. 多运行模式并存
+### 3. Intake -> Placement -> Cage Map
 
-静态模式、共享模式、打印模式、导出模式、Gitea 发布模式都存在独立行为差异。当前差异主要靠条件分支管理。后续应当把模式切换前移为配置层和 capability layer。
+确认接收会生成待进驻任务；预留会创建 `reserved` occupancy；正式入驻会转为 `active` 并成为计费起点。任何拆分都要保留这一条状态链。
 
-## Technical Debt
+### 4. Quantity Sheets -> Billing Workflows
 
-- 前端状态层、渲染层、领域逻辑层耦合
-- 后端路由、仓储、服务、兼容迁移耦合
-- API 契约缺少集中定义
-- 打印/导出逻辑与业务对象绑定过深
-- 样式系统以单文件维护，模块边界较弱
-- 进度、架构和重构约束此前未进入正式项目文档
+数量统计表保存涉及受影响表、审计日志、结算单和流程中心局部更新。拆分时需要优先保护返回结构与前端合并策略。
 
-## Compatibility Concerns
+### 5. Gitea Release / Package / Wiki
 
-- SQLite 旧库自动升级路径必须保持可用
-- IACUC 历史兼容字段和 CSV 列别名必须保持可用
-- 数量统计表与动态笼位图双入口必须保持并存
-- 发布检查必须继续以 Gitea Release 为准
-- 房间管理员权限边界必须保持稳定
+更新检查以最新 Gitea Release 为准；容器镜像与 tag 对应；Wiki 从 `wiki/**` 同步。发布链变更必须同时验证 release package、container package、wiki sync。
+
+## Compatibility Requirements
+
+- SQLite 旧库迁移路径保持可运行。
+- IACUC 历史字段、CSV 列别名和 `项目来源 -> funding` 语义保持稳定。
+- 数量统计表和动态笼位图双入口保持并存。
+- 房间管理员只能访问授权饲养间。
+- 系统更新继续读取 Gitea latest Release。
+- `wiki/` 继续作为面向用户和运维的正式文档入口。

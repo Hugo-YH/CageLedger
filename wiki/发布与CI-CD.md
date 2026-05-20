@@ -20,6 +20,15 @@ npm run release:local -- --version X.Y.Z --push
 
 发布前先更新 `src/app.js` 中的 `SYSTEM_RELEASE_NOTES`。
 
+## 发布前检查
+
+```bash
+npm run check
+python3 -m py_compile server.py server_app/*.py server_app/repositories/*.py server_app/services/*.py
+npm run smoke:api
+npm run package:offline
+```
+
 ## Gitea Actions 分工
 
 | 工作流 | 作用 |
@@ -27,6 +36,8 @@ npm run release:local -- --version X.Y.Z --push
 | `release-package.yml` | 创建 Release、上传离线包 |
 | `publish-container.yml` | 构建并推送容器镜像 |
 | `sync-wiki.yml` | 同步 `wiki/` 到 Gitea Wiki |
+
+`wiki/**` 变更合入 `main` 后会触发 Wiki 同步；版本发布 tag 会触发 Release 离线包和容器镜像发布。
 
 ## 凭据
 

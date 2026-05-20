@@ -8,6 +8,14 @@
 | `GET` | `/api/system/info` | 系统信息 |
 | `GET` | `/api/system/update-check` | Gitea 最新 Release 检查 |
 
+## 验证入口
+
+```bash
+npm run smoke:api
+```
+
+该命令会登录本地服务并检查健康检查、bootstrap、笼卡批次、待进驻任务、数量统计表、结算流程和项目负责人身份接口。
+
 ## 认证与账号
 
 | 方法 | 路径 |
@@ -57,4 +65,4 @@
 
 ## 存储模型
 
-后端使用 SQLite，并包含设施、占用、数量统计表、结算流程、负责人身份和审计事件等表。
+后端使用 SQLite，并包含设施、占用、数量统计表、结算流程、负责人身份和审计事件等表。表级访问集中在 `server_app/repositories/`，跨表业务流程集中在 `server_app/services/`。

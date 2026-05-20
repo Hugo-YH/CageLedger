@@ -72,23 +72,40 @@ Before marking any task as complete, verify ALL of the following:
 ## 4. Target Technology Coding Standards
 
 - 前端继续使用原生 HTML/CSS/JavaScript。新文件按功能拆分到 `src/` 下的明确子目录，入口保持轻量。
-- 后端继续使用 Python 标准库 HTTP 服务和 SQLite。路由层、仓储层、服务层、契约辅助层分开组织。
+- 后端继续使用 Python 标准库 HTTP 服务和 SQLite。`server.py` 保留 HTTP 入口，配置、数据库、缓存、HTTP helper、仓储和服务层落在 `server_app/`。
 - API 契约优先使用显式 JSON shape 文档，前后端共享同一字段命名和可序列化结构。
+- 前端入口保持 `src/app.js`，API、状态、领域 helper、视图边界和打印边界分别落在 `src/api/`、`src/state/`、`src/domain/`、`src/views/`、`src/print/`。
 - 前端错误处理统一走站内通知与站内确认弹层。
 - 状态更新统一经过显式 state helper，渲染经过统一调度入口。
 - 后端配置统一来源于环境变量和配置 helper，文件路径、端口、仓库地址、令牌变量不散落在业务函数中。
 - 发布、打包、Wiki 同步继续走已有脚本和 `.gitea/workflows/*`，所有改动都要保留现有 release contract。
 - 验证基线：
   - `npm run check`
+  - `npm run smoke:api`
   - 需要时补 `python3 -m py_compile ...`
   - 涉及页面行为时验证本地运行实例
 
 ## 5. Project-Specific Architecture Context
 
-- 当前最大 S.U.P.E.R 违反点在 `src/app.js` 和 `server.py`。这两个文件承担多重职责，是规范化改造的第一优先级。
+- `src/app.js` 和 `server.py` 仍是兼容入口；新增代码优先落在现有模块目录，避免继续扩大入口文件职责。
 - 目标分层模型：
   - Frontend: `app shell -> state -> api client -> domain helpers -> view modules`
   - Backend: `http routes -> service layer -> repository layer -> sqlite/runtime adapters`
+- Phase 1 契约基线已经完成，后续实现前先读取：
+  - `docs/contracts/frontend-state.md`
+  - `docs/contracts/api-contracts.md`
+  - `docs/contracts/module-boundaries.md`
+- Phase 2 后端拆分结果：
+  - config/db/cache/response helper
+  - repository helpers
+  - domain services
+  - handler thinning
+- Phase 3 前端拆分结果：
+  - API client
+  - state slices
+  - domain helpers
+  - view modules
+  - print/export modules
 - 当前必须优先修复的风险：
   - 结算链隐式契约
   - 本地静态模式与共享模式的行为分支
@@ -112,6 +129,7 @@ Before marking any task as complete, verify ALL of the following:
 ## 6. Progress Update Instructions
 
 Current project mode is `LOCAL_ONLY`.
+Current active phase is Complete. Current active task is v0.5.3 release verification.
 
 - Update the checkbox in the active `docs/progress/phase-*.md` file.
 - Update completion counts in `docs/progress/MASTER.md`.
