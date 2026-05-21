@@ -1,68 +1,135 @@
 # API 与数据模型
 
-## 系统接口
+本页覆盖当前主要 API 家族、响应约定和核心数据语义。完整技术契约以 `docs/contracts/api-contracts.md` 为准。
+
+## 通用约定
+
+| 项目 | 约定 |
+| --- | --- |
+| 认证 | Cookie Session，`GET /api/auth/me` 判断当前用户 |
+| 错误形状 | `{ "error": "message" }` |
+| 列表形状 | `{ "items": [...], "page": { "limit", "offset", "total", "hasMore" } }` |
+| 单对象形状 | `{ "item": {...} }` |
+| 审计增量 | 写入接口可返回 `auditLogs`，前端按增量合并 |
+| 权限 | `admin` 全局；`room_admin` 按授权房间过滤 |
+
+## 主要 API 家族
+
+### 认证与账号
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | 登录 |
+| `POST` | `/api/auth/logout` | 登出 |
+| `GET` | `/api/auth/me` | 当前用户 |
+| `GET` / `POST` | `/api/users` | 查询或创建账号 |
+| `PUT` / `DELETE` | `/api/users/{id}` | 更新或删除账号 |
+
+### Bootstrap 与设施
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/bootstrap?scope=summary` | 首页摘要、房间摘要、笼架摘要 |
+| `GET` | `/api/bootstrap?scope=room&roomId=...` | 单房间设施、笼位、占用、待进驻任务 |
+| `GET` | `/api/bootstrap?scope=full` | 全量共享状态 |
+| `POST` | `/api/infrastructure` | 批量写入 rooms / racks / slots / occupancies |
+| `GET` | `/api/infrastructure/occupancies` | 结算定向占用读取 |
+
+### 笼卡与待进驻
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/intake-batches` | 分页查询待接收批次 |
+| `POST` | `/api/intake-batches` | 新建待接收批次 |
+| `PUT` | `/api/intake-batches/{id}` | 更新待接收批次 |
+| `DELETE` | `/api/intake-batches/{id}` | 删除待接收批次及相关开放任务 |
+| `POST` | `/api/intake-batches/{id}/confirm-receipt` | 确认实际接收并生成待进驻任务 |
+| `GET` | `/api/placement-tasks` | 分页查询待进驻任务 |
+| `POST` | `/api/placement-tasks/{id}/reserve` | 预留空笼位 |
+| `POST` | `/api/placement-tasks/{id}/move-in` | 正式入驻 |
+| `POST` | `/api/placement-tasks/{id}/reassign-room` | 改签目标饲养间 |
+
+### 数量统计表与结算
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/quantity-sheets` | 分页查询数量统计表 |
+| `GET` | `/api/quantity-sheets/{id}` | 查询单张统计表 |
+| `POST` / `PUT` | `/api/quantity-sheets` | 新建或更新统计表 |
+| `DELETE` | `/api/quantity-sheets/{id}` | 删除统计表和转移镜像行 |
+| `POST` | `/api/quantity-sheets/{id}/generate-statement` | 从统计表生成结算单 |
+| `POST` | `/api/billing-statements/generate` | 从动态笼位图生成结算单 |
+| `POST` | `/api/billing-statements/generate-by-pi` | 按项目负责人合表生成结算单 |
+| `GET` | `/api/billing-workflows` | 分页查询流程中心列表 |
+| `GET` | `/api/billing-workflows/{id}` | 查询流程详情摘要 |
+| `GET` | `/api/billing-workflows/{id}/lines` | 查询指定版本明细 |
+| `POST` | `/api/billing-workflows/advance` | 推进流程状态 |
+| `DELETE` | `/api/billing-workflows/{id}` | 删除流程 |
+
+### 系统与数据
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/health` | 健康检查 |
 | `GET` | `/api/system/info` | 系统信息 |
 | `GET` | `/api/system/update-check` | Gitea 最新 Release 检查 |
+| `GET` | `/api/iacuc-index` | IACUC 索引载荷 |
+| `GET` | `/api/iacuc-index/status` | IACUC 索引状态 |
+| `POST` | `/api/iacuc-index/upload` | 上传 CSV 索引 |
+| `GET` | `/api/principal-identities` | 查询负责人身份 |
+| `PUT` | `/api/principal-identities/{name}` | 更新负责人身份 |
+| `GET` | `/api/audit-events` | 查询审计日志 |
 
-## 验证入口
+## 关键响应形状
 
-```bash
-npm run smoke:api
-```
-
-该命令会登录本地服务并检查健康检查、bootstrap、笼卡批次、待进驻任务、数量统计表、结算流程和项目负责人身份接口。
-
-## 认证与账号
-
-| 方法 | 路径 |
-| --- | --- |
-| `POST` | `/api/auth/login` |
-| `POST` | `/api/auth/logout` |
-| `GET` | `/api/auth/me` |
-| `GET` / `POST` | `/api/users` |
-| `PUT` / `DELETE` | `/api/users/{id}` |
-
-## 主要业务接口
-
-| 领域 | 代表接口 |
-| --- | --- |
-| 设施 | `/api/rooms`、`/api/racks`、`/api/cage-slots` |
-| 占用 | `/api/occupancies` |
-| 待进驻动物 | `/api/placement-tasks` |
-| 数量统计表 | `/api/quantity-sheets`、`/api/quantity-sheets/{id}` |
-| 结算 | `/api/billing-statements/generate`、`/api/billing-statements/generate-by-pi` |
-| 流程 | `/api/billing-workflows`、`/api/billing-workflows/advance` |
-| 审计 | `/api/audit-events` |
-
-### 接收与入驻动作
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `POST` | `/api/intake-batches/{id}/confirm-receipt` | 确认实际接收并生成待进驻任务 |
-| `POST` | `/api/placement-tasks/{id}/reserve` | 为任务预留空笼位 |
-| `POST` | `/api/placement-tasks/{id}/move-in` | 将预留占用转为正式入驻 |
-| `POST` | `/api/placement-tasks/{id}/reassign-room` | 改签目标饲养间 |
-
-## 数据约束
-
-- IACUC 串联占用、数量统计表和结算链路。
-- `funding` 以导入 CSV 中的 `项目来源` 为主。
-- 结算流程状态使用月度结算单模型。
-- 待进驻任务按每张笼卡生成；预留阶段使用 `reserved`，正式入驻后转为 `active`。
-- 数量统计表保存响应包含：
+### 列表分页
 
 ```json
 {
-  "item": {},
-  "affectedItems": [],
+  "items": [],
+  "page": {
+    "limit": 5,
+    "offset": 0,
+    "total": 12,
+    "hasMore": true
+  }
+}
+```
+
+### 数量统计表保存
+
+```json
+{
+  "sheet": {},
+  "affectedSheets": [],
   "auditLogs": []
 }
 ```
 
-## 存储模型
+### 流程推进
 
-后端使用 SQLite，并包含设施、占用、数量统计表、结算流程、负责人身份和审计事件等表。表级访问集中在 `server_app/repositories/`，跨表业务流程集中在 `server_app/services/`。
+```json
+{
+  "workflow": {},
+  "event": {},
+  "auditLogs": []
+}
+```
+
+## 核心数据语义
+
+| 对象 | 语义 |
+| --- | --- |
+| `IACUC` | 串联占用、数量统计表和结算链路的核心业务键 |
+| `funding` | 财务来源字段，`项目来源` 是 source of truth |
+| `occupancies` | 笼位占用历史，状态重点在 `reserved` 与 `active` |
+| `placement_tasks` | 每张已接收笼卡生成一条待进驻任务 |
+| `quantity_sheets` | 月度数量统计表，支持伦理号之间转入转出 |
+| `billing_workflows` | 月度结算流程，不是单笼位生命周期 |
+| `audit_events` | 关键写操作审计记录 |
+
+## 相关页面
+
+- [[项目结构]]
+- [[数据管理与IACUC索引]]
+- [[饲养费核算]]
