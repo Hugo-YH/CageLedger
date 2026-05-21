@@ -29,6 +29,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.4",
+    title: "README 与 Wiki 文档体系重整",
+    items: [
+      "README 收敛为轻量入口，统一项目简介、运行命令、部署入口和正式文档导航",
+      "Wiki 首页重写为正式门户，按使用者、管理员和开发维护者三条阅读路径组织内容",
+      "系统性重写快速开始、用户操作手册、部署与运行、API 与数据模型、发布与 CI-CD 等核心页面，并统一到当前 Gitea、模块拆分和双结算入口口径",
+    ],
+  },
+  {
     version: "0.5.3",
     title: "Spec-Driven 全项目整理",
     items: [
@@ -613,7 +622,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.3",
+  version: "0.5.4",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
