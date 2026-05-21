@@ -29,6 +29,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.5",
+    title: "数量统计表与核算汇总表导出贴合现行模板",
+    items: [
+      "数量统计表导出改为 PDF 模板版，按单个伦理号逐表输出，并按当月天数左右双栏排布日期",
+      "结算单 PDF 重排为课题组饲养费核算汇总表样式，按 IACUC 分列展示每日数量、减免和缴纳金额",
+      "演示数据脚本与本地演示库口径统一，避免页面与脚本展示信息脱节",
+    ],
+  },
+  {
     version: "0.5.4",
     title: "README 与 Wiki 文档体系重整",
     items: [
@@ -622,7 +631,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.4",
+  version: "0.5.5",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -4853,7 +4862,7 @@ function renderCageMapBillingView() {
                 <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
               </label>
               <div class="billing-action-grid">
-                <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+                <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
                 <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
                 <span class="billing-action-spacer" aria-hidden="true"></span>
               </div>
@@ -4953,7 +4962,7 @@ function renderQuantitySheetBillingView() {
                   ${renderIacucLookupInput("iacuc", draft.iacuc, { required: true })}
                 </label>
                 <div class="quantity-action-grid">
-                  <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出饲养明细 CSV</button>
+                  <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
                   <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
                   <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
                 </div>
@@ -9260,6 +9269,11 @@ function buildQuantitySheetStatement(sheet) {
           cageCount: item.cageCount,
           billingItem: item.profile.billingItem,
           billingUnit: item.profile.unit,
+          customerType: item.profile.customerType,
+          unitPrice: item.profile.unitPrice,
+          overageUnitPrice: item.profile.tiered ? BILLING_TIER_OVER_PRICE : 0,
+          tiered: Boolean(item.profile.tiered),
+          freeAllowance: Boolean(item.profile.freeAllowance),
         });
       }
     }
@@ -9572,10 +9586,25 @@ function occupancyBreakdown(items) {
     const iacuc = normalizeIacucNumber(item.iacuc);
     if (!iacuc) return;
     const profile = billingProfileForOccupancy(item);
-    const current = byIacuc.get(iacuc) || { iacuc, project: item.project || "", animalCount: 0, cageCount: 0 };
+    const key = [iacuc, profile.billingItem, profile.customerType].join("|");
+    const current =
+      byIacuc.get(key) ||
+      {
+        iacuc,
+        project: item.project || "",
+        animalCount: 0,
+        cageCount: 0,
+        billingItem: profile.billingItem,
+        billingUnit: profile.unit,
+        customerType: profile.customerType,
+        unitPrice: profile.unitPrice,
+        overageUnitPrice: profile.tiered ? BILLING_TIER_OVER_PRICE : 0,
+        tiered: Boolean(profile.tiered),
+        freeAllowance: Boolean(profile.freeAllowance),
+      };
     if (profile.unit === "animal_day") current.animalCount += occupancyAnimalCount(item, profile);
     else current.cageCount += 1;
-    byIacuc.set(iacuc, current);
+    byIacuc.set(key, current);
   });
   return [...byIacuc.values()].sort((a, b) => a.iacuc.localeCompare(b.iacuc, "zh-CN"));
 }
@@ -9678,36 +9707,24 @@ function discountFor(iacuc, date) {
 }
 
 async function exportBillingCsv() {
-  const { statement } = await statementForExport().catch((error) => {
+  const opened = window.open("", "_blank");
+  if (!opened) {
+    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
+    return;
+  }
+
+  const exportData = await statementForExport().catch((error) => {
+    opened.close();
     reportSaveError(error);
-    return {};
+    return null;
   });
-  if (!statement) return;
-  const isQuantitySheet = statement.sourceType === "quantity_sheet" || statement.sourceType === "pi_merged_quantity_sheet";
-  const header = isQuantitySheet
-    ? ["日期", "结余动物数", "合计笼数", "免费笼数", "收费笼数", "4.5元笼数", "6.5元笼数", "当日费用", "累计费用", "伦理明细"]
-    : ["日期", "合计笼数", "免费笼数", "收费笼数", "4.5元笼数", "6.5元笼数", "当日费用", "累计费用", "伦理明细"];
-  const rows = statement.rows.map((row) => [
-    row.date,
-    ...(isQuantitySheet ? [row.animalCount, row.cageCount] : [row.cageCount]),
-    row.freeCages,
-    row.billableCages,
-    row.tier1BillableCages,
-    row.tier2BillableCages,
-    row.amount.toFixed(2),
-    row.cumulative.toFixed(2),
-    (row.iacucBreakdown || []).map((item) => `${item.iacuc}:${item.cageCount}笼`).join("；"),
-  ]);
-  const csv = [header, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${statement.pi || state.billingPi || state.billingIacuc}-${statement.month || state.billingMonth}-饲养明细.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  if (!exportData?.statement) return;
+  const { statement, info } = exportData;
+  const forms = buildQuantityStatisticExportForms(statement, info);
+  opened.document.write(quantityStatisticHtml(statement, forms));
+  opened.document.close();
+  opened.focus();
+  opened.print();
 }
 
 async function exportSettlementPdf() {
@@ -9937,104 +9954,555 @@ function statementInfoForExport(statement) {
   };
 }
 
-function settlementHtml(statement, info, rows) {
-  const generatedAt = statement.generatedAt
-    ? formatLogTime(statement.generatedAt)
-    : new Date().toLocaleString("zh-CN", { hour12: false });
-  const isQuantitySheet = statement.sourceType === "quantity_sheet" || statement.sourceType === "pi_merged_quantity_sheet";
-  const documentNumber = settlementDocumentNumber(statement, generatedAt);
-  const statementUrl = settlementLookupUrl(documentNumber, statement);
-  const qrSvg = qrCodeSvg(statementUrl);
-  const periodLabel = settlementPeriodLabel(statement.month);
-  const currency = "CNY";
-  const dataSourceLabel = isQuantitySheet ? "数量统计表（录入）" : "动态笼位图（自动）";
-  const totalAmountText = MONEY_FORMAT.format(statement.totalAmount);
-  const billableTotal = statement.totalBillableCageDays ?? statement.totalCageDays;
-  const tier2Total = Number(statement.totalTier2CageDays || 0);
-  const project = info.project || "-";
-  const funding = info.funding || "-";
-  const pi = info.pi || "-";
-  const owner = info.owner || "-";
-  const iacucList = statement.iacucs?.length ? statement.iacucs : String(statement.iacuc || "").split("、").filter(Boolean);
-  const detailMatrix = settlementDetailMatrix(rows, iacucList);
-  const detailHeaderHtml = detailMatrix.iacucs.map((iacuc) => `<th>${escapeText(iacuc)}</th>`).join("");
-  const detailRowsHtml = rows
+function downloadCsvFile(content, filename) {
+  const blob = new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvEncodeRow(row) {
+  return row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",");
+}
+
+function exportStatementIacucs(statement) {
+  const found = new Set((statement.iacucs || []).map((value) => normalizeIacucNumber(value)).filter(Boolean));
+  for (const row of statement.rows || []) {
+    for (const item of row.iacucBreakdown || []) {
+      const iacuc = normalizeIacucNumber(item.iacuc || "");
+      if (iacuc) found.add(iacuc);
+    }
+  }
+  return [...found].sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function quantitySourceSheetsForExport(statement) {
+  const sourceIds = new Set([statement.sourceId, ...(statement.sourceIds || [])].filter(Boolean));
+  const month = statement.month || state.billingMonth;
+  const normalizedPi = normalizePersonName(statement.pi || state.billingPi || "");
+  const normalizedIacucs = new Set(exportStatementIacucs(statement));
+  return state.quantitySheets
+    .map((sheet) => normalizeQuantitySheetDraft(sheet))
+    .filter((sheet) => {
+      if (sourceIds.size) return sourceIds.has(sheet.id);
+      return sheet.month === month && normalizePersonName(sheet.pi) === normalizedPi && normalizedIacucs.has(normalizeIacucNumber(sheet.iacuc));
+    })
+    .sort((a, b) => String(a.iacuc || "").localeCompare(String(b.iacuc || ""), "zh-CN"));
+}
+
+function quantityChangeShortLabel(value) {
+  return {
+    购入: "购",
+    转入: "转",
+    分笼: "分",
+    取材: "取",
+    死亡: "死",
+    转出: "转",
+  }[value] || "";
+}
+
+function quantityChangeCell(rows, kind) {
+  const countKey = kind === "added" ? "addedCount" : "removedCount";
+  const typeKey = kind === "added" ? "addedType" : "removedType";
+  return rows
+    .filter((row) => numericOrZero(row[countKey]) > 0)
+    .map((row) => {
+      const count = formatStatementNumber(row[countKey]);
+      const type = quantityChangeShortLabel(row[typeKey]);
+      return type ? `${count}（${type}）` : count;
+    })
+    .join("；");
+}
+
+function formatQuantitySheetDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value || "";
+  return `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
+}
+
+function blankCsvRow(length = 12) {
+  return Array.from({ length }, () => "");
+}
+
+function twoPaneCsvRow(left = [], right = []) {
+  return [...left, ...right].slice(0, 12);
+}
+
+function buildQuantitySourceTimeline(statement) {
+  const sheets = quantitySourceSheetsForExport(statement);
+  if (!sheets.length) return new Map();
+  const dates = datesInMonth(statement.month || state.billingMonth);
+  const states = sheets.map((sheet) => {
+    const rowsByDate = new Map();
+    for (const row of sheet.rows || []) {
+      if (!row.date) continue;
+      rowsByDate.set(row.date, [...(rowsByDate.get(row.date) || []), row]);
+    }
+    return {
+      sheet,
+      rowsByDate,
+      animalCount: numericOrZero(sheet.initialAnimalCount),
+      cageCount: numericOrZero(sheet.initialCageCount),
+      profile: billingProfileForRoom(state.rooms.find((room) => room.id === quantitySheetRoomId(sheet)) || {}),
+    };
+  });
+  const stateByIacuc = new Map(states.map((item) => [normalizeIacucNumber(item.sheet.iacuc), item]).filter(([key]) => key));
+  const timelineByIacuc = new Map(states.map((item) => [normalizeIacucNumber(item.sheet.iacuc), []]));
+
+  for (const date of dates) {
+    const transferDeltas = new Map();
+    for (const item of states) {
+      const dayRows = item.rowsByDate.get(date) || [];
+      for (const row of dayRows) {
+        const addedCount = numericOrZero(row.addedCount);
+        const removedCount = numericOrZero(row.removedCount);
+        if (item.profile.unit === "animal_day") {
+          item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
+          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
+        } else {
+          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
+          else item.cageCount = Math.max(item.cageCount + addedCount - removedCount, 0);
+          if (row.animalCount !== null) item.animalCount = numericOrZero(row.animalCount);
+        }
+        const transferOutToIacuc = normalizeIacucNumber(row.transferOutToIacuc);
+        if (transferOutToIacuc && removedCount > 0) transferDeltas.set(transferOutToIacuc, numericOrZero(transferDeltas.get(transferOutToIacuc)) + removedCount);
+        const transferInFromIacuc = normalizeIacucNumber(row.transferInFromIacuc);
+        if (transferInFromIacuc && addedCount > 0) transferDeltas.set(transferInFromIacuc, numericOrZero(transferDeltas.get(transferInFromIacuc)) - addedCount);
+      }
+    }
+    for (const [iacuc, delta] of transferDeltas.entries()) {
+      const target = stateByIacuc.get(iacuc);
+      if (!target) continue;
+      if (target.profile.unit === "animal_day") target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
+      else target.cageCount = Math.max(numericOrZero(target.cageCount) + delta, 0);
+    }
+    for (const item of states) {
+      const iacuc = normalizeIacucNumber(item.sheet.iacuc);
+      const dayRows = item.rowsByDate.get(date) || [];
+      timelineByIacuc.get(iacuc)?.push({
+        date,
+        addedText: quantityChangeCell(dayRows, "added"),
+        removedText: quantityChangeCell(dayRows, "removed"),
+        animalCount: item.animalCount,
+        cageCount: item.cageCount,
+        manager: item.sheet.manager || "",
+        roomName: item.sheet.roomName || "",
+        project: item.sheet.project || "",
+        pi: item.sheet.pi || "",
+        owner: item.sheet.owner || "",
+      });
+    }
+  }
+  return timelineByIacuc;
+}
+
+function buildApproxQuantityTimeline(statement, info) {
+  const iacucs = exportStatementIacucs(statement);
+  const byDate = new Map();
+  for (const row of statement.rows || []) {
+    const current = new Map();
+    for (const item of row.iacucBreakdown || []) {
+      const iacuc = normalizeIacucNumber(item.iacuc || "");
+      if (!iacuc) continue;
+      current.set(iacuc, { animalCount: numericOrZero(item.animalCount), cageCount: numericOrZero(item.cageCount) });
+    }
+    byDate.set(row.date, current);
+  }
+  const timelines = new Map();
+  for (const iacuc of iacucs) {
+    const match = findIacucInfo(iacuc) || {};
+    let previousValue = 0;
+    timelines.set(
+      iacuc,
+      (statement.rows || []).map((row) => {
+        const current = byDate.get(row.date)?.get(iacuc) || { animalCount: 0, cageCount: 0 };
+        const balanceValue = current.animalCount > 0 ? current.animalCount : current.cageCount;
+        const delta = balanceValue - previousValue;
+        previousValue = balanceValue;
+        return {
+          date: row.date,
+          addedText: delta > 0 ? formatStatementNumber(delta) : "",
+          removedText: delta < 0 ? formatStatementNumber(Math.abs(delta)) : "",
+          animalCount: current.animalCount,
+          cageCount: current.cageCount,
+          manager: "",
+          roomName: "",
+          project: match.project || info.project || "",
+          pi: match.pi || statement.pi || info.pi || "",
+          owner: match.owner || info.owner || "",
+        };
+      }),
+    );
+  }
+  return timelines;
+}
+
+function buildQuantityStatisticExportForms(statement, info) {
+  const iacucs = exportStatementIacucs(statement);
+  const quantityTimeline = statement.sourceType === "quantity_sheet" || statement.sourceType === "pi_merged_quantity_sheet" ? buildQuantitySourceTimeline(statement) : new Map();
+  const timelineByIacuc = quantityTimeline.size ? quantityTimeline : buildApproxQuantityTimeline(statement, info);
+  const forms = [];
+  for (const iacuc of iacucs) {
+    const days = timelineByIacuc.get(iacuc) || [];
+    const match = findIacucInfo(iacuc) || {};
+    const first = days[0] || {};
+    const totalRows = Math.max(days.length, 1);
+    const leftCount = Math.ceil(totalRows / 2);
+    const rightCount = totalRows - leftCount;
+    const leftRows = days.slice(0, leftCount);
+    const rightRows = days.slice(leftCount, leftCount + rightCount);
+    while (leftRows.length < leftCount) leftRows.push(null);
+    while (rightRows.length < leftCount) rightRows.push(null);
+    forms.push({
+      iacuc,
+      roomName: first.roomName || "",
+      manager: first.manager || "",
+      pi: first.pi || match.pi || statement.pi || info.pi || "",
+      owner: first.owner || match.owner || info.owner || "",
+      project: first.project || match.project || info.project || "",
+      leftRows,
+      rightRows,
+    });
+  }
+  return forms;
+}
+
+function statementBreakdownCount(item, billingUnit) {
+  return billingUnit === "animal_day" ? numericOrZero(item.animalCount) : numericOrZero(item.cageCount);
+}
+
+function exportBillingUnit(statement, rows) {
+  return statement.billingUnit === "mixed" ? statementBillingUnitFromRows(rows) : statement.billingUnit || statementBillingUnitFromRows(rows);
+}
+
+function statementColumnIacucs(statement, rows, billingUnit) {
+  const totals = new Map();
+  for (const row of rows) {
+    for (const item of row.iacucBreakdown || []) {
+      const iacuc = normalizeIacucNumber(item.iacuc || "");
+      if (!iacuc) continue;
+      totals.set(iacuc, numericOrZero(totals.get(iacuc)) + statementBreakdownCount(item, billingUnit));
+    }
+  }
+  const iacucs = exportStatementIacucs(statement);
+  if (billingUnit === "cage_day" && numericOrZero(statement.totalTier2CageDays) > 0 && iacucs.length > 1) {
+    const tieredTarget = [...totals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (tieredTarget) return [tieredTarget, ...iacucs.filter((iacuc) => iacuc !== tieredTarget)];
+  }
+  return iacucs;
+}
+
+function billingBreakdownGroups(row, billingUnit) {
+  const groups = new Map();
+  for (const item of row.iacucBreakdown || []) {
+    const iacuc = normalizeIacucNumber(item.iacuc || "");
+    if (!iacuc) continue;
+    const count = statementBreakdownCount(item, billingUnit);
+    if (!count) continue;
+    const key = [item.billingItem || "", item.customerType || "", item.billingUnit || "", item.unitPrice || "", item.overageUnitPrice || "", item.tiered ? "1" : "0", item.freeAllowance ? "1" : "0"].join("|");
+    const current =
+      groups.get(key) ||
+      {
+        unitPrice: Number(item.unitPrice || 0),
+        overageUnitPrice: Number(item.overageUnitPrice || 0),
+        tiered: Boolean(item.tiered),
+        freeAllowance: Boolean(item.freeAllowance),
+        countsByIacuc: new Map(),
+      };
+    current.countsByIacuc.set(iacuc, numericOrZero(current.countsByIacuc.get(iacuc)) + count);
+    groups.set(key, current);
+  }
+  return [...groups.values()];
+}
+
+function buildSettlementTemplateModel(statement, rows) {
+  const billingUnit = exportBillingUnit(statement, rows);
+  const iacucs = statementColumnIacucs(statement, rows, billingUnit);
+  const quantityLabel = billingUnit === "animal_day" ? "数量" : "笼数";
+  const totalLabel = billingUnit === "animal_day" ? "总数量" : "总笼数";
+  const dayRows = rows.map((row) => {
+    const perIacuc = new Map(iacucs.map((iacuc) => [iacuc, { count: 0, free: 0, amount: 0 }]));
+    for (const group of billingBreakdownGroups(row, billingUnit)) {
+      let remainingFree = group.freeAllowance && billingUnit === "cage_day" ? numericOrZero(statement.freeCageAllowance) : 0;
+      let remainingTier1 = group.tiered ? BILLING_TIER_LIMIT : 0;
+      for (const iacuc of iacucs) {
+        const count = numericOrZero(group.countsByIacuc.get(iacuc));
+        if (!count) continue;
+        const current = perIacuc.get(iacuc) || { count: 0, free: 0, amount: 0 };
+        current.count += count;
+        if (group.tiered) {
+          const free = Math.min(remainingFree, count);
+          remainingFree -= free;
+          const billable = Math.max(count - free, 0);
+          const tier1 = Math.min(remainingTier1, billable);
+          remainingTier1 -= tier1;
+          const tier2 = Math.max(billable - tier1, 0);
+          current.free += free;
+          current.amount += tier1 * group.unitPrice + tier2 * (group.overageUnitPrice || BILLING_TIER_OVER_PRICE);
+        } else {
+          current.amount += count * group.unitPrice;
+        }
+        perIacuc.set(iacuc, current);
+      }
+    }
+    return {
+      date: row.date,
+      totalCount: billingUnit === "animal_day" ? numericOrZero(row.animalCount) : numericOrZero(row.cageCount),
+      totalFree: billingUnit === "cage_day" ? numericOrZero(row.freeCages) : 0,
+      totalTier2: billingUnit === "cage_day" ? numericOrZero(row.tier2BillableCages) : 0,
+      totalAmount: numericOrZero(row.amount),
+      perIacuc,
+    };
+  });
+  const totals = new Map(iacucs.map((iacuc) => [iacuc, { count: 0, free: 0, amount: 0 }]));
+  dayRows.forEach((row) => {
+    for (const iacuc of iacucs) {
+      const detail = row.perIacuc.get(iacuc) || { count: 0, free: 0, amount: 0 };
+      const current = totals.get(iacuc);
+      current.count += detail.count;
+      current.free += detail.free;
+      current.amount += detail.amount;
+    }
+  });
+  return {
+    billingUnit,
+    quantityLabel,
+    totalLabel,
+    iacucs,
+    dayRows,
+    totals,
+    totalCount: billingUnit === "animal_day" ? numericOrZero(statement.totalAnimalDays) : numericOrZero(statement.totalCageDays),
+    totalFree: billingUnit === "cage_day" ? numericOrZero(statement.totalFreeCageDays) : 0,
+    totalTier2: billingUnit === "cage_day" ? numericOrZero(statement.totalTier2CageDays) : 0,
+    totalAmount: numericOrZero(statement.totalAmount),
+  };
+}
+
+function quantityStatisticHtml(statement, forms) {
+  const note = "备注：饲养费计算以此表动物数量为准，请如实填写。填写说明：购：购入  转：转移  分：分笼  取：取材或处理  死：死亡";
+  const renderDayCell = (row) =>
+    row
+      ? `
+        <td>${escapeText(formatQuantitySheetDate(row.date))}</td>
+        <td>${escapeText(row.addedText || "")}</td>
+        <td>${escapeText(row.removedText || "")}</td>
+        <td class="num">${row.animalCount > 0 ? formatStatementNumber(row.animalCount) : ""}</td>
+        <td class="num">${row.cageCount > 0 ? formatStatementNumber(row.cageCount) : ""}</td>
+        <td>${escapeText(row.manager || "")}</td>
+      `
+      : `<td></td><td></td><td></td><td></td><td></td><td></td>`;
+  const pagesHtml = forms
     .map(
-      (row) => `
-        <tr>
-          <td>${escapeText(row.date)}</td>
-          ${detailMatrix.iacucs.map((iacuc) => `<td class="num">${formatStatementNumber(detailMatrix.byDate.get(row.date)?.get(iacuc) || 0)}</td>`).join("")}
-          <td class="num">${formatStatementNumber(row.cageCount)}</td>
-          <td class="num">${formatStatementNumber(row.freeCages)}</td>
-          <td class="num">${formatStatementNumber(row.billableCages)}</td>
-          <td class="money">¥${MONEY_FORMAT.format(row.amount)}</td>
-          <td class="money">¥${MONEY_FORMAT.format(row.cumulative)}</td>
-        </tr>
+      (form) => `
+        <section class="sheet-page">
+          <div class="sheet-topline">${escapeText(systemInfo.organization || "")} ${escapeText(systemInfo.department || "")}</div>
+          <table class="sheet-table">
+            <colgroup>
+              <col style="width:8%" />
+              <col style="width:11%" />
+              <col style="width:11%" />
+              <col style="width:6%" />
+              <col style="width:6%" />
+              <col style="width:10%" />
+              <col style="width:8%" />
+              <col style="width:11%" />
+              <col style="width:11%" />
+              <col style="width:6%" />
+              <col style="width:6%" />
+              <col style="width:10%" />
+            </colgroup>
+            <tr><th class="title" colspan="12">实验动物数量统计表</th></tr>
+            <tr>
+              <td class="note" colspan="8">${escapeText(note)}</td>
+              <td class="meta" colspan="2">房间号：${escapeText(form.roomName || "")}</td>
+              <td class="meta" colspan="2">管理员：${escapeText(form.manager || "")}</td>
+            </tr>
+            <tr>
+              <td class="label" colspan="2">IACUC编号</td>
+              <td colspan="2">${escapeText(form.iacuc)}</td>
+              <td class="label" colspan="2">项目负责人</td>
+              <td colspan="2">${escapeText(form.pi)}</td>
+              <td class="label" colspan="2">实验负责人及电话</td>
+              <td colspan="2">${escapeText(form.owner)}</td>
+            </tr>
+            <tr>
+              <td>日期</td>
+              <td>新增（购/转/分）</td>
+              <td>减少（取/死/转）</td>
+              <td>结余总数</td>
+              <td>结余笼数</td>
+              <td>经手人</td>
+              <td>日期</td>
+              <td>新增（购/转/分）</td>
+              <td>减少（取/死/转）</td>
+              <td>结余总数</td>
+              <td>结余笼数</td>
+              <td>经手人</td>
+            </tr>
+            ${form.leftRows
+              .map(
+                (leftRow, index) => `
+                  <tr>
+                    ${renderDayCell(leftRow)}
+                    ${renderDayCell(form.rightRows[index])}
+                  </tr>
+                `,
+              )
+              .join("")}
+            <tr><td class="footer-row" colspan="12">项目名称：${escapeText(form.project || "")}</td></tr>
+          </table>
+        </section>
       `,
     )
     .join("");
-  const detailTotalsHtml = detailMatrix.iacucs.map((iacuc) => `<td class="num">${formatStatementNumber(detailMatrix.totals.get(iacuc) || 0)}</td>`).join("");
-  const iacucColumnGroupHtml = detailMatrix.iacucs.map(() => `<col class="col-iacuc" />`).join("");
 
   return `
     <!doctype html>
     <html lang="zh-CN">
       <head>
         <meta charset="utf-8" />
-        <title>${escapeText(statement.pi || state.billingPi || state.billingIacuc)}-${escapeText(statement.month || state.billingMonth)}-饲养费结算单</title>
+        <title>${escapeText(statement.pi || state.billingPi || state.billingIacuc)}-${escapeText(statement.month || state.billingMonth)}-实验动物数量统计表</title>
         <style>
-          @page { size: A4; margin: 12mm; }
+          @page { size: A4 portrait; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            color: #000;
+            background: #fff;
+            font-family: "Arial", "Helvetica Neue", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-size: 9px;
+          }
+          .sheet-page {
+            min-height: 276mm;
+            page-break-after: always;
+          }
+          .sheet-page:last-child { page-break-after: auto; }
+          .sheet-topline {
+            font-size: 8px;
+            margin-bottom: 4px;
+          }
+          .sheet-table {
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: fixed;
+          }
+          .sheet-table th,
+          .sheet-table td {
+            border: 1px solid #000;
+            padding: 3px 4px;
+            text-align: center;
+            vertical-align: middle;
+            word-break: break-all;
+          }
+          .sheet-table .title {
+            font-size: 18px;
+            padding: 8px 0;
+            font-weight: 700;
+          }
+          .sheet-table .note {
+            color: #c80000;
+            font-weight: 700;
+            text-align: left;
+            line-height: 1.35;
+          }
+          .sheet-table .meta,
+          .sheet-table .label,
+          .sheet-table .footer-row {
+            font-weight: 700;
+          }
+          .sheet-table .footer-row {
+            text-align: left;
+            height: 26px;
+          }
+          .sheet-table .num {
+            font-variant-numeric: tabular-nums;
+          }
+          @media print {
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>${pagesHtml}</body>
+    </html>
+  `;
+}
+
+function settlementHtml(statement, info, rows) {
+  const generatedAt = statement.generatedAt ? formatLogTime(statement.generatedAt) : new Date().toLocaleString("zh-CN", { hour12: false });
+  const documentNumber = settlementDocumentNumber(statement, generatedAt);
+  const statementUrl = settlementLookupUrl(documentNumber, statement);
+  const qrSvg = qrCodeSvg(statementUrl);
+  const template = buildSettlementTemplateModel(statement, rows);
+  const titleSuffix = template.billingUnit === "cage_day" && numericOrZero(statement.freeCageAllowance) > 0 ? `（减免${formatStatementNumber(statement.freeCageAllowance)}笼）` : "";
+  const title = `${escapeText(statement.pi || info.pi || "-")}课题组实验动物饲养费核算汇总表${titleSuffix}`;
+  const totalAmountText = MONEY_FORMAT.format(template.totalAmount);
+  const iacucHeaderHtml = template.iacucs.map((iacuc, index) => `<th colspan="3">${escapeText(index === 0 && template.totalTier2 > 0 ? `${iacuc}（梯度收费）` : iacuc)}</th>`).join("");
+  const iacucSubHeaderHtml = template.iacucs.map(() => `<th>${escapeText(template.quantityLabel)}</th><th>减免</th><th>缴纳（元）</th>`).join("");
+  const detailRowsHtml = template.dayRows
+    .map((row) => {
+      const cells = template.iacucs
+        .map((iacuc) => {
+          const detail = row.perIacuc.get(iacuc) || { count: 0, free: 0, amount: 0 };
+          return `<td class="num">${detail.count ? formatStatementNumber(detail.count) : ""}</td><td class="num">${detail.free ? formatStatementNumber(detail.free) : ""}</td><td class="money">${detail.amount ? MONEY_FORMAT.format(detail.amount) : ""}</td>`;
+        })
+        .join("");
+      return `<tr><td>${escapeText(row.date)}</td><td class="num">${formatStatementNumber(row.totalCount)}</td><td class="num">${formatStatementNumber(row.totalFree)}</td><td class="num">${formatStatementNumber(row.totalTier2)}</td>${cells}</tr>`;
+    })
+    .join("");
+  const detailTotalsHtml = template.iacucs
+    .map((iacuc) => {
+      const detail = template.totals.get(iacuc) || { count: 0, free: 0, amount: 0 };
+      return `<td class="num">${detail.count ? formatStatementNumber(detail.count) : ""}</td><td class="num">${detail.free ? formatStatementNumber(detail.free) : ""}</td><td class="money">${detail.amount ? MONEY_FORMAT.format(detail.amount) : ""}</td>`;
+    })
+    .join("");
+
+  return `
+    <!doctype html>
+    <html lang="zh-CN">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeText(statement.pi || state.billingPi || state.billingIacuc)}-${escapeText(statement.month || state.billingMonth)}-饲养费核算汇总表</title>
+        <style>
+          @page { size: A4; margin: 10mm; }
           * { box-sizing: border-box; }
           body {
             color: #111111;
             font-family: "Arial", "Helvetica Neue", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-            font-size: 9.8px;
-            line-height: 1.28;
+            font-size: 8.4px;
+            line-height: 1.2;
             margin: 0;
             background: #ffffff;
           }
           .document {
-            max-width: 186mm;
-            min-height: 272mm;
-            max-height: 272mm;
-            overflow: hidden;
+            max-width: 190mm;
+            min-height: 277mm;
             margin: 0 auto;
           }
-          .topbar {
-            border-bottom: 1.4px solid #000000;
-            padding-bottom: 6px;
+          .header {
+            border: 1px solid #000000;
+            padding: 6px 8px;
           }
-          .topbar-grid {
-            display: grid;
-            grid-template-columns: 1fr 24mm;
-            gap: 8px;
-            align-items: start;
+          .header-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
           }
           h1 {
-            color: #000000;
-            font-size: 18px;
+            font-size: 15px;
             line-height: 1.1;
             margin: 0 0 4px;
-            text-align: center;
           }
           .subtitle {
-            color: #222222;
             margin: 0;
-            text-align: center;
           }
-          .doc-meta,
-          .basic-grid {
+          .meta {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(3, max-content);
             gap: 2px 10px;
-            margin-top: 5px;
-          }
-          .doc-meta span,
-          .basic-grid span { color: #444444; }
-          .doc-meta strong {
-            color: #000000;
-            font-weight: 400;
-            overflow-wrap: anywhere;
+            margin-top: 4px;
           }
           .qr-box {
             display: grid;
@@ -10042,198 +10510,69 @@ function settlementHtml(statement, info, rows) {
             gap: 2px;
             text-align: center;
           }
-          .qr-box svg {
-            width: 22mm;
-            height: 22mm;
-          }
-          .qr-box span {
-            font-size: 8px;
-            color: #444444;
-          }
-          .section {
-            margin-top: 6px;
-          }
-          .amount-strip {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 0;
-            margin-top: 6px;
-            border-top: 1px solid #000000;
-            border-bottom: 1px solid #000000;
-          }
-          .metric {
-            border-right: 1px solid #000000;
-            padding: 3px 5px;
-            break-inside: avoid;
-          }
-          .metric:last-child { border-right: 0; }
-          .metric span {
-            color: #333333;
-            display: block;
-            font-size: 8.5px;
-          }
-          .metric strong {
-            color: #000000;
-            display: block;
-            font-size: 12px;
-            line-height: 1.15;
-            margin-top: 1px;
-          }
-          .terms-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            border-top: 1px solid #000000;
-            border-bottom: 1px solid #000000;
-          }
-          .terms-grid div {
-            border-right: 1px solid #000000;
-            padding: 3px 5px;
-          }
-          .terms-grid div:last-child { border-right: 0; }
-          .terms-grid span {
-            color: #333333;
-            display: block;
-            font-size: 8.5px;
-          }
-          .section-head {
-            align-items: end;
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 2px;
-          }
-          h2 {
-            color: #000000;
-            font-size: 10.5px;
-            margin: 0;
-          }
-          .section-head span {
-            color: #333333;
-            font-size: 8.5px;
-          }
-          table {
+          .qr-box svg { width: 20mm; height: 20mm; }
+          .meta-table,
+          .summary-table,
+          .sign-table {
             border-collapse: collapse;
             width: 100%;
             table-layout: fixed;
+            margin-top: 6px;
           }
-          th,
-          td {
-            border: 0;
-            padding: 2.2px 4px;
-            vertical-align: top;
+          .meta-table td,
+          .summary-table th,
+          .summary-table td,
+          .sign-table td {
+            border: 1px solid #000000;
+            padding: 3px 4px;
+            vertical-align: middle;
           }
-          th {
-            color: #000000;
-            font-size: 8.8px;
-            font-weight: 700;
-            text-align: right;
-          }
-          th:first-child,
-          td:first-child {
-            text-align: left;
-          }
-          td {
-            text-align: right;
+          .meta-table td { text-align: left; }
+          .summary-table th,
+          .summary-table td { text-align: center; }
+          .summary-table th:first-child,
+          .summary-table td:first-child,
+          .summary-table .row-label,
+          .summary-table .meta-summary,
+          .sign-table td { text-align: left; }
+          .summary-table tfoot td { font-weight: 700; }
+          .note-line {
+            border: 1px solid #000000;
+            border-top: 0;
+            min-height: 30px;
+            padding: 5px 6px;
           }
           .num,
-          .money {
-            font-variant-numeric: tabular-nums;
-          }
-          .money {
-            white-space: nowrap;
-          }
-          .three-line {
-            border-top: 1px solid #000000;
-            border-bottom: 1px solid #000000;
-          }
-          .three-line thead tr {
-            border-bottom: 1px solid #000000;
-          }
-          .three-line tfoot tr {
-            border-top: 1px solid #000000;
-          }
-          .three-line tfoot td {
-            color: #000000;
-            font-weight: 700;
-          }
-          .detail-table .col-date { width: 11%; }
-          .detail-table .col-iacuc { width: 7%; }
-          .detail-table .col-total { width: 8%; }
-          .detail-table .col-free { width: 8%; }
-          .detail-table .col-billable { width: 8%; }
-          .detail-table .col-amount { width: 10%; }
-          .detail-table .col-cumulative { width: 10%; }
-          .summary-table td:nth-child(2),
-          .summary-table th:nth-child(2) {
-            text-align: left;
-          }
-          .empty-line {
-            color: #333333;
-            text-align: center !important;
-          }
-          .note-card {
-            border-top: 1px solid #000000;
-            color: #333333;
-            padding-top: 4px;
-          }
-          .note-card strong {
-            color: #000000;
-          }
-          .sign {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-top: 14px;
-            break-inside: avoid;
-          }
-          .sign div {
-            border-top: 1px solid #000000;
-            color: #222222;
-            min-height: 24px;
-            padding-top: 4px;
-          }
-          .flow-table th,
-          .flow-table td {
-            border: 1px solid #000000;
-            text-align: left;
-            padding: 4px;
-          }
-          .flow-table th {
-            background: #ffffff;
-            font-weight: 700;
-          }
-          .flow-table td {
-            height: 16px;
-          }
+          .money { font-variant-numeric: tabular-nums; }
+          .money { white-space: nowrap; }
           .footer {
             border-top: 1px solid #000000;
             color: #333333;
             display: flex;
             justify-content: space-between;
-            gap: 12px;
             margin-top: 6px;
             padding-top: 4px;
           }
           @media print {
-            body { font-size: 9.4px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-            .section { margin-top: 4px; }
-            th, td { padding: 1.7px 3px; }
-            .detail-table { page-break-inside: auto; }
-            tr { page-break-inside: avoid; page-break-after: auto; }
+            body { font-size: 8px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .meta-table td,
+            .summary-table th,
+            .summary-table td,
+            .sign-table td { padding: 2px 3px; }
           }
         </style>
       </head>
       <body>
         <main class="document">
-          <header class="topbar">
-            <div class="topbar-grid">
+          <section class="header">
+            <div class="header-grid">
               <div>
-                <h1>实验动物饲养费结算单</h1>
+                <h1>${title}</h1>
                 <p class="subtitle">${escapeText(systemInfo.department || "-")}</p>
-                <div class="doc-meta">
-                  <div><span>单据编号：</span><strong>${escapeText(documentNumber)}</strong></div>
-                  <div><span>结算期间：</span><strong>${escapeText(periodLabel)}</strong></div>
-                  <div><span>数据来源：</span><strong>${escapeText(dataSourceLabel)}</strong></div>
+                <div class="meta">
+                  <div>单据编号：${escapeText(documentNumber)}</div>
+                  <div>结算月份：${escapeText(statement.month || "-")}</div>
+                  <div>项目负责人：${escapeText(statement.pi || info.pi || "-")}</div>
                 </div>
               </div>
               <div class="qr-box">
@@ -10241,97 +10580,71 @@ function settlementHtml(statement, info, rows) {
                 <span>扫码访问在线单据</span>
               </div>
             </div>
-          </header>
-
-          <section class="basic-grid">
-            <div><span>出具科室：</span>${escapeText(systemInfo.department || "-")}</div>
-            <div><span>计费单位：</span>笼/天</div>
-            <div><span>单据状态：</span>${statement.status === "locked" ? "已锁定" : "草稿"}</div>
           </section>
 
-          <section class="section">
-            <div class="section-head">
-              <h2>项目信息</h2>
-              <span>IACUC ${escapeText(iacucList.length ? `${iacucList.length} 项` : "-")}</span>
-            </div>
-            <table class="summary-table three-line">
-              <tbody>
-                <tr><th>项目负责人</th><td>${escapeText(statement.pi || pi || "-")}</td></tr>
-                <tr><th>实验负责人</th><td>${escapeText(owner)}</td></tr>
-                <tr><th>支撑经费</th><td>${escapeText(funding)}</td></tr>
-                <tr><th>项目名称</th><td>${escapeText(project)}</td></tr>
-                <tr><th>IACUC 编号</th><td>${escapeText(iacucList.join("、") || "-")}</td></tr>
-                ${isQuantitySheet ? `<tr><th>房间/管理员</th><td>${escapeText(statement.roomName || "-")} / ${escapeText(statement.manager || "-")}</td></tr>` : ""}
-              </tbody>
-            </table>
-          </section>
+          <table class="meta-table">
+            <tbody>
+              <tr>
+                <td>出具科室：${escapeText(systemInfo.department || "-")}</td>
+                <td>计费单位：${escapeText(billingUnitLabel(template.billingUnit))}</td>
+                <td>实验负责人：${escapeText(info.owner || statement.owner || "-")}</td>
+                <td>支撑经费：${escapeText(info.funding || statement.funding || "-")}</td>
+              </tr>
+              <tr>
+                <td colspan="4">IACUC 编号：${escapeText(template.iacucs.join("、") || "-")}</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <section class="section">
-            <div class="section-head">
-              <h2>每日饲养费明细</h2>
-              <span>各 IACUC 列为当日笼数；首单元 ¥${MONEY_FORMAT.format(BILLING_TIER_BASE_PRICE)}；超额单元 ¥${MONEY_FORMAT.format(BILLING_TIER_OVER_PRICE)}${tier2Total ? `，本单超额 ${formatStatementNumber(tier2Total)} 笼日` : "，本单无超额笼日"}</span>
-            </div>
-            <table class="detail-table three-line">
-            <colgroup>
-              <col class="col-date" />
-              ${iacucColumnGroupHtml}
-              <col class="col-total" />
-              <col class="col-free" />
-              <col class="col-billable" />
-              <col class="col-amount" />
-              <col class="col-cumulative" />
-            </colgroup>
+          <table class="summary-table">
             <thead>
-              <tr><th>日期</th>${detailHeaderHtml}<th>合计笼数</th><th>减免笼数</th><th>收费笼数</th><th>当日费用</th><th>累计费用</th></tr>
+              <tr>
+                <th rowspan="2">日期</th>
+                <th rowspan="2">${escapeText(template.totalLabel)}</th>
+                <th rowspan="2">减免总${escapeText(template.quantityLabel)}</th>
+                <th rowspan="2">梯度${escapeText(template.quantityLabel)}</th>
+                ${iacucHeaderHtml}
+              </tr>
+              <tr>${iacucSubHeaderHtml}</tr>
             </thead>
             <tbody>${detailRowsHtml}</tbody>
             <tfoot>
               <tr>
-                <td>合计</td>
+                <td class="row-label">单项合计</td>
+                <td class="num">${formatStatementNumber(template.totalCount)}</td>
+                <td class="num">${formatStatementNumber(template.totalFree)}</td>
+                <td class="num">${formatStatementNumber(template.totalTier2)}</td>
                 ${detailTotalsHtml}
-                <td class="num">${formatStatementNumber(statement.totalCageDays)}</td>
-                <td class="num">${formatStatementNumber(statement.totalFreeCageDays)}</td>
-                <td class="num">${formatStatementNumber(billableTotal)}</td>
-                <td class="money">¥${totalAmountText}</td>
-                <td class="money">¥${totalAmountText}</td>
+              </tr>
+              <tr>
+                <td class="row-label">本月待缴纳饲养费总计（元）</td>
+                <td colspan="3" class="money">${totalAmountText}</td>
+                ${template.iacucs
+                  .map((iacuc) => {
+                    const detail = template.totals.get(iacuc) || { free: 0, amount: 0 };
+                    const support = numericOrZero(detail.free) * BILLING_TIER_BASE_PRICE;
+                    return `<td colspan="3" class="meta-summary">单位支持 ${MONEY_FORMAT.format(support)} ／ 实际待缴纳 ${MONEY_FORMAT.format(detail.amount)}</td>`;
+                  })
+                  .join("")}
+              </tr>
+              <tr>
+                <td class="row-label">未缴纳月份</td>
+                <td colspan="${3 + template.iacucs.length * 3}">　　　　　　　　　　　　　　未缴纳饲养费总计（元）：　　　　　　　　　　　　　　</td>
               </tr>
             </tfoot>
-            </table>
-          </section>
+          </table>
 
-          <section class="amount-strip">
-            <div class="metric">
-              <span>累计笼日</span>
-              <strong>${formatStatementNumber(statement.totalCageDays)}</strong>
-            </div>
-            <div class="metric">
-              <span>收费笼日</span>
-              <strong>${formatStatementNumber(billableTotal)}</strong>
-            </div>
-            <div class="metric">
-              <span>免费额度</span>
-              <strong>${formatStatementNumber(statement.freeCageAllowance)} 笼/天</strong>
-            </div>
-            <div class="metric">
-              <span>超额笼日</span>
-              <strong>${formatStatementNumber(tier2Total)}</strong>
-            </div>
-            <div class="metric">
-              <span>应收金额</span>
-              <strong>¥${totalAmountText}</strong>
-            </div>
-          </section>
+          <div class="note-line">说明：</div>
 
-          <section class="section note-card">
-            <strong>说明：</strong>
-            <span>&nbsp;</span>
-          </section>
-
-          <section class="sign">
-            <div>项目负责人确认 / Date</div>
-            <div>动物房审核 / Date</div>
-            <div>财务审核 / Date</div>
-          </section>
+          <table class="sign-table">
+            <tbody>
+              <tr>
+                <td>项目负责人</td>
+                <td>实验负责人/经办人</td>
+                <td>日期</td>
+              </tr>
+            </tbody>
+          </table>
 
           <footer class="footer">
             <span>${escapeText(systemInfo.name || "CageLedger")} · ${escapeText(systemInfo.license || "")}</span>

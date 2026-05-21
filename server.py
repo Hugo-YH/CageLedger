@@ -3340,6 +3340,11 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None):
                         "cageCount": state["cageCount"],
                         "billingItem": profile["billingItem"],
                         "billingUnit": profile["unit"],
+                        "customerType": profile["customerType"],
+                        "unitPrice": profile["unitPrice"],
+                        "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
+                        "tiered": bool(profile["tiered"]),
+                        "freeAllowance": bool(profile["freeAllowance"]),
                     }
                 )
 
@@ -3423,7 +3428,9 @@ def generate_billing_statement(conn, payload, actor):
                     (
                         entry
                         for entry in breakdown
-                        if entry["iacuc"] == iacuc and entry.get("billingItem") == profile["billingItem"]
+                        if entry["iacuc"] == iacuc
+                        and entry.get("billingItem") == profile["billingItem"]
+                        and entry.get("customerType") == profile["customerType"]
                     ),
                     None,
                 )
@@ -3435,6 +3442,11 @@ def generate_billing_statement(conn, payload, actor):
                         "cageCount": 0,
                         "billingItem": profile["billingItem"],
                         "billingUnit": profile["unit"],
+                        "customerType": profile["customerType"],
+                        "unitPrice": profile["unitPrice"],
+                        "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
+                        "tiered": bool(profile["tiered"]),
+                        "freeAllowance": bool(profile["freeAllowance"]),
                     }
                     breakdown.append(found)
                 if profile["unit"] == "animal_day":
@@ -3577,7 +3589,9 @@ def generate_billing_statement_by_pi(conn, payload, actor):
                     (
                         entry
                         for entry in breakdown
-                        if entry["iacuc"] == item_iacuc and entry.get("billingItem") == profile["billingItem"]
+                        if entry["iacuc"] == item_iacuc
+                        and entry.get("billingItem") == profile["billingItem"]
+                        and entry.get("customerType") == profile["customerType"]
                     ),
                     None,
                 )
@@ -3589,6 +3603,11 @@ def generate_billing_statement_by_pi(conn, payload, actor):
                         "cageCount": 0,
                         "billingItem": profile["billingItem"],
                         "billingUnit": profile["unit"],
+                        "customerType": profile["customerType"],
+                        "unitPrice": profile["unitPrice"],
+                        "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
+                        "tiered": bool(profile["tiered"]),
+                        "freeAllowance": bool(profile["freeAllowance"]),
                     }
                     breakdown.append(found)
                 if profile["unit"] == "animal_day":
