@@ -100,11 +100,28 @@
 
 ```json
 {
-  "sheet": {},
+  "sheet": {
+    "rows": [
+      {
+        "date": "2026-05-01",
+        "addedCount": 10,
+        "addedType": "购入",
+        "removedCount": null,
+        "removedType": "",
+        "animalCount": null,
+        "cageCount": null,
+        "handler": "经手人",
+        "balanceSource": "auto"
+      }
+    ],
+    "pageCount": 1
+  },
   "affectedSheets": [],
   "auditLogs": []
 }
 ```
+
+数量统计表前端按纸质表展示固定录入槽位，每页左右两栏各 15 行。左侧第一行固定为当前统计表月份 1 号，仍可记录当日新增和减少，`animalCount` 和 `cageCount` 作为月初结余写入。其他日期输入会在保存前归一为 `YYYY-MM-DD`，支持 `2026/05/15`、`20260515`、`0515`；只输入日号时按当前统计表月份补全年月。`pageCount` 记录同一伦理同月的纸质页数；保存时按日期排序并压缩为有效 `rows`。`handler` 用于记录每日经手人，`balanceSource` 标记结余来自自动计算或人工输入；旧数据缺少这些字段时按默认值处理。
 
 ### 流程推进
 

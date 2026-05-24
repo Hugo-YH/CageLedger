@@ -1835,35 +1835,111 @@ h3 {
   margin-bottom: 12px;
 }
 
+.quantity-page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.quantity-template-page {
+  margin-bottom: 18px;
+}
+
+.quantity-template-page-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .quantity-entry-table {
-  min-width: 1120px;
+  min-width: 1180px;
+}
+
+.quantity-template-table {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.quantity-template-table th {
+  text-align: center;
+  white-space: normal;
+}
+
+.quantity-template-table td {
+  vertical-align: top;
+  padding: 7px 6px;
+}
+
+.quantity-template-table th:nth-child(-n + 5),
+.quantity-template-table td:nth-child(-n + 5) {
+  background: #fbfcfb;
+}
+
+.quantity-template-table th:nth-child(n + 6),
+.quantity-template-table td:nth-child(n + 6) {
+  background: #f7faf9;
+}
+
+.quantity-template-table th:nth-child(6),
+.quantity-template-table td:nth-child(6) {
+  border-left: 3px solid #8aa39a;
+}
+
+.quantity-template-table th:nth-child(1),
+.quantity-template-table th:nth-child(6),
+.quantity-template-table td:nth-child(1),
+.quantity-template-table td:nth-child(6) {
+  width: 11%;
+}
+
+.quantity-template-table th:nth-child(2),
+.quantity-template-table th:nth-child(3),
+.quantity-template-table th:nth-child(7),
+.quantity-template-table th:nth-child(8) {
+  width: 15%;
+}
+
+.quantity-template-table th:nth-child(4),
+.quantity-template-table th:nth-child(5),
+.quantity-template-table th:nth-child(9),
+.quantity-template-table th:nth-child(10) {
+  width: 9%;
 }
 
 .quantity-entry-table input,
 .quantity-entry-table select {
   width: 100%;
-  min-width: 86px;
+  min-width: 0;
 }
 
-.quantity-entry-table .quantity-type-cell select {
-  min-width: 160px;
+.quantity-change-editor {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(68px, 1fr) 64px;
 }
 
-.quantity-entry-table .quantity-inline-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
+.quantity-change-editor .iacuc-lookup {
+  grid-column: 1 / -1;
 }
 
-.quantity-entry-table .quantity-inline-field input {
-  min-width: 120px;
-}
-
-.quantity-entry-table .quantity-count-input {
-  min-width: 72px;
-  width: 72px;
+.quantity-balance-input,
+.quantity-handler-input {
   text-align: right;
+}
+
+.quantity-handler-input {
+  text-align: left;
 }
 
 .quantity-entry-table input[required] {

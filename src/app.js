@@ -29,6 +29,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.6",
+    title: "数量统计表录入贴合纸质表",
+    items: [
+      "根据柯主任建议，数量统计表录入改为左右两栏、每栏 15 行的纸质表布局，支持同一伦理同月追加统计表页",
+      "日期格支持手动输入 2026/05/15、20260515、0515 或日号，系统按统计表月份归一并自动滚动计算结余",
+      "月初结余并入左侧第一行，保留当日新增和减少录入，隐藏计费口径、经手人列和说明横幅以提升连续录入效率",
+    ],
+  },
+  {
     version: "0.5.5",
     title: "数量统计表与核算汇总表导出贴合现行模板",
     items: [
@@ -631,7 +640,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.5",
+  version: "0.5.6",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -4988,7 +4997,7 @@ function renderQuantitySheetBillingView() {
               </label>
             </div>
             <div class="quantity-field-group quantity-field-group-project">
-              <label class="wide field-auto">
+              <label class="field-auto">
                 项目名称
                 <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
               </label>
@@ -5005,59 +5014,21 @@ function renderQuantitySheetBillingView() {
                 <input name="owner" value="${escapeAttr(draft.owner)}" placeholder="选择 IACUC 后自动填充" />
               </label>
             </div>
-            <div class="quantity-field-group quantity-field-group-billing">
-              ${
-                isAnimalBilling
-                  ? `
-                    <label class="field-required">
-                      月初结余动物数
-                      <input name="initialAnimalCount" type="number" min="0" value="${draft.initialAnimalCount ?? 0}" placeholder="请输入月初动物数" />
-                    </label>
-                  `
-                  : ""
-              }
-              <label class="field-required">
-                月初结余笼数
-                <input name="initialCageCount" type="number" min="0" value="${draft.initialCageCount ?? 0}" placeholder="请输入月初笼数" />
-              </label>
-              <label>
-                计费口径
-                <input value="${escapeAttr(billingUnitLabel(quantityProfile.unit))}" disabled />
-                <input type="hidden" name="billingUnit" value="${escapeAttr(quantityProfile.unit)}" />
-              </label>
-            </div>
+            <input type="hidden" name="billingUnit" value="${escapeAttr(quantityProfile.unit)}" />
             <div class="room-billing-hint">
               <span>${escapeText(facilityLabel(quantityProfile.facility))}</span>
               <span>${escapeText(billingItemLabel(quantityProfile.billingItem))}</span>
               <span>${escapeText(customerTypeLabel(quantityProfile.customerType))}</span>
               <span>单价 ¥${MONEY_FORMAT.format(quantityProfile.unitPrice)} / ${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
             </div>
-            <div class="billing-scope-banner compact">
-              <span>来源：数量统计表</span>
-              <span>设施：${escapeText(facilityLabel(quantityProfile.facility))}</span>
-              <span>计费单位：${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
-              <span>说明：${isAnimalBilling ? "按只计费房间会同步展示累计动物日。" : "按笼计费房间会保留阶梯与减免逻辑。"}</span>
-            </div>
           </div>
-          <div class="table-wrap quantity-entry-wrap">
-            <table class="quantity-entry-table">
-              <thead>
-                <tr>
-                  <th>日期</th>
-                  <th>新增类型</th>
-                  <th>新增</th>
-                  <th>减少类型</th>
-                  <th>减少</th>
-                  <th>${isAnimalBilling ? "结余动物数" : "结余笼数"}</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${draft.rows.map((row, index) => renderQuantitySheetRow(row, index)).join("")}
-              </tbody>
-            </table>
+          <div class="quantity-page-toolbar">
+            <span>数量统计表页数：${quantitySheetPageCount(draft)} 页</span>
+            <button id="addQuantitySheetPage" class="secondary" type="button">${iconSvg("plus")}新增统计表页</button>
           </div>
-          <button id="addQuantitySheetRow" class="secondary" type="button">${iconSvg("plus")}添加变更行</button>
+          <div class="quantity-entry-wrap">
+            ${renderQuantitySheetCalendarPages(draft)}
+          </div>
         </form>
 
         <div class="quantity-preview-section">
@@ -5364,55 +5335,185 @@ function renderBillingRow(row) {
   `;
 }
 
-function renderQuantitySheetRow(row, index) {
-  const showTransferIn = row.addedType === "转入";
-  const showTransferOut = row.removedType === "转出";
-  const balance = quantitySheetRowBalance(index);
+function quantitySheetPageCount(draft) {
+  return Math.max(numericOrZero(draft?.pageCount), Math.ceil(Math.max((draft?.rows || []).length, 30) / 30), 1);
+}
+
+function renderQuantitySheetCalendarPages(draft) {
+  const entries = buildQuantitySheetCalendarRows(draft);
+  const pages = Math.max(Math.ceil(entries.length / 30), 1);
+  return Array.from({ length: pages }, (_, pageIndex) => {
+    const pageEntries = entries.slice(pageIndex * 30, pageIndex * 30 + 30);
+    return `
+      <div class="quantity-template-page">
+        <div class="quantity-template-page-title">第 ${pageIndex + 1} 页</div>
+        <div class="table-wrap">
+          <table class="quantity-entry-table quantity-template-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>新增<br />（购/转/分）</th>
+                <th>减少<br />（取/死/转）</th>
+                <th>结余<br />总数</th>
+                <th>结余<br />笼数</th>
+                <th>日期</th>
+                <th>新增<br />（购/转/分）</th>
+                <th>减少<br />（取/死/转）</th>
+                <th>结余<br />总数</th>
+                <th>结余<br />笼数</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${renderQuantitySheetCalendarRows(pageEntries)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderQuantitySheetCalendarRows(entries) {
+  const split = 15;
+  return Array.from({ length: split }, (_, index) => {
+    const left = entries[index] || null;
+    const right = entries[index + split] || null;
+    return `
+      <tr>
+        ${renderQuantitySheetCalendarCell(left)}
+        ${renderQuantitySheetCalendarCell(right)}
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderQuantitySheetCalendarCell(entry) {
+  if (!entry) return `<td></td><td></td><td></td><td></td><td></td>`;
+  const row = entry.row || {};
+  const addedText = quantityChangeInputValue(row, "added");
+  const removedText = quantityChangeInputValue(row, "removed");
+  const animalManual = row.animalCount !== null && row.animalCount !== undefined;
+  const cageManual = row.cageCount !== null && row.cageCount !== undefined;
+  const isInitialRow = entry.index === 0;
+  const animalValue = animalManual ? row.animalCount : isInitialRow ? 0 : entry.animalCount || "";
+  const cageValue = cageManual ? row.cageCount : isInitialRow ? 0 : entry.cageCount || "";
   return `
-    <tr data-quantity-row="${index}">
-      <td><input name="rowDate" type="date" value="${escapeAttr(row.date)}" placeholder="请选择日期" required /></td>
-      <td class="quantity-type-cell">
-        <div class="quantity-inline-field">
-          <select name="addedType">
-            ${["", "购入", "转入", "分笼"].map((value) => `<option value="${value}" ${row.addedType === value ? "selected" : ""}>${value || "请选择"}</option>`).join("")}
-          </select>
-          ${
-            showTransferIn
-              ? renderIacucLookupInput("transferInFromIacuc", row.transferInFromIacuc || "", { placeholder: "来源伦理号", compact: true })
-              : ""
-          }
-        </div>
-      </td>
-      <td><input class="quantity-count-input" name="addedCount" type="number" min="0" value="${row.addedCount ?? ""}" placeholder="0" /></td>
-      <td class="quantity-type-cell">
-        <div class="quantity-inline-field">
-          <select name="removedType">
-            ${["", "取材", "死亡", "转出"].map((value) => `<option value="${value}" ${row.removedType === value ? "selected" : ""}>${value || "请选择"}</option>`).join("")}
-          </select>
-          ${
-            showTransferOut
-              ? renderIacucLookupInput("transferOutToIacuc", row.transferOutToIacuc || "", { placeholder: "目标伦理号", compact: true })
-              : ""
-          }
-        </div>
-      </td>
-      <td><input class="quantity-count-input" name="removedCount" type="number" min="0" value="${row.removedCount ?? ""}" placeholder="0" /></td>
-      <td>${balance}</td>
-      <td><button class="icon-danger" type="button" data-remove-qrow="${index}" title="删除行">${iconSvg("trash")}</button></td>
-    </tr>
+    <td class="quantity-date-cell" data-quantity-row="${escapeAttr(entry.index)}">
+      <input name="rowDate" type="text" inputmode="numeric" value="${escapeAttr(formatQuantityDateInputValue(entry.date || ""))}" ${isInitialRow ? "readonly" : ""} />
+    </td>
+    <td>${renderQuantityChangeEditor("added", row, addedText)}</td>
+    <td>${renderQuantityChangeEditor("removed", row, removedText)}</td>
+    <td>
+      <input class="quantity-balance-input" name="animalCount" type="number" min="0" value="${escapeAttr(animalValue)}" data-auto-value="${escapeAttr(entry.autoAnimalCount)}" data-manual="${animalManual || isInitialRow ? "true" : "false"}" ${isInitialRow ? "required" : ""} />
+    </td>
+    <td>
+      <input class="quantity-balance-input" name="cageCount" type="number" min="0" value="${escapeAttr(cageValue)}" data-auto-value="${escapeAttr(entry.autoCageCount)}" data-manual="${cageManual || isInitialRow ? "true" : "false"}" ${isInitialRow ? "required" : ""} />
+    </td>
   `;
 }
 
-function quantitySheetRowBalance(rowIndex) {
-  const draft = normalizeQuantitySheetDraft(state.quantitySheetDraft || {});
+function renderQuantityChangeEditor(kind, row, value) {
+  const type = kind === "added" ? row.addedType || "" : row.removedType || "";
+  const transferName = kind === "added" ? "transferInFromIacuc" : "transferOutToIacuc";
+  const transferValue = kind === "added" ? row.transferInFromIacuc || "" : row.transferOutToIacuc || "";
+  const showTransfer = type === (kind === "added" ? "转入" : "转出");
+  const options = kind === "added" ? ["", "购入", "转入", "分笼"] : ["", "取材", "死亡", "转出"];
+  return `
+    <div class="quantity-change-editor">
+      <input name="${kind}Text" value="${escapeAttr(value)}" />
+      <select name="${kind}Type" title="变更类型">
+        ${options.map((option) => `<option value="${option}" ${type === option ? "selected" : ""}>${option || "类型"}</option>`).join("")}
+      </select>
+      ${showTransfer ? renderIacucLookupInput(transferName, transferValue, { placeholder: kind === "added" ? "来源伦理号" : "目标伦理号", compact: true }) : ""}
+    </div>
+  `;
+}
+
+function buildQuantitySheetCalendarRows(sheet) {
+  const draft = normalizeQuantitySheetDraft(sheet || {});
   const profile = billingProfileForRoom(state.rooms.find((room) => room.id === quantitySheetRoomId(draft)) || {});
-  let current = profile.unit === "animal_day" ? numericOrZero(draft.initialAnimalCount) : numericOrZero(draft.initialCageCount);
-  for (let index = 0; index <= rowIndex; index += 1) {
-    const row = draft.rows[index];
-    if (!row) break;
-    current = Math.max(current + numericOrZero(row.addedCount) - numericOrZero(row.removedCount), 0);
+  const baseRows = [...(draft.rows || [])];
+  const slotCount = quantitySheetPageCount(draft) * 30;
+  while (baseRows.length < slotCount) baseRows.push(makeBlankQuantitySheetRow(draft.month));
+  baseRows[0] = quantitySheetInitialRow(draft, baseRows[0]);
+  const sourceRows = baseRows.map((row, index) => ({
+    row: normalizeQuantitySheetDraftRow(row, draft.month),
+    index,
+  }));
+  let animalCount = 0;
+  let cageCount = 0;
+  return sourceRows.map((item) => {
+    const row = item.row;
+    const date = row.date || "";
+    const added = numericOrZero(row.addedCount);
+    const removed = numericOrZero(row.removedCount);
+    const autoAnimalCount = Math.max(animalCount + added - removed, 0);
+    const autoCageCount = Math.max(cageCount + added - removed, 0);
+    const hasManualAnimal = row.animalCount !== null && row.animalCount !== undefined;
+    const hasManualCage = row.cageCount !== null && row.cageCount !== undefined;
+    const nextAnimalCount = hasManualAnimal ? numericOrZero(row.animalCount) : autoAnimalCount;
+    const nextCageCount = hasManualCage ? numericOrZero(row.cageCount) : autoCageCount;
+    const conflict =
+      (hasManualAnimal && added + removed > 0 && numericOrZero(row.animalCount) !== autoAnimalCount) ||
+      (hasManualCage && added + removed > 0 && numericOrZero(row.cageCount) !== autoCageCount);
+    animalCount = nextAnimalCount;
+    cageCount = nextCageCount;
+    return {
+      date,
+      row,
+      index: item.index,
+      profile,
+      autoAnimalCount,
+      autoCageCount,
+      animalCount: nextAnimalCount,
+      cageCount: nextCageCount,
+      conflict,
+    };
+  });
+}
+
+function quantitySheetRowsByDate(rows) {
+  const byDate = new Map();
+  for (const item of rows || []) {
+    const row = normalizeQuantitySheetDraftRow(item, String(item?.date || state.billingMonth || today.slice(0, 7)).slice(0, 7));
+    if (!row.date) continue;
+    const current = byDate.get(row.date);
+    if (!current) {
+      byDate.set(row.date, row);
+      continue;
+    }
+    current.addedCount = numericOrZero(current.addedCount) + numericOrZero(row.addedCount) || null;
+    current.removedCount = numericOrZero(current.removedCount) + numericOrZero(row.removedCount) || null;
+    current.addedType ||= row.addedType;
+    current.removedType ||= row.removedType;
+    current.transferInFromIacuc ||= row.transferInFromIacuc;
+    current.transferOutToIacuc ||= row.transferOutToIacuc;
+    if (row.animalCount !== null) current.animalCount = row.animalCount;
+    if (row.cageCount !== null) current.cageCount = row.cageCount;
+    current.handler ||= row.handler || row.notes;
+    current.notes ||= row.notes;
   }
-  return current;
+  return byDate;
+}
+
+function quantitySheetInitialRow(draft, row) {
+  const month = draft.month || state.billingMonth || today.slice(0, 7);
+  const existing = normalizeQuantitySheetDraftRow(row || {}, month);
+  return {
+    ...existing,
+    date: `${month}-01`,
+    animalCount: existing.animalCount !== null ? existing.animalCount : numericOrZero(draft.initialAnimalCount),
+    cageCount: existing.cageCount !== null ? existing.cageCount : numericOrZero(draft.initialCageCount),
+    balanceSource: "manual",
+  };
+}
+
+function quantityChangeInputValue(row, kind) {
+  const count = kind === "added" ? row.addedCount : row.removedCount;
+  const type = kind === "added" ? row.addedType : row.removedType;
+  if (count === null || count === undefined || count === "") return "";
+  const shortType = quantityChangeShortLabel(type);
+  return `${formatStatementNumber(count)}${shortType ? `（${shortType}）` : ""}`;
 }
 
 function renderQuantityPreviewRow(row) {
@@ -6448,10 +6549,12 @@ function bindEvents() {
     }
   });
   document.querySelector("#quantitySheetForm")?.addEventListener("submit", handleQuantitySheetSubmit);
+  document.querySelector(".quantity-template-table")?.addEventListener("keydown", handleQuantityTemplateKeydown);
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
   document.querySelector("#deleteQuantitySheet")?.addEventListener("click", deleteCurrentQuantitySheet);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
+  document.querySelector("#addQuantitySheetPage")?.addEventListener("click", addQuantitySheetPage);
   bindIntakeRequiredNotice("#intakeBatchForm", "无法保存待接收批次");
   document.querySelector("#intakeBatchForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -6685,7 +6788,7 @@ function bindEvents() {
       handleQuantitySheetFilterChange();
       return;
     }
-    if (name === "addedType" || name === "removedType") {
+    if (["rowDate", "addedText", "addedType", "removedText", "removedType", "animalCount", "cageCount", "handler"].includes(name)) {
       captureQuantitySheetDraft();
       render();
     }
@@ -6869,6 +6972,27 @@ function isCompactViewport() {
 
 function bindAuthEvents() {
   document.querySelector("#loginForm")?.addEventListener("submit", login);
+}
+
+function handleQuantityTemplateKeydown(event) {
+  if (event.key !== "Enter") return;
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+  event.preventDefault();
+  captureQuantitySheetDraft();
+  const cell = target.closest("td");
+  const row = target.closest("tr");
+  const rows = [...document.querySelectorAll(".quantity-template-table tbody tr")];
+  const rowIndex = rows.indexOf(row);
+  const cellIndex = cell?.cellIndex ?? -1;
+  const controlsInCell = [...(cell?.querySelectorAll("input, select") || [])].filter((control) => !control.disabled);
+  const controlIndex = controlsInCell.indexOf(target);
+  const nextCell = rows[rowIndex + 1]?.cells[cellIndex];
+  const nextControls = [...(nextCell?.querySelectorAll("input, select") || [])].filter((control) => !control.disabled);
+  const next = nextControls[controlIndex] || nextControls[0];
+  if (!next) return;
+  next.focus();
+  if (next instanceof HTMLInputElement) next.select();
 }
 
 function bindIntakeRequiredNotice(selector, title) {
@@ -8111,6 +8235,14 @@ function addQuantitySheetRow() {
   render();
 }
 
+function addQuantitySheetPage() {
+  captureQuantitySheetDraft();
+  const month = state.quantitySheetDraft.month || state.billingMonth || today.slice(0, 7);
+  state.quantitySheetDraft.pageCount = quantitySheetPageCount(state.quantitySheetDraft) + 1;
+  while (state.quantitySheetDraft.rows.length < state.quantitySheetDraft.pageCount * 30) state.quantitySheetDraft.rows.push(makeBlankQuantitySheetRow(month));
+  render();
+}
+
 function removeQuantitySheetRow(index) {
   captureQuantitySheetDraft();
   state.quantitySheetDraft.rows.splice(index, 1);
@@ -8623,38 +8755,103 @@ function formatPrintCompactDate(value) {
   return `${year.slice(2)}-${month}-${day}`;
 }
 
+function normalizeQuantitySheetEntryDate(value, month) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalizedDigits = raw.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  if (/^\d{1,2}$/.test(normalizedDigits)) {
+    const [year, monthNo] = String(month || today.slice(0, 7)).split("-");
+    return formatFlexibleDateParts(year, monthNo, normalizedDigits);
+  }
+  const referenceYear = Number(String(month || today.slice(0, 7)).slice(0, 4)) || new Date(`${today}T00:00:00`).getFullYear();
+  return normalizeFlexibleDateWithYear(normalizedDigits, referenceYear);
+}
+
+function formatQuantityDateInputValue(value) {
+  return value ? value : "";
+}
+
 function readQuantitySheetForm(form) {
   const data = new FormData(form);
   const room = state.rooms.find((item) => item.id === data.get("roomId"));
   const month = data.get("month") || state.billingMonth || today.slice(0, 7);
   const iacuc = String(data.get("iacuc") || "").trim();
   const iacucInfo = findIacucInfo(iacuc) || {};
+  const profile = billingProfileForRoom(room || {});
+  let runningAnimalCount = 0;
+  let runningCageCount = 0;
   const rows = [...form.querySelectorAll("[data-quantity-row]")]
-    .map((row) => {
-      const rowIndex = Number(row.dataset.quantityRow);
+    .map((cell) => {
+      const rowIndex = Number(cell.dataset.quantityRow);
+      const rowCells = cellsForQuantityDateCell(cell);
+      const date = rowIndex === 0 ? `${month}-01` : normalizeQuantitySheetEntryDate(rowCells.date?.querySelector("[name='rowDate']")?.value || "", month);
+      return { cell, rowCells, rowIndex, date };
+    })
+    .filter((item) => item.date)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || a.rowIndex - b.rowIndex)
+    .map(({ rowCells, rowIndex, date }) => {
       const previous = state.quantitySheetDraft?.rows?.[rowIndex] || {};
-      const addedType = row.querySelector("[name='addedType']")?.value || "";
-      const removedType = row.querySelector("[name='removedType']")?.value || "";
-      const transferInFromIacucInput = row.querySelector("[name='transferInFromIacuc']")?.value || "";
-      const transferOutToIacucInput = row.querySelector("[name='transferOutToIacuc']")?.value || "";
+      const added = parseQuantityChangeCell(rowCells.added?.querySelector("[name='addedText']")?.value || "", rowCells.added?.querySelector("[name='addedType']")?.value || "", "added");
+      const removed = parseQuantityChangeCell(rowCells.removed?.querySelector("[name='removedText']")?.value || "", rowCells.removed?.querySelector("[name='removedType']")?.value || "", "removed");
+      const animalInput = rowCells.animal?.querySelector("[name='animalCount']");
+      const cageInput = rowCells.cage?.querySelector("[name='cageCount']");
+      let manualAnimalCount = manualQuantityBalanceValue(animalInput);
+      let manualCageCount = manualQuantityBalanceValue(cageInput);
+      let addedCount = added.count;
+      let removedCount = removed.count;
+      let addedType = added.type;
+      let removedType = removed.type;
+      const hasChange = numericOrZero(addedCount) > 0 || numericOrZero(removedCount) > 0;
+      const primaryManual = profile.unit === "animal_day" ? manualAnimalCount : manualCageCount;
+      const primaryPrevious = profile.unit === "animal_day" ? runningAnimalCount : runningCageCount;
+      if (!hasChange && primaryManual !== null) {
+        const delta = primaryManual - primaryPrevious;
+        if (delta > 0) {
+          addedCount = delta;
+          addedType = addedType || "购入";
+        } else if (delta < 0) {
+          removedCount = Math.abs(delta);
+          removedType = removedType || "取材";
+        }
+      }
+      const autoAnimalCount = Math.max(runningAnimalCount + numericOrZero(addedCount) - numericOrZero(removedCount), 0);
+      const autoCageCount = Math.max(runningCageCount + numericOrZero(addedCount) - numericOrZero(removedCount), 0);
+      if (manualAnimalCount !== null && manualAnimalCount === autoAnimalCount && animalInput?.dataset.manual !== "true") manualAnimalCount = null;
+      if (manualCageCount !== null && manualCageCount === autoCageCount && cageInput?.dataset.manual !== "true") manualCageCount = null;
+      if (rowIndex === 0) {
+        manualAnimalCount = numericOrZero(animalInput?.value);
+        manualCageCount = numericOrZero(cageInput?.value);
+      }
+      const nextAnimalCount = manualAnimalCount !== null ? manualAnimalCount : autoAnimalCount;
+      const nextCageCount = manualCageCount !== null ? manualCageCount : autoCageCount;
+      runningAnimalCount = nextAnimalCount;
+      runningCageCount = nextCageCount;
+      const handler = previous.handler || previous.notes || "";
+      const transferInFromIacucInput = rowCells.added?.querySelector("[name='transferInFromIacuc']")?.value || "";
+      const transferOutToIacucInput = rowCells.removed?.querySelector("[name='transferOutToIacuc']")?.value || "";
+      const hasManualBalance = manualAnimalCount !== null || manualCageCount !== null;
+      const hasTypedChange = Boolean(addedType || removedType || transferInFromIacucInput || transferOutToIacucInput);
+      if (!date || (!numericOrZero(addedCount) && !numericOrZero(removedCount) && !hasManualBalance && !handler && !hasTypedChange)) return null;
       return {
         id: previous.id || crypto.randomUUID(),
-        date: row.querySelector("[name='rowDate']")?.value || "",
-        addedCount: numericOrNull(row.querySelector("[name='addedCount']")?.value),
-        addedType,
+        date,
+        addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
+        addedType: numericOrZero(addedCount) > 0 ? addedType || "购入" : addedType || "",
         transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
-        removedCount: numericOrNull(row.querySelector("[name='removedCount']")?.value),
-        removedType,
+        removedCount: numericOrZero(removedCount) > 0 ? numericOrZero(removedCount) : null,
+        removedType: numericOrZero(removedCount) > 0 ? removedType || "取材" : removedType || "",
         transferOutToIacuc: removedType === "转出" ? normalizeIacucNumber(transferOutToIacucInput || previous.transferOutToIacuc || "") : "",
-        animalCount: null,
-        cageCount: null,
-        notes: "",
+        animalCount: manualAnimalCount,
+        cageCount: manualCageCount,
+        handler,
+        balanceSource: hasManualBalance ? "manual" : "auto",
+        notes: handler,
         transferSourceSheetId: previous.transferSourceSheetId || "",
         transferSourceIacuc: previous.transferSourceIacuc || "",
         transferMirrorContrib: previous.transferMirrorContrib || null,
       };
     })
-    .filter((row) => row.date || row.addedCount || row.removedCount);
+    .filter(Boolean);
 
   return normalizeQuantitySheetDraft({
     id: state.quantitySheetDraft?.id || crypto.randomUUID(),
@@ -8669,10 +8866,30 @@ function readQuantitySheetForm(form) {
     contact: "",
     funding: iacucInfo.funding || data.get("funding")?.trim() || "",
     billingUnit: data.get("billingUnit") || billingProfileForRoom(room || {}).unit,
-    initialAnimalCount: numericOrZero(data.get("initialAnimalCount")),
-    initialCageCount: numericOrZero(data.get("initialCageCount")),
+    initialAnimalCount: numericOrZero(rows[0]?.animalCount),
+    initialCageCount: numericOrZero(rows[0]?.cageCount),
+    pageCount: quantitySheetPageCount(state.quantitySheetDraft),
     rows,
   });
+}
+
+function cellsForQuantityDateCell(cell) {
+  const date = cell;
+  const added = cell.nextElementSibling;
+  const removed = added?.nextElementSibling || null;
+  const animal = removed?.nextElementSibling || null;
+  const cage = animal?.nextElementSibling || null;
+  const handler = null;
+  return { date, added, removed, animal, cage, handler };
+}
+
+function manualQuantityBalanceValue(input) {
+  if (!input) return null;
+  const value = numericOrNull(input.value);
+  if (value === null) return null;
+  const autoValue = numericOrNull(input.dataset.autoValue);
+  if (input.dataset.manual !== "true" && autoValue !== null && value === autoValue) return null;
+  return Math.max(value, 0);
 }
 
 function makeQuantitySheetDraft(month = today.slice(0, 7)) {
@@ -8691,7 +8908,8 @@ function makeQuantitySheetDraft(month = today.slice(0, 7)) {
     billingUnit: "cage_day",
     initialAnimalCount: 0,
     initialCageCount: 0,
-    rows: [makeQuantitySheetRow(month)],
+    pageCount: 1,
+    rows: [makeBlankQuantitySheetRow(month)],
   });
 }
 
@@ -8707,7 +8925,16 @@ function makeQuantitySheetRow(month = today.slice(0, 7)) {
     transferOutToIacuc: "",
     animalCount: null,
     cageCount: null,
+    handler: "",
+    balanceSource: "auto",
     notes: "",
+  };
+}
+
+function makeBlankQuantitySheetRow(month = today.slice(0, 7)) {
+  return {
+    ...makeQuantitySheetRow(month),
+    date: "",
   };
 }
 
@@ -8728,6 +8955,7 @@ function normalizeQuantitySheetDraft(sheet) {
     billingUnit: sheet?.billingUnit === "animal_day" ? "animal_day" : "cage_day",
     initialAnimalCount: numericOrZero(sheet?.initialAnimalCount),
     initialCageCount: numericOrZero(sheet?.initialCageCount),
+    pageCount: Math.max(numericOrZero(sheet?.pageCount), 1),
     rows: Array.isArray(sheet?.rows) ? sheet.rows.map((row) => normalizeQuantitySheetDraftRow(row, month)) : [],
     updatedAt: sheet?.updatedAt || "",
   };
@@ -8742,7 +8970,7 @@ function quantitySheetRoomId(sheet) {
 function normalizeQuantitySheetDraftRow(row, month) {
   return {
     id: row?.id || crypto.randomUUID(),
-    date: row?.date || `${month}-01`,
+    date: row?.date || "",
     addedCount: numericOrNull(row?.addedCount),
     addedType: row?.addedType || "",
     transferInFromIacuc: normalizeIacucNumber(row?.transferInFromIacuc || ""),
@@ -8751,6 +8979,8 @@ function normalizeQuantitySheetDraftRow(row, month) {
     transferOutToIacuc: normalizeIacucNumber(row?.transferOutToIacuc || ""),
     animalCount: numericOrNull(row?.animalCount),
     cageCount: numericOrNull(row?.cageCount),
+    handler: row?.handler || "",
+    balanceSource: row?.balanceSource === "manual" ? "manual" : "auto",
     notes: row?.notes || "",
     transferSourceSheetId: row?.transferSourceSheetId || "",
     transferSourceIacuc: normalizeIacucNumber(row?.transferSourceIacuc || ""),
@@ -10004,6 +10234,29 @@ function quantityChangeShortLabel(value) {
   }[value] || "";
 }
 
+function quantityChangeFullType(value, kind) {
+  const text = String(value || "").trim();
+  const addedTypes = { 购: "购入", 购入: "购入", 转: "转入", 转入: "转入", 分: "分笼", 分笼: "分笼" };
+  const removedTypes = { 取: "取材", 取材: "取材", 死: "死亡", 死亡: "死亡", 转: "转出", 转出: "转出" };
+  return (kind === "added" ? addedTypes : removedTypes)[text] || "";
+}
+
+function parseQuantityChangeCell(value, fallbackType, kind) {
+  const text = String(value || "").trim();
+  const fallback = quantityChangeFullType(fallbackType, kind) || fallbackType || "";
+  if (!text) return { count: null, type: fallback };
+  const match = text.match(/^(\d+)(?:\s*[（(]\s*([^）)]*)\s*[）)])?$/);
+  if (!match) {
+    const number = numericOrNull(text);
+    return { count: Number.isFinite(number) ? number : null, type: fallback };
+  }
+  const inlineType = quantityChangeFullType(match[2] || "", kind);
+  return {
+    count: numericOrNull(match[1]),
+    type: inlineType || fallback,
+  };
+}
+
 function quantityChangeCell(rows, kind) {
   const countKey = kind === "added" ? "addedCount" : "removedCount";
   const typeKey = kind === "added" ? "addedType" : "removedType";
@@ -10088,7 +10341,7 @@ function buildQuantitySourceTimeline(statement) {
         removedText: quantityChangeCell(dayRows, "removed"),
         animalCount: item.animalCount,
         cageCount: item.cageCount,
-        manager: item.sheet.manager || "",
+        manager: dayRows.find((row) => row.handler)?.handler || item.sheet.manager || "",
         roomName: item.sheet.roomName || "",
         project: item.sheet.project || "",
         pi: item.sheet.pi || "",

@@ -3099,6 +3099,7 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "billingUnit": "animal_day" if clean_text(source.get("billingUnit", "")) == "animal_day" else "cage_day",
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
         "initialCageCount": as_int(source.get("initialCageCount")),
+        "pageCount": max(as_int(source.get("pageCount")) or 1, 1),
         "rows": [normalize_quantity_sheet_row(row, month) for row in rows],
         "updatedAt": updated_at,
     }
@@ -3121,6 +3122,8 @@ def normalize_quantity_sheet_row(row, month):
         "transferOutToIacuc": normalize_iacuc_number(row.get("transferOutToIacuc", "")),
         "animalCount": as_int(row.get("animalCount")),
         "cageCount": as_int(row.get("cageCount")),
+        "handler": clean_text(row.get("handler", "")),
+        "balanceSource": "manual" if clean_text(row.get("balanceSource", "")) == "manual" else "auto",
         "notes": clean_text(row.get("notes", "")),
         "transferSourceSheetId": clean_text(row.get("transferSourceSheetId", "")),
         "transferSourceIacuc": normalize_iacuc_number(row.get("transferSourceIacuc", "")),
