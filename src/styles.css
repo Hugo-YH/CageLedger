@@ -887,6 +887,10 @@ h3 {
   gap: 10px;
 }
 
+.workflow-center-view .workspace-meta-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .workspace-meta-card {
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -1493,7 +1497,7 @@ h3 {
 }
 
 .workflow-table {
-  min-width: 1015px;
+  min-width: 1330px;
   table-layout: fixed;
 }
 
@@ -1537,17 +1541,28 @@ h3 {
 
 .workflow-table th:nth-child(6),
 .workflow-table td:nth-child(6) {
-  width: 80px;
+  width: 110px;
 }
 
 .workflow-table th:nth-child(7),
 .workflow-table td:nth-child(7) {
-  width: 95px;
+  width: 120px;
 }
 
 .workflow-table th:nth-child(8),
 .workflow-table td:nth-child(8) {
-  width: 230px;
+  width: 135px;
+}
+
+.workflow-table th:nth-child(9),
+.workflow-table td:nth-child(9) {
+  width: 140px;
+  white-space: nowrap;
+}
+
+.workflow-table th:nth-child(10),
+.workflow-table td:nth-child(10) {
+  width: 260px;
   position: sticky;
   right: 0;
   background: var(--panel);
@@ -1565,7 +1580,7 @@ h3 {
   white-space: nowrap;
 }
 
-.workflow-table th:nth-child(8) {
+.workflow-table th:nth-child(10) {
   background: #f4f8f7;
   z-index: 3;
 }
@@ -1573,6 +1588,10 @@ h3 {
 .workflow-principal-cell strong,
 .workflow-principal-cell span {
   display: block;
+}
+
+.workflow-table td .pill {
+  white-space: nowrap;
 }
 
 .workflow-principal-cell strong {
@@ -1592,13 +1611,21 @@ h3 {
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
+  justify-content: flex-end;
 }
 
 .workflow-row-actions .ghost,
 .workflow-row-actions .secondary {
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 32px;
+  padding: 6px 8px;
   white-space: nowrap;
+  font-size: 14px;
+}
+
+.workflow-table td:nth-child(9) {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
 
 .workflow-row-actions .muted {

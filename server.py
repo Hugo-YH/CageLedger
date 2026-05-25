@@ -18,6 +18,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+try:
+    import openpyxl
+    from openpyxl.utils.datetime import from_excel as openpyxl_from_excel
+except ImportError:
+    openpyxl = None
+    openpyxl_from_excel = None
+
 from server_app.cache import cache_get, cache_key, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes, log_perf
 from server_app.config import (
     CAGELEDGER_APP_VERSION,
@@ -94,6 +101,15 @@ from server_app.repositories.payload import (
     set_setting,
     table_has_rows,
 )
+from server_app.repositories.reimbursement import (
+    delete_reimbursement_record as delete_reimbursement_record_repository,
+    get_reimbursement_record as get_reimbursement_record_repository,
+    get_reimbursement_record_by_key as get_reimbursement_record_by_key_repository,
+    get_reimbursement_record_by_workflow_id as get_reimbursement_record_by_workflow_id_repository,
+    list_reimbursement_records_for_pi as list_reimbursement_records_for_pi_repository,
+    list_reimbursement_records_page as list_reimbursement_records_page_repository,
+    upsert_reimbursement_record as upsert_reimbursement_record_repository,
+)
 from server_app.repositories.state import assemble_state as assemble_state_repository, read_applications_by_iacuc as read_applications_by_iacuc_repository, read_cached_state as read_cached_state_repository
 from server_app.repositories.users import (
     delete_session_by_token_hash,
@@ -113,6 +129,18 @@ from server_app.services.billing import save_billing_statement_workflow as save_
 from server_app.services.intake import confirm_intake_receipt as confirm_intake_receipt_service
 from server_app.services.placement import move_in_placement_task as move_in_placement_task_service, reassign_placement_task_room as reassign_placement_task_room_service, reserve_placement_task as reserve_placement_task_service
 from server_app.services.quantity import sync_quantity_sheet_transfer_rows as sync_quantity_sheet_transfer_rows_service
+from server_app.services.reimbursement import (
+    REIMBURSEMENT_STATUS_COMPLETED,
+    REIMBURSEMENT_STATUS_PENDING,
+    REIMBURSEMENT_STATUS_REIMBURSING,
+    coerce_money as coerce_reimbursement_money,
+    infer_import_status,
+    merge_reimbursement_edit,
+    normalize_reimbursement_status,
+    reimbursement_business_key,
+    reimbursement_has_manual_entry,
+    summarize_statement,
+)
 
 BILLING_PRINCIPAL_PI = "pi"
 BILLING_PRINCIPAL_INDEPENDENT = "independent"
@@ -138,6 +166,7 @@ WORKFLOW_STATUS_GENERATED = "statement_generated"
 WORKFLOW_STATUS_SENT = "statement_sent"
 WORKFLOW_STATUS_SIGNED = "statement_signed_returned"
 WORKFLOW_STATUS_FINANCE = "submitted_to_finance"
+REIMBURSEMENT_MIGRATION_KEY = "reimbursementRecordMigrationDone"
 WORKFLOW_STATUSES = (
     WORKFLOW_STATUS_IN_FEEDING,
     WORKFLOW_STATUS_GENERATED,
@@ -486,6 +515,31 @@ def initialize_schema(conn):
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS reimbursement_records (
+            id TEXT PRIMARY KEY,
+            business_key TEXT NOT NULL UNIQUE,
+            month TEXT NOT NULL,
+            pi TEXT NOT NULL,
+            workflow_id TEXT,
+            workflow_status TEXT,
+            reimbursement_status TEXT NOT NULL,
+            current_month_amount REAL NOT NULL DEFAULT 0,
+            support_amount REAL NOT NULL DEFAULT 0,
+            payable_amount REAL NOT NULL DEFAULT 0,
+            paid_amount REAL NOT NULL DEFAULT 0,
+            unpaid_amount REAL NOT NULL DEFAULT 0,
+            accumulated_payable REAL NOT NULL DEFAULT 0,
+            accumulated_paid REAL NOT NULL DEFAULT 0,
+            accumulated_unpaid REAL NOT NULL DEFAULT 0,
+            source TEXT NOT NULL,
+            latest_event_at TEXT,
+            updated_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS audit_logs (
             id TEXT PRIMARY KEY,
             message TEXT,
@@ -578,6 +632,10 @@ def create_performance_indexes(conn):
         "CREATE INDEX IF NOT EXISTS idx_billing_versions_workflow_id ON billing_statement_versions(workflow_id)",
         "CREATE INDEX IF NOT EXISTS idx_billing_version_lines_version_id ON billing_statement_version_lines(version_id)",
         "CREATE INDEX IF NOT EXISTS idx_billing_events_workflow_id ON billing_workflow_events(workflow_id)",
+        "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_month ON reimbursement_records(month)",
+        "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_pi ON reimbursement_records(pi)",
+        "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_status ON reimbursement_records(reimbursement_status)",
+        "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_workflow_id ON reimbursement_records(workflow_id)",
         "CREATE INDEX IF NOT EXISTS idx_audit_events_at ON audit_events(at)",
         "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
@@ -592,6 +650,7 @@ def migrate_schema(conn):
     ensure_occupancies_structured_columns(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
+    migrate_reimbursement_record_schema(conn)
 
 
 def ensure_experiment_applications_duplicate_schema(conn):
@@ -2079,6 +2138,30 @@ def write_normalized_state(conn, state, updated_at):
         )
 
 
+def migrate_reimbursement_record_schema(conn):
+    if read_setting(conn, REIMBURSEMENT_MIGRATION_KEY, False):
+        return
+    rows = conn.execute("SELECT id, payload FROM billing_workflows ORDER BY month, rowid").fetchall()
+    for row in rows:
+        workflow = json.loads(row["payload"])
+        current_version = workflow.get("currentVersion") or {}
+        statement = current_version.get("statement") or {}
+        if not statement:
+            continue
+        lines = list_billing_statement_lines_for_version(conn, current_version.get("id", ""))
+        detail_context = reimbursement_detail_context_from_workflow(conn, workflow, statement)
+        upsert_reimbursement_record_from_statement(
+            conn,
+            workflow,
+            statement,
+            lines,
+            detail_context,
+            source="workflow" if workflow.get("sourceType") else "imported",
+        )
+    recalculate_all_reimbursement_accumulations(conn)
+    set_setting(conn, REIMBURSEMENT_MIGRATION_KEY, True, now_iso())
+
+
 def assemble_state(conn):
     return assemble_state_repository(conn)
 
@@ -3384,8 +3467,9 @@ def generate_billing_statement(conn, payload, actor):
 
     occupancies = read_occupancies_for_billing(conn, month, iacuc=iacuc)
     applications_by_iacuc = read_applications_by_iacuc(conn)
+    rooms = read_payloads(conn, "rooms", "rowid")
     state = {
-        "rooms": read_payloads(conn, "rooms", "rowid"),
+        "rooms": rooms,
         "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
         "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
     }
@@ -3511,6 +3595,9 @@ def generate_billing_statement(conn, payload, actor):
         actor,
         f"生成 {pi_name} {month} 饲养费结算单",
     )
+    detail_context = occupancy_detail_context(occupancies, rooms)
+    upsert_reimbursement_record_from_statement(conn, workflow, statement, lines, detail_context, "workflow")
+    recalculate_reimbursement_accumulations(conn, pi_name)
     event = audit_event(
         actor,
         "billing_statement.generated",
@@ -3550,8 +3637,9 @@ def generate_billing_statement_by_pi(conn, payload, actor):
     if source_type == "cage_map":
         applications_by_iacuc = read_applications_by_iacuc(conn)
         occupancies = read_occupancies_for_billing(conn, month, pi=pi_name)
+        rooms = read_payloads(conn, "rooms", "rowid")
         state = {
-            "rooms": read_payloads(conn, "rooms", "rowid"),
+            "rooms": rooms,
             "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
             "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
         }
@@ -3659,6 +3747,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "generatedAt": generated_at,
             "lockedAt": generated_at if status == "locked" else "",
         }
+        detail_context = occupancy_detail_context(occupancies, rooms)
     else:
         sheets = [
             item
@@ -3703,6 +3792,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "generatedAt": generated_at,
             "lockedAt": generated_at if status == "locked" else "",
         }
+        detail_context = quantity_sheet_detail_context(sheets, rooms)
 
     for line in lines:
         line["statementId"] = statement["id"]
@@ -3715,6 +3805,8 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         actor,
         f"按 PI 合表生成 {pi_name} {month} 饲养费结算单",
     )
+    upsert_reimbursement_record_from_statement(conn, workflow, statement, lines, detail_context, "workflow")
+    recalculate_reimbursement_accumulations(conn, pi_name)
     event = audit_event(
         actor,
         "billing_statement.generated_by_pi",
@@ -4300,6 +4392,649 @@ def list_current_billing_statements(conn):
     return list_current_billing_statements_repository(conn)
 
 
+def list_reimbursement_records_page(conn, filters):
+    return list_reimbursement_records_page_repository(conn, filters, clean_text)
+
+
+def get_reimbursement_record(conn, record_id):
+    return get_reimbursement_record_repository(conn, record_id)
+
+
+def get_reimbursement_record_by_key(conn, business_key):
+    return get_reimbursement_record_by_key_repository(conn, business_key)
+
+
+def get_reimbursement_record_by_workflow_id(conn, workflow_id):
+    return get_reimbursement_record_by_workflow_id_repository(conn, workflow_id)
+
+
+def list_reimbursement_records_for_pi(conn, pi_name):
+    return list_reimbursement_records_for_pi_repository(conn, pi_name)
+
+
+def upsert_reimbursement_record(conn, payload):
+    existing_by_key = get_reimbursement_record_by_key(conn, payload.get("businessKey", ""))
+    if existing_by_key and existing_by_key.get("id"):
+        payload["id"] = existing_by_key["id"]
+    else:
+        row = conn.execute("SELECT payload FROM reimbursement_records WHERE id = ?", (payload.get("id", ""),)).fetchone()
+        if row:
+            existing_by_id = json.loads(row["payload"])
+            payload["id"] = existing_by_id.get("id", payload.get("id", ""))
+            if not payload.get("businessKey") and existing_by_id.get("businessKey"):
+                payload["businessKey"] = existing_by_id["businessKey"]
+    upsert_reimbursement_record_repository(conn, payload)
+
+
+def delete_reimbursement_record(conn, record_id):
+    delete_reimbursement_record_repository(conn, record_id)
+
+
+def reimbursement_status_label(value):
+    return {
+        REIMBURSEMENT_STATUS_PENDING: "待提交",
+        REIMBURSEMENT_STATUS_REIMBURSING: "报销中",
+        REIMBURSEMENT_STATUS_COMPLETED: "已完成",
+    }.get(normalize_reimbursement_status(value), "待提交")
+
+
+def reimbursement_record_id(month, pi_name):
+    raw = f"{clean_text(month)}|{clean_text(pi_name)}"
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", clean_text(month)).strip("-") or "record"
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+    return f"rrc-{slug}-{digest}"
+
+
+def quantity_sheet_detail_context(sheets, rooms):
+    room_by_id = {room.get("id"): room for room in rooms}
+    context = {}
+    for sheet in sheets:
+        iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
+        if not iacuc:
+            continue
+        room = room_by_id.get(sheet.get("roomId")) or next((item for item in rooms if clean_text(item.get("name")) == clean_text(sheet.get("roomName"))), {})
+        profile = billing_profile_for_room(room or {})
+        current = context.get(iacuc) or {
+            "facility": profile.get("facility", ""),
+            "funding": "",
+            "species": room.get("defaultSpecies", ""),
+            "project": "",
+            "owner": "",
+            "roomNames": set(),
+        }
+        if sheet.get("funding"):
+            current["funding"] = join_distinct_text(current.get("funding", ""), sheet.get("funding", ""))
+        if sheet.get("project"):
+            current["project"] = join_distinct_text(current.get("project", ""), sheet.get("project", ""))
+        if sheet.get("owner"):
+            current["owner"] = join_distinct_text(current.get("owner", ""), sheet.get("owner", ""))
+        if room.get("defaultSpecies"):
+            current["species"] = join_distinct_text(current.get("species", ""), room.get("defaultSpecies", ""))
+        if sheet.get("roomName"):
+            current["roomNames"].add(sheet.get("roomName"))
+        context[iacuc] = current
+    return finalize_reimbursement_detail_context(context)
+
+
+def occupancy_detail_context(occupancies, rooms):
+    room_by_id = {room.get("id"): room for room in rooms}
+    context = {}
+    for item in occupancies:
+        iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+        if not iacuc:
+            continue
+        room = room_by_id.get(item.get("roomId"), {})
+        profile = billing_profile_for_room(room or {})
+        current = context.get(iacuc) or {
+            "facility": profile.get("facility", ""),
+            "funding": "",
+            "species": "",
+            "project": "",
+            "owner": "",
+            "roomNames": set(),
+        }
+        current["funding"] = join_distinct_text(current.get("funding", ""), item.get("funding", ""))
+        current["species"] = join_distinct_text(current.get("species", ""), item.get("species", ""))
+        current["project"] = join_distinct_text(current.get("project", ""), item.get("project", ""))
+        current["owner"] = join_distinct_text(current.get("owner", ""), item.get("owner", ""))
+        if item.get("roomName"):
+            current["roomNames"].add(item.get("roomName"))
+        context[iacuc] = current
+    return finalize_reimbursement_detail_context(context)
+
+
+def finalize_reimbursement_detail_context(context):
+    finalized = {}
+    for iacuc, item in context.items():
+        finalized[iacuc] = {
+            **item,
+            "roomNames": sorted(item.get("roomNames", set())),
+        }
+    return finalized
+
+
+def join_distinct_text(current, value):
+    values = [part for part in [clean_text(current), clean_text(value)] if part]
+    if not values:
+        return ""
+    return "、".join(sorted(set(values)))
+
+
+def reimbursement_detail_context_from_workflow(conn, workflow, statement):
+    detail_context = {}
+    iacucs = [normalize_iacuc_number(value) for value in statement.get("iacucs", []) if normalize_iacuc_number(value)]
+    applications_by_iacuc = read_applications_by_iacuc(conn)
+    if statement.get("sourceType") == "pi_merged_quantity_sheet":
+        sheets = [item for item in list_quantity_sheets(conn) if item.get("month") == statement.get("month") and clean_text(item.get("pi")) == clean_text(statement.get("pi"))]
+        detail_context = quantity_sheet_detail_context(sheets, read_payloads(conn, "rooms", "rowid"))
+    elif statement.get("sourceType") == "quantity_sheet":
+        sheets = [item for item in list_quantity_sheets(conn) if item.get("month") == statement.get("month") and normalize_iacuc_number(item.get("iacuc")) == normalize_iacuc_number(statement.get("iacuc"))]
+        detail_context = quantity_sheet_detail_context(sheets, read_payloads(conn, "rooms", "rowid"))
+    else:
+        occupancies = read_occupancies_for_billing(
+            conn,
+            statement.get("month", ""),
+            iacuc="" if clean_text(statement.get("sourceType", "")).startswith("pi_merged_") else statement.get("iacuc", ""),
+            pi=statement.get("pi", "") if clean_text(statement.get("pi", "")) else "",
+        )
+        detail_context = occupancy_detail_context(occupancies, read_payloads(conn, "rooms", "rowid"))
+    for iacuc in iacucs:
+        snapshot = statement_application_snapshot(iacuc, applications_by_iacuc, [])
+        current = detail_context.get(iacuc, {"roomNames": []})
+        detail_context[iacuc] = {
+            **current,
+            "funding": current.get("funding") or snapshot.get("funding", ""),
+            "project": current.get("project") or snapshot.get("project", ""),
+            "owner": current.get("owner") or snapshot.get("owner", ""),
+        }
+    return detail_context
+
+
+def build_reimbursement_record_payload(existing, workflow, statement, lines, detail_context_by_iacuc, source):
+    summary = summarize_statement(statement, lines, detail_context_by_iacuc, BILLING_TIER_LIMIT)
+    month = clean_text(statement.get("month", ""))
+    pi_name = clean_text(statement.get("pi", ""))
+    business_key = reimbursement_business_key(month, pi_name)
+    current_month_amount = coerce_reimbursement_money(statement.get("totalAmount", 0))
+    support_amount = coerce_reimbursement_money(summary.get("supportAmount", 0))
+    payable_amount = coerce_reimbursement_money(summary.get("payableAmount", current_month_amount - support_amount))
+    paid_amount = coerce_reimbursement_money(existing.get("paidAmount", 0) if existing else 0)
+    reimbursement_status = normalize_reimbursement_status(existing.get("reimbursementStatus") if existing else "")
+    payload = {
+        "id": existing.get("id") if existing else reimbursement_record_id(month, pi_name),
+        "businessKey": business_key,
+        "month": month,
+        "pi": pi_name,
+        "workflowId": workflow.get("id", "") if workflow else existing.get("workflowId", "") if existing else "",
+        "workflowStatus": workflow.get("workflowStatus", "") if workflow else existing.get("workflowStatus", "") if existing else "",
+        "reimbursementStatus": reimbursement_status,
+        "currentMonthAmount": current_month_amount,
+        "supportAmount": support_amount,
+        "payableAmount": payable_amount,
+        "paidAmount": paid_amount,
+        "unpaidAmount": coerce_reimbursement_money(max(payable_amount - paid_amount, 0)),
+        "accumulatedPayable": coerce_reimbursement_money(existing.get("accumulatedPayable", 0) if existing else 0),
+        "accumulatedPaid": coerce_reimbursement_money(existing.get("accumulatedPaid", 0) if existing else 0),
+        "accumulatedUnpaid": coerce_reimbursement_money(existing.get("accumulatedUnpaid", 0) if existing else 0),
+        "fundBookNo": clean_text(existing.get("fundBookNo", "") if existing else ""),
+        "reimbursementFormNo": clean_text(existing.get("reimbursementFormNo", "") if existing else ""),
+        "approvedBudget": existing.get("approvedBudget", "") if existing else "",
+        "notes": clean_text(existing.get("notes", "") if existing else ""),
+        "completedAt": clean_text(existing.get("completedAt", "") if existing else ""),
+        "source": source,
+        "latestEventAt": workflow.get("latestEventAt", "") if workflow else statement.get("generatedAt", ""),
+        "updatedAt": now_iso(),
+        "details": summary.get("details", []),
+        "iacucs": [detail.get("iacuc", "") for detail in summary.get("details", []) if detail.get("iacuc")],
+        "statementVersionId": statement.get("versionId", "") or statement.get("id", ""),
+        "documentNumber": statement.get("documentNumber", ""),
+        "billingUnit": statement.get("billingUnit", ""),
+        "project": statement.get("project", ""),
+        "owner": statement.get("owner", ""),
+        "funding": statement.get("funding", ""),
+    }
+    if payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED and payload["paidAmount"] + 1e-9 < payload["payableAmount"]:
+        payload["reimbursementStatus"] = REIMBURSEMENT_STATUS_REIMBURSING if (payload["fundBookNo"] or payload["reimbursementFormNo"]) else REIMBURSEMENT_STATUS_PENDING
+        payload["completedAt"] = ""
+    return payload
+
+
+def upsert_reimbursement_record_from_statement(conn, workflow, statement, lines, detail_context_by_iacuc, source="workflow"):
+    business_key = reimbursement_business_key(statement.get("month", ""), statement.get("pi", ""))
+    existing = get_reimbursement_record_by_key(conn, business_key) or {}
+    payload = build_reimbursement_record_payload(existing, workflow, statement, lines, detail_context_by_iacuc, source)
+    upsert_reimbursement_record(conn, payload)
+    return payload
+
+
+def recalculate_reimbursement_accumulations(conn, pi_name):
+    records = list_reimbursement_records_for_pi(conn, clean_text(pi_name))
+    records = sorted(records, key=lambda item: (clean_text(item.get("month", "")), clean_text(item.get("latestEventAt", "")), clean_text(item.get("id", ""))))
+    accumulated_payable = 0.0
+    accumulated_paid = 0.0
+    for record in records:
+        payable_amount = coerce_reimbursement_money(record.get("payableAmount", 0))
+        paid_amount = coerce_reimbursement_money(record.get("paidAmount", 0))
+        record["unpaidAmount"] = coerce_reimbursement_money(max(payable_amount - paid_amount, 0))
+        accumulated_payable += payable_amount
+        accumulated_paid += paid_amount
+        record["accumulatedPayable"] = coerce_reimbursement_money(accumulated_payable)
+        record["accumulatedPaid"] = coerce_reimbursement_money(accumulated_paid)
+        record["accumulatedUnpaid"] = coerce_reimbursement_money(accumulated_payable - accumulated_paid)
+        record["updatedAt"] = now_iso()
+        upsert_reimbursement_record(conn, record)
+
+
+def recalculate_all_reimbursement_accumulations(conn):
+    rows = conn.execute("SELECT DISTINCT pi FROM reimbursement_records WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
+    for row in rows:
+        recalculate_reimbursement_accumulations(conn, row["pi"])
+
+
+def ensure_excel_import_supported():
+    if not openpyxl:
+        raise ValueError("当前运行环境缺少 Excel 导入依赖 openpyxl")
+
+
+def month_key(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m")
+    if isinstance(value, (int, float)) and openpyxl_from_excel:
+        try:
+            parsed = openpyxl_from_excel(value)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, datetime):
+            return parsed.strftime("%Y-%m")
+        if isinstance(parsed, date):
+            return parsed.strftime("%Y-%m")
+    text = clean_text(value)
+    if not text:
+        return ""
+    compact = re.search(r"(?<!\d)(20\d{2})(\d{2})(?!\d)", text)
+    if compact:
+        return f"{compact.group(1)}-{compact.group(2)}"
+    dotted = re.search(r"(20\d{2})[./-](\d{1,2})", text)
+    if dotted:
+        return f"{dotted.group(1)}-{int(dotted.group(2)):02d}"
+    chinese = re.search(r"(20\d{2})年\s*(\d{1,2})月", text)
+    if chinese:
+        return f"{chinese.group(1)}-{int(chinese.group(2)):02d}"
+    return ""
+
+
+def split_multiline_values(value):
+    text = str(value or "").replace("\r", "\n")
+    parts = [clean_text(part) for part in re.split(r"[\n、/]", text)]
+    seen = set()
+    values = []
+    for part in parts:
+        if not part or part in seen:
+            continue
+        seen.add(part)
+        values.append(part)
+    return values
+
+
+def distinct_text_list(values):
+    seen = set()
+    result = []
+    for value in values:
+        text = clean_text(value)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def find_header_row(sheet, required_labels, max_scan_rows=12):
+    normalized_required = [clean_text(label).lower() for label in required_labels]
+    for row_index in range(1, min(sheet.max_row, max_scan_rows) + 1):
+        labels = [clean_text(sheet.cell(row_index, column).value).lower() for column in range(1, sheet.max_column + 1)]
+        if all(any(required in label for label in labels if label) for required in normalized_required):
+            return row_index, labels
+    raise ValueError(f"工作表 {sheet.title} 缺少必需表头")
+
+
+def find_header_column(labels, *patterns):
+    candidates = [clean_text(pattern).lower() for pattern in patterns]
+    for index, label in enumerate(labels, start=1):
+        if not label:
+            continue
+        for candidate in candidates:
+            if candidate and candidate in label:
+                return index
+    return 0
+
+
+def monthly_sheet_month(sheet, header_row):
+    for row_index in range(1, min(header_row, 3) + 1):
+        for column_index in range(1, min(sheet.max_column, 8) + 1):
+            key = month_key(sheet.cell(row_index, column_index).value)
+            if key:
+                return key
+    key = month_key(sheet.title)
+    if key:
+        return key
+    raise ValueError(f"无法识别工作表 {sheet.title} 的月份")
+
+
+def next_imported_record_id(prefix="reim-import"):
+    return f"{prefix}-{secrets.token_hex(8)}"
+
+
+def build_monthly_import_groups(workbook):
+    groups = {}
+    for sheet in workbook.worksheets:
+        try:
+            header_row, labels = find_header_row(sheet, ["项目负责人", "IACUC", "应缴纳"])
+        except ValueError:
+            continue
+        month = monthly_sheet_month(sheet, header_row)
+        pi_col = find_header_column(labels, "项目负责人")
+        facility_col = find_header_column(labels, "设施")
+        iacuc_col = find_header_column(labels, "iacuc")
+        funding_col = find_header_column(labels, "伦理对应的经费")
+        species_col = find_header_column(labels, "动物品系")
+        current_amount_col = find_header_column(labels, "产生的饲养费")
+        support_amount_col = find_header_column(labels, "单位支持")
+        payable_amount_col = find_header_column(labels, "应缴纳")
+        fund_book_col = find_header_column(labels, "经费本号")
+        reimbursement_form_col = find_header_column(labels, "单号")
+        notes_col = find_header_column(labels, "备注")
+        room_col = find_header_column(labels, "房间号")
+        start_col = find_header_column(labels, "实验开始")
+        end_col = find_header_column(labels, "实验结束")
+        if not (pi_col and iacuc_col and current_amount_col and payable_amount_col):
+            continue
+        empty_rows = 0
+        for row_index in range(header_row + 1, min(sheet.max_row, 1200) + 1):
+            pi_name = clean_text(sheet.cell(row_index, pi_col).value)
+            iacuc = normalize_iacuc_number(sheet.cell(row_index, iacuc_col).value)
+            amount = coerce_reimbursement_money(sheet.cell(row_index, current_amount_col).value)
+            if not pi_name and not iacuc and amount <= 0:
+                empty_rows += 1
+                if empty_rows >= 20:
+                    break
+                continue
+            empty_rows = 0
+            if not pi_name:
+                continue
+            business_key = reimbursement_business_key(month, pi_name)
+            entry = groups.setdefault(
+                business_key,
+                {
+                    "month": month,
+                    "pi": pi_name,
+                    "source": "imported",
+                    "workflowId": "",
+                    "workflowStatus": "",
+                    "details": [],
+                    "currentMonthAmount": 0.0,
+                    "supportAmount": 0.0,
+                    "payableAmount": 0.0,
+                    "fundBookNos": [],
+                    "reimbursementFormNos": [],
+                    "notes": [],
+                    "species": [],
+                    "funding": [],
+                },
+            )
+            support_amount = coerce_reimbursement_money(sheet.cell(row_index, support_amount_col).value) if support_amount_col else 0.0
+            payable_amount = coerce_reimbursement_money(sheet.cell(row_index, payable_amount_col).value)
+            note_parts = [clean_text(sheet.cell(row_index, notes_col).value)] if notes_col else []
+            start_month = month_key(sheet.cell(row_index, start_col).value) if start_col else ""
+            end_month = month_key(sheet.cell(row_index, end_col).value) if end_col else ""
+            if start_month:
+                note_parts.append(f"实验开始：{start_month}")
+            if end_month:
+                note_parts.append(f"实验结束：{end_month}")
+            funding = clean_text(sheet.cell(row_index, funding_col).value) if funding_col else ""
+            species = clean_text(sheet.cell(row_index, species_col).value) if species_col else ""
+            rooms = split_multiline_values(sheet.cell(row_index, room_col).value) if room_col else []
+            facility = clean_text(sheet.cell(row_index, facility_col).value) if facility_col else ""
+            entry["currentMonthAmount"] += amount
+            entry["supportAmount"] += support_amount
+            entry["payableAmount"] += payable_amount
+            entry["fundBookNos"].append(clean_text(sheet.cell(row_index, fund_book_col).value) if fund_book_col else "")
+            entry["reimbursementFormNos"].append(clean_text(sheet.cell(row_index, reimbursement_form_col).value) if reimbursement_form_col else "")
+            entry["notes"].extend([part for part in note_parts if part])
+            if species:
+                entry["species"].append(species)
+            if funding:
+                entry["funding"].append(funding)
+            entry["details"].append(
+                {
+                    "iacuc": iacuc,
+                    "facility": facility,
+                    "funding": funding,
+                    "species": species,
+                    "project": "",
+                    "owner": "",
+                    "amount": coerce_reimbursement_money(amount),
+                    "supportAmount": coerce_reimbursement_money(support_amount),
+                    "payableAmount": coerce_reimbursement_money(payable_amount),
+                    "roomNames": rooms,
+                    "statementVersionId": "",
+                }
+            )
+    return groups
+
+
+def import_monthly_reimbursement_workbook(conn, file_body, actor):
+    ensure_excel_import_supported()
+    workbook = openpyxl.load_workbook(io.BytesIO(file_body), data_only=True)
+    groups = build_monthly_import_groups(workbook)
+    if not groups:
+        raise ValueError("未识别到可导入的月度汇总数据")
+    saved = []
+    audits = []
+    imported_months = set()
+    imported_pis = set()
+    for entry in groups.values():
+        existing = get_reimbursement_record_by_key(conn, reimbursement_business_key(entry["month"], entry["pi"])) or {}
+        fund_book_no = "；".join(distinct_text_list(entry["fundBookNos"]))
+        reimbursement_form_no = "；".join(distinct_text_list(entry["reimbursementFormNos"]))
+        notes = "；".join(distinct_text_list(entry["notes"]))
+        payload = {
+            "id": existing.get("id") or next_imported_record_id(),
+            "businessKey": reimbursement_business_key(entry["month"], entry["pi"]),
+            "month": entry["month"],
+            "pi": entry["pi"],
+            "workflowId": existing.get("workflowId", ""),
+            "workflowStatus": existing.get("workflowStatus", ""),
+            "reimbursementStatus": normalize_reimbursement_status(
+                existing.get("reimbursementStatus") or infer_import_status(fund_book_no, reimbursement_form_no, notes)
+            ),
+            "currentMonthAmount": coerce_reimbursement_money(entry["currentMonthAmount"]),
+            "supportAmount": coerce_reimbursement_money(entry["supportAmount"]),
+            "payableAmount": coerce_reimbursement_money(entry["payableAmount"]),
+            "paidAmount": coerce_reimbursement_money(existing.get("paidAmount", 0)),
+            "unpaidAmount": 0,
+            "accumulatedPayable": coerce_reimbursement_money(existing.get("accumulatedPayable", 0)),
+            "accumulatedPaid": coerce_reimbursement_money(existing.get("accumulatedPaid", 0)),
+            "accumulatedUnpaid": coerce_reimbursement_money(existing.get("accumulatedUnpaid", 0)),
+            "fundBookNo": fund_book_no or clean_text(existing.get("fundBookNo", "")),
+            "reimbursementFormNo": reimbursement_form_no or clean_text(existing.get("reimbursementFormNo", "")),
+            "approvedBudget": existing.get("approvedBudget", ""),
+            "notes": notes or clean_text(existing.get("notes", "")),
+            "completedAt": clean_text(existing.get("completedAt", "")),
+            "source": "imported",
+            "latestEventAt": now_iso(),
+            "updatedAt": now_iso(),
+            "details": entry["details"],
+            "iacucs": distinct_text_list(detail.get("iacuc", "") for detail in entry["details"]),
+            "statementVersionId": existing.get("statementVersionId", ""),
+            "documentNumber": existing.get("documentNumber", ""),
+            "billingUnit": existing.get("billingUnit", ""),
+            "project": clean_text(existing.get("project", "")),
+            "owner": clean_text(existing.get("owner", "")),
+            "funding": "；".join(distinct_text_list(entry["funding"])) or clean_text(existing.get("funding", "")),
+        }
+        payload["unpaidAmount"] = coerce_reimbursement_money(max(payload["payableAmount"] - payload["paidAmount"], 0))
+        if payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED and payload["paidAmount"] + 1e-9 < payload["payableAmount"]:
+            payload["reimbursementStatus"] = infer_import_status(payload["fundBookNo"], payload["reimbursementFormNo"], payload["notes"])
+            payload["completedAt"] = ""
+        if payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED and not payload["completedAt"]:
+            payload["completedAt"] = now_iso()
+        upsert_reimbursement_record(conn, payload)
+        saved.append(payload)
+        imported_months.add(payload["month"])
+        imported_pis.add(payload["pi"])
+    for pi_name in imported_pis:
+        recalculate_reimbursement_accumulations(conn, pi_name)
+    event_time = now_iso()
+    audit = audit_event(
+        actor,
+        "reimbursement.import_monthly",
+        "reimbursement_record",
+        f"monthly:{len(saved)}",
+        f"{actor['displayName']} 导入月度报销台账 {len(saved)} 条",
+        [],
+        event_time,
+        None,
+        {"months": sorted(imported_months), "count": len(saved)},
+    )
+    write_audit_events(conn, [audit])
+    audits.append(audit)
+    invalidate_data_cache_prefixes("reimbursement_records::", "billing_workflows::")
+    return {"items": saved, "auditLogs": merge_audit_logs([], audits), "count": len(saved), "months": sorted(imported_months)}
+
+
+def arrears_summary_columns(sheet):
+    month_columns = []
+    max_columns = min(sheet.max_column, 120)
+    for column_index in range(6, max_columns + 1):
+        label = sheet.cell(1, column_index).value
+        month = month_key(label)
+        if month:
+            month_columns.append((column_index, month))
+    return month_columns
+
+
+def import_arrears_reimbursement_workbook(conn, file_body, actor):
+    ensure_excel_import_supported()
+    workbook = openpyxl.load_workbook(io.BytesIO(file_body), data_only=True)
+    if not workbook.worksheets:
+        raise ValueError("欠缴工作簿为空")
+    sheet = workbook.worksheets[0]
+    month_columns = arrears_summary_columns(sheet)
+    if not month_columns:
+        raise ValueError("未识别到欠缴月份列")
+    saved = []
+    imported_pis = set()
+    empty_rows = 0
+    for row_index in range(2, 1200):
+        pi_name = clean_text(sheet.cell(row_index, 2).value)
+        total_amount = coerce_reimbursement_money(sheet.cell(row_index, 5).value)
+        if not pi_name and total_amount <= 0:
+            empty_rows += 1
+            if empty_rows >= 20:
+                break
+            continue
+        empty_rows = 0
+        if not pi_name:
+            continue
+        species = clean_text(sheet.cell(row_index, 3).value)
+        funding = clean_text(sheet.cell(row_index, 4).value)
+        for column_index, month in month_columns:
+            monthly_unpaid = coerce_reimbursement_money(sheet.cell(row_index, column_index).value)
+            if monthly_unpaid <= 0:
+                continue
+            business_key = reimbursement_business_key(month, pi_name)
+            existing = get_reimbursement_record_by_key(conn, business_key) or {}
+            if existing and existing.get("source") != "imported":
+                continue
+            details = existing.get("details") or [
+                {
+                    "iacuc": "",
+                    "facility": "",
+                    "funding": funding,
+                    "species": species,
+                    "project": "",
+                    "owner": "",
+                    "amount": monthly_unpaid,
+                    "supportAmount": 0,
+                    "payableAmount": monthly_unpaid,
+                    "roomNames": [],
+                    "statementVersionId": "",
+                }
+            ]
+            payload = {
+                "id": existing.get("id") or next_imported_record_id("reim-arrears"),
+                "businessKey": business_key,
+                "month": month,
+                "pi": pi_name,
+                "workflowId": existing.get("workflowId", ""),
+                "workflowStatus": existing.get("workflowStatus", ""),
+                "reimbursementStatus": normalize_reimbursement_status(existing.get("reimbursementStatus") or REIMBURSEMENT_STATUS_PENDING),
+                "currentMonthAmount": coerce_reimbursement_money(existing.get("currentMonthAmount", monthly_unpaid) or monthly_unpaid),
+                "supportAmount": coerce_reimbursement_money(existing.get("supportAmount", 0)),
+                "payableAmount": coerce_reimbursement_money(existing.get("payableAmount", monthly_unpaid) or monthly_unpaid),
+                "paidAmount": coerce_reimbursement_money(existing.get("paidAmount", 0)),
+                "unpaidAmount": 0,
+                "accumulatedPayable": coerce_reimbursement_money(existing.get("accumulatedPayable", 0)),
+                "accumulatedPaid": coerce_reimbursement_money(existing.get("accumulatedPaid", 0)),
+                "accumulatedUnpaid": coerce_reimbursement_money(existing.get("accumulatedUnpaid", 0)),
+                "fundBookNo": clean_text(existing.get("fundBookNo", "")),
+                "reimbursementFormNo": clean_text(existing.get("reimbursementFormNo", "")),
+                "approvedBudget": existing.get("approvedBudget", ""),
+                "notes": join_distinct_text(existing.get("notes", ""), f"欠缴汇算导入：累计欠缴 {total_amount:.2f} 元"),
+                "completedAt": clean_text(existing.get("completedAt", "")),
+                "source": "imported",
+                "latestEventAt": now_iso(),
+                "updatedAt": now_iso(),
+                "details": details,
+                "iacucs": distinct_text_list(detail.get("iacuc", "") for detail in details),
+                "statementVersionId": existing.get("statementVersionId", ""),
+                "documentNumber": existing.get("documentNumber", ""),
+                "billingUnit": existing.get("billingUnit", ""),
+                "project": clean_text(existing.get("project", "")),
+                "owner": clean_text(existing.get("owner", "")),
+                "funding": funding or clean_text(existing.get("funding", "")),
+            }
+            payload["unpaidAmount"] = coerce_reimbursement_money(max(payload["payableAmount"] - payload["paidAmount"], 0))
+            upsert_reimbursement_record(conn, payload)
+            saved.append(payload)
+            imported_pis.add(pi_name)
+    if not saved:
+        raise ValueError("未识别到可导入的欠缴记录")
+    for pi_name in imported_pis:
+        recalculate_reimbursement_accumulations(conn, pi_name)
+    event_time = now_iso()
+    audit = audit_event(
+        actor,
+        "reimbursement.import_arrears",
+        "reimbursement_record",
+        f"arrears:{len(saved)}",
+        f"{actor['displayName']} 导入欠缴汇算 {len(saved)} 条",
+        [],
+        event_time,
+        None,
+        {"count": len(saved)},
+    )
+    write_audit_events(conn, [audit])
+    invalidate_data_cache_prefixes("reimbursement_records::", "billing_workflows::")
+    return {"items": saved, "auditLogs": merge_audit_logs([], [audit]), "count": len(saved)}
+
+
+def reimbursement_detail_payload(conn, record):
+    workflow = get_billing_workflow(conn, record.get("workflowId", "")) if record.get("workflowId") else None
+    workflow_versions = list_billing_workflow_versions(conn, workflow["id"]) if workflow else []
+    workflow_events = list_billing_workflow_events(conn, workflow["id"]) if workflow else []
+    history = list_reimbursement_records_for_pi(conn, record.get("pi", ""))
+    history = sorted(history, key=lambda item: (clean_text(item.get("month", "")), clean_text(item.get("latestEventAt", ""))), reverse=True)
+    return {
+        "item": record,
+        "workflow": workflow,
+        "workflowVersions": workflow_versions,
+        "workflowEvents": workflow_events,
+        "history": history,
+    }
+
 def save_billing_statement_workflow(conn, statement, lines, actor, note=""):
     return save_billing_statement_workflow_service(conn, statement, lines, actor, note, billing_workflow_service_deps())
 
@@ -4358,7 +5093,7 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note=""):
 
 def parse_multipart_upload(content_type, raw):
     if "multipart/form-data" not in content_type:
-        raise ValueError("请使用 multipart/form-data 上传 CSV 文件")
+        raise ValueError("请使用 multipart/form-data 上传文件")
     boundary = multipart_boundary(content_type)
     delimiter = b"--" + boundary
     for part in raw.split(delimiter):
@@ -4523,6 +5258,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 self.send_json(list_billing_workflows_page(conn, self.list_filters()))
             return
+        if path == "/api/reimbursement-records":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(list_reimbursement_records_page(conn, self.list_filters()))
+            return
         workflow_id = self.billing_workflow_lines_route(path)
         if workflow_id:
             user = self.require_user()
@@ -4553,6 +5295,18 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                         "events": list_billing_workflow_events(conn, workflow_id),
                     }
                 )
+            return
+        reimbursement_id = self.reimbursement_record_route(path)
+        if reimbursement_id:
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                record = get_reimbursement_record(conn, reimbursement_id)
+                if not record:
+                    self.send_json({"error": "报销台账不存在"}, HTTPStatus.NOT_FOUND)
+                    return
+                self.send_json(reimbursement_detail_payload(conn, record))
             return
         if path == "/api/billing-statements":
             user = self.require_user()
@@ -4614,6 +5368,12 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/billing-workflows/advance":
             self.handle_billing_workflow_advance()
+            return
+        if path == "/api/reimbursement-records/import-monthly":
+            self.handle_reimbursement_monthly_import()
+            return
+        if path == "/api/reimbursement-records/import-arrears":
+            self.handle_reimbursement_arrears_import()
             return
         if path == "/api/infrastructure":
             self.handle_infrastructure_write()
@@ -4718,6 +5478,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if sheet_id:
             self.handle_quantity_sheet_save(sheet_id)
             return
+        reimbursement_id = self.reimbursement_record_route(path)
+        if reimbursement_id:
+            self.handle_reimbursement_record_update(reimbursement_id)
+            return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self):
@@ -4751,6 +5515,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         workflow_id = self.billing_workflow_route(path)
         if workflow_id:
             self.handle_billing_workflow_delete(workflow_id)
+            return
+        reimbursement_id = self.reimbursement_record_route(path)
+        if reimbursement_id:
+            self.handle_reimbursement_record_delete(reimbursement_id)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -4939,6 +5707,12 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             note = clean_text(body.get("note", ""))
             with connect_db() as conn:
                 workflow, version, event = update_workflow_status(conn, workflow_id, to_status, user, note)
+                reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
+                if reimbursement:
+                    reimbursement["workflowStatus"] = workflow.get("workflowStatus", "")
+                    reimbursement["latestEventAt"] = workflow.get("latestEventAt", "") or event.get("at", "")
+                    reimbursement["updatedAt"] = now_iso()
+                    upsert_reimbursement_record(conn, reimbursement)
                 audit = audit_event(
                     user,
                     f"billing_workflow.{to_status}",
@@ -4952,7 +5726,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::")
+            invalidate_data_cache_prefixes("billing_workflows::", "reimbursement_records::")
             self.send_json({"workflow": workflow, "event": event, "auditLogs": merge_audit_logs([], [audit])})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -4969,6 +5743,17 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         try:
             with connect_db() as conn:
                 workflow = delete_billing_workflow(conn, workflow_id)
+                reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
+                if reimbursement:
+                    if reimbursement_has_manual_entry(reimbursement) or reimbursement.get("source") == "imported":
+                        reimbursement["workflowId"] = ""
+                        reimbursement["workflowStatus"] = "workflow_deleted"
+                        reimbursement["notes"] = join_distinct_text(reimbursement.get("notes", ""), "原流程已删除")
+                        reimbursement["latestEventAt"] = now_iso()
+                        reimbursement["updatedAt"] = now_iso()
+                        upsert_reimbursement_record(conn, reimbursement)
+                    else:
+                        delete_reimbursement_record(conn, reimbursement["id"])
                 at = now_iso()
                 audit = audit_event(
                     user,
@@ -4983,8 +5768,120 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::")
+            invalidate_data_cache_prefixes("billing_workflows::", "reimbursement_records::")
             self.send_json({"ok": True, "workflow": workflow, "auditLogs": merge_audit_logs([], [audit])})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+
+    def handle_reimbursement_monthly_import(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            raw = self.read_raw_body()
+            filename, file_body = parse_multipart_upload(self.headers.get("Content-Type", ""), raw)
+            if filename and not filename.lower().endswith(".xlsx"):
+                raise ValueError("请上传月汇总 Excel 文件")
+            with connect_db() as conn:
+                payload = import_monthly_reimbursement_workbook(conn, file_body, user)
+                conn.commit()
+            self.send_json({**payload, "filename": filename}, HTTPStatus.CREATED)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_arrears_import(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            raw = self.read_raw_body()
+            filename, file_body = parse_multipart_upload(self.headers.get("Content-Type", ""), raw)
+            if filename and not filename.lower().endswith(".xlsx"):
+                raise ValueError("请上传欠缴汇算 Excel 文件")
+            with connect_db() as conn:
+                payload = import_arrears_reimbursement_workbook(conn, file_body, user)
+                conn.commit()
+            self.send_json({**payload, "filename": filename}, HTTPStatus.CREATED)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_record_update(self, record_id):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            patch = self.read_json_body()
+            with connect_db() as conn:
+                existing = get_reimbursement_record(conn, record_id)
+                if not existing:
+                    raise LookupError("报销台账不存在")
+                updated = merge_reimbursement_edit(existing, patch)
+                updated["latestEventAt"] = now_iso()
+                updated["updatedAt"] = now_iso()
+                upsert_reimbursement_record(conn, updated)
+                recalculate_reimbursement_accumulations(conn, updated.get("pi", ""))
+                refreshed = get_reimbursement_record(conn, record_id) or updated
+                audit = audit_event(
+                    user,
+                    "reimbursement.updated",
+                    "reimbursement_record",
+                    record_id,
+                    f"{user['displayName']} 更新 {refreshed.get('pi', '')} {refreshed.get('month', '')} 报销台账",
+                    [],
+                    refreshed.get("updatedAt", now_iso()),
+                    existing,
+                    refreshed,
+                )
+                write_audit_events(conn, [audit])
+                conn.commit()
+            invalidate_data_cache_prefixes("reimbursement_records::")
+            with connect_db() as conn:
+                detail = reimbursement_detail_payload(conn, get_reimbursement_record(conn, record_id) or refreshed)
+            self.send_json({**detail, "auditLogs": merge_audit_logs([], [audit])})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_record_delete(self, record_id):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with connect_db() as conn:
+                record = get_reimbursement_record(conn, record_id)
+                if not record:
+                    raise LookupError("报销台账不存在")
+                pi_name = record.get("pi", "")
+                delete_reimbursement_record(conn, record_id)
+                recalculate_reimbursement_accumulations(conn, pi_name)
+                audit = audit_event(
+                    user,
+                    "reimbursement.deleted",
+                    "reimbursement_record",
+                    record_id,
+                    f"{user['displayName']} 删除 {record.get('pi', '')} {record.get('month', '')} 报销台账",
+                    [],
+                    now_iso(),
+                    record,
+                    None,
+                )
+                write_audit_events(conn, [audit])
+                conn.commit()
+            invalidate_data_cache_prefixes("reimbursement_records::")
+            self.send_json({"ok": True, "item": record, "auditLogs": merge_audit_logs([], [audit])})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
 
@@ -5024,6 +5921,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             "sourceType": value("sourceType"),
             "entityType": value("entityType"),
             "action": value("action"),
+            "onlyUnpaid": value("onlyUnpaid"),
         }
 
     def send_entity_list(self, table, actor):
@@ -5124,6 +6022,15 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if "/" in workflow_id or not workflow_id:
             return None
         return workflow_id
+
+    def reimbursement_record_route(self, path):
+        prefix = "/api/reimbursement-records/"
+        if not path.startswith(prefix):
+            return None
+        record_id = unquote(path[len(prefix) :])
+        if "/" in record_id or not record_id:
+            return None
+        return record_id
 
     def intake_batch_confirm_route(self, path):
         prefix = "/api/intake-batches/"

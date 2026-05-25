@@ -60,6 +60,12 @@
 | `POST` | `/api/quantity-sheets/{id}/generate-statement` | 从统计表生成结算单 |
 | `POST` | `/api/billing-statements/generate` | 从动态笼位图生成结算单 |
 | `POST` | `/api/billing-statements/generate-by-pi` | 按项目负责人合表生成结算单 |
+| `GET` | `/api/reimbursement-records` | 分页查询报销台账主列表 |
+| `GET` | `/api/reimbursement-records/{id}` | 查询单条报销台账详情、关联流程和历史滚动 |
+| `PUT` | `/api/reimbursement-records/{id}` | 更新经费本号、报销单号、已缴金额和报销状态 |
+| `DELETE` | `/api/reimbursement-records/{id}` | 删除独立报销台账记录 |
+| `POST` | `/api/reimbursement-records/import-monthly` | 导入历史月汇总 Excel |
+| `POST` | `/api/reimbursement-records/import-arrears` | 导入历史欠缴汇算 Excel |
 | `GET` | `/api/billing-workflows` | 分页查询流程中心列表 |
 | `GET` | `/api/billing-workflows/{id}` | 查询流程详情摘要 |
 | `GET` | `/api/billing-workflows/{id}/lines` | 查询指定版本明细 |
@@ -133,6 +139,32 @@
 }
 ```
 
+### 报销台账详情
+
+```json
+{
+  "item": {
+    "month": "2026-03",
+    "pi": "张三",
+    "workflowStatus": "statement_sent",
+    "reimbursementStatus": "reimbursing",
+    "currentMonthAmount": 1200,
+    "supportAmount": 80,
+    "payableAmount": 1120,
+    "paidAmount": 500,
+    "unpaidAmount": 620,
+    "accumulatedUnpaid": 3500,
+    "fundBookNo": "3030902100001",
+    "reimbursementFormNo": "BXD1001202604000001",
+    "details": []
+  },
+  "workflow": {},
+  "workflowVersions": [],
+  "workflowEvents": [],
+  "history": []
+}
+```
+
 ## 核心数据语义
 
 | 对象 | 语义 |
@@ -142,6 +174,7 @@
 | `occupancies` | 笼位占用历史，状态重点在 `reserved` 与 `active` |
 | `placement_tasks` | 每张已接收笼卡生成一条待进驻任务 |
 | `quantity_sheets` | 月度数量统计表，支持伦理号之间转入转出 |
+| `reimbursement_records` | 每月每项目负责人一条报销台账，滚动维护应缴、已缴、未缴和报销状态 |
 | `billing_workflows` | 月度结算流程，不是单笼位生命周期 |
 | `audit_events` | 关键写操作审计记录 |
 

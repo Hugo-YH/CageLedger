@@ -1,5 +1,8 @@
 import {
   API_AUTH_ME_URL,
+  API_REIMBURSEMENT_IMPORT_ARREARS_URL,
+  API_REIMBURSEMENT_IMPORT_MONTHLY_URL,
+  API_REIMBURSEMENT_RECORDS_URL,
   API_BILLING_STATEMENT_GENERATE_BY_PI_URL,
   API_BILLING_WORKFLOW_ADVANCE_URL,
   API_BILLING_WORKFLOWS_URL,
@@ -23,11 +26,22 @@ import {
   buildBillingStatementUrl as buildBillingStatementApiUrl,
   buildBillingWorkflowLinesUrl as buildBillingWorkflowLinesApiUrl,
   buildBillingWorkflowsUrl as buildBillingWorkflowsApiUrl,
+  buildReimbursementRecordUrl as buildReimbursementRecordApiUrl,
+  buildReimbursementRecordsUrl as buildReimbursementRecordsApiUrl,
   buildQuantitySheetsUrl as buildQuantitySheetsApiUrl,
 } from "./api/billing.js";
 import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksUrl as buildPlacementTasksApiUrl } from "./api/intake.js";
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.5.7",
+    title: "流程中心升级为结算与报销台账中心",
+    items: [
+      "根据邱素娟老师的流程建议，流程中心改为按月份和项目负责人维护报销台账，自动承接每月结算金额、报销状态和累计未缴",
+      "新增月汇总与欠缴汇算 Excel 导入能力，支持历史台账补录、结算来源明细查看和报销登记字段维护",
+      "重排流程中心列表与详情工作台，统一查看、登记报销、标记完成和删除操作，并收紧摘要卡和表格排版",
+    ],
+  },
   {
     version: "0.5.6",
     title: "数量统计表录入贴合纸质表",
@@ -606,6 +620,9 @@ const HELP_TEXTS = {
   quantityBilling: "录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。",
   quantityPreview: "预览按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。",
   workflow: "按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号。",
+  reimbursementLedger: "按每月每项目负责人维护结算与报销台账，自动承接结算金额并滚动累计未缴金额。",
+  reimbursementHistory: "展示同一项目负责人历月金额、已缴和未缴累计，便于持续跟踪欠缴情况。",
+  reimbursementImport: "导入历史月汇总和欠缴汇算工作簿，把线下台账并入系统。",
   workflowSummary: "当前有效版本对应的汇总信息。",
   workflowVersions: "发送后修订会生成新版本，并保留旧版本留痕。",
   workflowEvents: "记录生成、发送、签回、交财务和修订等关键动作。",
@@ -640,7 +657,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.6",
+  version: "0.5.7",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -662,6 +679,8 @@ const lazyDataState = {
   intakeBatchesLoading: false,
   quantitySheetsLoaded: false,
   quantitySheetsLoading: false,
+  reimbursementRecordsLoaded: false,
+  reimbursementRecordsLoading: false,
   billingWorkflowsLoaded: false,
   billingWorkflowsLoading: false,
   auditLogsLoaded: false,
@@ -678,6 +697,7 @@ const infrastructureLoadState = {
 };
 const paginationState = {
   quantitySheets: { limit: 5, offset: 0, total: 0, hasMore: false, month: "", pi: "", iacuc: "", roomId: "" },
+  reimbursementRecords: { limit: 5, offset: 0, total: 0, hasMore: false, month: "", status: "pending_submission", pi: "", onlyUnpaid: "0" },
   billingWorkflows: { limit: 5, offset: 0, total: 0, hasMore: false, month: "", status: "todo" },
   auditLogs: { limit: 5, offset: 0, total: 0, hasMore: false },
   intakeBatches: { limit: 5, page: 1 },
@@ -1178,6 +1198,12 @@ const seedData = {
   billingPi: "张教授",
   billingPrincipalType: BILLING_PRINCIPAL_PI,
   freeCageAllowance: FREE_CAGES_DEFAULT,
+  reimbursementFilter: "pending_submission",
+  reimbursementSearchPi: "",
+  reimbursementOnlyUnpaid: true,
+  selectedReimbursementRecordId: "",
+  selectedReimbursementRecordDetail: null,
+  showReimbursementWorkflowLines: false,
   billingWorkflowFilter: "todo",
   selectedBillingWorkflowId: "",
   selectedBillingWorkflowDetail: null,
@@ -1201,6 +1227,7 @@ const seedData = {
   editingIntakeBatchId: "",
   editingIntakeBatchDraft: null,
   showIntakeCardPreview: false,
+  reimbursementRecords: [],
   billingWorkflows: [],
   facilitySummaries: [],
   principalIdentityFilter: "",
@@ -1385,6 +1412,14 @@ function buildBillingWorkflowsUrl({ month = "", status = "todo", limit = 50, off
   return buildBillingWorkflowsApiUrl({ month, status, limit, offset });
 }
 
+function buildReimbursementRecordsUrl({ month = "", status = "pending_submission", pi = "", onlyUnpaid = "", limit = 50, offset = 0 } = {}) {
+  return buildReimbursementRecordsApiUrl({ month, status, pi, onlyUnpaid, limit, offset });
+}
+
+function buildReimbursementRecordUrl(recordId) {
+  return buildReimbursementRecordApiUrl(recordId);
+}
+
 function buildAuditLogsUrl({ limit = 200, offset = 0 } = {}) {
   return buildAuditLogsApiUrl({ limit, offset });
 }
@@ -1421,6 +1456,8 @@ async function loadPersistedState() {
     lazyDataState.intakeBatchesLoading = false;
     lazyDataState.quantitySheetsLoaded = false;
     lazyDataState.quantitySheetsLoading = false;
+    lazyDataState.reimbursementRecordsLoaded = false;
+    lazyDataState.reimbursementRecordsLoading = false;
     lazyDataState.billingWorkflowsLoaded = false;
     lazyDataState.billingWorkflowsLoading = false;
     lazyDataState.auditLogsLoaded = false;
@@ -1444,6 +1481,13 @@ async function loadPersistedState() {
     paginationState.quantitySheets.pi = "";
     paginationState.quantitySheets.iacuc = "";
     paginationState.quantitySheets.roomId = "";
+    paginationState.reimbursementRecords.offset = 0;
+    paginationState.reimbursementRecords.total = 0;
+    paginationState.reimbursementRecords.hasMore = false;
+    paginationState.reimbursementRecords.month = state.billingMonth || today.slice(0, 7);
+    paginationState.reimbursementRecords.status = state.reimbursementFilter || "pending_submission";
+    paginationState.reimbursementRecords.pi = state.reimbursementSearchPi || "";
+    paginationState.reimbursementRecords.onlyUnpaid = state.reimbursementOnlyUnpaid ? "1" : "0";
     paginationState.billingWorkflows.offset = 0;
     paginationState.billingWorkflows.total = 0;
     paginationState.billingWorkflows.hasMore = false;
@@ -1474,6 +1518,8 @@ async function loadPersistedState() {
       lazyDataState.intakeBatchesLoading = false;
       lazyDataState.quantitySheetsLoaded = false;
       lazyDataState.quantitySheetsLoading = false;
+      lazyDataState.reimbursementRecordsLoaded = false;
+      lazyDataState.reimbursementRecordsLoading = false;
       lazyDataState.billingWorkflowsLoaded = false;
       lazyDataState.billingWorkflowsLoading = false;
       lazyDataState.auditLogsLoaded = false;
@@ -1498,6 +1544,8 @@ async function loadPersistedState() {
   lazyDataState.intakeBatchesLoading = false;
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
+  lazyDataState.reimbursementRecordsLoaded = true;
+  lazyDataState.reimbursementRecordsLoading = false;
   lazyDataState.billingWorkflowsLoaded = true;
   lazyDataState.billingWorkflowsLoading = false;
   lazyDataState.auditLogsLoaded = true;
@@ -1530,6 +1578,12 @@ async function loadBootstrapState() {
     billingPi: localState.billingPi || "",
     billingPrincipalType: principalTypeForPi(localState.billingPi || ""),
     freeCageAllowance: Number(localState.freeCageAllowance ?? seedData.freeCageAllowance),
+    reimbursementFilter: localState.reimbursementFilter || "pending_submission",
+    reimbursementSearchPi: localState.reimbursementSearchPi || "",
+    reimbursementOnlyUnpaid: localState.reimbursementOnlyUnpaid ?? true,
+    selectedReimbursementRecordId: "",
+    selectedReimbursementRecordDetail: null,
+    showReimbursementWorkflowLines: false,
     billingWorkflowFilter: localState.billingWorkflowFilter || "todo",
     selectedBillingWorkflowId: "",
     selectedBillingWorkflowDetail: null,
@@ -1542,6 +1596,7 @@ async function loadBootstrapState() {
     intakeBatchDraft: makeIncomingBatchDraft(),
     intakeBatches: [],
     placementTasks: [],
+    reimbursementRecords: [],
     billingWorkflows: [],
     principalIdentityFilter: localState.principalIdentityFilter || "",
     slotFilter: localState.slotFilter || "all",
@@ -1640,6 +1695,9 @@ function localUiOnlyState(source = {}) {
     billingMonth: source.billingMonth || today.slice(0, 7),
     billingIacuc: source.billingIacuc || "",
     billingPi: source.billingPi || "",
+    reimbursementFilter: source.reimbursementFilter || "pending_submission",
+    reimbursementSearchPi: source.reimbursementSearchPi || "",
+    reimbursementOnlyUnpaid: source.reimbursementOnlyUnpaid ?? true,
     billingWorkflowFilter: source.billingWorkflowFilter || "todo",
     selectedQuantitySheetId: source.selectedQuantitySheetId || "",
     selectedIntakeBatchId: source.selectedIntakeBatchId || "",
@@ -1905,6 +1963,137 @@ async function loadBillingWorkflows(options = {}) {
   return state.billingWorkflows;
 }
 
+async function loadReimbursementRecords(options = {}) {
+  if (!remotePersistence) {
+    state.reimbursementRecords = [];
+    lazyDataState.reimbursementRecordsLoaded = true;
+    lazyDataState.reimbursementRecordsLoading = false;
+    return [];
+  }
+  lazyDataState.reimbursementRecordsLoading = true;
+  const filters = {
+    month: options.month ?? paginationState.reimbursementRecords.month ?? state.billingMonth ?? today.slice(0, 7),
+    status: options.status ?? paginationState.reimbursementRecords.status ?? state.reimbursementFilter ?? "pending_submission",
+    pi: options.pi ?? paginationState.reimbursementRecords.pi ?? state.reimbursementSearchPi ?? "",
+    onlyUnpaid: options.onlyUnpaid ?? paginationState.reimbursementRecords.onlyUnpaid ?? (state.reimbursementOnlyUnpaid ? "1" : "0"),
+    limit: options.limit ?? paginationState.reimbursementRecords.limit,
+    offset: options.offset ?? 0,
+  };
+  const response = await fetch(buildReimbursementRecordsUrl(filters), { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    lazyDataState.reimbursementRecordsLoading = false;
+    currentUser = null;
+    scheduleRender("auth.expired");
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    lazyDataState.reimbursementRecordsLoading = false;
+    throw new Error(payload.error || "加载报销台账失败");
+  }
+  const items = payload.items || [];
+  state.reimbursementRecords = items;
+  paginationState.reimbursementRecords = {
+    ...paginationState.reimbursementRecords,
+    ...filters,
+    total: payload.page?.total || items.length,
+    hasMore: Boolean(payload.page?.hasMore),
+    offset: Number(payload.page?.offset || filters.offset),
+  };
+  lazyDataState.reimbursementRecordsLoaded = true;
+  lazyDataState.reimbursementRecordsLoading = false;
+  invalidateStateIndexCache();
+  return items;
+}
+
+async function loadReimbursementRecordDetail(recordId) {
+  if (!remotePersistence || !recordId) return null;
+  const response = await fetch(buildReimbursementRecordUrl(recordId), { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "加载报销台账详情失败");
+  }
+  state.selectedReimbursementRecordId = recordId;
+  state.selectedReimbursementRecordDetail = payload;
+  state.showReimbursementWorkflowLines = false;
+  if (payload.item) upsertById(state.reimbursementRecords, payload.item);
+  return payload;
+}
+
+async function updateReimbursementRecord(recordId, patch) {
+  const response = await fetch(buildReimbursementRecordUrl(recordId), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "保存报销台账失败");
+  }
+  mergeServerAuditLogs(payload);
+  if (payload.item) upsertById(state.reimbursementRecords, payload.item);
+  state.selectedReimbursementRecordDetail = payload;
+  invalidateStateIndexCache();
+  return payload.item;
+}
+
+async function deleteReimbursementRecord(recordId) {
+  const response = await fetch(buildReimbursementRecordUrl(recordId), { method: "DELETE" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "删除报销台账失败");
+  }
+  mergeServerAuditLogs(payload);
+  state.reimbursementRecords = state.reimbursementRecords.filter((item) => item.id !== recordId);
+  if (state.selectedReimbursementRecordId === recordId) {
+    state.selectedReimbursementRecordId = "";
+    state.selectedReimbursementRecordDetail = null;
+    state.showReimbursementWorkflowLines = false;
+  }
+  invalidateStateIndexCache();
+  return payload.item;
+}
+
+async function importReimbursementWorkbook(kind, formData) {
+  const url = kind === "arrears" ? API_REIMBURSEMENT_IMPORT_ARREARS_URL : API_REIMBURSEMENT_IMPORT_MONTHLY_URL;
+  const response = await fetch(url, { method: "POST", body: formData });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    render();
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    throw new Error(payload.error || "导入历史报销台账失败");
+  }
+  mergeServerAuditLogs(payload);
+  lazyDataState.reimbursementRecordsLoaded = false;
+  await loadReimbursementRecords({
+    month: paginationState.reimbursementRecords.month || state.billingMonth || today.slice(0, 7),
+    status: paginationState.reimbursementRecords.status || state.reimbursementFilter || "pending_submission",
+    pi: paginationState.reimbursementRecords.pi || state.reimbursementSearchPi || "",
+    onlyUnpaid: paginationState.reimbursementRecords.onlyUnpaid || (state.reimbursementOnlyUnpaid ? "1" : "0"),
+    limit: paginationState.reimbursementRecords.limit,
+    offset: 0,
+  });
+  return payload;
+}
+
 async function loadQuantitySheets(options = {}) {
   if (!remotePersistence) {
     lazyDataState.quantitySheetsLoaded = true;
@@ -2032,6 +2221,19 @@ async function goToBillingWorkflowsPage(page, limit = paginationState.billingWor
   });
 }
 
+async function goToReimbursementRecordsPage(page, limit = paginationState.reimbursementRecords.limit) {
+  const nextPage = Math.max(Number(page) || 1, 1);
+  const nextLimit = Math.max(Number(limit) || 10, 1);
+  await loadReimbursementRecords({
+    month: paginationState.reimbursementRecords.month || state.billingMonth || today.slice(0, 7),
+    status: paginationState.reimbursementRecords.status || state.reimbursementFilter || "pending_submission",
+    pi: paginationState.reimbursementRecords.pi || state.reimbursementSearchPi || "",
+    onlyUnpaid: paginationState.reimbursementRecords.onlyUnpaid || (state.reimbursementOnlyUnpaid ? "1" : "0"),
+    limit: nextLimit,
+    offset: (nextPage - 1) * nextLimit,
+  });
+}
+
 async function goToAuditLogsPage(page, limit = paginationState.auditLogs.limit) {
   const nextPage = Math.max(Number(page) || 1, 1);
   const nextLimit = Math.max(Number(limit) || 10, 1);
@@ -2086,8 +2288,16 @@ async function ensureViewDataLoaded(view) {
   if (view === "billing" && !lazyDataState.quantitySheetsLoaded && !lazyDataState.quantitySheetsLoading) {
     tasks.push(loadQuantitySheets({ month: state.billingMonth || today.slice(0, 7), offset: 0 }));
   }
-  if (view === "workflow-center" && !lazyDataState.billingWorkflowsLoaded && !lazyDataState.billingWorkflowsLoading) {
-    tasks.push(loadBillingWorkflows({ month: state.billingMonth || today.slice(0, 7), status: state.billingWorkflowFilter || "todo", offset: 0 }));
+  if (view === "workflow-center" && !lazyDataState.reimbursementRecordsLoaded && !lazyDataState.reimbursementRecordsLoading) {
+    tasks.push(
+      loadReimbursementRecords({
+        month: state.billingMonth || today.slice(0, 7),
+        status: state.reimbursementFilter || "pending_submission",
+        pi: state.reimbursementSearchPi || "",
+        onlyUnpaid: state.reimbursementOnlyUnpaid ? "1" : "0",
+        offset: 0,
+      }),
+    );
   }
   if (view === "logs" && !lazyDataState.auditLogsLoaded && !lazyDataState.auditLogsLoading) {
     tasks.push(loadAuditEvents({ offset: 0 }));
@@ -2121,6 +2331,17 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
     state.selectedBillingWorkflowDetail.workflow = payload.workflow;
     if (payload.event) {
       state.selectedBillingWorkflowDetail.events = [payload.event, ...(state.selectedBillingWorkflowDetail.events || [])];
+    }
+  }
+  if (state.selectedReimbursementRecordDetail?.workflow?.id === payload.workflow?.id) {
+    state.selectedReimbursementRecordDetail.workflow = payload.workflow;
+    if (state.selectedReimbursementRecordDetail.item) {
+      state.selectedReimbursementRecordDetail.item.workflowStatus = payload.workflow.workflowStatus || state.selectedReimbursementRecordDetail.item.workflowStatus;
+      state.selectedReimbursementRecordDetail.item.latestEventAt = payload.workflow.latestEventAt || state.selectedReimbursementRecordDetail.item.latestEventAt;
+      upsertById(state.reimbursementRecords, state.selectedReimbursementRecordDetail.item);
+    }
+    if (payload.event) {
+      state.selectedReimbursementRecordDetail.workflowEvents = [payload.event, ...(state.selectedReimbursementRecordDetail.workflowEvents || [])];
     }
   }
   logClientPerf("billing_workflow.advance", startedAt, { workflowId, toStatus });
@@ -2284,6 +2505,7 @@ function normalize(data) {
   next.quantitySheets = Array.isArray(next.quantitySheets) ? next.quantitySheets : [];
   next.intakeBatches = Array.isArray(next.intakeBatches) ? next.intakeBatches.map(normalizeIncomingBatchDraft) : [];
   next.placementTasks = Array.isArray(next.placementTasks) ? next.placementTasks.map(normalizePlacementTask) : [];
+  next.reimbursementRecords = Array.isArray(next.reimbursementRecords) ? next.reimbursementRecords : [];
   next.billingWorkflows = Array.isArray(next.billingWorkflows) ? next.billingWorkflows : [];
   next.settingsNavExpanded = Boolean(next.settingsNavExpanded);
   next.lastSettingsView = ["rooms", "data", "users", "system", "logs"].includes(next.lastSettingsView) ? next.lastSettingsView : "rooms";
@@ -2309,6 +2531,17 @@ function normalize(data) {
   next.billingPi = next.billingPi || piForIacuc(next.billingIacuc) || next.quantitySheetDraft.pi || "";
   next.billingPrincipalType = principalTypeForPi(next.billingPi);
   next.freeCageAllowance = Number(next.freeCageAllowance ?? FREE_CAGES_DEFAULT);
+  next.reimbursementFilter = ["pending_submission", "reimbursing", "completed", "all"].includes(next.reimbursementFilter)
+    ? next.reimbursementFilter
+    : "pending_submission";
+  next.reimbursementSearchPi = String(next.reimbursementSearchPi || "");
+  next.reimbursementOnlyUnpaid = Boolean(next.reimbursementOnlyUnpaid);
+  next.selectedReimbursementRecordId = String(next.selectedReimbursementRecordId || "");
+  next.selectedReimbursementRecordDetail =
+    next.selectedReimbursementRecordDetail && typeof next.selectedReimbursementRecordDetail === "object"
+      ? next.selectedReimbursementRecordDetail
+      : null;
+  next.showReimbursementWorkflowLines = Boolean(next.showReimbursementWorkflowLines);
   next.billingWorkflowFilter = ["todo", "all", "done"].includes(next.billingWorkflowFilter) ? next.billingWorkflowFilter : "todo";
   next.selectedBillingWorkflowId = String(next.selectedBillingWorkflowId || "");
   next.selectedBillingWorkflowDetail = next.selectedBillingWorkflowDetail && typeof next.selectedBillingWorkflowDetail === "object" ? next.selectedBillingWorkflowDetail : null;
@@ -4829,25 +5062,34 @@ function renderWorkflowCenterView() {
       </section>
     `;
   }
-  const allItems = stateIndexes().billingWorkflowsSorted || [];
-  const doneCount = allItems.filter((item) => item.workflowStatus === "submitted_to_finance").length;
-  const todoCount = allItems.filter((item) => workflowIsTodo(item)).length;
+  const allItems = stateIndexes().reimbursementRecordsSorted || [];
+  const doneCount = allItems.filter((item) => item.reimbursementStatus === "completed").length;
+  const todoCount = allItems.filter((item) => item.reimbursementStatus === "pending_submission").length;
+  const reimbursingCount = allItems.filter((item) => item.reimbursementStatus === "reimbursing").length;
   return `
     <section class="workspace-view workflow-center-view">
       ${renderWorkspaceHeader({
-        kicker: "流程推进工作台",
-        title: "结算流程中心",
-        helpKey: "workflow",
-        summary: "按项目负责人汇总跟踪结算单生成、发送、签回和交财务进度，流程状态与导出单据保持同步。",
-        status: state.billingWorkflowFilter === "done" ? "当前筛选：已完成" : state.billingWorkflowFilter === "all" ? "当前筛选：全部" : "当前筛选：待办",
+        kicker: "结算与报销台账中心",
+        title: "流程中心",
+        helpKey: "reimbursementLedger",
+        summary: "按每月每项目负责人维护结算金额、报销登记和累计未缴，结算流程版本继续留在详情中追踪。",
+        status:
+          state.reimbursementFilter === "completed"
+            ? "当前筛选：已完成"
+            : state.reimbursementFilter === "reimbursing"
+            ? "当前筛选：报销中"
+            : state.reimbursementFilter === "all"
+            ? "当前筛选：全部"
+            : "当前筛选：待提交",
         metrics: [
-          { label: "流程总数", value: allItems.length },
-          { label: "待办", value: todoCount, tone: todoCount ? "warning" : "success" },
+          { label: "台账总数", value: allItems.length },
+          { label: "待提交", value: todoCount, tone: todoCount ? "warning" : "success" },
+          { label: "报销中", value: reimbursingCount, tone: reimbursingCount ? "todo" : "success" },
           { label: "已完成", value: doneCount, tone: "success" },
         ],
       })}
       ${renderBillingWorkflowPanel()}
-      ${state.selectedBillingWorkflowDetail ? renderBillingWorkflowDetailModal() : ""}
+      ${state.selectedReimbursementRecordDetail ? renderBillingWorkflowDetailModal() : ""}
     </section>
   `;
 }
@@ -5055,33 +5297,40 @@ function renderQuantitySheetBillingView() {
 }
 
 function renderBillingWorkflowPanel() {
-  const items = filteredBillingWorkflows();
-  const workflowLoading = remotePersistence && lazyDataState.billingWorkflowsLoading && !state.billingWorkflows.length;
-  const workflowPage = paginationState.billingWorkflows;
+  const items = filteredReimbursementRecords();
+  const workflowLoading = remotePersistence && lazyDataState.reimbursementRecordsLoading && !state.reimbursementRecords.length;
+  const workflowPage = paginationState.reimbursementRecords;
   return `
     <section class="workflow-center-panel">
       <div class="panel">
         ${renderPanelHead({
-          title: "结算流程跟踪",
-          helpKey: "workflow",
+          title: "报销台账",
+          helpKey: "reimbursementLedger",
           actions: `
-          <div class="toolbar workflow-filter-toolbar">
-            <button class="segmented ${state.billingWorkflowFilter === "todo" ? "active" : ""}" type="button" data-workflow-filter="todo">待办</button>
-            <button class="segmented ${state.billingWorkflowFilter === "all" ? "active" : ""}" type="button" data-workflow-filter="all">全部</button>
-            <button class="segmented ${state.billingWorkflowFilter === "done" ? "active" : ""}" type="button" data-workflow-filter="done">已完成</button>
+          <div class="toolbar workflow-filter-toolbar reimbursement-toolbar">
+            <button class="segmented ${state.reimbursementFilter === "pending_submission" ? "active" : ""}" type="button" data-reimbursement-filter="pending_submission">待提交</button>
+            <button class="segmented ${state.reimbursementFilter === "reimbursing" ? "active" : ""}" type="button" data-reimbursement-filter="reimbursing">报销中</button>
+            <button class="segmented ${state.reimbursementFilter === "completed" ? "active" : ""}" type="button" data-reimbursement-filter="completed">已完成</button>
+            <button class="segmented ${state.reimbursementFilter === "all" ? "active" : ""}" type="button" data-reimbursement-filter="all">全部</button>
+            <input id="reimbursementMonthFilter" type="month" value="${escapeAttr(paginationState.reimbursementRecords.month || state.billingMonth || today.slice(0, 7))}" />
+            <input id="reimbursementPiFilter" type="search" value="${escapeAttr(state.reimbursementSearchPi)}" placeholder="检索项目负责人" />
+            <label class="checkbox-label reimbursement-unpaid-toggle"><input id="reimbursementOnlyUnpaid" type="checkbox" ${state.reimbursementOnlyUnpaid ? "checked" : ""} />仅看有欠缴</label>
+            <button class="secondary" type="button" id="applyReimbursementFilters">${iconSvg("search")}检索</button>
           </div>
           `,
         })}
         <div class="table-wrap">
-          <table class="workflow-table">
+          <table class="workflow-table reimbursement-table">
             <thead>
               <tr>
                 <th>结算月份</th>
                 <th>项目负责人</th>
-                <th>来源</th>
-                <th>当前状态</th>
-                <th>版本</th>
-                <th>应收金额</th>
+                <th>当前月应缴</th>
+                <th>累计未缴</th>
+                <th>结算流程状态</th>
+                <th>报销状态</th>
+                <th>经费本号</th>
+                <th>报销单号</th>
                 <th>最近更新</th>
                 <th></th>
               </tr>
@@ -5089,16 +5338,16 @@ function renderBillingWorkflowPanel() {
             <tbody>
               ${
                 workflowLoading
-                  ? `<tr><td colspan="8">正在加载结算流程。</td></tr>`
+                  ? `<tr><td colspan="10">正在加载报销台账。</td></tr>`
                   : items.length
-                  ? items.map(renderBillingWorkflowRow).join("")
-                  : `<tr><td colspan="8">当前筛选下没有结算流程。生成结算单后可在这里继续发送、签回和交财务跟踪。</td></tr>`
+                    ? items.map(renderBillingWorkflowRow).join("")
+                  : `<tr><td colspan="10">当前筛选下没有报销台账。按项目负责人生成结算单后会自动进入这里。</td></tr>`
               }
             </tbody>
           </table>
         </div>
         ${
-          remotePersistence ? renderPager("billingWorkflows", workflowPage, workflowPage.total || items.length) : ""
+          remotePersistence ? renderPager("reimbursementRecords", workflowPage, workflowPage.total || items.length) : ""
         }
       </div>
     </section>
@@ -5106,33 +5355,28 @@ function renderBillingWorkflowPanel() {
 }
 
 function renderBillingWorkflowRow(item) {
-  const currentVersion = item.currentVersion || {};
-  const summary = currentVersion.summary || {};
   const nextStatus = nextWorkflowStatus(item.workflowStatus);
-  const scopeLabel = item.scopeType === "pi" ? item.pi || item.scopeKey?.replace(/^pi::/, "") || "-" : item.iacuc || "-";
-  const iacucList = Array.isArray(item.iacucs) ? item.iacucs.filter(Boolean) : [];
-  const iacucLabel = iacucList.length ? iacucList.join("、") : item.iacuc || "-";
+  const iacucLabel = Array.isArray(item.iacucs) && item.iacucs.length ? item.iacucs.join("、") : "-";
   return `
-    <tr class="workflow-row" data-open-workflow="${escapeAttr(item.id)}">
+    <tr class="workflow-row" data-open-reimbursement="${escapeAttr(item.id)}">
       <td>${escapeText(item.month || "-")}</td>
       <td class="workflow-principal-cell">
-        <strong>${escapeText(scopeLabel)}</strong>
+        <strong>${escapeText(item.pi || "-")}</strong>
         <span>${escapeText(iacucLabel)}</span>
       </td>
-      <td>${escapeText(workflowSourceLabel(item.sourceType))}</td>
-      <td><span class="pill active">${escapeText(workflowStatusLabel(item.workflowStatus))}</span></td>
-      <td>${escapeText(currentVersion.documentNumber || `v${item.currentVersionNo || 0}`)}<br /><span class="muted">v${item.currentVersionNo || 0}</span></td>
-      <td>¥${MONEY_FORMAT.format(Number(item.totalAmount || summary.totalAmount || 0))}</td>
+      <td>¥${MONEY_FORMAT.format(Number(item.payableAmount || 0))}</td>
+      <td>¥${MONEY_FORMAT.format(Number(item.accumulatedUnpaid || 0))}</td>
+      <td><span class="pill ${reimbursementStatusTone(item.workflowStatus)}">${escapeText(workflowStatusLabel(item.workflowStatus || "statement_generated"))}</span></td>
+      <td><span class="pill ${reimbursementStatusTone(item.reimbursementStatus)}">${escapeText(reimbursementStatusLabel(item.reimbursementStatus))}</span></td>
+      <td>${escapeText(item.fundBookNo || "-")}</td>
+      <td>${escapeText(item.reimbursementFormNo || "-")}</td>
       <td>${escapeText(formatLogTime(item.latestEventAt || item.generatedAt || "")) || "-"}</td>
       <td>
         <div class="workflow-row-actions">
-          <button class="ghost" type="button" data-open-workflow-button="${escapeAttr(item.id)}">查看</button>
-          ${
-            nextStatus
-              ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(item.id)}" data-next-status="${escapeAttr(nextStatus)}">${escapeText(workflowActionLabel(nextStatus))}</button>`
-              : `<span class="muted">已完成</span>`
-          }
-          <button class="ghost danger-text" type="button" data-delete-workflow="${escapeAttr(item.id)}">删除</button>
+          <button class="secondary" type="button" data-open-reimbursement-button="${escapeAttr(item.id)}">查看</button>
+          <button class="secondary" type="button" data-open-reimbursement-button="${escapeAttr(item.id)}">登记报销</button>
+          <button class="secondary" type="button" data-complete-reimbursement="${escapeAttr(item.id)}" ${Number(item.paidAmount || 0) + 1e-9 < Number(item.payableAmount || 0) ? "disabled" : ""}>标记完成</button>
+          <button class="ghost danger-text" type="button" data-delete-reimbursement="${escapeAttr(item.id)}">删除</button>
         </div>
       </td>
     </tr>
@@ -5140,173 +5384,246 @@ function renderBillingWorkflowRow(item) {
 }
 
 function renderBillingWorkflowDetailModal() {
-  const detail = state.selectedBillingWorkflowDetail || {};
+  const detail = state.selectedReimbursementRecordDetail || {};
+  const record = detail.item || {};
   const workflow = detail.workflow || {};
-  const versions = detail.versions || [];
-  const events = detail.events || [];
+  const versions = detail.workflowVersions || [];
+  const events = detail.workflowEvents || [];
   const currentVersion = workflow.currentVersion || {};
   const currentVersionId = currentVersion.id || workflow.currentVersionId || "";
-  const lines = (detail.linesByVersion || {})[currentVersionId] || [];
-  const statement = currentVersion.statement || {};
-  const timeline = workflowTimelineItems(workflow);
+  const lines = (state.selectedBillingWorkflowDetail?.linesByVersion || {})[currentVersionId] || [];
+  const history = detail.history || [];
+  const timeline = workflow.id ? workflowTimelineItems(workflow) : [];
   const currentNode = timeline.find((item) => item.state === "current") || timeline.find((item) => item.state === "done") || timeline[0] || {};
-  const showStatements = Boolean(state.showWorkflowStatements);
+  const hasWorkflow = Boolean(workflow.id);
   return `
-    <div class="editor-modal-backdrop" id="closeWorkflowDetail"></div>
+    <div class="editor-modal-backdrop" id="closeReimbursementDetail"></div>
     <div class="panel detail-panel editor-modal workflow-detail-modal">
       <div class="workflow-modal-head">
         <div>
-          <h2>${escapeText(workflow.pi || workflow.scopeKey?.replace(/^pi::/, "") || "结算流程")}</h2>
-          <p>${escapeText(workflow.month || "-")} · ${escapeText(workflowSourceLabel(workflow.sourceType))} · 当前版本 ${escapeText(currentVersion.documentNumber || `v${workflow.currentVersionNo || 0}`)}</p>
+          <h2>${escapeText(record.pi || "报销台账")}</h2>
+          <p>${escapeText(record.month || "-")} · 当前月应缴 ¥${MONEY_FORMAT.format(Number(record.payableAmount || 0))} · 累计未缴 ¥${MONEY_FORMAT.format(Number(record.accumulatedUnpaid || 0))}</p>
         </div>
         <div class="workflow-modal-actions">
-          <span class="pill active">${escapeText(workflowStatusLabel(workflow.workflowStatus))}</span>
-          <button class="ghost danger-text" type="button" data-delete-workflow="${escapeAttr(workflow.id || state.selectedBillingWorkflowId)}">删除流程</button>
-          <button class="secondary" type="button" id="closeWorkflowDetailButton">${iconSvg("chevronRight")}关闭</button>
+          <span class="pill ${reimbursementStatusTone(record.reimbursementStatus)}">${escapeText(reimbursementStatusLabel(record.reimbursementStatus))}</span>
+          <button class="ghost danger-text" type="button" data-delete-reimbursement="${escapeAttr(record.id || state.selectedReimbursementRecordId)}">删除台账</button>
+          <button class="secondary" type="button" id="closeReimbursementDetailButton">${iconSvg("chevronRight")}关闭</button>
         </div>
       </div>
 
-      <div class="workflow-timeline">
-        ${timeline
-          .map(
-            (item) => `
-              <div class="workflow-node ${item.state}">
-                <span class="workflow-node-dot"></span>
-                <div>
-                  <strong>${escapeText(item.label)}</strong>
-                  <small>${escapeText(item.time || (item.state === "upcoming" ? "待推进" : item.state === "current" ? "当前节点" : "已完成"))}</small>
+      ${hasWorkflow ? `
+        <div class="workflow-timeline">
+          ${timeline
+            .map(
+              (item) => `
+                <div class="workflow-node ${item.state}">
+                  <span class="workflow-node-dot"></span>
+                  <div>
+                    <strong>${escapeText(item.label)}</strong>
+                    <small>${escapeText(item.time || (item.state === "upcoming" ? "待推进" : item.state === "current" ? "当前节点" : "已完成"))}</small>
+                  </div>
                 </div>
-              </div>
-            `,
-          )
-          .join("")}
-      </div>
+              `,
+            )
+            .join("")}
+        </div>
+      ` : ""}
 
       <section class="panel workflow-detail-card workflow-overview-card">
-        <div class="workflow-current-node">
-          <span class="workflow-node-dot"></span>
-          <div>
-            <span>当前节点</span>
-            <strong>${escapeText(currentNode.label || workflowStatusLabel(workflow.workflowStatus))}</strong>
-            <small>${escapeText(currentNode.time || "待推进")}</small>
-          </div>
-        </div>
+        ${
+          hasWorkflow
+            ? `
+              <div class="workflow-current-node">
+                <span class="workflow-node-dot"></span>
+                <div>
+                  <span>当前节点</span>
+                  <strong>${escapeText(currentNode.label || workflowStatusLabel(workflow.workflowStatus))}</strong>
+                  <small>${escapeText(currentNode.time || "待推进")}</small>
+                </div>
+              </div>
+            `
+            : `<div class="workflow-current-node"><span class="workflow-node-dot"></span><div><span>结算流程</span><strong>当前台账无关联流程</strong><small>历史导入或原流程已删除</small></div></div>`
+        }
         <div class="workflow-overview-meta">
-          <div><span>结算月份</span><strong>${escapeText(workflow.month || "-")}</strong></div>
-          <div><span>来源</span><strong>${escapeText(workflowSourceLabel(workflow.sourceType))}</strong></div>
-          <div><span>伦理号数</span><strong>${Array.isArray(workflow.iacucs) ? workflow.iacucs.filter(Boolean).length : 0}</strong></div>
-          <div><span>应收金额</span><strong>¥${MONEY_FORMAT.format(Number(workflow.totalAmount || 0))}</strong></div>
+          <div><span>结算月份</span><strong>${escapeText(record.month || "-")}</strong></div>
+          <div><span>当前月应缴</span><strong>¥${MONEY_FORMAT.format(Number(record.payableAmount || 0))}</strong></div>
+          <div><span>当前月已缴</span><strong>¥${MONEY_FORMAT.format(Number(record.paidAmount || 0))}</strong></div>
+          <div><span>累计未缴</span><strong>¥${MONEY_FORMAT.format(Number(record.accumulatedUnpaid || 0))}</strong></div>
         </div>
-        <button class="secondary workflow-statement-toggle ${showStatements ? "active" : ""}" type="button" data-toggle-workflow-statements>
-          ${iconSvg("receipt")}
-          已生成结算单 ${versions.length ? versions.length : ""}
-        </button>
+      </section>
+
+      <div class="workflow-detail-grid">
+        <section class="panel workflow-detail-card">
+          ${renderPanelHead({ title: "结算来源", helpKey: "workflowSummary", compact: true })}
+          <div class="statement-summary">
+            ${summaryTile("项目负责人", record.pi || "-")}
+            ${summaryTile("结算月份", record.month || "-")}
+            ${summaryTile("伦理号数", Array.isArray(record.iacucs) ? record.iacucs.filter(Boolean).length : 0)}
+            ${summaryTile("单位支持", `¥${MONEY_FORMAT.format(Number(record.supportAmount || 0))}`)}
+          </div>
+          <div class="workflow-meta-list">
+            <div><span>结算流程状态</span><strong>${escapeText(hasWorkflow ? workflowStatusLabel(workflow.workflowStatus) : "无关联流程")}</strong></div>
+            <div><span>来源口径</span><strong>${escapeText(hasWorkflow ? workflowSourceLabel(workflow.sourceType) : record.source || "-")}</strong></div>
+            <div><span>经费摘要</span><strong>${escapeText(record.funding || "-")}</strong></div>
+            <div><span>伦理编号</span><strong>${escapeText((record.iacucs || []).join("、") || "-")}</strong></div>
+          </div>
+          <div class="table-wrap mini-statement">
+            <table>
+              <thead><tr><th>IACUC</th><th>设施</th><th>品系</th><th>应缴</th><th>房间</th></tr></thead>
+              <tbody>
+                ${(record.details || []).length
+                  ? (record.details || []).map((detailItem) => `
+                    <tr>
+                      <td>${escapeText(detailItem.iacuc || "-")}</td>
+                      <td>${escapeText(detailItem.facility || "-")}</td>
+                      <td>${escapeText(detailItem.species || "-")}</td>
+                      <td>¥${MONEY_FORMAT.format(Number(detailItem.payableAmount || 0))}</td>
+                      <td>${escapeText((detailItem.roomNames || []).join("、") || "-")}</td>
+                    </tr>`).join("")
+                  : `<tr><td colspan="5">暂无 IACUC 明细。</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel workflow-detail-card">
+          ${renderPanelHead({ title: "报销登记", helpKey: "reimbursementLedger", compact: true })}
+          <form id="reimbursementEditForm" class="form reimbursement-form" data-record-id="${escapeAttr(record.id || "")}">
+            <label>
+              经费本号
+              <input name="fundBookNo" value="${escapeAttr(record.fundBookNo || "")}" placeholder="请输入经费本号" />
+            </label>
+            <label>
+              报销单号
+              <input name="reimbursementFormNo" value="${escapeAttr(record.reimbursementFormNo || "")}" placeholder="请输入报销单号" />
+            </label>
+            <label>
+              核准预算
+              <input name="approvedBudget" type="number" min="0" step="0.01" value="${escapeAttr(record.approvedBudget ?? "")}" placeholder="请输入预算额度" />
+            </label>
+            <label>
+              已缴金额
+              <input name="paidAmount" type="number" min="0" step="0.01" value="${escapeAttr(record.paidAmount ?? 0)}" placeholder="请输入已缴金额" />
+            </label>
+            <label>
+              报销状态
+              <select name="reimbursementStatus">
+                <option value="pending_submission" ${record.reimbursementStatus === "pending_submission" ? "selected" : ""}>待提交</option>
+                <option value="reimbursing" ${record.reimbursementStatus === "reimbursing" ? "selected" : ""}>报销中</option>
+                <option value="completed" ${record.reimbursementStatus === "completed" ? "selected" : ""}>已完成</option>
+              </select>
+            </label>
+            <label class="field-span-2">
+              备注
+              <textarea name="notes" rows="3" placeholder="请输入补缴、合并报销或其他说明">${escapeText(record.notes || "")}</textarea>
+            </label>
+            <div class="form-actions">
+              <button class="primary" type="submit">${iconSvg("save")}保存报销登记</button>
+              <button class="secondary" type="button" data-complete-reimbursement="${escapeAttr(record.id || "")}" ${Number(record.paidAmount || 0) + 1e-9 < Number(record.payableAmount || 0) ? "disabled" : ""}>标记完成</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <section class="panel workflow-detail-card">
+        ${renderPanelHead({ title: "历史滚动", helpKey: "reimbursementHistory", compact: true })}
+        <div class="workflow-event-list">
+          ${history.length ? history.map((historyItem) => `
+            <div class="audit-row">
+              <div>
+                <strong>${escapeText(historyItem.month || "-")}</strong>
+                <p class="muted">当前月应缴 ¥${MONEY_FORMAT.format(Number(historyItem.payableAmount || 0))} · 已缴 ¥${MONEY_FORMAT.format(Number(historyItem.paidAmount || 0))}</p>
+              </div>
+              <span class="muted">累计未缴 ¥${MONEY_FORMAT.format(Number(historyItem.accumulatedUnpaid || 0))}</span>
+            </div>
+          `).join("") : `<p class="muted">暂无历史滚动记录。</p>`}
+        </div>
       </section>
 
       ${
-        showStatements
+        hasWorkflow
           ? `
-      <div class="workflow-detail-grid">
-        <section class="panel workflow-detail-card">
-          ${renderPanelHead({ title: "结算单摘要", helpKey: "workflowSummary", compact: true })}
-          <div class="statement-summary">
-            ${summaryTile("项目负责人", workflow.pi || "-")}
-            ${summaryTile("结算月份", workflow.month || "-")}
-            ${summaryTile("伦理号数", Array.isArray(workflow.iacucs) ? workflow.iacucs.filter(Boolean).length : 0)}
-            ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(Number(workflow.totalAmount || 0))}`)}
-          </div>
-          <div class="workflow-meta-list">
-            <div><span>项目名称</span><strong>${escapeText(workflow.project || "-")}</strong></div>
-            <div><span>实验负责人</span><strong>${escapeText(workflow.owner || "-")}</strong></div>
-            <div><span>支撑经费</span><strong>${escapeText(workflow.funding || "-")}</strong></div>
-            <div><span>伦理编号</span><strong>${escapeText((workflow.iacucs || []).join("、") || statement.iacuc || "-")}</strong></div>
-          </div>
-        </section>
-
-        <section class="panel workflow-detail-card">
-          ${renderPanelHead({ title: "版本记录", helpKey: "workflowVersions", compact: true })}
-          <div class="workflow-version-list">
-            ${
-              versions.length
-                ? versions
-                    .map(
-                      (version) => `
-                        <div class="rule-card">
-                          <strong>${escapeText(version.documentNumber || `v${version.versionNo}`)}</strong>
-                          <span>${escapeText(version.versionStatus === "active" ? "当前有效版本" : "历史作废版本")}</span>
-                          <p>${escapeText(workflowStatusLabel(version.workflowStatus))} · ${escapeText(formatLogTime(version.generatedAt)) || "-"}</p>
-                          ${version.voidReason ? `<p class="muted">作废原因：${escapeText(version.voidReason)}</p>` : ""}
+            <div class="workflow-detail-grid">
+              <section class="panel workflow-detail-card">
+                ${renderPanelHead({ title: "版本记录", helpKey: "workflowVersions", compact: true })}
+                <div class="workflow-version-list">
+                  ${
+                    versions.length
+                      ? versions
+                          .map(
+                            (version) => `
+                              <div class="rule-card">
+                                <strong>${escapeText(version.documentNumber || `v${version.versionNo}`)}</strong>
+                                <span>${escapeText(version.versionStatus === "active" ? "当前有效版本" : "历史作废版本")}</span>
+                                <p>${escapeText(workflowStatusLabel(version.workflowStatus))} · ${escapeText(formatLogTime(version.generatedAt)) || "-"}</p>
+                              </div>
+                            `,
+                          )
+                          .join("")
+                      : `<p class="muted">暂无版本记录。</p>`
+                  }
+                </div>
+              </section>
+              <section class="panel workflow-detail-card">
+                ${renderPanelHead({ title: "流程事件", helpKey: "workflowEvents", compact: true })}
+                <div class="workflow-event-list">
+                  ${
+                    events.length
+                      ? events.map((event) => `
+                        <div class="audit-row">
+                          <div>
+                            <strong>${escapeText(workflowEventLabel(event.eventType))}</strong>
+                            <p class="muted">${escapeText(event.actor?.displayName || "-")} · ${escapeText(formatLogTime(event.at)) || "-"}</p>
+                          </div>
+                          <span class="muted">${escapeText(event.note || "")}</span>
                         </div>
-                      `,
-                    )
-                    .join("")
-                : `<p class="muted">暂无版本记录。</p>`
-            }
-          </div>
-        </section>
-      </div>
-
-      <section class="panel workflow-detail-card">
-        ${renderPanelHead({ title: "流程事件", helpKey: "workflowEvents", compact: true })}
-        <div class="workflow-event-list">
-          ${
-            events.length
-              ? events
-                  .map(
-                    (event) => `
-                      <div class="audit-row">
-                        <div>
-                          <strong>${escapeText(workflowEventLabel(event.eventType))}</strong>
-                          <p class="muted">${escapeText(event.actor?.displayName || "-")} · ${escapeText(formatLogTime(event.at)) || "-"}</p>
-                        </div>
-                        <span class="muted">${escapeText(event.note || "")}</span>
-                      </div>
-                    `,
-                  )
-                  .join("")
-              : `<p class="muted">暂无流程事件。</p>`
-          }
-        </div>
-      </section>
-
-      <section class="panel workflow-detail-card">
-        ${renderPanelHead({ title: "当前结算单明细", helpKey: "workflowLines", compact: true })}
-        <div class="table-wrap workflow-lines-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>笼数</th>
-                <th>免费笼数</th>
-                <th>收费笼数</th>
-                <th>当日费用</th>
-                <th>累计费用</th>
-              </tr>
-            </thead>
-            <tbody>
+                      `).join("")
+                      : `<p class="muted">暂无流程事件。</p>`
+                  }
+                </div>
+                ${
+                  nextStatus(workflow.workflowStatus)
+                    ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(workflow.id)}" data-next-status="${escapeAttr(nextStatus(workflow.workflowStatus))}">${escapeText(workflowActionLabel(nextStatus(workflow.workflowStatus)))}</button>`
+                    : ""
+                }
+              </section>
+            </div>
+            <section class="panel workflow-detail-card">
+              ${renderPanelHead({ title: "当前结算单明细", helpKey: "workflowLines", compact: true, actions: `<button class="secondary workflow-statement-toggle ${state.showReimbursementWorkflowLines ? "active" : ""}" type="button" data-toggle-reimbursement-workflow-lines>${iconSvg("receipt")}展开结算单明细</button>` })}
               ${
-                lines.length
-                  ? lines
-                      .filter((line) => Number(line.cageCount || line.animalCount || 0) > 0)
-                      .map(
-                        (line) => `
-                          <tr>
-                            <td>${escapeText(line.date || "-")}</td>
-                            <td>${Number(line.cageCount || 0)}</td>
-                            <td>${Number(line.freeCages || 0)}</td>
-                            <td>${Number(line.billableCages || 0)}</td>
-                            <td>¥${MONEY_FORMAT.format(Number(line.amount || 0))}</td>
-                            <td>¥${MONEY_FORMAT.format(Number(line.cumulative || 0))}</td>
-                          </tr>
-                        `,
-                      )
-                      .join("") || `<tr><td colspan="6">当前结算单没有非零明细。</td></tr>`
-                  : `<tr><td colspan="6">当前结算单暂无明细。</td></tr>`
+                state.showReimbursementWorkflowLines
+                  ? `
+                    <div class="table-wrap workflow-lines-wrap">
+                      <table>
+                        <thead>
+                          <tr><th>日期</th><th>笼数</th><th>免费笼数</th><th>收费笼数</th><th>当日费用</th><th>累计费用</th></tr>
+                        </thead>
+                        <tbody>
+                          ${
+                            lines.length
+                              ? lines
+                                  .filter((line) => Number(line.cageCount || line.animalCount || 0) > 0)
+                                  .map((line) => `
+                                    <tr>
+                                      <td>${escapeText(line.date || "-")}</td>
+                                      <td>${Number(line.cageCount || 0)}</td>
+                                      <td>${Number(line.freeCages || 0)}</td>
+                                      <td>${Number(line.billableCages || 0)}</td>
+                                      <td>¥${MONEY_FORMAT.format(Number(line.amount || 0))}</td>
+                                      <td>¥${MONEY_FORMAT.format(Number(line.cumulative || 0))}</td>
+                                    </tr>
+                                  `)
+                                  .join("") || `<tr><td colspan="6">当前结算单没有非零明细。</td></tr>`
+                              : `<tr><td colspan="6">当前结算单暂无明细。</td></tr>`
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  `
+                  : `<p class="muted">当前版本明细按需加载，展开后显示每日结算内容。</p>`
               }
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </section>
           `
           : ""
       }
@@ -5770,6 +6087,7 @@ function renderDataManagementView() {
       </div>
       <div class="panel">
         ${renderIacucAdminPanel()}
+        ${renderReimbursementImportPanel()}
       </div>
     </section>
   `;
@@ -6016,6 +6334,28 @@ function renderIacucAdminPanel() {
     <p class="muted iacuc-index-status">
       当前索引：${iacucIndexMeta?.count ?? IACUC_INDEX.length} 条${iacucIndexMeta?.updatedAt ? ` · ${escapeText(formatLogTime(iacucIndexMeta.updatedAt))}` : ""}
     </p>
+  `;
+}
+
+function renderReimbursementImportPanel() {
+  return `
+    <div class="system-section">
+      ${renderPanelHead({ title: "历史报销台账导入", helpKey: "reimbursementImport", compact: true })}
+      <form id="monthlyReimbursementImportForm" class="form">
+        <label class="field-required">
+          月汇总 Excel
+          <input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+        </label>
+        <button class="secondary" type="submit">${iconSvg("upload")}导入月汇总</button>
+      </form>
+      <form id="arrearsReimbursementImportForm" class="form">
+        <label class="field-required">
+          欠缴汇算 Excel
+          <input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+        </label>
+        <button class="secondary" type="submit">${iconSvg("upload")}导入欠缴汇算</button>
+      </form>
+    </div>
   `;
 }
 
@@ -6281,19 +6621,21 @@ function bindEvents() {
         state.billingMonth = today.slice(0, 7);
       } else if (action === "workflow-todo") {
         state.activeView = "workflow-center";
-        state.billingWorkflowFilter = "todo";
+        state.reimbursementFilter = "pending_submission";
       } else if (action === "workflow-all") {
         state.activeView = "workflow-center";
-        state.billingWorkflowFilter = "all";
+        state.reimbursementFilter = "all";
       }
       render();
       try {
         await ensureViewDataLoaded(state.activeView);
         if (state.activeView === "workflow-center" && remotePersistence) {
-          await loadBillingWorkflows({
-            month: paginationState.billingWorkflows.month || state.billingMonth || today.slice(0, 7),
-            status: state.billingWorkflowFilter,
-            limit: paginationState.billingWorkflows.limit,
+          await loadReimbursementRecords({
+            month: paginationState.reimbursementRecords.month || state.billingMonth || today.slice(0, 7),
+            status: state.reimbursementFilter,
+            pi: state.reimbursementSearchPi || "",
+            onlyUnpaid: state.reimbursementOnlyUnpaid ? "1" : "0",
+            limit: paginationState.reimbursementRecords.limit,
             offset: 0,
           });
         }
@@ -6702,38 +7044,84 @@ function bindEvents() {
   document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
     button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
   });
-  document.querySelectorAll("[data-workflow-filter]").forEach((button) => {
+  document.querySelectorAll("[data-reimbursement-filter]").forEach((button) => {
     button.addEventListener("click", async () => {
-      state.billingWorkflowFilter = button.dataset.workflowFilter;
-      paginationState.billingWorkflows.status = state.billingWorkflowFilter;
+      state.reimbursementFilter = button.dataset.reimbursementFilter;
+      paginationState.reimbursementRecords.status = state.reimbursementFilter;
       try {
-        await goToBillingWorkflowsPage(1, paginationState.billingWorkflows.limit);
+        await goToReimbursementRecordsPage(1, paginationState.reimbursementRecords.limit);
       } catch (error) {
         reportSaveError(error);
       }
-      scheduleRender("workflow.filter");
+      scheduleRender("reimbursement.filter");
     });
   });
-  document.querySelectorAll("[data-open-workflow]").forEach((row) => {
+  document.querySelector("#applyReimbursementFilters")?.addEventListener("click", async () => {
+    state.reimbursementSearchPi = document.querySelector("#reimbursementPiFilter")?.value || "";
+    state.reimbursementOnlyUnpaid = Boolean(document.querySelector("#reimbursementOnlyUnpaid")?.checked);
+    paginationState.reimbursementRecords.month = document.querySelector("#reimbursementMonthFilter")?.value || "";
+    paginationState.reimbursementRecords.pi = state.reimbursementSearchPi;
+    paginationState.reimbursementRecords.onlyUnpaid = state.reimbursementOnlyUnpaid ? "1" : "0";
+    await goToReimbursementRecordsPage(1, paginationState.reimbursementRecords.limit).catch(reportSaveError);
+    scheduleRender("reimbursement.search");
+  });
+  document.querySelectorAll("[data-open-reimbursement]").forEach((row) => {
     row.addEventListener("click", async () => {
       try {
-        await loadBillingWorkflowDetail(row.dataset.openWorkflow);
+        await loadReimbursementRecordDetail(row.dataset.openReimbursement);
         render();
       } catch (error) {
         reportSaveError(error);
       }
     });
   });
-  document.querySelectorAll("[data-open-workflow-button]").forEach((button) => {
+  document.querySelectorAll("[data-open-reimbursement-button]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
       try {
-        await loadBillingWorkflowDetail(button.dataset.openWorkflowButton);
+        await loadReimbursementRecordDetail(button.dataset.openReimbursementButton);
         render();
       } catch (error) {
         reportSaveError(error);
       }
     });
+  });
+  document.querySelectorAll("[data-complete-reimbursement]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const record = reimbursementRecordById(button.dataset.completeReimbursement) || state.selectedReimbursementRecordDetail?.item || {};
+      try {
+        await updateReimbursementRecord(button.dataset.completeReimbursement, {
+          reimbursementStatus: "completed",
+          paidAmount: Number(record.payableAmount || 0),
+        });
+        pushLog(`完成报销台账：${record.pi || ""} ${record.month || ""}`);
+        render();
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelector("#reimbursementEditForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const recordId = form.dataset.recordId;
+    const formData = new FormData(form);
+    try {
+      await updateReimbursementRecord(recordId, {
+        fundBookNo: formData.get("fundBookNo") || "",
+        reimbursementFormNo: formData.get("reimbursementFormNo") || "",
+        approvedBudget: formData.get("approvedBudget") || "",
+        paidAmount: formData.get("paidAmount") || 0,
+        reimbursementStatus: formData.get("reimbursementStatus") || "pending_submission",
+        notes: formData.get("notes") || "",
+      });
+      pushLog(`保存报销台账：${recordId}`);
+      showFlashNotice("保存成功", "报销登记已更新。", "success");
+      render();
+    } catch (error) {
+      reportSaveError(error);
+    }
   });
   document.querySelectorAll("[data-advance-workflow]").forEach((button) => {
     button.addEventListener("click", async (event) => {
@@ -6747,30 +7135,31 @@ function bindEvents() {
       }
     });
   });
-  document.querySelectorAll("[data-delete-workflow]").forEach((button) => {
+  document.querySelectorAll("[data-delete-reimbursement]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
-      const workflowId = button.dataset.deleteWorkflow;
-      const workflow = billingWorkflowById(workflowId) || state.selectedBillingWorkflowDetail?.workflow || {};
-      const label = [workflow.pi || workflow.iacuc || "该流程", workflow.month || ""].filter(Boolean).join(" ");
+      const recordId = button.dataset.deleteReimbursement;
+      const record = reimbursementRecordById(recordId) || state.selectedReimbursementRecordDetail?.item || {};
+      const label = [record.pi || "该台账", record.month || ""].filter(Boolean).join(" ");
       openConfirmDialog({
-        type: "delete-workflow",
-        id: workflowId,
-        title: "删除结算流程",
-        message: `确认删除 ${label} 的结算流程？删除后会同时移除版本记录、明细和流程事件。`,
+        type: "delete-reimbursement",
+        id: recordId,
+        title: "删除报销台账",
+        message: `确认删除 ${label} 的报销台账？`,
         confirmLabel: "删除",
         payload: { label },
       });
     });
   });
-  document.querySelector("#closeWorkflowDetail")?.addEventListener("click", closeBillingWorkflowDetail);
-  document.querySelector("#closeWorkflowDetailButton")?.addEventListener("click", closeBillingWorkflowDetail);
-  document.querySelector("[data-toggle-workflow-statements]")?.addEventListener("click", async () => {
-    state.showWorkflowStatements = !state.showWorkflowStatements;
-    if (state.showWorkflowStatements && state.selectedBillingWorkflowId) {
+  document.querySelector("#closeReimbursementDetail")?.addEventListener("click", closeReimbursementDetail);
+  document.querySelector("#closeReimbursementDetailButton")?.addEventListener("click", closeReimbursementDetail);
+  document.querySelector("[data-toggle-reimbursement-workflow-lines]")?.addEventListener("click", async () => {
+    state.showReimbursementWorkflowLines = !state.showReimbursementWorkflowLines;
+    if (state.showReimbursementWorkflowLines && state.selectedReimbursementRecordDetail?.workflow?.id) {
       try {
-        const workflow = state.selectedBillingWorkflowDetail?.workflow || {};
-        await loadBillingWorkflowLines(state.selectedBillingWorkflowId, workflow.currentVersionId || "");
+        const workflow = state.selectedReimbursementRecordDetail?.workflow || {};
+        state.selectedBillingWorkflowDetail = state.selectedBillingWorkflowDetail || { linesByVersion: {} };
+        await loadBillingWorkflowLines(workflow.id, workflow.currentVersionId || "");
       } catch (error) {
         reportSaveError(error);
       }
@@ -6826,6 +7215,8 @@ function bindEvents() {
     bindUserRoomAccessControls(form);
   });
   document.querySelector("#iacucUploadForm")?.addEventListener("submit", handleIacucUpload);
+  document.querySelector("#monthlyReimbursementImportForm")?.addEventListener("submit", (event) => handleReimbursementImport(event, "monthly"));
+  document.querySelector("#arrearsReimbursementImportForm")?.addEventListener("submit", (event) => handleReimbursementImport(event, "arrears"));
   document.querySelector("#principalIdentityFilter")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -6851,6 +7242,7 @@ function bindEvents() {
       const limit = Number(select.value) || 10;
       try {
         if (kind === "quantitySheets") await goToQuantitySheetsPage(1, limit);
+        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(1, limit);
         if (kind === "billingWorkflows") await goToBillingWorkflowsPage(1, limit);
         if (kind === "auditLogs") await goToAuditLogsPage(1, limit);
         if (kind === "intakeBatches") await goToIntakeBatchesPage(1, limit);
@@ -6867,6 +7259,7 @@ function bindEvents() {
       const kind = button.dataset.pagePrev;
       try {
         if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) - 1);
+        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(currentPage(paginationState.reimbursementRecords) - 1);
         if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) - 1);
         if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) - 1);
         if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page - 1);
@@ -6883,6 +7276,7 @@ function bindEvents() {
       const kind = button.dataset.pageNext;
       try {
         if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) + 1);
+        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(currentPage(paginationState.reimbursementRecords) + 1);
         if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) + 1);
         if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) + 1);
         if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page + 1);
@@ -7347,6 +7741,24 @@ async function handleIacucUpload(event) {
     render();
   } catch {
     showFlashNotice("上传失败", "请检查网络或文件格式。", "error");
+  }
+}
+
+async function handleReimbursementImport(event, kind) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const file = form.get("file");
+  if (!file || !file.name) {
+    showFlashNotice("导入失败", "请选择 Excel 文件。", "error");
+    return;
+  }
+  try {
+    const payload = await importReimbursementWorkbook(kind, form);
+    const title = kind === "arrears" ? "欠缴汇算导入完成" : "月汇总导入完成";
+    showFlashNotice(title, `已导入 ${payload.count || 0} 条报销台账。`, "success");
+    render();
+  } catch (error) {
+    reportSaveError(error);
   }
 }
 
@@ -9736,6 +10148,44 @@ function filteredBillingWorkflows() {
   return items;
 }
 
+function filteredReimbursementRecords() {
+  const items = [...stateIndexes().reimbursementRecordsSorted];
+  return items.filter((item) => {
+    if (state.reimbursementFilter !== "all" && item.reimbursementStatus !== state.reimbursementFilter) return false;
+    if (state.reimbursementSearchPi && !normalizeSearchText(item.pi).includes(normalizeSearchText(state.reimbursementSearchPi))) return false;
+    if (state.reimbursementOnlyUnpaid && Number(item.accumulatedUnpaid || 0) <= 0) return false;
+    const selectedMonth = paginationState.reimbursementRecords.month || state.billingMonth || "";
+    if (selectedMonth && item.month !== selectedMonth) return false;
+    return true;
+  });
+}
+
+function sortReimbursementRecords(items) {
+  return [...items].sort((a, b) => {
+    const byMonth = String(b.month || "").localeCompare(String(a.month || ""), "zh-CN");
+    if (byMonth !== 0) return byMonth;
+    const byUnpaid = Number(b.accumulatedUnpaid || 0) - Number(a.accumulatedUnpaid || 0);
+    if (byUnpaid !== 0) return byUnpaid;
+    return String(a.pi || "").localeCompare(String(b.pi || ""), "zh-CN");
+  });
+}
+
+function reimbursementStatusLabel(value) {
+  return {
+    pending_submission: "待提交",
+    reimbursing: "报销中",
+    completed: "已完成",
+  }[value] || value || "-";
+}
+
+function reimbursementStatusTone(value) {
+  return {
+    pending_submission: "warning",
+    reimbursing: "todo",
+    completed: "success",
+  }[value] || "active";
+}
+
 function sortBillingWorkflows(items) {
   return [...items].sort((a, b) => {
     const byMonth = String(b.month || "").localeCompare(String(a.month || ""), "zh-CN");
@@ -10011,6 +10461,7 @@ async function persistBillingWorkflowFromCurrent() {
     if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
     lazyDataState.billingWorkflowsLoaded = true;
     lazyDataState.billingWorkflowsLoading = false;
+    lazyDataState.reimbursementRecordsLoaded = false;
     logClientPerf("billing_workflow.create", startedAt, { source: "quantity_sheet" });
     pushLog(`发起结算流程：${sheet.pi} ${sheet.month}`);
     showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${sheet.month} ${sheet.pi} 的进度。`);
@@ -10041,6 +10492,7 @@ async function persistBillingWorkflowFromCurrent() {
   if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
   lazyDataState.billingWorkflowsLoaded = true;
   lazyDataState.billingWorkflowsLoading = false;
+  lazyDataState.reimbursementRecordsLoaded = false;
   logClientPerf("billing_workflow.create", startedAt, { source: "cage_map" });
   pushLog(`发起结算流程：${state.billingPi} ${state.billingMonth}`);
   showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${state.billingMonth} ${state.billingPi} 的进度。`);
@@ -10051,6 +10503,13 @@ function closeBillingWorkflowDetail() {
   state.selectedBillingWorkflowId = "";
   state.selectedBillingWorkflowDetail = null;
   state.showWorkflowStatements = false;
+  render();
+}
+
+function closeReimbursementDetail() {
+  state.selectedReimbursementRecordId = "";
+  state.selectedReimbursementRecordDetail = null;
+  state.showReimbursementWorkflowLines = false;
   render();
 }
 
@@ -11278,6 +11737,10 @@ function billingWorkflowByBusinessKey(businessKey) {
   return stateIndexes().billingWorkflowByBusinessKey.get(businessKey) || null;
 }
 
+function reimbursementRecordById(recordId) {
+  return stateIndexes().reimbursementRecordById.get(recordId) || null;
+}
+
 function getSelectedRack(racks) {
   return racks.find((rack) => rack.id === state.selectedRackId) ?? racks[0];
 }
@@ -11387,6 +11850,7 @@ function stateIndexes() {
   state.billingWorkflows.forEach((workflow) => {
     if (workflow.businessKey) billingWorkflowByBusinessKey.set(workflow.businessKey, workflow);
   });
+  const reimbursementRecordById = new Map(state.reimbursementRecords.map((record) => [record.id, record]));
   STATE_INDEX_CACHE = {
     roomById,
     rackById,
@@ -11404,6 +11868,8 @@ function stateIndexes() {
     billingWorkflowById,
     billingWorkflowByBusinessKey,
     billingWorkflowsSorted: sortBillingWorkflows(state.billingWorkflows),
+    reimbursementRecordById,
+    reimbursementRecordsSorted: sortReimbursementRecords(state.reimbursementRecords),
   };
   return STATE_INDEX_CACHE;
 }
@@ -11745,6 +12211,12 @@ async function handleConfirmDialogAction() {
       await deleteBillingWorkflow(dialog.id);
       pushLog(`删除结算流程：${dialog.payload?.label || dialog.id}`);
       showFlashNotice("删除成功", `结算流程已删除：${dialog.payload?.label || dialog.id}`);
+      return;
+    }
+    if (dialog.type === "delete-reimbursement") {
+      await deleteReimbursementRecord(dialog.id);
+      pushLog(`删除报销台账：${dialog.payload?.label || dialog.id}`);
+      showFlashNotice("删除成功", `报销台账已删除：${dialog.payload?.label || dialog.id}`);
       return;
     }
     if (dialog.type === "delete-quantity-sheet") {

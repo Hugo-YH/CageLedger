@@ -2,6 +2,7 @@ import {
   API_BILLING_OCCUPANCIES_URL,
   API_BILLING_WORKFLOWS_URL,
   API_QUANTITY_SHEETS_URL,
+  API_REIMBURSEMENT_RECORDS_URL,
   ENTITY_API_URLS,
 } from "./endpoints.js";
 import { queryUrl } from "./client.js";
@@ -12,6 +13,10 @@ export function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId
 
 export function buildBillingWorkflowsUrl({ month = "", status = "todo", limit = 50, offset = 0 } = {}) {
   return queryUrl(API_BILLING_WORKFLOWS_URL, { month, status, limit, offset });
+}
+
+export function buildReimbursementRecordsUrl({ month = "", status = "pending_submission", pi = "", onlyUnpaid = "", limit = 50, offset = 0 } = {}) {
+  return queryUrl(API_REIMBURSEMENT_RECORDS_URL, { month, status, pi, onlyUnpaid, limit, offset });
 }
 
 export function buildAuditLogsUrl({ limit = 200, offset = 0 } = {}) {
@@ -30,3 +35,6 @@ export function buildBillingWorkflowLinesUrl(workflowId, versionId = "") {
   return queryUrl(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}/lines`, { versionId });
 }
 
+export function buildReimbursementRecordUrl(recordId) {
+  return `${API_REIMBURSEMENT_RECORDS_URL}/${encodeURIComponent(recordId)}`;
+}

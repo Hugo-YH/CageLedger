@@ -12,6 +12,9 @@ export const API_BILLING_OCCUPANCIES_URL = "/api/infrastructure/occupancies";
 export const API_BILLING_STATEMENT_GENERATE_BY_PI_URL = "/api/billing-statements/generate-by-pi";
 export const API_BILLING_WORKFLOWS_URL = "/api/billing-workflows";
 export const API_BILLING_WORKFLOW_ADVANCE_URL = "/api/billing-workflows/advance";
+export const API_REIMBURSEMENT_RECORDS_URL = "/api/reimbursement-records";
+export const API_REIMBURSEMENT_IMPORT_MONTHLY_URL = "/api/reimbursement-records/import-monthly";
+export const API_REIMBURSEMENT_IMPORT_ARREARS_URL = "/api/reimbursement-records/import-arrears";
 export const API_QUANTITY_SHEETS_URL = "/api/quantity-sheets";
 export const API_INFRASTRUCTURE_URL = "/api/infrastructure";
 
@@ -26,4 +29,3 @@ export const ENTITY_API_URLS = {
   intakeBatches: "/api/intake-batches",
   auditLogs: "/api/audit-events",
 };
-
