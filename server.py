@@ -1782,12 +1782,14 @@ def reconcile_intake_batch_update(state, old_item, item):
     next_item = {**old_item, **item}
     next_item["receipts"] = [dict(receipt) for receipt in (item.get("receipts") if isinstance(item.get("receipts"), list) else old_item.get("receipts", []))]
     final_count = max(as_int(next_item.get("finalCardCount")) or 0, 0)
-    confirmed_count = max(as_int(next_item.get("confirmedCardCount")) or intake_receipt_total(next_item), 0)
+    confirmed_count = max(as_int(next_item.get("confirmedCardCount")) or sum(max(as_int(receipt.get("cardCount")) or 0, 0) for receipt in next_item.get("receipts", [])), 0)
     next_item["confirmedCardCount"] = confirmed_count
     next_item["remainingCardCount"] = max(as_int(next_item.get("remainingCardCount")) if next_item.get("remainingCardCount") not in (None, "") else final_count - confirmed_count, 0)
 
     old_status = clean_text(old_item.get("status", ""))
     new_status = clean_text(next_item.get("status", ""))
+    old_room_name = clean_text(old_item.get("roomName", ""))
+    new_room_name = clean_text(next_item.get("roomName", ""))
     if old_status == "received" and new_status == "printed":
         related_tasks = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")]
         blocking = [task for task in related_tasks if task.get("status") in ("reserved", "active")]
@@ -1797,6 +1799,18 @@ def reconcile_intake_batch_update(state, old_item, item):
         next_item["receipts"] = []
         next_item["confirmedCardCount"] = 0
         next_item["remainingCardCount"] = final_count
+    if old_room_name != new_room_name:
+        related_tasks = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")]
+        blocking = [task for task in related_tasks if task.get("status") in ("reserved", "active")]
+        if blocking:
+            raise ValueError("该批次已有已预留或已入驻的待进驻任务，请先处理相关任务后再调整房间")
+        target_room = next((room for room in state.get("rooms", []) if clean_text(room.get("name", "")) == new_room_name), None) if new_room_name else None
+        if related_tasks and new_room_name and not target_room:
+            raise ValueError("房间尚未在系统中配置，请先选择已配置饲养间后再保存")
+        for task in related_tasks:
+            task["targetRoomId"] = target_room.get("id", "") if target_room else ""
+            task["targetRoomName"] = target_room.get("name", "") if target_room else new_room_name
+            task["updatedAt"] = next_item.get("updatedAt") or now_iso()
     return next_item
 
 
