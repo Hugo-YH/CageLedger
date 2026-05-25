@@ -34,6 +34,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.7a",
+    title: "编辑保存反馈与笼位弹窗体验优化",
+    items: [
+      "根据李志权反馈，统一补齐笼位、待接收、待进驻、数量统计表、房间笼架、账号、报销登记和结算流程等保存成功提示",
+      "保存、设空、取材、预留、入驻、变更饲养间等操作完成后自动刷新对应界面，提升操作结果可感知性",
+      "笼位编辑弹窗改为视口定位并扩大显示区域，靠下笼位编辑时保持窗口在当前可见区域内",
+    ],
+  },
+  {
     version: "0.5.7",
     title: "流程中心升级为结算与报销台账中心",
     items: [
@@ -657,7 +666,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.7",
+  version: "0.5.7a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1647,10 +1656,11 @@ async function loadFullInfrastructure() {
   }
 }
 
-async function loadRoomInfrastructure(roomId) {
+async function loadRoomInfrastructure(roomId, options = {}) {
   if (!remotePersistence || !roomId || infrastructureLoadState.loading) return;
-  if (infrastructureLoadState.scope === "full") return;
-  if (infrastructureLoadState.scope === "room" && infrastructureLoadState.roomId === roomId) return;
+  const force = Boolean(options.force);
+  if (!force && infrastructureLoadState.scope === "full") return;
+  if (!force && infrastructureLoadState.scope === "room" && infrastructureLoadState.roomId === roomId) return;
   infrastructureLoadState.loading = true;
   const startedAt = performance.now();
   try {
@@ -2469,6 +2479,51 @@ function logClientPerf(label, startedAt, details = {}) {
 
 function reportSaveError(error) {
   showFlashNotice("保存失败", error?.message || "保存失败", "error");
+}
+
+async function refreshUsersAfterSave() {
+  await loadUsers();
+}
+
+async function refreshIntakeAndPlacementAfterSave() {
+  if (!remotePersistence) {
+    if (state.selectedRoomId) {
+      paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
+    }
+    paginationState.intakeBatches.total = filteredIntakeBatches().length;
+    return;
+  }
+  await Promise.all([
+    loadIntakeBatchesPage(paginationState.intakeBatches.page || 1, paginationState.intakeBatches.limit),
+    loadPlacementTasksPage(paginationState.placementTasks.page || 1, paginationState.placementTasks.limit),
+  ]);
+}
+
+async function refreshQuantitySheetsAfterSave(sheetId = "") {
+  if (remotePersistence) {
+    await goToQuantitySheetsPage(paginationState.quantitySheets.page || 1, paginationState.quantitySheets.limit);
+  }
+  const selected =
+    state.quantitySheets.find((item) => item.id === sheetId) ||
+    state.quantitySheets.find((item) => item.id === state.selectedQuantitySheetId) ||
+    state.quantitySheets[0] ||
+    null;
+  state.selectedQuantitySheetId = selected?.id || "";
+  state.quantitySheetDraft = selected ? hydrateQuantitySheetIacucInfo(selected) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
+}
+
+async function refreshBillingWorkflowsAfterSave() {
+  if (!remotePersistence) return;
+  await goToBillingWorkflowsPage(paginationState.billingWorkflows.page || 1, paginationState.billingWorkflows.limit);
+}
+
+async function refreshInfrastructureAfterSave() {
+  await reloadInfrastructureOverview();
+  if (state.selectedRoomId) {
+    await loadRoomInfrastructure(state.selectedRoomId, { force: true });
+  }
+  refreshInfrastructureSummaries();
+  updateSlotStatuses();
 }
 
 function upsertById(items, item) {
@@ -6903,9 +6958,11 @@ function bindEvents() {
     try {
       const savedBatch = await saveIntakeBatchDraft();
       pushLog(`保存待接收批次：${savedBatch.batchNo || savedBatch.id}`);
+      await refreshIntakeAndPlacementAfterSave();
       state.selectedIntakeBatchId = "";
       state.intakeBatchDraft = makeIncomingBatchDraft();
       showFlashNotice("保存成功", `已保存为待接收批次：${savedBatch.batchNo || savedBatch.id}`);
+      render();
     } catch (error) {
       reportSaveError(error);
     }
@@ -6918,8 +6975,10 @@ function bindEvents() {
       const editedBatch = readIncomingBatchForm(event.target);
       const savedBatch = await saveIntakeBatch(editedBatch);
       pushLog(`更新待接收批次：${savedBatch.batchNo || savedBatch.id}`);
+      await refreshIntakeAndPlacementAfterSave();
       closeIntakeBatchEditor();
       showFlashNotice("保存成功", `待接收批次已更新：${savedBatch.batchNo || savedBatch.id}`);
+      render();
     } catch (error) {
       reportSaveError(error);
     }
@@ -7096,6 +7155,8 @@ function bindEvents() {
           paidAmount: Number(record.payableAmount || 0),
         });
         pushLog(`完成报销台账：${record.pi || ""} ${record.month || ""}`);
+        await goToReimbursementRecordsPage(paginationState.reimbursementRecords.page || 1, paginationState.reimbursementRecords.limit);
+        showFlashNotice("保存成功", "报销台账已标记完成。", "success");
         render();
       } catch (error) {
         reportSaveError(error);
@@ -7117,6 +7178,7 @@ function bindEvents() {
         notes: formData.get("notes") || "",
       });
       pushLog(`保存报销台账：${recordId}`);
+      await goToReimbursementRecordsPage(paginationState.reimbursementRecords.page || 1, paginationState.reimbursementRecords.limit);
       showFlashNotice("保存成功", "报销登记已更新。", "success");
       render();
     } catch (error) {
@@ -7129,6 +7191,8 @@ function bindEvents() {
       try {
         await advanceBillingWorkflow(button.dataset.advanceWorkflow, button.dataset.nextStatus);
         pushLog(`更新结算流程：${workflowActionLabel(button.dataset.nextStatus)}`);
+        await refreshBillingWorkflowsAfterSave();
+        showFlashNotice("保存成功", `结算流程已更新为${workflowStatusLabel(button.dataset.nextStatus)}。`, "success");
         render();
       } catch (error) {
         reportSaveError(error);
@@ -7652,7 +7716,8 @@ async function handleUserSubmit(event) {
     showFlashNotice("创建账号失败", payload.error || "创建账号失败", "error");
     return;
   }
-  await loadUsers();
+  await refreshUsersAfterSave();
+  showFlashNotice("创建成功", `账号已创建：${form.get("displayName") || form.get("username")}`, "success");
   render();
 }
 
@@ -7678,7 +7743,8 @@ async function handleUserUpdate(event) {
     showFlashNotice("保存账号失败", payload.error || "保存账号失败", "error");
     return;
   }
-  await loadUsers();
+  await refreshUsersAfterSave();
+  showFlashNotice("保存成功", `账号已更新：${form.get("displayName") || form.get("username")}`, "success");
   render();
 }
 
@@ -7704,7 +7770,7 @@ async function deleteUserConfirmed(userId) {
     showFlashNotice("删除账号失败", payload.error || "删除账号失败", "error");
     return;
   }
-  await loadUsers();
+  await refreshUsersAfterSave();
 }
 
 async function handleIacucUpload(event) {
@@ -7766,6 +7832,7 @@ async function savePrincipalIdentityFromTable(pi, principalType) {
   try {
     const item = await savePrincipalIdentity(pi, normalizePrincipalType(principalType));
     pushLog(`更新 ${item.pi} 负责人身份为 ${principalTypeLabel(item.principalType)}`);
+    showFlashNotice("保存成功", `${item.pi} 已更新为${principalTypeLabel(item.principalType)}。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -7908,7 +7975,10 @@ async function handleSlotSubmit(event) {
 
   if (status === "empty") {
     try {
-      await closeOccupancy(slotId, form.get("endDate") || today);
+      await closeOccupancy(slotId, form.get("endDate") || today, "cleared", { renderAfterSave: false });
+      await refreshCageMapAfterOccupancySave();
+      showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(slotId)} 已设为空。`, "success");
+      render();
     } catch (error) {
       reportSaveError(error);
     }
@@ -7951,6 +8021,8 @@ async function handleSlotSubmit(event) {
     upsertById(state.occupancies, response.item || payload);
     pushLog(`${current ? "更新" : "新增"}笼位 ${slotId} ${statusLabel(status)}`);
     updateSlotStatuses();
+    await refreshCageMapAfterOccupancySave();
+    showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(slotId)} 已更新为${statusLabel(status)}。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8009,9 +8081,26 @@ async function handleBatchSlotSubmit(event) {
     savedItems.forEach((item) => upsertById(state.occupancies, item));
     pushLog(`批量更新 ${state.selectedSlotIds.length} 个笼位为 ${statusLabel(payload.status)}`);
     updateSlotStatuses();
+    await refreshCageMapAfterOccupancySave();
+    showFlashNotice("保存成功", `已更新 ${savedItems.length} 个笼位为${statusLabel(payload.status)}。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
+  }
+}
+
+async function refreshCageMapAfterOccupancySave() {
+  invalidateStateIndexCache();
+  if (!remotePersistence || !state.selectedRoomId) {
+    updateSlotStatuses();
+    return;
+  }
+  try {
+    await loadRoomInfrastructure(state.selectedRoomId, { force: true });
+    updateSlotStatuses();
+  } catch (error) {
+    console.error(error);
+    showFlashNotice("刷新失败", "笼位已保存，但刷新当前笼位图失败，请手动刷新页面确认。", "warning");
   }
 }
 
@@ -8084,6 +8173,8 @@ async function clearSelectedSlot() {
   try {
     await closeOccupancy(state.selectedSlotId, today, "cleared", { renderAfterSave: false });
     state.samplingMode = "";
+    await refreshCageMapAfterOccupancySave();
+    showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(state.selectedSlotId)} 已设为空。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8106,6 +8197,8 @@ async function sampleSelectedSlot() {
   try {
     await closeOccupancy(state.selectedSlotId, sampledDate, "sampled", { renderAfterSave: false });
     state.samplingMode = "";
+    await refreshCageMapAfterOccupancySave();
+    showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(state.selectedSlotId)} 已标记为已取材。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8143,6 +8236,8 @@ async function sampleBatchSlotsConfirmed(sampledDate) {
     pushLog(`批量标记已取材 ${activeItems.length} 个笼位，最后计费日期 ${sampledDate}`);
     state.samplingMode = "";
     updateSlotStatuses();
+    await refreshCageMapAfterOccupancySave();
+    showFlashNotice("保存成功", `已将 ${activeItems.length} 个笼位标记为已取材。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8170,6 +8265,8 @@ async function clearBatchSlotsConfirmed() {
     pushLog(`批量设空 ${state.selectedSlotIds.length} 个笼位`);
     state.samplingMode = "";
     updateSlotStatuses();
+    await refreshCageMapAfterOccupancySave();
+    showFlashNotice("保存成功", `已将 ${savedItems.filter(Boolean).length} 个笼位设为空。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8228,6 +8325,9 @@ async function submitIntakeReceipt(batchId, actualReceiptDate, cardCount) {
     mergeServerAuditLogs(payload);
     state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(payload.batch);
     pushLog(`确认接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务`);
+    await refreshIntakeAndPlacementAfterSave();
+    state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(payload.batch);
+    showFlashNotice("确认成功", `已接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8255,7 +8355,12 @@ async function reservePlacementTask(taskId, slotId, options = {}) {
     if (resetSelection) state.selectedPlacementTaskId = "";
     state.selectedSlotId = slotId;
     updateSlotStatuses();
-    if (renderAfterSave) render();
+    if (renderAfterSave) {
+      await refreshCageMapAfterOccupancySave();
+      await refreshIntakeAndPlacementAfterSave();
+      showFlashNotice("预留成功", `已预留笼位 ${cageCodeForSlot(slotId)}。`, "success");
+      render();
+    }
   } catch (error) {
     reportSaveError(error);
   }
@@ -8305,6 +8410,8 @@ async function batchMoveInSelectedPlacementTasks() {
     state.selectedSlotIds = [];
     state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
     state.batchMode = state.placementAssignmentMode;
+    await refreshCageMapAfterOccupancySave();
+    await refreshIntakeAndPlacementAfterSave();
     showFlashNotice("批量入驻完成", `已完成 ${taskIdsToMove.length} 笼入驻。`, "success");
     render();
   } catch (error) {
@@ -8326,7 +8433,12 @@ async function moveInPlacementTask(taskId, options = {}) {
     upsertById(state.occupancies, payload.occupancy);
     mergeServerAuditLogs(payload);
     updateSlotStatuses();
-    if (renderAfterSave) render();
+    if (renderAfterSave) {
+      await refreshCageMapAfterOccupancySave();
+      await refreshIntakeAndPlacementAfterSave();
+      showFlashNotice("入驻成功", `笼位 ${cageCodeForSlot(payload.occupancy?.slotId || "")} 已正式入驻。`, "success");
+      render();
+    }
   } catch (error) {
     reportSaveError(error);
   }
@@ -8350,6 +8462,8 @@ async function reassignPlacementTask(taskId) {
     if (!response.ok) throw new Error(payload.error || "改签房间失败");
     upsertById(state.placementTasks, normalizePlacementTask(payload.task));
     mergeServerAuditLogs(payload);
+    await refreshIntakeAndPlacementAfterSave();
+    showFlashNotice("保存成功", "待进驻动物目标饲养间已更新。", "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8380,6 +8494,8 @@ async function reassignPlacementGroup(receiptId, roomId = "") {
       upsertById(state.placementTasks, normalizePlacementTask(payload.task));
       mergeServerAuditLogs(payload);
     }
+    await refreshIntakeAndPlacementAfterSave();
+    showFlashNotice("保存成功", `已更新 ${tasks.length} 条待进驻任务的目标饲养间。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8471,6 +8587,7 @@ async function deletePlacementTaskGroupConfirmed(groupKey) {
     state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
     state.batchMode = state.placementAssignmentMode;
     paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId || "")).length;
+    await refreshCageMapAfterOccupancySave();
     render();
     return;
   }
@@ -8486,6 +8603,7 @@ async function deletePlacementTaskGroupConfirmed(groupKey) {
   state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
   state.batchMode = state.placementAssignmentMode;
   updateSlotStatuses();
+  await refreshCageMapAfterOccupancySave();
   await goToPlacementTasksPage(nextPage, limit);
 }
 
@@ -8504,6 +8622,7 @@ async function handleRateSubmit(event) {
     state.freeCageAllowance = freeCageAllowance;
     state.billingPrincipalType = principalType;
     pushLog(`更新 ${targetPi} 负责人类型为 ${principalTypeLabel(principalType)}，免费笼数 ${freeCageAllowance}`);
+    showFlashNotice("保存成功", `${targetPi} 负责人类型已更新。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -8532,6 +8651,7 @@ async function handleQuantitySheetSubmit(event) {
   try {
     const sheet = await saveQuantitySheetDraft();
     pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
+    await refreshQuantitySheetsAfterSave(sheet.id);
     showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
     render();
   } catch (error) {
@@ -8895,6 +9015,8 @@ async function printAndMarkIntakeBatches(batches) {
       const saved = await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
       upsertById(state.intakeBatches, saved);
     }
+    await refreshIntakeAndPlacementAfterSave();
+    showFlashNotice("打印完成", `已打印并标记 ${batches.length} 个待接收批次。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -9441,23 +9563,23 @@ function positionCageEditorPopover() {
   const fallback = container.querySelector("#openCageEditor") || container;
   const anchorElement = anchor || fallback;
   const gap = 12;
-  const containerRect = container.getBoundingClientRect();
   const anchorRect = anchorElement.getBoundingClientRect();
   const editorRect = editor.getBoundingClientRect();
-  const maxLeft = Math.max(gap, container.clientWidth - editorRect.width - gap);
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const preferredEditorHeight = Math.min(620, Math.max(420, viewportHeight - gap * 2));
 
-  let left = anchorRect.right - containerRect.left + gap;
-  if (left > maxLeft) left = anchorRect.left - containerRect.left - editorRect.width - gap;
-  left = Math.min(Math.max(gap, left), maxLeft);
+  let left = anchorRect.right + gap;
+  if (left + editorRect.width > viewportWidth - gap) left = anchorRect.left - editorRect.width - gap;
+  left = Math.min(Math.max(gap, left), Math.max(gap, viewportWidth - editorRect.width - gap));
 
-  let top = anchorRect.top - containerRect.top;
-  const viewportBottom = window.innerHeight - containerRect.top - gap;
-  const containerBottom = container.clientHeight - gap;
-  const maxTop = Math.max(gap, Math.min(containerBottom, viewportBottom) - Math.min(editorRect.height, viewportBottom - gap));
-  top = Math.min(Math.max(gap, top), maxTop);
+  let top = anchorRect.top;
+  if (top + preferredEditorHeight > viewportHeight - gap) top = Math.max(gap, viewportHeight - preferredEditorHeight - gap);
+  top = Math.max(gap, top);
 
   editor.style.left = `${Math.round(left)}px`;
   editor.style.top = `${Math.round(top)}px`;
+  editor.style.maxHeight = `${Math.max(420, Math.round(viewportHeight - top - gap))}px`;
 }
 
 function showSlotHoverPreview(slotButton) {
@@ -9578,7 +9700,8 @@ async function handleRoomSubmit(event) {
     state.showRoomForm = false;
     state.editingRoomId = "";
     pushLog(`${existingRoom ? "更新" : "新增"}饲养间 ${room.name}`);
-    await reloadInfrastructureOverview();
+    await refreshInfrastructureAfterSave();
+    showFlashNotice("保存成功", `饲养间已${existingRoom ? "更新" : "新增"}：${room.name}`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -9642,7 +9765,8 @@ async function handleRackSubmit(event) {
     state.editingRackId = "";
     state.showRackForm = false;
     pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
-    await reloadInfrastructureOverview();
+    await refreshInfrastructureAfterSave();
+    showFlashNotice("保存成功", `已新增 ${room.name} 笼架 ${rackCode(rackIndex)}。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -9700,7 +9824,8 @@ async function handleRackEditSubmit(event) {
     state.selectedRackId = rack.id;
     state.selectedSlotId = state.slots.find((slot) => slot.rackId === rack.id)?.id || "";
     pushLog(`更新${room.name} 笼架 ${rackCode(rack)}`);
-    await reloadInfrastructureOverview();
+    await refreshInfrastructureAfterSave();
+    showFlashNotice("保存成功", `已更新 ${room.name} 笼架 ${rackCode(rack)}。`, "success");
     render();
   } catch (error) {
     reportSaveError(error);
@@ -9746,9 +9871,8 @@ async function deleteRoomConfirmed(roomId) {
     state.selectedSlotIds = state.selectedSlotIds.filter((slotId) => state.slots.some((slot) => slot.id === slotId));
     if (racks.some((rack) => rack.id === state.editingRackId)) state.editingRackId = "";
     pushLog(`删除饲养间 ${room.name}`);
-    refreshInfrastructureSummaries();
     selectFirstAvailableCage();
-    updateSlotStatuses();
+    await refreshInfrastructureAfterSave();
     render();
   } catch (error) {
     reportSaveError(error);
@@ -9799,9 +9923,8 @@ async function deleteRackConfirmed(rackId) {
       Object.assign(room, updatedRoom);
     }
     pushLog(`删除${rackLabel}`);
-    refreshInfrastructureSummaries();
+    await refreshInfrastructureAfterSave();
     selectFirstAvailableCage();
-    updateSlotStatuses();
     render();
   } catch (error) {
     reportSaveError(error);
@@ -10464,6 +10587,7 @@ async function persistBillingWorkflowFromCurrent() {
     lazyDataState.reimbursementRecordsLoaded = false;
     logClientPerf("billing_workflow.create", startedAt, { source: "quantity_sheet" });
     pushLog(`发起结算流程：${sheet.pi} ${sheet.month}`);
+    await refreshBillingWorkflowsAfterSave();
     showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${sheet.month} ${sheet.pi} 的进度。`);
     return payload.statement;
   }
@@ -10495,6 +10619,7 @@ async function persistBillingWorkflowFromCurrent() {
   lazyDataState.reimbursementRecordsLoaded = false;
   logClientPerf("billing_workflow.create", startedAt, { source: "cage_map" });
   pushLog(`发起结算流程：${state.billingPi} ${state.billingMonth}`);
+  await refreshBillingWorkflowsAfterSave();
   showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${state.billingMonth} ${state.billingPi} 的进度。`);
   return payload.statement;
 }
