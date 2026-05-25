@@ -11,6 +11,8 @@
 | 列表形状 | `{ "items": [...], "page": { "limit", "offset", "total", "hasMore" } }` |
 | 单对象形状 | `{ "item": {...} }` |
 | 审计增量 | 写入接口可返回 `auditLogs`，前端按增量合并 |
+| 增量刷新 | 高频写入接口返回 `affectedSlots`、`affectedItems`、`tasks` 等增量对象，前端先本地合并，再后台定向刷新 |
+| 性能摘要 | 关键写入接口返回 `perf.total_ms`、`perf.rows_changed`，服务端同时输出低噪声 `[perf]` 日志 |
 | 权限 | `admin` 全局；`room_admin` 按授权房间过滤 |
 
 ## 主要 API 家族
@@ -106,7 +108,7 @@
 
 ```json
 {
-  "sheet": {
+  "item": {
     "rows": [
       {
         "date": "2026-05-01",
@@ -122,12 +124,51 @@
     ],
     "pageCount": 1
   },
-  "affectedSheets": [],
-  "auditLogs": []
+  "affectedItems": [],
+  "auditLogs": [],
+  "perf": {
+    "total_ms": 24.1,
+    "rows_changed": 2
+  }
 }
 ```
 
 数量统计表前端按纸质表展示固定录入槽位，每页左右两栏各 15 行。左侧第一行固定为当前统计表月份 1 号，仍可记录当日新增和减少，`animalCount` 和 `cageCount` 作为月初结余写入。其他日期输入会在保存前归一为 `YYYY-MM-DD`，支持 `2026/05/15`、`20260515`、`0515`；只输入日号时按当前统计表月份补全年月。`pageCount` 记录同一伦理同月的纸质页数；保存时按日期排序并压缩为有效 `rows`。`handler` 用于记录每日经手人，`balanceSource` 标记结余来自自动计算或人工输入；旧数据缺少这些字段时按默认值处理。
+
+### 笼位与待进驻写入
+
+```json
+{
+  "item": {},
+  "task": {},
+  "occupancy": {},
+  "affectedSlots": [],
+  "auditLogs": [],
+  "perf": {
+    "total_ms": 18.4,
+    "rows_changed": 2
+  }
+}
+```
+
+笼位占用、待进驻预留、正式入驻、改签和删除采用局部写入。接口只更新受影响的 `occupancies`、`placement_tasks` 和 `cage_slots`，返回最新对象与受影响笼位，前端据此立即更新笼位图。
+
+### 待接收确认
+
+```json
+{
+  "batch": {},
+  "receipt": {},
+  "tasks": [],
+  "auditLogs": [],
+  "perf": {
+    "total_ms": 31.2,
+    "rows_changed": 3
+  }
+}
+```
+
+确认接收只更新当前批次并插入本次接收生成的待进驻任务。旧批次编辑、删除和回退逻辑仍保留历史兼容语义。
 
 ### 流程推进
 

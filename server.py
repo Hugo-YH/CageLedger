@@ -80,15 +80,28 @@ from server_app.repositories.billing import (
     update_quantity_sheet as update_quantity_sheet_repository,
 )
 from server_app.repositories.entities import (
+    delete_intake_batch as delete_intake_batch_repository,
+    delete_placement_task as delete_placement_task_repository,
     list_audit_events_page,
     list_intake_batches_page,
     list_placement_tasks_page,
     list_distinct_principal_names,
     read_principal_identity_payloads,
     read_principal_type_by_pi as read_principal_type_by_pi_repository,
+    upsert_intake_batch as upsert_intake_batch_repository,
+    upsert_placement_task as upsert_placement_task_repository,
     upsert_principal_identity,
 )
-from server_app.repositories.infrastructure import insert_rack_record, insert_room_record, insert_slot_record, update_rack_record, update_room_record
+from server_app.repositories.infrastructure import (
+    delete_rack_record,
+    delete_room_record,
+    delete_slot_record,
+    insert_rack_record,
+    insert_room_record,
+    insert_slot_record,
+    update_rack_record,
+    update_room_record,
+)
 from server_app.repositories.iacuc import read_iacuc_index as read_iacuc_index_repository
 from server_app.repositories.iacuc import replace_experiment_applications, save_iacuc_index_file as save_iacuc_index_file_repository
 from server_app.repositories.payload import (
@@ -127,7 +140,12 @@ from server_app.repositories.users import (
 )
 from server_app.services.billing import save_billing_statement_workflow as save_billing_statement_workflow_service, update_workflow_status as update_workflow_status_service
 from server_app.services.intake import confirm_intake_receipt as confirm_intake_receipt_service
-from server_app.services.placement import move_in_placement_task as move_in_placement_task_service, reassign_placement_task_room as reassign_placement_task_room_service, reserve_placement_task as reserve_placement_task_service
+from server_app.services.placement import (
+    move_in_placement_task as move_in_placement_task_service,
+    reassign_placement_task_room as reassign_placement_task_room_service,
+    reserve_placement_task as reserve_placement_task_service,
+    sync_slot_statuses,
+)
 from server_app.services.quantity import sync_quantity_sheet_transfer_rows as sync_quantity_sheet_transfer_rows_service
 from server_app.services.reimbursement import (
     REIMBURSEMENT_STATUS_COMPLETED,
@@ -1558,6 +1576,15 @@ def write_state(state, actor, skip_permission=False):
 def write_entity_state(endpoint, method, item_id, payload, actor):
     spec = WRITABLE_ENTITY_ENDPOINTS[endpoint]
     collection = spec["collection"]
+    if collection == "occupancies":
+        return write_occupancy_entity_state(method, item_id, payload, actor, spec)
+    if collection == "intakeBatches":
+        return write_intake_batch_entity_state(method, item_id, payload, actor, spec)
+    if collection == "placementTasks":
+        return write_placement_task_entity_state(method, item_id, payload, actor, spec)
+    if collection in ("rooms", "racks", "slots"):
+        return write_infrastructure_entity_state(collection, method, item_id, payload, actor, spec)
+
     current = read_state()
     state = current.get("state") or empty_state()
 
@@ -1581,6 +1608,389 @@ def write_entity_state(endpoint, method, item_id, payload, actor):
     if collection == "intakeBatches" and method != "DELETE":
         response["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")]
     return response, status
+
+
+def write_infrastructure_entity_state(collection, method, item_id, payload, actor, spec):
+    started_at = time.perf_counter()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    status = HTTPStatus.OK
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        item = normalize_entity_payload(collection, payload, item_id, method, spec["id_prefix"])
+        if method == "POST":
+            insert_entity(state, collection, item)
+            status = HTTPStatus.CREATED
+        elif method == "PUT":
+            replace_entity(state, collection, item_id, item)
+        elif method == "DELETE":
+            item = delete_entity(state, collection, item_id)
+        else:
+            raise ValueError("Unsupported entity write method")
+
+        validate_state_write_permission(conn, actor, old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        if collection == "rooms":
+            if method == "POST":
+                insert_room_record(conn, item)
+            elif method == "PUT":
+                update_room_record(conn, item)
+            else:
+                delete_room_record(conn, item_id)
+        elif collection == "racks":
+            if method == "POST":
+                insert_rack_record(conn, item)
+            elif method == "PUT":
+                update_rack_record(conn, item)
+            else:
+                delete_rack_record(conn, item_id)
+        elif collection == "slots":
+            if method == "POST":
+                insert_slot_record(conn, item)
+            elif method == "PUT":
+                update_slot_record(conn, item)
+            else:
+                delete_slot_record(conn, item_id)
+        write_audit_events(conn, events)
+        conn.commit()
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    response = {
+        "item": item,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=1, collection=collection, method=method),
+    }
+    log_perf("infrastructure_entity.save", started_at, collection=collection, method=method)
+    return response, status
+
+
+def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
+    started_at = time.perf_counter()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    status = HTTPStatus.OK
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        item = normalize_entity_payload("intakeBatches", payload, item_id, method, spec["id_prefix"])
+        if method == "POST":
+            insert_entity(state, "intakeBatches", item)
+            status = HTTPStatus.CREATED
+        elif method == "PUT":
+            replace_entity(state, "intakeBatches", item_id, item)
+        elif method == "DELETE":
+            item = delete_entity(state, "intakeBatches", item_id)
+        else:
+            raise ValueError("Unsupported entity write method")
+
+        validate_state_write_permission(conn, actor, old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        if method == "DELETE":
+            delete_intake_batch_repository(conn, item_id)
+            conn.execute("DELETE FROM placement_tasks WHERE source_batch_id = ?", (item_id,))
+        else:
+            saved_item = next((entry for entry in state.get("intakeBatches", []) if entry.get("id") == item.get("id")), item)
+            upsert_intake_batch_repository(conn, saved_item)
+            item = saved_item
+            next_task_ids = {
+                task.get("id")
+                for task in state.get("placementTasks", [])
+                if task.get("sourceBatchId") == item.get("id")
+            }
+            old_task_ids = {
+                task.get("id")
+                for task in old_state.get("placementTasks", [])
+                if task.get("sourceBatchId") == item.get("id")
+            }
+            for task_id in sorted(old_task_ids - next_task_ids):
+                delete_placement_task_repository(conn, task_id)
+            for task in state.get("placementTasks", []):
+                if task.get("sourceBatchId") == item.get("id"):
+                    upsert_placement_task_repository(conn, task)
+        write_audit_events(conn, events)
+        conn.commit()
+
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    response = {
+        "item": item,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=1, method=method),
+    }
+    if method != "DELETE":
+        response["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")]
+        response["perf"] = write_perf_summary(started_at, rows_changed=1 + len(response["placementTasks"]), method=method)
+    log_perf("intake_batch.save", started_at, method=method, tasks=len(response.get("placementTasks", [])))
+    return response, status
+
+
+def write_placement_task_entity_state(method, item_id, payload, actor, spec):
+    started_at = time.perf_counter()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    status = HTTPStatus.OK
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        item = normalize_entity_payload("placementTasks", payload, item_id, method, spec["id_prefix"])
+        old_item = next((entry for entry in old_state.get("placementTasks", []) if entry.get("id") == item_id), None)
+        removed_occupancy_id = ""
+        if method == "POST":
+            insert_entity(state, "placementTasks", item)
+            status = HTTPStatus.CREATED
+        elif method == "PUT":
+            replace_entity(state, "placementTasks", item_id, item)
+        elif method == "DELETE":
+            item = delete_entity(state, "placementTasks", item_id)
+            removed_occupancy_id = clean_text((old_item or item).get("reservedOccupancyId", ""))
+        else:
+            raise ValueError("Unsupported entity write method")
+
+        affected_slot_ids = {
+            clean_text(occ.get("slotId", ""))
+            for occ in old_state.get("occupancies", [])
+            if removed_occupancy_id and occ.get("id") == removed_occupancy_id
+        }
+        sync_slot_statuses(state)
+        validate_state_write_permission(conn, actor, old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        if method == "DELETE":
+            delete_placement_task_repository(conn, item_id)
+            if removed_occupancy_id:
+                conn.execute("DELETE FROM occupancies WHERE id = ?", (removed_occupancy_id,))
+        else:
+            saved_item = next((entry for entry in state.get("placementTasks", []) if entry.get("id") == item.get("id")), item)
+            upsert_placement_task_repository(conn, saved_item)
+            item = saved_item
+        affected_slots = [slot for slot in state.get("slots", []) if slot.get("id") in affected_slot_ids]
+        for slot in affected_slots:
+            update_slot_record(conn, slot)
+        write_audit_events(conn, events)
+        conn.commit()
+
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    response = {
+        "item": item,
+        "affectedSlots": affected_slots,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=1 + len(affected_slots), method=method),
+    }
+    log_perf("placement_task.save", started_at, method=method, slot_count=len(affected_slots))
+    return response, status
+
+
+def persist_intake_receipt_confirmation(batch_id, body, actor):
+    started_at = time.perf_counter()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        batch, receipt, tasks = confirm_intake_receipt(state, batch_id, body, actor)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        upsert_intake_batch_repository(conn, batch)
+        for task in tasks:
+            upsert_placement_task_repository(conn, task)
+        write_audit_events(conn, events)
+        conn.commit()
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    log_perf("intake_batch.confirm", started_at, tasks=len(tasks))
+    return {
+        "batch": batch,
+        "receipt": receipt,
+        "tasks": tasks,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=1 + len(tasks), tasks=len(tasks)),
+    }
+
+
+def persist_placement_action(task_id, actor, mutator):
+    started_at = time.perf_counter()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        result = mutator(state)
+        task = result[0] if isinstance(result, tuple) else result
+        occupancy = result[1] if isinstance(result, tuple) and len(result) > 1 else None
+        affected_slot_ids = changed_placement_slot_ids(old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        upsert_placement_task_repository(conn, task)
+        if occupancy:
+            applications_by_iacuc = read_applications_by_iacuc(conn)
+            occupancy = occupancy_with_snapshots(occupancy, state, applications_by_iacuc)
+            upsert_occupancy_record(conn, occupancy)
+        affected_slots = [slot for slot in state.get("slots", []) if slot.get("id") in affected_slot_ids]
+        for slot in affected_slots:
+            update_slot_record(conn, slot)
+        write_audit_events(conn, events)
+        conn.commit()
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    log_perf("placement_task.action", started_at, task_id=task_id, slot_count=len(affected_slots))
+    payload = {
+        "task": task,
+        "affectedSlots": affected_slots,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=1 + (1 if occupancy else 0) + len(affected_slots), slot_count=len(affected_slots)),
+    }
+    if occupancy:
+        payload["occupancy"] = occupancy
+    return payload
+
+
+def changed_placement_slot_ids(old_state, state):
+    old_occupancies = {item.get("id"): item for item in old_state.get("occupancies", [])}
+    new_occupancies = {item.get("id"): item for item in state.get("occupancies", [])}
+    slot_ids = set()
+    for occupancy_id in changed_keys(old_occupancies, new_occupancies):
+        old_item = old_occupancies.get(occupancy_id) or {}
+        new_item = new_occupancies.get(occupancy_id) or {}
+        for item in (old_item, new_item):
+            slot_id = clean_text(item.get("slotId", ""))
+            if slot_id:
+                slot_ids.add(slot_id)
+    return slot_ids
+
+
+def write_occupancy_entity_state(method, item_id, payload, actor, spec):
+    started_at = time.perf_counter()
+    updated_at = datetime.now(timezone.utc).isoformat()
+    status = HTTPStatus.OK
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        old_item = next((item for item in old_state.get("occupancies", []) if item.get("id") == item_id), None)
+        item = normalize_entity_payload("occupancies", payload, item_id, method, spec["id_prefix"])
+        if method == "POST":
+            insert_entity(state, "occupancies", item)
+            status = HTTPStatus.CREATED
+        elif method == "PUT":
+            replace_entity(state, "occupancies", item_id, item)
+        elif method == "DELETE":
+            item = delete_entity(state, "occupancies", item_id)
+        else:
+            raise ValueError("Unsupported entity write method")
+
+        affected_slot_ids = {clean_text((old_item or {}).get("slotId", "")), clean_text((item or {}).get("slotId", ""))}
+        affected_slot_ids.discard("")
+        sync_slot_statuses(state)
+        validate_state_write_permission(conn, actor, old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        applications_by_iacuc = read_applications_by_iacuc(conn)
+        saved_item = None
+        if method == "DELETE":
+            conn.execute("DELETE FROM occupancies WHERE id = ?", (item_id,))
+        else:
+            saved_item = next((entry for entry in state.get("occupancies", []) if entry.get("id") == item.get("id")), item)
+            saved_item = occupancy_with_snapshots(saved_item, state, applications_by_iacuc)
+            upsert_occupancy_record(conn, saved_item)
+
+        affected_slots = [slot for slot in state.get("slots", []) if slot.get("id") in affected_slot_ids]
+        for slot in affected_slots:
+            update_slot_record(conn, slot)
+        write_audit_events(conn, events)
+        conn.commit()
+
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    response_item = item if method == "DELETE" else saved_item
+    response = {
+        "item": response_item,
+        "affectedSlots": affected_slots,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=1 + len(affected_slots), method=method),
+    }
+    log_perf("occupancy.save", started_at, method=method, slot_count=len(affected_slots))
+    return response, status
+
+
+def upsert_occupancy_record(conn, occupancy):
+    structured = occupancy_structured_values(occupancy)
+    conn.execute(
+        """
+        INSERT INTO occupancies (
+            id, slot_id, room_id, rack_id, cage_code, status, iacuc, project, pi, owner, funding,
+            species, billing_item, customer_type, animal_count, room_name, rack_name, slot_code,
+            start_date, end_date, end_reason, notes, updated_at, payload
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            slot_id = excluded.slot_id,
+            room_id = excluded.room_id,
+            rack_id = excluded.rack_id,
+            cage_code = excluded.cage_code,
+            status = excluded.status,
+            iacuc = excluded.iacuc,
+            project = excluded.project,
+            pi = excluded.pi,
+            owner = excluded.owner,
+            funding = excluded.funding,
+            species = excluded.species,
+            billing_item = excluded.billing_item,
+            customer_type = excluded.customer_type,
+            animal_count = excluded.animal_count,
+            room_name = excluded.room_name,
+            rack_name = excluded.rack_name,
+            slot_code = excluded.slot_code,
+            start_date = excluded.start_date,
+            end_date = excluded.end_date,
+            end_reason = excluded.end_reason,
+            notes = excluded.notes,
+            updated_at = excluded.updated_at,
+            payload = excluded.payload
+        """,
+        (
+            occupancy.get("id"),
+            occupancy.get("slotId"),
+            structured["room_id"],
+            structured["rack_id"],
+            occupancy.get("cageCode", ""),
+            occupancy.get("status", ""),
+            occupancy.get("iacuc", ""),
+            occupancy.get("project", ""),
+            occupancy.get("pi", ""),
+            occupancy.get("owner", ""),
+            occupancy.get("funding", ""),
+            structured["species"],
+            structured["billing_item"],
+            structured["customer_type"],
+            structured["animal_count"],
+            occupancy.get("roomName", ""),
+            occupancy.get("rackName", ""),
+            occupancy.get("slotCode", ""),
+            occupancy.get("startDate", ""),
+            occupancy.get("endDate", ""),
+            occupancy.get("endReason", ""),
+            occupancy.get("notes", ""),
+            occupancy.get("updatedAt", ""),
+            dump_json(occupancy),
+        ),
+    )
+
+
+def update_slot_record(conn, slot):
+    conn.execute(
+        """
+        UPDATE cage_slots
+        SET rack_id = ?, row_no = ?, col_no = ?, code = ?, status = ?, payload = ?
+        WHERE id = ?
+        """,
+        (
+            slot.get("rackId"),
+            as_int(slot.get("row")),
+            as_int(slot.get("col")),
+            slot.get("code", ""),
+            slot.get("status", "empty"),
+            dump_json(slot),
+            slot.get("id"),
+        ),
+    )
 
 
 def write_infrastructure_state(payload, actor):
@@ -2635,6 +3045,14 @@ def merge_audit_logs(client_logs, events):
     return merged[:500]
 
 
+def write_perf_summary(started_at, rows_changed=0, **fields):
+    return {
+        "total_ms": round((time.perf_counter() - started_at) * 1000, 1),
+        "rows_changed": rows_changed,
+        **{key: value for key, value in fields.items() if value not in (None, "")},
+    }
+
+
 def slot_label_map(state):
     rack_by_id = {rack.get("id"): rack for rack in state.get("racks", [])}
     room_by_id = {room.get("id"): room for room in state.get("rooms", [])}
@@ -3122,7 +3540,8 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         affected=len(affected_sheets),
         rows=len(sheet.get("rows", [])),
     )
-    return sheet, affected_sheets, merge_audit_logs([], events), status
+    perf = write_perf_summary(started_at, rows_changed=1 + len(affected_sheets), affected=len(affected_sheets), rows=len(sheet.get("rows", [])))
+    return sheet, affected_sheets, merge_audit_logs([], events), status, perf
 
 
 def delete_quantity_sheet(conn, actor, sheet_id):
@@ -6117,11 +6536,11 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         try:
             body = self.read_json_body()
             with connect_db() as conn:
-                sheet, affected_sheets, audit_logs, status = save_quantity_sheet(conn, body, user, sheet_id)
+                sheet, affected_sheets, audit_logs, status, perf = save_quantity_sheet(conn, body, user, sheet_id)
                 conn.commit()
             invalidate_data_cache("principal_identities")
             invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
-            self.send_json({"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs}, status)
+            self.send_json({"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs, "perf": perf}, status)
         except sqlite3.IntegrityError:
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
         except PermissionError as exc:
@@ -6184,19 +6603,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         try:
             body = self.read_json_body()
-            current = read_state()
-            state = current.get("state") or empty_state()
-            batch, receipt, tasks = confirm_intake_receipt(state, batch_id, body, user)
-            result = write_state(state, user, skip_permission=True)
-            self.send_json(
-                {
-                    "batch": batch,
-                    "receipt": receipt,
-                    "tasks": tasks,
-                    "auditLogs": result["auditLogs"],
-                },
-                HTTPStatus.CREATED,
-            )
+            self.send_json(persist_intake_receipt_confirmation(batch_id, body, user), HTTPStatus.CREATED)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -6208,11 +6615,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         try:
             body = self.read_json_body()
-            current = read_state()
-            state = current.get("state") or empty_state()
-            task, occupancy = reserve_placement_task(state, task_id, clean_text(body.get("slotId")), user)
-            result = write_state(state, user)
-            self.send_json({"task": task, "occupancy": occupancy, "auditLogs": result["auditLogs"]})
+            self.send_json(
+                persist_placement_action(
+                    task_id,
+                    user,
+                    lambda state: reserve_placement_task(state, task_id, clean_text(body.get("slotId")), user),
+                )
+            )
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:
@@ -6226,11 +6635,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         try:
             body = self.read_json_body()
-            current = read_state()
-            state = current.get("state") or empty_state()
-            task, occupancy = move_in_placement_task(state, task_id, body.get("actualMoveInDate"), user)
-            result = write_state(state, user)
-            self.send_json({"task": task, "occupancy": occupancy, "auditLogs": result["auditLogs"]})
+            self.send_json(
+                persist_placement_action(
+                    task_id,
+                    user,
+                    lambda state: move_in_placement_task(state, task_id, body.get("actualMoveInDate"), user),
+                )
+            )
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:
@@ -6244,11 +6655,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             return
         try:
             body = self.read_json_body()
-            current = read_state()
-            state = current.get("state") or empty_state()
-            task = reassign_placement_task_room(state, task_id, clean_text(body.get("roomId")), user)
-            result = write_state(state, user)
-            self.send_json({"task": task, "auditLogs": result["auditLogs"]})
+            self.send_json(
+                persist_placement_action(
+                    task_id,
+                    user,
+                    lambda state: reassign_placement_task_room(state, task_id, clean_text(body.get("roomId")), user),
+                )
+            )
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:

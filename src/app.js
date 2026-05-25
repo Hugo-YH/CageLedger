@@ -34,6 +34,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.8",
+    title: "保存链路性能系统性优化",
+    items: [
+      "将笼位占用、待接收批次、待进驻任务和房间笼架等高频写入迁移为 SQLite 局部写入，减少保存时整库重写",
+      "保存接口返回最新对象、受影响笼位和性能摘要，前端先增量合并并立即提示成功，再后台定向刷新",
+      "修复待接收批次远端分页筛选，未打印筛选正确包含 draft/pending_print，全部筛选取消状态过滤",
+    ],
+  },
+  {
     version: "0.5.7a",
     title: "编辑保存反馈与笼位弹窗体验优化",
     items: [
@@ -666,7 +675,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.7a",
+  version: "0.5.8",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -7975,10 +7984,10 @@ async function handleSlotSubmit(event) {
 
   if (status === "empty") {
     try {
-      await closeOccupancy(slotId, form.get("endDate") || today, "cleared", { renderAfterSave: false });
-      await refreshCageMapAfterOccupancySave();
+      const saved = await closeOccupancy(slotId, form.get("endDate") || today, "cleared", { renderAfterSave: false });
       showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(slotId)} 已设为空。`, "success");
       render();
+      if (saved) refreshCageMapAfterOccupancySaveInBackground();
     } catch (error) {
       reportSaveError(error);
     }
@@ -8018,12 +8027,11 @@ async function handleSlotSubmit(event) {
     const response = current
       ? await updateEntity("occupancies", current.id, payload)
       : await createEntity("occupancies", payload);
-    upsertById(state.occupancies, response.item || payload);
+    applyOccupancyWriteResponse(response, payload);
     pushLog(`${current ? "更新" : "新增"}笼位 ${slotId} ${statusLabel(status)}`);
-    updateSlotStatuses();
-    await refreshCageMapAfterOccupancySave();
     showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(slotId)} 已更新为${statusLabel(status)}。`, "success");
     render();
+    refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
   }
@@ -8076,14 +8084,13 @@ async function handleBatchSlotSubmit(event) {
       const response = current
         ? await updateEntity("occupancies", current.id, next)
         : await createEntity("occupancies", next);
-      savedItems.push(response.item || next);
+      savedItems.push(applyOccupancyWriteResponse(response, next));
     }
-    savedItems.forEach((item) => upsertById(state.occupancies, item));
     pushLog(`批量更新 ${state.selectedSlotIds.length} 个笼位为 ${statusLabel(payload.status)}`);
     updateSlotStatuses();
-    await refreshCageMapAfterOccupancySave();
     showFlashNotice("保存成功", `已更新 ${savedItems.length} 个笼位为${statusLabel(payload.status)}。`, "success");
     render();
+    refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
   }
@@ -8102,6 +8109,37 @@ async function refreshCageMapAfterOccupancySave() {
     console.error(error);
     showFlashNotice("刷新失败", "笼位已保存，但刷新当前笼位图失败，请手动刷新页面确认。", "warning");
   }
+}
+
+function applyOccupancyWriteResponse(payload, fallbackItem = null) {
+  mergeServerAuditLogs(payload);
+  const item = payload?.item || fallbackItem;
+  if (item?.id) upsertById(state.occupancies, item);
+  const affectedSlots = Array.isArray(payload?.affectedSlots) ? payload.affectedSlots : [];
+  affectedSlots.forEach((slot) => {
+    if (slot?.id) upsertById(state.slots, slot);
+  });
+  updateSlotStatuses();
+  return item;
+}
+
+function applyPlacementWriteResponse(payload) {
+  mergeServerAuditLogs(payload);
+  if (payload?.task) upsertById(state.placementTasks, normalizePlacementTask(payload.task));
+  if (payload?.occupancy) upsertById(state.occupancies, payload.occupancy);
+  const affectedSlots = Array.isArray(payload?.affectedSlots) ? payload.affectedSlots : [];
+  affectedSlots.forEach((slot) => {
+    if (slot?.id) upsertById(state.slots, slot);
+  });
+  updateSlotStatuses();
+}
+
+function refreshCageMapAfterOccupancySaveInBackground() {
+  refreshCageMapAfterOccupancySave()
+    .then(() => render())
+    .catch((error) => {
+      console.error(error);
+    });
 }
 
 function autofillIacucFields(event) {
@@ -8173,9 +8211,9 @@ async function clearSelectedSlot() {
   try {
     await closeOccupancy(state.selectedSlotId, today, "cleared", { renderAfterSave: false });
     state.samplingMode = "";
-    await refreshCageMapAfterOccupancySave();
     showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(state.selectedSlotId)} 已设为空。`, "success");
     render();
+    refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
   }
@@ -8197,9 +8235,9 @@ async function sampleSelectedSlot() {
   try {
     await closeOccupancy(state.selectedSlotId, sampledDate, "sampled", { renderAfterSave: false });
     state.samplingMode = "";
-    await refreshCageMapAfterOccupancySave();
     showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(state.selectedSlotId)} 已标记为已取材。`, "success");
     render();
+    refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
   }
@@ -8236,9 +8274,9 @@ async function sampleBatchSlotsConfirmed(sampledDate) {
     pushLog(`批量标记已取材 ${activeItems.length} 个笼位，最后计费日期 ${sampledDate}`);
     state.samplingMode = "";
     updateSlotStatuses();
-    await refreshCageMapAfterOccupancySave();
     showFlashNotice("保存成功", `已将 ${activeItems.length} 个笼位标记为已取材。`, "success");
     render();
+    refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
   }
@@ -8265,9 +8303,9 @@ async function clearBatchSlotsConfirmed() {
     pushLog(`批量设空 ${state.selectedSlotIds.length} 个笼位`);
     state.samplingMode = "";
     updateSlotStatuses();
-    await refreshCageMapAfterOccupancySave();
     showFlashNotice("保存成功", `已将 ${savedItems.filter(Boolean).length} 个笼位设为空。`, "success");
     render();
+    refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
   }
@@ -8290,8 +8328,7 @@ async function closeOccupancy(slotId, endDate, reason = "cleared", options = {})
   };
 
   const response = await updateEntity("occupancies", current.id, next);
-  const saved = response.item || next;
-  upsertById(state.occupancies, saved);
+  const saved = applyOccupancyWriteResponse(response, next);
   pushLog(`${reason === "sampled" ? "已取材" : "设为空"}：结束笼位 ${slotId} 占用，最后计费日期 ${endDate}`);
   updateSlotStatuses();
   if (renderAfterSave) render();
@@ -8349,17 +8386,14 @@ async function reservePlacementTask(taskId, slotId, options = {}) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "预留笼位失败");
-    upsertById(state.placementTasks, normalizePlacementTask(payload.task));
-    upsertById(state.occupancies, payload.occupancy);
-    mergeServerAuditLogs(payload);
+    applyPlacementWriteResponse(payload);
     if (resetSelection) state.selectedPlacementTaskId = "";
     state.selectedSlotId = slotId;
-    updateSlotStatuses();
     if (renderAfterSave) {
-      await refreshCageMapAfterOccupancySave();
       await refreshIntakeAndPlacementAfterSave();
       showFlashNotice("预留成功", `已预留笼位 ${cageCodeForSlot(slotId)}。`, "success");
       render();
+      refreshCageMapAfterOccupancySaveInBackground();
     }
   } catch (error) {
     reportSaveError(error);
@@ -8429,15 +8463,12 @@ async function moveInPlacementTask(taskId, options = {}) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "正式入驻失败");
-    upsertById(state.placementTasks, normalizePlacementTask(payload.task));
-    upsertById(state.occupancies, payload.occupancy);
-    mergeServerAuditLogs(payload);
-    updateSlotStatuses();
+    applyPlacementWriteResponse(payload);
     if (renderAfterSave) {
-      await refreshCageMapAfterOccupancySave();
       await refreshIntakeAndPlacementAfterSave();
       showFlashNotice("入驻成功", `笼位 ${cageCodeForSlot(payload.occupancy?.slotId || "")} 已正式入驻。`, "success");
       render();
+      refreshCageMapAfterOccupancySaveInBackground();
     }
   } catch (error) {
     reportSaveError(error);
@@ -8460,8 +8491,7 @@ async function reassignPlacementTask(taskId) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "改签房间失败");
-    upsertById(state.placementTasks, normalizePlacementTask(payload.task));
-    mergeServerAuditLogs(payload);
+    applyPlacementWriteResponse(payload);
     await refreshIntakeAndPlacementAfterSave();
     showFlashNotice("保存成功", "待进驻动物目标饲养间已更新。", "success");
     render();
@@ -8491,8 +8521,7 @@ async function reassignPlacementGroup(receiptId, roomId = "") {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "改签房间失败");
-      upsertById(state.placementTasks, normalizePlacementTask(payload.task));
-      mergeServerAuditLogs(payload);
+      applyPlacementWriteResponse(payload);
     }
     await refreshIntakeAndPlacementAfterSave();
     showFlashNotice("保存成功", `已更新 ${tasks.length} 条待进驻任务的目标饲养间。`, "success");
@@ -8593,7 +8622,8 @@ async function deletePlacementTaskGroupConfirmed(groupKey) {
   }
 
   for (const task of tasks) {
-    await deleteEntityRequest("placementTasks", task.id);
+    const response = await deleteEntityRequest("placementTasks", task.id);
+    applyPlacementWriteResponse(response);
     state.placementTasks = state.placementTasks.filter((item) => item.id !== task.id);
     if (task.reservedOccupancyId) {
       state.occupancies = state.occupancies.filter((item) => item.id !== task.reservedOccupancyId);
@@ -8651,7 +8681,6 @@ async function handleQuantitySheetSubmit(event) {
   try {
     const sheet = await saveQuantitySheetDraft();
     pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
-    await refreshQuantitySheetsAfterSave(sheet.id);
     showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
     render();
   } catch (error) {
@@ -8829,9 +8858,11 @@ async function saveQuantitySheetDraft() {
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
   logClientPerf("quantity_sheet.save", startedAt, { affected: affectedSheets.length, rows: savedSheet.rows?.length || 0 });
-  Promise.all([savedSheet, ...affectedSheets].map((item) => refreshQuantitySheet(item.id))).catch((refreshError) => {
-    console.error(refreshError);
-  });
+  Promise.all([savedSheet, ...affectedSheets].map((item) => refreshQuantitySheet(item.id)))
+    .then(() => render())
+    .catch((refreshError) => {
+      console.error(refreshError);
+    });
   return state.quantitySheetDraft;
 }
 

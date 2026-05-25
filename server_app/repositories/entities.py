@@ -1,5 +1,6 @@
 import json
 
+from .payload import dump_json
 from .payload import paginated_payloads
 
 
@@ -33,14 +34,20 @@ def list_audit_events_page(conn, filters, filtered_where):
 
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
+    status = str(filters.get("status", "") or "").strip()
+    normalized_filters = dict(filters)
+    if status in ("all", "unprinted"):
+        normalized_filters.pop("status", None)
     where, params = filtered_where(
         [
             ("status", "status = ?"),
             ("iacuc", "iacuc = ?"),
             ("roomName", "room_name = ?"),
         ],
-        filters,
+        normalized_filters,
     )
+    if status == "unprinted":
+        where = " AND ".join([part for part in (where, "status IN ('draft', 'pending_print')") if part])
     if filters.get("month"):
         where = " AND ".join([part for part in (where, "intake_date LIKE ?") if part])
         params = (*params, f"{filters['month']}%")
@@ -79,3 +86,74 @@ def upsert_principal_identity(conn, pi_name, principal_type, updated_at, payload
         """,
         (pi_name, principal_type, updated_at, payload_json),
     )
+
+
+def upsert_intake_batch(conn, batch):
+    conn.execute(
+        """
+        INSERT INTO intake_batches (id, batch_no, iacuc, supplier, room_name, intake_date, status, updated_at, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            batch_no = excluded.batch_no,
+            iacuc = excluded.iacuc,
+            supplier = excluded.supplier,
+            room_name = excluded.room_name,
+            intake_date = excluded.intake_date,
+            status = excluded.status,
+            updated_at = excluded.updated_at,
+            payload = excluded.payload
+        """,
+        (
+            batch.get("id"),
+            batch.get("batchNo", ""),
+            batch.get("iacuc", ""),
+            batch.get("supplier", ""),
+            batch.get("roomName", ""),
+            batch.get("intakeDate", ""),
+            batch.get("status", "draft"),
+            batch.get("updatedAt", ""),
+            dump_json(batch),
+        ),
+    )
+
+
+def delete_intake_batch(conn, batch_id):
+    conn.execute("DELETE FROM intake_batches WHERE id = ?", (batch_id,))
+
+
+def upsert_placement_task(conn, task):
+    conn.execute(
+        """
+        INSERT INTO placement_tasks (
+            id, source_batch_id, source_receipt_id, target_room_id, planned_move_in_date,
+            status, reserved_occupancy_id, actual_move_in_date, updated_at, payload
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            source_batch_id = excluded.source_batch_id,
+            source_receipt_id = excluded.source_receipt_id,
+            target_room_id = excluded.target_room_id,
+            planned_move_in_date = excluded.planned_move_in_date,
+            status = excluded.status,
+            reserved_occupancy_id = excluded.reserved_occupancy_id,
+            actual_move_in_date = excluded.actual_move_in_date,
+            updated_at = excluded.updated_at,
+            payload = excluded.payload
+        """,
+        (
+            task.get("id"),
+            task.get("sourceBatchId", ""),
+            task.get("sourceReceiptId", ""),
+            task.get("targetRoomId", ""),
+            task.get("plannedMoveInDate", ""),
+            task.get("status", "pending"),
+            task.get("reservedOccupancyId", ""),
+            task.get("actualMoveInDate", ""),
+            task.get("updatedAt", ""),
+            dump_json(task),
+        ),
+    )
+
+
+def delete_placement_task(conn, task_id):
+    conn.execute("DELETE FROM placement_tasks WHERE id = ?", (task_id,))

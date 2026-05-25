@@ -38,6 +38,10 @@ def update_room_record(conn, room):
     )
 
 
+def delete_room_record(conn, room_id):
+    conn.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
+
+
 def insert_rack_record(conn, rack):
     conn.execute(
         """
@@ -75,6 +79,10 @@ def update_rack_record(conn, rack):
     )
 
 
+def delete_rack_record(conn, rack_id):
+    conn.execute("DELETE FROM racks WHERE id = ?", (rack_id,))
+
+
 def insert_slot_record(conn, slot):
     conn.execute(
         """
@@ -91,6 +99,10 @@ def insert_slot_record(conn, slot):
             dump_json(slot),
         ),
     )
+
+
+def delete_slot_record(conn, slot_id):
+    conn.execute("DELETE FROM cage_slots WHERE id = ?", (slot_id,))
 
 
 def _as_int(value):
