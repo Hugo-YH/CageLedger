@@ -34,6 +34,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.8a",
+    title: "待接收批次勾选与房间变更保存修正",
+    items: [
+      "待接收批次列表表头新增当前页全选勾选框，并补齐半选状态，便于批量打印和批量标记接收",
+      "修复编辑笼卡信息时更改房间后无法保存的问题，待接收批次更新链恢复正常落库",
+      "同批次下尚未入驻的待进驻任务会同步目标房间，已预留和已入驻任务保持明确保护规则",
+    ],
+  },
+  {
     version: "0.5.8",
     title: "保存链路性能系统性优化",
     items: [
@@ -675,7 +684,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.8",
+  version: "0.5.8a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -4813,9 +4822,9 @@ function renderIntakeBatchView() {
             </div>
             `,
           })}
-          <div class="table-wrap">
+        <div class="table-wrap">
             <table class="workflow-table intake-batch-table">
-              <thead><tr><th></th><th>状态</th><th>批次号</th><th>购买单位</th><th>项目负责人</th><th>实验负责人</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
+              <thead><tr><th><input type="checkbox" data-select-all-intake-batches ${visibleBatches.length && selectedCount === visibleBatches.length ? "checked" : ""} aria-label="全选当前页待接收批次" /></th><th>状态</th><th>批次号</th><th>购买单位</th><th>项目负责人</th><th>实验负责人</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
               <tbody>
                 ${
                   visibleBatches.length
@@ -7049,6 +7058,16 @@ function bindEvents() {
       render();
     });
   });
+  document.querySelector("[data-select-all-intake-batches]")?.addEventListener("change", (event) => {
+    toggleSelectedIntakeBatchPage(event.target.checked);
+    render();
+  });
+  const selectAllIntakeBatches = document.querySelector("[data-select-all-intake-batches]");
+  if (selectAllIntakeBatches) {
+    const visibleBatchIds = pagedIntakeBatches().map((batch) => batch.id);
+    const selectedVisibleCount = state.selectedIntakeBatchIds.filter((id) => visibleBatchIds.includes(id)).length;
+    selectAllIntakeBatches.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleBatchIds.length;
+  }
   document.querySelectorAll("[data-open-intake-batch]").forEach((row) => {
     row.addEventListener("click", () => {
       openIntakeBatchEditor(row.dataset.openIntakeBatch);
@@ -9003,6 +9022,16 @@ function toggleSelectedIntakeBatch(batchId, checked) {
   const next = new Set(state.selectedIntakeBatchIds);
   if (checked) next.add(batchId);
   else next.delete(batchId);
+  state.selectedIntakeBatchIds = [...next];
+  saveState();
+}
+
+function toggleSelectedIntakeBatchPage(checked) {
+  const next = new Set(state.selectedIntakeBatchIds);
+  for (const batch of pagedIntakeBatches()) {
+    if (checked) next.add(batch.id);
+    else next.delete(batch.id);
+  }
   state.selectedIntakeBatchIds = [...next];
   saveState();
 }
