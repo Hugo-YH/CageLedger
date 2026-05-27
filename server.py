@@ -5952,7 +5952,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             self.send_json({"item": item})
             return
-        if path.startswith("/scan/cage-card/"):
+        if path.startswith("/scan/cage-card/") or path.startswith("/c/"):
             self.send_spa_index()
             return
         super().do_GET()

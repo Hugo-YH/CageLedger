@@ -35,6 +35,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.8b",
+    title: "检疫卡二维码与启动修复",
+    items: [
+      "修复待接收批次草稿初始化异常导致页面空白的问题，前端模块加载恢复正常",
+      "检疫卡二维码改为短链接并按内容自动选择二维码版本，降低码图复杂度",
+      "调整检疫卡打印模板标题、笼号和二维码布局，二维码完整填充格子并保持可扫码留白",
+    ],
+  },
+  {
     version: "0.5.8a",
     title: "待接收批次勾选与房间变更保存修正",
     items: [
@@ -685,7 +694,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.8a",
+  version: "0.5.8b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -872,7 +881,6 @@ function makeIncomingBatchDraft() {
     receipts: [],
     confirmedCardCount: 0,
     remainingCardCount: 0,
-    cards: Array.isArray(item.cards) ? item.cards.map((card) => ({ ...card })) : [],
     updatedAt: "",
   });
 }
@@ -9350,7 +9358,7 @@ function intakeCardsPrintHtml(items) {
             position: absolute;
             left: 0;
             top: 50%;
-            width: 76mm;
+            width: 100mm;
             transform: translateY(-50%);
             font-size: 4.35mm;
             font-weight: 800;
@@ -9359,7 +9367,7 @@ function intakeCardsPrintHtml(items) {
           }
           .card .header-line-cage {
             position: absolute;
-            left: 65mm;
+            right: 20mm;
             bottom: 0.58mm;
             font-size: 2.35mm;
             font-weight: 800;
@@ -9406,12 +9414,12 @@ function intakeCardsPrintHtml(items) {
             white-space: nowrap;
           }
           .card .qr-cell {
-            padding: 0.55mm;
+            padding: 0.15mm;
           }
           .card .qr-cell svg {
             display: block;
-            width: 17.8mm;
-            height: 17.8mm;
+            width: 16.5mm;
+            height: 16.5mm;
             margin: 0 auto;
           }
           @media print {
@@ -9454,11 +9462,11 @@ function renderIntakeCardPrint(batch, card) {
           <col style="width:16mm" />
           <col style="width:11mm" />
           <col style="width:23mm" />
-          <col style="width:20mm" />
-          <col style="width:10mm" />
+          <col style="width:18mm" />
           <col style="width:8mm" />
-          <col style="width:8mm" />
-          <col style="width:4mm" />
+          <col style="width:7mm" />
+          <col style="width:8.5mm" />
+          <col style="width:8.5mm" />
         </colgroup>
         <tr style="height:4.9mm">
           <td class="header-line" colspan="8">
@@ -9521,7 +9529,7 @@ function renderIntakeCardPrint(batch, card) {
 function cageCardScanUrl(qrId) {
   const id = String(qrId || "").trim();
   if (!id) return "";
-  return new URL(`/scan/cage-card/${encodeURIComponent(id)}`, window.location.href).href;
+  return new URL(`/c/${encodeURIComponent(id)}`, window.location.href).href;
 }
 
 function renderBatchNoWithHighlightedIacuc(batchNo, iacuc) {
@@ -11886,6 +11894,14 @@ function rmbUppercase(value) {
   return `人民币${integerText || "零"}元${fractionText}`;
 }
 
+const QR_VERSION_SPECS = [
+  { version: 1, dataCodewords: 19, eccCodewords: 7, alignmentCenters: [] },
+  { version: 2, dataCodewords: 34, eccCodewords: 10, alignmentCenters: [6, 18] },
+  { version: 3, dataCodewords: 55, eccCodewords: 15, alignmentCenters: [6, 22] },
+  { version: 4, dataCodewords: 80, eccCodewords: 20, alignmentCenters: [6, 26] },
+  { version: 5, dataCodewords: 108, eccCodewords: 26, alignmentCenters: [6, 30] },
+];
+
 function qrCodeSvg(text, ariaLabel = "二维码") {
   const modules = qrCodeMatrix(text);
   const size = modules.length;
@@ -11897,14 +11913,15 @@ function qrCodeSvg(text, ariaLabel = "二维码") {
       if (modules[row][col]) cells.push(`<rect x="${col + quiet}" y="${row + quiet}" width="1" height="1"/>`);
     }
   }
-  return `<svg viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="${escapeAttr(ariaLabel)}" xmlns="http://www.w3.org/2000/svg"><rect width="${viewBoxSize}" height="${viewBoxSize}" fill="#fff"/><g fill="#000">${cells.join("")}</g></svg>`;
+  return `<svg viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="${escapeAttr(ariaLabel)}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect width="${viewBoxSize}" height="${viewBoxSize}" fill="#fff"/><g fill="#000">${cells.join("")}</g></svg>`;
 }
 
 function qrCodeMatrix(text) {
-  const version = 5;
+  const bytes = new TextEncoder().encode(text);
+  const spec = QR_VERSION_SPECS.find((item) => qrEncodedByteLength(bytes.length) <= item.dataCodewords) || QR_VERSION_SPECS.at(-1);
+  if (qrEncodedByteLength(bytes.length) > spec.dataCodewords) throw new Error("二维码内容过长");
+  const { version, dataCodewords, eccCodewords, alignmentCenters } = spec;
   const size = version * 4 + 17;
-  const dataCodewords = 108;
-  const eccCodewords = 26;
   const matrix = Array.from({ length: size }, () => Array(size).fill(false));
   const reserved = Array.from({ length: size }, () => Array(size).fill(false));
   const setFunction = (row, col, dark) => {
@@ -11942,17 +11959,20 @@ function qrCodeMatrix(text) {
       }
     }
   };
-  [6, 30].forEach((row) => [6, 30].forEach((col) => drawAlignment(row, col)));
+  alignmentCenters.forEach((row) => alignmentCenters.forEach((col) => drawAlignment(row, col)));
   setFunction(size - 8, 8, true);
 
   reserveFormatAreas(reserved, size);
-  const bytes = new TextEncoder().encode(text);
   const data = qrEncodeData(bytes, dataCodewords);
   const codewords = [...data, ...qrReedSolomonRemainder(data, eccCodewords)];
   placeQrData(matrix, reserved, codewords);
   applyQrMask(matrix, reserved, 0);
   drawQrFormatBits(matrix, reserved, 0);
   return matrix;
+}
+
+function qrEncodedByteLength(byteLength) {
+  return Math.ceil((4 + 8 + byteLength * 8) / 8);
 }
 
 function reserveFormatAreas(reserved, size) {
@@ -12838,7 +12858,7 @@ async function applyStatementDeepLink() {
 }
 
 function cageCardScanQrIdFromLocation() {
-  const match = window.location.pathname.match(/^\/scan\/cage-card\/([^/]+)$/);
+  const match = window.location.pathname.match(/^\/(?:c|scan\/cage-card)\/([^/]+)$/);
   return match ? decodeURIComponent(match[1]) : "";
 }
 
