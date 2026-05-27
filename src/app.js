@@ -13,6 +13,7 @@ import {
   API_LOGIN_URL,
   API_LOGOUT_URL,
   API_PRINCIPAL_IDENTITIES_URL,
+  API_PUBLIC_CAGE_CARD_URL,
   API_QUANTITY_SHEETS_URL,
   API_SYSTEM_INFO_URL,
   API_SYSTEM_UPDATE_URL,
@@ -871,7 +872,7 @@ function makeIncomingBatchDraft() {
     receipts: [],
     confirmedCardCount: 0,
     remainingCardCount: 0,
-    cards: [],
+    cards: Array.isArray(item.cards) ? item.cards.map((card) => ({ ...card })) : [],
     updatedAt: "",
   });
 }
@@ -1187,10 +1188,13 @@ function buildIncomingCards(batch) {
   const perCage = Math.max(numericOrNull(batch.suggestedAnimalsPerCage) || defaultAnimalsPerCage(batch.species), 1);
   const quantity = Math.max(numericOrNull(batch.quantity) || 0, 0);
   const remainder = quantity && perCage ? quantity % perCage : 0;
+  const existingCards = Array.isArray(batch.cards) ? batch.cards : [];
   return Array.from({ length: cardCount }, (_, index) => {
     const isLast = index === cardCount - 1;
     const suggestedQuantity = !quantity ? "" : remainder && isLast ? "" : String(perCage);
-    const qrId = [batch.iacuc || "NOIACUC", (batch.intakeDate || "nodate").replaceAll("-", ""), String(index + 1).padStart(2, "0")].join("-");
+    const existingCard = existingCards[index] || {};
+    const existingQrId = String(existingCard.qrId || "").trim();
+    const qrId = /^[A-Z0-9]{8}$/.test(existingQrId) ? existingQrId : cageCardQrId(batch.id, index + 1);
     return {
       id: `${batch.id}-card-${index + 1}`,
       index: index + 1,
@@ -1200,6 +1204,15 @@ function buildIncomingCards(batch) {
     };
   });
 }
+
+const INTAKE_CARD_PRINT_PAGE_SIZE = 14;
+let pendingIntakeCardPrintJob = null;
+let publicCageCardState = {
+  loading: false,
+  item: null,
+  error: "",
+  qrId: "",
+};
 
 const seedData = {
   activeView: "dashboard",
@@ -1757,6 +1770,7 @@ function normalizePlacementTask(item = {}) {
     strainStandard: String(item.strainStandard || ""),
     animalCount: numericOrNull(item.animalCount),
     cardSequence: numericOrNull(item.cardSequence),
+    qrId: String(item.qrId || cageCardQrId(item.sourceBatchId || "", item.cardSequence || 0)),
     updatedAt: String(item.updatedAt || ""),
   };
 }
@@ -2596,6 +2610,8 @@ function normalize(data) {
         title: String(next.confirmDialog.title || ""),
         message: String(next.confirmDialog.message || ""),
         confirmLabel: String(next.confirmDialog.confirmLabel || "确认"),
+        cancelLabel: String(next.confirmDialog.cancelLabel || "取消"),
+        confirmClass: ["primary", "secondary", "danger-button"].includes(next.confirmDialog.confirmClass) ? next.confirmDialog.confirmClass : "danger-button",
         payload: next.confirmDialog.payload && typeof next.confirmDialog.payload === "object" ? next.confirmDialog.payload : {},
       }
     : null;
@@ -2968,6 +2984,12 @@ function render() {
   const previousScrollY = window.scrollY;
   const previousWorkspaceScrollTop = document.querySelector(".workspace")?.scrollTop ?? 0;
   const shouldPreserveScroll = previousView === state.activeView;
+  if (isCageCardScanRoute()) {
+    document.querySelector("#app").innerHTML = renderPublicCageCardScanView();
+    lastRenderedView = "cage-card-scan";
+    logClientPerf("render", startedAt, { view: "cage-card-scan" });
+    return;
+  }
   if (remotePersistence && !currentUser) {
     document.querySelector("#app").innerHTML = renderLoginView();
     bindAuthEvents();
@@ -2985,6 +3007,7 @@ function render() {
   document.querySelector("#app").innerHTML = `
     <div class="shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       ${renderSidebar()}
+      ${renderSidebarHandle()}
       <main class="workspace">
         ${renderFlashNotice()}
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
@@ -3029,8 +3052,8 @@ function renderConfirmDialog() {
           <p>${escapeText(state.confirmDialog.message)}</p>
         </div>
         <div class="confirm-dialog-actions">
-          <button class="secondary" type="button" id="cancelConfirmDialog">取消</button>
-          <button class="danger-button" type="button" id="confirmDialogAction">${escapeText(state.confirmDialog.confirmLabel || "确认")}</button>
+          <button class="secondary" type="button" id="cancelConfirmDialog">${escapeText(state.confirmDialog.cancelLabel || "取消")}</button>
+          <button class="${escapeAttr(state.confirmDialog.confirmClass || "danger-button")}" type="button" id="confirmDialogAction">${escapeText(state.confirmDialog.confirmLabel || "确认")}</button>
         </div>
       </section>
     </div>
@@ -3076,23 +3099,15 @@ function renderSidebar() {
 
   return `
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark"><img src="./assets/cageledger-icon.svg" alt="" /></div>
-        <div>
-          <strong>CageLedger</strong>
-          <span>实验动物笼位管理与计费系统</span>
+      <div class="sidebar-head">
+        <div class="brand">
+          <div class="brand-mark"><img src="./assets/cageledger-icon.svg" alt="" /></div>
+          <div>
+            <strong>CageLedger</strong>
+            <span>实验动物笼位管理与计费系统</span>
+          </div>
         </div>
       </div>
-      <button
-        class="nav-toggle"
-        id="sidebarToggle"
-        type="button"
-        title="${state.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}"
-        aria-label="${state.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}"
-      >
-        ${iconSvg(state.sidebarCollapsed ? "chevronRight" : "chevronLeft")}
-        <span>${state.sidebarCollapsed ? "展开" : "隐藏导航栏"}</span>
-      </button>
       <nav class="nav">
         <div class="nav-group">
           <span class="nav-group-title">业务</span>
@@ -3121,6 +3136,21 @@ function renderSidebar() {
       ${settingsNavItems.length ? renderSettingsDrawer(settingsNavItems, settingsNavExpanded) : ""}
       ${renderSidebarAccount()}
     </aside>
+  `;
+}
+
+function renderSidebarHandle() {
+  return `
+    <button
+      class="nav-toggle nav-toggle-rail"
+      id="sidebarToggle"
+      type="button"
+      title="${state.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}"
+      aria-label="${state.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}"
+    >
+      ${iconSvg(state.sidebarCollapsed ? "chevronRight" : "chevronLeft")}
+      <span>${state.sidebarCollapsed ? "展开" : "隐藏导航栏"}</span>
+    </button>
   `;
 }
 
@@ -3177,6 +3207,68 @@ function renderLoginView() {
           <button class="primary" type="submit">${iconSvg("save")}登录</button>
         </form>
         ${renderVersionMeta("login-version")}
+      </section>
+    </main>
+  `;
+}
+
+function renderPublicCageCardScanView() {
+  const item = publicCageCardState.item || {};
+  const statusText = item.statusLabel || "未找到";
+  const details = [
+    ["笼号", item.cageCode || item.slotCode || ""],
+    ["房间", item.roomName || ""],
+    ["笼架/笼位", [item.rackName, item.slotCode].filter(Boolean).join(" · ")],
+    ["IACUC 编号", item.iacuc || ""],
+    ["项目名称", item.project || ""],
+    ["项目负责人", item.pi || ""],
+    ["实验负责人", item.owner || ""],
+    ["动物品系", item.strainStandard || item.speciesLabel || item.species || ""],
+    ["数量", item.animalCount ? `${item.animalCount} 只` : ""],
+    ["性别", item.sex || ""],
+    ["出生日期/年龄", [item.birthDate, item.age].filter(Boolean).join(" · ")],
+    ["入驻日期", item.startDate || item.actualMoveInDate || ""],
+    ["预计结束日期", item.endDate || ""],
+  ];
+  return `
+    <main class="public-scan-page">
+      <section class="public-scan-card">
+        <div class="public-scan-brand">
+          <img src="./assets/cageledger-icon.svg" alt="" />
+          <div>
+            <strong>CageLedger</strong>
+            <span>实验动物笼卡扫码查询</span>
+          </div>
+        </div>
+        ${
+          publicCageCardState.loading
+            ? `<div class="public-scan-state">正在读取笼卡信息...</div>`
+            : publicCageCardState.error
+              ? `
+                <div class="public-scan-state error">
+                  <h1>未找到笼卡信息</h1>
+                  <p>${escapeText(publicCageCardState.error)}</p>
+                  <small>${escapeText(publicCageCardState.qrId || "")}</small>
+                </div>
+              `
+              : `
+                <div class="public-scan-header">
+                  <div>
+                    <span class="public-scan-eyebrow">当前状态</span>
+                    <h1>${escapeText(item.batchNo || item.qrId || "笼卡详情")}</h1>
+                  </div>
+                  <span class="public-scan-status">${escapeText(statusText)}</span>
+                </div>
+                <dl class="public-scan-grid">
+                  ${details.map(([label, value]) => `
+                    <div>
+                      <dt>${escapeText(label)}</dt>
+                      <dd>${escapeText(value || "-")}</dd>
+                    </div>
+                  `).join("")}
+                </dl>
+              `
+        }
       </section>
     </main>
   `;
@@ -7110,7 +7202,7 @@ function bindEvents() {
     });
   });
   document.querySelector("#confirmIntakeReceiptForm")?.addEventListener("submit", confirmIntakeReceipt);
-  document.querySelector("#cancelConfirmDialog")?.addEventListener("click", closeConfirmDialog);
+  document.querySelector("#cancelConfirmDialog")?.addEventListener("click", handleCancelConfirmDialog);
   document.querySelector(".confirm-dialog-backdrop")?.addEventListener("click", (event) => {
     if (event.target.classList.contains("confirm-dialog-backdrop")) closeConfirmDialog();
   });
@@ -8584,8 +8676,8 @@ async function placementPrintItemsForGroup(groupKey) {
       if (batch) batchCache.set(task.sourceBatchId, batch);
     }
     const batch = batchCache.get(task.sourceBatchId);
-    const card = batch?.cards?.find((item) => Number(item.cardSequence) === Number(task.cardSequence));
-    if (batch && card) items.push({ batch, card });
+    const card = batch?.cards?.find((item) => Number(item.index) === Number(task.cardSequence));
+    if (batch && card) items.push({ batch, card: { ...card, qrId: task.qrId || card.qrId } });
   }
   return items;
 }
@@ -8607,13 +8699,81 @@ function printIntakeCardItems(items) {
   return true;
 }
 
+function requestPrintIntakeCardItems(items, afterPrint) {
+  if (!items.length) {
+    showFlashNotice("当前无法打印", "当前没有可打印的笼卡。", "warning");
+    return;
+  }
+  const missing = items.length % INTAKE_CARD_PRINT_PAGE_SIZE
+    ? INTAKE_CARD_PRINT_PAGE_SIZE - (items.length % INTAKE_CARD_PRINT_PAGE_SIZE)
+    : 0;
+  if (!missing) {
+    const printed = printIntakeCardItems(items);
+    if (printed && afterPrint) Promise.resolve(afterPrint()).catch(reportSaveError);
+    return;
+  }
+  pendingIntakeCardPrintJob = {
+    items,
+    missing,
+    afterPrint,
+  };
+  openConfirmDialog({
+    type: "print-intake-cards-fill-blanks",
+    title: "补齐空白笼卡",
+    message: `当前共 ${items.length} 张笼卡，距离整页 ${INTAKE_CARD_PRINT_PAGE_SIZE} 张还差 ${missing} 张。是否自动补 ${missing} 张空白卡？`,
+    confirmLabel: "补空白卡并打印",
+    cancelLabel: "直接打印",
+    confirmClass: "primary",
+    payload: {
+      count: items.length,
+      missing,
+    },
+  });
+}
+
+function finishPendingIntakeCardPrint(fillBlanks) {
+  const job = pendingIntakeCardPrintJob;
+  pendingIntakeCardPrintJob = null;
+  if (!job?.items?.length) return;
+  const items = fillBlanks
+    ? [...job.items, ...Array.from({ length: job.missing }, (_, index) => makeBlankIntakeCardPrintItem(index + 1))]
+    : job.items;
+  const printed = printIntakeCardItems(items);
+  if (printed && job.afterPrint) Promise.resolve(job.afterPrint()).catch(reportSaveError);
+}
+
+function makeBlankIntakeCardPrintItem(index) {
+  return {
+    batch: {
+      id: `blank-print-batch-${index}`,
+      batchNo: "",
+      iacuc: "",
+      supplier: "",
+      strainStandard: "",
+      strainRaw: "",
+      pi: "",
+      owner: "",
+      intakeDate: "",
+      endDate: "",
+      receiverName: "",
+      vetPhone: "",
+      roomName: "",
+    },
+    card: {
+      id: `blank-print-card-${index}`,
+      suggestedQuantity: "",
+      blank: true,
+    },
+  };
+}
+
 async function printPlacementTaskGroup(groupKey) {
   const items = await placementPrintItemsForGroup(groupKey);
   if (!items.length) {
     showFlashNotice("当前无法打印", "当前待进驻分组没有可打印的笼卡。", "warning");
     return;
   }
-  printIntakeCardItems(items);
+  requestPrintIntakeCardItems(items);
 }
 
 async function deletePlacementTaskGroupConfirmed(groupKey) {
@@ -9062,25 +9222,26 @@ async function deleteIntakeBatch(batchId) {
   }
 }
 
-function printIntakeBatches(batches) {
+function printIntakeBatches(batches, afterPrint) {
   const items = batches.flatMap((batch) => batch.cards.map((card) => ({ batch, card })));
-  printIntakeCardItems(items);
+  requestPrintIntakeCardItems(items, afterPrint);
 }
 
 async function printAndMarkIntakeBatches(batches) {
-  printIntakeBatches(batches);
-  try {
-    for (const batch of batches) {
-      if (batch.status === "received" || batch.status === "printed") continue;
-      const saved = await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
-      upsertById(state.intakeBatches, saved);
+  printIntakeBatches(batches, async () => {
+    try {
+      for (const batch of batches) {
+        if (batch.status === "received" || batch.status === "printed") continue;
+        const saved = await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
+        upsertById(state.intakeBatches, saved);
+      }
+      await refreshIntakeAndPlacementAfterSave();
+      showFlashNotice("打印完成", `已打印并标记 ${batches.length} 个待接收批次。`, "success");
+      render();
+    } catch (error) {
+      reportSaveError(error);
     }
-    await refreshIntakeAndPlacementAfterSave();
-    showFlashNotice("打印完成", `已打印并标记 ${batches.length} 个待接收批次。`, "success");
-    render();
-  } catch (error) {
-    reportSaveError(error);
-  }
+  });
 }
 
 async function confirmIntakeBatchDirect(batchId) {
@@ -9104,7 +9265,7 @@ async function confirmSelectedIntakeBatches() {
 }
 
 function intakeCardsPrintHtml(items) {
-  const pages = chunkIntakePrintItems(items, 14);
+  const pages = chunkIntakePrintItems(items, INTAKE_CARD_PRINT_PAGE_SIZE);
   const sheets = pages
     .map(
       (page) => `
@@ -9171,15 +9332,37 @@ function intakeCardsPrintHtml(items) {
           .card .header-title {
             font-size: 4.35mm;
             font-weight: 800;
-            text-align: left;
-            padding-left: 7mm;
+            text-align: center;
             letter-spacing: 0.12mm;
           }
           .card .header-cage {
-            font-size: 4.35mm;
+            font-size: 2.35mm;
             font-weight: 800;
             text-align: left;
-            padding-left: 4mm;
+            padding-left: 1mm;
+            vertical-align: bottom;
+          }
+          .card .header-line {
+            position: relative;
+            padding: 0;
+          }
+          .card .header-line-title {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 76mm;
+            transform: translateY(-50%);
+            font-size: 4.35mm;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: 0.12mm;
+          }
+          .card .header-line-cage {
+            position: absolute;
+            left: 65mm;
+            bottom: 0.58mm;
+            font-size: 2.35mm;
+            font-weight: 800;
           }
           .card .label {
             font-size: 2.35mm;
@@ -9207,19 +9390,29 @@ function intakeCardsPrintHtml(items) {
             text-align: center;
             font-weight: 800;
             font-size: 2.35mm;
+            white-space: nowrap;
           }
           .card .room {
             text-align: center;
             color: #7f0000;
-            font-size: 8.8mm;
-            font-weight: 800;
+            font-size: 9.25mm;
+            font-weight: 900;
           }
           .card .cycle {
-            font-size: 2mm;
+            font-size: 1.86mm;
             font-weight: 800;
             text-align: center;
             letter-spacing: -0.06mm;
             white-space: nowrap;
+          }
+          .card .qr-cell {
+            padding: 0.55mm;
+          }
+          .card .qr-cell svg {
+            display: block;
+            width: 17.8mm;
+            height: 17.8mm;
+            margin: 0 auto;
           }
           @media print {
             @page { size: A4 portrait; margin: 0; }
@@ -9253,54 +9446,62 @@ function chunkIntakePrintItems(items, pageSize) {
 function renderIntakeCardPrint(batch, card) {
   const supplierShortName = abbreviateSupplierName(batch.supplier);
   const batchNoHtml = renderBatchNoWithHighlightedIacuc(batch.batchNo, batch.iacuc);
+  const qrHtml = card?.blank ? "" : qrCodeSvg(cageCardScanUrl(card.qrId), "笼卡二维码");
   return `
     <section class="card">
       <table>
         <colgroup>
           <col style="width:16mm" />
-          <col style="width:34mm" />
-          <col style="width:27mm" />
+          <col style="width:11mm" />
           <col style="width:23mm" />
+          <col style="width:20mm" />
+          <col style="width:10mm" />
+          <col style="width:8mm" />
+          <col style="width:8mm" />
+          <col style="width:4mm" />
         </colgroup>
         <tr style="height:4.9mm">
-          <td class="header-title" colspan="2">实验动物检疫卡</td>
-          <td class="header-cage" colspan="2">笼号：</td>
+          <td class="header-line" colspan="8">
+            <span class="header-line-title">实验动物检疫卡</span>
+            <span class="header-line-cage">笼号：</span>
+          </td>
         </tr>
         <tr style="height:4.25mm">
           <td class="label">批次号：</td>
-          <td class="value value-compact">${batchNoHtml}</td>
-          <td class="label">购买单位：</td>
-          <td class="value">${escapeText(supplierShortName || batch.supplier || "")}</td>
+          <td class="value value-compact" colspan="2">${batchNoHtml}</td>
+          <td class="label" colspan="2">购买单位：</td>
+          <td class="value" colspan="3">${escapeText(supplierShortName || batch.supplier || "")}</td>
         </tr>
         <tr style="height:4.25mm">
           <td class="label">动物品系：</td>
-          <td class="value">${escapeText(batch.strainStandard || batch.strainRaw || "")}</td>
-          <td class="label">项目负责人：</td>
-          <td class="value">${escapeText(batch.pi || "")}</td>
+          <td class="value" colspan="2">${escapeText(batch.strainStandard || batch.strainRaw || "")}</td>
+          <td class="label" colspan="2">项目负责人：</td>
+          <td class="value" colspan="3">${escapeText(batch.pi || "")}</td>
         </tr>
         <tr style="height:4.25mm">
           <td class="label">接收日期：</td>
-          <td class="value">${escapeText(formatPrintDate(batch.intakeDate))}</td>
-          <td class="label label-long">实验责任人/助手：</td>
-          <td class="value">${escapeText(batch.owner || "")}</td>
+          <td class="value" colspan="2">${escapeText(formatPrintDate(batch.intakeDate))}</td>
+          <td class="label label-long" colspan="2">实验责任人/助手：</td>
+          <td class="value" colspan="3">${escapeText(batch.owner || "")}</td>
         </tr>
         <tr style="height:4.25mm">
           <td class="label">接收人员：</td>
-          <td class="value">${escapeText(batch.receiverName || "")}</td>
-          <td class="label">兽医电话：</td>
-          <td class="value">${escapeText(batch.vetPhone || "")}</td>
+          <td class="value" colspan="2">${escapeText(batch.receiverName || "")}</td>
+          <td class="label" colspan="2">兽医电话：</td>
+          <td class="value" colspan="3">${escapeText(batch.vetPhone || "")}</td>
         </tr>
         <tr style="height:3.3mm">
           <td class="row-head">日期</td>
           <td class="row-head">数目变化</td>
-          <td class="row-head">房间</td>
           <td class="row-head">饲养周期</td>
+          <td class="row-head" colspan="3">房间</td>
+          <td class="qr-cell" colspan="2" rowspan="4">${qrHtml}</td>
         </tr>
         <tr style="height:4.65mm">
           <td class="value">${escapeText(formatPrintDate(batch.intakeDate))}</td>
           <td class="value">${escapeText(card.suggestedQuantity || "")}</td>
-          <td class="room" rowspan="3">${escapeText(batch.roomName || "")}</td>
           <td class="cycle">${escapeText(formatPrintDateRange(batch.intakeDate, batch.endDate))}</td>
+          <td class="room" colspan="3" rowspan="3">${escapeText(batch.roomName || "")}</td>
         </tr>
         <tr style="height:4.65mm">
           <td></td>
@@ -9315,6 +9516,12 @@ function renderIntakeCardPrint(batch, card) {
       </table>
     </section>
   `;
+}
+
+function cageCardScanUrl(qrId) {
+  const id = String(qrId || "").trim();
+  if (!id) return "";
+  return new URL(`/scan/cage-card/${encodeURIComponent(id)}`, window.location.href).href;
 }
 
 function renderBatchNoWithHighlightedIacuc(batchNo, iacuc) {
@@ -11614,6 +11821,22 @@ function hashCompact(value) {
   return hash.toString(36).toUpperCase().padStart(6, "0").slice(-6);
 }
 
+function hashBase36(value, length = 8) {
+  let hash = 1469598103934665603n;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= BigInt(text.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * 1099511628211n);
+  }
+  return hash.toString(36).toUpperCase().padStart(length, "0").slice(-length);
+}
+
+function cageCardQrId(batchId, sequence) {
+  const sourceBatchId = String(batchId || "batch").trim() || "batch";
+  const cardNo = String(Math.max(numericOrNull(sequence) || 0, 0)).padStart(2, "0");
+  return hashBase36(`${sourceBatchId}:${cardNo}`, 8);
+}
+
 function rmbUppercase(value) {
   const amount = Math.round(Number(value || 0) * 100);
   if (!amount) return "人民币零元整";
@@ -11663,7 +11886,7 @@ function rmbUppercase(value) {
   return `人民币${integerText || "零"}元${fractionText}`;
 }
 
-function qrCodeSvg(text) {
+function qrCodeSvg(text, ariaLabel = "二维码") {
   const modules = qrCodeMatrix(text);
   const size = modules.length;
   const quiet = 4;
@@ -11674,7 +11897,7 @@ function qrCodeSvg(text) {
       if (modules[row][col]) cells.push(`<rect x="${col + quiet}" y="${row + quiet}" width="1" height="1"/>`);
     }
   }
-  return `<svg viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="结算单二维码" xmlns="http://www.w3.org/2000/svg"><rect width="${viewBoxSize}" height="${viewBoxSize}" fill="#fff"/><g fill="#000">${cells.join("")}</g></svg>`;
+  return `<svg viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="${escapeAttr(ariaLabel)}" xmlns="http://www.w3.org/2000/svg"><rect width="${viewBoxSize}" height="${viewBoxSize}" fill="#fff"/><g fill="#000">${cells.join("")}</g></svg>`;
 }
 
 function qrCodeMatrix(text) {
@@ -11746,7 +11969,7 @@ function reserveFormatAreas(reserved, size) {
 }
 
 function qrEncodeData(bytes, capacity) {
-  if (bytes.length > 105) throw new Error("结算单二维码内容过长");
+  if (bytes.length > 105) throw new Error("二维码内容过长");
   const bits = [];
   const append = (value, length) => {
     for (let index = length - 1; index >= 0; index -= 1) bits.push((value >>> index) & 1);
@@ -12363,14 +12586,30 @@ function openConfirmDialog(config) {
     title: config.title || "请确认",
     message: config.message || "",
     confirmLabel: config.confirmLabel || "确认",
+    cancelLabel: config.cancelLabel || "取消",
+    confirmClass: config.confirmClass || "danger-button",
     payload: config.payload || {},
   };
   scheduleRender("confirm.open");
 }
 
 function closeConfirmDialog() {
+  if (state.confirmDialog?.type === "print-intake-cards-fill-blanks") {
+    pendingIntakeCardPrintJob = null;
+  }
   state.confirmDialog = null;
   scheduleRender("confirm.close");
+}
+
+function handleCancelConfirmDialog() {
+  const dialog = state.confirmDialog;
+  state.confirmDialog = null;
+  if (dialog?.type === "print-intake-cards-fill-blanks") {
+    finishPendingIntakeCardPrint(false);
+    scheduleRender("confirm.cancel");
+    return;
+  }
+  scheduleRender("confirm.cancel");
 }
 
 async function handleConfirmDialogAction() {
@@ -12378,6 +12617,10 @@ async function handleConfirmDialogAction() {
   if (!dialog) return;
   state.confirmDialog = null;
   try {
+    if (dialog.type === "print-intake-cards-fill-blanks") {
+      finishPendingIntakeCardPrint(true);
+      return;
+    }
     if (dialog.type === "delete-intake-batch") {
       const batch = state.intakeBatches.find((item) => item.id === dialog.id);
       await deleteIntakeBatch(dialog.id);
@@ -12546,6 +12789,12 @@ initialize();
 
 async function initialize() {
   await loadSystemInfo();
+  if (isCageCardScanRoute()) {
+    remotePersistence = true;
+    await loadPublicCageCardScan();
+    render();
+    return;
+  }
   await loadCurrentUser();
   if (!remotePersistence || currentUser) {
     await Promise.all([loadIacucIndexStatus(), loadPersistedState()]);
@@ -12585,6 +12834,37 @@ async function applyStatementDeepLink() {
     state.billingPi = statement.pi || state.billingPi;
   } catch {
     // Deep links are advisory; the normal billing page remains usable if lookup fails.
+  }
+}
+
+function cageCardScanQrIdFromLocation() {
+  const match = window.location.pathname.match(/^\/scan\/cage-card\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function isCageCardScanRoute() {
+  return Boolean(cageCardScanQrIdFromLocation());
+}
+
+async function loadPublicCageCardScan() {
+  const qrId = cageCardScanQrIdFromLocation();
+  publicCageCardState = { loading: true, item: null, error: "", qrId };
+  if (!qrId) {
+    publicCageCardState = { loading: false, item: null, error: "二维码地址无效。", qrId: "" };
+    return;
+  }
+  try {
+    const response = await fetch(`${API_PUBLIC_CAGE_CARD_URL}/${encodeURIComponent(qrId)}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "该二维码没有匹配到笼卡记录。");
+    publicCageCardState = { loading: false, item: payload.item || null, error: "", qrId };
+  } catch (error) {
+    publicCageCardState = {
+      loading: false,
+      item: null,
+      error: error?.message || "该二维码没有匹配到笼卡记录。",
+      qrId,
+    };
   }
 }
 

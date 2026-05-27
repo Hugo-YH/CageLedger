@@ -44,6 +44,7 @@ def reserve_placement_task(state, task_id, slot_id, actor, deps):
         "owner": task.get("owner", ""),
         "species": task.get("species", ""),
         "animalCount": task.get("animalCount"),
+        "qrId": task.get("qrId", ""),
         "startDate": "",
         "endDate": "",
         "notes": f"来自待进驻任务 {task.get('batchNo', '')}",

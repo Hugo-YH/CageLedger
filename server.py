@@ -1140,6 +1140,169 @@ def current_occupancy_by_slot(state):
     return current
 
 
+def base36_encode(value):
+    digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    number = int(value or 0)
+    if number <= 0:
+        return "0"
+    output = ""
+    while number:
+        number, remainder = divmod(number, 36)
+        output = digits[remainder] + output
+    return output
+
+
+def hash_base36(value, length=8):
+    hash_value = 1469598103934665603
+    mask = (1 << 64) - 1
+    for char in str(value or ""):
+        hash_value ^= ord(char)
+        hash_value = (hash_value * 1099511628211) & mask
+    return base36_encode(hash_value).rjust(length, "0")[-length:]
+
+
+def cage_card_qr_id(batch, sequence):
+    batch_id = clean_text(batch.get("id") or batch.get("sourceBatchId") or "batch") or "batch"
+    card_no = str(max(as_int(sequence) or 0, 0)).zfill(2)
+    return hash_base36(f"{batch_id}:{card_no}", 8)
+
+
+def cage_card_qr_id_from_batch_card(batch, sequence):
+    cards = batch.get("cards") if isinstance(batch.get("cards"), list) else []
+    index = max(as_int(sequence) or 0, 0) - 1
+    if 0 <= index < len(cards) and isinstance(cards[index], dict):
+        qr_id = clean_text(cards[index].get("qrId"))
+        if re.match(r"^[A-Z0-9]{8}$", qr_id):
+            return qr_id
+    return cage_card_qr_id(batch, sequence)
+
+
+def legacy_cage_card_qr_id(batch, sequence):
+    iacuc = clean_text(batch.get("iacuc") or "NOIACUC") or "NOIACUC"
+    intake_date = clean_text(batch.get("intakeDate") or "nodate").replace("-", "")
+    card_no = str(max(as_int(sequence) or 0, 0)).zfill(2)
+    return "-".join([iacuc, intake_date, card_no])
+
+
+def species_label(value):
+    return {
+        "mouse": "小鼠",
+        "rat": "大鼠",
+        "guinea_pig": "豚鼠",
+        "rabbit": "兔",
+        "monkey": "猴",
+        "dog": "犬",
+        "pig": "猪",
+    }.get(clean_text(value), clean_text(value))
+
+
+def cage_card_status_label(batch, task, occupancy):
+    if occupancy:
+        return {"reserved": "已预留", "active": "已入驻", "ended": "已结束"}.get(occupancy.get("status"), occupancy.get("status", ""))
+    if task:
+        return {"pending": "待进驻", "reserved": "已预留", "active": "已入驻", "cancelled": "已取消"}.get(task.get("status"), task.get("status", ""))
+    return {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}.get(batch.get("status"), batch.get("status", ""))
+
+
+def animal_age_text(birth_date, reference_date=None):
+    raw = clean_text(birth_date)
+    if not raw:
+        return ""
+    try:
+        birth = date.fromisoformat(raw)
+        reference = date.fromisoformat(clean_text(reference_date)) if reference_date else date.today()
+    except ValueError:
+        return ""
+    if reference < birth:
+        return ""
+    months = (reference.year - birth.year) * 12 + reference.month - birth.month
+    if reference.day < birth.day:
+        months -= 1
+    years = months // 12
+    remaining_months = months % 12
+    if years and remaining_months:
+        return f"{years}岁{remaining_months}个月"
+    if years:
+        return f"{years}岁"
+    return f"{max(months, 0)}个月"
+
+
+def public_cage_card_payload(conn, qr_id):
+    target = clean_text(qr_id)
+    if not target:
+        raise LookupError("二维码地址无效")
+    state = assemble_state(conn) or empty_state()
+    applications_by_iacuc = read_applications_by_iacuc(conn)
+    rooms_by_id = {item.get("id"): item for item in state.get("rooms", [])}
+    racks_by_id = {item.get("id"): item for item in state.get("racks", [])}
+    slots_by_id = {item.get("id"): item for item in state.get("slots", [])}
+    tasks_by_batch_and_sequence = {
+        (task.get("sourceBatchId"), as_int(task.get("cardSequence")) or 0): task
+        for task in state.get("placementTasks", [])
+    }
+    occupancies_by_id = {item.get("id"): item for item in state.get("occupancies", [])}
+    occupancies_by_qr = {clean_text(item.get("qrId")): item for item in state.get("occupancies", []) if clean_text(item.get("qrId"))}
+
+    for batch in state.get("intakeBatches", []):
+        card_count = max(
+            as_int(batch.get("finalCardCount")) or 0,
+            as_int(batch.get("suggestedCardCount")) or 0,
+            len(batch.get("cards") or []) if isinstance(batch.get("cards"), list) else 0,
+        )
+        for sequence in range(1, card_count + 1):
+            task = tasks_by_batch_and_sequence.get((batch.get("id"), sequence))
+            candidate_ids = {
+                cage_card_qr_id_from_batch_card(batch, sequence),
+                legacy_cage_card_qr_id(batch, sequence),
+            }
+            if task and clean_text(task.get("qrId")):
+                candidate_ids.add(clean_text(task.get("qrId")))
+            if target not in candidate_ids:
+                continue
+            occupancy = occupancies_by_qr.get(target)
+            if not occupancy and task and task.get("reservedOccupancyId"):
+                occupancy = occupancies_by_id.get(task.get("reservedOccupancyId"))
+            slot = slots_by_id.get((occupancy or {}).get("slotId"))
+            rack = racks_by_id.get((slot or {}).get("rackId") or (occupancy or {}).get("rackId"))
+            room = rooms_by_id.get((rack or {}).get("roomId") or (task or {}).get("targetRoomId") or (occupancy or {}).get("roomId"))
+            iacuc = normalize_iacuc_number(batch.get("iacuc") or (task or {}).get("iacuc") or (occupancy or {}).get("iacuc"))
+            application = applications_by_iacuc.get(iacuc, {})
+            animal_count = (task or {}).get("animalCount")
+            if animal_count in (None, ""):
+                animal_count = (occupancy or {}).get("animalCount")
+            if animal_count in (None, ""):
+                per_cage = max(as_int(batch.get("suggestedAnimalsPerCage")) or 1, 1)
+                quantity = max(as_int(batch.get("quantity")) or 0, 0)
+                remainder = quantity % per_cage if quantity and per_cage else 0
+                animal_count = "" if remainder and sequence == card_count else per_cage
+            birth_date = (occupancy or {}).get("birthDate", "")
+            item = {
+                "qrId": target,
+                "batchNo": batch.get("batchNo", ""),
+                "cageCode": (occupancy or {}).get("cageCode", ""),
+                "roomName": (room or {}).get("name") or (task or {}).get("targetRoomName") or batch.get("roomName", "") or (occupancy or {}).get("roomName", ""),
+                "rackName": (rack or {}).get("name") or (occupancy or {}).get("rackName", ""),
+                "slotCode": (slot or {}).get("code") or (occupancy or {}).get("slotCode", ""),
+                "iacuc": iacuc,
+                "project": batch.get("project") or (task or {}).get("project") or (occupancy or {}).get("project") or application.get("project", ""),
+                "pi": batch.get("pi") or (task or {}).get("pi") or (occupancy or {}).get("pi") or application.get("pi", ""),
+                "owner": batch.get("owner") or (task or {}).get("owner") or (occupancy or {}).get("owner") or application.get("owner", ""),
+                "species": batch.get("species") or (task or {}).get("species") or (occupancy or {}).get("species", ""),
+                "speciesLabel": species_label(batch.get("species") or (task or {}).get("species") or (occupancy or {}).get("species", "")),
+                "strainStandard": batch.get("strainStandard") or (task or {}).get("strainStandard") or (occupancy or {}).get("strainStandard", ""),
+                "animalCount": animal_count,
+                "sex": batch.get("sex") or (occupancy or {}).get("sex", ""),
+                "birthDate": birth_date,
+                "age": animal_age_text(birth_date),
+                "startDate": (occupancy or {}).get("startDate") or (task or {}).get("actualMoveInDate", ""),
+                "actualMoveInDate": (task or {}).get("actualMoveInDate", ""),
+                "endDate": (occupancy or {}).get("endDate") or batch.get("endDate", ""),
+                "statusLabel": cage_card_status_label(batch, task, occupancy),
+            }
+            return {"item": item}
+    raise LookupError("该二维码没有匹配到笼卡记录")
+
+
 def occupancy_period_tone(occupancy):
     if not occupancy or occupancy.get("status") != "active":
         return ""
@@ -2285,6 +2448,7 @@ def entity_exists(state, collection, item_id):
 def intake_service_deps():
     return {
         "as_int": as_int,
+        "cage_card_qr_id": cage_card_qr_id_from_batch_card,
         "clean_text": clean_text,
         "new_id": new_id,
         "now_iso": now_iso,
@@ -5581,6 +5745,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             self.send_json({"ok": True, "database": str(DB_PATH), "system": system_info()})
             return
+        if path.startswith("/api/public/cage-card/"):
+            qr_id = unquote(path.rsplit("/", 1)[-1])
+            try:
+                with connect_db() as conn:
+                    self.send_json(public_cage_card_payload(conn, qr_id))
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            return
         if path == "/api/system/info":
             self.send_json(system_info())
             return
@@ -5779,6 +5951,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "记录不存在"}, HTTPStatus.NOT_FOUND)
                 return
             self.send_json({"item": item})
+            return
+        if path.startswith("/scan/cage-card/"):
+            self.send_spa_index()
             return
         super().do_GET()
 
@@ -5989,6 +6164,17 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
 
     def send_json(self, payload, status=HTTPStatus.OK):
         send_json_response(self, payload, status)
+
+    def send_spa_index(self):
+        body = (ROOT / "index.html").read_text(encoding="utf-8")
+        if "<base " not in body:
+            body = body.replace("<head>", '<head>\n    <base href="/" />', 1)
+        body_bytes = body.encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body_bytes)))
+        self.end_headers()
+        self.wfile.write(body_bytes)
 
     def handle_login(self):
         try:

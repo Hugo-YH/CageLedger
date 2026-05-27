@@ -56,6 +56,7 @@ def confirm_intake_receipt(state, batch_id, payload, actor, deps):
     batch["updatedAt"] = now
     tasks = []
     for index in range(card_count):
+        card_sequence = confirmed_total + index + 1
         task = {
             "id": deps["new_id"]("ptask"),
             "sourceBatchId": batch["id"],
@@ -75,10 +76,10 @@ def confirm_intake_receipt(state, batch_id, payload, actor, deps):
             "species": batch.get("species", ""),
             "strainStandard": batch.get("strainStandard", ""),
             "animalCount": max(deps["as_int"](batch.get("suggestedAnimalsPerCage")) or 1, 1),
-            "cardSequence": confirmed_total + index + 1,
+            "cardSequence": card_sequence,
+            "qrId": deps["cage_card_qr_id"](batch, card_sequence) if deps.get("cage_card_qr_id") else "",
             "updatedAt": now,
         }
         state.setdefault("placementTasks", []).append(task)
         tasks.append(task)
     return batch, receipt, tasks
-
