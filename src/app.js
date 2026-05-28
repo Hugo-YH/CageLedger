@@ -710,7 +710,10 @@ let batchSlotDrag = null;
 let suppressNextSlotClick = false;
 let flashNoticeTimer = null;
 let renderScheduled = false;
+let renderFrameId = 0;
 let persistScheduled = false;
+let persistTimerId = 0;
+let lastPersistedStateJson = "";
 const lazyDataState = {
   intakeBatchesLoaded: false,
   intakeBatchesLoading: false,
@@ -1397,6 +1400,7 @@ function loadState() {
   }
 
   try {
+    lastPersistedStateJson = raw;
     return JSON.parse(raw);
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -1406,29 +1410,39 @@ function loadState() {
 }
 
 function saveState() {
-  invalidateIacucSearchCache();
-  invalidateStateIndexCache();
   const payload = remotePersistence ? localUiStateSnapshot() : { ...state };
   const startedAt = performance.now();
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null }));
-    logClientPerf("state.persist", startedAt, { remote: remotePersistence ? 1 : 0 });
+    const serialized = JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null });
+    if (serialized === lastPersistedStateJson) {
+      logClientPerf("state.persist.skip", startedAt, { remote: remotePersistence ? 1 : 0 });
+      return;
+    }
+    localStorage.setItem(STORAGE_KEY, serialized);
+    lastPersistedStateJson = serialized;
+    logClientPerf("state.persist", startedAt, { remote: remotePersistence ? 1 : 0, bytes: serialized.length });
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
+    lastPersistedStateJson = "";
   }
 }
 
 function scheduleStatePersist() {
   if (persistScheduled) return;
   persistScheduled = true;
-  window.setTimeout(() => {
+  persistTimerId = window.setTimeout(() => {
     persistScheduled = false;
+    persistTimerId = 0;
     saveState();
   }, 200);
 }
 
 function persistStateNow() {
+  if (persistTimerId) {
+    window.clearTimeout(persistTimerId);
+    persistTimerId = 0;
+  }
   persistScheduled = false;
   saveState();
 }
@@ -1440,8 +1454,9 @@ function localUiStateSnapshot() {
 function scheduleRender(reason = "") {
   if (renderScheduled) return;
   renderScheduled = true;
-  queueMicrotask(() => {
+  renderFrameId = window.requestAnimationFrame(() => {
     renderScheduled = false;
+    renderFrameId = 0;
     const startedAt = performance.now();
     render();
     logClientPerf("render.scheduled", startedAt, { reason });
@@ -2184,7 +2199,8 @@ async function loadQuantitySheets(options = {}) {
   lazyDataState.quantitySheetsLoading = false;
   const selected = state.quantitySheets.find((sheet) => sheet.id === state.selectedQuantitySheetId) || state.quantitySheets[0] || null;
   state.selectedQuantitySheetId = selected?.id || "";
-  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(selected || makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7)));
+  const detailed = selected ? await ensureQuantitySheetDetail(selected) : null;
+  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(detailed || selected || makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7)));
   if (!state.billingPi && state.quantitySheetDraft.pi) {
     state.billingPi = state.quantitySheetDraft.pi;
     state.billingPrincipalType = principalTypeForPi(state.billingPi);
@@ -2208,6 +2224,16 @@ async function refreshQuantitySheet(sheetId) {
   }
   if (payload.item) upsertById(state.quantitySheets, payload.item);
   return payload.item || null;
+}
+
+async function ensureQuantitySheetDetail(sheet) {
+  if (!sheet?.id || Array.isArray(sheet.rows)) return sheet || null;
+  try {
+    return (await refreshQuantitySheet(sheet.id)) || sheet;
+  } catch (error) {
+    reportSaveError(error);
+    return sheet;
+  }
 }
 
 async function loadAuditEvents(options = {}) {
@@ -2549,7 +2575,8 @@ async function refreshQuantitySheetsAfterSave(sheetId = "") {
     state.quantitySheets[0] ||
     null;
   state.selectedQuantitySheetId = selected?.id || "";
-  state.quantitySheetDraft = selected ? hydrateQuantitySheetIacucInfo(selected) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
+  const detailed = await ensureQuantitySheetDetail(selected);
+  state.quantitySheetDraft = detailed ? hydrateQuantitySheetIacucInfo(detailed) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
 }
 
 async function refreshBillingWorkflowsAfterSave() {
@@ -5569,6 +5596,7 @@ function renderBillingWorkflowDetailModal() {
   const timeline = workflow.id ? workflowTimelineItems(workflow) : [];
   const currentNode = timeline.find((item) => item.state === "current") || timeline.find((item) => item.state === "done") || timeline[0] || {};
   const hasWorkflow = Boolean(workflow.id);
+  const nextWorkflowStep = hasWorkflow ? nextWorkflowStatus(workflow.workflowStatus) : "";
   return `
     <div class="editor-modal-backdrop" id="closeReimbursementDetail"></div>
     <div class="panel detail-panel editor-modal workflow-detail-modal">
@@ -5756,8 +5784,8 @@ function renderBillingWorkflowDetailModal() {
                   }
                 </div>
                 ${
-                  nextStatus(workflow.workflowStatus)
-                    ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(workflow.id)}" data-next-status="${escapeAttr(nextStatus(workflow.workflowStatus))}">${escapeText(workflowActionLabel(nextStatus(workflow.workflowStatus)))}</button>`
+                  nextWorkflowStep
+                    ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(workflow.id)}" data-next-status="${escapeAttr(nextWorkflowStep)}">${escapeText(workflowActionLabel(nextWorkflowStep))}</button>`
                     : ""
                 }
               </section>
@@ -7065,7 +7093,9 @@ function bindEvents() {
   });
   document.querySelector("#quantitySheetForm")?.addEventListener("submit", handleQuantitySheetSubmit);
   document.querySelector(".quantity-template-table")?.addEventListener("keydown", handleQuantityTemplateKeydown);
-  document.querySelector("#quantitySheetSelect")?.addEventListener("change", handleQuantitySheetSelect);
+  document.querySelector("#quantitySheetSelect")?.addEventListener("change", (event) => {
+    handleQuantitySheetSelect(event).catch(reportSaveError);
+  });
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
   document.querySelector("#deleteQuantitySheet")?.addEventListener("click", deleteCurrentQuantitySheet);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
@@ -8875,11 +8905,12 @@ async function handleQuantitySheetSubmit(event) {
   }
 }
 
-function handleQuantitySheetSelect(event) {
+async function handleQuantitySheetSelect(event) {
   captureQuantitySheetDraft();
   const sheet = state.quantitySheets.find((item) => item.id === event.target.value);
   state.selectedQuantitySheetId = sheet?.id || "";
-  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(sheet || makeQuantitySheetDraft(state.billingMonth));
+  const detailed = await ensureQuantitySheetDetail(sheet);
+  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(detailed || sheet || makeQuantitySheetDraft(state.billingMonth));
   state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
   state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
   state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
@@ -8904,8 +8935,9 @@ async function handleQuantitySheetFilterChange() {
         state.quantitySheets[0] ||
         null;
       state.selectedQuantitySheetId = selected?.id || "";
-      state.quantitySheetDraft = selected
-        ? hydrateQuantitySheetIacucInfo(selected)
+      const detailed = await ensureQuantitySheetDetail(selected);
+      state.quantitySheetDraft = detailed
+        ? hydrateQuantitySheetIacucInfo(detailed)
         : hydrateQuantitySheetIacucInfo({ ...makeQuantitySheetDraft(month), iacuc });
     } catch (error) {
       reportSaveError(error);
@@ -8973,7 +9005,8 @@ async function deleteQuantitySheetConfirmed(sheetId) {
   invalidateStateIndexCache();
   const nextSheet = state.quantitySheets[0] || null;
   state.selectedQuantitySheetId = nextSheet?.id || "";
-  state.quantitySheetDraft = nextSheet ? hydrateQuantitySheetIacucInfo(nextSheet) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
+  const detailed = await ensureQuantitySheetDetail(nextSheet);
+  state.quantitySheetDraft = detailed ? hydrateQuantitySheetIacucInfo(detailed) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
   render();
 }
 

@@ -1,6 +1,8 @@
 import json
 
-from .payload import cached_paginated_payloads, dump_json
+from server_app.cache import cache_get, cache_key, cache_set
+
+from .payload import dump_json
 
 
 def list_quantity_sheets(conn):
@@ -18,7 +20,59 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         ],
         filters,
     )
-    return cached_paginated_payloads(conn, "quantity_sheets", "quantity_sheets", "month DESC, iacuc, updated_at DESC", filters, where, params)
+    key = cache_key(
+        "quantity_sheets",
+        limit=filters["limit"],
+        offset=filters["offset"],
+        month=str(filters.get("month", "")).strip(),
+        iacuc=str(filters.get("iacuc", "")).strip(),
+        pi=str(filters.get("pi", "")).strip(),
+        room_id=str(filters.get("roomId", "")).strip(),
+    )
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    where_clause = f" WHERE {where}" if where else ""
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM quantity_sheets{where_clause}", params).fetchone()["total"]
+    rows = conn.execute(
+        f"""
+        SELECT payload
+        FROM quantity_sheets{where_clause}
+        ORDER BY month DESC, iacuc, updated_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, filters["limit"], filters["offset"]),
+    ).fetchall()
+    payload = {
+        "items": [quantity_sheet_list_item(json.loads(row["payload"])) for row in rows],
+        "page": {
+            "limit": filters["limit"],
+            "offset": filters["offset"],
+            "total": total,
+            "hasMore": filters["offset"] + filters["limit"] < total,
+        },
+    }
+    return cache_set(key, payload)
+
+
+def quantity_sheet_list_item(sheet):
+    return {
+        "id": sheet.get("id", ""),
+        "month": sheet.get("month", ""),
+        "iacuc": sheet.get("iacuc", ""),
+        "roomId": sheet.get("roomId", ""),
+        "roomName": sheet.get("roomName", ""),
+        "manager": sheet.get("manager", ""),
+        "project": sheet.get("project", ""),
+        "pi": sheet.get("pi", ""),
+        "owner": sheet.get("owner", ""),
+        "contact": sheet.get("contact", ""),
+        "funding": sheet.get("funding", ""),
+        "initialCageCount": sheet.get("initialCageCount", 0),
+        "initialAnimalCount": sheet.get("initialAnimalCount", 0),
+        "billingUnit": sheet.get("billingUnit", ""),
+        "updatedAt": sheet.get("updatedAt", ""),
+    }
 
 
 def get_quantity_sheet(conn, sheet_id):
@@ -59,7 +113,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
     elif status == "done":
         clauses.append("workflow_status = ?")
         params.append(workflow_status_finance)
-    elif status:
+    elif status and status != "all":
         clauses.append("workflow_status = ?")
         params.append(status)
     if clean_text(filters.get("sourceType", "")):
@@ -69,7 +123,66 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         clauses.append("iacuc = ?")
         params.append(filters["iacuc"])
     where = " AND ".join(clauses)
-    return cached_paginated_payloads(conn, "billing_workflows", "billing_workflows", "month DESC, rowid DESC", filters, where, tuple(params))
+    key = cache_key(
+        "billing_workflows",
+        limit=filters["limit"],
+        offset=filters["offset"],
+        status=status,
+        month=clean_text(filters.get("month", "")),
+        source_type=clean_text(filters.get("sourceType", "")),
+        iacuc=clean_text(filters.get("iacuc", "")),
+    )
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    where_clause = f" WHERE {where}" if where else ""
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM billing_workflows{where_clause}", tuple(params)).fetchone()["total"]
+    rows = conn.execute(
+        f"""
+        SELECT payload
+        FROM billing_workflows{where_clause}
+        ORDER BY month DESC, rowid DESC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, filters["limit"], filters["offset"]),
+    ).fetchall()
+    payload = {
+        "items": [billing_workflow_list_item(json.loads(row["payload"])) for row in rows],
+        "page": {
+            "limit": filters["limit"],
+            "offset": filters["offset"],
+            "total": total,
+            "hasMore": filters["offset"] + filters["limit"] < total,
+        },
+    }
+    return cache_set(key, payload)
+
+
+def billing_workflow_list_item(workflow):
+    return {
+        "id": workflow.get("id", ""),
+        "businessKey": workflow.get("businessKey", ""),
+        "scopeType": workflow.get("scopeType", ""),
+        "scopeKey": workflow.get("scopeKey", ""),
+        "iacuc": workflow.get("iacuc", ""),
+        "iacucs": workflow.get("iacucs", []),
+        "month": workflow.get("month", ""),
+        "sourceType": workflow.get("sourceType", ""),
+        "workflowStatus": workflow.get("workflowStatus", ""),
+        "currentVersionId": workflow.get("currentVersionId", ""),
+        "currentVersionNo": workflow.get("currentVersionNo", 0),
+        "latestEventAt": workflow.get("latestEventAt", ""),
+        "pi": workflow.get("pi", ""),
+        "project": workflow.get("project", ""),
+        "owner": workflow.get("owner", ""),
+        "funding": workflow.get("funding", ""),
+        "totalAmount": workflow.get("totalAmount", 0),
+        "totalCageDays": workflow.get("totalCageDays", 0),
+        "generatedAt": workflow.get("generatedAt", ""),
+        "sentAt": workflow.get("sentAt", ""),
+        "signedReturnedAt": workflow.get("signedReturnedAt", ""),
+        "submittedToFinanceAt": workflow.get("submittedToFinanceAt", ""),
+    }
 
 
 def list_billing_workflow_versions(conn, workflow_id):
@@ -77,7 +190,31 @@ def list_billing_workflow_versions(conn, workflow_id):
         "SELECT payload FROM billing_statement_versions WHERE workflow_id = ? ORDER BY version_no DESC, rowid DESC",
         (workflow_id,),
     ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return [billing_workflow_version_list_item(json.loads(row["payload"])) for row in rows]
+
+
+def billing_workflow_version_list_item(version):
+    summary = dict(version.get("summary") or {})
+    return {
+        "id": version.get("id", ""),
+        "workflowId": version.get("workflowId", ""),
+        "versionNo": version.get("versionNo", 0),
+        "versionStatus": version.get("versionStatus", ""),
+        "workflowStatus": version.get("workflowStatus", ""),
+        "generatedAt": version.get("generatedAt", ""),
+        "voidedAt": version.get("voidedAt", ""),
+        "voidedBy": version.get("voidedBy", ""),
+        "voidReason": version.get("voidReason", ""),
+        "documentNumber": version.get("documentNumber", ""),
+        "summary": summary,
+    }
+
+
+def billing_workflow_detail_item(workflow):
+    current_version = workflow.get("currentVersion") or {}
+    payload = dict(workflow)
+    payload["currentVersion"] = billing_workflow_version_list_item(current_version) if current_version else {}
+    return payload
 
 
 def list_billing_workflow_events(conn, workflow_id):
@@ -96,14 +233,53 @@ def list_billing_statement_lines_for_version(conn, version_id):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def billing_statement_list_item(statement):
+    return {
+        "id": statement.get("id", ""),
+        "workflowId": statement.get("workflowId", ""),
+        "versionId": statement.get("versionId", ""),
+        "versionNo": statement.get("versionNo", ""),
+        "versionStatus": statement.get("versionStatus", ""),
+        "workflowStatus": statement.get("workflowStatus", ""),
+        "documentNumber": statement.get("documentNumber", ""),
+        "iacuc": statement.get("iacuc", ""),
+        "iacucs": statement.get("iacucs", []),
+        "month": statement.get("month", ""),
+        "sourceType": statement.get("sourceType", ""),
+        "pi": statement.get("pi", ""),
+        "project": statement.get("project", ""),
+        "owner": statement.get("owner", ""),
+        "funding": statement.get("funding", ""),
+        "totalAmount": statement.get("totalAmount", 0),
+        "totalCageDays": statement.get("totalCageDays", 0),
+        "totalAnimalDays": statement.get("totalAnimalDays", 0),
+        "billingUnit": statement.get("billingUnit", ""),
+        "generatedAt": statement.get("generatedAt", ""),
+    }
+
+
 def list_current_billing_statements(conn):
     statements = []
     for workflow in list_billing_workflows(conn):
         current_version = workflow.get("currentVersion") or {}
         statement = dict((current_version.get("statement") or {}))
         if statement:
-            statements.append(statement)
+            statements.append(billing_statement_list_item(statement))
     return statements
+
+
+def get_current_billing_statement(conn, statement_id):
+    row = conn.execute("SELECT payload FROM billing_statement_versions WHERE id = ?", (statement_id,)).fetchone()
+    if not row:
+        return None
+    version = json.loads(row["payload"])
+    statement = dict(version.get("statement") or {})
+    if not statement:
+        return None
+    workflow = get_billing_workflow(conn, version.get("workflowId", ""))
+    if workflow and (workflow.get("currentVersionId") or "") != statement_id:
+        return None
+    return statement
 
 
 def insert_quantity_sheet(conn, sheet, db_values):

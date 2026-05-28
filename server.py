@@ -57,6 +57,8 @@ from server_app.repositories.audit import insert_audit_events
 from server_app.repositories.billing import (
     delete_billing_workflow_tree as delete_billing_workflow_tree_repository,
     delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
+    get_current_billing_statement as get_current_billing_statement_repository,
+    billing_workflow_detail_item as billing_workflow_detail_item_repository,
     get_billing_version as get_billing_version_repository,
     get_billing_workflow as get_billing_workflow_repository,
     get_billing_workflow_by_key as get_billing_workflow_by_key_repository,
@@ -3669,10 +3671,7 @@ def get_quantity_sheet(conn, sheet_id):
 
 
 def get_current_billing_statement(conn, statement_id):
-    for statement in list_current_billing_statements(conn):
-        if clean_text(statement.get("id", "")) == clean_text(statement_id):
-            return statement
-    return None
+    return get_current_billing_statement_repository(conn, clean_text(statement_id))
 
 
 def save_quantity_sheet(conn, payload, actor, sheet_id=None):
@@ -4977,6 +4976,10 @@ def list_billing_workflow_versions(conn, workflow_id):
     return list_billing_workflow_versions_repository(conn, workflow_id)
 
 
+def billing_workflow_detail_item(workflow):
+    return billing_workflow_detail_item_repository(workflow)
+
+
 def list_billing_workflow_events(conn, workflow_id):
     return list_billing_workflow_events_repository(conn, workflow_id)
 
@@ -5626,7 +5629,7 @@ def reimbursement_detail_payload(conn, record):
     history = sorted(history, key=lambda item: (clean_text(item.get("month", "")), clean_text(item.get("latestEventAt", ""))), reverse=True)
     return {
         "item": record,
-        "workflow": workflow,
+        "workflow": billing_workflow_detail_item(workflow) if workflow else None,
         "workflowVersions": workflow_versions,
         "workflowEvents": workflow_events,
         "history": history,
@@ -5895,7 +5898,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                     return
                 self.send_json(
                     {
-                        "workflow": workflow,
+                        "workflow": billing_workflow_detail_item(workflow),
                         "versions": list_billing_workflow_versions(conn, workflow_id),
                         "events": list_billing_workflow_events(conn, workflow_id),
                     }

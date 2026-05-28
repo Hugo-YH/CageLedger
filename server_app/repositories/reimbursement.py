@@ -2,7 +2,38 @@ import json
 
 from server_app.cache import cache_get, cache_key, cache_set
 
-from .payload import dump_json, paginated_payloads
+from .payload import dump_json
+
+
+REIMBURSEMENT_LIST_FIELDS = (
+    "id",
+    "businessKey",
+    "month",
+    "pi",
+    "workflowId",
+    "workflowStatus",
+    "reimbursementStatus",
+    "currentMonthAmount",
+    "supportAmount",
+    "payableAmount",
+    "paidAmount",
+    "unpaidAmount",
+    "accumulatedPayable",
+    "accumulatedPaid",
+    "accumulatedUnpaid",
+    "fundBookNo",
+    "reimbursementFormNo",
+    "approvedBudget",
+    "source",
+    "latestEventAt",
+    "generatedAt",
+    "updatedAt",
+    "iacucs",
+)
+
+
+def reimbursement_record_list_item(payload):
+    return {key: payload.get(key, [] if key == "iacucs" else "") for key in REIMBURSEMENT_LIST_FIELDS}
 
 
 def list_reimbursement_records_page(conn, filters, clean_text):
@@ -35,18 +66,27 @@ def list_reimbursement_records_page(conn, filters, clean_text):
     cached = cache_get(key)
     if cached is not None:
         return cached
-    return cache_set(
-        key,
-        paginated_payloads(
-            conn,
-            "reimbursement_records",
-            "month DESC, latest_event_at DESC, rowid DESC",
-            where,
-            tuple(params),
-            filters["limit"],
-            filters["offset"],
-        ),
-    )
+    where_clause = f" WHERE {where}" if where else ""
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM reimbursement_records{where_clause}", tuple(params)).fetchone()["total"]
+    rows = conn.execute(
+        f"""
+        SELECT payload
+        FROM reimbursement_records{where_clause}
+        ORDER BY month DESC, latest_event_at DESC, rowid DESC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, filters["limit"], filters["offset"]),
+    ).fetchall()
+    payload = {
+        "items": [reimbursement_record_list_item(json.loads(row["payload"])) for row in rows],
+        "page": {
+            "limit": filters["limit"],
+            "offset": filters["offset"],
+            "total": total,
+            "hasMore": filters["offset"] + filters["limit"] < total,
+        },
+    }
+    return cache_set(key, payload)
 
 
 def get_reimbursement_record(conn, record_id):
