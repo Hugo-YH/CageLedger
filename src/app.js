@@ -2534,6 +2534,83 @@ function replacePlacementTasksForBatch(batchId, tasks) {
   state.placementTasks = [...kept, ...incoming];
 }
 
+function placementTaskMatchesCurrentFilter(task = {}) {
+  if (state.selectedRoomId && task.targetRoomId !== state.selectedRoomId) return false;
+  return !["active", "cancelled"].includes(task.status);
+}
+
+function updateIntakeBatchListFromServer(batch, previousBatch = null) {
+  const savedBatch = normalizeIncomingBatchDraft(batch);
+  if (!remotePersistence) {
+    upsertById(state.intakeBatches, savedBatch);
+    return savedBatch;
+  }
+  const existingBatch = previousBatch || state.intakeBatches.find((item) => item.id === savedBatch.id) || null;
+  const wasVisible = existingBatch ? intakeBatchMatchesFilter(existingBatch, state.intakeBatchFilter) : false;
+  const isVisible = intakeBatchMatchesFilter(savedBatch, state.intakeBatchFilter);
+  if (isVisible) {
+    upsertById(state.intakeBatches, savedBatch);
+  } else {
+    state.intakeBatches = state.intakeBatches.filter((item) => item.id !== savedBatch.id);
+  }
+  if (remotePersistence) {
+    const delta = (isVisible ? 1 : 0) - (wasVisible ? 1 : 0);
+    paginationState.intakeBatches.total = Math.max(Number(paginationState.intakeBatches.total || 0) + delta, 0);
+  }
+  state.selectedIntakeBatchIds = state.selectedIntakeBatchIds.filter((id) => state.intakeBatches.some((item) => item.id === id));
+  return savedBatch;
+}
+
+function replacePlacementTasksForBatchFromServer(batchId, tasks) {
+  const beforeGroups = placementTaskGroups(
+    state.placementTasks.filter((item) => item.sourceBatchId === batchId && placementTaskMatchesCurrentFilter(item)),
+  ).length;
+  replacePlacementTasksForBatch(batchId, tasks);
+  const afterGroups = placementTaskGroups(
+    state.placementTasks.filter((item) => item.sourceBatchId === batchId && placementTaskMatchesCurrentFilter(item)),
+  ).length;
+  if (remotePersistence) {
+    paginationState.placementTasks.total = Math.max(Number(paginationState.placementTasks.total || 0) + afterGroups - beforeGroups, 0);
+  }
+  state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => state.placementTasks.some((item) => item.id === id));
+  state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+  state.batchMode = state.placementAssignmentMode;
+}
+
+function updatePlacementTaskListFromServer(task) {
+  const savedTask = normalizePlacementTask(task);
+  if (!remotePersistence) {
+    upsertById(state.placementTasks, savedTask);
+    state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => state.placementTasks.some((item) => item.id === id));
+    state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+    state.batchMode = state.placementAssignmentMode;
+    return savedTask;
+  }
+  const existingTask = state.placementTasks.find((item) => item.id === savedTask.id) || null;
+  const affectedKeys = new Set([placementTaskGroupKey(savedTask)]);
+  if (existingTask) affectedKeys.add(placementTaskGroupKey(existingTask));
+  const beforeGroups = placementTaskGroups(
+    state.placementTasks.filter((item) => affectedKeys.has(placementTaskGroupKey(item)) && placementTaskMatchesCurrentFilter(item)),
+  ).length;
+  const isVisible = placementTaskMatchesCurrentFilter(savedTask);
+  if (isVisible) {
+    upsertById(state.placementTasks, savedTask);
+  } else {
+    state.placementTasks = state.placementTasks.filter((item) => item.id !== savedTask.id);
+  }
+  const afterGroups = placementTaskGroups(
+    state.placementTasks.filter((item) => affectedKeys.has(placementTaskGroupKey(item)) && placementTaskMatchesCurrentFilter(item)),
+  ).length;
+  if (remotePersistence) {
+    const delta = afterGroups - beforeGroups;
+    paginationState.placementTasks.total = Math.max(Number(paginationState.placementTasks.total || 0) + delta, 0);
+  }
+  state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => state.placementTasks.some((item) => item.id === id));
+  state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+  state.batchMode = state.placementAssignmentMode;
+  return savedTask;
+}
+
 function logClientPerf(label, startedAt, details = {}) {
   const elapsedMs = Math.round((performance.now() - startedAt) * 10) / 10;
   const detailText = Object.entries(details)
@@ -2549,20 +2626,6 @@ function reportSaveError(error) {
 
 async function refreshUsersAfterSave() {
   await loadUsers();
-}
-
-async function refreshIntakeAndPlacementAfterSave() {
-  if (!remotePersistence) {
-    if (state.selectedRoomId) {
-      paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
-    }
-    paginationState.intakeBatches.total = filteredIntakeBatches().length;
-    return;
-  }
-  await Promise.all([
-    loadIntakeBatchesPage(paginationState.intakeBatches.page || 1, paginationState.intakeBatches.limit),
-    loadPlacementTasksPage(paginationState.placementTasks.page || 1, paginationState.placementTasks.limit),
-  ]);
 }
 
 async function refreshQuantitySheetsAfterSave(sheetId = "") {
@@ -7106,7 +7169,6 @@ function bindEvents() {
     try {
       const savedBatch = await saveIntakeBatchDraft();
       pushLog(`保存待接收批次：${savedBatch.batchNo || savedBatch.id}`);
-      await refreshIntakeAndPlacementAfterSave();
       state.selectedIntakeBatchId = "";
       state.intakeBatchDraft = makeIncomingBatchDraft();
       showFlashNotice("保存成功", `已保存为待接收批次：${savedBatch.batchNo || savedBatch.id}`);
@@ -7123,7 +7185,6 @@ function bindEvents() {
       const editedBatch = readIncomingBatchForm(event.target);
       const savedBatch = await saveIntakeBatch(editedBatch);
       pushLog(`更新待接收批次：${savedBatch.batchNo || savedBatch.id}`);
-      await refreshIntakeAndPlacementAfterSave();
       closeIntakeBatchEditor();
       showFlashNotice("保存成功", `待接收批次已更新：${savedBatch.batchNo || savedBatch.id}`);
       render();
@@ -8274,7 +8335,7 @@ function applyOccupancyWriteResponse(payload, fallbackItem = null) {
 
 function applyPlacementWriteResponse(payload) {
   mergeServerAuditLogs(payload);
-  if (payload?.task) upsertById(state.placementTasks, normalizePlacementTask(payload.task));
+  if (payload?.task) updatePlacementTaskListFromServer(payload.task);
   if (payload?.occupancy) upsertById(state.occupancies, payload.occupancy);
   const affectedSlots = Array.isArray(payload?.affectedSlots) ? payload.affectedSlots : [];
   affectedSlots.forEach((slot) => {
@@ -8503,15 +8564,11 @@ async function submitIntakeReceipt(batchId, actualReceiptDate, cardCount) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "确认接收失败");
-    upsertById(state.intakeBatches, normalizeIncomingBatchDraft(payload.batch));
-    payload.tasks?.map(normalizePlacementTask).forEach((task) => upsertById(state.placementTasks, task));
-    if (state.selectedRoomId) {
-      paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
-    }
+    const savedBatch = updateIntakeBatchListFromServer(payload.batch);
+    replacePlacementTasksForBatchFromServer(savedBatch.id, payload.tasks || []);
     mergeServerAuditLogs(payload);
     state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(payload.batch);
     pushLog(`确认接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务`);
-    await refreshIntakeAndPlacementAfterSave();
     state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(payload.batch);
     showFlashNotice("确认成功", `已接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务。`, "success");
     render();
@@ -8539,7 +8596,6 @@ async function reservePlacementTask(taskId, slotId, options = {}) {
     if (resetSelection) state.selectedPlacementTaskId = "";
     state.selectedSlotId = slotId;
     if (renderAfterSave) {
-      await refreshIntakeAndPlacementAfterSave();
       showFlashNotice("预留成功", `已预留笼位 ${cageCodeForSlot(slotId)}。`, "success");
       render();
       refreshCageMapAfterOccupancySaveInBackground();
@@ -8594,7 +8650,6 @@ async function batchMoveInSelectedPlacementTasks() {
     state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
     state.batchMode = state.placementAssignmentMode;
     await refreshCageMapAfterOccupancySave();
-    await refreshIntakeAndPlacementAfterSave();
     showFlashNotice("批量入驻完成", `已完成 ${taskIdsToMove.length} 笼入驻。`, "success");
     render();
   } catch (error) {
@@ -8614,7 +8669,6 @@ async function moveInPlacementTask(taskId, options = {}) {
     if (!response.ok) throw new Error(payload.error || "正式入驻失败");
     applyPlacementWriteResponse(payload);
     if (renderAfterSave) {
-      await refreshIntakeAndPlacementAfterSave();
       showFlashNotice("入驻成功", `笼位 ${cageCodeForSlot(payload.occupancy?.slotId || "")} 已正式入驻。`, "success");
       render();
       refreshCageMapAfterOccupancySaveInBackground();
@@ -8641,7 +8695,6 @@ async function reassignPlacementTask(taskId) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "改签房间失败");
     applyPlacementWriteResponse(payload);
-    await refreshIntakeAndPlacementAfterSave();
     showFlashNotice("保存成功", "待进驻动物目标饲养间已更新。", "success");
     render();
   } catch (error) {
@@ -8672,7 +8725,6 @@ async function reassignPlacementGroup(receiptId, roomId = "") {
       if (!response.ok) throw new Error(payload.error || "改签房间失败");
       applyPlacementWriteResponse(payload);
     }
-    await refreshIntakeAndPlacementAfterSave();
     showFlashNotice("保存成功", `已更新 ${tasks.length} 条待进驻任务的目标饲养间。`, "success");
     render();
   } catch (error) {
@@ -9155,15 +9207,8 @@ async function saveIntakeBatch(batch) {
   mergeServerAuditLogs(payload);
   const savedBatch = normalizeIncomingBatchDraft(payload.item || normalizedBatch);
   state.selectedIntakeBatchId = savedBatch.id;
-  upsertById(state.intakeBatches, savedBatch);
-  if (Array.isArray(payload.placementTasks)) replacePlacementTasksForBatch(savedBatch.id, payload.placementTasks);
-  if (paginationState.intakeBatches.total >= 0) {
-    const delta = !exists && intakeBatchMatchesFilter(savedBatch, state.intakeBatchFilter) ? 1 : 0;
-    paginationState.intakeBatches.total = Math.max(Number(paginationState.intakeBatches.total || 0) + delta, state.intakeBatches.length);
-  }
-  if (state.selectedRoomId) {
-    paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId)).length;
-  }
+  updateIntakeBatchListFromServer(savedBatch, existingBatch);
+  if (Array.isArray(payload.placementTasks)) replacePlacementTasksForBatchFromServer(savedBatch.id, payload.placementTasks);
   return state.intakeBatches.find((item) => item.id === savedBatch.id) || savedBatch;
 }
 
@@ -9273,10 +9318,8 @@ async function printAndMarkIntakeBatches(batches) {
     try {
       for (const batch of batches) {
         if (batch.status === "received" || batch.status === "printed") continue;
-        const saved = await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
-        upsertById(state.intakeBatches, saved);
+        await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
       }
-      await refreshIntakeAndPlacementAfterSave();
       showFlashNotice("打印完成", `已打印并标记 ${batches.length} 个待接收批次。`, "success");
       render();
     } catch (error) {

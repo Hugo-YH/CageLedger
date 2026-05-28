@@ -222,7 +222,25 @@ def list_billing_workflow_events(conn, workflow_id):
         "SELECT payload FROM billing_workflow_events WHERE workflow_id = ? ORDER BY at DESC, rowid DESC",
         (workflow_id,),
     ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return [billing_workflow_event_list_item(json.loads(row["payload"])) for row in rows]
+
+
+def billing_workflow_event_list_item(event):
+    return {
+        "id": event.get("id", ""),
+        "workflowId": event.get("workflowId", ""),
+        "versionId": event.get("versionId", ""),
+        "eventType": event.get("eventType", ""),
+        "fromStatus": event.get("fromStatus", ""),
+        "toStatus": event.get("toStatus", ""),
+        "at": event.get("at", ""),
+        "actor": {
+            "id": (event.get("actor") or {}).get("id", ""),
+            "username": (event.get("actor") or {}).get("username", ""),
+            "displayName": (event.get("actor") or {}).get("displayName", ""),
+        },
+        "note": event.get("note", ""),
+    }
 
 
 def list_billing_statement_lines_for_version(conn, version_id):
@@ -259,13 +277,26 @@ def billing_statement_list_item(statement):
 
 
 def list_current_billing_statements(conn):
+    key = "billing_statements::current"
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    rows = conn.execute(
+        """
+        SELECT versions.payload
+        FROM billing_workflows AS workflows
+        JOIN billing_statement_versions AS versions
+          ON versions.id = workflows.current_version_id
+        ORDER BY workflows.month DESC, workflows.rowid DESC
+        """
+    ).fetchall()
     statements = []
-    for workflow in list_billing_workflows(conn):
-        current_version = workflow.get("currentVersion") or {}
-        statement = dict((current_version.get("statement") or {}))
+    for row in rows:
+        version = json.loads(row["payload"])
+        statement = dict(version.get("statement") or {})
         if statement:
             statements.append(billing_statement_list_item(statement))
-    return statements
+    return cache_set(key, statements)
 
 
 def get_current_billing_statement(conn, statement_id):

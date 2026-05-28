@@ -123,6 +123,7 @@ from server_app.repositories.reimbursement import (
     get_reimbursement_record_by_workflow_id as get_reimbursement_record_by_workflow_id_repository,
     list_reimbursement_records_for_pi as list_reimbursement_records_for_pi_repository,
     list_reimbursement_records_page as list_reimbursement_records_page_repository,
+    reimbursement_record_list_item,
     upsert_reimbursement_record as upsert_reimbursement_record_repository,
 )
 from server_app.repositories.state import assemble_state as assemble_state_repository, read_applications_by_iacuc as read_applications_by_iacuc_repository, read_cached_state as read_cached_state_repository
@@ -1705,21 +1706,56 @@ def filter_entity_payloads_for_actor(collection, items, actor):
     if not actor or actor.get("role") == "admin":
         return items
 
-    allowed_rooms = set(actor.get("roomIds", []))
+    allowed_rooms = {clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)}
     if collection == "rooms":
         return [item for item in items if item.get("id") in allowed_rooms]
-    if collection in ("racks", "slots", "occupancies", "placementTasks"):
-        with connect_db() as conn:
-            state = assemble_state(conn) or empty_state()
-        visible = filter_state_for_actor(state, actor)
-        visible_ids = {
-            "racks": {item.get("id") for item in visible.get("racks", [])},
-            "slots": {item.get("id") for item in visible.get("slots", [])},
-            "occupancies": {item.get("id") for item in visible.get("occupancies", [])},
-            "placementTasks": {item.get("id") for item in visible.get("placementTasks", [])},
-        }[collection]
-        return [item for item in items if item.get("id") in visible_ids]
+    if collection == "racks":
+        return [item for item in items if item.get("roomId") in allowed_rooms]
+    if collection == "placementTasks":
+        return [item for item in items if item.get("targetRoomId") in allowed_rooms]
+    if collection == "slots":
+        rack_ids = {clean_text(item.get("rackId", "")) for item in items if clean_text(item.get("rackId", ""))}
+        rack_rooms = read_rack_room_map(rack_ids)
+        return [item for item in items if rack_rooms.get(item.get("rackId")) in allowed_rooms]
+    if collection == "occupancies":
+        direct = [item for item in items if item.get("roomId") in allowed_rooms]
+        unresolved = [item for item in items if not item.get("roomId")]
+        if not unresolved:
+            return direct
+        slot_ids = {clean_text(item.get("slotId", "")) for item in unresolved if clean_text(item.get("slotId", ""))}
+        slot_rooms = read_slot_room_map(slot_ids)
+        return direct + [item for item in unresolved if slot_rooms.get(item.get("slotId")) in allowed_rooms]
     return items
+
+
+def placeholders(values):
+    return ", ".join("?" for _ in values)
+
+
+def read_rack_room_map(rack_ids):
+    ids = sorted({clean_text(item) for item in rack_ids if clean_text(item)})
+    if not ids:
+        return {}
+    with connect_db() as conn:
+        rows = conn.execute(f"SELECT id, room_id FROM racks WHERE id IN ({placeholders(ids)})", ids).fetchall()
+    return {row["id"]: row["room_id"] for row in rows}
+
+
+def read_slot_room_map(slot_ids):
+    ids = sorted({clean_text(item) for item in slot_ids if clean_text(item)})
+    if not ids:
+        return {}
+    with connect_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT slots.id AS slot_id, racks.room_id AS room_id
+            FROM cage_slots AS slots
+            JOIN racks ON racks.id = slots.rack_id
+            WHERE slots.id IN ({placeholders(ids)})
+            """,
+            ids,
+        ).fetchall()
+    return {row["slot_id"]: row["room_id"] for row in rows}
 
 
 def write_state(state, actor, skip_permission=False):
@@ -3185,6 +3221,8 @@ def audit_event(actor, action, entity_type, entity_id, message, slot_ids, at, be
 
 def write_audit_events(conn, events):
     insert_audit_events(conn, events)
+    if events:
+        invalidate_data_cache_prefixes("audit_events::")
 
 
 def merge_audit_logs(client_logs, events):
@@ -5627,6 +5665,7 @@ def reimbursement_detail_payload(conn, record):
     workflow_events = list_billing_workflow_events(conn, workflow["id"]) if workflow else []
     history = list_reimbursement_records_for_pi(conn, record.get("pi", ""))
     history = sorted(history, key=lambda item: (clean_text(item.get("month", "")), clean_text(item.get("latestEventAt", ""))), reverse=True)
+    history = [reimbursement_record_list_item(item) for item in history]
     return {
         "item": record,
         "workflow": billing_workflow_detail_item(workflow) if workflow else None,
@@ -5636,7 +5675,9 @@ def reimbursement_detail_payload(conn, record):
     }
 
 def save_billing_statement_workflow(conn, statement, lines, actor, note=""):
-    return save_billing_statement_workflow_service(conn, statement, lines, actor, note, billing_workflow_service_deps())
+    result = save_billing_statement_workflow_service(conn, statement, lines, actor, note, billing_workflow_service_deps())
+    invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
+    return result
 
 
 def insert_billing_workflow(conn, payload):
@@ -6348,7 +6389,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::", "reimbursement_records::")
+            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
             self.send_json({"workflow": workflow, "event": event, "auditLogs": merge_audit_logs([], [audit])})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -6390,7 +6431,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::", "reimbursement_records::")
+            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
             self.send_json({"ok": True, "workflow": workflow, "auditLogs": merge_audit_logs([], [audit])})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -6560,6 +6601,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 page = payload["page"]
             elif table == "placement_tasks":
                 filters = self.list_filters()
+                if actor.get("role") != "admin":
+                    allowed_rooms = [clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)]
+                    requested_room_id = clean_text(filters.get("roomId", ""))
+                    if requested_room_id and requested_room_id not in allowed_rooms:
+                        filters["roomIds"] = []
+                        filters["roomId"] = ""
+                    elif not requested_room_id:
+                        filters["roomIds"] = allowed_rooms
                 payload = list_placement_tasks_page(conn, filters, ENTITY_ORDER_BY, clean_text)
                 items = payload["items"]
                 page = payload["page"]

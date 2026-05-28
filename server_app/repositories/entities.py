@@ -1,5 +1,7 @@
 import json
 
+from server_app.cache import cache_get, cache_key, cache_set
+
 from .payload import dump_json
 from .payload import paginated_payloads
 
@@ -30,7 +32,17 @@ def list_audit_events_page(conn, filters, filtered_where):
         ],
         filters,
     )
-    return paginated_payloads(conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"])
+    key = cache_key(
+        "audit_events",
+        limit=filters["limit"],
+        offset=filters["offset"],
+        entity_type=str(filters.get("entityType", "")).strip(),
+        action=str(filters.get("action", "")).strip(),
+    )
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    return cache_set(key, paginated_payloads(conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"]))
 
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
@@ -67,6 +79,13 @@ def list_placement_tasks_page(conn, filters, entity_order_by, clean_text):
     if room_id:
         where_parts.append("target_room_id = ?")
         params.append(room_id)
+    elif isinstance(filters.get("roomIds"), list):
+        room_ids = [clean_text(item) for item in filters.get("roomIds", []) if clean_text(item)]
+        if room_ids:
+            where_parts.append(f"target_room_id IN ({', '.join('?' for _ in room_ids)})")
+            params.extend(room_ids)
+        else:
+            where_parts.append("1 = 0")
     where = " AND ".join(where_parts)
     if filters.get("month"):
         where = " AND ".join([part for part in (where, "planned_move_in_date LIKE ?") if part])
