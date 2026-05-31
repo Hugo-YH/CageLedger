@@ -70,7 +70,30 @@ def list_reimbursement_records_page(conn, filters, clean_text):
     total = conn.execute(f"SELECT COUNT(*) AS total FROM reimbursement_records{where_clause}", tuple(params)).fetchone()["total"]
     rows = conn.execute(
         f"""
-        SELECT payload
+        SELECT
+            id,
+            business_key,
+            month,
+            pi,
+            workflow_id,
+            workflow_status,
+            reimbursement_status,
+            current_month_amount,
+            support_amount,
+            payable_amount,
+            paid_amount,
+            unpaid_amount,
+            accumulated_payable,
+            accumulated_paid,
+            accumulated_unpaid,
+            source,
+            latest_event_at,
+            updated_at,
+            json_extract(payload, '$.fundBookNo') AS fund_book_no,
+            json_extract(payload, '$.reimbursementFormNo') AS reimbursement_form_no,
+            json_extract(payload, '$.approvedBudget') AS approved_budget,
+            json_extract(payload, '$.generatedAt') AS generated_at,
+            json_extract(payload, '$.iacucs') AS iacucs_json
         FROM reimbursement_records{where_clause}
         ORDER BY month DESC, latest_event_at DESC, rowid DESC
         LIMIT ? OFFSET ?
@@ -78,7 +101,7 @@ def list_reimbursement_records_page(conn, filters, clean_text):
         (*params, filters["limit"], filters["offset"]),
     ).fetchall()
     payload = {
-        "items": [reimbursement_record_list_item(json.loads(row["payload"])) for row in rows],
+        "items": [reimbursement_record_list_row(row) for row in rows],
         "page": {
             "limit": filters["limit"],
             "offset": filters["offset"],
@@ -87,6 +110,34 @@ def list_reimbursement_records_page(conn, filters, clean_text):
         },
     }
     return cache_set(key, payload)
+
+
+def reimbursement_record_list_row(row):
+    return {
+        "id": row["id"] or "",
+        "businessKey": row["business_key"] or "",
+        "month": row["month"] or "",
+        "pi": row["pi"] or "",
+        "workflowId": row["workflow_id"] or "",
+        "workflowStatus": row["workflow_status"] or "",
+        "reimbursementStatus": row["reimbursement_status"] or "",
+        "currentMonthAmount": row["current_month_amount"] or 0,
+        "supportAmount": row["support_amount"] or 0,
+        "payableAmount": row["payable_amount"] or 0,
+        "paidAmount": row["paid_amount"] or 0,
+        "unpaidAmount": row["unpaid_amount"] or 0,
+        "accumulatedPayable": row["accumulated_payable"] or 0,
+        "accumulatedPaid": row["accumulated_paid"] or 0,
+        "accumulatedUnpaid": row["accumulated_unpaid"] or 0,
+        "fundBookNo": row["fund_book_no"] or "",
+        "reimbursementFormNo": row["reimbursement_form_no"] or "",
+        "approvedBudget": row["approved_budget"] or "",
+        "source": row["source"] or "",
+        "latestEventAt": row["latest_event_at"] or "",
+        "generatedAt": row["generated_at"] or "",
+        "updatedAt": row["updated_at"] or "",
+        "iacucs": _load_json_array(row["iacucs_json"]),
+    }
 
 
 def get_reimbursement_record(conn, record_id):
@@ -110,6 +161,47 @@ def list_reimbursement_records_for_pi(conn, pi_name):
         (pi_name,),
     ).fetchall()
     return [json.loads(row["payload"]) for row in rows]
+
+
+def list_reimbursement_record_summaries_for_pi(conn, pi_name):
+    normalized_pi = str(pi_name or "").strip()
+    key = cache_key("reimbursement_records::history", pi=normalized_pi)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    rows = conn.execute(
+        """
+        SELECT
+            id,
+            business_key,
+            month,
+            pi,
+            workflow_id,
+            workflow_status,
+            reimbursement_status,
+            current_month_amount,
+            support_amount,
+            payable_amount,
+            paid_amount,
+            unpaid_amount,
+            accumulated_payable,
+            accumulated_paid,
+            accumulated_unpaid,
+            source,
+            latest_event_at,
+            updated_at,
+            json_extract(payload, '$.fundBookNo') AS fund_book_no,
+            json_extract(payload, '$.reimbursementFormNo') AS reimbursement_form_no,
+            json_extract(payload, '$.approvedBudget') AS approved_budget,
+            json_extract(payload, '$.generatedAt') AS generated_at,
+            json_extract(payload, '$.iacucs') AS iacucs_json
+        FROM reimbursement_records
+        WHERE pi = ?
+        ORDER BY month DESC, latest_event_at DESC, rowid DESC
+        """,
+        (normalized_pi,),
+    ).fetchall()
+    return cache_set(key, [reimbursement_record_list_row(row) for row in rows])
 
 
 def upsert_reimbursement_record(conn, payload):
@@ -166,3 +258,13 @@ def upsert_reimbursement_record(conn, payload):
 
 def delete_reimbursement_record(conn, record_id):
     conn.execute("DELETE FROM reimbursement_records WHERE id = ?", (record_id,))
+
+
+def _load_json_array(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []

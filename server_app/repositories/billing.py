@@ -36,7 +36,22 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
     total = conn.execute(f"SELECT COUNT(*) AS total FROM quantity_sheets{where_clause}", params).fetchone()["total"]
     rows = conn.execute(
         f"""
-        SELECT payload
+        SELECT
+            id,
+            month,
+            iacuc,
+            room_id,
+            room_name,
+            manager,
+            project,
+            pi,
+            owner,
+            funding,
+            updated_at,
+            json_extract(payload, '$.contact') AS contact,
+            json_extract(payload, '$.initialCageCount') AS initial_cage_count,
+            json_extract(payload, '$.initialAnimalCount') AS initial_animal_count,
+            json_extract(payload, '$.billingUnit') AS billing_unit
         FROM quantity_sheets{where_clause}
         ORDER BY month DESC, iacuc, updated_at DESC
         LIMIT ? OFFSET ?
@@ -44,7 +59,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         (*params, filters["limit"], filters["offset"]),
     ).fetchall()
     payload = {
-        "items": [quantity_sheet_list_item(json.loads(row["payload"])) for row in rows],
+        "items": [quantity_sheet_list_row(row) for row in rows],
         "page": {
             "limit": filters["limit"],
             "offset": filters["offset"],
@@ -53,6 +68,26 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         },
     }
     return cache_set(key, payload)
+
+
+def quantity_sheet_list_row(row):
+    return {
+        "id": row["id"] or "",
+        "month": row["month"] or "",
+        "iacuc": row["iacuc"] or "",
+        "roomId": row["room_id"] or "",
+        "roomName": row["room_name"] or "",
+        "manager": row["manager"] or "",
+        "project": row["project"] or "",
+        "pi": row["pi"] or "",
+        "owner": row["owner"] or "",
+        "contact": row["contact"] or "",
+        "funding": row["funding"] or "",
+        "initialCageCount": row["initial_cage_count"] or 0,
+        "initialAnimalCount": row["initial_animal_count"] or 0,
+        "billingUnit": row["billing_unit"] or "",
+        "updatedAt": row["updated_at"] or "",
+    }
 
 
 def quantity_sheet_list_item(sheet):
@@ -76,8 +111,38 @@ def quantity_sheet_list_item(sheet):
 
 
 def get_quantity_sheet(conn, sheet_id):
+    key = cache_key("quantity_sheets::detail", id=sheet_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     row = conn.execute("SELECT payload FROM quantity_sheets WHERE id = ?", (sheet_id,)).fetchone()
-    return json.loads(row["payload"]) if row else None
+    return cache_set(key, json.loads(row["payload"]) if row else None)
+
+
+def list_quantity_sheets_by_month_iacuc(conn, month, iacuc):
+    rows = conn.execute(
+        """
+        SELECT payload
+        FROM quantity_sheets
+        WHERE month = ? AND iacuc = ?
+        ORDER BY updated_at DESC, rowid DESC
+        """,
+        (month, iacuc),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def list_quantity_sheets_by_month_pi(conn, month, pi):
+    rows = conn.execute(
+        """
+        SELECT payload
+        FROM quantity_sheets
+        WHERE month = ? AND pi = ?
+        ORDER BY updated_at DESC, rowid DESC
+        """,
+        (month, pi),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
 
 
 def get_billing_workflow_by_key(conn, business_key):
@@ -88,6 +153,53 @@ def get_billing_workflow_by_key(conn, business_key):
 def get_billing_workflow(conn, workflow_id):
     row = conn.execute("SELECT payload FROM billing_workflows WHERE id = ?", (workflow_id,)).fetchone()
     return json.loads(row["payload"]) if row else None
+
+
+def get_billing_workflow_detail(conn, workflow_id):
+    row = conn.execute(
+        """
+        SELECT
+            workflows.id,
+            workflows.business_key,
+            workflows.iacuc,
+            workflows.month,
+            workflows.source_type,
+            workflows.workflow_status,
+            workflows.current_version_id,
+            workflows.current_version_no,
+            workflows.latest_event_at,
+            json_extract(workflows.payload, '$.scopeType') AS scope_type,
+            json_extract(workflows.payload, '$.scopeKey') AS scope_key,
+            json_extract(workflows.payload, '$.iacucs') AS iacucs_json,
+            json_extract(workflows.payload, '$.pi') AS pi,
+            json_extract(workflows.payload, '$.project') AS project,
+            json_extract(workflows.payload, '$.owner') AS owner,
+            json_extract(workflows.payload, '$.funding') AS funding,
+            json_extract(workflows.payload, '$.totalAmount') AS total_amount,
+            json_extract(workflows.payload, '$.totalCageDays') AS total_cage_days,
+            json_extract(workflows.payload, '$.generatedAt') AS generated_at,
+            json_extract(workflows.payload, '$.sentAt') AS sent_at,
+            json_extract(workflows.payload, '$.signedReturnedAt') AS signed_returned_at,
+            json_extract(workflows.payload, '$.submittedToFinanceAt') AS submitted_to_finance_at,
+            versions.id AS cv_id,
+            versions.workflow_id AS cv_workflow_id,
+            versions.version_no AS cv_version_no,
+            versions.version_status AS cv_version_status,
+            versions.workflow_status AS cv_workflow_status,
+            versions.generated_at AS cv_generated_at,
+            versions.voided_at AS cv_voided_at,
+            json_extract(versions.payload, '$.voidedBy') AS cv_voided_by,
+            json_extract(versions.payload, '$.voidReason') AS cv_void_reason,
+            json_extract(versions.payload, '$.documentNumber') AS cv_document_number,
+            json_extract(versions.payload, '$.summary') AS cv_summary_json
+        FROM billing_workflows AS workflows
+        LEFT JOIN billing_statement_versions AS versions
+          ON versions.id = workflows.current_version_id
+        WHERE workflows.id = ?
+        """,
+        (workflow_id,),
+    ).fetchone()
+    return billing_workflow_detail_row(row) if row else None
 
 
 def get_billing_version(conn, version_id):
@@ -139,7 +251,29 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
     total = conn.execute(f"SELECT COUNT(*) AS total FROM billing_workflows{where_clause}", tuple(params)).fetchone()["total"]
     rows = conn.execute(
         f"""
-        SELECT payload
+        SELECT
+            id,
+            business_key,
+            iacuc,
+            month,
+            source_type,
+            workflow_status,
+            current_version_id,
+            current_version_no,
+            latest_event_at,
+            json_extract(payload, '$.scopeType') AS scope_type,
+            json_extract(payload, '$.scopeKey') AS scope_key,
+            json_extract(payload, '$.iacucs') AS iacucs_json,
+            json_extract(payload, '$.pi') AS pi,
+            json_extract(payload, '$.project') AS project,
+            json_extract(payload, '$.owner') AS owner,
+            json_extract(payload, '$.funding') AS funding,
+            json_extract(payload, '$.totalAmount') AS total_amount,
+            json_extract(payload, '$.totalCageDays') AS total_cage_days,
+            json_extract(payload, '$.generatedAt') AS generated_at,
+            json_extract(payload, '$.sentAt') AS sent_at,
+            json_extract(payload, '$.signedReturnedAt') AS signed_returned_at,
+            json_extract(payload, '$.submittedToFinanceAt') AS submitted_to_finance_at
         FROM billing_workflows{where_clause}
         ORDER BY month DESC, rowid DESC
         LIMIT ? OFFSET ?
@@ -147,7 +281,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         (*params, filters["limit"], filters["offset"]),
     ).fetchall()
     payload = {
-        "items": [billing_workflow_list_item(json.loads(row["payload"])) for row in rows],
+        "items": [billing_workflow_list_row(row) for row in rows],
         "page": {
             "limit": filters["limit"],
             "offset": filters["offset"],
@@ -156,6 +290,33 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         },
     }
     return cache_set(key, payload)
+
+
+def billing_workflow_list_row(row):
+    return {
+        "id": row["id"] or "",
+        "businessKey": row["business_key"] or "",
+        "scopeType": row["scope_type"] or "",
+        "scopeKey": row["scope_key"] or "",
+        "iacuc": row["iacuc"] or "",
+        "iacucs": _load_json_array(row["iacucs_json"]),
+        "month": row["month"] or "",
+        "sourceType": row["source_type"] or "",
+        "workflowStatus": row["workflow_status"] or "",
+        "currentVersionId": row["current_version_id"] or "",
+        "currentVersionNo": row["current_version_no"] or 0,
+        "latestEventAt": row["latest_event_at"] or "",
+        "pi": row["pi"] or "",
+        "project": row["project"] or "",
+        "owner": row["owner"] or "",
+        "funding": row["funding"] or "",
+        "totalAmount": row["total_amount"] or 0,
+        "totalCageDays": row["total_cage_days"] or 0,
+        "generatedAt": row["generated_at"] or "",
+        "sentAt": row["sent_at"] or "",
+        "signedReturnedAt": row["signed_returned_at"] or "",
+        "submittedToFinanceAt": row["submitted_to_finance_at"] or "",
+    }
 
 
 def billing_workflow_list_item(workflow):
@@ -185,12 +346,39 @@ def billing_workflow_list_item(workflow):
     }
 
 
+def billing_workflow_detail_row(row):
+    return {
+        **billing_workflow_list_row(row),
+        "currentVersion": billing_workflow_version_row(row, prefix="cv_") if row["cv_id"] else {},
+    }
+
+
 def list_billing_workflow_versions(conn, workflow_id):
+    key = cache_key("billing_workflows::versions", workflow_id=workflow_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = conn.execute(
-        "SELECT payload FROM billing_statement_versions WHERE workflow_id = ? ORDER BY version_no DESC, rowid DESC",
+        """
+        SELECT
+            id,
+            workflow_id,
+            version_no,
+            version_status,
+            workflow_status,
+            generated_at,
+            voided_at,
+            json_extract(payload, '$.voidedBy') AS voided_by,
+            json_extract(payload, '$.voidReason') AS void_reason,
+            json_extract(payload, '$.documentNumber') AS document_number,
+            json_extract(payload, '$.summary') AS summary_json
+        FROM billing_statement_versions
+        WHERE workflow_id = ?
+        ORDER BY version_no DESC, rowid DESC
+        """,
         (workflow_id,),
     ).fetchall()
-    return [billing_workflow_version_list_item(json.loads(row["payload"])) for row in rows]
+    return cache_set(key, [billing_workflow_version_row(row) for row in rows])
 
 
 def billing_workflow_version_list_item(version):
@@ -210,6 +398,22 @@ def billing_workflow_version_list_item(version):
     }
 
 
+def billing_workflow_version_row(row, prefix=""):
+    return {
+        "id": row[f"{prefix}id"] or "",
+        "workflowId": row[f"{prefix}workflow_id"] or "",
+        "versionNo": row[f"{prefix}version_no"] or 0,
+        "versionStatus": row[f"{prefix}version_status"] or "",
+        "workflowStatus": row[f"{prefix}workflow_status"] or "",
+        "generatedAt": row[f"{prefix}generated_at"] or "",
+        "voidedAt": row[f"{prefix}voided_at"] or "",
+        "voidedBy": row[f"{prefix}voided_by"] or "",
+        "voidReason": row[f"{prefix}void_reason"] or "",
+        "documentNumber": row[f"{prefix}document_number"] or "",
+        "summary": _load_json_object(row[f"{prefix}summary_json"]),
+    }
+
+
 def billing_workflow_detail_item(workflow):
     current_version = workflow.get("currentVersion") or {}
     payload = dict(workflow)
@@ -218,11 +422,31 @@ def billing_workflow_detail_item(workflow):
 
 
 def list_billing_workflow_events(conn, workflow_id):
+    key = cache_key("billing_workflows::events", workflow_id=workflow_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = conn.execute(
-        "SELECT payload FROM billing_workflow_events WHERE workflow_id = ? ORDER BY at DESC, rowid DESC",
+        """
+        SELECT
+            id,
+            workflow_id,
+            version_id,
+            event_type,
+            from_status,
+            to_status,
+            at,
+            json_extract(payload, '$.actor.id') AS actor_id,
+            json_extract(payload, '$.actor.username') AS actor_username,
+            json_extract(payload, '$.actor.displayName') AS actor_display_name,
+            json_extract(payload, '$.note') AS note
+        FROM billing_workflow_events
+        WHERE workflow_id = ?
+        ORDER BY at DESC, rowid DESC
+        """,
         (workflow_id,),
     ).fetchall()
-    return [billing_workflow_event_list_item(json.loads(row["payload"])) for row in rows]
+    return cache_set(key, [billing_workflow_event_row(row) for row in rows])
 
 
 def billing_workflow_event_list_item(event):
@@ -243,12 +467,63 @@ def billing_workflow_event_list_item(event):
     }
 
 
+def billing_workflow_event_row(row):
+    return {
+        "id": row["id"] or "",
+        "workflowId": row["workflow_id"] or "",
+        "versionId": row["version_id"] or "",
+        "eventType": row["event_type"] or "",
+        "fromStatus": row["from_status"] or "",
+        "toStatus": row["to_status"] or "",
+        "at": row["at"] or "",
+        "actor": {
+            "id": row["actor_id"] or "",
+            "username": row["actor_username"] or "",
+            "displayName": row["actor_display_name"] or "",
+        },
+        "note": row["note"] or "",
+    }
+
+
 def list_billing_statement_lines_for_version(conn, version_id):
     rows = conn.execute(
         "SELECT payload FROM billing_statement_version_lines WHERE version_id = ? ORDER BY line_date, rowid",
         (version_id,),
     ).fetchall()
     return [json.loads(row["payload"]) for row in rows]
+
+
+def list_billing_statement_line_summaries_for_version(conn, version_id):
+    rows = conn.execute(
+        """
+        SELECT
+            line_date,
+            json_extract(payload, '$.cageCount') AS cage_count,
+            json_extract(payload, '$.animalCount') AS animal_count,
+            json_extract(payload, '$.freeCages') AS free_cages,
+            json_extract(payload, '$.billableCages') AS billable_cages,
+            json_extract(payload, '$.billableCount') AS billable_count,
+            json_extract(payload, '$.amount') AS amount,
+            json_extract(payload, '$.cumulative') AS cumulative
+        FROM billing_statement_version_lines
+        WHERE version_id = ?
+        ORDER BY line_date, rowid
+        """,
+        (version_id,),
+    ).fetchall()
+    return [billing_statement_line_summary_row(row) for row in rows]
+
+
+def billing_statement_line_summary_row(row):
+    return {
+        "date": row["line_date"] or "",
+        "cageCount": row["cage_count"] or 0,
+        "animalCount": row["animal_count"] or 0,
+        "freeCages": row["free_cages"] or 0,
+        "billableCages": row["billable_cages"] if row["billable_cages"] is not None else (row["billable_count"] or 0),
+        "amount": row["amount"] or 0,
+        "cumulative": row["cumulative"] or 0,
+    }
 
 
 def billing_statement_list_item(statement):
@@ -500,3 +775,23 @@ def delete_billing_workflow_tree(conn, workflow_id):
     conn.execute("DELETE FROM billing_workflow_events WHERE workflow_id = ?", (workflow_id,))
     conn.execute("DELETE FROM billing_statement_versions WHERE workflow_id = ?", (workflow_id,))
     conn.execute("DELETE FROM billing_workflows WHERE id = ?", (workflow_id,))
+
+
+def _load_json_array(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _load_json_object(value):
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

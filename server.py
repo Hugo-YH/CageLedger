@@ -59,6 +59,7 @@ from server_app.repositories.billing import (
     delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
     get_current_billing_statement as get_current_billing_statement_repository,
     billing_workflow_detail_item as billing_workflow_detail_item_repository,
+    get_billing_workflow_detail as get_billing_workflow_detail_repository,
     get_billing_version as get_billing_version_repository,
     get_billing_workflow as get_billing_workflow_repository,
     get_billing_workflow_by_key as get_billing_workflow_by_key_repository,
@@ -67,8 +68,11 @@ from server_app.repositories.billing import (
     insert_billing_workflow as insert_billing_workflow_repository,
     insert_billing_workflow_event as insert_billing_workflow_event_repository,
     insert_quantity_sheet as insert_quantity_sheet_repository,
+    list_quantity_sheets_by_month_iacuc as list_quantity_sheets_by_month_iacuc_repository,
+    list_quantity_sheets_by_month_pi as list_quantity_sheets_by_month_pi_repository,
     list_billing_workflows as list_billing_workflows_repository,
     list_billing_statement_lines_for_version as list_billing_statement_lines_for_version_repository,
+    list_billing_statement_line_summaries_for_version as list_billing_statement_line_summaries_for_version_repository,
     list_billing_workflow_events as list_billing_workflow_events_repository,
     list_billing_workflow_versions as list_billing_workflow_versions_repository,
     list_billing_workflows_page as list_billing_workflows_page_repository,
@@ -121,6 +125,7 @@ from server_app.repositories.reimbursement import (
     get_reimbursement_record as get_reimbursement_record_repository,
     get_reimbursement_record_by_key as get_reimbursement_record_by_key_repository,
     get_reimbursement_record_by_workflow_id as get_reimbursement_record_by_workflow_id_repository,
+    list_reimbursement_record_summaries_for_pi as list_reimbursement_record_summaries_for_pi_repository,
     list_reimbursement_records_for_pi as list_reimbursement_records_for_pi_repository,
     list_reimbursement_records_page as list_reimbursement_records_page_repository,
     reimbursement_record_list_item,
@@ -3697,6 +3702,14 @@ def list_quantity_sheets(conn):
     return list_quantity_sheets_repository(conn)
 
 
+def list_quantity_sheets_by_month_iacuc(conn, month, iacuc):
+    return list_quantity_sheets_by_month_iacuc_repository(conn, month, iacuc)
+
+
+def list_quantity_sheets_by_month_pi(conn, month, pi):
+    return list_quantity_sheets_by_month_pi_repository(conn, month, pi)
+
+
 def list_quantity_sheets_page(conn, filters):
     return list_quantity_sheets_page_repository(conn, filters, filtered_where)
 
@@ -3895,11 +3908,7 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
     if not sheet_iacuc:
         raise ValueError("数量统计表缺少伦理号，无法生成按伦理号拆分的结算单")
-    sheets = [
-        item
-        for item in list_quantity_sheets(conn)
-        if item.get("month") == sheet["month"] and normalize_iacuc_number(item.get("iacuc", "")) == sheet_iacuc
-    ]
+    sheets = list_quantity_sheets_by_month_iacuc(conn, sheet["month"], sheet_iacuc)
     for item in sheets:
         validate_quantity_sheet_permission(actor, item)
     pi_name = clean_text(sheet.get("pi", ""))
@@ -4383,11 +4392,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         }
         detail_context = occupancy_detail_context(occupancies, rooms)
     else:
-        sheets = [
-            item
-            for item in list_quantity_sheets(conn)
-            if item.get("month") == month and clean_text(item.get("pi", "")) == pi_name
-        ]
+        sheets = list_quantity_sheets_by_month_pi(conn, month, pi_name)
         if not sheets:
             raise ValueError("未找到该 PI 在结算月份内的数量统计表")
         for item in sheets:
@@ -4976,6 +4981,10 @@ def get_billing_workflow(conn, workflow_id):
     return get_billing_workflow_repository(conn, workflow_id)
 
 
+def get_billing_workflow_detail(conn, workflow_id):
+    return get_billing_workflow_detail_repository(conn, workflow_id)
+
+
 def get_billing_version(conn, version_id):
     return get_billing_version_repository(conn, version_id)
 
@@ -4998,7 +5007,7 @@ def list_billing_workflow_lines(conn, workflow_id, version_id=""):
     return {
         "workflowId": workflow_id,
         "versionId": selected_version_id,
-        "lines": list_billing_statement_lines_for_version(conn, selected_version_id),
+        "lines": list_billing_statement_line_summaries_for_version_repository(conn, selected_version_id),
     }
 
 
@@ -5048,6 +5057,10 @@ def get_reimbursement_record_by_workflow_id(conn, workflow_id):
 
 def list_reimbursement_records_for_pi(conn, pi_name):
     return list_reimbursement_records_for_pi_repository(conn, pi_name)
+
+
+def list_reimbursement_record_summaries_for_pi(conn, pi_name):
+    return list_reimbursement_record_summaries_for_pi_repository(conn, pi_name)
 
 
 def upsert_reimbursement_record(conn, payload):
@@ -5163,10 +5176,10 @@ def reimbursement_detail_context_from_workflow(conn, workflow, statement):
     iacucs = [normalize_iacuc_number(value) for value in statement.get("iacucs", []) if normalize_iacuc_number(value)]
     applications_by_iacuc = read_applications_by_iacuc(conn)
     if statement.get("sourceType") == "pi_merged_quantity_sheet":
-        sheets = [item for item in list_quantity_sheets(conn) if item.get("month") == statement.get("month") and clean_text(item.get("pi")) == clean_text(statement.get("pi"))]
+        sheets = list_quantity_sheets_by_month_pi(conn, statement.get("month"), clean_text(statement.get("pi")))
         detail_context = quantity_sheet_detail_context(sheets, read_payloads(conn, "rooms", "rowid"))
     elif statement.get("sourceType") == "quantity_sheet":
-        sheets = [item for item in list_quantity_sheets(conn) if item.get("month") == statement.get("month") and normalize_iacuc_number(item.get("iacuc")) == normalize_iacuc_number(statement.get("iacuc"))]
+        sheets = list_quantity_sheets_by_month_iacuc(conn, statement.get("month"), normalize_iacuc_number(statement.get("iacuc")))
         detail_context = quantity_sheet_detail_context(sheets, read_payloads(conn, "rooms", "rowid"))
     else:
         occupancies = read_occupancies_for_billing(
@@ -5660,19 +5673,30 @@ def import_arrears_reimbursement_workbook(conn, file_body, actor):
 
 
 def reimbursement_detail_payload(conn, record):
-    workflow = get_billing_workflow(conn, record.get("workflowId", "")) if record.get("workflowId") else None
+    record_id = clean_text(record.get("id", ""))
+    workflow_id = clean_text(record.get("workflowId", ""))
+    cache_key_value = cache_key(
+        "reimbursement_records::detail",
+        record_id=record_id,
+        workflow_id=workflow_id,
+        updated_at=clean_text(record.get("updatedAt", "")),
+        latest_event_at=clean_text(record.get("latestEventAt", "")),
+    )
+    cached = cache_get(cache_key_value)
+    if cached is not None:
+        return cached
+    workflow = get_billing_workflow_detail(conn, record.get("workflowId", "")) if record.get("workflowId") else None
     workflow_versions = list_billing_workflow_versions(conn, workflow["id"]) if workflow else []
     workflow_events = list_billing_workflow_events(conn, workflow["id"]) if workflow else []
-    history = list_reimbursement_records_for_pi(conn, record.get("pi", ""))
-    history = sorted(history, key=lambda item: (clean_text(item.get("month", "")), clean_text(item.get("latestEventAt", ""))), reverse=True)
-    history = [reimbursement_record_list_item(item) for item in history]
-    return {
+    history = list_reimbursement_record_summaries_for_pi(conn, record.get("pi", ""))
+    payload = {
         "item": record,
-        "workflow": billing_workflow_detail_item(workflow) if workflow else None,
+        "workflow": workflow if workflow else None,
         "workflowVersions": workflow_versions,
         "workflowEvents": workflow_events,
         "history": history,
     }
+    return cache_set(cache_key_value, payload)
 
 def save_billing_statement_workflow(conn, statement, lines, actor, note=""):
     result = save_billing_statement_workflow_service(conn, statement, lines, actor, note, billing_workflow_service_deps())
@@ -5933,13 +5957,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             if not user:
                 return
             with connect_db() as conn:
-                workflow = get_billing_workflow(conn, workflow_id)
+                workflow = get_billing_workflow_detail(conn, workflow_id)
                 if not workflow:
                     self.send_json({"error": "结算流程不存在"}, HTTPStatus.NOT_FOUND)
                     return
                 self.send_json(
                     {
-                        "workflow": billing_workflow_detail_item(workflow),
+                        "workflow": workflow,
                         "versions": list_billing_workflow_versions(conn, workflow_id),
                         "events": list_billing_workflow_events(conn, workflow_id),
                     }

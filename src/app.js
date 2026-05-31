@@ -687,6 +687,10 @@ let IACUC_INDEX_LOADED = false;
 let IACUC_INDEX_PROMISE = null;
 let PRINCIPAL_IDENTITIES = [];
 let PRINCIPAL_IDENTITY_BY_NAME = new Map();
+let QUANTITY_SHEET_DETAIL_CACHE = new Map();
+let REIMBURSEMENT_DETAIL_CACHE = new Map();
+let BILLING_WORKFLOW_DETAIL_CACHE = new Map();
+let BILLING_WORKFLOW_LINES_CACHE = new Map();
 let iacucIndexMeta = null;
 let systemUpdateInfo = null;
 let lastRenderedView = "";
@@ -1689,7 +1693,7 @@ async function loadFullInfrastructure() {
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
       currentUser = null;
-      render();
+      scheduleRender("auth.expired");
       throw new Error("请先登录");
     }
     if (!response.ok) throw new Error(payload.error || "加载设施数据失败");
@@ -1722,7 +1726,7 @@ async function loadRoomInfrastructure(roomId, options = {}) {
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
       currentUser = null;
-      render();
+      scheduleRender("auth.expired");
       throw new Error("请先登录");
     }
     if (!response.ok) throw new Error(payload.error || "加载饲养间笼位失败");
@@ -1810,7 +1814,7 @@ async function entityRequest(collection, method, item = null, itemId = "") {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -1835,7 +1839,7 @@ async function createInfrastructure(payload) {
   const result = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2073,11 +2077,19 @@ async function loadReimbursementRecords(options = {}) {
 
 async function loadReimbursementRecordDetail(recordId) {
   if (!remotePersistence || !recordId) return null;
+  const cached = cachedReimbursementRecordDetail(recordId);
+  if (cached) {
+    state.selectedReimbursementRecordId = recordId;
+    state.selectedReimbursementRecordDetail = cached;
+    state.showReimbursementWorkflowLines = false;
+    if (cached.item) upsertById(state.reimbursementRecords, cached.item);
+    return cached;
+  }
   const response = await fetch(buildReimbursementRecordUrl(recordId), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2086,6 +2098,7 @@ async function loadReimbursementRecordDetail(recordId) {
   state.selectedReimbursementRecordId = recordId;
   state.selectedReimbursementRecordDetail = payload;
   state.showReimbursementWorkflowLines = false;
+  rememberReimbursementRecordDetail(payload);
   if (payload.item) upsertById(state.reimbursementRecords, payload.item);
   return payload;
 }
@@ -2099,7 +2112,7 @@ async function updateReimbursementRecord(recordId, patch) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2108,6 +2121,7 @@ async function updateReimbursementRecord(recordId, patch) {
   mergeServerAuditLogs(payload);
   if (payload.item) upsertById(state.reimbursementRecords, payload.item);
   state.selectedReimbursementRecordDetail = payload;
+  rememberReimbursementRecordDetail(payload);
   invalidateStateIndexCache();
   return payload.item;
 }
@@ -2117,7 +2131,7 @@ async function deleteReimbursementRecord(recordId) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2125,6 +2139,7 @@ async function deleteReimbursementRecord(recordId) {
   }
   mergeServerAuditLogs(payload);
   state.reimbursementRecords = state.reimbursementRecords.filter((item) => item.id !== recordId);
+  REIMBURSEMENT_DETAIL_CACHE.delete(recordId);
   if (state.selectedReimbursementRecordId === recordId) {
     state.selectedReimbursementRecordId = "";
     state.selectedReimbursementRecordDetail = null;
@@ -2140,7 +2155,7 @@ async function importReimbursementWorkbook(kind, formData) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2216,18 +2231,27 @@ async function refreshQuantitySheet(sheetId) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
     throw new Error(payload.error || "刷新数量统计表失败");
   }
-  if (payload.item) upsertById(state.quantitySheets, payload.item);
+  if (payload.item) {
+    rememberQuantitySheetDetail(payload.item);
+    upsertById(state.quantitySheets, payload.item);
+  }
   return payload.item || null;
 }
 
 async function ensureQuantitySheetDetail(sheet) {
-  if (!sheet?.id || Array.isArray(sheet.rows)) return sheet || null;
+  if (!sheet?.id) return sheet || null;
+  const cached = cachedQuantitySheetDetail(sheet);
+  if (cached) return cached;
+  if (Array.isArray(sheet.rows)) {
+    rememberQuantitySheetDetail(sheet);
+    return sheet;
+  }
   try {
     return (await refreshQuantitySheet(sheet.id)) || sheet;
   } catch (error) {
@@ -2395,7 +2419,7 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2408,6 +2432,7 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
     if (payload.event) {
       state.selectedBillingWorkflowDetail.events = [payload.event, ...(state.selectedBillingWorkflowDetail.events || [])];
     }
+    rememberBillingWorkflowDetail(state.selectedBillingWorkflowDetail);
   }
   if (state.selectedReimbursementRecordDetail?.workflow?.id === payload.workflow?.id) {
     state.selectedReimbursementRecordDetail.workflow = payload.workflow;
@@ -2419,6 +2444,7 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
     if (payload.event) {
       state.selectedReimbursementRecordDetail.workflowEvents = [payload.event, ...(state.selectedReimbursementRecordDetail.workflowEvents || [])];
     }
+    rememberReimbursementRecordDetail(state.selectedReimbursementRecordDetail);
   }
   logClientPerf("billing_workflow.advance", startedAt, { workflowId, toStatus });
   return payload.workflow;
@@ -2426,11 +2452,19 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
 
 async function loadBillingWorkflowDetail(workflowId) {
   if (!remotePersistence) return null;
+  const cached = cachedBillingWorkflowDetail(workflowId);
+  if (cached) {
+    state.selectedBillingWorkflowId = workflowId;
+    state.selectedBillingWorkflowDetail = cached;
+    state.showWorkflowStatements = false;
+    if (cached.workflow) upsertById(state.billingWorkflows, cached.workflow);
+    return cached;
+  }
   const response = await fetch(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2439,6 +2473,7 @@ async function loadBillingWorkflowDetail(workflowId) {
   state.selectedBillingWorkflowId = workflowId;
   state.selectedBillingWorkflowDetail = { ...payload, linesByVersion: {} };
   state.showWorkflowStatements = false;
+  rememberBillingWorkflowDetail(state.selectedBillingWorkflowDetail);
   if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
   return payload;
 }
@@ -2450,11 +2485,23 @@ async function loadBillingWorkflowLines(workflowId, versionId = "") {
   const workflow = detail.workflow || {};
   const resolvedVersionId = versionId || workflow.currentVersionId || "";
   if (resolvedVersionId && Array.isArray(linesByVersion[resolvedVersionId])) return linesByVersion[resolvedVersionId];
+  const cachedLines = cachedBillingWorkflowLines(workflowId, resolvedVersionId);
+  if (cachedLines) {
+    state.selectedBillingWorkflowDetail = {
+      ...detail,
+      linesByVersion: {
+        ...linesByVersion,
+        [resolvedVersionId || "current"]: cachedLines,
+      },
+    };
+    rememberBillingWorkflowDetail(state.selectedBillingWorkflowDetail);
+    return cachedLines;
+  }
   const response = await fetch(buildBillingWorkflowLinesUrl(workflowId, resolvedVersionId), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2467,6 +2514,8 @@ async function loadBillingWorkflowLines(workflowId, versionId = "") {
       [payload.versionId || resolvedVersionId || "current"]: payload.lines || [],
     },
   };
+  rememberBillingWorkflowLines(workflowId, payload.versionId || resolvedVersionId || "current", payload.lines || []);
+  rememberBillingWorkflowDetail(state.selectedBillingWorkflowDetail);
   return payload.lines || [];
 }
 
@@ -2477,7 +2526,7 @@ async function deleteBillingWorkflow(workflowId) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2485,6 +2534,8 @@ async function deleteBillingWorkflow(workflowId) {
   }
   mergeServerAuditLogs(payload);
   state.billingWorkflows = state.billingWorkflows.filter((item) => item.id !== workflowId);
+  BILLING_WORKFLOW_DETAIL_CACHE.delete(workflowId);
+  clearBillingWorkflowLinesCache(workflowId);
   invalidateStateIndexCache();
   if (state.selectedBillingWorkflowId === workflowId) {
     state.selectedBillingWorkflowId = "";
@@ -2513,7 +2564,7 @@ async function fetchEntityById(collection, itemId) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -2648,10 +2699,12 @@ async function refreshBillingWorkflowsAfterSave() {
 }
 
 async function refreshInfrastructureAfterSave() {
-  await reloadInfrastructureOverview();
-  if (state.selectedRoomId) {
-    await loadRoomInfrastructure(state.selectedRoomId, { force: true });
+  const selectedRoomId = state.selectedRoomId;
+  const tasks = [reloadInfrastructureOverview()];
+  if (selectedRoomId) {
+    tasks.push(loadRoomInfrastructure(selectedRoomId, { force: true }));
   }
+  await Promise.all(tasks);
   refreshInfrastructureSummaries();
   updateSlotStatuses();
 }
@@ -3779,7 +3832,7 @@ async function reloadInfrastructureOverview() {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) throw new Error(payload.error || "刷新设施概览失败");
@@ -6839,7 +6892,7 @@ function bindEvents() {
   document.querySelector("#logoutButton")?.addEventListener("click", logout);
   document.querySelector("#sidebarToggle")?.addEventListener("click", () => {
     state.sidebarCollapsed = !state.sidebarCollapsed;
-    render();
+    scheduleRender("sidebar.toggle");
   });
   document.querySelector("#settingsNavToggle")?.addEventListener("click", () => {
     const settingsViews = ["rooms", "data", "users", "system", "logs"];
@@ -6849,11 +6902,11 @@ function bindEvents() {
     } else {
       state.settingsNavExpanded = !state.settingsNavExpanded;
     }
-    render();
+    scheduleRender("settings_nav.toggle");
   });
   document.querySelector("#settingsDrawerBackdrop")?.addEventListener("click", () => {
     state.settingsNavExpanded = false;
-    render();
+    scheduleRender("settings_nav.backdrop");
   });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -6864,13 +6917,13 @@ function bindEvents() {
       } else {
         state.settingsNavExpanded = false;
       }
-      render();
+      scheduleRender(`view.switch.${state.activeView}`);
       try {
         await ensureViewDataLoaded(state.activeView);
       } catch (error) {
         reportSaveError(error);
       }
-      render();
+      scheduleRender(`view.loaded.${state.activeView}`);
     });
   });
   document.querySelectorAll("[data-dashboard-action]").forEach((button) => {
@@ -6890,7 +6943,7 @@ function bindEvents() {
         state.activeView = "workflow-center";
         state.reimbursementFilter = "all";
       }
-      render();
+      scheduleRender(`dashboard.action.${action}`);
       try {
         await ensureViewDataLoaded(state.activeView);
         if (state.activeView === "workflow-center" && remotePersistence) {
@@ -6906,7 +6959,7 @@ function bindEvents() {
       } catch (error) {
         reportSaveError(error);
       }
-      render();
+      scheduleRender(`dashboard.loaded.${action}`);
     });
   });
 
@@ -6918,25 +6971,24 @@ function bindEvents() {
     state.selectedSlotIds = [];
     if (remotePersistence) {
       try {
-        await loadRoomInfrastructure(state.selectedRoomId);
-        await loadPlacementTasksPage(1, paginationState.placementTasks.limit);
+        await Promise.all([loadRoomInfrastructure(state.selectedRoomId), loadPlacementTasksPage(1, paginationState.placementTasks.limit)]);
       } catch (error) {
         reportSaveError(error);
       }
     }
-    render();
+    scheduleRender("room.select");
   });
 
   document.querySelector("#rackSelect")?.addEventListener("change", (event) => {
     state.selectedRackId = event.target.value;
     state.selectedSlotId = state.slots.find((slot) => slot.rackId === state.selectedRackId)?.id;
     state.selectedSlotIds = [];
-    render();
+    scheduleRender("rack.select");
   });
   document.querySelectorAll("[data-toggle-placement-task-panel]").forEach((button) => {
     button.addEventListener("click", () => {
       state.showPlacementTaskPanel = button.dataset.togglePlacementTaskPanel === "open";
-      render();
+      scheduleRender("placement_task_panel.toggle");
     });
   });
 
@@ -6961,7 +7013,7 @@ function bindEvents() {
         state.selectedSlotId = button.dataset.slot;
         state.selectedSlotIds = [];
       }
-      render();
+      scheduleRender("slot.select");
     });
     button.addEventListener("mouseenter", () => showSlotHoverPreview(button));
     button.addEventListener("mousemove", () => positionSlotHoverPreview(button));
@@ -6974,7 +7026,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.slotFilter = button.dataset.filter;
       state.selectedSlotIds = [];
-      render();
+      scheduleRender("slot.filter");
     });
   });
 
@@ -6982,19 +7034,19 @@ function bindEvents() {
     if (state.placementAssignmentMode) return;
     state.batchMode = !state.batchMode;
     state.selectedSlotIds = state.batchMode && state.selectedSlotId ? [state.selectedSlotId] : [];
-    render();
+    scheduleRender("slot.batch_mode");
   });
   document.querySelector("#selectVisibleSlots")?.addEventListener("click", selectVisibleSlots);
   document.querySelector("#clearBatchSelection")?.addEventListener("click", () => {
     state.selectedSlotIds = [];
-    render();
+    scheduleRender("slot.batch_selection.clear");
   });
   document.querySelector("#slotForm")?.addEventListener("submit", handleSlotSubmit);
   document.querySelectorAll("[data-select-placement-task]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedPlacementTaskId = button.dataset.selectPlacementTask || "";
       showFlashNotice("请选择空笼位", "点击一个空笼位即可完成预留。", "success");
-      render();
+      scheduleRender("placement_task.select");
     });
   });
   document.querySelectorAll("[data-select-placement-task-group]").forEach((input) => {
@@ -7015,7 +7067,7 @@ function bindEvents() {
       if (state.placementAssignmentMode) {
         state.selectedSlotIds = [];
       }
-      render();
+      scheduleRender("placement_task_group.select");
     });
   });
   document.querySelector("#clearSelectedPlacementTasks")?.addEventListener("click", () => {
@@ -7023,7 +7075,7 @@ function bindEvents() {
     state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => !pageTaskIds.has(id));
     state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
     state.batchMode = state.placementAssignmentMode;
-    render();
+    scheduleRender("placement_task_group.clear");
   });
   document.querySelector("#confirmPlacementBatchMoveIn")?.addEventListener("click", batchMoveInSelectedPlacementTasks);
   document.querySelectorAll("[data-reserve-slot-for-task]").forEach((button) => {
@@ -7066,7 +7118,7 @@ function bindEvents() {
   document.querySelectorAll("[data-open-placement-room-change]").forEach((button) => {
     button.addEventListener("click", () => {
       state.reassigningPlacementReceiptId = button.dataset.openPlacementRoomChange || "";
-      render();
+      scheduleRender("placement.reassign.open");
     });
   });
   document.querySelector("#closePlacementRoomChange")?.addEventListener("click", closePlacementRoomChange);
@@ -7084,7 +7136,7 @@ function bindEvents() {
   document.querySelector("#confirmSampleBatchSlots")?.addEventListener("click", sampleBatchSlots);
   document.querySelector("#cancelSampling")?.addEventListener("click", () => {
     state.samplingMode = "";
-    render();
+    scheduleRender("sampling.cancel");
   });
   document.querySelector("#clearSlot")?.addEventListener("click", clearSelectedSlot);
   document.querySelector("#clearBatchSlots")?.addEventListener("click", clearBatchSlots);
@@ -7093,11 +7145,11 @@ function bindEvents() {
   });
   document.querySelector("#closeCageEditor")?.addEventListener("click", () => {
     state.showCageEditor = false;
-    render();
+    scheduleRender("cage_editor.close");
   });
   document.querySelector("#closeCageEditorButton")?.addEventListener("click", () => {
     state.showCageEditor = false;
-    render();
+    scheduleRender("cage_editor.close.button");
   });
   positionCageEditorPopover();
   window.onresize = () => {
@@ -7172,7 +7224,7 @@ function bindEvents() {
       state.selectedIntakeBatchId = "";
       state.intakeBatchDraft = makeIncomingBatchDraft();
       showFlashNotice("保存成功", `已保存为待接收批次：${savedBatch.batchNo || savedBatch.id}`);
-      render();
+      scheduleRender("intake_batch.create");
     } catch (error) {
       reportSaveError(error);
     }
@@ -7187,22 +7239,22 @@ function bindEvents() {
       pushLog(`更新待接收批次：${savedBatch.batchNo || savedBatch.id}`);
       closeIntakeBatchEditor();
       showFlashNotice("保存成功", `待接收批次已更新：${savedBatch.batchNo || savedBatch.id}`);
-      render();
+      scheduleRender("intake_batch.update");
     } catch (error) {
       reportSaveError(error);
     }
   });
   document.querySelector("#closeIntakeBatchEditor")?.addEventListener("click", () => {
     closeIntakeBatchEditor();
-    render();
+    scheduleRender("intake_batch.close");
   });
   document.querySelector("#closeIntakeBatchEditorButton")?.addEventListener("click", () => {
     closeIntakeBatchEditor();
-    render();
+    scheduleRender("intake_batch.close");
   });
   document.querySelector("#cancelIntakeBatchEdit")?.addEventListener("click", () => {
     closeIntakeBatchEditor();
-    render();
+    scheduleRender("intake_batch.cancel");
   });
   document.querySelector("#parseIncomingMessage")?.addEventListener("click", parseCurrentIncomingMessage);
   document.querySelector("#printCurrentCageCards")?.addEventListener("click", async () => {
@@ -7212,15 +7264,15 @@ function bindEvents() {
   document.querySelector("#previewCurrentCageCard")?.addEventListener("click", () => {
     captureIntakeBatchDraft();
     state.showIntakeCardPreview = true;
-    render();
+    scheduleRender("intake_card.preview.open");
   });
   document.querySelector("#closeIntakeCardPreview")?.addEventListener("click", () => {
     state.showIntakeCardPreview = false;
-    render();
+    scheduleRender("intake_card.preview.close");
   });
   document.querySelector("#closeIntakeCardPreviewButton")?.addEventListener("click", () => {
     state.showIntakeCardPreview = false;
-    render();
+    scheduleRender("intake_card.preview.close");
   });
   document.querySelector("#printSelectedCageCards")?.addEventListener("click", async () => {
     const pageBatchIds = new Set(pagedIntakeBatches().map((item) => item.id));
@@ -7239,19 +7291,19 @@ function bindEvents() {
           reportSaveError(error);
         }
       }
-      render();
+      scheduleRender("intake_batch.filter");
     });
   });
   document.querySelectorAll("[data-select-intake-batch]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());
     input.addEventListener("change", (event) => {
       toggleSelectedIntakeBatch(input.dataset.selectIntakeBatch, event.target.checked);
-      render();
+      scheduleRender("intake_batch.toggle");
     });
   });
   document.querySelector("[data-select-all-intake-batches]")?.addEventListener("change", (event) => {
     toggleSelectedIntakeBatchPage(event.target.checked);
-    render();
+    scheduleRender("intake_batch.toggle_page");
   });
   const selectAllIntakeBatches = document.querySelector("[data-select-all-intake-batches]");
   if (selectAllIntakeBatches) {
@@ -7262,14 +7314,14 @@ function bindEvents() {
   document.querySelectorAll("[data-open-intake-batch]").forEach((row) => {
     row.addEventListener("click", () => {
       openIntakeBatchEditor(row.dataset.openIntakeBatch);
-      render();
+      scheduleRender("intake_batch.open");
     });
   });
   document.querySelectorAll("[data-open-intake-batch-button]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       openIntakeBatchEditor(button.dataset.openIntakeBatchButton);
-      render();
+      scheduleRender("intake_batch.open");
     });
   });
   document.querySelectorAll("[data-delete-intake-batch]").forEach((button) => {
@@ -7311,13 +7363,13 @@ function bindEvents() {
     if (!form) return;
     const current = readIncomingBatchForm(form);
     state.intakeBatchDraft = applyIncomingBatchIacucInfo(current);
-    render();
+    scheduleRender("intake_batch.iacuc_autofill");
   });
   bindIacucLookupInputs("#intakeBatchEditForm", (event) => {
     const form = event.target.closest("form");
     if (!form) return;
     state.editingIntakeBatchDraft = applyIncomingBatchIacucInfo(readIncomingBatchForm(form));
-    render();
+    scheduleRender("intake_batch_edit.iacuc_autofill");
   });
   document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
     button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
@@ -7347,7 +7399,7 @@ function bindEvents() {
     row.addEventListener("click", async () => {
       try {
         await loadReimbursementRecordDetail(row.dataset.openReimbursement);
-        render();
+        scheduleRender("reimbursement.open");
       } catch (error) {
         reportSaveError(error);
       }
@@ -7358,7 +7410,7 @@ function bindEvents() {
       event.stopPropagation();
       try {
         await loadReimbursementRecordDetail(button.dataset.openReimbursementButton);
-        render();
+        scheduleRender("reimbursement.open");
       } catch (error) {
         reportSaveError(error);
       }
@@ -7376,7 +7428,7 @@ function bindEvents() {
         pushLog(`完成报销台账：${record.pi || ""} ${record.month || ""}`);
         await goToReimbursementRecordsPage(paginationState.reimbursementRecords.page || 1, paginationState.reimbursementRecords.limit);
         showFlashNotice("保存成功", "报销台账已标记完成。", "success");
-        render();
+        scheduleRender("reimbursement.complete");
       } catch (error) {
         reportSaveError(error);
       }
@@ -7399,7 +7451,7 @@ function bindEvents() {
       pushLog(`保存报销台账：${recordId}`);
       await goToReimbursementRecordsPage(paginationState.reimbursementRecords.page || 1, paginationState.reimbursementRecords.limit);
       showFlashNotice("保存成功", "报销登记已更新。", "success");
-      render();
+      scheduleRender("reimbursement.save");
     } catch (error) {
       reportSaveError(error);
     }
@@ -7412,7 +7464,7 @@ function bindEvents() {
         pushLog(`更新结算流程：${workflowActionLabel(button.dataset.nextStatus)}`);
         await refreshBillingWorkflowsAfterSave();
         showFlashNotice("保存成功", `结算流程已更新为${workflowStatusLabel(button.dataset.nextStatus)}。`, "success");
-        render();
+        scheduleRender("billing_workflow.advance");
       } catch (error) {
         reportSaveError(error);
       }
@@ -7447,7 +7499,7 @@ function bindEvents() {
         reportSaveError(error);
       }
     }
-    render();
+    scheduleRender("reimbursement.workflow_lines.toggle");
   });
   bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
@@ -7462,7 +7514,7 @@ function bindEvents() {
     }
     if (["rowDate", "addedText", "addedType", "removedText", "removedType", "animalCount", "cageCount", "handler"].includes(name)) {
       captureQuantitySheetDraft();
-      render();
+      scheduleRender("quantity_sheet.form_change");
     }
   });
   document.querySelector("#quantitySheetForm select[name='roomId']")?.addEventListener("change", syncQuantitySheetRoomName);
@@ -7478,13 +7530,13 @@ function bindEvents() {
   document.querySelectorAll("[data-edit-rack]").forEach((button) => {
     button.addEventListener("click", () => {
       state.editingRackId = button.dataset.editRack;
-      render();
+      scheduleRender("rack.edit.open");
     });
   });
   document.querySelectorAll("[data-cancel-rack-edit]").forEach((button) => {
     button.addEventListener("click", () => {
       if (state.editingRackId === button.dataset.cancelRackEdit) state.editingRackId = "";
-      render();
+      scheduleRender("rack.edit.cancel");
     });
   });
   document.querySelectorAll("[data-rack-edit-form]").forEach((form) => {
@@ -7509,7 +7561,7 @@ function bindEvents() {
   document.querySelector("#applyPrincipalIdentityFilter")?.addEventListener("click", applyPrincipalIdentityFilter);
   document.querySelector("#clearPrincipalIdentityFilter")?.addEventListener("click", () => {
     state.principalIdentityFilter = "";
-    render();
+    scheduleRender("principal_identity.filter.clear");
   });
   document.querySelectorAll("[data-save-principal]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -7586,7 +7638,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.editingRoomId = button.dataset.editRoom;
       state.showRoomForm = true;
-      render();
+      scheduleRender("room.edit.open");
     });
   });
   document.querySelectorAll("[data-delete-room]").forEach((button) => {
@@ -7598,29 +7650,29 @@ function bindEvents() {
   document.querySelector("#openRoomForm")?.addEventListener("click", () => {
     state.editingRoomId = "";
     state.showRoomForm = true;
-    render();
+    scheduleRender("room.create.open");
   });
   document.querySelector("#openRackForm")?.addEventListener("click", () => {
     state.showRackForm = true;
-    render();
+    scheduleRender("rack.create.open");
   });
   document.querySelector("#closeRoomForm")?.addEventListener("click", () => {
     state.showRoomForm = false;
     state.editingRoomId = "";
-    render();
+    scheduleRender("room.form.close");
   });
   document.querySelector("#closeRackForm")?.addEventListener("click", () => {
     state.showRackForm = false;
-    render();
+    scheduleRender("rack.form.close");
   });
   document.querySelector("#closeRoomFormButton")?.addEventListener("click", () => {
     state.showRoomForm = false;
     state.editingRoomId = "";
-    render();
+    scheduleRender("room.form.close.button");
   });
   document.querySelector("#closeRackFormButton")?.addEventListener("click", () => {
     state.showRackForm = false;
-    render();
+    scheduleRender("rack.form.close.button");
   });
   document.querySelector("#resetDemo")?.addEventListener("click", () => {
     if (remotePersistence) {
@@ -7630,13 +7682,13 @@ function bindEvents() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     state = normalize(structuredClone(seedData));
-    render();
+    scheduleRender("demo.reset");
   });
 }
 
 function openCageEditor() {
   state.showCageEditor = true;
-  render();
+  scheduleRender("cage_editor.open");
 }
 
 function isMobileViewport() {
@@ -7754,7 +7806,7 @@ function finishBatchSlotDrag() {
   window.removeEventListener("pointermove", handleBatchSlotDragMove);
   window.removeEventListener("pointerup", finishBatchSlotDrag);
   window.removeEventListener("pointercancel", finishBatchSlotDrag);
-  render();
+  scheduleRender("slot.batch_drag.finish");
 }
 
 function toggleBatchSlot(slotId) {
@@ -7937,7 +7989,7 @@ async function handleUserSubmit(event) {
   }
   await refreshUsersAfterSave();
   showFlashNotice("创建成功", `账号已创建：${form.get("displayName") || form.get("username")}`, "success");
-  render();
+  scheduleRender("user.create");
 }
 
 async function handleUserUpdate(event) {
@@ -7964,7 +8016,7 @@ async function handleUserUpdate(event) {
   }
   await refreshUsersAfterSave();
   showFlashNotice("保存成功", `账号已更新：${form.get("displayName") || form.get("username")}`, "success");
-  render();
+  scheduleRender("user.update");
 }
 
 async function deleteUser(userId) {
@@ -8023,7 +8075,7 @@ async function handleIacucUpload(event) {
     };
     mergeServerAuditLogs(payload);
     showFlashNotice("上传完成", `已生成 IACUC 索引 ${payload.count} 条，重复编号 ${payload.duplicateCount || 0} 条。`, "success");
-    render();
+    scheduleRender("iacuc.upload");
   } catch {
     showFlashNotice("上传失败", "请检查网络或文件格式。", "error");
   }
@@ -8041,7 +8093,7 @@ async function handleReimbursementImport(event, kind) {
     const payload = await importReimbursementWorkbook(kind, form);
     const title = kind === "arrears" ? "欠缴汇算导入完成" : "月汇总导入完成";
     showFlashNotice(title, `已导入 ${payload.count || 0} 条报销台账。`, "success");
-    render();
+    scheduleRender("reimbursement.import");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8052,7 +8104,7 @@ async function savePrincipalIdentityFromTable(pi, principalType) {
     const item = await savePrincipalIdentity(pi, normalizePrincipalType(principalType));
     pushLog(`更新 ${item.pi} 负责人身份为 ${principalTypeLabel(item.principalType)}`);
     showFlashNotice("保存成功", `${item.pi} 已更新为${principalTypeLabel(item.principalType)}。`, "success");
-    render();
+    scheduleRender("principal_identity.save");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8061,7 +8113,7 @@ async function savePrincipalIdentityFromTable(pi, principalType) {
 function applyPrincipalIdentityFilter() {
   const input = document.querySelector("#principalIdentityFilter");
   state.principalIdentityFilter = input?.value || "";
-  render();
+  scheduleRender("principal_identity.filter.apply");
 }
 
 async function savePrincipalIdentity(pi, principalType) {
@@ -8083,7 +8135,7 @@ async function savePrincipalIdentity(pi, principalType) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -8096,21 +8148,21 @@ async function savePrincipalIdentity(pi, principalType) {
 
 async function checkSystemUpdate() {
   systemUpdateInfo = { loading: true };
-  render();
+  scheduleRender("system_update.loading");
 
   try {
     const response = await fetch(API_SYSTEM_UPDATE_URL, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       systemUpdateInfo = { error: payload.error || "检查更新失败" };
-      render();
+      scheduleRender("system_update.error");
       return;
     }
     systemUpdateInfo = payload;
-    render();
+    scheduleRender("system_update.loaded");
   } catch {
     systemUpdateInfo = { error: "无法连接后端服务" };
-    render();
+    scheduleRender("system_update.offline");
   }
 }
 
@@ -8182,7 +8234,7 @@ function selectVisibleSlots() {
   const visibleSlots = state.slotFilter === "all" ? slots : slots.filter((slot) => slot.status === state.slotFilter);
   state.selectedSlotIds = visibleSlots.map((slot) => slot.id);
   state.selectedSlotId = state.selectedSlotIds[0] ?? state.selectedSlotId;
-  render();
+  scheduleRender("slot.select_visible");
 }
 
 async function handleSlotSubmit(event) {
@@ -8196,7 +8248,7 @@ async function handleSlotSubmit(event) {
     try {
       const saved = await closeOccupancy(slotId, form.get("endDate") || today, "cleared", { renderAfterSave: false });
       showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(slotId)} 已设为空。`, "success");
-      render();
+      scheduleRender("slot.save.clear");
       if (saved) refreshCageMapAfterOccupancySaveInBackground();
     } catch (error) {
       reportSaveError(error);
@@ -8240,7 +8292,7 @@ async function handleSlotSubmit(event) {
     applyOccupancyWriteResponse(response, payload);
     pushLog(`${current ? "更新" : "新增"}笼位 ${slotId} ${statusLabel(status)}`);
     showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(slotId)} 已更新为${statusLabel(status)}。`, "success");
-    render();
+    scheduleRender("slot.save");
     refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
@@ -8299,7 +8351,7 @@ async function handleBatchSlotSubmit(event) {
     pushLog(`批量更新 ${state.selectedSlotIds.length} 个笼位为 ${statusLabel(payload.status)}`);
     updateSlotStatuses();
     showFlashNotice("保存成功", `已更新 ${savedItems.length} 个笼位为${statusLabel(payload.status)}。`, "success");
-    render();
+    scheduleRender("slot.batch_save");
     refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
@@ -8346,7 +8398,7 @@ function applyPlacementWriteResponse(payload) {
 
 function refreshCageMapAfterOccupancySaveInBackground() {
   refreshCageMapAfterOccupancySave()
-    .then(() => render())
+    .then(() => scheduleRender("cage_map.refresh.background"))
     .catch((error) => {
       console.error(error);
     });
@@ -8422,7 +8474,7 @@ async function clearSelectedSlot() {
     await closeOccupancy(state.selectedSlotId, today, "cleared", { renderAfterSave: false });
     state.samplingMode = "";
     showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(state.selectedSlotId)} 已设为空。`, "success");
-    render();
+    scheduleRender("slot.clear");
     refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
@@ -8431,7 +8483,7 @@ async function clearSelectedSlot() {
 
 function openSampling(mode) {
   state.samplingMode = mode;
-  render();
+  scheduleRender("sampling.open");
 }
 
 async function sampleSelectedSlot() {
@@ -8446,7 +8498,7 @@ async function sampleSelectedSlot() {
     await closeOccupancy(state.selectedSlotId, sampledDate, "sampled", { renderAfterSave: false });
     state.samplingMode = "";
     showFlashNotice("保存成功", `笼位 ${cageCodeForSlot(state.selectedSlotId)} 已标记为已取材。`, "success");
-    render();
+    scheduleRender("sampling.save");
     refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
@@ -8485,7 +8537,7 @@ async function sampleBatchSlotsConfirmed(sampledDate) {
     state.samplingMode = "";
     updateSlotStatuses();
     showFlashNotice("保存成功", `已将 ${activeItems.length} 个笼位标记为已取材。`, "success");
-    render();
+    scheduleRender("slot.batch_sample.save");
     refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
@@ -8514,7 +8566,7 @@ async function clearBatchSlotsConfirmed() {
     state.samplingMode = "";
     updateSlotStatuses();
     showFlashNotice("保存成功", `已将 ${savedItems.filter(Boolean).length} 个笼位设为空。`, "success");
-    render();
+    scheduleRender("slot.batch_clear.save");
     refreshCageMapAfterOccupancySaveInBackground();
   } catch (error) {
     reportSaveError(error);
@@ -8525,7 +8577,7 @@ async function closeOccupancy(slotId, endDate, reason = "cleared", options = {})
   const { renderAfterSave = true } = options;
   const current = currentOccupancy(slotId);
   if (!current) {
-    if (renderAfterSave) render();
+    if (renderAfterSave) scheduleRender(`occupancy.close.empty.${reason}`);
     return null;
   }
 
@@ -8541,7 +8593,7 @@ async function closeOccupancy(slotId, endDate, reason = "cleared", options = {})
   const saved = applyOccupancyWriteResponse(response, next);
   pushLog(`${reason === "sampled" ? "已取材" : "设为空"}：结束笼位 ${slotId} 占用，最后计费日期 ${endDate}`);
   updateSlotStatuses();
-  if (renderAfterSave) render();
+  if (renderAfterSave) scheduleRender(`occupancy.close.${reason}`);
   return saved;
 }
 
@@ -8571,7 +8623,7 @@ async function submitIntakeReceipt(batchId, actualReceiptDate, cardCount) {
     pushLog(`确认接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务`);
     state.editingIntakeBatchDraft = normalizeIncomingBatchDraft(payload.batch);
     showFlashNotice("确认成功", `已接收 ${payload.batch.batchNo || payload.batch.id}，生成 ${payload.tasks?.length || 0} 个待进驻任务。`, "success");
-    render();
+    scheduleRender("intake_batch.confirm_receipt");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8597,7 +8649,7 @@ async function reservePlacementTask(taskId, slotId, options = {}) {
     state.selectedSlotId = slotId;
     if (renderAfterSave) {
       showFlashNotice("预留成功", `已预留笼位 ${cageCodeForSlot(slotId)}。`, "success");
-      render();
+      scheduleRender("placement.reserve");
       refreshCageMapAfterOccupancySaveInBackground();
     }
   } catch (error) {
@@ -8613,7 +8665,7 @@ async function togglePlacementAssignmentSlot(slotId) {
   }
   if (state.selectedSlotIds.includes(slotId)) {
     state.selectedSlotIds = state.selectedSlotIds.filter((id) => id !== slotId);
-    render();
+    scheduleRender("placement.slot.toggle");
     return;
   }
   if (state.selectedSlotIds.length >= state.selectedPlacementTaskIds.length) {
@@ -8621,7 +8673,7 @@ async function togglePlacementAssignmentSlot(slotId) {
     return;
   }
   state.selectedSlotIds = [...state.selectedSlotIds, slotId];
-  render();
+  scheduleRender("placement.slot.toggle");
 }
 
 async function batchMoveInSelectedPlacementTasks() {
@@ -8651,7 +8703,7 @@ async function batchMoveInSelectedPlacementTasks() {
     state.batchMode = state.placementAssignmentMode;
     await refreshCageMapAfterOccupancySave();
     showFlashNotice("批量入驻完成", `已完成 ${taskIdsToMove.length} 笼入驻。`, "success");
-    render();
+    scheduleRender("placement.batch_move_in");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8670,7 +8722,7 @@ async function moveInPlacementTask(taskId, options = {}) {
     applyPlacementWriteResponse(payload);
     if (renderAfterSave) {
       showFlashNotice("入驻成功", `笼位 ${cageCodeForSlot(payload.occupancy?.slotId || "")} 已正式入驻。`, "success");
-      render();
+      scheduleRender("placement.move_in");
       refreshCageMapAfterOccupancySaveInBackground();
     }
   } catch (error) {
@@ -8696,7 +8748,7 @@ async function reassignPlacementTask(taskId) {
     if (!response.ok) throw new Error(payload.error || "改签房间失败");
     applyPlacementWriteResponse(payload);
     showFlashNotice("保存成功", "待进驻动物目标饲养间已更新。", "success");
-    render();
+    scheduleRender("placement.reassign");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8726,7 +8778,7 @@ async function reassignPlacementGroup(receiptId, roomId = "") {
       applyPlacementWriteResponse(payload);
     }
     showFlashNotice("保存成功", `已更新 ${tasks.length} 条待进驻任务的目标饲养间。`, "success");
-    render();
+    scheduleRender("placement.reassign_group");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8734,7 +8786,7 @@ async function reassignPlacementGroup(receiptId, roomId = "") {
 
 function closePlacementRoomChange() {
   state.reassigningPlacementReceiptId = "";
-  render();
+  scheduleRender("placement.reassign.close");
 }
 
 async function submitPlacementRoomChange(event) {
@@ -8744,7 +8796,7 @@ async function submitPlacementRoomChange(event) {
   if (!roomId || !receiptId) return;
   await reassignPlacementGroup(receiptId, roomId);
   state.reassigningPlacementReceiptId = "";
-  render();
+  scheduleRender("placement.reassign.submit");
 }
 
 function intakeBatchById(batchId) {
@@ -8886,7 +8938,7 @@ async function deletePlacementTaskGroupConfirmed(groupKey) {
     state.batchMode = state.placementAssignmentMode;
     paginationState.placementTasks.total = placementTaskGroups(visiblePlacementTasksForRoom(state.selectedRoomId || "")).length;
     await refreshCageMapAfterOccupancySave();
-    render();
+    scheduleRender("placement_group.delete.local");
     return;
   }
 
@@ -8922,7 +8974,7 @@ async function handleRateSubmit(event) {
     state.billingPrincipalType = principalType;
     pushLog(`更新 ${targetPi} 负责人类型为 ${principalTypeLabel(principalType)}，免费笼数 ${freeCageAllowance}`);
     showFlashNotice("保存成功", `${targetPi} 负责人类型已更新。`, "success");
-    render();
+    scheduleRender("billing.principal_type.save");
   } catch (error) {
     reportSaveError(error);
   }
@@ -8951,7 +9003,7 @@ async function handleQuantitySheetSubmit(event) {
     const sheet = await saveQuantitySheetDraft();
     pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
     showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
-    render();
+    scheduleRender("quantity_sheet.submit");
   } catch (error) {
     reportSaveError(error);
   }
@@ -9013,7 +9065,7 @@ function newQuantitySheetDraft() {
   captureQuantitySheetDraft();
   state.selectedQuantitySheetId = "";
   state.quantitySheetDraft = makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
-  render();
+  scheduleRender("quantity_sheet.new");
 }
 
 function deleteCurrentQuantitySheet() {
@@ -9036,7 +9088,7 @@ async function deleteQuantitySheetConfirmed(sheetId) {
     state.quantitySheets = state.quantitySheets.filter((item) => item.id !== sheetId);
     state.selectedQuantitySheetId = "";
     state.quantitySheetDraft = makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
-    render();
+    scheduleRender("quantity_sheet.delete.local");
     return;
   }
 
@@ -9046,7 +9098,7 @@ async function deleteQuantitySheetConfirmed(sheetId) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -9054,18 +9106,19 @@ async function deleteQuantitySheetConfirmed(sheetId) {
   }
   mergeServerAuditLogs(payload);
   state.quantitySheets = state.quantitySheets.filter((item) => item.id !== sheetId);
+  QUANTITY_SHEET_DETAIL_CACHE.delete(sheetId);
   invalidateStateIndexCache();
   const nextSheet = state.quantitySheets[0] || null;
   state.selectedQuantitySheetId = nextSheet?.id || "";
   const detailed = await ensureQuantitySheetDetail(nextSheet);
   state.quantitySheetDraft = detailed ? hydrateQuantitySheetIacucInfo(detailed) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
-  render();
+  scheduleRender("quantity_sheet.delete.remote");
 }
 
 function addQuantitySheetRow() {
   captureQuantitySheetDraft();
   state.quantitySheetDraft.rows.push(makeQuantitySheetRow(state.quantitySheetDraft.month));
-  render();
+  scheduleRender("quantity_sheet.row.add");
 }
 
 function addQuantitySheetPage() {
@@ -9073,13 +9126,13 @@ function addQuantitySheetPage() {
   const month = state.quantitySheetDraft.month || state.billingMonth || today.slice(0, 7);
   state.quantitySheetDraft.pageCount = quantitySheetPageCount(state.quantitySheetDraft) + 1;
   while (state.quantitySheetDraft.rows.length < state.quantitySheetDraft.pageCount * 30) state.quantitySheetDraft.rows.push(makeBlankQuantitySheetRow(month));
-  render();
+  scheduleRender("quantity_sheet.page.add");
 }
 
 function removeQuantitySheetRow(index) {
   captureQuantitySheetDraft();
   state.quantitySheetDraft.rows.splice(index, 1);
-  render();
+  scheduleRender("quantity_sheet.row.remove");
 }
 
 function captureQuantitySheetDraft() {
@@ -9114,7 +9167,7 @@ async function saveQuantitySheetDraft() {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -9123,6 +9176,8 @@ async function saveQuantitySheetDraft() {
   mergeServerAuditLogs(payload);
   const savedSheet = payload.item || sheet;
   const affectedSheets = Array.isArray(payload.affectedItems) ? payload.affectedItems : [];
+  rememberQuantitySheetDetail(savedSheet);
+  affectedSheets.forEach((item) => rememberQuantitySheetDetail(item));
   upsertById(state.quantitySheets, savedSheet);
   affectedSheets.forEach((item) => upsertById(state.quantitySheets, item));
   state.selectedQuantitySheetId = savedSheet.id;
@@ -9130,11 +9185,6 @@ async function saveQuantitySheetDraft() {
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
   logClientPerf("quantity_sheet.save", startedAt, { affected: affectedSheets.length, rows: savedSheet.rows?.length || 0 });
-  Promise.all([savedSheet, ...affectedSheets].map((item) => refreshQuantitySheet(item.id)))
-    .then(() => render())
-    .catch((refreshError) => {
-      console.error(refreshError);
-    });
   return state.quantitySheetDraft;
 }
 
@@ -9142,7 +9192,7 @@ function handleIntakeBatchSelect(event) {
   const batch = state.intakeBatches.find((item) => item.id === event.target.value);
   if (batch) openIntakeBatchEditor(batch.id);
   else closeIntakeBatchEditor();
-  render();
+  scheduleRender("intake_batch.select");
 }
 
 function openIntakeBatchEditor(batchId) {
@@ -9198,7 +9248,7 @@ async function saveIntakeBatch(batch) {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -9261,7 +9311,7 @@ function parseCurrentIncomingMessage() {
     showFlashNotice("房间未匹配", `识别到房间 ${state.intakeBatchDraft.roomName}，当前系统中没有同名饲养间，请先改为已配置房间。`, "warning");
   }
   if (!isEditingSelectedBatch) state.selectedIntakeBatchId = "";
-  render();
+  scheduleRender("intake_batch.parse");
 }
 
 function toggleSelectedIntakeBatch(batchId, checked) {
@@ -9321,7 +9371,7 @@ async function printAndMarkIntakeBatches(batches) {
         await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
       }
       showFlashNotice("打印完成", `已打印并标记 ${batches.length} 个待接收批次。`, "success");
-      render();
+      scheduleRender("intake_batch.print.complete");
     } catch (error) {
       reportSaveError(error);
     }
@@ -9846,6 +9896,78 @@ function normalizeQuantitySheetDraft(sheet) {
   };
 }
 
+function cachedQuantitySheetDetail(sheet) {
+  const sheetId = sheet?.id || "";
+  if (!sheetId) return null;
+  const cached = QUANTITY_SHEET_DETAIL_CACHE.get(sheetId);
+  if (!cached || !Array.isArray(cached.rows)) return null;
+  if (!sheet?.updatedAt || !cached.updatedAt || cached.updatedAt === sheet.updatedAt) return cached;
+  return null;
+}
+
+function rememberQuantitySheetDetail(sheet) {
+  if (!sheet?.id || !Array.isArray(sheet.rows)) return sheet || null;
+  QUANTITY_SHEET_DETAIL_CACHE.set(sheet.id, sheet);
+  return sheet;
+}
+
+function cachedReimbursementRecordDetail(recordId) {
+  const summary = reimbursementRecordById(recordId);
+  const cached = REIMBURSEMENT_DETAIL_CACHE.get(recordId);
+  if (!cached || !cached.item) return null;
+  if (!summary) return cached;
+  if ((cached.item.updatedAt || "") !== (summary.updatedAt || "")) return null;
+  if ((cached.item.latestEventAt || "") !== (summary.latestEventAt || "")) return null;
+  return cached;
+}
+
+function rememberReimbursementRecordDetail(detail) {
+  const recordId = detail?.item?.id || "";
+  if (!recordId) return detail || null;
+  REIMBURSEMENT_DETAIL_CACHE.set(recordId, detail);
+  return detail;
+}
+
+function cachedBillingWorkflowDetail(workflowId) {
+  const summary = billingWorkflowById(workflowId);
+  const cached = BILLING_WORKFLOW_DETAIL_CACHE.get(workflowId);
+  if (!cached || !cached.workflow) return null;
+  if (!summary) return cached;
+  if ((cached.workflow.latestEventAt || "") !== (summary.latestEventAt || "")) return null;
+  if ((cached.workflow.currentVersionId || "") !== (summary.currentVersionId || "")) return null;
+  if ((cached.workflow.workflowStatus || "") !== (summary.workflowStatus || "")) return null;
+  return cached;
+}
+
+function rememberBillingWorkflowDetail(detail) {
+  const workflowId = detail?.workflow?.id || "";
+  if (!workflowId) return detail || null;
+  BILLING_WORKFLOW_DETAIL_CACHE.set(workflowId, detail);
+  return detail;
+}
+
+function billingWorkflowLinesCacheKey(workflowId, versionId) {
+  return `${workflowId}::${versionId || "current"}`;
+}
+
+function cachedBillingWorkflowLines(workflowId, versionId) {
+  if (!workflowId || !versionId) return null;
+  return BILLING_WORKFLOW_LINES_CACHE.get(billingWorkflowLinesCacheKey(workflowId, versionId)) || null;
+}
+
+function rememberBillingWorkflowLines(workflowId, versionId, lines) {
+  if (!workflowId || !versionId || !Array.isArray(lines)) return lines || null;
+  BILLING_WORKFLOW_LINES_CACHE.set(billingWorkflowLinesCacheKey(workflowId, versionId), lines);
+  return lines;
+}
+
+function clearBillingWorkflowLinesCache(workflowId) {
+  if (!workflowId) return;
+  for (const key of BILLING_WORKFLOW_LINES_CACHE.keys()) {
+    if (key.startsWith(`${workflowId}::`)) BILLING_WORKFLOW_LINES_CACHE.delete(key);
+  }
+}
+
 function quantitySheetRoomId(sheet) {
   if (sheet?.roomId) return sheet.roomId;
   if (!sheet?.roomName) return "";
@@ -9901,7 +10023,7 @@ function hydrateQuantitySheetIacucInfo(sheet) {
 function syncQuantitySheetRoomName(event) {
   const form = event.target.form;
   if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
-  render();
+  scheduleRender("quantity_sheet.room_name");
 }
 
 function positionCageEditorPopover() {
@@ -10053,7 +10175,7 @@ async function handleRoomSubmit(event) {
     pushLog(`${existingRoom ? "更新" : "新增"}饲养间 ${room.name}`);
     await refreshInfrastructureAfterSave();
     showFlashNotice("保存成功", `饲养间已${existingRoom ? "更新" : "新增"}：${room.name}`, "success");
-    render();
+    scheduleRender("room.save");
   } catch (error) {
     reportSaveError(error);
   }
@@ -10118,7 +10240,7 @@ async function handleRackSubmit(event) {
     pushLog(`新增${room.name} 笼架 ${rackCode(rackIndex)}`);
     await refreshInfrastructureAfterSave();
     showFlashNotice("保存成功", `已新增 ${room.name} 笼架 ${rackCode(rackIndex)}。`, "success");
-    render();
+    scheduleRender("rack.create");
   } catch (error) {
     reportSaveError(error);
   }
@@ -10177,7 +10299,7 @@ async function handleRackEditSubmit(event) {
     pushLog(`更新${room.name} 笼架 ${rackCode(rack)}`);
     await refreshInfrastructureAfterSave();
     showFlashNotice("保存成功", `已更新 ${room.name} 笼架 ${rackCode(rack)}。`, "success");
-    render();
+    scheduleRender("rack.update");
   } catch (error) {
     reportSaveError(error);
   }
@@ -10224,7 +10346,7 @@ async function deleteRoomConfirmed(roomId) {
     pushLog(`删除饲养间 ${room.name}`);
     selectFirstAvailableCage();
     await refreshInfrastructureAfterSave();
-    render();
+    scheduleRender("room.delete");
   } catch (error) {
     reportSaveError(error);
   }
@@ -10276,7 +10398,7 @@ async function deleteRackConfirmed(rackId) {
     pushLog(`删除${rackLabel}`);
     await refreshInfrastructureAfterSave();
     selectFirstAvailableCage();
-    render();
+    scheduleRender("rack.delete");
   } catch (error) {
     reportSaveError(error);
   }
@@ -10927,7 +11049,7 @@ async function persistBillingWorkflowFromCurrent() {
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
       currentUser = null;
-      render();
+      scheduleRender("auth.expired");
       throw new Error("请先登录");
     }
     if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
@@ -10959,7 +11081,7 @@ async function persistBillingWorkflowFromCurrent() {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
@@ -10979,14 +11101,14 @@ function closeBillingWorkflowDetail() {
   state.selectedBillingWorkflowId = "";
   state.selectedBillingWorkflowDetail = null;
   state.showWorkflowStatements = false;
-  render();
+  scheduleRender("billing_workflow.detail.close");
 }
 
 function closeReimbursementDetail() {
   state.selectedReimbursementRecordId = "";
   state.selectedReimbursementRecordDetail = null;
   state.showReimbursementWorkflowLines = false;
-  render();
+  scheduleRender("reimbursement.detail.close");
 }
 
 async function statementForExport() {
@@ -11018,7 +11140,7 @@ async function statementForExport() {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -11031,7 +11153,7 @@ async function statementForExport() {
   mergeServerAuditLogs(payload);
   const statement = statementPayloadForExport(payload.statement, payload.lines || []);
   pushLog(`生成结算单：${statement.pi} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
-  render();
+  scheduleRender("billing.statement.export");
   return { statement, info: statementInfoForExport(statement) };
 }
 
@@ -11062,7 +11184,7 @@ async function quantitySheetStatementForExport() {
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     currentUser = null;
-    render();
+    scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
   if (!response.ok) {
@@ -11075,7 +11197,7 @@ async function quantitySheetStatementForExport() {
   mergeServerAuditLogs(payload);
   const statement = statementPayloadForExport(payload.statement, payload.lines || []);
   pushLog(`按 PI 汇总数量统计表生成结算单：${statement.pi || statement.iacuc} ${statement.month}，应收 ${MONEY_FORMAT.format(statement.totalAmount)} 元`);
-  render();
+  scheduleRender("quantity_sheet.statement.export");
   return { statement, info: statementInfoForExport(statement) };
 }
 
@@ -12728,7 +12850,7 @@ async function handleConfirmDialogAction() {
       await deletePlacementTaskGroupConfirmed(dialog.id);
       pushLog(`删除待进驻记录：${dialog.payload?.batchNo || dialog.id}`);
       showFlashNotice("删除成功", `待进驻记录已删除：${dialog.payload?.batchNo || dialog.id}`);
-      render();
+      scheduleRender("confirm.delete_placement_group");
       return;
     }
     if (dialog.type === "delete-workflow") {
@@ -12752,7 +12874,7 @@ async function handleConfirmDialogAction() {
     if (dialog.type === "delete-user") {
       await deleteUserConfirmed(dialog.id);
       showFlashNotice("删除成功", `账号已删除：${dialog.payload?.displayName || dialog.id}`);
-      render();
+      scheduleRender("confirm.delete_user");
       return;
     }
     if (dialog.type === "sample-batch-slots") {
@@ -12777,7 +12899,7 @@ async function handleConfirmDialogAction() {
       await clearClientCacheAndReload();
       return;
     }
-    render();
+    scheduleRender(`confirm.${dialog.type || "close"}`);
   } catch (error) {
     reportSaveError(error);
   }
@@ -13047,7 +13169,7 @@ async function ensureIacucIndexLoaded() {
       const response = await fetch(API_IACUC_INDEX_URL, { cache: "no-store" });
       if (response.status === 401) {
         currentUser = null;
-        render();
+        scheduleRender("auth.expired");
         throw new Error("请先登录");
       }
       if (!response.ok) throw new Error("加载 IACUC 索引失败");
@@ -13090,7 +13212,7 @@ async function loadPrincipalIdentities() {
     const response = await fetch(API_PRINCIPAL_IDENTITIES_URL, { cache: "no-store" });
     if (response.status === 401) {
       currentUser = null;
-      render();
+      scheduleRender("auth.expired");
       throw new Error("请先登录");
     }
     if (!response.ok) throw new Error("加载项目负责人身份失败");
