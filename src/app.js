@@ -35,6 +35,16 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.10",
+    releasedAt: "2026-06-01 20:25",
+    title: "数量统计表列表与预览优化",
+    items: [
+      "数量统计表录入区和已保存列表拆分为上下两张卡片，录入区保持新建和保存，列表区承接查看、删除、导出和发起流程",
+      "已保存数量统计表支持检索、多选和当前页全选，批量删除按勾选项执行，导出和发起流程按单张已选统计表操作",
+      "列表行点击改为弹窗预览，预览复用导出数量统计表的同版式模板，查看效果与导出 PDF 口径一致",
+    ],
+  },
+  {
     version: "0.5.9",
     releasedAt: "2026-06-01 08:10",
     title: "流程与结算链路性能优化",
@@ -708,7 +718,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.9",
+  version: "0.5.10",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1286,6 +1296,9 @@ const seedData = {
   flashNotice: null,
   confirmDialog: null,
   selectedQuantitySheetId: "",
+  selectedQuantitySheetIds: [],
+  viewingQuantitySheetId: "",
+  quantitySheetListSearch: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
   selectedIntakeBatchId: "",
@@ -1795,6 +1808,9 @@ function localUiOnlyState(source = {}) {
     reimbursementOnlyUnpaid: source.reimbursementOnlyUnpaid ?? true,
     billingWorkflowFilter: source.billingWorkflowFilter || "todo",
     selectedQuantitySheetId: source.selectedQuantitySheetId || "",
+    selectedQuantitySheetIds: Array.isArray(source.selectedQuantitySheetIds) ? source.selectedQuantitySheetIds.slice(0, 200) : [],
+    viewingQuantitySheetId: source.viewingQuantitySheetId || "",
+    quantitySheetListSearch: source.quantitySheetListSearch || "",
     selectedIntakeBatchId: source.selectedIntakeBatchId || "",
     selectedIntakeBatchIds: Array.isArray(source.selectedIntakeBatchIds) ? source.selectedIntakeBatchIds.slice(0, 200) : [],
     showPlacementTaskPanel: Boolean(source.showPlacementTaskPanel ?? false),
@@ -2249,11 +2265,11 @@ async function loadQuantitySheets(options = {}) {
   };
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
-  const selected = state.quantitySheets.find((sheet) => sheet.id === state.selectedQuantitySheetId) || state.quantitySheets[0] || null;
-  state.selectedQuantitySheetId = selected?.id || "";
-  const detailed = selected ? await ensureQuantitySheetDetail(selected) : null;
-  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(detailed || selected || makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7)));
-  if (!state.billingPi && state.quantitySheetDraft.pi) {
+  const loadedIds = new Set(state.quantitySheets.map((sheet) => sheet.id));
+  state.selectedQuantitySheetIds = state.selectedQuantitySheetIds.filter((id) => loadedIds.has(id));
+  if (state.selectedQuantitySheetId && !loadedIds.has(state.selectedQuantitySheetId)) state.selectedQuantitySheetId = "";
+  if (state.viewingQuantitySheetId && !loadedIds.has(state.viewingQuantitySheetId)) state.viewingQuantitySheetId = "";
+  if (!state.billingPi && state.quantitySheetDraft?.pi) {
     state.billingPi = state.quantitySheetDraft.pi;
     state.billingPrincipalType = principalTypeForPi(state.billingPi);
     state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
@@ -5535,50 +5551,32 @@ function renderCageMapBillingView() {
 
 function renderQuantitySheetBillingView() {
   const draft = state.quantitySheetDraft || makeQuantitySheetDraft(state.billingMonth);
-  const statement = buildQuantitySheetStatement(draft);
-  const canGenerateStatement = !remotePersistence || Boolean(currentUser);
   const quantityLoading = remotePersistence && lazyDataState.quantitySheetsLoading && !state.quantitySheets.length;
-  const quantityPage = paginationState.quantitySheets;
   const managerValue = draft.manager || currentUser?.displayName || "";
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
-  const isAnimalBilling = quantityProfile.unit === "animal_day";
 
   return `
     <section class="billing-layout quantity-billing-layout">
-      <div class="panel large">
+      <div class="panel large quantity-editor-panel">
         <form id="quantitySheetForm">
           ${renderPanelHead({
             title: "数量统计表结算",
             helpKey: "quantityBilling",
             actions: `
-            <div class="quantity-sheet-actions">
-              <div class="billing-control-matrix">
-                <label class="field-required">
-                  月份
-                  <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
-                </label>
-                <div class="quantity-action-grid">
-                  <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
-                  <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
-                  <button id="deleteQuantitySheet" class="ghost danger-text" type="button" ${state.quantitySheets.some((sheet) => sheet.id === draft.id) ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
-                </div>
-                <label class="field-required">
-                  IACUC 编号
-                  ${renderIacucLookupInput("iacuc", draft.iacuc, { required: true })}
-                </label>
-                <div class="quantity-action-grid">
-                  <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
-                  <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
-                  <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
-                </div>
-              </div>
+            <div class="quantity-sheet-actions quantity-sheet-head-actions">
+              <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
+              <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
             </div>
             `,
           })}
           ${quantityLoading ? `<p class="muted">正在加载数量统计表，请稍候。</p>` : ""}
           <div class="quantity-sheet-fields">
             <div class="quantity-field-group quantity-field-group-basic">
+              <label class="field-required">
+                月份
+                <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
+              </label>
               <label>
                 房间号
                 <select name="roomId">
@@ -5594,6 +5592,10 @@ function renderQuantitySheetBillingView() {
               </label>
             </div>
             <div class="quantity-field-group quantity-field-group-project">
+              <label class="field-required">
+                IACUC 编号
+                ${renderIacucLookupInput("iacuc", draft.iacuc, { required: true })}
+              </label>
               <label class="field-auto">
                 项目名称
                 <input name="project" value="${escapeAttr(draft.project)}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
@@ -5627,27 +5629,126 @@ function renderQuantitySheetBillingView() {
             ${renderQuantitySheetCalendarPages(draft)}
           </div>
         </form>
-
-        <div class="quantity-preview-section">
-          ${renderPanelHead({ title: "结算预览", helpKey: "quantityPreview", compact: true })}
-          <div class="statement-summary compact-summary">
-            ${summaryTile("项目负责人", statement.pi || draft.pi || "-")}
-            ${summaryTile("伦理编号", statement.iacucs.length ? statement.iacucs.join("、") : "-")}
-            ${summaryTile("免费笼数/天", statement.freeCageAllowance)}
-            ${summaryTile("累计笼日", statement.totalCageDays)}
-            ${summaryTile("累计动物日", statement.totalAnimalDays || 0)}
-            ${summaryTile("收费笼日", statement.totalBillableCageDays)}
-            ${summaryTile("应收金额", `¥${MONEY_FORMAT.format(statement.totalAmount)}`)}
-          </div>
-          <div class="table-wrap mini-statement">
-            <table>
-              <thead><tr><th>日期</th><th>数量</th><th>收费数量</th><th>费用</th></tr></thead>
-              <tbody>${statement.rows.filter((row) => row.cageCount || row.animalCount).map(renderQuantityPreviewRow).join("") || `<tr><td colspan="4">录入月初结余或变更行后显示明细</td></tr>`}</tbody>
-            </table>
-          </div>
-        </div>
       </div>
+      <div class="panel quantity-saved-panel">
+        ${renderSavedQuantitySheetsPanel(quantityLoading)}
+      </div>
+      ${renderQuantitySheetDetailModal()}
     </section>
+  `;
+}
+
+function renderSavedQuantitySheetsPanel(quantityLoading) {
+  const items = state.quantitySheets || [];
+  const keyword = state.quantitySheetListSearch || "";
+  const filteredItems = filterSavedQuantitySheets(items, keyword);
+  const page = paginationState.quantitySheets;
+  const selectedIds = new Set(state.selectedQuantitySheetIds || []);
+  const selectedCount = selectedIds.size;
+  const allVisibleSelected = Boolean(filteredItems.length) && filteredItems.every((sheet) => selectedIds.has(sheet.id));
+  const canGenerateStatement = !remotePersistence || Boolean(currentUser);
+  const canDeleteCurrent = selectedCount > 0;
+  const canUseSingleSheetAction = selectedCount === 1 && canGenerateStatement;
+  return `
+    <div class="quantity-saved-list-section">
+      ${renderPanelHead({
+        title: "已保存数量统计表",
+        helpKey: "quantityPreview",
+        compact: true,
+        actions: `
+          <div class="quantity-saved-list-toolbar">
+            <input
+              id="quantitySheetListSearch"
+              type="search"
+              value="${escapeAttr(keyword)}"
+              placeholder="检索月份 / IACUC / 房间 / 负责人"
+            />
+          </div>
+          <div class="quantity-saved-actions">
+            <button id="deleteQuantitySheet" class="ghost danger-text" type="button" ${canDeleteCurrent ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
+            <button id="exportBilling" class="secondary" type="button" ${canUseSingleSheetAction ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
+            <button id="exportSettlementPdf" class="secondary" type="button" ${canUseSingleSheetAction ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+            <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canUseSingleSheetAction ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
+          </div>
+        `,
+      })}
+      <div class="quantity-saved-list-meta">
+        <span>当前命中 ${filteredItems.length} / 已加载 ${items.length} 条 · 已选 ${selectedCount} 条</span>
+        ${remotePersistence ? "" : `<span>本地模式</span>`}
+      </div>
+      <div class="table-wrap quantity-saved-list">
+        <table>
+          <thead>
+            <tr><th class="quantity-select-col"><input id="toggleVisibleQuantitySheets" type="checkbox" ${allVisibleSelected ? "checked" : ""} ${filteredItems.length ? "" : "disabled"} /></th><th>月份</th><th>IACUC</th><th>房间</th><th>负责人</th><th>更新时间</th></tr>
+          </thead>
+          <tbody>
+            ${
+              quantityLoading && !items.length
+                ? `<tr><td colspan="6">正在加载数量统计表...</td></tr>`
+                : filteredItems.map((sheet) => renderSavedQuantitySheetRow(sheet, selectedIds)).join("") ||
+                  `<tr><td colspan="6">${items.length ? "当前检索条件下没有匹配的数量统计表。" : "当前没有已保存数量统计表。保存后会显示在这里。"}</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+      ${remotePersistence ? renderPager("quantitySheets", page, page.total || items.length) : ""}
+    </div>
+  `;
+}
+
+function renderQuantitySheetDetailModal() {
+  const sheet = state.quantitySheets.find((item) => item.id === state.viewingQuantitySheetId);
+  if (!sheet) return "";
+  return `
+    <div class="editor-modal-backdrop" id="closeQuantitySheetDetail"></div>
+    <div class="panel detail-panel editor-modal quantity-sheet-detail-modal">
+      <div class="editor-modal-actions">
+        <button class="secondary" type="button" id="closeQuantitySheetDetailButton">${iconSvg("chevronRight")}关闭</button>
+      </div>
+      ${renderSavedQuantitySheetDetail(sheet)}
+    </div>
+  `;
+}
+
+function renderSavedQuantitySheetDetail(sheet) {
+  if (!sheet) {
+    return "";
+  }
+  const statement = buildQuantitySheetStatement(sheet);
+  const forms = buildQuantityStatisticExportForms(statement, statementInfoForExport(statement));
+  return `
+    <div class="quantity-stat-preview">
+      ${quantityStatisticPagesHtml(statement, forms)}
+    </div>
+  `;
+}
+
+function filterSavedQuantitySheets(items, keyword) {
+  const normalizedKeyword = normalizeSearchText(keyword);
+  if (!normalizedKeyword) return items;
+  return items.filter((sheet) =>
+    normalizeSearchText([
+      sheet.month,
+      sheet.iacuc,
+      sheet.roomName || roomNameById(sheet.roomId),
+      sheet.pi,
+      sheet.owner,
+      sheet.project,
+    ].join(" ")).includes(normalizedKeyword),
+  );
+}
+
+function renderSavedQuantitySheetRow(sheet, selectedIds) {
+  const isActive = selectedIds.has(sheet.id);
+  return `
+    <tr class="${isActive ? "selected-row" : ""}" data-open-quantity-sheet="${escapeAttr(sheet.id)}">
+      <td class="quantity-select-col"><input type="checkbox" data-select-quantity-sheet="${escapeAttr(sheet.id)}" ${isActive ? "checked" : ""} /></td>
+      <td>${escapeText(sheet.month || "-")}</td>
+      <td>${escapeText(sheet.iacuc || "-")}</td>
+      <td>${escapeText(sheet.roomName || roomNameById(sheet.roomId) || "-")}</td>
+      <td>${escapeText(sheet.pi || "-")}</td>
+      <td>${escapeText(formatLogTime(sheet.updatedAt) || "-")}</td>
+    </tr>
   `;
 }
 
@@ -6794,6 +6895,13 @@ function currentPage(pageState) {
   return Math.floor((Number(pageState.offset) || 0) / Math.max(Number(pageState.limit) || 1, 1)) + 1;
 }
 
+function paginationSummary(pageState) {
+  const total = Math.max(Number(pageState.total) || 0, 0);
+  const page = currentPage(pageState);
+  const pages = pageCount(total, pageState.limit);
+  return `第 ${page} / ${pages} 页 · 共 ${total} 条`;
+}
+
 function renderPager(kind, pageState, total) {
   const limit = Math.max(Number(pageState.limit) || 10, 1);
   const pages = pageCount(total, limit);
@@ -7252,6 +7360,32 @@ function bindEvents() {
   document.querySelector(".quantity-template-table")?.addEventListener("keydown", handleQuantityTemplateKeydown);
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", (event) => {
     handleQuantitySheetSelect(event).catch(reportSaveError);
+  });
+  document.querySelectorAll("[data-open-quantity-sheet]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      try {
+        await handleQuantitySheetSelect({ target: { value: row.dataset.openQuantitySheet } });
+      } catch (error) {
+        reportSaveError(error);
+      }
+    });
+  });
+  document.querySelectorAll("[data-select-quantity-sheet]").forEach((checkbox) => {
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+    checkbox.addEventListener("change", (event) => {
+      toggleQuantitySheetSelection(event.target.dataset.selectQuantitySheet, event.target.checked);
+    });
+  });
+  document.querySelector("#toggleVisibleQuantitySheets")?.addEventListener("change", (event) => {
+    toggleVisibleQuantitySheetSelection(event.target.checked);
+  });
+  document.querySelector("#closeQuantitySheetDetail")?.addEventListener("click", closeQuantitySheetDetail);
+  document.querySelector("#closeQuantitySheetDetailButton")?.addEventListener("click", closeQuantitySheetDetail);
+  document.querySelector("#quantitySheetListSearch")?.addEventListener("input", (event) => {
+    state.quantitySheetListSearch = event.target.value || "";
+    scheduleRender("quantity_sheet.list.search");
   });
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
   document.querySelector("#deleteQuantitySheet")?.addEventListener("click", deleteCurrentQuantitySheet);
@@ -9052,17 +9186,36 @@ async function handleQuantitySheetSubmit(event) {
 }
 
 async function handleQuantitySheetSelect(event) {
-  captureQuantitySheetDraft();
   const sheet = state.quantitySheets.find((item) => item.id === event.target.value);
   state.selectedQuantitySheetId = sheet?.id || "";
-  const detailed = await ensureQuantitySheetDetail(sheet);
-  state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(detailed || sheet || makeQuantitySheetDraft(state.billingMonth));
-  state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
-  state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
-  state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
-  state.billingPrincipalType = principalTypeForPi(state.billingPi);
-  state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
-  scheduleRender("quantity_sheet.select");
+  state.viewingQuantitySheetId = sheet?.id || "";
+  await ensureQuantitySheetDetail(sheet);
+  scheduleRender("quantity_sheet.saved_select");
+}
+
+function toggleQuantitySheetSelection(sheetId, checked) {
+  if (!sheetId) return;
+  const selected = new Set(state.selectedQuantitySheetIds || []);
+  if (checked) selected.add(sheetId);
+  else selected.delete(sheetId);
+  state.selectedQuantitySheetIds = [...selected];
+  scheduleRender("quantity_sheet.selection");
+}
+
+function toggleVisibleQuantitySheetSelection(checked) {
+  const visibleIds = filterSavedQuantitySheets(state.quantitySheets || [], state.quantitySheetListSearch || "").map((sheet) => sheet.id);
+  const selected = new Set(state.selectedQuantitySheetIds || []);
+  visibleIds.forEach((id) => {
+    if (checked) selected.add(id);
+    else selected.delete(id);
+  });
+  state.selectedQuantitySheetIds = [...selected];
+  scheduleRender("quantity_sheet.selection.visible");
+}
+
+function closeQuantitySheetDetail() {
+  state.viewingQuantitySheetId = "";
+  scheduleRender("quantity_sheet.detail.close");
 }
 
 async function handleQuantitySheetFilterChange() {
@@ -9111,16 +9264,18 @@ function newQuantitySheetDraft() {
 }
 
 function deleteCurrentQuantitySheet() {
-  const sheetId = state.selectedQuantitySheetId || state.quantitySheetDraft?.id || "";
-  const sheet = state.quantitySheets.find((item) => item.id === sheetId);
-  if (!sheet) return;
+  const selectedSheets = selectedQuantitySheetsForAction();
+  if (!selectedSheets.length) return;
+  const label = selectedSheets.length === 1
+    ? [selectedSheets[0].iacuc, selectedSheets[0].month].filter(Boolean).join(" ")
+    : `${selectedSheets.length} 张数量统计表`;
   openConfirmDialog({
-    type: "delete-quantity-sheet",
-    id: sheet.id,
-    title: "删除数量统计表",
-    message: `确认删除 ${sheet.iacuc || "该伦理号"} ${sheet.month || ""} 数量统计表？相关结算流程和已导出的结算单不会自动删除。`,
+    type: "delete-quantity-sheets",
+    id: selectedSheets[0].id,
+    title: selectedSheets.length === 1 ? "删除数量统计表" : "批量删除数量统计表",
+    message: `确认删除 ${label}？相关结算流程和已导出的结算单不会自动删除。`,
     confirmLabel: "删除",
-    payload: { label: [sheet.iacuc, sheet.month].filter(Boolean).join(" ") },
+    payload: { ids: selectedSheets.map((sheet) => sheet.id), label },
   });
 }
 
@@ -9149,12 +9304,28 @@ async function deleteQuantitySheetConfirmed(sheetId) {
   mergeServerAuditLogs(payload);
   state.quantitySheets = state.quantitySheets.filter((item) => item.id !== sheetId);
   QUANTITY_SHEET_DETAIL_CACHE.delete(sheetId);
+  state.selectedQuantitySheetIds = state.selectedQuantitySheetIds.filter((id) => id !== sheetId);
+  if (state.selectedQuantitySheetId === sheetId) state.selectedQuantitySheetId = "";
+  if (state.viewingQuantitySheetId === sheetId) state.viewingQuantitySheetId = "";
   invalidateStateIndexCache();
-  const nextSheet = state.quantitySheets[0] || null;
-  state.selectedQuantitySheetId = nextSheet?.id || "";
-  const detailed = await ensureQuantitySheetDetail(nextSheet);
-  state.quantitySheetDraft = detailed ? hydrateQuantitySheetIacucInfo(detailed) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
   scheduleRender("quantity_sheet.delete.remote");
+}
+
+async function deleteQuantitySheetsConfirmed(sheetIds = []) {
+  for (const sheetId of sheetIds) {
+    await deleteQuantitySheetConfirmed(sheetId);
+  }
+}
+
+function selectedQuantitySheetsForAction() {
+  const selectedIds = new Set(state.selectedQuantitySheetIds || []);
+  return state.quantitySheets.filter((sheet) => selectedIds.has(sheet.id));
+}
+
+async function selectedQuantitySheetForSingleAction() {
+  const selected = selectedQuantitySheetsForAction();
+  if (selected.length !== 1) throw new Error("请只勾选一张数量统计表后再操作");
+  return (await ensureQuantitySheetDetail(selected[0])) || selected[0];
 }
 
 function addQuantitySheetRow() {
@@ -11075,7 +11246,7 @@ async function persistBillingWorkflowFromCurrent() {
     throw new Error("本地离线模式不支持结算流程跟踪");
   }
   if (state.billingSource === "quantity_sheet") {
-    const sheet = await saveQuantitySheetDraft();
+    const sheet = await selectedQuantitySheetForSingleAction();
     if (!sheet.pi || !sheet.month) throw new Error("请先完善数量统计表中的结算月份和项目负责人");
     const response = await fetch(API_BILLING_STATEMENT_GENERATE_BY_PI_URL, {
       method: "POST",
@@ -11200,7 +11371,7 @@ async function statementForExport() {
 }
 
 async function quantitySheetStatementForExport() {
-  const sheet = await saveQuantitySheetDraft();
+  const sheet = await selectedQuantitySheetForSingleAction();
   if (!sheet.iacuc || !sheet.month) {
     throw new Error("请先填写 IACUC 编号和结算月份");
   }
@@ -11633,7 +11804,7 @@ function buildSettlementTemplateModel(statement, rows) {
   };
 }
 
-function quantityStatisticHtml(statement, forms) {
+function quantityStatisticPagesHtml(statement, forms) {
   const note = "备注：饲养费计算以此表动物数量为准，请如实填写。填写说明：购：购入  转：转移  分：分笼  取：取材或处理  死：死亡";
   const renderDayCell = (row) =>
     row
@@ -11646,7 +11817,7 @@ function quantityStatisticHtml(statement, forms) {
         <td>${escapeText(row.manager || "")}</td>
       `
       : `<td></td><td></td><td></td><td></td><td></td><td></td>`;
-  const pagesHtml = forms
+  return forms
     .map(
       (form) => `
         <section class="sheet-page">
@@ -11710,7 +11881,10 @@ function quantityStatisticHtml(statement, forms) {
       `,
     )
     .join("");
+}
 
+function quantityStatisticHtml(statement, forms) {
+  const pagesHtml = quantityStatisticPagesHtml(statement, forms);
   return `
     <!doctype html>
     <html lang="zh-CN">
@@ -12909,6 +13083,12 @@ async function handleConfirmDialogAction() {
     }
     if (dialog.type === "delete-quantity-sheet") {
       await deleteQuantitySheetConfirmed(dialog.id);
+      pushLog(`删除数量统计表：${dialog.payload?.label || dialog.id}`);
+      showFlashNotice("删除成功", `数量统计表已删除：${dialog.payload?.label || dialog.id}`);
+      return;
+    }
+    if (dialog.type === "delete-quantity-sheets") {
+      await deleteQuantitySheetsConfirmed(dialog.payload?.ids || []);
       pushLog(`删除数量统计表：${dialog.payload?.label || dialog.id}`);
       showFlashNotice("删除成功", `数量统计表已删除：${dialog.payload?.label || dialog.id}`);
       return;
