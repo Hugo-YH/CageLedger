@@ -3654,12 +3654,25 @@ tr:last-child td {
   gap: 10px;
 }
 
+.release-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .release-card > div > strong,
 .release-card > div > span,
 .doc-link strong,
 .doc-link span,
 .api-group strong {
   display: block;
+}
+
+.release-card-time {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .release-card > div > span,

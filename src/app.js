@@ -35,6 +35,16 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.9",
+    releasedAt: "2026-06-01 08:10",
+    title: "流程与结算链路性能优化",
+    items: [
+      "结算流程、报销台账、数量统计表、操作日志、待接收批次和待进驻任务统一切换为更轻量的分页返回，减少列表首开负载",
+      "流程详情、报销台账详情和结算单查询继续压缩返回字段，并把结算明细拆为按版本按需加载，降低详情弹窗体积",
+      "前端列表写后刷新改为局部合并和定向重载，分页请求增加过期响应丢弃保护，快速切页和切筛选时界面保持稳定",
+    ],
+  },
+  {
     version: "0.5.8b",
     title: "检疫卡二维码与启动修复",
     items: [
@@ -698,7 +708,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.8b",
+  version: "0.5.9",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -747,6 +757,14 @@ const paginationState = {
   intakeBatches: { limit: 5, page: 1 },
   placementTasks: { limit: 5, page: 1 },
   releaseNotes: { limit: 5, page: 1 },
+};
+const pagedLoadSeq = {
+  quantitySheets: 0,
+  reimbursementRecords: 0,
+  billingWorkflows: 0,
+  auditLogs: 0,
+  intakeBatches: 0,
+  placementTasks: 0,
 };
 const billingInfrastructureState = {
   month: "",
@@ -1451,6 +1469,12 @@ function persistStateNow() {
   saveState();
 }
 
+function invalidatePagedLoads() {
+  Object.keys(pagedLoadSeq).forEach((key) => {
+    pagedLoadSeq[key] += 1;
+  });
+}
+
 function localUiStateSnapshot() {
   return localUiOnlyState(state);
 }
@@ -1514,6 +1538,7 @@ function buildBillingWorkflowLinesUrl(workflowId, versionId = "") {
 async function loadPersistedState() {
   try {
     remotePersistence = true;
+    invalidatePagedLoads();
     const entityState = await loadBootstrapState();
     state = normalize(entityState);
     state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
@@ -1569,6 +1594,7 @@ async function loadPersistedState() {
     console.error(error);
     if (currentUser) {
       remotePersistence = true;
+      invalidatePagedLoads();
       const localState = loadState();
       state = normalize({
         ...structuredClone(seedData),
@@ -1603,6 +1629,7 @@ async function loadPersistedState() {
     remotePersistence = false;
   }
 
+  invalidatePagedLoads();
   state = normalize(loadState());
   state.quantitySheetDraft = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   invalidateIacucSearchCache();
@@ -1877,6 +1904,7 @@ async function loadIntakeBatchesPage(page = 1, limit = paginationState.intakeBat
   }
   const nextLimit = Math.max(Number(limit) || 10, 1);
   const nextPage = Math.max(Number(page) || 1, 1);
+  const requestId = ++pagedLoadSeq.intakeBatches;
   const response = await fetch(
     buildIntakeBatchesUrl({
       status: state.intakeBatchFilter || "unprinted",
@@ -1891,6 +1919,7 @@ async function loadIntakeBatchesPage(page = 1, limit = paginationState.intakeBat
     scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
+  if (requestId !== pagedLoadSeq.intakeBatches) return state.intakeBatches;
   if (!response.ok) throw new Error(payload.error || "加载待接收批次失败");
   state.intakeBatches = (payload.items || []).map((item) => normalizeIncomingBatchDraft(item));
   const total = Number(payload.page?.total || state.intakeBatches.length);
@@ -1920,6 +1949,7 @@ async function loadPlacementTasksPage(page = 1, limit = paginationState.placemen
   const nextLimit = Math.max(Number(limit) || 10, 1);
   const nextPage = Math.max(Number(page) || 1, 1);
   const roomId = state.selectedRoomId || "";
+  const requestId = ++pagedLoadSeq.placementTasks;
   const response = await fetch(
     buildPlacementTasksUrl({
       roomId,
@@ -1935,6 +1965,7 @@ async function loadPlacementTasksPage(page = 1, limit = paginationState.placemen
     scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
+  if (requestId !== pagedLoadSeq.placementTasks) return state.placementTasks;
   if (!response.ok) throw new Error(payload.error || "加载待进驻任务失败");
   state.placementTasks = (payload.items || []).map((item) => normalizePlacementTask(item));
   const total = Number(payload.page?.total || state.placementTasks.length);
@@ -2005,6 +2036,7 @@ async function loadBillingWorkflows(options = {}) {
     limit: options.limit ?? paginationState.billingWorkflows.limit,
     offset: options.offset ?? 0,
   };
+  const requestId = ++pagedLoadSeq.billingWorkflows;
   const response = await fetch(buildBillingWorkflowsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
@@ -2013,6 +2045,7 @@ async function loadBillingWorkflows(options = {}) {
     scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
+  if (requestId !== pagedLoadSeq.billingWorkflows) return state.billingWorkflows;
   if (!response.ok) {
     lazyDataState.billingWorkflowsLoading = false;
     throw new Error(payload.error || "加载结算流程失败");
@@ -2048,6 +2081,7 @@ async function loadReimbursementRecords(options = {}) {
     limit: options.limit ?? paginationState.reimbursementRecords.limit,
     offset: options.offset ?? 0,
   };
+  const requestId = ++pagedLoadSeq.reimbursementRecords;
   const response = await fetch(buildReimbursementRecordsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
@@ -2056,6 +2090,7 @@ async function loadReimbursementRecords(options = {}) {
     scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
+  if (requestId !== pagedLoadSeq.reimbursementRecords) return state.reimbursementRecords;
   if (!response.ok) {
     lazyDataState.reimbursementRecordsLoading = false;
     throw new Error(payload.error || "加载报销台账失败");
@@ -2189,6 +2224,7 @@ async function loadQuantitySheets(options = {}) {
     limit: options.limit ?? paginationState.quantitySheets.limit,
     offset: options.offset ?? 0,
   };
+  const requestId = ++pagedLoadSeq.quantitySheets;
   const response = await fetch(buildQuantitySheetsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
@@ -2197,6 +2233,7 @@ async function loadQuantitySheets(options = {}) {
     scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
+  if (requestId !== pagedLoadSeq.quantitySheets) return state.quantitySheets;
   if (!response.ok) {
     lazyDataState.quantitySheetsLoading = false;
     throw new Error(payload.error || "加载数量统计表失败");
@@ -2271,6 +2308,7 @@ async function loadAuditEvents(options = {}) {
     limit: options.limit ?? paginationState.auditLogs.limit,
     offset: options.offset ?? 0,
   };
+  const requestId = ++pagedLoadSeq.auditLogs;
   const response = await fetch(buildAuditLogsUrl(filters), { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
@@ -2279,6 +2317,7 @@ async function loadAuditEvents(options = {}) {
     scheduleRender("auth.expired");
     throw new Error("请先登录");
   }
+  if (requestId !== pagedLoadSeq.auditLogs) return state.auditLogs;
   if (!response.ok) {
     lazyDataState.auditLogsLoading = false;
     throw new Error(payload.error || "加载操作日志失败");
@@ -6556,8 +6595,11 @@ function renderReleaseNotes() {
 function renderReleaseNote(note) {
   return `
     <article class="release-card">
-      <div>
+      <div class="release-card-head">
         <strong>v${escapeText(note.version)}</strong>
+        ${note.releasedAt ? `<span class="release-card-time">${escapeText(note.releasedAt)}</span>` : ""}
+      </div>
+      <div>
         <span>${escapeText(note.title)}</span>
       </div>
       <ul>
