@@ -35,6 +35,17 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.11b",
+    releasedAt: "2026-06-02 17:13",
+    title: "数量统计表录入与导出修正",
+    items: [
+      "根据 @李志权 反馈，数量统计表的增加和减少统一按结余只数联动，结余笼数保持手工录入口径",
+      "修复数量统计表日期空值录入后按 Tab 焦点丢失的问题，日期框继续支持自由输入和保存前校验",
+      "修复数量统计表保存后已保存列表未即时刷新的问题，并将成功失败提示固定到窗口顶层显示",
+      "数量统计表 PDF 导出补充转入转出伦理号，格式统一为 10（转入 2025001）和 10（转出 2025001）",
+    ],
+  },
+  {
     version: "0.5.11a",
     releasedAt: "2026-06-02 16:35",
     title: "数量统计表录入修正",
@@ -747,7 +758,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.11a",
+  version: "0.5.11b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -2779,6 +2790,17 @@ function quantitySheetMatchesCurrentFilter(sheet = {}) {
   return true;
 }
 
+function sortQuantitySheetsForList(items = []) {
+  items.sort((left, right) => {
+    const updatedDiff = String(right?.updatedAt || "").localeCompare(String(left?.updatedAt || ""));
+    if (updatedDiff) return updatedDiff;
+    const monthDiff = String(right?.month || "").localeCompare(String(left?.month || ""));
+    if (monthDiff) return monthDiff;
+    return String(left?.iacuc || "").localeCompare(String(right?.iacuc || ""));
+  });
+  return items;
+}
+
 function updateQuantitySheetListFromServer(sheet, previousSheet = null) {
   const savedSheet = normalizeQuantitySheetDraft(sheet);
   const existingSheet = previousSheet || state.quantitySheets.find((item) => item.id === savedSheet.id) || null;
@@ -2786,6 +2808,10 @@ function updateQuantitySheetListFromServer(sheet, previousSheet = null) {
   const isVisible = quantitySheetMatchesCurrentFilter(savedSheet);
   if (isVisible) {
     upsertById(state.quantitySheets, savedSheet);
+    sortQuantitySheetsForList(state.quantitySheets);
+    paginationState.quantitySheets.offset = 0;
+    const limit = Number(paginationState.quantitySheets.limit || 0);
+    if (limit > 0 && state.quantitySheets.length > limit) state.quantitySheets = state.quantitySheets.slice(0, limit);
   } else {
     state.quantitySheets = state.quantitySheets.filter((item) => item.id !== savedSheet.id);
   }
@@ -3355,8 +3381,8 @@ function render() {
     <div class="shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       ${renderSidebar()}
       ${renderSidebarHandle()}
+      ${renderFlashNotice()}
       <main class="workspace">
-        ${renderFlashNotice()}
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "intake" ? renderIntakeBatchView() : ""}
@@ -6313,9 +6339,10 @@ function renderQuantitySheetCalendarCell(entry) {
   const isInitialRow = entry.index === 0;
   const animalValue = animalManual ? row.animalCount : isInitialRow ? 0 : entry.animalCount || "";
   const cageValue = cageManual ? row.cageCount : isInitialRow ? 0 : entry.cageCount || "";
+  const dateInputValue = isInitialRow ? formatQuantityDateInputValue(entry.date || "") : row.rawDateInput || formatQuantityDateInputValue(entry.date || "");
   return `
     <td class="quantity-date-cell" data-quantity-row="${escapeAttr(entry.index)}">
-      <input name="rowDate" type="text" inputmode="text" autocomplete="off" placeholder="${isInitialRow ? "" : "如 0515 / 15 / 20260515"}" value="${escapeAttr(formatQuantityDateInputValue(entry.date || ""))}" ${isInitialRow ? "readonly" : ""} />
+      <input name="rowDate" type="text" inputmode="text" autocomplete="off" placeholder="" value="${escapeAttr(dateInputValue)}" ${isInitialRow ? "readonly" : ""} />
     </td>
     <td>${renderQuantityChangeEditor("added", row, addedText)}</td>
     <td>${renderQuantityChangeEditor("removed", row, removedText)}</td>
@@ -6364,14 +6391,12 @@ function buildQuantitySheetCalendarRows(sheet) {
     const added = numericOrZero(row.addedCount);
     const removed = numericOrZero(row.removedCount);
     const autoAnimalCount = Math.max(animalCount + added - removed, 0);
-    const autoCageCount = Math.max(cageCount + added - removed, 0);
+    const autoCageCount = cageCount;
     const hasManualAnimal = row.animalCount !== null && row.animalCount !== undefined;
     const hasManualCage = row.cageCount !== null && row.cageCount !== undefined;
     const nextAnimalCount = hasManualAnimal ? numericOrZero(row.animalCount) : autoAnimalCount;
     const nextCageCount = hasManualCage ? numericOrZero(row.cageCount) : autoCageCount;
-    const conflict =
-      (hasManualAnimal && added + removed > 0 && numericOrZero(row.animalCount) !== autoAnimalCount) ||
-      (hasManualCage && added + removed > 0 && numericOrZero(row.cageCount) !== autoCageCount);
+    const conflict = hasManualAnimal && added + removed > 0 && numericOrZero(row.animalCount) !== autoAnimalCount;
     animalCount = nextAnimalCount;
     cageCount = nextCageCount;
     return {
@@ -7863,6 +7888,10 @@ function bindEvents() {
     }
     if (name === "iacuc") {
       handleQuantitySheetFilterChange();
+      return;
+    }
+    if (name === "rowDate") {
+      captureQuantitySheetDraft();
       return;
     }
     if (["rowDate", "addedText", "addedType", "removedText", "removedType", "animalCount", "cageCount", "handler"].includes(name)) {
@@ -9442,7 +9471,7 @@ function removeQuantitySheetRow(index) {
 function captureQuantitySheetDraft() {
   const form = document.querySelector("#quantitySheetForm");
   if (!form) return;
-  state.quantitySheetDraft = readQuantitySheetForm(form);
+  state.quantitySheetDraft = readQuantitySheetForm(form, { preserveInvalidDates: true });
   state.billingMonth = state.quantitySheetDraft.month || state.billingMonth;
   state.billingIacuc = state.quantitySheetDraft.iacuc || state.billingIacuc;
   state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
@@ -9453,7 +9482,10 @@ function captureQuantitySheetDraft() {
 async function saveQuantitySheetDraft() {
   const startedAt = performance.now();
   const form = document.querySelector("#quantitySheetForm");
-  if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
+  if (form) state.quantitySheetDraft = readQuantitySheetForm(form, { preserveInvalidDates: true });
+  if (state.quantitySheetDraft.invalidDateInputs?.length) {
+    throw new Error(`请先修正日期：${state.quantitySheetDraft.invalidDateInputs.join("、")}`);
+  }
   const sheet = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
   if (!remotePersistence) {
@@ -10011,7 +10043,8 @@ function formatQuantityDateInputValue(value) {
   return value ? value : "";
 }
 
-function readQuantitySheetForm(form) {
+function readQuantitySheetForm(form, options = {}) {
+  const { preserveInvalidDates = false } = options;
   const data = new FormData(form);
   const room = state.rooms.find((item) => item.id === data.get("roomId"));
   const month = data.get("month") || state.billingMonth || today.slice(0, 7);
@@ -10020,16 +10053,22 @@ function readQuantitySheetForm(form) {
   const profile = billingProfileForRoom(room || {});
   let runningAnimalCount = 0;
   let runningCageCount = 0;
+  const invalidDateInputs = [];
   const rows = [...form.querySelectorAll("[data-quantity-row]")]
     .map((cell) => {
       const rowIndex = Number(cell.dataset.quantityRow);
       const rowCells = cellsForQuantityDateCell(cell);
-      const date = rowIndex === 0 ? `${month}-01` : normalizeQuantitySheetEntryDate(rowCells.date?.querySelector("[name='rowDate']")?.value || "", month);
-      return { cell, rowCells, rowIndex, date };
+      const rawDateInput = String(rowCells.date?.querySelector("[name='rowDate']")?.value || "").trim();
+      const date = rowIndex === 0 ? `${month}-01` : normalizeQuantitySheetEntryDate(rawDateInput, month);
+      return { cell, rowCells, rowIndex, rawDateInput, date };
     })
-    .filter((item) => item.date)
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || a.rowIndex - b.rowIndex)
-    .map(({ rowCells, rowIndex, date }) => {
+    .sort((a, b) => {
+      if (a.date && b.date) return String(a.date || "").localeCompare(String(b.date || "")) || a.rowIndex - b.rowIndex;
+      if (a.date) return -1;
+      if (b.date) return 1;
+      return a.rowIndex - b.rowIndex;
+    })
+    .map(({ rowCells, rowIndex, rawDateInput, date }) => {
       const previous = state.quantitySheetDraft?.rows?.[rowIndex] || {};
       const added = parseQuantityChangeCell(rowCells.added?.querySelector("[name='addedText']")?.value || "", rowCells.added?.querySelector("[name='addedType']")?.value || "", "added");
       const removed = parseQuantityChangeCell(rowCells.removed?.querySelector("[name='removedText']")?.value || "", rowCells.removed?.querySelector("[name='removedType']")?.value || "", "removed");
@@ -10042,8 +10081,8 @@ function readQuantitySheetForm(form) {
       let addedType = added.type;
       let removedType = removed.type;
       const hasChange = numericOrZero(addedCount) > 0 || numericOrZero(removedCount) > 0;
-      const primaryManual = profile.unit === "animal_day" ? manualAnimalCount : manualCageCount;
-      const primaryPrevious = profile.unit === "animal_day" ? runningAnimalCount : runningCageCount;
+      const primaryManual = manualAnimalCount;
+      const primaryPrevious = runningAnimalCount;
       if (rowIndex > 0 && !hasChange && primaryManual !== null) {
         const delta = primaryManual - primaryPrevious;
         if (delta > 0) {
@@ -10055,7 +10094,7 @@ function readQuantitySheetForm(form) {
         }
       }
       const autoAnimalCount = Math.max(runningAnimalCount + numericOrZero(addedCount) - numericOrZero(removedCount), 0);
-      const autoCageCount = Math.max(runningCageCount + numericOrZero(addedCount) - numericOrZero(removedCount), 0);
+      const autoCageCount = runningCageCount;
       if (manualAnimalCount !== null && manualAnimalCount === autoAnimalCount && animalInput?.dataset.manual !== "true") manualAnimalCount = null;
       if (manualCageCount !== null && manualCageCount === autoCageCount && cageInput?.dataset.manual !== "true") manualCageCount = null;
       if (rowIndex === 0) {
@@ -10071,10 +10110,35 @@ function readQuantitySheetForm(form) {
       const transferOutToIacucInput = rowCells.removed?.querySelector("[name='transferOutToIacuc']")?.value || "";
       const hasManualBalance = manualAnimalCount !== null || manualCageCount !== null;
       const hasTypedChange = Boolean(addedType || removedType || transferInFromIacucInput || transferOutToIacucInput);
-      if (!date || (!numericOrZero(addedCount) && !numericOrZero(removedCount) && !hasManualBalance && !handler && !hasTypedChange)) return null;
+      const hasContent = Boolean(rawDateInput || numericOrZero(addedCount) || numericOrZero(removedCount) || hasManualBalance || handler || hasTypedChange);
+      if (!hasContent) return null;
+      if (!date && rowIndex > 0) {
+        if (rawDateInput) invalidDateInputs.push(rawDateInput);
+        if (!preserveInvalidDates) return null;
+        return {
+          id: previous.id || crypto.randomUUID(),
+          date: "",
+          rawDateInput,
+          addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
+          addedType: numericOrZero(addedCount) > 0 ? addedType || "购入" : addedType || "",
+          transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
+          removedCount: numericOrZero(removedCount) > 0 ? numericOrZero(removedCount) : null,
+          removedType: numericOrZero(removedCount) > 0 ? removedType || "取材" : removedType || "",
+          transferOutToIacuc: removedType === "转出" ? normalizeIacucNumber(transferOutToIacucInput || previous.transferOutToIacuc || "") : "",
+          animalCount: manualAnimalCount,
+          cageCount: manualCageCount,
+          handler,
+          balanceSource: hasManualBalance ? "manual" : "auto",
+          notes: handler,
+          transferSourceSheetId: previous.transferSourceSheetId || "",
+          transferSourceIacuc: previous.transferSourceIacuc || "",
+          transferMirrorContrib: previous.transferMirrorContrib || null,
+        };
+      }
       return {
         id: previous.id || crypto.randomUUID(),
         date,
+        rawDateInput: rowIndex === 0 ? date : rawDateInput || date,
         addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
         addedType: numericOrZero(addedCount) > 0 ? addedType || "购入" : addedType || "",
         transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
@@ -10110,6 +10174,7 @@ function readQuantitySheetForm(form) {
     initialCageCount: numericOrZero(rows[0]?.cageCount),
     pageCount: quantitySheetPageCount(state.quantitySheetDraft),
     rows,
+    invalidDateInputs,
   });
 }
 
@@ -10197,6 +10262,7 @@ function normalizeQuantitySheetDraft(sheet) {
     initialCageCount: numericOrZero(sheet?.initialCageCount),
     pageCount: Math.max(numericOrZero(sheet?.pageCount), 1),
     rows: Array.isArray(sheet?.rows) ? sheet.rows.map((row) => normalizeQuantitySheetDraftRow(row, month)) : [],
+    invalidDateInputs: Array.isArray(sheet?.invalidDateInputs) ? sheet.invalidDateInputs.filter(Boolean) : [],
     updatedAt: sheet?.updatedAt || "",
   };
 }
@@ -10283,6 +10349,7 @@ function normalizeQuantitySheetDraftRow(row, month) {
   return {
     id: row?.id || crypto.randomUUID(),
     date: row?.date || "",
+    rawDateInput: row?.rawDateInput || row?.date || "",
     addedCount: numericOrNull(row?.addedCount),
     addedType: row?.addedType || "",
     transferInFromIacuc: normalizeIacucNumber(row?.transferInFromIacuc || ""),
@@ -10327,7 +10394,7 @@ function hydrateQuantitySheetIacucInfo(sheet) {
 
 function syncQuantitySheetRoomName(event) {
   const form = event.target.form;
-  if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
+  if (form) state.quantitySheetDraft = readQuantitySheetForm(form, { preserveInvalidDates: true });
   scheduleRender("quantity_sheet.room_name");
 }
 
@@ -10774,14 +10841,8 @@ function buildQuantitySheetStatement(sheet) {
       for (const row of dayRows) {
         const addedCount = numericOrZero(row.addedCount);
         const removedCount = numericOrZero(row.removedCount);
-        if (item.profile.unit === "animal_day") {
-          item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
-          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
-        } else {
-          if (row.animalCount !== null) item.animalCount = numericOrZero(row.animalCount);
-          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
-          else item.cageCount = Math.max(item.cageCount + addedCount - removedCount, 0);
-        }
+        item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
+        if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
         const transferOutToIacuc = normalizeIacucNumber(row.transferOutToIacuc);
         if (transferOutToIacuc && removedCount > 0) {
           transferDeltas.set(transferOutToIacuc, numericOrZero(transferDeltas.get(transferOutToIacuc)) + removedCount);
@@ -10796,8 +10857,7 @@ function buildQuantitySheetStatement(sheet) {
     for (const [iacuc, delta] of transferDeltas.entries()) {
       const target = sheetStateByIacuc.get(iacuc);
       if (!target) continue;
-      if (target.profile.unit === "animal_day") target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
-      else target.cageCount = Math.max(numericOrZero(target.cageCount) + delta, 0);
+      target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
     }
     for (const item of sheetStates) {
       animalCount += item.animalCount;
@@ -11912,8 +11972,17 @@ function quantityChangeCell(rows, kind) {
     .filter((row) => numericOrZero(row[countKey]) > 0)
     .map((row) => {
       const count = formatStatementNumber(row[countKey]);
-      const type = quantityChangeShortLabel(row[typeKey]);
-      return type ? `${count}（${type}）` : count;
+      const type = quantityChangeFullType(row[typeKey], kind);
+      if (type === "转入") {
+        const sourceIacuc = normalizeIacucNumber(row.transferInFromIacuc || "");
+        return sourceIacuc ? `${count}（转入 ${sourceIacuc}）` : `${count}（转入）`;
+      }
+      if (type === "转出") {
+        const targetIacuc = normalizeIacucNumber(row.transferOutToIacuc || "");
+        return targetIacuc ? `${count}（转出 ${targetIacuc}）` : `${count}（转出）`;
+      }
+      const shortType = quantityChangeShortLabel(type);
+      return shortType ? `${count}（${shortType}）` : count;
     })
     .join("；");
 }
@@ -11960,14 +12029,8 @@ function buildQuantitySourceTimeline(statement) {
       for (const row of dayRows) {
         const addedCount = numericOrZero(row.addedCount);
         const removedCount = numericOrZero(row.removedCount);
-        if (item.profile.unit === "animal_day") {
-          item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
-          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
-        } else {
-          if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
-          else item.cageCount = Math.max(item.cageCount + addedCount - removedCount, 0);
-          if (row.animalCount !== null) item.animalCount = numericOrZero(row.animalCount);
-        }
+        item.animalCount = row.animalCount !== null ? numericOrZero(row.animalCount) : Math.max(item.animalCount + addedCount - removedCount, 0);
+        if (row.cageCount !== null) item.cageCount = numericOrZero(row.cageCount);
         const transferOutToIacuc = normalizeIacucNumber(row.transferOutToIacuc);
         if (transferOutToIacuc && removedCount > 0) transferDeltas.set(transferOutToIacuc, numericOrZero(transferDeltas.get(transferOutToIacuc)) + removedCount);
         const transferInFromIacuc = normalizeIacucNumber(row.transferInFromIacuc);
@@ -11977,8 +12040,7 @@ function buildQuantitySourceTimeline(statement) {
     for (const [iacuc, delta] of transferDeltas.entries()) {
       const target = stateByIacuc.get(iacuc);
       if (!target) continue;
-      if (target.profile.unit === "animal_day") target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
-      else target.cageCount = Math.max(numericOrZero(target.cageCount) + delta, 0);
+      target.animalCount = Math.max(numericOrZero(target.animalCount) + delta, 0);
     }
     for (const item of states) {
       const iacuc = normalizeIacucNumber(item.sheet.iacuc);
@@ -12020,7 +12082,7 @@ function buildApproxQuantityTimeline(statement, info) {
       iacuc,
       (statement.rows || []).map((row) => {
         const current = byDate.get(row.date)?.get(iacuc) || { animalCount: 0, cageCount: 0 };
-        const balanceValue = current.animalCount > 0 ? current.animalCount : current.cageCount;
+        const balanceValue = current.animalCount;
         const delta = balanceValue - previousValue;
         previousValue = balanceValue;
         return {
