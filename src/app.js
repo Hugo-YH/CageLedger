@@ -35,6 +35,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.11a",
+    releasedAt: "2026-06-02 16:35",
+    title: "数量统计表录入修正",
+    items: [
+      "根据 @李志权 反馈，修复数量统计表首日手工填写结余笼数时自动补入购入数的问题，月初结余保持纯手工口径",
+      "数量统计表日期输入框恢复自由录入，继续支持 15、0515、20260515 等灵活日期格式",
+    ],
+  },
+  {
     version: "0.5.11",
     releasedAt: "2026-06-02 13:41",
     title: "性能优化持续收敛",
@@ -738,7 +747,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.11",
+  version: "0.5.11a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -6306,7 +6315,7 @@ function renderQuantitySheetCalendarCell(entry) {
   const cageValue = cageManual ? row.cageCount : isInitialRow ? 0 : entry.cageCount || "";
   return `
     <td class="quantity-date-cell" data-quantity-row="${escapeAttr(entry.index)}">
-      <input name="rowDate" type="text" inputmode="numeric" value="${escapeAttr(formatQuantityDateInputValue(entry.date || ""))}" ${isInitialRow ? "readonly" : ""} />
+      <input name="rowDate" type="text" inputmode="text" autocomplete="off" placeholder="${isInitialRow ? "" : "如 0515 / 15 / 20260515"}" value="${escapeAttr(formatQuantityDateInputValue(entry.date || ""))}" ${isInitialRow ? "readonly" : ""} />
     </td>
     <td>${renderQuantityChangeEditor("added", row, addedText)}</td>
     <td>${renderQuantityChangeEditor("removed", row, removedText)}</td>
@@ -10035,7 +10044,7 @@ function readQuantitySheetForm(form) {
       const hasChange = numericOrZero(addedCount) > 0 || numericOrZero(removedCount) > 0;
       const primaryManual = profile.unit === "animal_day" ? manualAnimalCount : manualCageCount;
       const primaryPrevious = profile.unit === "animal_day" ? runningAnimalCount : runningCageCount;
-      if (!hasChange && primaryManual !== null) {
+      if (rowIndex > 0 && !hasChange && primaryManual !== null) {
         const delta = primaryManual - primaryPrevious;
         if (delta > 0) {
           addedCount = delta;
