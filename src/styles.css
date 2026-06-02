@@ -2354,6 +2354,7 @@ h3 {
 }
 
 .intake-card-preview-frame .card .batch-iacuc-highlight {
+  font-size: 2.7mm;
   color: #b91c1c;
   font-weight: 800;
 }

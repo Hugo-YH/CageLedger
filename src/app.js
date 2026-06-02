@@ -35,6 +35,14 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.11c",
+    releasedAt: "2026-06-02 17:29",
+    title: "笼卡 IACUC 高亮微调",
+    items: [
+      "调整笼卡打印与预览中批次号 IACUC 高亮字号为 2.7mm，增强识别度并保持版面稳定",
+    ],
+  },
+  {
     version: "0.5.11b",
     releasedAt: "2026-06-02 17:13",
     title: "数量统计表录入与导出修正",
@@ -758,7 +766,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.11b",
+  version: "0.5.11c",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -9854,6 +9862,7 @@ function intakeCardsPrintHtml(items) {
             line-height: 0.98;
           }
           .card .batch-iacuc-highlight {
+            font-size: 2.7mm;
             color: #b91c1c;
             font-weight: 800;
           }
