@@ -6375,8 +6375,18 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement_by_pi(conn, body, user)
                 workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
+                reimbursement = get_reimbursement_record_by_workflow_id(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
                 conn.commit()
-            self.send_json({"statement": statement, "lines": lines, "workflow": workflow, "auditLogs": audit_logs}, HTTPStatus.CREATED)
+            self.send_json(
+                {
+                    "statement": statement,
+                    "lines": lines,
+                    "workflow": workflow,
+                    "reimbursementItem": reimbursement_record_list_item(reimbursement) if reimbursement else None,
+                    "auditLogs": audit_logs,
+                },
+                HTTPStatus.CREATED,
+            )
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -6414,7 +6424,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 write_audit_events(conn, [audit])
                 conn.commit()
             invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
-            self.send_json({"workflow": workflow, "event": event, "auditLogs": merge_audit_logs([], [audit])})
+            self.send_json(
+                {
+                    "workflow": workflow,
+                    "event": event,
+                    "reimbursementItem": reimbursement_record_list_item(reimbursement) if reimbursement else None,
+                    "auditLogs": merge_audit_logs([], [audit]),
+                }
+            )
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -6431,6 +6448,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 workflow = delete_billing_workflow(conn, workflow_id)
                 reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
+                deleted_reimbursement_id = ""
                 if reimbursement:
                     if reimbursement_has_manual_entry(reimbursement) or reimbursement.get("source") == "imported":
                         reimbursement["workflowId"] = ""
@@ -6440,6 +6458,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                         reimbursement["updatedAt"] = now_iso()
                         upsert_reimbursement_record(conn, reimbursement)
                     else:
+                        deleted_reimbursement_id = reimbursement.get("id", "")
                         delete_reimbursement_record(conn, reimbursement["id"])
                 at = now_iso()
                 audit = audit_event(
@@ -6456,7 +6475,15 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 write_audit_events(conn, [audit])
                 conn.commit()
             invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
-            self.send_json({"ok": True, "workflow": workflow, "auditLogs": merge_audit_logs([], [audit])})
+            self.send_json(
+                {
+                    "ok": True,
+                    "workflow": workflow,
+                    "reimbursementItem": reimbursement_record_list_item(reimbursement) if reimbursement and not deleted_reimbursement_id else None,
+                    "deletedReimbursementId": deleted_reimbursement_id,
+                    "auditLogs": merge_audit_logs([], [audit]),
+                }
+            )
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
 

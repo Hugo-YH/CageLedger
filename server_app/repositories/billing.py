@@ -156,6 +156,10 @@ def get_billing_workflow(conn, workflow_id):
 
 
 def get_billing_workflow_detail(conn, workflow_id):
+    key = cache_key("billing_workflows::detail", workflow_id=workflow_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     row = conn.execute(
         """
         SELECT
@@ -199,7 +203,7 @@ def get_billing_workflow_detail(conn, workflow_id):
         """,
         (workflow_id,),
     ).fetchone()
-    return billing_workflow_detail_row(row) if row else None
+    return cache_set(key, billing_workflow_detail_row(row) if row else None)
 
 
 def get_billing_version(conn, version_id):
@@ -494,6 +498,10 @@ def list_billing_statement_lines_for_version(conn, version_id):
 
 
 def list_billing_statement_line_summaries_for_version(conn, version_id):
+    key = cache_key("billing_workflows::lines", version_id=version_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = conn.execute(
         """
         SELECT
@@ -511,7 +519,7 @@ def list_billing_statement_line_summaries_for_version(conn, version_id):
         """,
         (version_id,),
     ).fetchall()
-    return [billing_statement_line_summary_row(row) for row in rows]
+    return cache_set(key, [billing_statement_line_summary_row(row) for row in rows])
 
 
 def billing_statement_line_summary_row(row):
@@ -585,7 +593,7 @@ def get_current_billing_statement(conn, statement_id):
     workflow = get_billing_workflow(conn, version.get("workflowId", ""))
     if workflow and (workflow.get("currentVersionId") or "") != statement_id:
         return None
-    return statement
+    return billing_statement_list_item(statement)
 
 
 def insert_quantity_sheet(conn, sheet, db_values):

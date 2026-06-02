@@ -35,6 +35,16 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.11",
+    releasedAt: "2026-06-02 13:41",
+    title: "性能优化持续收敛",
+    items: [
+      "数量统计表、报销台账、结算流程、待接收批次和待进驻任务的写后刷新继续收敛为当前页局部更新，减少操作后的整页重载",
+      "结算预览、流程详情和首页摘要补充派生结果缓存与区块 HTML 缓存，降低重复计算和大段 DOM 重建成本",
+      "导航切换、首页快捷入口、帮助提示、账号授权摘要和多类列表操作改为统一事件委托或单次绑定，继续压缩 render 后的监听扫描开销",
+    ],
+  },
+  {
     version: "0.5.10",
     releasedAt: "2026-06-01 20:25",
     title: "数量统计表列表与预览优化",
@@ -711,6 +721,16 @@ let QUANTITY_SHEET_DETAIL_CACHE = new Map();
 let REIMBURSEMENT_DETAIL_CACHE = new Map();
 let BILLING_WORKFLOW_DETAIL_CACHE = new Map();
 let BILLING_WORKFLOW_LINES_CACHE = new Map();
+let DATE_LIST_CACHE = new Map();
+let CAGE_MAP_STATEMENT_CACHE = new Map();
+let QUANTITY_SHEET_STATEMENT_CACHE = new Map();
+let QUANTITY_STATISTIC_FORMS_CACHE = new Map();
+let QUANTITY_STATISTIC_PAGES_HTML_CACHE = new Map();
+let SETTLEMENT_TEMPLATE_MODEL_CACHE = new Map();
+let WORKFLOW_DETAIL_SECTION_CACHE = new Map();
+let LIST_SECTION_CACHE = new Map();
+let UNIT_PRICE_CACHE = new Map();
+let DISCOUNT_CACHE = new Map();
 let iacucIndexMeta = null;
 let systemUpdateInfo = null;
 let lastRenderedView = "";
@@ -718,7 +738,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.10",
+  version: "0.5.11",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1796,8 +1816,6 @@ function localUiOnlyState(source = {}) {
     selectedRoomId: source.selectedRoomId || "",
     selectedRackId: source.selectedRackId || "",
     selectedSlotId: source.selectedSlotId || "",
-    selectedSlotIds: Array.isArray(source.selectedSlotIds) ? source.selectedSlotIds.slice(0, 500) : [],
-    batchMode: Boolean(source.batchMode),
     slotFilter: source.slotFilter || "all",
     billingSource: source.billingSource || "cage_map",
     billingMonth: source.billingMonth || today.slice(0, 7),
@@ -1808,12 +1826,8 @@ function localUiOnlyState(source = {}) {
     reimbursementOnlyUnpaid: source.reimbursementOnlyUnpaid ?? true,
     billingWorkflowFilter: source.billingWorkflowFilter || "todo",
     selectedQuantitySheetId: source.selectedQuantitySheetId || "",
-    selectedQuantitySheetIds: Array.isArray(source.selectedQuantitySheetIds) ? source.selectedQuantitySheetIds.slice(0, 200) : [],
-    viewingQuantitySheetId: source.viewingQuantitySheetId || "",
     quantitySheetListSearch: source.quantitySheetListSearch || "",
     selectedIntakeBatchId: source.selectedIntakeBatchId || "",
-    selectedIntakeBatchIds: Array.isArray(source.selectedIntakeBatchIds) ? source.selectedIntakeBatchIds.slice(0, 200) : [],
-    showPlacementTaskPanel: Boolean(source.showPlacementTaskPanel ?? false),
     intakeBatchFilter: source.intakeBatchFilter || "unprinted",
     principalIdentityFilter: source.principalIdentityFilter || "",
   };
@@ -2170,14 +2184,15 @@ async function updateReimbursementRecord(recordId, patch) {
     throw new Error(payload.error || "保存报销台账失败");
   }
   mergeServerAuditLogs(payload);
-  if (payload.item) upsertById(state.reimbursementRecords, payload.item);
   state.selectedReimbursementRecordDetail = payload;
   rememberReimbursementRecordDetail(payload);
+  mergeReimbursementRecordsFromDetail(payload);
   invalidateStateIndexCache();
   return payload.item;
 }
 
 async function deleteReimbursementRecord(recordId) {
+  const existingRecord = state.reimbursementRecords.find((item) => item.id === recordId) || null;
   const response = await fetch(buildReimbursementRecordUrl(recordId), { method: "DELETE" });
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
@@ -2190,6 +2205,9 @@ async function deleteReimbursementRecord(recordId) {
   }
   mergeServerAuditLogs(payload);
   state.reimbursementRecords = state.reimbursementRecords.filter((item) => item.id !== recordId);
+  if (remotePersistence && existingRecord && reimbursementRecordMatchesCurrentFilter(existingRecord)) {
+    paginationState.reimbursementRecords.total = Math.max(Number(paginationState.reimbursementRecords.total || 0) - 1, 0);
+  }
   REIMBURSEMENT_DETAIL_CACHE.delete(recordId);
   if (state.selectedReimbursementRecordId === recordId) {
     state.selectedReimbursementRecordId = "";
@@ -2466,6 +2484,10 @@ async function ensureViewDataLoaded(view) {
 
 async function advanceBillingWorkflow(workflowId, toStatus) {
   const startedAt = performance.now();
+  const existingWorkflow = state.billingWorkflows.find((item) => item.id === workflowId) || null;
+  const existingReimbursement = state.selectedReimbursementRecordDetail?.item?.workflowId === workflowId
+    ? state.selectedReimbursementRecordDetail.item
+    : state.reimbursementRecords.find((item) => item.workflowId === workflowId) || null;
   const response = await fetch(API_BILLING_WORKFLOW_ADVANCE_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2481,7 +2503,7 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
     throw new Error(payload.error || "更新结算流程失败");
   }
   mergeServerAuditLogs(payload);
-  if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
+  if (payload.workflow) updateBillingWorkflowListFromServer(payload.workflow, existingWorkflow);
   if (state.selectedBillingWorkflowDetail?.workflow?.id === payload.workflow?.id) {
     state.selectedBillingWorkflowDetail.workflow = payload.workflow;
     if (payload.event) {
@@ -2494,12 +2516,15 @@ async function advanceBillingWorkflow(workflowId, toStatus) {
     if (state.selectedReimbursementRecordDetail.item) {
       state.selectedReimbursementRecordDetail.item.workflowStatus = payload.workflow.workflowStatus || state.selectedReimbursementRecordDetail.item.workflowStatus;
       state.selectedReimbursementRecordDetail.item.latestEventAt = payload.workflow.latestEventAt || state.selectedReimbursementRecordDetail.item.latestEventAt;
-      upsertById(state.reimbursementRecords, state.selectedReimbursementRecordDetail.item);
+      updateReimbursementRecordListFromServer(state.selectedReimbursementRecordDetail.item, existingReimbursement);
     }
     if (payload.event) {
       state.selectedReimbursementRecordDetail.workflowEvents = [payload.event, ...(state.selectedReimbursementRecordDetail.workflowEvents || [])];
     }
     rememberReimbursementRecordDetail(state.selectedReimbursementRecordDetail);
+  }
+  if (payload.reimbursementItem) {
+    updateReimbursementRecordListFromServer(payload.reimbursementItem, existingReimbursement);
   }
   logClientPerf("billing_workflow.advance", startedAt, { workflowId, toStatus });
   return payload.workflow;
@@ -2575,6 +2600,10 @@ async function loadBillingWorkflowLines(workflowId, versionId = "") {
 }
 
 async function deleteBillingWorkflow(workflowId) {
+  const existingWorkflow = state.billingWorkflows.find((item) => item.id === workflowId) || null;
+  const existingReimbursement = state.selectedReimbursementRecordDetail?.item?.workflowId === workflowId
+    ? state.selectedReimbursementRecordDetail.item
+    : state.reimbursementRecords.find((item) => item.workflowId === workflowId) || null;
   const response = await fetch(`${API_BILLING_WORKFLOWS_URL}/${encodeURIComponent(workflowId)}`, {
     method: "DELETE",
   });
@@ -2589,9 +2618,21 @@ async function deleteBillingWorkflow(workflowId) {
   }
   mergeServerAuditLogs(payload);
   state.billingWorkflows = state.billingWorkflows.filter((item) => item.id !== workflowId);
+  if (remotePersistence && existingWorkflow && workflowMatchesCurrentFilter(existingWorkflow)) {
+    paginationState.billingWorkflows.total = Math.max(Number(paginationState.billingWorkflows.total || 0) - 1, 0);
+  }
   BILLING_WORKFLOW_DETAIL_CACHE.delete(workflowId);
   clearBillingWorkflowLinesCache(workflowId);
   invalidateStateIndexCache();
+  if (payload.reimbursementItem) {
+    updateReimbursementRecordListFromServer(payload.reimbursementItem, existingReimbursement);
+  } else if (payload.deletedReimbursementId) {
+    state.reimbursementRecords = state.reimbursementRecords.filter((item) => item.id !== payload.deletedReimbursementId);
+    REIMBURSEMENT_DETAIL_CACHE.delete(payload.deletedReimbursementId);
+    if (remotePersistence && existingReimbursement && reimbursementRecordMatchesCurrentFilter(existingReimbursement)) {
+      paginationState.reimbursementRecords.total = Math.max(Number(paginationState.reimbursementRecords.total || 0) - 1, 0);
+    }
+  }
   if (state.selectedBillingWorkflowId === workflowId) {
     state.selectedBillingWorkflowId = "";
     state.selectedBillingWorkflowDetail = null;
@@ -2717,6 +2758,116 @@ function updatePlacementTaskListFromServer(task) {
   return savedTask;
 }
 
+function quantitySheetMatchesCurrentFilter(sheet = {}) {
+  const month = paginationState.quantitySheets.month || state.billingMonth || "";
+  const iacuc = normalizeIacucNumber(paginationState.quantitySheets.iacuc || "");
+  const pi = normalizePersonName(paginationState.quantitySheets.pi || "");
+  const roomId = paginationState.quantitySheets.roomId || "";
+  if (month && sheet.month !== month) return false;
+  if (iacuc && normalizeIacucNumber(sheet.iacuc) !== iacuc) return false;
+  if (pi && normalizePersonName(sheet.pi) !== pi) return false;
+  if (roomId && quantitySheetRoomId(sheet) !== roomId) return false;
+  return true;
+}
+
+function updateQuantitySheetListFromServer(sheet, previousSheet = null) {
+  const savedSheet = normalizeQuantitySheetDraft(sheet);
+  const existingSheet = previousSheet || state.quantitySheets.find((item) => item.id === savedSheet.id) || null;
+  const wasVisible = existingSheet ? quantitySheetMatchesCurrentFilter(existingSheet) : false;
+  const isVisible = quantitySheetMatchesCurrentFilter(savedSheet);
+  if (isVisible) {
+    upsertById(state.quantitySheets, savedSheet);
+  } else {
+    state.quantitySheets = state.quantitySheets.filter((item) => item.id !== savedSheet.id);
+  }
+  if (remotePersistence) {
+    const delta = (isVisible ? 1 : 0) - (wasVisible ? 1 : 0);
+    paginationState.quantitySheets.total = Math.max(Number(paginationState.quantitySheets.total || 0) + delta, 0);
+  }
+  state.selectedQuantitySheetIds = state.selectedQuantitySheetIds.filter((id) => state.quantitySheets.some((item) => item.id === id));
+  return savedSheet;
+}
+
+function workflowMatchesCurrentFilter(workflow = {}) {
+  const month = paginationState.billingWorkflows.month || state.billingMonth || "";
+  const status = paginationState.billingWorkflows.status || state.billingWorkflowFilter || "todo";
+  if (month && workflow.month !== month) return false;
+  if (status === "todo") return workflowIsTodo(workflow);
+  if (status === "done") return workflow.workflowStatus === "submitted_to_finance";
+  if (status === "all") return true;
+  return workflow.workflowStatus === status;
+}
+
+function updateBillingWorkflowListFromServer(workflow, previousWorkflow = null) {
+  if (!workflow) return null;
+  const existingWorkflow = previousWorkflow || state.billingWorkflows.find((item) => item.id === workflow.id) || null;
+  const wasVisible = existingWorkflow ? workflowMatchesCurrentFilter(existingWorkflow) : false;
+  const isVisible = workflowMatchesCurrentFilter(workflow);
+  if (isVisible) {
+    upsertById(state.billingWorkflows, workflow);
+  } else {
+    state.billingWorkflows = state.billingWorkflows.filter((item) => item.id !== workflow.id);
+  }
+  if (remotePersistence) {
+    const delta = (isVisible ? 1 : 0) - (wasVisible ? 1 : 0);
+    paginationState.billingWorkflows.total = Math.max(Number(paginationState.billingWorkflows.total || 0) + delta, 0);
+  }
+  return workflow;
+}
+
+function reimbursementRecordMatchesCurrentFilter(record = {}) {
+  const month = paginationState.reimbursementRecords.month || state.billingMonth || "";
+  const status = paginationState.reimbursementRecords.status || state.reimbursementFilter || "pending_submission";
+  const pi = normalizeSearchText(paginationState.reimbursementRecords.pi || state.reimbursementSearchPi || "");
+  const onlyUnpaid = (paginationState.reimbursementRecords.onlyUnpaid || (state.reimbursementOnlyUnpaid ? "1" : "0")) === "1";
+  if (month && record.month !== month) return false;
+  if (status !== "all" && record.reimbursementStatus !== status) return false;
+  if (pi && !normalizeSearchText(record.pi).includes(pi)) return false;
+  if (onlyUnpaid && Number(record.accumulatedUnpaid || 0) <= 0) return false;
+  return true;
+}
+
+function mergeReimbursementRecordsFromDetail(detail) {
+  if (!detail?.item) return [];
+  const incoming = new Map();
+  [detail.item, ...(detail.history || [])].forEach((record) => {
+    if (record?.id) incoming.set(record.id, record);
+  });
+  const visibleBefore = new Map(state.reimbursementRecords.map((record) => [record.id, reimbursementRecordMatchesCurrentFilter(record)]));
+  let delta = 0;
+  for (const record of incoming.values()) {
+    const wasVisible = visibleBefore.get(record.id) || false;
+    const isVisible = reimbursementRecordMatchesCurrentFilter(record);
+    if (isVisible) {
+      upsertById(state.reimbursementRecords, record);
+    } else {
+      state.reimbursementRecords = state.reimbursementRecords.filter((item) => item.id !== record.id);
+    }
+    delta += (isVisible ? 1 : 0) - (wasVisible ? 1 : 0);
+  }
+  if (remotePersistence && delta) {
+    paginationState.reimbursementRecords.total = Math.max(Number(paginationState.reimbursementRecords.total || 0) + delta, 0);
+  }
+  return [...incoming.values()];
+}
+
+function updateReimbursementRecordListFromServer(record, previousRecord = null) {
+  if (!record?.id) return null;
+  const existingRecord = previousRecord || state.reimbursementRecords.find((item) => item.id === record.id) || null;
+  const wasVisible = existingRecord ? reimbursementRecordMatchesCurrentFilter(existingRecord) : false;
+  const isVisible = reimbursementRecordMatchesCurrentFilter(record);
+  if (isVisible) {
+    upsertById(state.reimbursementRecords, record);
+  } else {
+    state.reimbursementRecords = state.reimbursementRecords.filter((item) => item.id !== record.id);
+  }
+  if (remotePersistence) {
+    const delta = (isVisible ? 1 : 0) - (wasVisible ? 1 : 0);
+    paginationState.reimbursementRecords.total = Math.max(Number(paginationState.reimbursementRecords.total || 0) + delta, 0);
+  }
+  return record;
+}
+
 function logClientPerf(label, startedAt, details = {}) {
   const elapsedMs = Math.round((performance.now() - startedAt) * 10) / 10;
   const detailText = Object.entries(details)
@@ -2732,25 +2883,6 @@ function reportSaveError(error) {
 
 async function refreshUsersAfterSave() {
   await loadUsers();
-}
-
-async function refreshQuantitySheetsAfterSave(sheetId = "") {
-  if (remotePersistence) {
-    await goToQuantitySheetsPage(paginationState.quantitySheets.page || 1, paginationState.quantitySheets.limit);
-  }
-  const selected =
-    state.quantitySheets.find((item) => item.id === sheetId) ||
-    state.quantitySheets.find((item) => item.id === state.selectedQuantitySheetId) ||
-    state.quantitySheets[0] ||
-    null;
-  state.selectedQuantitySheetId = selected?.id || "";
-  const detailed = await ensureQuantitySheetDetail(selected);
-  state.quantitySheetDraft = detailed ? hydrateQuantitySheetIacucInfo(detailed) : makeQuantitySheetDraft(state.billingMonth || today.slice(0, 7));
-}
-
-async function refreshBillingWorkflowsAfterSave() {
-  if (!remotePersistence) return;
-  await goToBillingWorkflowsPage(paginationState.billingWorkflows.page || 1, paginationState.billingWorkflows.limit);
 }
 
 async function refreshInfrastructureAfterSave() {
@@ -3654,12 +3786,18 @@ function updateHelpHintPosition(hint) {
   hint.style.setProperty("--help-arrow-left", `${arrowLeft}px`);
 }
 
+let helpHintEventsBound = false;
+
 function bindHelpHints() {
-  document.querySelectorAll(".help-hint").forEach((hint) => {
-    const sync = () => updateHelpHintPosition(hint);
-    hint.addEventListener("mouseenter", sync);
-    hint.addEventListener("focus", sync);
-  });
+  if (helpHintEventsBound) return;
+  helpHintEventsBound = true;
+  const sync = (event) => {
+    const hint = event.target.closest?.(".help-hint");
+    if (!hint) return;
+    updateHelpHintPosition(hint);
+  };
+  document.addEventListener("mouseover", sync);
+  document.addEventListener("focusin", sync);
 }
 
 function metric(label, value, tone) {
@@ -3918,6 +4056,9 @@ function renderDashboardView() {
   const periodOpenPct = percent(counts.periodOpen, periodTotal);
   const periodNormalPct = percent(counts.periodNormal, periodTotal);
   const periodOverduePct = percent(counts.periodOverdue, periodTotal);
+  const overviewCardsHtml = renderDashboardOverviewCardsHtml(overview);
+  const facilityCardsHtml = renderDashboardFacilityCardsHtml(facilities);
+  const roomCapacityHtml = renderRoomCapacityRowsHtml(roomCapacityRows());
 
   return `
     <section class="workspace-view dashboard-view">
@@ -3944,17 +4085,14 @@ function renderDashboardView() {
       </div>
 
       <div class="dashboard-overview-grid">
-        ${dashboardOverviewCard("待接收批次", overview.intakePendingCount, "接收笼卡后统一打印，已接收会进入待进驻。", "intake")}
-        ${dashboardOverviewCard("待进驻任务", overview.openPlacementTaskCount, "预留或正式入驻后会从当前房间待办中移除。", "cages")}
-        ${dashboardOverviewCard("本月待办流程", overview.currentMonthWorkflowTodoCount, "已生成、已发送、已签字交回都会留在待办链。", "workflow-todo")}
-        ${dashboardOverviewCard("异常项", overview.exceptionCount, `房间未匹配 ${overview.unmatchedIntakeCount} · 待进驻超期 ${overview.overduePlacementCount} · 流程待推进 ${overview.stalledWorkflowCount}`, "workflow-all")}
+        ${overviewCardsHtml}
       </div>
 
       <div class="dashboard-main-grid">
         <section class="panel dashboard-quick-panel">
           ${renderPanelHead({ title: "两设施运营摘要", helpKey: "dashboardOverview", compact: true })}
           <div class="dashboard-facility-grid">
-            ${facilities.map(renderDashboardFacilityCard).join("")}
+            ${facilityCardsHtml}
           </div>
         </section>
         <section class="panel dashboard-status-panel">
@@ -3982,7 +4120,7 @@ function renderDashboardView() {
       <section class="panel dashboard-room-panel">
         ${renderPanelHead({ title: "饲养间使用情况", helpKey: "dashboardRooms", compact: true })}
         <div class="room-capacity-list">
-          ${roomCapacityRows().map(renderRoomCapacityRow).join("")}
+          ${roomCapacityHtml}
         </div>
       </section>
     </section>
@@ -4025,6 +4163,17 @@ function dashboardOverviewCard(title, value, note, action) {
   `;
 }
 
+function renderDashboardOverviewCardsHtml(overview) {
+  const items = [
+    { title: "待接收批次", value: overview.intakePendingCount, note: "接收笼卡后统一打印，已接收会进入待进驻。", action: "intake" },
+    { title: "待进驻任务", value: overview.openPlacementTaskCount, note: "预留或正式入驻后会从当前房间待办中移除。", action: "cages" },
+    { title: "本月待办流程", value: overview.currentMonthWorkflowTodoCount, note: "已生成、已发送、已签字交回都会留在待办链。", action: "workflow-todo" },
+    { title: "异常项", value: overview.exceptionCount, note: `房间未匹配 ${overview.unmatchedIntakeCount} · 待进驻超期 ${overview.overduePlacementCount} · 流程待推进 ${overview.stalledWorkflowCount}`, action: "workflow-all" },
+  ];
+  const key = workflowDetailListKey(items, ["title", "value", "note", "action"]);
+  return cachedListSection("dashboard_overview_cards", key, () => items.map((item) => dashboardOverviewCard(item.title, item.value, item.note, item.action)).join(""));
+}
+
 function renderDashboardFacilityCard(item) {
   return `
     <article class="dashboard-facility-card">
@@ -4042,6 +4191,11 @@ function renderDashboardFacilityCard(item) {
       </div>
     </article>
   `;
+}
+
+function renderDashboardFacilityCardsHtml(items) {
+  const key = workflowDetailListKey(items, ["facility", "roomCount", "activeCageCount", "activeAnimalCount", "openPlacementTaskCount", "currentMonthWorkflowTodoCount", "currentMonthWorkflowDoneCount"]);
+  return cachedListSection("dashboard_facility_cards", key, () => items.map(renderDashboardFacilityCard).join(""));
 }
 
 function slotStatusCounts() {
@@ -4157,6 +4311,11 @@ function renderRoomCapacityRow(room) {
       </div>
     </div>
   `;
+}
+
+function renderRoomCapacityRowsHtml(items) {
+  const key = workflowDetailListKey(items, ["id", "name", "area", "total", "active", "reserved", "empty", "periodOpen", "periodNormal", "periodOverdue"]);
+  return cachedListSection("dashboard_room_capacity_rows", key, () => items.map(renderRoomCapacityRow).join(""));
 }
 
 function renderCageView() {
@@ -4321,7 +4480,7 @@ function renderPlacementTaskPanel(tasks, room, options = {}) {
             <div class="table-wrap">
               <table class="workflow-table placement-task-table">
                 <thead><tr><th></th><th>状态</th><th>计划入驻</th><th>批次号</th><th>项目负责人</th><th>实验负责人</th><th>品系</th><th>笼数</th><th>预留情况</th><th></th></tr></thead>
-                <tbody>${groups.map(renderPlacementTaskGroupRow).join("")}</tbody>
+                <tbody>${renderPlacementTaskGroupRowsHtml(groups)}</tbody>
               </table>
             </div>
           `
@@ -4390,6 +4549,34 @@ function renderPlacementTaskGroupRow(group) {
       </td>
     </tr>
   `;
+}
+
+function renderPlacementTaskGroupRowsHtml(groups) {
+  const key = [
+    groups.length,
+    selectedIdSignature(state.selectedPlacementTaskIds),
+    workflowDetailListKey(
+      groups.map((group) => {
+        const first = group[0] || {};
+        const pendingTasks = group.filter((task) => task.status === "pending");
+        const reservedTasks = group.filter((task) => task.status === "reserved");
+        return {
+          id: placementTaskGroupKey(first),
+          status: pendingTasks.length ? "pending" : "reserved",
+          plannedMoveInDate: first.plannedMoveInDate || "",
+          batchNo: first.batchNo || "",
+          pi: first.pi || "",
+          owner: first.owner || "",
+          strainStandard: first.strainStandard || first.species || "",
+          count: group.length,
+          reservedCount: reservedTasks.length,
+          pendingCount: pendingTasks.length,
+        };
+      }),
+      ["id", "status", "plannedMoveInDate", "batchNo", "pi", "owner", "strainStandard", "count", "reservedCount", "pendingCount"],
+    ),
+  ].join("::");
+  return cachedListSection("placement_group_rows", key, () => groups.map(renderPlacementTaskGroupRow).join(""));
 }
 
 function placementDateTone(dateValue) {
@@ -5123,13 +5310,7 @@ function renderIntakeBatchView() {
         <div class="table-wrap">
             <table class="workflow-table intake-batch-table">
               <thead><tr><th><input type="checkbox" data-select-all-intake-batches ${visibleBatches.length && selectedCount === visibleBatches.length ? "checked" : ""} aria-label="全选当前页待接收批次" /></th><th>状态</th><th>批次号</th><th>购买单位</th><th>项目负责人</th><th>实验负责人</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
-              <tbody>
-                ${
-                  visibleBatches.length
-                    ? visibleBatches.map(renderIntakeBatchRow).join("")
-                    : `<tr><td colspan="11">${state.intakeBatches.length ? "当前筛选下没有待接收批次，可切换状态或翻页查看。" : "当前没有待接收批次，先在上方粘贴预约消息并保存。"} </td></tr>`
-                }
-              </tbody>
+              <tbody>${renderIntakeBatchRowsHtml(visibleBatches)}</tbody>
             </table>
           </div>
           ${renderPager("intakeBatches", intakePage, remotePersistence ? intakePage.total || allVisibleBatches.length : allVisibleBatches.length)}
@@ -5219,6 +5400,20 @@ function renderIntakeBatchRow(batch) {
       </td>
     </tr>
   `;
+}
+
+function renderIntakeBatchRowsHtml(visibleBatches) {
+  const key = [
+    state.intakeBatches.length,
+    visibleBatches.length,
+    selectedIdSignature(state.selectedIntakeBatchIds),
+    state.selectedIntakeBatchId || "",
+    workflowDetailListKey(visibleBatches, ["id", "status", "batchNo", "supplier", "pi", "owner", "quantity", "roomName", "roomMatched", "intakeDate", "confirmedCardCount", "finalCardCount", "updatedAt"]),
+  ].join("::");
+  return cachedListSection("intake_batch_rows", key, () => {
+    if (visibleBatches.length) return visibleBatches.map(renderIntakeBatchRow).join("");
+    return `<tr><td colspan="11">${state.intakeBatches.length ? "当前筛选下没有待接收批次，可切换状态或翻页查看。" : "当前没有待接收批次，先在上方粘贴预约消息并保存。"} </td></tr>`;
+  });
 }
 
 function renderIntakeBatchEditorModal() {
@@ -5466,7 +5661,7 @@ function renderWorkflowCenterView() {
 }
 
 function renderCageMapBillingView() {
-  const statement = buildStatement(state.billingPi, state.billingMonth);
+  const statement = cageMapBillingStatement(state.billingPi, state.billingMonth);
   const canGenerateStatement = !remotePersistence || currentUser?.role === "admin";
   const scope = billingStatementScopeSummary(statement);
 
@@ -5682,12 +5877,7 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
             <tr><th class="quantity-select-col"><input id="toggleVisibleQuantitySheets" type="checkbox" ${allVisibleSelected ? "checked" : ""} ${filteredItems.length ? "" : "disabled"} /></th><th>月份</th><th>IACUC</th><th>房间</th><th>负责人</th><th>更新时间</th></tr>
           </thead>
           <tbody>
-            ${
-              quantityLoading && !items.length
-                ? `<tr><td colspan="6">正在加载数量统计表...</td></tr>`
-                : filteredItems.map((sheet) => renderSavedQuantitySheetRow(sheet, selectedIds)).join("") ||
-                  `<tr><td colspan="6">${items.length ? "当前检索条件下没有匹配的数量统计表。" : "当前没有已保存数量统计表。保存后会显示在这里。"}</td></tr>`
-            }
+            ${renderSavedQuantitySheetRowsHtml(filteredItems, selectedIds, quantityLoading, items.length)}
           </tbody>
         </table>
       </div>
@@ -5714,11 +5904,11 @@ function renderSavedQuantitySheetDetail(sheet) {
   if (!sheet) {
     return "";
   }
-  const statement = buildQuantitySheetStatement(sheet);
-  const forms = buildQuantityStatisticExportForms(statement, statementInfoForExport(statement));
+  const statement = quantitySheetBillingStatement(sheet);
+  const forms = quantityStatisticExportForms(statement, statementInfoForExport(statement));
   return `
     <div class="quantity-stat-preview">
-      ${quantityStatisticPagesHtml(statement, forms)}
+      ${quantityStatisticPages(statement, forms)}
     </div>
   `;
 }
@@ -5750,6 +5940,21 @@ function renderSavedQuantitySheetRow(sheet, selectedIds) {
       <td>${escapeText(formatLogTime(sheet.updatedAt) || "-")}</td>
     </tr>
   `;
+}
+
+function renderSavedQuantitySheetRowsHtml(filteredItems, selectedIds, quantityLoading, itemsLength) {
+  const key = [
+    quantityLoading ? "loading" : "ready",
+    itemsLength,
+    filteredItems.length,
+    selectedIdSignature([...selectedIds]),
+    workflowDetailListKey(filteredItems, ["id", "month", "iacuc", "roomId", "roomName", "pi", "updatedAt"]),
+  ].join("::");
+  return cachedListSection("quantity_sheet_rows", key, () => {
+    if (quantityLoading && !itemsLength) return `<tr><td colspan="6">正在加载数量统计表...</td></tr>`;
+    if (filteredItems.length) return filteredItems.map((sheet) => renderSavedQuantitySheetRow(sheet, selectedIds)).join("");
+    return `<tr><td colspan="6">${itemsLength ? "当前检索条件下没有匹配的数量统计表。" : "当前没有已保存数量统计表。保存后会显示在这里。"}</td></tr>`;
+  });
 }
 
 function renderBillingWorkflowPanel() {
@@ -5792,13 +5997,7 @@ function renderBillingWorkflowPanel() {
               </tr>
             </thead>
             <tbody>
-              ${
-                workflowLoading
-                  ? `<tr><td colspan="10">正在加载报销台账。</td></tr>`
-                  : items.length
-                    ? items.map(renderBillingWorkflowRow).join("")
-                  : `<tr><td colspan="10">当前筛选下没有报销台账。按项目负责人生成结算单后会自动进入这里。</td></tr>`
-              }
+              ${renderBillingWorkflowRowsHtml(items, workflowLoading, state.reimbursementRecords.length)}
             </tbody>
           </table>
         </div>
@@ -5839,6 +6038,20 @@ function renderBillingWorkflowRow(item) {
   `;
 }
 
+function renderBillingWorkflowRowsHtml(items, workflowLoading, totalLoaded) {
+  const key = [
+    workflowLoading ? "loading" : "ready",
+    totalLoaded,
+    items.length,
+    workflowDetailListKey(items, ["id", "month", "pi", "payableAmount", "accumulatedUnpaid", "workflowStatus", "reimbursementStatus", "fundBookNo", "reimbursementFormNo", "latestEventAt", "paidAmount"]),
+  ].join("::");
+  return cachedListSection("reimbursement_rows", key, () => {
+    if (workflowLoading) return `<tr><td colspan="10">正在加载报销台账。</td></tr>`;
+    if (items.length) return items.map(renderBillingWorkflowRow).join("");
+    return `<tr><td colspan="10">当前筛选下没有报销台账。按项目负责人生成结算单后会自动进入这里。</td></tr>`;
+  });
+}
+
 function renderBillingWorkflowDetailModal() {
   const detail = state.selectedReimbursementRecordDetail || {};
   const record = detail.item || {};
@@ -5853,6 +6066,12 @@ function renderBillingWorkflowDetailModal() {
   const currentNode = timeline.find((item) => item.state === "current") || timeline.find((item) => item.state === "done") || timeline[0] || {};
   const hasWorkflow = Boolean(workflow.id);
   const nextWorkflowStep = hasWorkflow ? nextWorkflowStatus(workflow.workflowStatus) : "";
+  const timelineHtml = hasWorkflow ? renderWorkflowTimelineHtml(workflow, timeline) : "";
+  const sourceRowsHtml = renderWorkflowSourceRowsHtml(record);
+  const historyHtml = renderWorkflowHistoryHtml(record, history);
+  const versionsHtml = renderWorkflowVersionsHtml(workflow, versions);
+  const eventsHtml = renderWorkflowEventsHtml(workflow, events);
+  const linesHtml = renderWorkflowLinesHtml(workflow, currentVersionId, lines);
   return `
     <div class="editor-modal-backdrop" id="closeReimbursementDetail"></div>
     <div class="panel detail-panel editor-modal workflow-detail-modal">
@@ -5868,23 +6087,7 @@ function renderBillingWorkflowDetailModal() {
         </div>
       </div>
 
-      ${hasWorkflow ? `
-        <div class="workflow-timeline">
-          ${timeline
-            .map(
-              (item) => `
-                <div class="workflow-node ${item.state}">
-                  <span class="workflow-node-dot"></span>
-                  <div>
-                    <strong>${escapeText(item.label)}</strong>
-                    <small>${escapeText(item.time || (item.state === "upcoming" ? "待推进" : item.state === "current" ? "当前节点" : "已完成"))}</small>
-                  </div>
-                </div>
-              `,
-            )
-            .join("")}
-        </div>
-      ` : ""}
+      ${timelineHtml}
 
       <section class="panel workflow-detail-card workflow-overview-card">
         ${
@@ -5927,19 +6130,7 @@ function renderBillingWorkflowDetailModal() {
           <div class="table-wrap mini-statement">
             <table>
               <thead><tr><th>IACUC</th><th>设施</th><th>品系</th><th>应缴</th><th>房间</th></tr></thead>
-              <tbody>
-                ${(record.details || []).length
-                  ? (record.details || []).map((detailItem) => `
-                    <tr>
-                      <td>${escapeText(detailItem.iacuc || "-")}</td>
-                      <td>${escapeText(detailItem.facility || "-")}</td>
-                      <td>${escapeText(detailItem.species || "-")}</td>
-                      <td>¥${MONEY_FORMAT.format(Number(detailItem.payableAmount || 0))}</td>
-                      <td>${escapeText((detailItem.roomNames || []).join("、") || "-")}</td>
-                    </tr>`).join("")
-                  : `<tr><td colspan="5">暂无 IACUC 明细。</td></tr>`
-                }
-              </tbody>
+              <tbody>${sourceRowsHtml}</tbody>
             </table>
           </div>
         </section>
@@ -5985,17 +6176,7 @@ function renderBillingWorkflowDetailModal() {
 
       <section class="panel workflow-detail-card">
         ${renderPanelHead({ title: "历史滚动", helpKey: "reimbursementHistory", compact: true })}
-        <div class="workflow-event-list">
-          ${history.length ? history.map((historyItem) => `
-            <div class="audit-row">
-              <div>
-                <strong>${escapeText(historyItem.month || "-")}</strong>
-                <p class="muted">当前月应缴 ¥${MONEY_FORMAT.format(Number(historyItem.payableAmount || 0))} · 已缴 ¥${MONEY_FORMAT.format(Number(historyItem.paidAmount || 0))}</p>
-              </div>
-              <span class="muted">累计未缴 ¥${MONEY_FORMAT.format(Number(historyItem.accumulatedUnpaid || 0))}</span>
-            </div>
-          `).join("") : `<p class="muted">暂无历史滚动记录。</p>`}
-        </div>
+        <div class="workflow-event-list">${historyHtml}</div>
       </section>
 
       ${
@@ -6004,41 +6185,11 @@ function renderBillingWorkflowDetailModal() {
             <div class="workflow-detail-grid">
               <section class="panel workflow-detail-card">
                 ${renderPanelHead({ title: "版本记录", helpKey: "workflowVersions", compact: true })}
-                <div class="workflow-version-list">
-                  ${
-                    versions.length
-                      ? versions
-                          .map(
-                            (version) => `
-                              <div class="rule-card">
-                                <strong>${escapeText(version.documentNumber || `v${version.versionNo}`)}</strong>
-                                <span>${escapeText(version.versionStatus === "active" ? "当前有效版本" : "历史作废版本")}</span>
-                                <p>${escapeText(workflowStatusLabel(version.workflowStatus))} · ${escapeText(formatLogTime(version.generatedAt)) || "-"}</p>
-                              </div>
-                            `,
-                          )
-                          .join("")
-                      : `<p class="muted">暂无版本记录。</p>`
-                  }
-                </div>
+                <div class="workflow-version-list">${versionsHtml}</div>
               </section>
               <section class="panel workflow-detail-card">
                 ${renderPanelHead({ title: "流程事件", helpKey: "workflowEvents", compact: true })}
-                <div class="workflow-event-list">
-                  ${
-                    events.length
-                      ? events.map((event) => `
-                        <div class="audit-row">
-                          <div>
-                            <strong>${escapeText(workflowEventLabel(event.eventType))}</strong>
-                            <p class="muted">${escapeText(event.actor?.displayName || "-")} · ${escapeText(formatLogTime(event.at)) || "-"}</p>
-                          </div>
-                          <span class="muted">${escapeText(event.note || "")}</span>
-                        </div>
-                      `).join("")
-                      : `<p class="muted">暂无流程事件。</p>`
-                  }
-                </div>
+                <div class="workflow-event-list">${eventsHtml}</div>
                 ${
                   nextWorkflowStep
                     ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(workflow.id)}" data-next-status="${escapeAttr(nextWorkflowStep)}">${escapeText(workflowActionLabel(nextWorkflowStep))}</button>`
@@ -6056,25 +6207,7 @@ function renderBillingWorkflowDetailModal() {
                         <thead>
                           <tr><th>日期</th><th>笼数</th><th>免费笼数</th><th>收费笼数</th><th>当日费用</th><th>累计费用</th></tr>
                         </thead>
-                        <tbody>
-                          ${
-                            lines.length
-                              ? lines
-                                  .filter((line) => Number(line.cageCount || line.animalCount || 0) > 0)
-                                  .map((line) => `
-                                    <tr>
-                                      <td>${escapeText(line.date || "-")}</td>
-                                      <td>${Number(line.cageCount || 0)}</td>
-                                      <td>${Number(line.freeCages || 0)}</td>
-                                      <td>${Number(line.billableCages || 0)}</td>
-                                      <td>¥${MONEY_FORMAT.format(Number(line.amount || 0))}</td>
-                                      <td>¥${MONEY_FORMAT.format(Number(line.cumulative || 0))}</td>
-                                    </tr>
-                                  `)
-                                  .join("") || `<tr><td colspan="6">当前结算单没有非零明细。</td></tr>`
-                              : `<tr><td colspan="6">当前结算单暂无明细。</td></tr>`
-                          }
-                        </tbody>
+                        <tbody>${linesHtml}</tbody>
                       </table>
                     </div>
                   `
@@ -7039,6 +7172,7 @@ function renderRackEditForm(room, rack) {
 function bindEvents() {
   decorateRequiredFields();
   bindHelpHints();
+  const appRoot = document.querySelector("#app");
   document.querySelector("#logoutButton")?.addEventListener("click", logout);
   document.querySelector("#sidebarToggle")?.addEventListener("click", () => {
     state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -7058,61 +7192,6 @@ function bindEvents() {
     state.settingsNavExpanded = false;
     scheduleRender("settings_nav.backdrop");
   });
-  document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      state.activeView = button.dataset.view;
-      if (["rooms", "data", "users", "system", "logs"].includes(state.activeView)) {
-        state.lastSettingsView = state.activeView;
-        state.settingsNavExpanded = false;
-      } else {
-        state.settingsNavExpanded = false;
-      }
-      scheduleRender(`view.switch.${state.activeView}`);
-      try {
-        await ensureViewDataLoaded(state.activeView);
-      } catch (error) {
-        reportSaveError(error);
-      }
-      scheduleRender(`view.loaded.${state.activeView}`);
-    });
-  });
-  document.querySelectorAll("[data-dashboard-action]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const action = button.dataset.dashboardAction;
-      if (action === "intake") {
-        state.activeView = "intake";
-      } else if (action === "cages") {
-        state.activeView = "cages";
-      } else if (action === "billing") {
-        state.activeView = "billing";
-        state.billingMonth = today.slice(0, 7);
-      } else if (action === "workflow-todo") {
-        state.activeView = "workflow-center";
-        state.reimbursementFilter = "pending_submission";
-      } else if (action === "workflow-all") {
-        state.activeView = "workflow-center";
-        state.reimbursementFilter = "all";
-      }
-      scheduleRender(`dashboard.action.${action}`);
-      try {
-        await ensureViewDataLoaded(state.activeView);
-        if (state.activeView === "workflow-center" && remotePersistence) {
-          await loadReimbursementRecords({
-            month: paginationState.reimbursementRecords.month || state.billingMonth || today.slice(0, 7),
-            status: state.reimbursementFilter,
-            pi: state.reimbursementSearchPi || "",
-            onlyUnpaid: state.reimbursementOnlyUnpaid ? "1" : "0",
-            limit: paginationState.reimbursementRecords.limit,
-            offset: 0,
-          });
-        }
-      } catch (error) {
-        reportSaveError(error);
-      }
-      scheduleRender(`dashboard.loaded.${action}`);
-    });
-  });
-
   document.querySelector("#roomSelect")?.addEventListener("change", async (event) => {
     state.selectedRoomId = event.target.value;
     paginationState.placementTasks.page = 1;
@@ -7135,13 +7214,6 @@ function bindEvents() {
     state.selectedSlotIds = [];
     scheduleRender("rack.select");
   });
-  document.querySelectorAll("[data-toggle-placement-task-panel]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.showPlacementTaskPanel = button.dataset.togglePlacementTaskPanel === "open";
-      scheduleRender("placement_task_panel.toggle");
-    });
-  });
-
   document.querySelectorAll("[data-slot]").forEach((button) => {
     button.addEventListener("pointerdown", (event) => startBatchSlotDrag(event, button));
     button.addEventListener("click", () => {
@@ -7172,14 +7244,6 @@ function bindEvents() {
     button.addEventListener("blur", hideSlotHoverPreview);
   });
 
-  document.querySelectorAll("[data-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.slotFilter = button.dataset.filter;
-      state.selectedSlotIds = [];
-      scheduleRender("slot.filter");
-    });
-  });
-
   document.querySelector("#batchModeToggle")?.addEventListener("click", () => {
     if (state.placementAssignmentMode) return;
     state.batchMode = !state.batchMode;
@@ -7199,27 +7263,6 @@ function bindEvents() {
       scheduleRender("placement_task.select");
     });
   });
-  document.querySelectorAll("[data-select-placement-task-group]").forEach((input) => {
-    input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("change", () => {
-      const pageGroups = pagedPlacementTaskGroups(getSelectedRoom()?.id || "");
-      const tasks = pageGroups
-        .flat()
-        .filter((task) => placementTaskGroupKey(task) === input.dataset.selectPlacementTaskGroup && task.status === "pending");
-      const next = new Set(state.selectedPlacementTaskIds);
-      tasks.forEach((task) => {
-        if (input.checked) next.add(task.id);
-        else next.delete(task.id);
-      });
-      state.selectedPlacementTaskIds = [...next];
-      state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
-      state.batchMode = state.placementAssignmentMode;
-      if (state.placementAssignmentMode) {
-        state.selectedSlotIds = [];
-      }
-      scheduleRender("placement_task_group.select");
-    });
-  });
   document.querySelector("#clearSelectedPlacementTasks")?.addEventListener("click", () => {
     const pageTaskIds = new Set(pagedPlacementTaskGroups(getSelectedRoom()?.id || "").flat().map((task) => task.id));
     state.selectedPlacementTaskIds = state.selectedPlacementTaskIds.filter((id) => !pageTaskIds.has(id));
@@ -7230,46 +7273,6 @@ function bindEvents() {
   document.querySelector("#confirmPlacementBatchMoveIn")?.addEventListener("click", batchMoveInSelectedPlacementTasks);
   document.querySelectorAll("[data-reserve-slot-for-task]").forEach((button) => {
     button.addEventListener("click", () => reservePlacementTask(button.dataset.reserveSlotForTask, button.dataset.slotId));
-  });
-  document.querySelectorAll("[data-move-in-placement-task]").forEach((button) => {
-    button.addEventListener("click", () => moveInPlacementTask(button.dataset.moveInPlacementTask));
-  });
-  document.querySelectorAll("[data-print-placement-task-group]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      try {
-        await printPlacementTaskGroup(button.dataset.printPlacementTaskGroup || "");
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
-  document.querySelectorAll("[data-delete-placement-task-group]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const groupKey = button.dataset.deletePlacementTaskGroup || "";
-      const tasks = placementTasksForGroupKey(groupKey);
-      if (!tasks.length) return;
-      const first = tasks[0];
-      const hasReserved = tasks.some((task) => task.status === "reserved");
-      openConfirmDialog({
-        type: "delete-placement-task-group",
-        id: groupKey,
-        title: "删除待进驻动物",
-        message: `确认删除 ${first.batchNo || "当前批次"} 的待进驻记录？${hasReserved ? "已预留笼位会同步释放。" : ""}`,
-        confirmLabel: "删除",
-        payload: {
-          batchNo: first.batchNo || "",
-          count: tasks.length,
-        },
-      });
-    });
-  });
-  document.querySelectorAll("[data-open-placement-room-change]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.reassigningPlacementReceiptId = button.dataset.openPlacementRoomChange || "";
-      scheduleRender("placement.reassign.open");
-    });
   });
   document.querySelector("#closePlacementRoomChange")?.addEventListener("click", closePlacementRoomChange);
   document.querySelector("#closePlacementRoomChangeButton")?.addEventListener("click", closePlacementRoomChange);
@@ -7305,21 +7308,6 @@ function bindEvents() {
   window.onresize = () => {
     positionCageEditorPopover();
   };
-  document.querySelectorAll("[data-billing-source]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      captureQuantitySheetDraft();
-      state.billingSource = button.dataset.billingSource;
-      scheduleRender("billing.source");
-      if (state.activeView === "billing") {
-        try {
-          await ensureViewDataLoaded("billing");
-        } catch (error) {
-          reportSaveError(error);
-        }
-      }
-      scheduleRender("billing.source.loaded");
-    });
-  });
   document.querySelector("#billingMonth")?.addEventListener("change", async (event) => {
     state.billingMonth = event.target.value;
     paginationState.quantitySheets.month = state.billingMonth;
@@ -7360,23 +7348,6 @@ function bindEvents() {
   document.querySelector(".quantity-template-table")?.addEventListener("keydown", handleQuantityTemplateKeydown);
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", (event) => {
     handleQuantitySheetSelect(event).catch(reportSaveError);
-  });
-  document.querySelectorAll("[data-open-quantity-sheet]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      try {
-        await handleQuantitySheetSelect({ target: { value: row.dataset.openQuantitySheet } });
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
-  document.querySelectorAll("[data-select-quantity-sheet]").forEach((checkbox) => {
-    checkbox.addEventListener("click", (event) => {
-      event.stopPropagation();
-    });
-    checkbox.addEventListener("change", (event) => {
-      toggleQuantitySheetSelection(event.target.dataset.selectQuantitySheet, event.target.checked);
-    });
   });
   document.querySelector("#toggleVisibleQuantitySheets")?.addEventListener("change", (event) => {
     toggleVisibleQuantitySheetSelection(event.target.checked);
@@ -7456,27 +7427,6 @@ function bindEvents() {
     await printAndMarkIntakeBatches(batches);
   });
   document.querySelector("#confirmSelectedIntakeBatches")?.addEventListener("click", () => confirmSelectedIntakeBatches());
-  document.querySelectorAll("[data-intake-batch-filter]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      state.intakeBatchFilter = button.dataset.intakeBatchFilter || "unprinted";
-      paginationState.intakeBatches.page = 1;
-      if (remotePersistence) {
-        try {
-          await loadIntakeBatchesPage(1, paginationState.intakeBatches.limit);
-        } catch (error) {
-          reportSaveError(error);
-        }
-      }
-      scheduleRender("intake_batch.filter");
-    });
-  });
-  document.querySelectorAll("[data-select-intake-batch]").forEach((input) => {
-    input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("change", (event) => {
-      toggleSelectedIntakeBatch(input.dataset.selectIntakeBatch, event.target.checked);
-      scheduleRender("intake_batch.toggle");
-    });
-  });
   document.querySelector("[data-select-all-intake-batches]")?.addEventListener("change", (event) => {
     toggleSelectedIntakeBatchPage(event.target.checked);
     scheduleRender("intake_batch.toggle_page");
@@ -7487,47 +7437,6 @@ function bindEvents() {
     const selectedVisibleCount = state.selectedIntakeBatchIds.filter((id) => visibleBatchIds.includes(id)).length;
     selectAllIntakeBatches.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleBatchIds.length;
   }
-  document.querySelectorAll("[data-open-intake-batch]").forEach((row) => {
-    row.addEventListener("click", () => {
-      openIntakeBatchEditor(row.dataset.openIntakeBatch);
-      scheduleRender("intake_batch.open");
-    });
-  });
-  document.querySelectorAll("[data-open-intake-batch-button]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openIntakeBatchEditor(button.dataset.openIntakeBatchButton);
-      scheduleRender("intake_batch.open");
-    });
-  });
-  document.querySelectorAll("[data-delete-intake-batch]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const batchId = button.dataset.deleteIntakeBatch;
-      const batch = state.intakeBatches.find((item) => item.id === batchId);
-      if (!batch) return;
-      openConfirmDialog({
-        type: "delete-intake-batch",
-        id: batchId,
-        title: "删除待接收批次",
-        message: `确认删除待接收批次 ${batch.batchNo || batch.id}？`,
-        confirmLabel: "删除",
-      });
-    });
-  });
-  document.querySelectorAll("[data-confirm-intake-batch]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await confirmIntakeBatchDirect(button.dataset.confirmIntakeBatch);
-    });
-  });
-  document.querySelectorAll("[data-print-intake-batch]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const batch = state.intakeBatches.find((item) => item.id === button.dataset.printIntakeBatch);
-      if (batch) await printAndMarkIntakeBatches([batch]);
-    });
-  });
   document.querySelector("#confirmIntakeReceiptForm")?.addEventListener("submit", confirmIntakeReceipt);
   document.querySelector("#cancelConfirmDialog")?.addEventListener("click", handleCancelConfirmDialog);
   document.querySelector(".confirm-dialog-backdrop")?.addEventListener("click", (event) => {
@@ -7550,18 +7459,6 @@ function bindEvents() {
   document.querySelectorAll("[data-remove-qrow]").forEach((button) => {
     button.addEventListener("click", () => removeQuantitySheetRow(Number(button.dataset.removeQrow)));
   });
-  document.querySelectorAll("[data-reimbursement-filter]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      state.reimbursementFilter = button.dataset.reimbursementFilter;
-      paginationState.reimbursementRecords.status = state.reimbursementFilter;
-      try {
-        await goToReimbursementRecordsPage(1, paginationState.reimbursementRecords.limit);
-      } catch (error) {
-        reportSaveError(error);
-      }
-      scheduleRender("reimbursement.filter");
-    });
-  });
   document.querySelector("#applyReimbursementFilters")?.addEventListener("click", async () => {
     state.reimbursementSearchPi = document.querySelector("#reimbursementPiFilter")?.value || "";
     state.reimbursementOnlyUnpaid = Boolean(document.querySelector("#reimbursementOnlyUnpaid")?.checked);
@@ -7570,45 +7467,6 @@ function bindEvents() {
     paginationState.reimbursementRecords.onlyUnpaid = state.reimbursementOnlyUnpaid ? "1" : "0";
     await goToReimbursementRecordsPage(1, paginationState.reimbursementRecords.limit).catch(reportSaveError);
     scheduleRender("reimbursement.search");
-  });
-  document.querySelectorAll("[data-open-reimbursement]").forEach((row) => {
-    row.addEventListener("click", async () => {
-      try {
-        await loadReimbursementRecordDetail(row.dataset.openReimbursement);
-        scheduleRender("reimbursement.open");
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
-  document.querySelectorAll("[data-open-reimbursement-button]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      try {
-        await loadReimbursementRecordDetail(button.dataset.openReimbursementButton);
-        scheduleRender("reimbursement.open");
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
-  document.querySelectorAll("[data-complete-reimbursement]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const record = reimbursementRecordById(button.dataset.completeReimbursement) || state.selectedReimbursementRecordDetail?.item || {};
-      try {
-        await updateReimbursementRecord(button.dataset.completeReimbursement, {
-          reimbursementStatus: "completed",
-          paidAmount: Number(record.payableAmount || 0),
-        });
-        pushLog(`完成报销台账：${record.pi || ""} ${record.month || ""}`);
-        await goToReimbursementRecordsPage(paginationState.reimbursementRecords.page || 1, paginationState.reimbursementRecords.limit);
-        showFlashNotice("保存成功", "报销台账已标记完成。", "success");
-        scheduleRender("reimbursement.complete");
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
   });
   document.querySelector("#reimbursementEditForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -7625,31 +7483,266 @@ function bindEvents() {
         notes: formData.get("notes") || "",
       });
       pushLog(`保存报销台账：${recordId}`);
-      await goToReimbursementRecordsPage(paginationState.reimbursementRecords.page || 1, paginationState.reimbursementRecords.limit);
       showFlashNotice("保存成功", "报销登记已更新。", "success");
       scheduleRender("reimbursement.save");
     } catch (error) {
       reportSaveError(error);
     }
   });
-  document.querySelectorAll("[data-advance-workflow]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
+  appRoot?.addEventListener("click", async (event) => {
+    const viewButton = event.target.closest("[data-view]");
+    if (viewButton) {
+      state.activeView = viewButton.dataset.view;
+      if (["rooms", "data", "users", "system", "logs"].includes(state.activeView)) {
+        state.lastSettingsView = state.activeView;
+      }
+      state.settingsNavExpanded = false;
+      scheduleRender(`view.switch.${state.activeView}`);
+      try {
+        await ensureViewDataLoaded(state.activeView);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      scheduleRender(`view.loaded.${state.activeView}`);
+      return;
+    }
+    const dashboardActionButton = event.target.closest("[data-dashboard-action]");
+    if (dashboardActionButton) {
+      const action = dashboardActionButton.dataset.dashboardAction;
+      if (action === "intake") state.activeView = "intake";
+      if (action === "cages") state.activeView = "cages";
+      if (action === "billing") {
+        state.activeView = "billing";
+        state.billingMonth = today.slice(0, 7);
+      }
+      if (action === "workflow-todo") {
+        state.activeView = "workflow-center";
+        state.reimbursementFilter = "pending_submission";
+      }
+      if (action === "workflow-all") {
+        state.activeView = "workflow-center";
+        state.reimbursementFilter = "all";
+      }
+      scheduleRender(`dashboard.action.${action}`);
+      try {
+        await ensureViewDataLoaded(state.activeView);
+        if (state.activeView === "workflow-center" && remotePersistence) {
+          await loadReimbursementRecords({
+            month: paginationState.reimbursementRecords.month || state.billingMonth || today.slice(0, 7),
+            status: state.reimbursementFilter,
+            pi: state.reimbursementSearchPi || "",
+            onlyUnpaid: state.reimbursementOnlyUnpaid ? "1" : "0",
+            limit: paginationState.reimbursementRecords.limit,
+            offset: 0,
+          });
+        }
+      } catch (error) {
+        reportSaveError(error);
+      }
+      scheduleRender(`dashboard.loaded.${action}`);
+      return;
+    }
+    const slotFilterButton = event.target.closest("[data-filter]");
+    if (slotFilterButton) {
+      state.slotFilter = slotFilterButton.dataset.filter;
+      state.selectedSlotIds = [];
+      scheduleRender("slot.filter");
+      return;
+    }
+    const togglePlacementTaskPanel = event.target.closest("[data-toggle-placement-task-panel]");
+    if (togglePlacementTaskPanel) {
+      state.showPlacementTaskPanel = togglePlacementTaskPanel.dataset.togglePlacementTaskPanel === "open";
+      scheduleRender("placement_task_panel.toggle");
+      return;
+    }
+    const moveInPlacementTaskButton = event.target.closest("[data-move-in-placement-task]");
+    if (moveInPlacementTaskButton) {
+      await moveInPlacementTask(moveInPlacementTaskButton.dataset.moveInPlacementTask);
+      return;
+    }
+    const printPlacementTaskGroupButton = event.target.closest("[data-print-placement-task-group]");
+    if (printPlacementTaskGroupButton) {
       event.stopPropagation();
       try {
-        await advanceBillingWorkflow(button.dataset.advanceWorkflow, button.dataset.nextStatus);
-        pushLog(`更新结算流程：${workflowActionLabel(button.dataset.nextStatus)}`);
-        await refreshBillingWorkflowsAfterSave();
-        showFlashNotice("保存成功", `结算流程已更新为${workflowStatusLabel(button.dataset.nextStatus)}。`, "success");
+        await printPlacementTaskGroup(printPlacementTaskGroupButton.dataset.printPlacementTaskGroup || "");
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const deletePlacementTaskGroupButton = event.target.closest("[data-delete-placement-task-group]");
+    if (deletePlacementTaskGroupButton) {
+      event.stopPropagation();
+      const groupKey = deletePlacementTaskGroupButton.dataset.deletePlacementTaskGroup || "";
+      const tasks = placementTasksForGroupKey(groupKey);
+      if (!tasks.length) return;
+      const first = tasks[0];
+      const hasReserved = tasks.some((task) => task.status === "reserved");
+      openConfirmDialog({
+        type: "delete-placement-task-group",
+        id: groupKey,
+        title: "删除待进驻动物",
+        message: `确认删除 ${first.batchNo || "当前批次"} 的待进驻记录？${hasReserved ? "已预留笼位会同步释放。" : ""}`,
+        confirmLabel: "删除",
+        payload: {
+          batchNo: first.batchNo || "",
+          count: tasks.length,
+        },
+      });
+      return;
+    }
+    const openPlacementRoomChangeButton = event.target.closest("[data-open-placement-room-change]");
+    if (openPlacementRoomChangeButton) {
+      state.reassigningPlacementReceiptId = openPlacementRoomChangeButton.dataset.openPlacementRoomChange || "";
+      scheduleRender("placement.reassign.open");
+      return;
+    }
+    const billingSourceButton = event.target.closest("[data-billing-source]");
+    if (billingSourceButton) {
+      captureQuantitySheetDraft();
+      state.billingSource = billingSourceButton.dataset.billingSource;
+      scheduleRender("billing.source");
+      if (state.activeView === "billing") {
+        try {
+          await ensureViewDataLoaded("billing");
+        } catch (error) {
+          reportSaveError(error);
+        }
+      }
+      scheduleRender("billing.source.loaded");
+      return;
+    }
+    const openQuantitySheetRow = event.target.closest("[data-open-quantity-sheet]");
+    if (openQuantitySheetRow && !event.target.closest("[data-select-quantity-sheet]")) {
+      try {
+        await handleQuantitySheetSelect({ target: { value: openQuantitySheetRow.dataset.openQuantitySheet } });
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const intakeBatchFilterButton = event.target.closest("[data-intake-batch-filter]");
+    if (intakeBatchFilterButton) {
+      state.intakeBatchFilter = intakeBatchFilterButton.dataset.intakeBatchFilter || "unprinted";
+      paginationState.intakeBatches.page = 1;
+      if (remotePersistence) {
+        try {
+          await loadIntakeBatchesPage(1, paginationState.intakeBatches.limit);
+        } catch (error) {
+          reportSaveError(error);
+        }
+      }
+      scheduleRender("intake_batch.filter");
+      return;
+    }
+    const openIntakeBatchRow = event.target.closest("[data-open-intake-batch]");
+    if (openIntakeBatchRow && !event.target.closest("[data-select-intake-batch]") && !event.target.closest("[data-open-intake-batch-button]") && !event.target.closest("[data-delete-intake-batch]") && !event.target.closest("[data-confirm-intake-batch]") && !event.target.closest("[data-print-intake-batch]")) {
+      openIntakeBatchEditor(openIntakeBatchRow.dataset.openIntakeBatch);
+      scheduleRender("intake_batch.open");
+      return;
+    }
+    const openIntakeBatchButton = event.target.closest("[data-open-intake-batch-button]");
+    if (openIntakeBatchButton) {
+      event.stopPropagation();
+      openIntakeBatchEditor(openIntakeBatchButton.dataset.openIntakeBatchButton);
+      scheduleRender("intake_batch.open");
+      return;
+    }
+    const deleteIntakeBatchButton = event.target.closest("[data-delete-intake-batch]");
+    if (deleteIntakeBatchButton) {
+      event.stopPropagation();
+      const batchId = deleteIntakeBatchButton.dataset.deleteIntakeBatch;
+      const batch = state.intakeBatches.find((item) => item.id === batchId);
+      if (!batch) return;
+      openConfirmDialog({
+        type: "delete-intake-batch",
+        id: batchId,
+        title: "删除待接收批次",
+        message: `确认删除待接收批次 ${batch.batchNo || batch.id}？`,
+        confirmLabel: "删除",
+      });
+      return;
+    }
+    const confirmIntakeBatchButton = event.target.closest("[data-confirm-intake-batch]");
+    if (confirmIntakeBatchButton) {
+      event.stopPropagation();
+      await confirmIntakeBatchDirect(confirmIntakeBatchButton.dataset.confirmIntakeBatch);
+      return;
+    }
+    const printIntakeBatchButton = event.target.closest("[data-print-intake-batch]");
+    if (printIntakeBatchButton) {
+      event.stopPropagation();
+      const batch = state.intakeBatches.find((item) => item.id === printIntakeBatchButton.dataset.printIntakeBatch);
+      if (batch) await printAndMarkIntakeBatches([batch]);
+      return;
+    }
+    const reimbursementFilterButton = event.target.closest("[data-reimbursement-filter]");
+    if (reimbursementFilterButton) {
+      state.reimbursementFilter = reimbursementFilterButton.dataset.reimbursementFilter;
+      paginationState.reimbursementRecords.status = state.reimbursementFilter;
+      try {
+        await goToReimbursementRecordsPage(1, paginationState.reimbursementRecords.limit);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      scheduleRender("reimbursement.filter");
+      return;
+    }
+    const openReimbursementRow = event.target.closest("[data-open-reimbursement]");
+    if (openReimbursementRow && !event.target.closest("[data-open-reimbursement-button]") && !event.target.closest("[data-complete-reimbursement]") && !event.target.closest("[data-delete-reimbursement]")) {
+      try {
+        await loadReimbursementRecordDetail(openReimbursementRow.dataset.openReimbursement);
+        scheduleRender("reimbursement.open");
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const openReimbursementButton = event.target.closest("[data-open-reimbursement-button]");
+    if (openReimbursementButton) {
+      event.stopPropagation();
+      try {
+        await loadReimbursementRecordDetail(openReimbursementButton.dataset.openReimbursementButton);
+        scheduleRender("reimbursement.open");
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const completeReimbursementButton = event.target.closest("[data-complete-reimbursement]");
+    if (completeReimbursementButton) {
+      event.stopPropagation();
+      const record = reimbursementRecordById(completeReimbursementButton.dataset.completeReimbursement) || state.selectedReimbursementRecordDetail?.item || {};
+      try {
+        await updateReimbursementRecord(completeReimbursementButton.dataset.completeReimbursement, {
+          reimbursementStatus: "completed",
+          paidAmount: Number(record.payableAmount || 0),
+        });
+        pushLog(`完成报销台账：${record.pi || ""} ${record.month || ""}`);
+        showFlashNotice("保存成功", "报销台账已标记完成。", "success");
+        scheduleRender("reimbursement.complete");
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const advanceWorkflowButton = event.target.closest("[data-advance-workflow]");
+    if (advanceWorkflowButton) {
+      event.stopPropagation();
+      try {
+        await advanceBillingWorkflow(advanceWorkflowButton.dataset.advanceWorkflow, advanceWorkflowButton.dataset.nextStatus);
+        pushLog(`更新结算流程：${workflowActionLabel(advanceWorkflowButton.dataset.nextStatus)}`);
+        showFlashNotice("保存成功", `结算流程已更新为${workflowStatusLabel(advanceWorkflowButton.dataset.nextStatus)}。`, "success");
         scheduleRender("billing_workflow.advance");
       } catch (error) {
         reportSaveError(error);
       }
-    });
-  });
-  document.querySelectorAll("[data-delete-reimbursement]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
+      return;
+    }
+    const deleteReimbursementButton = event.target.closest("[data-delete-reimbursement]");
+    if (deleteReimbursementButton) {
       event.stopPropagation();
-      const recordId = button.dataset.deleteReimbursement;
+      const recordId = deleteReimbursementButton.dataset.deleteReimbursement;
       const record = reimbursementRecordById(recordId) || state.selectedReimbursementRecordDetail?.item || {};
       const label = [record.pi || "该台账", record.month || ""].filter(Boolean).join(" ");
       openConfirmDialog({
@@ -7660,7 +7753,82 @@ function bindEvents() {
         confirmLabel: "删除",
         payload: { label },
       });
-    });
+      return;
+    }
+    const deleteUserButton = event.target.closest("[data-delete-user]");
+    if (deleteUserButton) {
+      deleteUser(deleteUserButton.dataset.deleteUser);
+      return;
+    }
+    const editRackButton = event.target.closest("[data-edit-rack]");
+    if (editRackButton) {
+      state.editingRackId = editRackButton.dataset.editRack;
+      scheduleRender("rack.edit.open");
+      return;
+    }
+    const cancelRackEditButton = event.target.closest("[data-cancel-rack-edit]");
+    if (cancelRackEditButton) {
+      if (state.editingRackId === cancelRackEditButton.dataset.cancelRackEdit) state.editingRackId = "";
+      scheduleRender("rack.edit.cancel");
+      return;
+    }
+    const savePrincipalButton = event.target.closest("[data-save-principal]");
+    if (savePrincipalButton) {
+      const pi = savePrincipalButton.dataset.savePrincipal;
+      const select = document.querySelector(`[data-principal-type="${cssEscape(pi)}"]`);
+      savePrincipalIdentityFromTable(pi, select?.value);
+      return;
+    }
+    const pagePrevButton = event.target.closest("[data-page-prev]");
+    if (pagePrevButton) {
+      const kind = pagePrevButton.dataset.pagePrev;
+      try {
+        if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) - 1);
+        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(currentPage(paginationState.reimbursementRecords) - 1);
+        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) - 1);
+        if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) - 1);
+        if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page - 1);
+        if (kind === "placementTasks") await goToPlacementTasksPage(paginationState.placementTasks.page - 1);
+        if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page - 1);
+        scheduleRender(`pager.prev.${kind}`);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const pageNextButton = event.target.closest("[data-page-next]");
+    if (pageNextButton) {
+      const kind = pageNextButton.dataset.pageNext;
+      try {
+        if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) + 1);
+        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(currentPage(paginationState.reimbursementRecords) + 1);
+        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) + 1);
+        if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) + 1);
+        if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page + 1);
+        if (kind === "placementTasks") await goToPlacementTasksPage(paginationState.placementTasks.page + 1);
+        if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page + 1);
+        scheduleRender(`pager.next.${kind}`);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const editRoomButton = event.target.closest("[data-edit-room]");
+    if (editRoomButton) {
+      state.editingRoomId = editRoomButton.dataset.editRoom;
+      state.showRoomForm = true;
+      scheduleRender("room.edit.open");
+      return;
+    }
+    const deleteRoomButton = event.target.closest("[data-delete-room]");
+    if (deleteRoomButton) {
+      deleteRoom(deleteRoomButton.dataset.deleteRoom);
+      return;
+    }
+    const deleteRackButton = event.target.closest("[data-delete-rack]");
+    if (deleteRackButton) {
+      deleteRack(deleteRackButton.dataset.deleteRack);
+    }
   });
   document.querySelector("#closeReimbursementDetail")?.addEventListener("click", closeReimbursementDetail);
   document.querySelector("#closeReimbursementDetailButton")?.addEventListener("click", closeReimbursementDetail);
@@ -7703,18 +7871,6 @@ function bindEvents() {
   document.querySelectorAll("#rackForm input[name='rows'], #rackForm input[name='cols']").forEach((input) => {
     input.addEventListener("input", updateRackFormDraft);
   });
-  document.querySelectorAll("[data-edit-rack]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingRackId = button.dataset.editRack;
-      scheduleRender("rack.edit.open");
-    });
-  });
-  document.querySelectorAll("[data-cancel-rack-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (state.editingRackId === button.dataset.cancelRackEdit) state.editingRackId = "";
-      scheduleRender("rack.edit.cancel");
-    });
-  });
   document.querySelectorAll("[data-rack-edit-form]").forEach((form) => {
     form.addEventListener("submit", handleRackEditSubmit);
   });
@@ -7739,66 +7895,7 @@ function bindEvents() {
     state.principalIdentityFilter = "";
     scheduleRender("principal_identity.filter.clear");
   });
-  document.querySelectorAll("[data-save-principal]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const pi = button.dataset.savePrincipal;
-      const select = document.querySelector(`[data-principal-type="${cssEscape(pi)}"]`);
-      savePrincipalIdentityFromTable(pi, select?.value);
-    });
-  });
   document.querySelector("#checkSystemUpdate")?.addEventListener("click", checkSystemUpdate);
-  document.querySelectorAll("[data-page-size]").forEach((select) => {
-    select.addEventListener("change", async () => {
-      const kind = select.dataset.pageSize;
-      const limit = Number(select.value) || 10;
-      try {
-        if (kind === "quantitySheets") await goToQuantitySheetsPage(1, limit);
-        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(1, limit);
-        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(1, limit);
-        if (kind === "auditLogs") await goToAuditLogsPage(1, limit);
-        if (kind === "intakeBatches") await goToIntakeBatchesPage(1, limit);
-        if (kind === "placementTasks") await goToPlacementTasksPage(1, limit);
-        if (kind === "releaseNotes") goToReleaseNotesPage(1, limit);
-        scheduleRender(`pager.size.${kind}`);
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
-  document.querySelectorAll("[data-page-prev]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const kind = button.dataset.pagePrev;
-      try {
-        if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) - 1);
-        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(currentPage(paginationState.reimbursementRecords) - 1);
-        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) - 1);
-        if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) - 1);
-        if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page - 1);
-        if (kind === "placementTasks") await goToPlacementTasksPage(paginationState.placementTasks.page - 1);
-        if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page - 1);
-        scheduleRender(`pager.prev.${kind}`);
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
-  document.querySelectorAll("[data-page-next]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const kind = button.dataset.pageNext;
-      try {
-        if (kind === "quantitySheets") await goToQuantitySheetsPage(currentPage(paginationState.quantitySheets) + 1);
-        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(currentPage(paginationState.reimbursementRecords) + 1);
-        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(currentPage(paginationState.billingWorkflows) + 1);
-        if (kind === "auditLogs") await goToAuditLogsPage(currentPage(paginationState.auditLogs) + 1);
-        if (kind === "intakeBatches") await goToIntakeBatchesPage(paginationState.intakeBatches.page + 1);
-        if (kind === "placementTasks") await goToPlacementTasksPage(paginationState.placementTasks.page + 1);
-        if (kind === "releaseNotes") goToReleaseNotesPage(paginationState.releaseNotes.page + 1);
-        scheduleRender(`pager.next.${kind}`);
-      } catch (error) {
-        reportSaveError(error);
-      }
-    });
-  });
   document.querySelector("#clearClientCache")?.addEventListener("click", () => {
     openConfirmDialog({
       type: "clear-client-cache",
@@ -7806,22 +7903,6 @@ function bindEvents() {
       message: "确认清理当前浏览器保存的本地缓存并重新加载页面？这会清空本地界面状态和已缓存资源。",
       confirmLabel: "清理并刷新",
     });
-  });
-  document.querySelectorAll("[data-delete-user]").forEach((button) => {
-    button.addEventListener("click", () => deleteUser(button.dataset.deleteUser));
-  });
-  document.querySelectorAll("[data-edit-room]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingRoomId = button.dataset.editRoom;
-      state.showRoomForm = true;
-      scheduleRender("room.edit.open");
-    });
-  });
-  document.querySelectorAll("[data-delete-room]").forEach((button) => {
-    button.addEventListener("click", () => deleteRoom(button.dataset.deleteRoom));
-  });
-  document.querySelectorAll("[data-delete-rack]").forEach((button) => {
-    button.addEventListener("click", () => deleteRack(button.dataset.deleteRack));
   });
   document.querySelector("#openRoomForm")?.addEventListener("click", () => {
     state.editingRoomId = "";
@@ -8113,33 +8194,30 @@ async function loadUsers() {
   }
 }
 
-function bindUserRoomAccessControls(form) {
+function syncUserRoomAccessControls(form) {
   const roleSelect = form.querySelector("select[name='role']");
   const dropdown = form.querySelector("[data-room-access-dropdown]");
   const summary = form.querySelector("[data-room-access-summary]");
   if (!dropdown || !summary) return;
-  const sync = () => {
-    const isAdmin = roleSelect?.value === "admin";
-    const isLocked = dropdown.dataset.roomAccessLocked === "true";
-    dropdown.classList.toggle("disabled", Boolean(isAdmin || isLocked));
-    form.querySelectorAll("input[name='roomIds']").forEach((input) => {
-      input.disabled = Boolean(isAdmin || isLocked);
-    });
-    if (isAdmin) {
-      summary.textContent = "系统管理员默认全部饲养间";
-      dropdown.removeAttribute("open");
-      return;
-    }
-    const selectedRoomNames = Array.from(form.querySelectorAll("input[name='roomIds']:checked")).map(
-      (input) => input.dataset.roomName || input.value,
-    );
-    summary.textContent = formatRoomAccessSummary(selectedRoomNames);
-  };
-  roleSelect?.addEventListener("change", sync);
+  const isAdmin = roleSelect?.value === "admin";
+  const isLocked = dropdown.dataset.roomAccessLocked === "true";
+  dropdown.classList.toggle("disabled", Boolean(isAdmin || isLocked));
   form.querySelectorAll("input[name='roomIds']").forEach((input) => {
-    input.addEventListener("change", sync);
+    input.disabled = Boolean(isAdmin || isLocked);
   });
-  sync();
+  if (isAdmin) {
+    summary.textContent = "系统管理员默认全部饲养间";
+    dropdown.removeAttribute("open");
+    return;
+  }
+  const selectedRoomNames = Array.from(form.querySelectorAll("input[name='roomIds']:checked")).map(
+    (input) => input.dataset.roomName || input.value,
+  );
+  summary.textContent = formatRoomAccessSummary(selectedRoomNames);
+}
+
+function bindUserRoomAccessControls(form) {
+  syncUserRoomAccessControls(form);
 }
 
 async function handleUserSubmit(event) {
@@ -9302,7 +9380,11 @@ async function deleteQuantitySheetConfirmed(sheetId) {
     throw new Error(payload.error || "删除数量统计表失败");
   }
   mergeServerAuditLogs(payload);
+  const existingSheet = state.quantitySheets.find((item) => item.id === sheetId) || null;
   state.quantitySheets = state.quantitySheets.filter((item) => item.id !== sheetId);
+  if (remotePersistence && existingSheet && quantitySheetMatchesCurrentFilter(existingSheet)) {
+    paginationState.quantitySheets.total = Math.max(Number(paginationState.quantitySheets.total || 0) - 1, 0);
+  }
   QUANTITY_SHEET_DETAIL_CACHE.delete(sheetId);
   state.selectedQuantitySheetIds = state.selectedQuantitySheetIds.filter((id) => id !== sheetId);
   if (state.selectedQuantitySheetId === sheetId) state.selectedQuantitySheetId = "";
@@ -9364,6 +9446,7 @@ async function saveQuantitySheetDraft() {
   const form = document.querySelector("#quantitySheetForm");
   if (form) state.quantitySheetDraft = readQuantitySheetForm(form);
   const sheet = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
+  const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
   if (!remotePersistence) {
     upsertById(state.quantitySheets, sheet);
     state.selectedQuantitySheetId = sheet.id;
@@ -9391,8 +9474,8 @@ async function saveQuantitySheetDraft() {
   const affectedSheets = Array.isArray(payload.affectedItems) ? payload.affectedItems : [];
   rememberQuantitySheetDetail(savedSheet);
   affectedSheets.forEach((item) => rememberQuantitySheetDetail(item));
-  upsertById(state.quantitySheets, savedSheet);
-  affectedSheets.forEach((item) => upsertById(state.quantitySheets, item));
+  updateQuantitySheetListFromServer(savedSheet, existingSheet);
+  affectedSheets.forEach((item) => updateQuantitySheetListFromServer(item));
   state.selectedQuantitySheetId = savedSheet.id;
   state.quantitySheetDraft = savedSheet;
   lazyDataState.quantitySheetsLoaded = true;
@@ -10842,6 +10925,289 @@ function buildStatement(pi, month) {
   };
 }
 
+function clearBillingDerivedCaches() {
+  DATE_LIST_CACHE = new Map();
+  CAGE_MAP_STATEMENT_CACHE = new Map();
+  QUANTITY_SHEET_STATEMENT_CACHE = new Map();
+  QUANTITY_STATISTIC_FORMS_CACHE = new Map();
+  QUANTITY_STATISTIC_PAGES_HTML_CACHE = new Map();
+  SETTLEMENT_TEMPLATE_MODEL_CACHE = new Map();
+  WORKFLOW_DETAIL_SECTION_CACHE = new Map();
+  LIST_SECTION_CACHE = new Map();
+  UNIT_PRICE_CACHE = new Map();
+  DISCOUNT_CACHE = new Map();
+}
+
+function quantitySheetStatementCacheKey(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet);
+  const sourceIds = quantitySheetsForStatement(normalized, normalized.month || state.billingMonth, normalized.pi || state.billingPi || "")
+    .map((item) => `${item.id}:${item.updatedAt || ""}:${item.rows?.length || 0}:${item.pageCount || 1}`)
+    .join("|");
+  return [
+    normalized.id,
+    normalized.month,
+    normalizePersonName(normalized.pi),
+    normalized.updatedAt || "",
+    normalized.rows.length,
+    normalized.pageCount,
+    normalized.initialAnimalCount,
+    normalized.initialCageCount,
+    sourceIds,
+  ].join("::");
+}
+
+function cageMapStatementCacheKey(pi, month) {
+  const occupancies = occupanciesForPi(pi);
+  const occupancySignature = occupancies
+    .map((item) => `${item.id}:${item.updatedAt || ""}:${item.startDate || ""}:${item.endDate || ""}:${item.status || ""}:${item.slotId || ""}:${item.iacuc || ""}:${item.animalCount || ""}`)
+    .join("|");
+  return [
+    normalizePersonName(pi),
+    month || "",
+    billingInfrastructureState.month || "",
+    normalizePersonName(billingInfrastructureState.pi || ""),
+    normalizeIacucNumber(billingInfrastructureState.iacuc || ""),
+    occupancies.length,
+    occupancySignature,
+    freeCageAllowanceForPi(pi),
+  ].join("::");
+}
+
+function quantityStatisticFormsCacheKey(statement) {
+  const sourceIds = [statement.sourceId, ...(statement.sourceIds || [])].filter(Boolean).join("|");
+  const rowSignature = (statement.rows || [])
+    .map((row) => `${row.date}:${row.animalCount || 0}:${row.cageCount || 0}:${row.amount || 0}:${row.iacucBreakdown?.length || 0}`)
+    .join("|");
+  return [
+    statement.sourceType || "",
+    statement.month || "",
+    normalizePersonName(statement.pi || ""),
+    normalizeIacucNumber(statement.iacuc || ""),
+    sourceIds,
+    rowSignature,
+  ].join("::");
+}
+
+function quantityStatisticPagesHtmlCacheKey(statement, forms) {
+  return `${quantityStatisticFormsCacheKey(statement)}::${forms.length}`;
+}
+
+function settlementTemplateCacheKey(statement, rows) {
+  const rowSignature = rows
+    .map((row) => `${row.date}:${row.animalCount || 0}:${row.cageCount || 0}:${row.freeCages || 0}:${row.tier2BillableCages || 0}:${row.amount || 0}:${row.iacucBreakdown?.length || 0}`)
+    .join("|");
+  return [
+    statement.sourceType || "",
+    statement.month || "",
+    normalizePersonName(statement.pi || ""),
+    normalizeIacucNumber(statement.iacuc || ""),
+    rowSignature,
+  ].join("::");
+}
+
+function cageMapBillingStatement(pi, month) {
+  const key = cageMapStatementCacheKey(pi, month);
+  const cached = CAGE_MAP_STATEMENT_CACHE.get(key);
+  if (cached) return cached;
+  const statement = buildStatement(pi, month);
+  CAGE_MAP_STATEMENT_CACHE.set(key, statement);
+  return statement;
+}
+
+function quantitySheetBillingStatement(sheet) {
+  const key = quantitySheetStatementCacheKey(sheet);
+  const cached = QUANTITY_SHEET_STATEMENT_CACHE.get(key);
+  if (cached) return cached;
+  const statement = buildQuantitySheetStatement(sheet);
+  QUANTITY_SHEET_STATEMENT_CACHE.set(key, statement);
+  return statement;
+}
+
+function quantityStatisticExportForms(statement, info) {
+  const key = quantityStatisticFormsCacheKey(statement);
+  const cached = QUANTITY_STATISTIC_FORMS_CACHE.get(key);
+  if (cached) return cached;
+  const forms = buildQuantityStatisticExportForms(statement, info);
+  QUANTITY_STATISTIC_FORMS_CACHE.set(key, forms);
+  return forms;
+}
+
+function quantityStatisticPages(statement, forms) {
+  const key = quantityStatisticPagesHtmlCacheKey(statement, forms);
+  const cached = QUANTITY_STATISTIC_PAGES_HTML_CACHE.get(key);
+  if (cached) return cached;
+  const html = quantityStatisticPagesHtml(statement, forms);
+  QUANTITY_STATISTIC_PAGES_HTML_CACHE.set(key, html);
+  return html;
+}
+
+function cachedSettlementTemplateModel(statement, rows) {
+  const key = settlementTemplateCacheKey(statement, rows);
+  const cached = SETTLEMENT_TEMPLATE_MODEL_CACHE.get(key);
+  if (cached) return cached;
+  const model = buildSettlementTemplateModel(statement, rows);
+  SETTLEMENT_TEMPLATE_MODEL_CACHE.set(key, model);
+  return model;
+}
+
+function cachedWorkflowDetailSection(kind, key, render) {
+  const cacheKey = `${kind}::${key}`;
+  const cached = WORKFLOW_DETAIL_SECTION_CACHE.get(cacheKey);
+  if (cached) return cached;
+  const html = render();
+  WORKFLOW_DETAIL_SECTION_CACHE.set(cacheKey, html);
+  return html;
+}
+
+function cachedListSection(kind, key, render) {
+  const cacheKey = `${kind}::${key}`;
+  const cached = LIST_SECTION_CACHE.get(cacheKey);
+  if (cached) return cached;
+  const html = render();
+  LIST_SECTION_CACHE.set(cacheKey, html);
+  return html;
+}
+
+function workflowDetailListKey(items, fields) {
+  return (items || [])
+    .map((item) => fields.map((field) => String(item?.[field] ?? "")).join(":"))
+    .join("|");
+}
+
+function selectedIdSignature(values) {
+  return [...new Set((values || []).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "zh-CN")).join("|");
+}
+
+function renderWorkflowTimelineHtml(workflow, timeline) {
+  const key = [workflow.id || "", workflow.workflowStatus || "", workflow.latestEventAt || "", timeline.length].join("::");
+  return cachedWorkflowDetailSection("timeline", key, () =>
+    `
+      <div class="workflow-timeline">
+        ${timeline
+          .map(
+            (item) => `
+              <div class="workflow-node ${item.state}">
+                <span class="workflow-node-dot"></span>
+                <div>
+                  <strong>${escapeText(item.label)}</strong>
+                  <small>${escapeText(item.time || (item.state === "upcoming" ? "待推进" : item.state === "current" ? "当前节点" : "已完成"))}</small>
+                </div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    `,
+  );
+}
+
+function renderWorkflowSourceRowsHtml(record) {
+  const details = record.details || [];
+  const key = [record.id || "", record.updatedAt || "", details.length, workflowDetailListKey(details, ["iacuc", "facility", "species", "payableAmount"])].join("::");
+  return cachedWorkflowDetailSection("source_rows", key, () =>
+    details.length
+      ? details
+          .map(
+            (detailItem) => `
+              <tr>
+                <td>${escapeText(detailItem.iacuc || "-")}</td>
+                <td>${escapeText(detailItem.facility || "-")}</td>
+                <td>${escapeText(detailItem.species || "-")}</td>
+                <td>¥${MONEY_FORMAT.format(Number(detailItem.payableAmount || 0))}</td>
+                <td>${escapeText((detailItem.roomNames || []).join("、") || "-")}</td>
+              </tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="5">暂无 IACUC 明细。</td></tr>`,
+  );
+}
+
+function renderWorkflowHistoryHtml(record, history) {
+  const key = [record.id || "", record.updatedAt || "", history.length, workflowDetailListKey(history, ["id", "month", "payableAmount", "paidAmount", "accumulatedUnpaid"])].join("::");
+  return cachedWorkflowDetailSection("history", key, () =>
+    history.length
+      ? history
+          .map(
+            (historyItem) => `
+              <div class="audit-row">
+                <div>
+                  <strong>${escapeText(historyItem.month || "-")}</strong>
+                  <p class="muted">当前月应缴 ¥${MONEY_FORMAT.format(Number(historyItem.payableAmount || 0))} · 已缴 ¥${MONEY_FORMAT.format(Number(historyItem.paidAmount || 0))}</p>
+                </div>
+                <span class="muted">累计未缴 ¥${MONEY_FORMAT.format(Number(historyItem.accumulatedUnpaid || 0))}</span>
+              </div>
+            `,
+          )
+          .join("")
+      : `<p class="muted">暂无历史滚动记录。</p>`,
+  );
+}
+
+function renderWorkflowVersionsHtml(workflow, versions) {
+  const key = [workflow.id || "", workflow.currentVersionId || "", versions.length, workflowDetailListKey(versions, ["id", "versionNo", "versionStatus", "workflowStatus", "generatedAt"])].join("::");
+  return cachedWorkflowDetailSection("versions", key, () =>
+    versions.length
+      ? versions
+          .map(
+            (version) => `
+              <div class="rule-card">
+                <strong>${escapeText(version.documentNumber || `v${version.versionNo}`)}</strong>
+                <span>${escapeText(version.versionStatus === "active" ? "当前有效版本" : "历史作废版本")}</span>
+                <p>${escapeText(workflowStatusLabel(version.workflowStatus))} · ${escapeText(formatLogTime(version.generatedAt)) || "-"}</p>
+              </div>
+            `,
+          )
+          .join("")
+      : `<p class="muted">暂无版本记录。</p>`,
+  );
+}
+
+function renderWorkflowEventsHtml(workflow, events) {
+  const key = [workflow.id || "", workflow.latestEventAt || "", events.length, workflowDetailListKey(events, ["id", "eventType", "at", "note"])].join("::");
+  return cachedWorkflowDetailSection("events", key, () =>
+    events.length
+      ? events
+          .map(
+            (event) => `
+              <div class="audit-row">
+                <div>
+                  <strong>${escapeText(workflowEventLabel(event.eventType))}</strong>
+                  <p class="muted">${escapeText(event.actor?.displayName || "-")} · ${escapeText(formatLogTime(event.at)) || "-"}</p>
+                </div>
+                <span class="muted">${escapeText(event.note || "")}</span>
+              </div>
+            `,
+          )
+          .join("")
+      : `<p class="muted">暂无流程事件。</p>`,
+  );
+}
+
+function renderWorkflowLinesHtml(workflow, currentVersionId, lines) {
+  const nonZeroLines = lines.filter((line) => Number(line.cageCount || line.animalCount || 0) > 0);
+  const key = [workflow.id || "", currentVersionId || "", lines.length, workflowDetailListKey(nonZeroLines, ["date", "cageCount", "animalCount", "freeCages", "billableCages", "amount", "cumulative"])].join("::");
+  return cachedWorkflowDetailSection("lines", key, () =>
+    nonZeroLines.length
+      ? nonZeroLines
+          .map(
+            (line) => `
+              <tr>
+                <td>${escapeText(line.date || "-")}</td>
+                <td>${Number(line.cageCount || 0)}</td>
+                <td>${Number(line.freeCages || 0)}</td>
+                <td>${Number(line.billableCages || 0)}</td>
+                <td>¥${MONEY_FORMAT.format(Number(line.amount || 0))}</td>
+                <td>¥${MONEY_FORMAT.format(Number(line.cumulative || 0))}</td>
+              </tr>
+            `,
+          )
+          .join("")
+      : lines.length
+        ? `<tr><td colspan="6">当前结算单没有非零明细。</td></tr>`
+        : `<tr><td colspan="6">当前结算单暂无明细。</td></tr>`,
+  );
+}
+
 function activeOccupanciesOnDate(date, candidates = stateIndexes().billableOccupancies) {
   return candidates.filter((item) => {
     if (item.status !== "active" && item.status !== "ended") return false;
@@ -11163,15 +11529,9 @@ function normalizeSearchText(value) {
 }
 
 function piInfo(pi) {
-  const normalizedPi = normalizePersonName(pi);
-  const applications = IACUC_INDEX.filter((item) => normalizePersonName(item.pi) === normalizedPi);
-  const occupancies = occupanciesForPi(pi);
-  return {
-    project: uniqueJoined([...applications.map((item) => item.project), ...occupancies.map((item) => item.project)]),
-    pi,
-    owner: uniqueJoined([...applications.map((item) => item.owner), ...occupancies.map((item) => item.owner)]),
-    funding: uniqueJoined([...applications.map((item) => item.funding), ...occupancies.map((item) => item.funding)]),
-  };
+  const indexed = stateIndexes().piInfoByName.get(normalizePersonName(pi));
+  if (indexed) return { ...indexed };
+  return { project: "", pi, owner: "", funding: "" };
 }
 
 function uniqueJoined(values) {
@@ -11179,20 +11539,29 @@ function uniqueJoined(values) {
 }
 
 function unitPriceFor(date) {
+  const cached = UNIT_PRICE_CACHE.get(date);
+  if (cached !== undefined) return cached;
   const rule = state.billingRules.find((item) => {
     const afterStart = !item.effectiveStart || item.effectiveStart <= date;
     const beforeEnd = !item.effectiveEnd || item.effectiveEnd >= date;
     return item.unit === "cage_day" && afterStart && beforeEnd;
   });
-  return Number(rule?.price ?? state.baseRate ?? 4.5);
+  const price = Number(rule?.price ?? state.baseRate ?? 4.5);
+  UNIT_PRICE_CACHE.set(date, price);
+  return price;
 }
 
 function discountFor(iacuc, date) {
+  const cacheKey = `${normalizeIacucNumber(iacuc)}::${date}`;
+  const cached = DISCOUNT_CACHE.get(cacheKey);
+  if (cached !== undefined) return cached;
   const adjustment = state.adjustments.find((item) => {
     const inRange = (!item.effectiveStart || item.effectiveStart <= date) && (!item.effectiveEnd || item.effectiveEnd >= date);
     return item.targetType === "iacuc" && item.targetId === iacuc && item.type === "discount" && inRange;
   });
-  return Number(adjustment?.value ?? 0);
+  const value = Number(adjustment?.value ?? 0);
+  DISCOUNT_CACHE.set(cacheKey, value);
+  return value;
 }
 
 async function exportBillingCsv() {
@@ -11267,13 +11636,13 @@ async function persistBillingWorkflowFromCurrent() {
     }
     if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
     mergeServerAuditLogs(payload);
-    if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
-    lazyDataState.billingWorkflowsLoaded = true;
+    if (payload.workflow) updateBillingWorkflowListFromServer(payload.workflow);
+    if (payload.reimbursementItem) updateReimbursementRecordListFromServer(payload.reimbursementItem);
+    lazyDataState.billingWorkflowsLoaded = false;
     lazyDataState.billingWorkflowsLoading = false;
     lazyDataState.reimbursementRecordsLoaded = false;
     logClientPerf("billing_workflow.create", startedAt, { source: "quantity_sheet" });
     pushLog(`发起结算流程：${sheet.pi} ${sheet.month}`);
-    await refreshBillingWorkflowsAfterSave();
     showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${sheet.month} ${sheet.pi} 的进度。`);
     return payload.statement;
   }
@@ -11299,13 +11668,13 @@ async function persistBillingWorkflowFromCurrent() {
   }
   if (!response.ok) throw new Error(payload.error || "发起结算流程失败");
   mergeServerAuditLogs(payload);
-  if (payload.workflow) upsertById(state.billingWorkflows, payload.workflow);
-  lazyDataState.billingWorkflowsLoaded = true;
+  if (payload.workflow) updateBillingWorkflowListFromServer(payload.workflow);
+  if (payload.reimbursementItem) updateReimbursementRecordListFromServer(payload.reimbursementItem);
+  lazyDataState.billingWorkflowsLoaded = false;
   lazyDataState.billingWorkflowsLoading = false;
   lazyDataState.reimbursementRecordsLoaded = false;
   logClientPerf("billing_workflow.create", startedAt, { source: "cage_map" });
   pushLog(`发起结算流程：${state.billingPi} ${state.billingMonth}`);
-  await refreshBillingWorkflowsAfterSave();
   showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${state.billingMonth} ${state.billingPi} 的进度。`);
   return payload.statement;
 }
@@ -11332,7 +11701,7 @@ async function statementForExport() {
     throw new Error("请先选择项目负责人和结算月份");
   }
   if (!remotePersistence) {
-    const statement = buildStatement(state.billingPi, state.billingMonth);
+    const statement = cageMapBillingStatement(state.billingPi, state.billingMonth);
     return { statement, info: statementInfoForExport(statement) };
   }
   if (currentUser?.role !== "admin") {
@@ -11379,7 +11748,7 @@ async function quantitySheetStatementForExport() {
     throw new Error("请先填写项目负责人后再导出结算单");
   }
   if (!remotePersistence) {
-    const statement = buildQuantitySheetStatement(sheet);
+    const statement = quantitySheetBillingStatement(sheet);
     return { statement, info: statementInfoForExport(statement) };
   }
 
@@ -11884,7 +12253,7 @@ function quantityStatisticPagesHtml(statement, forms) {
 }
 
 function quantityStatisticHtml(statement, forms) {
-  const pagesHtml = quantityStatisticPagesHtml(statement, forms);
+  const pagesHtml = quantityStatisticPages(statement, forms);
   return `
     <!doctype html>
     <html lang="zh-CN">
@@ -11961,7 +12330,7 @@ function settlementHtml(statement, info, rows) {
   const documentNumber = settlementDocumentNumber(statement, generatedAt);
   const statementUrl = settlementLookupUrl(documentNumber, statement);
   const qrSvg = qrCodeSvg(statementUrl);
-  const template = buildSettlementTemplateModel(statement, rows);
+  const template = cachedSettlementTemplateModel(statement, rows);
   const titleSuffix = template.billingUnit === "cage_day" && numericOrZero(statement.freeCageAllowance) > 0 ? `（减免${formatStatementNumber(statement.freeCageAllowance)}笼）` : "";
   const title = `${escapeText(statement.pi || info.pi || "-")}课题组实验动物饲养费核算汇总表${titleSuffix}`;
   const totalAmountText = MONEY_FORMAT.format(template.totalAmount);
@@ -12517,6 +12886,8 @@ function qrFormatBits(mask) {
 }
 
 function datesInMonth(month) {
+  const cached = DATE_LIST_CACHE.get(month);
+  if (cached) return cached;
   const [year, monthIndex] = month.split("-").map(Number);
   const date = new Date(year, monthIndex - 1, 1);
   const dates = [];
@@ -12524,6 +12895,7 @@ function datesInMonth(month) {
     dates.push(formatLocalDate(date));
     date.setDate(date.getDate() + 1);
   }
+  DATE_LIST_CACHE.set(month, dates);
   return dates;
 }
 
@@ -12654,7 +13026,30 @@ function stateIndexes() {
   const currentOccupancyBySlotId = new Map();
   const occupanciesByPi = new Map();
   const occupanciesByIacuc = new Map();
+  const piInfoPartsByName = new Map();
   const billableOccupancies = [];
+  const rememberPiInfoPart = (pi, field, value) => {
+    const key = normalizePersonName(pi);
+    const text = String(value || "").trim();
+    if (!key || !text) return;
+    const current =
+      piInfoPartsByName.get(key) ||
+      {
+        pi: String(pi || "").trim(),
+        projects: new Set(),
+        owners: new Set(),
+        fundings: new Set(),
+      };
+    if (field === "project") current.projects.add(text);
+    if (field === "owner") current.owners.add(text);
+    if (field === "funding") current.fundings.add(text);
+    piInfoPartsByName.set(key, current);
+  };
+  IACUC_INDEX.forEach((item) => {
+    rememberPiInfoPart(item.pi, "project", item.project);
+    rememberPiInfoPart(item.pi, "owner", item.owner);
+    rememberPiInfoPart(item.pi, "funding", item.funding);
+  });
   indexedOccupancies.forEach((item) => {
     if ((item.status === "active" || item.status === "reserved") && item.slotId) {
       currentOccupancyBySlotId.set(item.slotId, item);
@@ -12671,6 +13066,9 @@ function stateIndexes() {
         if (!occupanciesByPi.has(piKey)) occupanciesByPi.set(piKey, []);
         occupanciesByPi.get(piKey).push(item);
       }
+      rememberPiInfoPart(item.pi, "project", item.project);
+      rememberPiInfoPart(item.pi, "owner", item.owner);
+      rememberPiInfoPart(item.pi, "funding", item.funding);
     }
   });
   const quantitySheetsById = new Map(state.quantitySheets.map((sheet) => [sheet.id, sheet]));
@@ -12693,6 +13091,17 @@ function stateIndexes() {
     if (workflow.businessKey) billingWorkflowByBusinessKey.set(workflow.businessKey, workflow);
   });
   const reimbursementRecordById = new Map(state.reimbursementRecords.map((record) => [record.id, record]));
+  const piInfoByName = new Map(
+    [...piInfoPartsByName.entries()].map(([key, item]) => [
+      key,
+      {
+        project: uniqueJoined([...item.projects]),
+        pi: item.pi,
+        owner: uniqueJoined([...item.owners]),
+        funding: uniqueJoined([...item.fundings]),
+      },
+    ]),
+  );
   STATE_INDEX_CACHE = {
     roomById,
     rackById,
@@ -12712,12 +13121,14 @@ function stateIndexes() {
     billingWorkflowsSorted: sortBillingWorkflows(state.billingWorkflows),
     reimbursementRecordById,
     reimbursementRecordsSorted: sortReimbursementRecords(state.reimbursementRecords),
+    piInfoByName,
   };
   return STATE_INDEX_CACHE;
 }
 
 function invalidateStateIndexCache() {
   STATE_INDEX_CACHE = null;
+  clearBillingDerivedCaches();
 }
 
 function emptyOccupancy(slotId) {
@@ -13458,3 +13869,63 @@ async function loadPrincipalIdentities() {
     lazyDataState.principalIdentitiesLoading = false;
   }
 }
+  appRoot?.addEventListener("change", async (event) => {
+    const placementGroupCheckbox = event.target.closest("[data-select-placement-task-group]");
+    if (placementGroupCheckbox) {
+      const pageGroups = pagedPlacementTaskGroups(getSelectedRoom()?.id || "");
+      const tasks = pageGroups
+        .flat()
+        .filter((task) => placementTaskGroupKey(task) === placementGroupCheckbox.dataset.selectPlacementTaskGroup && task.status === "pending");
+      const next = new Set(state.selectedPlacementTaskIds);
+      tasks.forEach((task) => {
+        if (placementGroupCheckbox.checked) next.add(task.id);
+        else next.delete(task.id);
+      });
+      state.selectedPlacementTaskIds = [...next];
+      state.placementAssignmentMode = state.selectedPlacementTaskIds.length > 0;
+      state.batchMode = state.placementAssignmentMode;
+      if (state.placementAssignmentMode) state.selectedSlotIds = [];
+      scheduleRender("placement_task_group.select");
+      return;
+    }
+    const quantitySheetCheckbox = event.target.closest("[data-select-quantity-sheet]");
+    if (quantitySheetCheckbox) {
+      toggleQuantitySheetSelection(quantitySheetCheckbox.dataset.selectQuantitySheet, quantitySheetCheckbox.checked);
+      return;
+    }
+    const intakeBatchCheckbox = event.target.closest("[data-select-intake-batch]");
+    if (intakeBatchCheckbox) {
+      toggleSelectedIntakeBatch(intakeBatchCheckbox.dataset.selectIntakeBatch, intakeBatchCheckbox.checked);
+      scheduleRender("intake_batch.toggle");
+      return;
+    }
+    const pageSizeSelect = event.target.closest("[data-page-size]");
+    if (pageSizeSelect) {
+      const kind = pageSizeSelect.dataset.pageSize;
+      const limit = Number(pageSizeSelect.value) || 10;
+      try {
+        if (kind === "quantitySheets") await goToQuantitySheetsPage(1, limit);
+        if (kind === "reimbursementRecords") await goToReimbursementRecordsPage(1, limit);
+        if (kind === "billingWorkflows") await goToBillingWorkflowsPage(1, limit);
+        if (kind === "auditLogs") await goToAuditLogsPage(1, limit);
+        if (kind === "intakeBatches") await goToIntakeBatchesPage(1, limit);
+        if (kind === "placementTasks") await goToPlacementTasksPage(1, limit);
+        if (kind === "releaseNotes") goToReleaseNotesPage(1, limit);
+        scheduleRender(`pager.size.${kind}`);
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const roleSelect = event.target.closest(".user-edit-form select[name='role'], #userForm select[name='role']");
+    if (roleSelect) {
+      const form = roleSelect.closest("form");
+      if (form) syncUserRoomAccessControls(form);
+      return;
+    }
+    const roomAccessCheckbox = event.target.closest(".user-edit-form input[name='roomIds'], #userForm input[name='roomIds']");
+    if (roomAccessCheckbox) {
+      const form = roomAccessCheckbox.closest("form");
+      if (form) syncUserRoomAccessControls(form);
+    }
+  });
