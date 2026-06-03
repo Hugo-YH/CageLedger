@@ -35,6 +35,17 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.12",
+    releasedAt: "2026-06-03 16:34",
+    title: "数量统计表录入体验修正",
+    items: [
+      "根据 @李志权 反馈，修复数量统计表 IACUC 检索点击后项目信息未立即回填的问题",
+      "数量统计表新增和减少数量不再默认选择类型，保存前提示补齐类型，录入和按 Tab 切格时保持焦点稳定",
+      "数量统计表房间号选择放开为全部饲养间，便于跨房间集中录入；日期表头新增格式帮助气泡",
+      "清理本地缓存并刷新入口移到左侧导航账号区，刷新与退出按钮按语义区分颜色",
+    ],
+  },
+  {
     version: "0.5.11c",
     releasedAt: "2026-06-02 17:29",
     title: "笼卡 IACUC 高亮微调",
@@ -713,6 +724,7 @@ const HELP_TEXTS = {
   billingGuide: "动态笼位图适合日常完整维护的房间；数量统计表适合纸质台账和人工月度核对。",
   cageMapBilling: "按每天实际在养数量计算，已预约默认不计费，适合完整维护中的房间。",
   quantityBilling: "录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。",
+  quantityDateFormat: "日期支持输入日号、月日、完整日期，例如 15、0515、20260515、2026-05-15、2026/05/15。",
   quantityPreview: "预览按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。",
   workflow: "按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号。",
   reimbursementLedger: "按每月每项目负责人维护结算与报销台账，自动承接结算金额并滚动累计未缴金额。",
@@ -766,7 +778,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.11c",
+  version: "0.5.12",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -3780,10 +3792,16 @@ function renderSidebarAccount() {
       <span>当前账号</span>
       <strong title="${escapeAttr(currentUser.displayName)}">${escapeText(currentUser.displayName)}</strong>
       <small>${currentUser.role === "admin" ? "管理员" : "房间管理员"} · ${state.rooms.length} 个饲养间</small>
-      <button id="logoutButton" class="secondary logout-button" type="button" title="退出登录" aria-label="退出登录">
-        ${iconSvg("logout")}
-        <span>退出</span>
-      </button>
+      <div class="sidebar-account-actions">
+        <button id="clearClientCache" class="secondary sidebar-cache-button" type="button" title="清理本地缓存并刷新" aria-label="清理本地缓存并刷新">
+          ${iconSvg("refresh")}
+          <span>刷新</span>
+        </button>
+        <button id="logoutButton" class="secondary logout-button" type="button" title="退出登录" aria-label="退出登录">
+          ${iconSvg("logout")}
+          <span>退出</span>
+        </button>
+      </div>
       ${renderVersionMeta("sidebar-version")}
     </div>
   `;
@@ -5793,6 +5811,7 @@ function renderQuantitySheetBillingView() {
   const managerValue = draft.manager || currentUser?.displayName || "";
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
+  const quantityRooms = [...state.rooms].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
 
   return `
     <section class="billing-layout quantity-billing-layout">
@@ -5819,7 +5838,7 @@ function renderQuantitySheetBillingView() {
                 房间号
                 <select name="roomId">
                   <option value="">请选择房间号</option>
-                  ${visibleRooms()
+                  ${quantityRooms
                     .map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === quantitySheetRoomId(draft) ? "selected" : ""}>${escapeText(room.name)}</option>`)
                     .join("")}
                 </select>
@@ -6301,12 +6320,12 @@ function renderQuantitySheetCalendarPages(draft) {
           <table class="quantity-entry-table quantity-template-table">
             <thead>
               <tr>
-                <th>日期</th>
+                <th><span class="quantity-table-head-label">日期${renderHelpHint("quantityDateFormat")}</span></th>
                 <th>新增<br />（购/转/分）</th>
                 <th>减少<br />（取/死/转）</th>
                 <th>结余<br />总数</th>
                 <th>结余<br />笼数</th>
-                <th>日期</th>
+                <th><span class="quantity-table-head-label">日期${renderHelpHint("quantityDateFormat")}</span></th>
                 <th>新增<br />（购/转/分）</th>
                 <th>减少<br />（取/死/转）</th>
                 <th>结余<br />总数</th>
@@ -6369,6 +6388,8 @@ function renderQuantityChangeEditor(kind, row, value) {
   const transferValue = kind === "added" ? row.transferInFromIacuc || "" : row.transferOutToIacuc || "";
   const showTransfer = type === (kind === "added" ? "转入" : "转出");
   const options = kind === "added" ? ["", "购入", "转入", "分笼"] : ["", "取材", "死亡", "转出"];
+  const count = numericOrZero(row[kind === "added" ? "addedCount" : "removedCount"]);
+  const missingType = count > 0 && !type;
   return `
     <div class="quantity-change-editor">
       <input name="${kind}Text" value="${escapeAttr(value)}" />
@@ -6376,6 +6397,7 @@ function renderQuantityChangeEditor(kind, row, value) {
         ${options.map((option) => `<option value="${option}" ${type === option ? "selected" : ""}>${option || "类型"}</option>`).join("")}
       </select>
       ${showTransfer ? renderIacucLookupInput(transferName, transferValue, { placeholder: kind === "added" ? "来源伦理号" : "目标伦理号", compact: true }) : ""}
+      <small class="quantity-change-type-warning" ${missingType ? "" : "hidden"}>请选择类型</small>
     </div>
   `;
 }
@@ -6459,10 +6481,8 @@ function quantitySheetInitialRow(draft, row) {
 
 function quantityChangeInputValue(row, kind) {
   const count = kind === "added" ? row.addedCount : row.removedCount;
-  const type = kind === "added" ? row.addedType : row.removedType;
   if (count === null || count === undefined || count === "") return "";
-  const shortType = quantityChangeShortLabel(type);
-  return `${formatStatementNumber(count)}${shortType ? `（${shortType}）` : ""}`;
+  return formatStatementNumber(count);
 }
 
 function renderQuantityPreviewRow(row) {
@@ -6845,7 +6865,6 @@ function renderSystemUpdateCard() {
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
       ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
       <div class="update-card-actions">
-        <button id="clearClientCache" class="secondary" type="button">${iconSvg("refresh")}清理本地缓存并刷新</button>
         <button id="checkSystemUpdate" class="secondary" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
       </div>
     </div>
@@ -7888,6 +7907,13 @@ function bindEvents() {
     scheduleRender("reimbursement.workflow_lines.toggle");
   });
   bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
+  document.querySelector("#quantitySheetForm")?.addEventListener("input", (event) => {
+    const name = event.target?.name;
+    if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+      captureQuantitySheetDraft();
+      syncQuantityChangeTypeWarnings();
+    }
+  });
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
     if (event.target?.id === "quantitySheetMonth") {
@@ -7902,9 +7928,19 @@ function bindEvents() {
       captureQuantitySheetDraft();
       return;
     }
-    if (["rowDate", "addedText", "addedType", "removedText", "removedType", "animalCount", "cageCount", "handler"].includes(name)) {
+    if (["addedText", "removedText", "animalCount", "cageCount", "handler"].includes(name)) {
       captureQuantitySheetDraft();
-      scheduleRender("quantity_sheet.form_change");
+      syncQuantityChangeTypeWarnings();
+      return;
+    }
+    if (["addedType", "removedType"].includes(name)) {
+      captureQuantitySheetDraft();
+      syncQuantityChangeTypeWarnings();
+      const editor = event.target.closest(".quantity-change-editor");
+      const transferType = name === "addedType" ? "转入" : "转出";
+      if (event.target.value === transferType || editor?.querySelector("[data-iacuc-lookup]")) {
+        scheduleRender("quantity_sheet.transfer_type");
+      }
     }
   });
   document.querySelector("#quantitySheetForm select[name='roomId']")?.addEventListener("change", syncQuantitySheetRoomName);
@@ -8025,6 +8061,18 @@ function handleQuantityTemplateKeydown(event) {
   if (!next) return;
   next.focus();
   if (next instanceof HTMLInputElement) next.select();
+}
+
+function syncQuantityChangeTypeWarnings(scope = document) {
+  scope.querySelectorAll?.(".quantity-change-editor").forEach((editor) => {
+    const textInput = editor.querySelector("input[name='addedText'], input[name='removedText']");
+    const typeSelect = editor.querySelector("select[name='addedType'], select[name='removedType']");
+    const warning = editor.querySelector(".quantity-change-type-warning");
+    const hasCount = numericOrZero(parseQuantityChangeCell(textInput?.value || "", "", typeSelect?.name === "addedType" ? "added" : "removed").count) > 0;
+    const missingType = hasCount && !typeSelect?.value;
+    editor.classList.toggle("missing-type", missingType);
+    if (warning) warning.hidden = !missingType;
+  });
 }
 
 function bindIntakeRequiredNotice(selector, title) {
@@ -8747,7 +8795,7 @@ function bindIacucLookupInputs(scopeSelector, autofillHandler) {
     });
   });
 
-  scope?.addEventListener("click", (event) => {
+  scope?.addEventListener("mousedown", (event) => {
     const button = event.target.closest("[data-iacuc-pick]");
     if (!button || !scope.contains(button)) return;
     event.preventDefault();
@@ -8758,7 +8806,6 @@ function bindIacucLookupInputs(scopeSelector, autofillHandler) {
     updateIacucLookupPanel(input);
     if (input.name === "iacuc") autofillHandler({ target: input });
     field.classList.add("lookup-picked");
-    input.blur();
   });
 }
 
@@ -9494,6 +9541,11 @@ async function saveQuantitySheetDraft() {
   if (state.quantitySheetDraft.invalidDateInputs?.length) {
     throw new Error(`请先修正日期：${state.quantitySheetDraft.invalidDateInputs.join("、")}`);
   }
+  const missingChangeTypes = quantitySheetMissingChangeTypeLabels(state.quantitySheetDraft);
+  if (missingChangeTypes.length) {
+    syncQuantityChangeTypeWarnings();
+    throw new Error(`请先选择新增/减少类型：${missingChangeTypes.join("、")}`);
+  }
   const sheet = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
   const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
   if (!remotePersistence) {
@@ -10096,10 +10148,8 @@ function readQuantitySheetForm(form, options = {}) {
         const delta = primaryManual - primaryPrevious;
         if (delta > 0) {
           addedCount = delta;
-          addedType = addedType || "购入";
         } else if (delta < 0) {
           removedCount = Math.abs(delta);
-          removedType = removedType || "取材";
         }
       }
       const autoAnimalCount = Math.max(runningAnimalCount + numericOrZero(addedCount) - numericOrZero(removedCount), 0);
@@ -10129,10 +10179,10 @@ function readQuantitySheetForm(form, options = {}) {
           date: "",
           rawDateInput,
           addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
-          addedType: numericOrZero(addedCount) > 0 ? addedType || "购入" : addedType || "",
+          addedType: numericOrZero(addedCount) > 0 ? addedType || "" : "",
           transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
           removedCount: numericOrZero(removedCount) > 0 ? numericOrZero(removedCount) : null,
-          removedType: numericOrZero(removedCount) > 0 ? removedType || "取材" : removedType || "",
+          removedType: numericOrZero(removedCount) > 0 ? removedType || "" : "",
           transferOutToIacuc: removedType === "转出" ? normalizeIacucNumber(transferOutToIacucInput || previous.transferOutToIacuc || "") : "",
           animalCount: manualAnimalCount,
           cageCount: manualCageCount,
@@ -10149,10 +10199,10 @@ function readQuantitySheetForm(form, options = {}) {
         date,
         rawDateInput: rowIndex === 0 ? date : rawDateInput || date,
         addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
-        addedType: numericOrZero(addedCount) > 0 ? addedType || "购入" : addedType || "",
+        addedType: numericOrZero(addedCount) > 0 ? addedType || "" : "",
         transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
         removedCount: numericOrZero(removedCount) > 0 ? numericOrZero(removedCount) : null,
-        removedType: numericOrZero(removedCount) > 0 ? removedType || "取材" : removedType || "",
+        removedType: numericOrZero(removedCount) > 0 ? removedType || "" : "",
         transferOutToIacuc: removedType === "转出" ? normalizeIacucNumber(transferOutToIacucInput || previous.transferOutToIacuc || "") : "",
         animalCount: manualAnimalCount,
         cageCount: manualCageCount,
@@ -10185,6 +10235,17 @@ function readQuantitySheetForm(form, options = {}) {
     rows,
     invalidDateInputs,
   });
+}
+
+function quantitySheetMissingChangeTypeLabels(sheet) {
+  return (sheet?.rows || [])
+    .filter((row) => (numericOrZero(row.addedCount) > 0 && !row.addedType) || (numericOrZero(row.removedCount) > 0 && !row.removedType))
+    .map((row) => {
+      const parts = [];
+      if (numericOrZero(row.addedCount) > 0 && !row.addedType) parts.push("新增");
+      if (numericOrZero(row.removedCount) > 0 && !row.removedType) parts.push("减少");
+      return `${row.rawDateInput || row.date || "未填日期"} ${parts.join("、")}`;
+    });
 }
 
 function cellsForQuantityDateCell(cell) {
@@ -10385,6 +10446,7 @@ function autofillQuantitySheetIacucFields(event) {
   if (form.elements.owner) form.elements.owner.value = match.owner || "";
   if (form.elements.funding) form.elements.funding.value = match.funding || "";
   event.target.value = match.iacuc;
+  state.quantitySheetDraft = readQuantitySheetForm(form, { preserveInvalidDates: true });
 }
 
 function hydrateQuantitySheetIacucInfo(sheet) {

@@ -603,6 +603,11 @@ svg {
   margin-inline: auto;
 }
 
+.shell.sidebar-collapsed .sidebar-account-actions {
+  grid-template-columns: 1fr;
+}
+
+.shell.sidebar-collapsed .sidebar-cache-button span,
 .shell.sidebar-collapsed .logout-button span {
   display: none;
 }
@@ -636,14 +641,47 @@ svg {
   font-size: 12px;
 }
 
-.sidebar-account .secondary {
-  width: 100%;
-  justify-content: center;
+.sidebar-account-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   margin-top: 6px;
 }
 
+.sidebar-account-actions .secondary {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.sidebar-cache-button,
 .logout-button {
   min-height: 38px;
+}
+
+.sidebar-cache-button.secondary {
+  background: rgba(218, 239, 234, 0.98);
+  border-color: rgba(153, 203, 193, 0.9);
+  color: #0f6f66;
+}
+
+.sidebar-cache-button.secondary:hover {
+  background: #e8f5f1;
+  border-color: rgba(174, 218, 209, 0.95);
+  color: #075a53;
+}
+
+.logout-button.secondary {
+  background: rgba(255, 242, 240, 0.96);
+  border-color: rgba(244, 177, 169, 0.86);
+  color: #b42318;
+}
+
+.logout-button.secondary:hover {
+  background: #fff7f5;
+  border-color: rgba(235, 129, 117, 0.9);
+  color: #8f1f16;
 }
 
 .version-meta {
@@ -1947,6 +1985,25 @@ h3 {
   white-space: normal;
 }
 
+.quantity-table-head-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.quantity-template-table th .help-hint {
+  width: 17px;
+  height: 17px;
+}
+
+.quantity-template-table th .help-hint-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+}
+
 .quantity-template-table td {
   vertical-align: top;
   padding: 7px 6px;
@@ -2002,6 +2059,18 @@ h3 {
 
 .quantity-change-editor .iacuc-lookup {
   grid-column: 1 / -1;
+}
+
+.quantity-change-type-warning {
+  grid-column: 1 / -1;
+  color: #a85d00;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.quantity-change-editor.missing-type select {
+  border-color: #d69e2e;
+  background: #fffdf7;
 }
 
 .quantity-balance-input,
