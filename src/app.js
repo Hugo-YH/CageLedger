@@ -35,6 +35,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.12a",
+    releasedAt: "2026-06-03 16:46",
+    title: "检疫笼卡版式微调",
+    items: [
+      "根据 @吴玉婷 建议，检疫笼卡删除顶部标题行，将高度分配给剩余信息行和手写行",
+      "检疫笼卡外框改为单向边框绘制，减少合并单元格导致的四边粗细差异",
+    ],
+  },
+  {
     version: "0.5.12",
     releasedAt: "2026-06-03 16:34",
     title: "数量统计表录入体验修正",
@@ -778,7 +787,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.12",
+  version: "0.5.12a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -9841,18 +9850,23 @@ function intakeCardsPrintHtml(items) {
             position: relative;
             width: 100mm;
             height: 40.09mm;
-            border: 0.36mm solid #111827;
+            border: 0;
             overflow: hidden;
             background: #fff;
           }
           .card table {
             width: 100%;
             height: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-top: 0.32mm solid #111827;
+            border-left: 0.32mm solid #111827;
             table-layout: fixed;
           }
           .card td {
-            border: 0.32mm solid #111827;
+            border: 0;
+            border-right: 0.32mm solid #111827;
+            border-bottom: 0.32mm solid #111827;
             padding: 0.12mm 0.55mm;
             vertical-align: middle;
             font-size: 2.45mm;
@@ -9992,55 +10006,49 @@ function renderIntakeCardPrint(batch, card) {
           <col style="width:8.5mm" />
           <col style="width:8.5mm" />
         </colgroup>
-        <tr style="height:4.9mm">
-          <td class="header-line" colspan="8">
-            <span class="header-line-title">实验动物检疫卡</span>
-            <span class="header-line-cage">笼号：</span>
-          </td>
-        </tr>
-        <tr style="height:4.25mm">
+        <tr style="height:4.86mm">
           <td class="label">批次号：</td>
           <td class="value value-compact" colspan="2">${batchNoHtml}</td>
           <td class="label" colspan="2">购买单位：</td>
           <td class="value" colspan="3">${escapeText(supplierShortName || batch.supplier || "")}</td>
         </tr>
-        <tr style="height:4.25mm">
+        <tr style="height:4.86mm">
           <td class="label">动物品系：</td>
           <td class="value" colspan="2">${escapeText(batch.strainStandard || batch.strainRaw || "")}</td>
           <td class="label" colspan="2">项目负责人：</td>
           <td class="value" colspan="3">${escapeText(batch.pi || "")}</td>
         </tr>
-        <tr style="height:4.25mm">
+        <tr style="height:4.86mm">
           <td class="label">接收日期：</td>
           <td class="value" colspan="2">${escapeText(formatPrintDate(batch.intakeDate))}</td>
           <td class="label label-long" colspan="2">实验责任人/助手：</td>
           <td class="value" colspan="3">${escapeText(batch.owner || "")}</td>
         </tr>
-        <tr style="height:4.25mm">
+        <tr style="height:4.86mm">
           <td class="label">接收人员：</td>
           <td class="value" colspan="2">${escapeText(batch.receiverName || "")}</td>
           <td class="label" colspan="2">兽医电话：</td>
           <td class="value" colspan="3">${escapeText(batch.vetPhone || "")}</td>
         </tr>
-        <tr style="height:3.3mm">
+        <tr style="height:3.91mm">
           <td class="row-head">日期</td>
           <td class="row-head">数目变化</td>
           <td class="row-head">饲养周期</td>
           <td class="row-head" colspan="3">房间</td>
           <td class="qr-cell" colspan="2" rowspan="4">${qrHtml}</td>
         </tr>
-        <tr style="height:4.65mm">
+        <tr style="height:5.26mm">
           <td class="value">${escapeText(formatPrintDate(batch.intakeDate))}</td>
           <td class="value">${escapeText(card.suggestedQuantity || "")}</td>
           <td class="cycle">${escapeText(formatPrintDateRange(batch.intakeDate, batch.endDate))}</td>
           <td class="room" colspan="3" rowspan="3">${escapeText(batch.roomName || "")}</td>
         </tr>
-        <tr style="height:4.65mm">
+        <tr style="height:5.26mm">
           <td></td>
           <td></td>
           <td></td>
         </tr>
-        <tr style="height:4.65mm">
+        <tr style="height:5.26mm">
           <td></td>
           <td></td>
           <td></td>
