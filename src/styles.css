@@ -2140,7 +2140,7 @@ h3 {
 }
 
 .quantity-saved-list table {
-  min-width: 720px;
+  min-width: 920px;
 }
 
 .quantity-select-col {
@@ -2153,16 +2153,46 @@ h3 {
   height: 16px;
 }
 
-.quantity-saved-list tbody tr {
-  cursor: pointer;
-}
-
 .quantity-saved-list tbody tr:hover {
   background: rgba(15, 118, 110, 0.08);
 }
 
 .quantity-sheet-detail-modal {
-  width: min(1120px, calc(100vw - 48px));
+  width: min(1480px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.quantity-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.quantity-row-actions .compact {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.quantity-sheet-detail-workbench {
+  display: grid;
+  gap: 18px;
+}
+
+.quantity-sheet-detail-form {
+  display: grid;
+  gap: 14px;
+}
+
+.quantity-detail-entry-wrap {
+  max-height: min(60vh, 620px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .quantity-stat-preview {
@@ -2175,7 +2205,7 @@ h3 {
 }
 
 .quantity-stat-preview .sheet-page {
-  width: min(100%, 820px);
+  width: min(100%, 1120px);
   min-height: auto;
   margin: 0 auto 14px;
   padding: 14px;
@@ -4240,6 +4270,13 @@ tr:last-child td {
   width: auto;
   max-height: calc(100vh - 80px);
   overflow: auto;
+}
+
+.quantity-sheet-detail-modal.editor-modal {
+  left: max(292px, calc(50vw - 720px));
+  right: 24px;
+  width: auto;
+  max-width: 1440px;
 }
 
 .editor-modal-actions {

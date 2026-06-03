@@ -1367,6 +1367,7 @@ const seedData = {
   selectedQuantitySheetId: "",
   selectedQuantitySheetIds: [],
   viewingQuantitySheetId: "",
+  viewingQuantitySheetMode: "preview",
   quantitySheetListSearch: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
@@ -1651,7 +1652,7 @@ async function loadPersistedState() {
     paginationState.quantitySheets.offset = 0;
     paginationState.quantitySheets.total = 0;
     paginationState.quantitySheets.hasMore = false;
-    paginationState.quantitySheets.month = state.billingMonth || today.slice(0, 7);
+    paginationState.quantitySheets.month = "";
     paginationState.quantitySheets.pi = "";
     paginationState.quantitySheets.iacuc = "";
     paginationState.quantitySheets.roomId = "";
@@ -2300,7 +2301,7 @@ async function loadQuantitySheets(options = {}) {
   }
   lazyDataState.quantitySheetsLoading = true;
   const filters = {
-    month: options.month ?? paginationState.quantitySheets.month ?? state.billingMonth ?? today.slice(0, 7),
+    month: options.month ?? paginationState.quantitySheets.month ?? "",
     iacuc: options.iacuc ?? paginationState.quantitySheets.iacuc ?? "",
     pi: options.pi ?? paginationState.quantitySheets.pi ?? "",
     roomId: options.roomId ?? paginationState.quantitySheets.roomId ?? "",
@@ -2423,7 +2424,7 @@ async function goToQuantitySheetsPage(page, limit = paginationState.quantityShee
   const nextPage = Math.max(Number(page) || 1, 1);
   const nextLimit = Math.max(Number(limit) || 10, 1);
   await loadQuantitySheets({
-    month: paginationState.quantitySheets.month || state.billingMonth || today.slice(0, 7),
+    month: paginationState.quantitySheets.month || "",
     iacuc: paginationState.quantitySheets.iacuc,
     pi: paginationState.quantitySheets.pi,
     roomId: paginationState.quantitySheets.roomId,
@@ -2508,7 +2509,7 @@ async function ensureViewDataLoaded(view) {
     tasks.push(loadPrincipalIdentities());
   }
   if (view === "billing" && !lazyDataState.quantitySheetsLoaded && !lazyDataState.quantitySheetsLoading) {
-    tasks.push(loadQuantitySheets({ month: state.billingMonth || today.slice(0, 7), offset: 0 }));
+    tasks.push(loadQuantitySheets({ offset: 0 }));
   }
   if (view === "workflow-center" && !lazyDataState.reimbursementRecordsLoaded && !lazyDataState.reimbursementRecordsLoading) {
     tasks.push(
@@ -2808,7 +2809,7 @@ function updatePlacementTaskListFromServer(task) {
 }
 
 function quantitySheetMatchesCurrentFilter(sheet = {}) {
-  const month = paginationState.quantitySheets.month || state.billingMonth || "";
+  const month = paginationState.quantitySheets.month || "";
   const iacuc = normalizeIacucNumber(paginationState.quantitySheets.iacuc || "");
   const pi = normalizePersonName(paginationState.quantitySheets.pi || "");
   const roomId = paginationState.quantitySheets.roomId || "";
@@ -5913,8 +5914,7 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
   const selectedCount = selectedIds.size;
   const allVisibleSelected = Boolean(filteredItems.length) && filteredItems.every((sheet) => selectedIds.has(sheet.id));
   const canGenerateStatement = !remotePersistence || Boolean(currentUser);
-  const canDeleteCurrent = selectedCount > 0;
-  const canUseSingleSheetAction = selectedCount === 1 && canGenerateStatement;
+  const canUseSheetAction = selectedCount > 0 && canGenerateStatement;
   return `
     <div class="quantity-saved-list-section">
       ${renderPanelHead({
@@ -5931,10 +5931,9 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
             />
           </div>
           <div class="quantity-saved-actions">
-            <button id="deleteQuantitySheet" class="ghost danger-text" type="button" ${canDeleteCurrent ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
-            <button id="exportBilling" class="secondary" type="button" ${canUseSingleSheetAction ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
-            <button id="exportSettlementPdf" class="secondary" type="button" ${canUseSingleSheetAction ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
-            <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canUseSingleSheetAction ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
+            <button id="exportBilling" class="secondary" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
+            <button id="exportSettlementPdf" class="secondary" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+            <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
           </div>
         `,
       })}
@@ -5945,7 +5944,7 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
       <div class="table-wrap quantity-saved-list">
         <table>
           <thead>
-            <tr><th class="quantity-select-col"><input id="toggleVisibleQuantitySheets" type="checkbox" ${allVisibleSelected ? "checked" : ""} ${filteredItems.length ? "" : "disabled"} /></th><th>月份</th><th>IACUC</th><th>房间</th><th>负责人</th><th>更新时间</th></tr>
+            <tr><th class="quantity-select-col"><input id="toggleVisibleQuantitySheets" type="checkbox" ${allVisibleSelected ? "checked" : ""} ${filteredItems.length ? "" : "disabled"} /></th><th>月份</th><th>IACUC</th><th>房间</th><th>负责人</th><th>更新时间</th><th>操作</th></tr>
           </thead>
           <tbody>
             ${renderSavedQuantitySheetRowsHtml(filteredItems, selectedIds, quantityLoading, items.length)}
@@ -5960,26 +5959,102 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
 function renderQuantitySheetDetailModal() {
   const sheet = state.quantitySheets.find((item) => item.id === state.viewingQuantitySheetId);
   if (!sheet) return "";
+  const mode = state.viewingQuantitySheetMode === "edit" ? "edit" : "preview";
   return `
     <div class="editor-modal-backdrop" id="closeQuantitySheetDetail"></div>
-    <div class="panel detail-panel editor-modal quantity-sheet-detail-modal">
+    <div class="panel detail-panel editor-modal quantity-sheet-detail-modal ${mode === "edit" ? "edit-mode" : "preview-mode"}">
       <div class="editor-modal-actions">
         <button class="secondary" type="button" id="closeQuantitySheetDetailButton">${iconSvg("chevronRight")}关闭</button>
       </div>
-      ${renderSavedQuantitySheetDetail(sheet)}
+      ${mode === "edit" ? renderSavedQuantitySheetEditor(sheet) : renderSavedQuantitySheetPreview(sheet)}
     </div>
   `;
 }
 
-function renderSavedQuantitySheetDetail(sheet) {
+function renderSavedQuantitySheetPreview(sheet) {
   if (!sheet) {
     return "";
   }
   const statement = quantitySheetBillingStatement(sheet);
   const forms = quantityStatisticExportForms(statement, statementInfoForExport(statement));
   return `
+    ${renderPanelHead({ title: "预览数量统计表", helpKey: "quantityPreview", compact: true })}
     <div class="quantity-stat-preview">
       ${quantityStatisticPages(statement, forms)}
+    </div>
+  `;
+}
+
+function renderSavedQuantitySheetEditor(sheet) {
+  if (!sheet) {
+    return "";
+  }
+  const quantityRooms = [...state.rooms].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
+  const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(sheet));
+  const quantityProfile = billingProfileForRoom(quantityRoom || {});
+  return `
+    <div class="quantity-sheet-detail-workbench">
+      <form id="quantitySheetDetailForm" class="quantity-sheet-detail-form" data-sheet-id="${escapeAttr(sheet.id)}">
+        ${renderPanelHead({
+          title: "编辑数量统计表",
+          helpKey: "quantityBilling",
+          compact: true,
+          actions: `<button id="saveQuantitySheetDetail" class="primary" type="submit">${iconSvg("save")}保存修改</button>`,
+        })}
+        <div class="quantity-sheet-fields">
+          <div class="quantity-field-group quantity-field-group-basic">
+            <label class="field-required">
+              月份
+              <input name="month" type="month" value="${escapeAttr(sheet.month || state.billingMonth)}" required />
+            </label>
+            <label>
+              房间号
+              <select name="roomId">
+                <option value="">请选择房间号</option>
+                ${quantityRooms
+                  .map((room) => `<option value="${escapeAttr(room.id)}" ${room.id === quantitySheetRoomId(sheet) ? "selected" : ""}>${escapeText(room.name)}</option>`)
+                  .join("")}
+              </select>
+            </label>
+            <label>
+              管理员
+              <input name="manager" value="${escapeAttr(sheet.manager || currentUser?.displayName || "")}" placeholder="请输入管理员姓名" />
+            </label>
+          </div>
+          <div class="quantity-field-group quantity-field-group-project">
+            <label class="field-required">
+              IACUC 编号
+              ${renderIacucLookupInput("iacuc", sheet.iacuc, { required: true })}
+            </label>
+            <label class="field-auto">
+              项目名称
+              <input name="project" value="${escapeAttr(sheet.project || "")}" placeholder="选择 IACUC 后自动填充，也可手动输入" />
+            </label>
+            <label class="field-auto">
+              支撑经费
+              <input name="funding" value="${escapeAttr(sheet.funding || "")}" placeholder="选择 IACUC 后自动填充" />
+            </label>
+            <label class="field-auto">
+              项目负责人
+              <input name="pi" value="${escapeAttr(sheet.pi || "")}" placeholder="选择 IACUC 后自动填充" />
+            </label>
+            <label class="field-auto">
+              实验负责人
+              <input name="owner" value="${escapeAttr(sheet.owner || "")}" placeholder="选择 IACUC 后自动填充" />
+            </label>
+          </div>
+          <input type="hidden" name="billingUnit" value="${escapeAttr(sheet.billingUnit || quantityProfile.unit)}" />
+          <div class="room-billing-hint">
+            <span>${escapeText(facilityLabel(quantityProfile.facility))}</span>
+            <span>${escapeText(billingItemLabel(quantityProfile.billingItem))}</span>
+            <span>${escapeText(customerTypeLabel(quantityProfile.customerType))}</span>
+            <span>单价 ¥${MONEY_FORMAT.format(quantityProfile.unitPrice)} / ${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
+          </div>
+        </div>
+        <div class="quantity-entry-wrap quantity-detail-entry-wrap">
+          ${renderQuantitySheetCalendarPages(sheet)}
+        </div>
+      </form>
     </div>
   `;
 }
@@ -6002,13 +6077,18 @@ function filterSavedQuantitySheets(items, keyword) {
 function renderSavedQuantitySheetRow(sheet, selectedIds) {
   const isActive = selectedIds.has(sheet.id);
   return `
-    <tr class="${isActive ? "selected-row" : ""}" data-open-quantity-sheet="${escapeAttr(sheet.id)}">
+    <tr class="${isActive ? "selected-row" : ""}">
       <td class="quantity-select-col"><input type="checkbox" data-select-quantity-sheet="${escapeAttr(sheet.id)}" ${isActive ? "checked" : ""} /></td>
       <td>${escapeText(sheet.month || "-")}</td>
       <td>${escapeText(sheet.iacuc || "-")}</td>
       <td>${escapeText(sheet.roomName || roomNameById(sheet.roomId) || "-")}</td>
       <td>${escapeText(sheet.pi || "-")}</td>
       <td>${escapeText(formatLogTime(sheet.updatedAt) || "-")}</td>
+      <td class="quantity-row-actions">
+        <button class="secondary compact" type="button" data-preview-quantity-sheet="${escapeAttr(sheet.id)}">预览</button>
+        <button class="secondary compact" type="button" data-edit-quantity-sheet="${escapeAttr(sheet.id)}">编辑</button>
+        <button class="ghost danger-text compact" type="button" data-delete-quantity-sheet-row="${escapeAttr(sheet.id)}">${iconSvg("trash")}删除</button>
+      </td>
     </tr>
   `;
 }
@@ -6022,9 +6102,9 @@ function renderSavedQuantitySheetRowsHtml(filteredItems, selectedIds, quantityLo
     workflowDetailListKey(filteredItems, ["id", "month", "iacuc", "roomId", "roomName", "pi", "updatedAt"]),
   ].join("::");
   return cachedListSection("quantity_sheet_rows", key, () => {
-    if (quantityLoading && !itemsLength) return `<tr><td colspan="6">正在加载数量统计表...</td></tr>`;
+    if (quantityLoading && !itemsLength) return `<tr><td colspan="7">正在加载数量统计表...</td></tr>`;
     if (filteredItems.length) return filteredItems.map((sheet) => renderSavedQuantitySheetRow(sheet, selectedIds)).join("");
-    return `<tr><td colspan="6">${itemsLength ? "当前检索条件下没有匹配的数量统计表。" : "当前没有已保存数量统计表。保存后会显示在这里。"}</td></tr>`;
+    return `<tr><td colspan="7">${itemsLength ? "当前检索条件下没有匹配的数量统计表。" : "当前没有已保存数量统计表。保存后会显示在这里。"}</td></tr>`;
   });
 }
 
@@ -7380,7 +7460,6 @@ function bindEvents() {
   };
   document.querySelector("#billingMonth")?.addEventListener("change", async (event) => {
     state.billingMonth = event.target.value;
-    paginationState.quantitySheets.month = state.billingMonth;
     paginationState.billingWorkflows.month = state.billingMonth;
     billingInfrastructureState.month = "";
     if (state.activeView === "billing") {
@@ -7422,14 +7501,41 @@ function bindEvents() {
   document.querySelector("#toggleVisibleQuantitySheets")?.addEventListener("change", (event) => {
     toggleVisibleQuantitySheetSelection(event.target.checked);
   });
+  document.querySelectorAll("[data-select-quantity-sheet]").forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      toggleQuantitySheetSelection(event.target.dataset.selectQuantitySheet, event.target.checked);
+    });
+  });
   document.querySelector("#closeQuantitySheetDetail")?.addEventListener("click", closeQuantitySheetDetail);
   document.querySelector("#closeQuantitySheetDetailButton")?.addEventListener("click", closeQuantitySheetDetail);
+  document.querySelector(".quantity-sheet-detail-modal .quantity-template-table")?.addEventListener("keydown", handleQuantityTemplateKeydown);
+  bindIacucLookupInputs("#quantitySheetDetailForm", autofillQuantitySheetDetailIacucFields);
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("submit", handleQuantitySheetDetailSubmit);
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("input", (event) => {
+    const name = event.target?.name;
+    if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+      captureQuantitySheetDetailDraft(event.currentTarget);
+      syncQuantityChangeTypeWarnings(event.currentTarget);
+    }
+  });
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("change", (event) => {
+    const name = event.target?.name;
+    if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+      captureQuantitySheetDetailDraft(event.currentTarget);
+      syncQuantityChangeTypeWarnings(event.currentTarget);
+      return;
+    }
+    if (["month", "roomId", "addedType", "removedType"].includes(name)) {
+      captureQuantitySheetDetailDraft(event.currentTarget);
+      if (["addedType", "removedType"].includes(name)) syncQuantityChangeTypeWarnings(event.currentTarget);
+      scheduleRender("quantity_sheet.detail.form_change");
+    }
+  });
   document.querySelector("#quantitySheetListSearch")?.addEventListener("input", (event) => {
     state.quantitySheetListSearch = event.target.value || "";
     scheduleRender("quantity_sheet.list.search");
   });
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
-  document.querySelector("#deleteQuantitySheet")?.addEventListener("click", deleteCurrentQuantitySheet);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
   document.querySelector("#addQuantitySheetPage")?.addEventListener("click", addQuantitySheetPage);
   bindIntakeRequiredNotice("#intakeBatchForm", "无法保存待接收批次");
@@ -7682,13 +7788,27 @@ function bindEvents() {
       scheduleRender("billing.source.loaded");
       return;
     }
-    const openQuantitySheetRow = event.target.closest("[data-open-quantity-sheet]");
-    if (openQuantitySheetRow && !event.target.closest("[data-select-quantity-sheet]")) {
+    const previewQuantitySheetButton = event.target.closest("[data-preview-quantity-sheet]");
+    if (previewQuantitySheetButton) {
       try {
-        await handleQuantitySheetSelect({ target: { value: openQuantitySheetRow.dataset.openQuantitySheet } });
+        await openQuantitySheetDetail(previewQuantitySheetButton.dataset.previewQuantitySheet, "preview");
       } catch (error) {
         reportSaveError(error);
       }
+      return;
+    }
+    const editQuantitySheetButton = event.target.closest("[data-edit-quantity-sheet]");
+    if (editQuantitySheetButton) {
+      try {
+        await openQuantitySheetDetail(editQuantitySheetButton.dataset.editQuantitySheet, "edit");
+      } catch (error) {
+        reportSaveError(error);
+      }
+      return;
+    }
+    const deleteQuantitySheetRowButton = event.target.closest("[data-delete-quantity-sheet-row]");
+    if (deleteQuantitySheetRowButton) {
+      deleteSingleQuantitySheet(deleteQuantitySheetRowButton.dataset.deleteQuantitySheetRow);
       return;
     }
     const intakeBatchFilterButton = event.target.closest("[data-intake-batch-filter]");
@@ -9366,11 +9486,54 @@ async function handleQuantitySheetSubmit(event) {
 }
 
 async function handleQuantitySheetSelect(event) {
-  const sheet = state.quantitySheets.find((item) => item.id === event.target.value);
+  await openQuantitySheetDetail(event.target.value, "preview");
+}
+
+async function openQuantitySheetDetail(sheetId, mode = "preview") {
+  const sheet = state.quantitySheets.find((item) => item.id === sheetId);
   state.selectedQuantitySheetId = sheet?.id || "";
   state.viewingQuantitySheetId = sheet?.id || "";
+  state.viewingQuantitySheetMode = mode === "edit" ? "edit" : "preview";
   await ensureQuantitySheetDetail(sheet);
-  scheduleRender("quantity_sheet.saved_select");
+  scheduleRender(`quantity_sheet.${state.viewingQuantitySheetMode}.open`);
+}
+
+function captureQuantitySheetDetailDraft(form) {
+  if (!form) return null;
+  const sheetId = form.dataset.sheetId || state.viewingQuantitySheetId || "";
+  const baseSheet = state.quantitySheets.find((item) => item.id === sheetId) || null;
+  if (!baseSheet) return null;
+  const draft = readQuantitySheetForm(form, { preserveInvalidDates: true, baseSheet });
+  upsertById(state.quantitySheets, draft);
+  rememberQuantitySheetDetail(draft);
+  return draft;
+}
+
+function autofillQuantitySheetDetailIacucFields(event) {
+  const form = event.target.form;
+  const match = findIacucInfo(event.target.value);
+  if (!form || !match) return;
+  if (form.elements.project) form.elements.project.value = match.project || "";
+  if (form.elements.pi) form.elements.pi.value = match.pi || "";
+  if (form.elements.owner) form.elements.owner.value = match.owner || "";
+  if (form.elements.funding) form.elements.funding.value = match.funding || "";
+  event.target.value = match.iacuc;
+  captureQuantitySheetDetailDraft(form);
+}
+
+async function handleQuantitySheetDetailSubmit(event) {
+  event.preventDefault();
+  try {
+    const form = event.currentTarget;
+    const draft = captureQuantitySheetDetailDraft(form);
+    if (!draft) throw new Error("当前数量统计表不存在");
+    const savedSheet = await saveQuantitySheetObject(draft, { updateDraft: false });
+    state.viewingQuantitySheetId = savedSheet.id;
+    showFlashNotice("保存成功", `数量统计表已保存：${[savedSheet.month, savedSheet.iacuc].filter(Boolean).join(" · ")}`);
+    scheduleRender("quantity_sheet.detail.submit");
+  } catch (error) {
+    reportSaveError(error);
+  }
 }
 
 function toggleQuantitySheetSelection(sheetId, checked) {
@@ -9395,6 +9558,7 @@ function toggleVisibleQuantitySheetSelection(checked) {
 
 function closeQuantitySheetDetail() {
   state.viewingQuantitySheetId = "";
+  state.viewingQuantitySheetMode = "preview";
   scheduleRender("quantity_sheet.detail.close");
 }
 
@@ -9404,32 +9568,6 @@ async function handleQuantitySheetFilterChange() {
   const iacuc = normalizeIacucNumber(state.quantitySheetDraft?.iacuc || "");
   state.billingMonth = month;
   state.billingIacuc = iacuc || state.billingIacuc;
-  paginationState.quantitySheets.month = month;
-  paginationState.quantitySheets.iacuc = iacuc;
-  if (remotePersistence) {
-    try {
-      await goToQuantitySheetsPage(1, paginationState.quantitySheets.limit);
-      const selected =
-        state.quantitySheets.find((sheet) => sheet.month === month && normalizeIacucNumber(sheet.iacuc) === iacuc) ||
-        state.quantitySheets[0] ||
-        null;
-      state.selectedQuantitySheetId = selected?.id || "";
-      const detailed = await ensureQuantitySheetDetail(selected);
-      state.quantitySheetDraft = detailed
-        ? hydrateQuantitySheetIacucInfo(detailed)
-        : hydrateQuantitySheetIacucInfo({ ...makeQuantitySheetDraft(month), iacuc });
-    } catch (error) {
-      reportSaveError(error);
-    }
-  } else {
-    const selected =
-      state.quantitySheets.find((sheet) => sheet.month === month && normalizeIacucNumber(sheet.iacuc) === iacuc) ||
-      null;
-    state.selectedQuantitySheetId = selected?.id || "";
-    state.quantitySheetDraft = selected
-      ? hydrateQuantitySheetIacucInfo(selected)
-      : hydrateQuantitySheetIacucInfo({ ...state.quantitySheetDraft, month, iacuc });
-  }
   state.billingPi = state.quantitySheetDraft.pi || state.billingPi;
   state.billingPrincipalType = principalTypeForPi(state.billingPi);
   state.freeCageAllowance = freeCageAllowanceForPi(state.billingPi);
@@ -9456,6 +9594,20 @@ function deleteCurrentQuantitySheet() {
     message: `确认删除 ${label}？相关结算流程和已导出的结算单不会自动删除。`,
     confirmLabel: "删除",
     payload: { ids: selectedSheets.map((sheet) => sheet.id), label },
+  });
+}
+
+function deleteSingleQuantitySheet(sheetId) {
+  const sheet = state.quantitySheets.find((item) => item.id === sheetId);
+  if (!sheet) return;
+  const label = [sheet.iacuc, sheet.month].filter(Boolean).join(" ");
+  openConfirmDialog({
+    type: "delete-quantity-sheet",
+    id: sheet.id,
+    title: "删除数量统计表",
+    message: `确认删除 ${label || "这张数量统计表"}？相关结算流程和已导出的结算单不会自动删除。`,
+    confirmLabel: "删除",
+    payload: { label },
   });
 }
 
@@ -9547,20 +9699,26 @@ async function saveQuantitySheetDraft() {
   const startedAt = performance.now();
   const form = document.querySelector("#quantitySheetForm");
   if (form) state.quantitySheetDraft = readQuantitySheetForm(form, { preserveInvalidDates: true });
-  if (state.quantitySheetDraft.invalidDateInputs?.length) {
-    throw new Error(`请先修正日期：${state.quantitySheetDraft.invalidDateInputs.join("、")}`);
+  const savedSheet = await saveQuantitySheetObject(state.quantitySheetDraft, { startedAt, updateDraft: true });
+  return savedSheet;
+}
+
+async function saveQuantitySheetObject(sheetDraft, { startedAt = performance.now(), updateDraft = false } = {}) {
+  state.quantitySheetDraft = updateDraft ? sheetDraft : state.quantitySheetDraft;
+  if (sheetDraft.invalidDateInputs?.length) {
+    throw new Error(`请先修正日期：${sheetDraft.invalidDateInputs.join("、")}`);
   }
-  const missingChangeTypes = quantitySheetMissingChangeTypeLabels(state.quantitySheetDraft);
+  const missingChangeTypes = quantitySheetMissingChangeTypeLabels(sheetDraft);
   if (missingChangeTypes.length) {
     syncQuantityChangeTypeWarnings();
     throw new Error(`请先选择新增/减少类型：${missingChangeTypes.join("、")}`);
   }
-  const sheet = hydrateQuantitySheetIacucInfo(state.quantitySheetDraft);
+  const sheet = hydrateQuantitySheetIacucInfo(sheetDraft);
   const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
   if (!remotePersistence) {
     upsertById(state.quantitySheets, sheet);
     state.selectedQuantitySheetId = sheet.id;
-    state.quantitySheetDraft = sheet;
+    if (updateDraft) state.quantitySheetDraft = sheet;
     return sheet;
   }
 
@@ -9587,11 +9745,11 @@ async function saveQuantitySheetDraft() {
   updateQuantitySheetListFromServer(savedSheet, existingSheet);
   affectedSheets.forEach((item) => updateQuantitySheetListFromServer(item));
   state.selectedQuantitySheetId = savedSheet.id;
-  state.quantitySheetDraft = savedSheet;
+  if (updateDraft) state.quantitySheetDraft = savedSheet;
   lazyDataState.quantitySheetsLoaded = true;
   lazyDataState.quantitySheetsLoading = false;
   logClientPerf("quantity_sheet.save", startedAt, { affected: affectedSheets.length, rows: savedSheet.rows?.length || 0 });
-  return state.quantitySheetDraft;
+  return savedSheet;
 }
 
 function handleIntakeBatchSelect(event) {
@@ -10113,7 +10271,7 @@ function formatQuantityDateInputValue(value) {
 }
 
 function readQuantitySheetForm(form, options = {}) {
-  const { preserveInvalidDates = false } = options;
+  const { preserveInvalidDates = false, baseSheet = state.quantitySheetDraft } = options;
   const data = new FormData(form);
   const room = state.rooms.find((item) => item.id === data.get("roomId"));
   const month = data.get("month") || state.billingMonth || today.slice(0, 7);
@@ -10138,7 +10296,7 @@ function readQuantitySheetForm(form, options = {}) {
       return a.rowIndex - b.rowIndex;
     })
     .map(({ rowCells, rowIndex, rawDateInput, date }) => {
-      const previous = state.quantitySheetDraft?.rows?.[rowIndex] || {};
+      const previous = baseSheet?.rows?.[rowIndex] || {};
       const added = parseQuantityChangeCell(rowCells.added?.querySelector("[name='addedText']")?.value || "", rowCells.added?.querySelector("[name='addedType']")?.value || "", "added");
       const removed = parseQuantityChangeCell(rowCells.removed?.querySelector("[name='removedText']")?.value || "", rowCells.removed?.querySelector("[name='removedType']")?.value || "", "removed");
       const animalInput = rowCells.animal?.querySelector("[name='animalCount']");
@@ -10225,7 +10383,7 @@ function readQuantitySheetForm(form, options = {}) {
     .filter(Boolean);
 
   return normalizeQuantitySheetDraft({
-    id: state.quantitySheetDraft?.id || crypto.randomUUID(),
+    id: baseSheet?.id || crypto.randomUUID(),
     month,
     roomId: data.get("roomId") || "",
     roomName: data.get("roomName")?.trim() || room?.name || "",
@@ -10239,7 +10397,7 @@ function readQuantitySheetForm(form, options = {}) {
     billingUnit: data.get("billingUnit") || billingProfileForRoom(room || {}).unit,
     initialAnimalCount: numericOrZero(rows[0]?.animalCount),
     initialCageCount: numericOrZero(rows[0]?.cageCount),
-    pageCount: quantitySheetPageCount(state.quantitySheetDraft),
+    pageCount: quantitySheetPageCount(baseSheet),
     rows,
     invalidDateInputs,
   });
