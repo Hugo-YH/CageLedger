@@ -1967,9 +1967,6 @@ h3 {
 }
 
 .quantity-template-page-title {
-  position: sticky;
-  top: 0;
-  z-index: 6;
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -1987,18 +1984,27 @@ h3 {
   min-width: 1180px;
 }
 
+.quantity-entry-wrap .table-wrap {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .quantity-template-table {
   table-layout: fixed;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .quantity-template-table th {
   position: sticky;
-  top: 28px;
-  z-index: 5;
+  top: 0;
+  z-index: 8;
   text-align: center;
   white-space: normal;
   background: var(--surface-soft);
+  box-shadow: 0 1px 0 var(--line), 0 8px 14px rgba(14, 37, 39, 0.08);
 }
 
 .quantity-table-head-label {
