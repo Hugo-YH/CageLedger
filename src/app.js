@@ -14,6 +14,7 @@ import {
   API_LOGOUT_URL,
   API_PRINCIPAL_IDENTITIES_URL,
   API_PUBLIC_CAGE_CARD_URL,
+  API_QUANTITY_SHEET_ROOMS_URL,
   API_QUANTITY_SHEETS_URL,
   API_SYSTEM_INFO_URL,
   API_SYSTEM_UPDATE_URL,
@@ -34,6 +35,17 @@ import {
 import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksUrl as buildPlacementTasksApiUrl } from "./api/intake.js";
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.5.12c",
+    releasedAt: "2026-06-04 16:53",
+    title: "数量统计表录入易用性优化",
+    items: [
+      "数量统计表录入区改为表格内部滚动，标题、项目信息和保存按钮在连续录入时保持可见",
+      "保存数量统计表后自动选中并高亮已保存列表对应行，成功提示显示月份和 IACUC 编号",
+      "新增/减少数量缺类型、转入/转出缺伦理号时增加行级提示和保存前问题汇总",
+      "修复房间管理员无法在数量统计表录入中选择和保存未授权房间的问题，便于多人跨房间集中录入",
+    ],
+  },
   {
     version: "0.5.12b",
     releasedAt: "2026-06-04 11:48",
@@ -797,7 +809,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.12b",
+  version: "0.5.12c",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -812,6 +824,7 @@ let state = { rooms: [] };
 let batchSlotDrag = null;
 let suppressNextSlotClick = false;
 let flashNoticeTimer = null;
+let quantitySavedHighlightTimer = null;
 let renderScheduled = false;
 let renderFrameId = 0;
 let persistScheduled = false;
@@ -822,6 +835,8 @@ const lazyDataState = {
   intakeBatchesLoading: false,
   quantitySheetsLoaded: false,
   quantitySheetsLoading: false,
+  quantitySheetRoomsLoaded: false,
+  quantitySheetRoomsLoading: false,
   reimbursementRecordsLoaded: false,
   reimbursementRecordsLoading: false,
   billingWorkflowsLoaded: false,
@@ -1378,9 +1393,11 @@ const seedData = {
   selectedQuantitySheetIds: [],
   viewingQuantitySheetId: "",
   viewingQuantitySheetMode: "preview",
+  recentSavedQuantitySheetId: "",
   quantitySheetListSearch: "",
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
+  quantitySheetRooms: [],
   selectedIntakeBatchId: "",
   selectedIntakeBatchIds: [],
   selectedPlacementTaskId: "",
@@ -1641,6 +1658,8 @@ async function loadPersistedState() {
     lazyDataState.intakeBatchesLoading = false;
     lazyDataState.quantitySheetsLoaded = false;
     lazyDataState.quantitySheetsLoading = false;
+    lazyDataState.quantitySheetRoomsLoaded = false;
+    lazyDataState.quantitySheetRoomsLoading = false;
     lazyDataState.reimbursementRecordsLoaded = false;
     lazyDataState.reimbursementRecordsLoading = false;
     lazyDataState.billingWorkflowsLoaded = false;
@@ -1702,8 +1721,10 @@ async function loadPersistedState() {
       invalidateStateIndexCache();
       lazyDataState.intakeBatchesLoaded = false;
       lazyDataState.intakeBatchesLoading = false;
-      lazyDataState.quantitySheetsLoaded = false;
-      lazyDataState.quantitySheetsLoading = false;
+    lazyDataState.quantitySheetsLoaded = false;
+    lazyDataState.quantitySheetsLoading = false;
+    lazyDataState.quantitySheetRoomsLoaded = false;
+    lazyDataState.quantitySheetRoomsLoading = false;
       lazyDataState.reimbursementRecordsLoaded = false;
       lazyDataState.reimbursementRecordsLoading = false;
       lazyDataState.billingWorkflowsLoaded = false;
@@ -2356,6 +2377,38 @@ async function loadQuantitySheets(options = {}) {
   return state.quantitySheets;
 }
 
+async function loadQuantitySheetRooms() {
+  if (!remotePersistence) {
+    state.quantitySheetRooms = [...state.rooms];
+    lazyDataState.quantitySheetRoomsLoaded = true;
+    lazyDataState.quantitySheetRoomsLoading = false;
+    return state.quantitySheetRooms;
+  }
+  if (lazyDataState.quantitySheetRoomsLoading) return state.quantitySheetRooms;
+  lazyDataState.quantitySheetRoomsLoading = true;
+  const response = await fetch(API_QUANTITY_SHEET_ROOMS_URL, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    lazyDataState.quantitySheetRoomsLoading = false;
+    currentUser = null;
+    scheduleRender("auth.expired");
+    throw new Error("请先登录");
+  }
+  if (!response.ok) {
+    lazyDataState.quantitySheetRoomsLoading = false;
+    throw new Error(payload.error || "加载数量统计表房间列表失败");
+  }
+  state.quantitySheetRooms = Array.isArray(payload.items) ? payload.items : [];
+  lazyDataState.quantitySheetRoomsLoaded = true;
+  lazyDataState.quantitySheetRoomsLoading = false;
+  return state.quantitySheetRooms;
+}
+
+function quantitySheetSelectableRooms() {
+  const rooms = state.quantitySheetRooms?.length ? state.quantitySheetRooms : state.rooms;
+  return [...rooms].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
+}
+
 async function refreshQuantitySheet(sheetId) {
   if (!remotePersistence || !sheetId) return null;
   const response = await fetch(`${API_QUANTITY_SHEETS_URL}/${encodeURIComponent(sheetId)}`, { cache: "no-store" });
@@ -2520,6 +2573,9 @@ async function ensureViewDataLoaded(view) {
   }
   if (view === "billing" && !lazyDataState.quantitySheetsLoaded && !lazyDataState.quantitySheetsLoading) {
     tasks.push(loadQuantitySheets({ offset: 0 }));
+  }
+  if (view === "billing" && !lazyDataState.quantitySheetRoomsLoaded && !lazyDataState.quantitySheetRoomsLoading) {
+    tasks.push(loadQuantitySheetRooms());
   }
   if (view === "workflow-center" && !lazyDataState.reimbursementRecordsLoaded && !lazyDataState.reimbursementRecordsLoading) {
     tasks.push(
@@ -5831,7 +5887,7 @@ function renderQuantitySheetBillingView() {
   const managerValue = draft.manager || currentUser?.displayName || "";
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
-  const quantityRooms = [...state.rooms].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
+  const quantityRooms = quantitySheetSelectableRooms();
 
   return `
     <section class="billing-layout quantity-billing-layout">
@@ -5999,7 +6055,7 @@ function renderSavedQuantitySheetEditor(sheet) {
   if (!sheet) {
     return "";
   }
-  const quantityRooms = [...state.rooms].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
+  const quantityRooms = quantitySheetSelectableRooms();
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(sheet));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
   return `
@@ -6086,8 +6142,9 @@ function filterSavedQuantitySheets(items, keyword) {
 
 function renderSavedQuantitySheetRow(sheet, selectedIds) {
   const isActive = selectedIds.has(sheet.id);
+  const isRecent = sheet.id === state.recentSavedQuantitySheetId;
   return `
-    <tr class="${isActive ? "selected-row" : ""}">
+    <tr class="${[isActive ? "selected-row" : "", isRecent ? "recent-saved-row" : ""].filter(Boolean).join(" ")}" data-quantity-sheet-row="${escapeAttr(sheet.id)}">
       <td class="quantity-select-col"><input type="checkbox" data-select-quantity-sheet="${escapeAttr(sheet.id)}" ${isActive ? "checked" : ""} /></td>
       <td>${escapeText(sheet.month || "-")}</td>
       <td>${escapeText(sheet.iacuc || "-")}</td>
@@ -6109,6 +6166,7 @@ function renderSavedQuantitySheetRowsHtml(filteredItems, selectedIds, quantityLo
     itemsLength,
     filteredItems.length,
     selectedIdSignature([...selectedIds]),
+    state.recentSavedQuantitySheetId || "",
     workflowDetailListKey(filteredItems, ["id", "month", "iacuc", "roomId", "roomName", "pi", "updatedAt"]),
   ].join("::");
   return cachedListSection("quantity_sheet_rows", key, () => {
@@ -6446,8 +6504,12 @@ function renderQuantitySheetCalendarRows(entries) {
   return Array.from({ length: split }, (_, index) => {
     const left = entries[index] || null;
     const right = entries[index + split] || null;
+    const classes = [
+      quantitySheetEntryHasInputIssues(left) ? "quantity-row-warning-left" : "",
+      quantitySheetEntryHasInputIssues(right) ? "quantity-row-warning-right" : "",
+    ].filter(Boolean);
     return `
-      <tr>
+      <tr class="${classes.join(" ")}">
         ${renderQuantitySheetCalendarCell(left)}
         ${renderQuantitySheetCalendarCell(right)}
       </tr>
@@ -6489,16 +6551,35 @@ function renderQuantityChangeEditor(kind, row, value) {
   const options = kind === "added" ? ["", "购入", "转入", "分笼"] : ["", "取材", "死亡", "转出"];
   const count = numericOrZero(row[kind === "added" ? "addedCount" : "removedCount"]);
   const missingType = count > 0 && !type;
+  const missingTransferIacuc = count > 0 && showTransfer && !normalizeIacucNumber(transferValue);
+  const editorClasses = ["quantity-change-editor", missingType ? "missing-type" : "", missingTransferIacuc ? "missing-transfer" : ""].filter(Boolean).join(" ");
   return `
-    <div class="quantity-change-editor">
+    <div class="${editorClasses}">
       <input name="${kind}Text" value="${escapeAttr(value)}" />
       <select name="${kind}Type" title="变更类型">
         ${options.map((option) => `<option value="${option}" ${type === option ? "selected" : ""}>${option || "类型"}</option>`).join("")}
       </select>
       ${showTransfer ? renderIacucLookupInput(transferName, transferValue, { placeholder: kind === "added" ? "来源伦理号" : "目标伦理号", compact: true }) : ""}
       <small class="quantity-change-type-warning" ${missingType ? "" : "hidden"}>请选择类型</small>
+      <small class="quantity-transfer-warning" ${missingTransferIacuc ? "" : "hidden"}>请填写伦理号</small>
     </div>
   `;
+}
+
+function quantitySheetEntryHasInputIssues(entry) {
+  if (!entry?.row) return false;
+  return quantitySheetRowInputIssues(entry.row).length > 0;
+}
+
+function quantitySheetRowInputIssues(row) {
+  const issues = [];
+  const addedCount = numericOrZero(row?.addedCount);
+  const removedCount = numericOrZero(row?.removedCount);
+  if (addedCount > 0 && !row?.addedType) issues.push("新增请选择类型");
+  if (removedCount > 0 && !row?.removedType) issues.push("减少请选择类型");
+  if (addedCount > 0 && row?.addedType === "转入" && !normalizeIacucNumber(row?.transferInFromIacuc || "")) issues.push("转入请填写伦理号");
+  if (removedCount > 0 && row?.removedType === "转出" && !normalizeIacucNumber(row?.transferOutToIacuc || "")) issues.push("转出请填写伦理号");
+  return issues;
 }
 
 function buildQuantitySheetCalendarRows(sheet) {
@@ -7523,7 +7604,7 @@ function bindEvents() {
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("submit", handleQuantitySheetDetailSubmit);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
-    if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
       syncQuantityChangeTypeWarnings(event.currentTarget);
     }
@@ -8048,7 +8129,7 @@ function bindEvents() {
   bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
   document.querySelector("#quantitySheetForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
-    if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDraft();
       syncQuantityChangeTypeWarnings();
     }
@@ -8067,7 +8148,7 @@ function bindEvents() {
       captureQuantitySheetDraft();
       return;
     }
-    if (["addedText", "removedText", "animalCount", "cageCount", "handler"].includes(name)) {
+    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount", "handler"].includes(name)) {
       captureQuantitySheetDraft();
       syncQuantityChangeTypeWarnings();
       return;
@@ -8207,10 +8288,24 @@ function syncQuantityChangeTypeWarnings(scope = document) {
     const textInput = editor.querySelector("input[name='addedText'], input[name='removedText']");
     const typeSelect = editor.querySelector("select[name='addedType'], select[name='removedType']");
     const warning = editor.querySelector(".quantity-change-type-warning");
-    const hasCount = numericOrZero(parseQuantityChangeCell(textInput?.value || "", "", typeSelect?.name === "addedType" ? "added" : "removed").count) > 0;
+    const transferInput = editor.querySelector("input[name='transferInFromIacuc'], input[name='transferOutToIacuc']");
+    const transferWarning = editor.querySelector(".quantity-transfer-warning");
+    const kind = typeSelect?.name === "addedType" ? "added" : "removed";
+    const hasCount = numericOrZero(parseQuantityChangeCell(textInput?.value || "", "", kind).count) > 0;
     const missingType = hasCount && !typeSelect?.value;
+    const missingTransfer = hasCount && ((kind === "added" && typeSelect?.value === "转入") || (kind === "removed" && typeSelect?.value === "转出")) && !normalizeIacucNumber(transferInput?.value || "");
     editor.classList.toggle("missing-type", missingType);
+    editor.classList.toggle("missing-transfer", missingTransfer);
     if (warning) warning.hidden = !missingType;
+    if (transferWarning) transferWarning.hidden = !missingTransfer;
+    const row = editor.closest("tr");
+    const cell = editor.closest("td");
+    if (row && cell) {
+      const rowClass = cell.cellIndex < 5 ? "quantity-row-warning-left" : "quantity-row-warning-right";
+      const sideCells = [...row.cells].filter((item) => (cell.cellIndex < 5 ? item.cellIndex < 5 : item.cellIndex >= 5));
+      const hasSideIssue = sideCells.some((sideCell) => sideCell.querySelector(".quantity-change-editor.missing-type, .quantity-change-editor.missing-transfer"));
+      row.classList.toggle(rowClass, hasSideIssue);
+    }
   });
 }
 
@@ -9488,11 +9583,36 @@ async function handleQuantitySheetSubmit(event) {
   try {
     const sheet = await saveQuantitySheetDraft();
     pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
+    markSavedQuantitySheetForFeedback(sheet.id);
     showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
     scheduleRender("quantity_sheet.submit");
+    scrollSavedQuantitySheetIntoView(sheet.id);
   } catch (error) {
     reportSaveError(error);
   }
+}
+
+function markSavedQuantitySheetForFeedback(sheetId) {
+  if (!sheetId) return;
+  state.selectedQuantitySheetId = sheetId;
+  state.selectedQuantitySheetIds = [sheetId];
+  state.recentSavedQuantitySheetId = sheetId;
+  if (quantitySavedHighlightTimer) clearTimeout(quantitySavedHighlightTimer);
+  quantitySavedHighlightTimer = window.setTimeout(() => {
+    if (state.recentSavedQuantitySheetId === sheetId) {
+      state.recentSavedQuantitySheetId = "";
+      scheduleRender("quantity_sheet.highlight.clear");
+    }
+    quantitySavedHighlightTimer = null;
+  }, 4200);
+}
+
+function scrollSavedQuantitySheetIntoView(sheetId) {
+  if (!sheetId) return;
+  window.setTimeout(() => {
+    const row = document.querySelector(`[data-quantity-sheet-row="${cssEscape(sheetId)}"]`);
+    row?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 120);
 }
 
 async function handleQuantitySheetSelect(event) {
@@ -9539,8 +9659,10 @@ async function handleQuantitySheetDetailSubmit(event) {
     if (!draft) throw new Error("当前数量统计表不存在");
     const savedSheet = await saveQuantitySheetObject(draft, { updateDraft: false });
     state.viewingQuantitySheetId = savedSheet.id;
+    markSavedQuantitySheetForFeedback(savedSheet.id);
     showFlashNotice("保存成功", `数量统计表已保存：${[savedSheet.month, savedSheet.iacuc].filter(Boolean).join(" · ")}`);
     scheduleRender("quantity_sheet.detail.submit");
+    scrollSavedQuantitySheetIntoView(savedSheet.id);
   } catch (error) {
     reportSaveError(error);
   }
@@ -9718,10 +9840,10 @@ async function saveQuantitySheetObject(sheetDraft, { startedAt = performance.now
   if (sheetDraft.invalidDateInputs?.length) {
     throw new Error(`请先修正日期：${sheetDraft.invalidDateInputs.join("、")}`);
   }
-  const missingChangeTypes = quantitySheetMissingChangeTypeLabels(sheetDraft);
-  if (missingChangeTypes.length) {
+  const inputIssues = quantitySheetInputIssueLabels(sheetDraft);
+  if (inputIssues.length) {
     syncQuantityChangeTypeWarnings();
-    throw new Error(`请先选择新增/减少类型：${missingChangeTypes.join("、")}`);
+    throw new Error(`请先补全数量统计表：${inputIssues.slice(0, 5).join("、")}${inputIssues.length > 5 ? " 等" : ""}`);
   }
   const sheet = hydrateQuantitySheetIacucInfo(sheetDraft);
   const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
@@ -10421,6 +10543,16 @@ function quantitySheetMissingChangeTypeLabels(sheet) {
       if (numericOrZero(row.addedCount) > 0 && !row.addedType) parts.push("新增");
       if (numericOrZero(row.removedCount) > 0 && !row.removedType) parts.push("减少");
       return `${row.rawDateInput || row.date || "未填日期"} ${parts.join("、")}`;
+    });
+}
+
+function quantitySheetInputIssueLabels(sheet) {
+  return (sheet?.rows || [])
+    .flatMap((row) => {
+      const issues = quantitySheetRowInputIssues(row);
+      if (!issues.length) return [];
+      const rowLabel = row.rawDateInput || row.date || "未填日期";
+      return issues.map((issue) => `${rowLabel} ${issue}`);
     });
 }
 

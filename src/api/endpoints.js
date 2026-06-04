@@ -16,6 +16,7 @@ export const API_REIMBURSEMENT_RECORDS_URL = "/api/reimbursement-records";
 export const API_REIMBURSEMENT_IMPORT_MONTHLY_URL = "/api/reimbursement-records/import-monthly";
 export const API_REIMBURSEMENT_IMPORT_ARREARS_URL = "/api/reimbursement-records/import-arrears";
 export const API_QUANTITY_SHEETS_URL = "/api/quantity-sheets";
+export const API_QUANTITY_SHEET_ROOMS_URL = "/api/quantity-sheet-rooms";
 export const API_INFRASTRUCTURE_URL = "/api/infrastructure";
 export const API_PUBLIC_CAGE_CARD_URL = "/api/public/cage-card";
 

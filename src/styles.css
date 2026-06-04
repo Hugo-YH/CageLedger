@@ -1942,6 +1942,14 @@ h3 {
 
 .quantity-entry-wrap {
   margin-bottom: 12px;
+  min-height: 360px;
+  max-height: min(64vh, 720px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0 0 8px;
+  scrollbar-gutter: stable;
 }
 
 .quantity-page-toolbar {
@@ -1955,13 +1963,17 @@ h3 {
 }
 
 .quantity-template-page {
-  margin-bottom: 18px;
+  margin: 0 0 18px;
 }
 
 .quantity-template-page-title {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   display: inline-flex;
   align-items: center;
   min-height: 28px;
+  margin: 0 0 0 0;
   padding: 3px 10px;
   border: 1px solid var(--line);
   border-bottom: 0;
@@ -1981,8 +1993,12 @@ h3 {
 }
 
 .quantity-template-table th {
+  position: sticky;
+  top: 28px;
+  z-index: 5;
   text-align: center;
   white-space: normal;
+  background: var(--surface-soft);
 }
 
 .quantity-table-head-label {
@@ -2017,6 +2033,16 @@ h3 {
 .quantity-template-table th:nth-child(n + 6),
 .quantity-template-table td:nth-child(n + 6) {
   background: #f7faf9;
+}
+
+.quantity-template-table tr.quantity-row-warning-left td:nth-child(-n + 5),
+.quantity-template-table tr.quantity-row-warning-right td:nth-child(n + 6) {
+  background: #fff8eb;
+}
+
+.quantity-template-table tr.quantity-row-warning-left td:nth-child(1),
+.quantity-template-table tr.quantity-row-warning-right td:nth-child(6) {
+  box-shadow: inset 3px 0 0 #d69e2e;
 }
 
 .quantity-template-table th:nth-child(6),
@@ -2061,14 +2087,16 @@ h3 {
   grid-column: 1 / -1;
 }
 
-.quantity-change-type-warning {
+.quantity-change-type-warning,
+.quantity-transfer-warning {
   grid-column: 1 / -1;
   color: #a85d00;
   font-size: 10px;
   line-height: 1.2;
 }
 
-.quantity-change-editor.missing-type select {
+.quantity-change-editor.missing-type select,
+.quantity-change-editor.missing-transfer .iacuc-lookup input {
   border-color: #d69e2e;
   background: #fffdf7;
 }
@@ -2155,6 +2183,16 @@ h3 {
 
 .quantity-saved-list tbody tr:hover {
   background: rgba(15, 118, 110, 0.08);
+}
+
+.quantity-saved-list tbody tr.recent-saved-row {
+  background: #fff8df;
+  box-shadow: inset 4px 0 0 #d69e2e;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.quantity-saved-list tbody tr.recent-saved-row:hover {
+  background: #fff3cc;
 }
 
 .quantity-sheet-detail-modal {

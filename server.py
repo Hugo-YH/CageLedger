@@ -3889,12 +3889,9 @@ def normalize_sheet_date(value, month):
 
 
 def validate_quantity_sheet_permission(actor, sheet):
-    if actor["role"] == "admin":
+    if actor:
         return
-    room_id = sheet.get("roomId", "")
-    allowed_rooms = set(actor.get("roomIds", []))
-    if room_id and room_id not in allowed_rooms:
-        raise PermissionError("不能维护未授权饲养间的数量统计表")
+    raise PermissionError("请先登录")
 
 
 def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
@@ -5886,6 +5883,13 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             with connect_db() as conn:
                 self.send_json(list_quantity_sheets_page(conn, self.list_filters()))
+            return
+        if path == "/api/quantity-sheet-rooms":
+            if not self.require_user():
+                return
+            with connect_db() as conn:
+                rooms = read_payloads(conn, "rooms", "rowid")
+            self.send_json({"items": rooms})
             return
         sheet_id = self.quantity_sheet_route(path)
         if sheet_id:
