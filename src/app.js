@@ -35,6 +35,16 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.12b",
+    releasedAt: "2026-06-04 11:48",
+    title: "数量统计表已保存列表优化",
+    items: [
+      "已保存数量统计表列表与录入区月份解耦，切换录入月份不再影响已保存列表",
+      "已保存数量统计表每行新增预览、编辑和删除操作，预览和编辑弹窗加宽显示",
+      "修复已保存数量统计表勾选后导出数量统计表 PDF、导出结算单 PDF 和发起结算流程按钮未启用的问题",
+    ],
+  },
+  {
     version: "0.5.12a",
     releasedAt: "2026-06-03 16:46",
     title: "检疫笼卡版式微调",
@@ -787,7 +797,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.12a",
+  version: "0.5.12b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
