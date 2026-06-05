@@ -36,6 +36,16 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.13",
+    releasedAt: "2026-06-05 10:58",
+    title: "前后端版本一致性检查",
+    items: [
+      "系统启动时自动读取后端版本并与当前前端页面版本比较，识别浏览器缓存导致的前端落后情况",
+      "前端版本落后时先尝试自动刷新一次，仍落后时显示固定提示条和站内通知",
+      "版本落后提示明确引导用户点击左侧导航栏账号区的刷新按钮，并高亮刷新入口",
+    ],
+  },
+  {
     version: "0.5.12d",
     releasedAt: "2026-06-05 10:35",
     title: "数量统计表连续录入优化",
@@ -820,13 +830,20 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.12d",
+  version: "0.5.13",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
   contactEmail: "info@cellnucle.us",
   license: "Apache-2.0",
   copyright: "© 2026 中山大学中山眼科中心 实验动物中心. Licensed under Apache-2.0.",
+};
+let clientVersionStatus = {
+  checked: false,
+  stale: false,
+  needsManualRefresh: false,
+  clientVersion: systemInfo.version,
+  serverVersion: "",
 };
 let remotePersistence = false;
 let currentUser = null;
@@ -3492,6 +3509,7 @@ function render() {
       ${renderSidebar()}
       ${renderSidebarHandle()}
       ${renderFlashNotice()}
+      ${renderClientVersionWarning()}
       <main class="workspace">
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
@@ -3549,6 +3567,18 @@ function renderFlashNotice() {
     <div class="flash-notice ${state.flashNotice.type || "success"}" role="status" aria-live="polite">
       <strong>${escapeText(state.flashNotice.title || "已完成")}</strong>
       <span>${escapeText(state.flashNotice.message)}</span>
+    </div>
+  `;
+}
+
+function renderClientVersionWarning() {
+  if (!clientVersionStatus.stale || !clientVersionStatus.needsManualRefresh) return "";
+  const clientVersion = clientVersionStatus.clientVersion ? `v${clientVersionStatus.clientVersion}` : "未知";
+  const serverVersion = clientVersionStatus.serverVersion ? `v${clientVersionStatus.serverVersion}` : "未知";
+  return `
+    <div class="client-version-warning" role="status" aria-live="polite">
+      <strong>前端版本需要刷新</strong>
+      <span>当前页面 ${escapeText(clientVersion)}，后端 ${escapeText(serverVersion)}。请点击左侧导航栏账号区的“刷新”按钮获取最新前端。</span>
     </div>
   `;
 }
@@ -3866,6 +3896,7 @@ function formatMonthDisplay(value) {
 }
 
 function renderSidebarAccount() {
+  const refreshButtonClass = ["secondary", "sidebar-cache-button", clientVersionStatus.stale ? "needs-refresh" : ""].filter(Boolean).join(" ");
   if (!currentUser) {
     return `
       <div class="sidebar-account">
@@ -3883,7 +3914,7 @@ function renderSidebarAccount() {
       <strong title="${escapeAttr(currentUser.displayName)}">${escapeText(currentUser.displayName)}</strong>
       <small>${currentUser.role === "admin" ? "管理员" : "房间管理员"} · ${state.rooms.length} 个饲养间</small>
       <div class="sidebar-account-actions">
-        <button id="clearClientCache" class="secondary sidebar-cache-button" type="button" title="清理本地缓存并刷新" aria-label="清理本地缓存并刷新">
+        <button id="clearClientCache" class="${escapeAttr(refreshButtonClass)}" type="button" title="清理本地缓存并刷新" aria-label="清理本地缓存并刷新">
           ${iconSvg("refresh")}
           <span>刷新</span>
         </button>
@@ -8562,6 +8593,7 @@ async function login(event) {
       return;
     }
     currentUser = payload.user;
+    await loadSystemInfo();
     await Promise.all([loadIacucIndexStatus(), loadPersistedState()]);
     try {
       await ensureViewDataLoaded(state.activeView);
@@ -8574,6 +8606,7 @@ async function login(event) {
       };
     }
     render();
+    showClientVersionRefreshNotice();
   } catch {
     if (error) error.textContent = "无法连接后端服务";
   }
@@ -14255,6 +14288,7 @@ async function initialize() {
   }
   render();
   showPendingCacheResetNotice();
+  showClientVersionRefreshNotice();
 }
 
 async function applyStatementDeepLink() {
@@ -14319,25 +14353,43 @@ function statementIdFromDocumentNumber(value) {
 
 async function loadSystemInfo() {
   try {
-    const bundledVersion = systemInfo.version || "";
+    const bundledVersion = clientVersionStatus.clientVersion || systemInfo.version || "";
     const response = await fetch(API_SYSTEM_INFO_URL, { cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
     systemInfo = { ...systemInfo, ...payload };
-    refreshStaleClientVersion(bundledVersion, payload.version);
+    refreshStaleClientVersion(bundledVersion, payload.version || "");
   } catch {
     // Keep the bundled metadata fallback for static or offline runs.
   }
 }
 
 function refreshStaleClientVersion(clientVersion, serverVersion) {
-  if (!clientVersion || !serverVersion || clientVersion === serverVersion || typeof window === "undefined") return;
+  clientVersionStatus = {
+    checked: Boolean(clientVersion && serverVersion),
+    stale: false,
+    needsManualRefresh: false,
+    clientVersion,
+    serverVersion,
+  };
+  if (!clientVersion || !serverVersion || typeof window === "undefined") return;
+  const clientIsBehind = compareAppVersions(clientVersion, serverVersion) < 0;
+  clientVersionStatus.stale = clientIsBehind;
+  if (!clientIsBehind) {
+    try {
+      sessionStorage.removeItem(VERSION_REFRESH_KEY);
+    } catch {
+      // Ignore session cleanup failures.
+    }
+    return;
+  }
   const refreshToken = `${serverVersion}:${clientVersion}`;
   if (sessionStorage.getItem(VERSION_REFRESH_KEY) === refreshToken) {
+    clientVersionStatus.needsManualRefresh = true;
     state.flashNotice = {
       type: "warning",
       title: "检测到新版本",
-      message: `服务器版本为 v${serverVersion}，当前页面版本为 v${clientVersion}。请刷新页面获取最新功能。`,
+      message: `后端版本为 v${serverVersion}，当前前端页面为 v${clientVersion}。请点击左侧导航栏账号区的“刷新”按钮获取最新前端。`,
     };
     return;
   }
@@ -14345,6 +14397,27 @@ function refreshStaleClientVersion(clientVersion, serverVersion) {
   const url = new URL(window.location.href);
   url.searchParams.set("_clv", `${serverVersion}-${Date.now()}`);
   window.location.replace(url.toString());
+}
+
+function compareAppVersions(left, right) {
+  const leftParts = versionParts(left);
+  const rightParts = versionParts(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart === rightPart) continue;
+    if (typeof leftPart === "number" && typeof rightPart === "number") return leftPart - rightPart;
+    return String(leftPart).localeCompare(String(rightPart), "en", { numeric: true });
+  }
+  return 0;
+}
+
+function versionParts(value) {
+  return String(value || "")
+    .replace(/^v/i, "")
+    .match(/\d+|[a-z]+/gi)
+    ?.map((part) => (/^\d+$/.test(part) ? Number(part) : part.toLowerCase())) || [];
 }
 
 function showPendingCacheResetNotice() {
@@ -14358,6 +14431,15 @@ function showPendingCacheResetNotice() {
     sessionStorage.removeItem(CACHE_RESET_NOTICE_KEY);
     showFlashNotice("清理完成", "本地缓存已清理，页面已刷新。");
   }
+}
+
+function showClientVersionRefreshNotice() {
+  if (!clientVersionStatus.stale || !clientVersionStatus.needsManualRefresh) return;
+  showFlashNotice(
+    "检测到新版本",
+    `后端版本为 v${clientVersionStatus.serverVersion}，当前前端页面为 v${clientVersionStatus.clientVersion}。请点击左侧导航栏账号区的“刷新”按钮获取最新前端。`,
+    "warning",
+  );
 }
 
 async function loadIacucIndexStatus() {
