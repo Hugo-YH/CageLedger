@@ -36,6 +36,17 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.12d",
+    releasedAt: "2026-06-05 10:35",
+    title: "数量统计表连续录入优化",
+    items: [
+      "数量统计表录入支持当前行和当前半区高亮，连续录入时更容易定位正在填写的位置",
+      "优化日期、数量、类型和转入转出伦理号的键盘录入流，减少按 Tab 后失焦和整表刷新",
+      "选择转入或转出后自动聚焦对应伦理号输入框，保存前缺类型、缺伦理号或日期错误时自动定位问题单元格",
+      "数量统计表日期提示收敛为只填写当月日期，表格列宽微调以完整显示日期并压缩新增/减少数字输入宽度",
+    ],
+  },
+  {
     version: "0.5.12c",
     releasedAt: "2026-06-04 16:53",
     title: "数量统计表录入易用性优化",
@@ -755,7 +766,7 @@ const HELP_TEXTS = {
   billingGuide: "动态笼位图适合日常完整维护的房间；数量统计表适合纸质台账和人工月度核对。",
   cageMapBilling: "按每天实际在养数量计算，已预约默认不计费，适合完整维护中的房间。",
   quantityBilling: "录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。",
-  quantityDateFormat: "日期支持输入日号、月日、完整日期，例如 15、0515、20260515、2026-05-15、2026/05/15。",
+  quantityDateFormat: "只需填写当月日期，推荐输入日号，例如 15；系统会按当前统计月份自动归一。",
   quantityPreview: "预览按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。",
   workflow: "按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号。",
   reimbursementLedger: "按每月每项目负责人维护结算与报销台账，自动承接结算金额并滚动累计未缴金额。",
@@ -809,7 +820,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.12c",
+  version: "0.5.12d",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -825,6 +836,9 @@ let batchSlotDrag = null;
 let suppressNextSlotClick = false;
 let flashNoticeTimer = null;
 let quantitySavedHighlightTimer = null;
+let quantityIssueAttentionTimer = null;
+let pendingQuantityProblemFocusTimer = null;
+let pendingQuantityFocusTarget = null;
 let renderScheduled = false;
 let renderFrameId = 0;
 let persistScheduled = false;
@@ -6529,15 +6543,15 @@ function renderQuantitySheetCalendarCell(entry) {
   const cageValue = cageManual ? row.cageCount : isInitialRow ? 0 : entry.cageCount || "";
   const dateInputValue = isInitialRow ? formatQuantityDateInputValue(entry.date || "") : row.rawDateInput || formatQuantityDateInputValue(entry.date || "");
   return `
-    <td class="quantity-date-cell" data-quantity-row="${escapeAttr(entry.index)}">
+    <td class="quantity-date-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="date">
       <input name="rowDate" type="text" inputmode="text" autocomplete="off" placeholder="" value="${escapeAttr(dateInputValue)}" ${isInitialRow ? "readonly" : ""} />
     </td>
-    <td>${renderQuantityChangeEditor("added", row, addedText)}</td>
-    <td>${renderQuantityChangeEditor("removed", row, removedText)}</td>
-    <td>
+    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="added">${renderQuantityChangeEditor("added", row, addedText)}</td>
+    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="removed">${renderQuantityChangeEditor("removed", row, removedText)}</td>
+    <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="animal">
       <input class="quantity-balance-input" name="animalCount" type="number" min="0" value="${escapeAttr(animalValue)}" data-auto-value="${escapeAttr(entry.autoAnimalCount)}" data-manual="${animalManual || isInitialRow ? "true" : "false"}" ${isInitialRow ? "required" : ""} />
     </td>
-    <td>
+    <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="cage">
       <input class="quantity-balance-input" name="cageCount" type="number" min="0" value="${escapeAttr(cageValue)}" data-auto-value="${escapeAttr(entry.autoCageCount)}" data-manual="${cageManual || isInitialRow ? "true" : "false"}" ${isInitialRow ? "required" : ""} />
     </td>
   `;
@@ -7602,6 +7616,8 @@ function bindEvents() {
   document.querySelector(".quantity-sheet-detail-modal .quantity-template-table")?.addEventListener("keydown", handleQuantityTemplateKeydown);
   bindIacucLookupInputs("#quantitySheetDetailForm", autofillQuantitySheetDetailIacucFields);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("submit", handleQuantitySheetDetailSubmit);
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("focusin", handleQuantityEntryFocusIn);
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("focusout", handleQuantityEntryFocusOut);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
@@ -7618,7 +7634,12 @@ function bindEvents() {
     }
     if (["month", "roomId", "addedType", "removedType"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
-      if (["addedType", "removedType"].includes(name)) syncQuantityChangeTypeWarnings(event.currentTarget);
+      if (["addedType", "removedType"].includes(name)) {
+        pendingQuantityFocusTarget = syncQuantityTransferLookupEditor(event.target);
+        focusPendingQuantityField();
+        captureQuantitySheetDetailDraft(event.currentTarget);
+        return;
+      }
       scheduleRender("quantity_sheet.detail.form_change");
     }
   });
@@ -8127,6 +8148,8 @@ function bindEvents() {
     scheduleRender("reimbursement.workflow_lines.toggle");
   });
   bindIacucLookupInputs("#quantitySheetForm", autofillQuantitySheetIacucFields);
+  document.querySelector("#quantitySheetForm")?.addEventListener("focusin", handleQuantityEntryFocusIn);
+  document.querySelector("#quantitySheetForm")?.addEventListener("focusout", handleQuantityEntryFocusOut);
   document.querySelector("#quantitySheetForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
@@ -8155,12 +8178,9 @@ function bindEvents() {
     }
     if (["addedType", "removedType"].includes(name)) {
       captureQuantitySheetDraft();
-      syncQuantityChangeTypeWarnings();
-      const editor = event.target.closest(".quantity-change-editor");
-      const transferType = name === "addedType" ? "转入" : "转出";
-      if (event.target.value === transferType || editor?.querySelector("[data-iacuc-lookup]")) {
-        scheduleRender("quantity_sheet.transfer_type");
-      }
+      pendingQuantityFocusTarget = syncQuantityTransferLookupEditor(event.target);
+      focusPendingQuantityField();
+      captureQuantitySheetDraft();
     }
   });
   document.querySelector("#quantitySheetForm select[name='roomId']")?.addEventListener("change", syncQuantitySheetRoomName);
@@ -8281,6 +8301,121 @@ function handleQuantityTemplateKeydown(event) {
   if (!next) return;
   next.focus();
   if (next instanceof HTMLInputElement) next.select();
+}
+
+function handleQuantityEntryFocusIn(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+  setActiveQuantityEntryCell(target);
+}
+
+function handleQuantityEntryFocusOut(event) {
+  const wrap = event.target?.closest?.(".quantity-entry-wrap");
+  if (!wrap) return;
+  window.setTimeout(() => {
+    if (!wrap.contains(document.activeElement)) clearActiveQuantityEntryCell(wrap);
+  }, 0);
+}
+
+function setActiveQuantityEntryCell(target) {
+  const cell = target.closest?.("td[data-quantity-row]");
+  const wrap = target.closest?.(".quantity-entry-wrap");
+  if (!cell || !wrap) return;
+  clearActiveQuantityEntryCell(wrap);
+  const row = cell.closest("tr");
+  const isLeftSide = cell.cellIndex < 5;
+  row?.classList.add(isLeftSide ? "quantity-row-active-left" : "quantity-row-active-right");
+  cell.classList.add("quantity-cell-active");
+}
+
+function clearActiveQuantityEntryCell(scope = document) {
+  scope.querySelectorAll?.(".quantity-row-active-left, .quantity-row-active-right").forEach((row) => {
+    row.classList.remove("quantity-row-active-left", "quantity-row-active-right");
+  });
+  scope.querySelectorAll?.(".quantity-cell-active").forEach((cell) => cell.classList.remove("quantity-cell-active"));
+}
+
+function quantityFocusTargetFromCell(cell, inputName) {
+  if (!cell) return null;
+  const row = cell.dataset.quantityRow || "";
+  const field = cell.dataset.quantityField || "";
+  if (!row || !field || !inputName) return null;
+  return { row, field, inputName };
+}
+
+function focusPendingQuantityField() {
+  if (!pendingQuantityFocusTarget) return;
+  const target = { ...pendingQuantityFocusTarget };
+  window.setTimeout(() => {
+    const selector = `[data-quantity-row="${cssEscape(target.row)}"][data-quantity-field="${cssEscape(target.field)}"] input[name="${cssEscape(target.inputName)}"]`;
+    const input = document.querySelector(selector);
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+      input.select();
+      setActiveQuantityEntryCell(input);
+      pendingQuantityFocusTarget = null;
+    }
+  }, 80);
+}
+
+function syncQuantityTransferLookupEditor(select) {
+  if (!(select instanceof HTMLSelectElement)) return null;
+  const editor = select.closest(".quantity-change-editor");
+  const cell = select.closest("td");
+  const form = select.closest("form");
+  if (!editor || !cell || !form) return null;
+  const isAdded = select.name === "addedType";
+  const transferType = isAdded ? "转入" : "转出";
+  const inputName = isAdded ? "transferInFromIacuc" : "transferOutToIacuc";
+  const placeholder = isAdded ? "来源伦理号" : "目标伦理号";
+  const existingLookup = editor.querySelector(".iacuc-lookup-field");
+  if (select.value !== transferType) {
+    existingLookup?.remove();
+    syncQuantityChangeTypeWarnings(form);
+    return null;
+  }
+  if (!existingLookup) {
+    const warning = editor.querySelector(".quantity-change-type-warning");
+    warning?.insertAdjacentHTML("beforebegin", renderIacucLookupInput(inputName, "", { placeholder, compact: true }));
+    bindIacucLookupInputs(`#${cssEscape(form.id)}`, () => {});
+  }
+  syncQuantityChangeTypeWarnings(form);
+  return quantityFocusTargetFromCell(cell, inputName);
+}
+
+function focusFirstQuantitySheetProblem({ invalidDateInputs = [] } = {}) {
+  const invalidDates = new Set((invalidDateInputs || []).map((item) => String(item || "").trim()).filter(Boolean));
+  let target = null;
+  if (invalidDates.size) {
+    target = [...document.querySelectorAll(".quantity-entry-wrap input[name='rowDate']")].find((input) => invalidDates.has(String(input.value || "").trim()));
+  }
+  if (!target) {
+    target = document.querySelector(".quantity-change-editor.missing-type select, .quantity-change-editor.missing-transfer input[name='transferInFromIacuc'], .quantity-change-editor.missing-transfer input[name='transferOutToIacuc']");
+  }
+  if (!target) return;
+  const cell = target.closest("td");
+  const attentionTarget = cell || target;
+  if (quantityIssueAttentionTimer) clearTimeout(quantityIssueAttentionTimer);
+  document.querySelectorAll(".quantity-cell-attention").forEach((item) => item.classList.remove("quantity-cell-attention"));
+  attentionTarget.classList.add("quantity-cell-attention");
+  target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+  window.setTimeout(() => {
+    target.focus();
+    if (target instanceof HTMLInputElement) target.select();
+    setActiveQuantityEntryCell(target);
+  }, 180);
+  quantityIssueAttentionTimer = window.setTimeout(() => {
+    attentionTarget.classList.remove("quantity-cell-attention");
+    quantityIssueAttentionTimer = null;
+  }, 2600);
+}
+
+function queueQuantitySheetProblemFocus(options = {}) {
+  if (pendingQuantityProblemFocusTimer) clearTimeout(pendingQuantityProblemFocusTimer);
+  pendingQuantityProblemFocusTimer = window.setTimeout(() => {
+    pendingQuantityProblemFocusTimer = null;
+    focusFirstQuantitySheetProblem(options);
+  }, 160);
 }
 
 function syncQuantityChangeTypeWarnings(scope = document) {
@@ -9004,6 +9139,8 @@ function autofillIacucFields(event) {
 function bindIacucLookupInputs(scopeSelector, autofillHandler) {
   const scope = document.querySelector(scopeSelector);
   document.querySelectorAll(`${scopeSelector} [data-iacuc-lookup]`).forEach((input) => {
+    if (input.dataset.iacucLookupBound === "true") return;
+    input.dataset.iacucLookupBound = "true";
     input.addEventListener("focus", async () => {
       if (IACUC_INDEX_LOADED || IACUC_INDEX_LOADING) return;
       updateIacucLookupPanel(input);
@@ -9029,18 +9166,21 @@ function bindIacucLookupInputs(scopeSelector, autofillHandler) {
     });
   });
 
-  scope?.addEventListener("mousedown", (event) => {
-    const button = event.target.closest("[data-iacuc-pick]");
-    if (!button || !scope.contains(button)) return;
-    event.preventDefault();
-    const field = button.closest(".iacuc-lookup-field");
-    const input = field?.querySelector("[data-iacuc-lookup]");
-    if (!input) return;
-    input.value = button.dataset.iacucPick || "";
-    updateIacucLookupPanel(input);
-    if (input.name === "iacuc") autofillHandler({ target: input });
-    field.classList.add("lookup-picked");
-  });
+  if (scope && scope.dataset.iacucLookupPickBound !== "true") {
+    scope.dataset.iacucLookupPickBound = "true";
+    scope.addEventListener("mousedown", (event) => {
+      const button = event.target.closest("[data-iacuc-pick]");
+      if (!button || !scope.contains(button)) return;
+      event.preventDefault();
+      const field = button.closest(".iacuc-lookup-field");
+      const input = field?.querySelector("[data-iacuc-lookup]");
+      if (!input) return;
+      input.value = button.dataset.iacucPick || "";
+      updateIacucLookupPanel(input);
+      if (input.name === "iacuc") autofillHandler({ target: input });
+      field.classList.add("lookup-picked");
+    });
+  }
 }
 
 function updateIacucLookupPanel(input) {
@@ -9838,11 +9978,13 @@ async function saveQuantitySheetDraft() {
 async function saveQuantitySheetObject(sheetDraft, { startedAt = performance.now(), updateDraft = false } = {}) {
   state.quantitySheetDraft = updateDraft ? sheetDraft : state.quantitySheetDraft;
   if (sheetDraft.invalidDateInputs?.length) {
+    queueQuantitySheetProblemFocus({ invalidDateInputs: sheetDraft.invalidDateInputs });
     throw new Error(`请先修正日期：${sheetDraft.invalidDateInputs.join("、")}`);
   }
   const inputIssues = quantitySheetInputIssueLabels(sheetDraft);
   if (inputIssues.length) {
     syncQuantityChangeTypeWarnings();
+    queueQuantitySheetProblemFocus();
     throw new Error(`请先补全数量统计表：${inputIssues.slice(0, 5).join("、")}${inputIssues.length > 5 ? " 等" : ""}`);
   }
   const sheet = hydrateQuantitySheetIacucInfo(sheetDraft);
