@@ -1989,6 +1989,7 @@ h3 {
   background: var(--surface);
   padding: 0 0 8px;
   scrollbar-gutter: stable;
+  scroll-padding-top: 58px;
 }
 
 .quantity-page-toolbar {
@@ -1999,6 +2000,55 @@ h3 {
   margin: 4px 0 12px;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.quantity-page-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.quantity-entry-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quantity-entry-status span,
+.quantity-entry-status-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid #d7e5e2;
+  border-radius: 999px;
+  background: #f7fbfa;
+  color: #5f7371;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.quantity-entry-status-pill {
+  cursor: pointer;
+}
+
+.quantity-entry-status-pill:disabled {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.quantity-entry-status.has-issues .quantity-entry-status-pill {
+  border-color: #efd7a4;
+  background: #fff8eb;
+  color: #98630f;
+  font-weight: 700;
 }
 
 .quantity-template-page {
@@ -2020,7 +2070,7 @@ h3 {
 }
 
 .quantity-entry-table {
-  min-width: 1180px;
+  min-width: 1040px;
 }
 
 .quantity-entry-wrap .table-wrap {
@@ -2044,6 +2094,10 @@ h3 {
   white-space: normal;
   background: var(--surface-soft);
   box-shadow: 0 1px 0 var(--line), 0 8px 14px rgba(14, 37, 39, 0.08);
+  height: 44px;
+  padding: 7px 6px;
+  vertical-align: middle;
+  line-height: 1.2;
 }
 
 .quantity-table-head-label {
@@ -2067,7 +2121,7 @@ h3 {
 
 .quantity-template-table td {
   vertical-align: top;
-  padding: 7px 6px;
+  padding: 5px 5px;
 }
 
 .quantity-template-table th:nth-child(-n + 5),
@@ -2130,18 +2184,22 @@ h3 {
   border-left: 3px solid #8aa39a;
 }
 
+.quantity-template-table tbody tr:first-child td {
+  border-top: 1px solid var(--line);
+}
+
 .quantity-template-table th:nth-child(1),
 .quantity-template-table th:nth-child(6),
 .quantity-template-table td:nth-child(1),
 .quantity-template-table td:nth-child(6) {
-  width: 12%;
+  width: 11.5%;
 }
 
 .quantity-template-table th:nth-child(2),
 .quantity-template-table th:nth-child(3),
 .quantity-template-table th:nth-child(7),
 .quantity-template-table th:nth-child(8) {
-  width: 14%;
+  width: 10.25%;
 }
 
 .quantity-template-table th:nth-child(4),
@@ -2155,12 +2213,22 @@ h3 {
 .quantity-entry-table select {
   width: 100%;
   min-width: 0;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.quantity-template-table input[name="rowDate"] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 .quantity-change-editor {
   display: grid;
-  gap: 5px;
-  grid-template-columns: 46px minmax(66px, 1fr);
+  gap: 4px;
+  grid-template-columns: 42px minmax(62px, 1fr);
 }
 
 .quantity-change-editor .iacuc-lookup {
