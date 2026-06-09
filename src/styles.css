@@ -2273,6 +2273,72 @@ h3 {
   letter-spacing: 0;
 }
 
+.quantity-date-field {
+  position: relative;
+}
+
+.quantity-date-field input[name="rowDate"] {
+  padding-right: 10px;
+}
+
+.quantity-date-picker-button {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.quantity-date-field:focus-within input[name="rowDate"],
+.quantity-date-field:hover input[name="rowDate"] {
+  padding-right: 34px;
+}
+
+.quantity-date-field:focus-within .quantity-date-picker-button,
+.quantity-date-field:hover .quantity-date-picker-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.quantity-date-picker-button:hover,
+.quantity-date-picker-button:focus-visible {
+  background: rgba(47, 122, 114, 0.1);
+  color: var(--brand-strong);
+}
+
+.quantity-date-picker-button svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+}
+
+.quantity-date-picker-native {
+  position: absolute;
+  right: 4px;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .quantity-change-editor {
   display: grid;
   gap: 4px;

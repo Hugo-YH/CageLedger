@@ -36,6 +36,18 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.15a",
+    releasedAt: "2026-06-09 16:56",
+    title: "数量统计表日期与录入顺序优化",
+    items: [
+      "修复数量统计表切换月份后空白行自动填入月初日期的问题，首行继续保留月初日期",
+      "第一行结余总数和结余笼数默认显示为空白，保存和计算时仍按月初结余口径处理",
+      "数量统计表录入限制数量格只输入数字，日期格支持键盘输入和本月范围内的日历选择",
+      "优化 Tab 录入顺序，先完成左侧 15 行再进入右侧 16 日至月底区域",
+      "数量统计表月份限制为本月及过去月份，减少误选未来月份的风险",
+    ],
+  },
+  {
     version: "0.5.15",
     releasedAt: "2026-06-07 13:43",
     title: "实验室运营台易用性优化",
@@ -852,7 +864,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.15",
+  version: "0.5.15a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1172,6 +1184,13 @@ function formatFlexibleDateParts(year, month, day) {
   const date = new Date(normalizedYear, normalizedMonth - 1, normalizedDay);
   if (date.getFullYear() !== normalizedYear || date.getMonth() !== normalizedMonth - 1 || date.getDate() !== normalizedDay) return "";
   return `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}-${String(normalizedDay).padStart(2, "0")}`;
+}
+
+function monthEndDate(month) {
+  const [year, monthNumber] = String(month || today.slice(0, 7)).split("-").map(Number);
+  if (!year || !monthNumber) return today;
+  const lastDay = new Date(year, monthNumber, 0).getDate();
+  return `${year}-${String(monthNumber).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 }
 
 function inferSpecies(value) {
@@ -6090,7 +6109,7 @@ function renderQuantitySheetBillingView() {
                 <div class="quantity-field-group quantity-field-group-basic">
                   <label class="field-required">
                     月份
-                    <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" placeholder="请选择结算月份" required />
+                    <input id="quantitySheetMonth" name="month" type="month" value="${escapeAttr(draft.month || state.billingMonth)}" max="${escapeAttr(today.slice(0, 7))}" placeholder="请选择结算月份" required />
                   </label>
                   <label>
                     房间号
@@ -6269,7 +6288,7 @@ function renderSavedQuantitySheetEditor(sheet) {
               <div class="quantity-field-group quantity-field-group-basic">
                 <label class="field-required">
                   月份
-                  <input name="month" type="month" value="${escapeAttr(sheet.month || state.billingMonth)}" required />
+                  <input name="month" type="month" value="${escapeAttr(sheet.month || state.billingMonth)}" max="${escapeAttr(today.slice(0, 7))}" required />
                 </label>
                 <label>
                   房间号
@@ -6795,20 +6814,28 @@ function renderQuantitySheetCalendarCell(entry) {
   const animalManual = row.animalCount !== null && row.animalCount !== undefined;
   const cageManual = row.cageCount !== null && row.cageCount !== undefined;
   const isInitialRow = entry.index === 0;
-  const animalValue = animalManual ? row.animalCount : isInitialRow ? 0 : entry.animalCount || "";
-  const cageValue = cageManual ? row.cageCount : isInitialRow ? 0 : entry.cageCount || "";
+  const animalValue = isInitialRow && numericOrZero(row.animalCount) === 0 ? "" : animalManual ? row.animalCount : entry.animalCount || "";
+  const cageValue = isInitialRow && numericOrZero(row.cageCount) === 0 ? "" : cageManual ? row.cageCount : entry.cageCount || "";
   const dateInputValue = isInitialRow ? formatQuantityDateInputValue(entry.date || "") : row.rawDateInput || formatQuantityDateInputValue(entry.date || "");
+  const pickerMonth = String(entry.date || state.billingMonth || today.slice(0, 7)).slice(0, 7);
+  const pickerValue = normalizeQuantitySheetEntryDate(dateInputValue, pickerMonth);
+  const pickerMin = `${pickerMonth}-01`;
+  const pickerMax = monthEndDate(pickerMonth);
   return `
     <td class="quantity-date-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="date">
-      <input name="rowDate" type="text" inputmode="text" autocomplete="off" placeholder="" value="${escapeAttr(dateInputValue)}" ${isInitialRow ? "readonly" : ""} />
+      <div class="quantity-date-field">
+        <input name="rowDate" type="text" inputmode="numeric" autocomplete="off" placeholder="" value="${escapeAttr(dateInputValue)}" />
+        <button class="quantity-date-picker-button" type="button" data-action="open-quantity-date-picker" aria-label="选择日期">${iconSvg("calendar")}</button>
+        <input class="quantity-date-picker-native" name="quantityDatePicker" type="date" value="${escapeAttr(pickerValue)}" min="${escapeAttr(pickerMin)}" max="${escapeAttr(pickerMax)}" tabindex="-1" aria-hidden="true" />
+      </div>
     </td>
     <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="added">${renderQuantityChangeEditor("added", row, addedText)}</td>
     <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="removed">${renderQuantityChangeEditor("removed", row, removedText)}</td>
     <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="animal">
-      <input class="quantity-balance-input" name="animalCount" type="number" min="0" value="${escapeAttr(animalValue)}" data-auto-value="${escapeAttr(entry.autoAnimalCount)}" data-manual="${animalManual || isInitialRow ? "true" : "false"}" ${isInitialRow ? "required" : ""} />
+      <input class="quantity-balance-input" name="animalCount" type="number" min="0" value="${escapeAttr(animalValue)}" data-auto-value="${escapeAttr(entry.autoAnimalCount)}" data-manual="${animalManual || isInitialRow ? "true" : "false"}" />
     </td>
     <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="cage">
-      <input class="quantity-balance-input" name="cageCount" type="number" min="0" value="${escapeAttr(cageValue)}" data-auto-value="${escapeAttr(entry.autoCageCount)}" data-manual="${cageManual || isInitialRow ? "true" : "false"}" ${isInitialRow ? "required" : ""} />
+      <input class="quantity-balance-input" name="cageCount" type="number" min="0" value="${escapeAttr(cageValue)}" data-auto-value="${escapeAttr(entry.autoCageCount)}" data-manual="${cageManual || isInitialRow ? "true" : "false"}" />
     </td>
   `;
 }
@@ -6825,7 +6852,7 @@ function renderQuantityChangeEditor(kind, row, value) {
   const editorClasses = ["quantity-change-editor", missingType ? "missing-type" : "", missingTransferIacuc ? "missing-transfer" : ""].filter(Boolean).join(" ");
   return `
     <div class="${editorClasses}">
-      <input name="${kind}Text" value="${escapeAttr(value)}" />
+      <input name="${kind}Text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(value)}" />
       <select name="${kind}Type" title="变更类型">
         ${options.map((option) => `<option value="${option}" ${type === option ? "selected" : ""}>${option || "类型"}</option>`).join("")}
       </select>
@@ -7925,6 +7952,11 @@ function bindEvents() {
     table.addEventListener("keydown", handleQuantityTemplateKeydown);
   });
   document.querySelector("#quantitySheetForm")?.addEventListener("click", (event) => {
+    const datePickerButton = event.target?.closest?.("[data-action='open-quantity-date-picker']");
+    if (datePickerButton) {
+      openQuantityDatePicker(datePickerButton);
+      return;
+    }
     if (event.target?.closest?.("[data-action='focus-quantity-issue']")) {
       syncQuantityEntryFormState(event.currentTarget);
       focusFirstQuantitySheetProblem({ form: event.currentTarget });
@@ -7948,10 +7980,15 @@ function bindEvents() {
   });
   bindIacucLookupInputs("#quantitySheetDetailForm", autofillQuantitySheetDetailIacucFields);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("submit", handleQuantitySheetDetailSubmit);
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("click", (event) => {
+    const datePickerButton = event.target?.closest?.("[data-action='open-quantity-date-picker']");
+    if (datePickerButton) openQuantityDatePicker(datePickerButton);
+  });
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("focusin", handleQuantityEntryFocusIn);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("focusout", handleQuantityEntryFocusOut);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
+    sanitizeQuantitySheetInput(event.target);
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
       syncQuantityChangeTypeWarnings(event.currentTarget);
@@ -7960,6 +7997,12 @@ function bindEvents() {
   });
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
+    if (name === "quantityDatePicker") {
+      applyQuantityDatePickerValue(event.target);
+      captureQuantitySheetDetailDraft(event.currentTarget);
+      syncQuantityEntryStatus(event.currentTarget);
+      return;
+    }
     if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
       syncQuantityChangeTypeWarnings(event.currentTarget);
@@ -8551,6 +8594,7 @@ function bindEvents() {
   document.querySelector("#quantitySheetForm")?.addEventListener("focusout", handleQuantityEntryFocusOut);
   document.querySelector("#quantitySheetForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
+    sanitizeQuantitySheetInput(event.target);
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDraft();
       syncQuantityChangeTypeWarnings();
@@ -8559,6 +8603,12 @@ function bindEvents() {
   });
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
+    if (name === "quantityDatePicker") {
+      applyQuantityDatePickerValue(event.target);
+      captureQuantitySheetDraft();
+      syncQuantityEntryStatus(event.currentTarget);
+      return;
+    }
     if (event.target?.id === "quantitySheetMonth") {
       handleQuantitySheetFilterChange();
       return;
@@ -8691,10 +8741,68 @@ function handleQuantityTemplateKeydown(event) {
   if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
   const form = target.closest("form");
   syncQuantityEntryFormState(form);
-  const next = event.key === "Enter" ? nextQuantityControlInColumn(target) : nextQuantityControlInRow(target, event.shiftKey ? -1 : 1);
+  const next = event.key === "Enter" ? nextQuantityControlInColumn(target) : nextQuantityControlInEntryOrder(target, event.shiftKey ? -1 : 1);
   if (!next) return;
   event.preventDefault();
   focusQuantityControl(next);
+}
+
+function sanitizeQuantitySheetInput(target) {
+  if (!(target instanceof HTMLInputElement)) return;
+  if (!target.closest(".quantity-template-table")) return;
+  const name = target.name;
+  const original = target.value || "";
+  let next = original;
+  if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+    next = original
+      .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+      .replace(/\D/g, "");
+  } else if (name === "rowDate") {
+    next = original
+      .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+      .replace(/[．。]/g, ".")
+      .replace(/[／]/g, "/")
+      .replace(/[－—–]/g, "-")
+      .replace(/[^0-9./-]/g, "");
+  }
+  if (next === original) return;
+  const position = target.selectionStart;
+  target.value = next;
+  if (position !== null) {
+    const delta = original.length - next.length;
+    const nextPosition = Math.max(position - delta, 0);
+    target.setSelectionRange(nextPosition, nextPosition);
+  }
+}
+
+function openQuantityDatePicker(button) {
+  const field = button?.closest?.(".quantity-date-field");
+  const textInput = field?.querySelector?.("input[name='rowDate']");
+  const picker = field?.querySelector?.("input[name='quantityDatePicker']");
+  if (!(picker instanceof HTMLInputElement)) return;
+  const form = button.closest("form");
+  const month = form?.querySelector?.("input[name='month']")?.value || state.billingMonth || today.slice(0, 7);
+  const min = `${month}-01`;
+  const max = monthEndDate(month);
+  picker.min = min;
+  picker.max = max;
+  const normalized = normalizeQuantitySheetEntryDate(textInput?.value || "", month);
+  picker.value = normalized && normalized >= min && normalized <= max ? normalized : min;
+  if (typeof picker.showPicker === "function") {
+    picker.showPicker();
+  } else {
+    picker.focus();
+    picker.click();
+  }
+}
+
+function applyQuantityDatePickerValue(picker) {
+  if (!(picker instanceof HTMLInputElement)) return;
+  const textInput = picker.closest(".quantity-date-field")?.querySelector("input[name='rowDate']");
+  if (!(textInput instanceof HTMLInputElement)) return;
+  textInput.value = picker.value || "";
+  setActiveQuantityEntryCell(textInput);
+  textInput.focus();
 }
 
 function syncQuantityEntryFormState(form) {
@@ -8716,6 +8824,32 @@ function nextQuantityControlInRow(target, direction = 1) {
   return controls[index + direction] || null;
 }
 
+function nextQuantityControlInEntryOrder(target, direction = 1) {
+  const table = target.closest(".quantity-template-table");
+  if (!table) return null;
+  const controls = quantityControlsInQuantityEntryOrder(table);
+  const index = controls.indexOf(target);
+  if (index < 0) return null;
+  return controls[index + direction] || null;
+}
+
+function quantityControlsInQuantityEntryOrder(table) {
+  const fieldOrder = new Map([
+    ["date", 0],
+    ["added", 1],
+    ["removed", 2],
+    ["animal", 3],
+    ["cage", 4],
+  ]);
+  return [...(table?.querySelectorAll?.("td[data-quantity-row][data-quantity-field]") || [])]
+    .sort((a, b) => {
+      const rowDiff = numericOrZero(a.dataset.quantityRow) - numericOrZero(b.dataset.quantityRow);
+      if (rowDiff) return rowDiff;
+      return numericOrZero(fieldOrder.get(a.dataset.quantityField)) - numericOrZero(fieldOrder.get(b.dataset.quantityField));
+    })
+    .flatMap((cell) => quantityControlsInScope(cell));
+}
+
 function nextQuantityControlInColumn(target) {
   const table = target.closest(".quantity-template-table");
   const cell = target.closest("td");
@@ -8732,7 +8866,7 @@ function nextQuantityControlInColumn(target) {
 }
 
 function quantityControlsInScope(scope) {
-  return [...(scope?.querySelectorAll?.("input, select") || [])].filter((control) => !control.disabled && control.type !== "hidden" && control.offsetParent !== null);
+  return [...(scope?.querySelectorAll?.("input, select") || [])].filter((control) => !control.disabled && control.type !== "hidden" && control.name !== "quantityDatePicker" && control.offsetParent !== null);
 }
 
 function focusQuantityControl(control) {
@@ -10987,18 +11121,25 @@ function formatQuantityDateInputValue(value) {
   return value ? value : "";
 }
 
+function clampQuantitySheetMonth(month) {
+  const value = String(month || "").slice(0, 7);
+  const currentMonth = today.slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(value)) return currentMonth;
+  return value > currentMonth ? currentMonth : value;
+}
+
 function readQuantitySheetForm(form, options = {}) {
   const { preserveInvalidDates = false, baseSheet = state.quantitySheetDraft } = options;
   const data = new FormData(form);
   const room = state.rooms.find((item) => item.id === data.get("roomId"));
-  const month = data.get("month") || state.billingMonth || today.slice(0, 7);
+  const month = clampQuantitySheetMonth(data.get("month") || state.billingMonth || today.slice(0, 7));
   const iacuc = String(data.get("iacuc") || "").trim();
   const iacucInfo = findIacucInfo(iacuc) || {};
   const profile = billingProfileForRoom(room || {});
   let runningAnimalCount = 0;
   let runningCageCount = 0;
   const invalidDateInputs = [];
-  const rows = [...form.querySelectorAll("[data-quantity-row]")]
+  const rows = [...form.querySelectorAll("[data-quantity-field='date'][data-quantity-row]")]
     .map((cell) => {
       const rowIndex = Number(cell.dataset.quantityRow);
       const rowCells = cellsForQuantityDateCell(cell);
@@ -11080,7 +11221,7 @@ function readQuantitySheetForm(form, options = {}) {
       return {
         id: previous.id || crypto.randomUUID(),
         date,
-        rawDateInput: rowIndex === 0 ? date : rawDateInput || date,
+        rawDateInput: rowIndex === 0 ? rawDateInput : rawDateInput || date,
         addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
         addedType: numericOrZero(addedCount) > 0 ? addedType || "" : "",
         transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
@@ -11312,7 +11453,7 @@ function normalizeQuantitySheetDraftRow(row, month) {
   return {
     id: row?.id || crypto.randomUUID(),
     date: row?.date || "",
-    rawDateInput: row?.rawDateInput || row?.date || "",
+    rawDateInput: row?.rawDateInput ?? row?.date ?? "",
     addedCount: numericOrNull(row?.addedCount),
     addedType: row?.addedType || "",
     transferInFromIacuc: normalizeIacucNumber(row?.transferInFromIacuc || ""),
@@ -14642,6 +14783,7 @@ function iconSvg(name) {
     trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2m-8 0 1 12h8l1-12M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16h2V7l3 3 1.4-1.4L12 3.2 6.6 8.6 8 10l3-3zM5 18h14v2H5z"/></svg>`,
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
+    calendar: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v3h6V2h2v3h3v17H4V5h3zm11 8H6v10h12zM6 7v1h12V7z"/></svg>`,
     search: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 10.5l4 4-1.4 1.4-4-4A6.5 6.5 0 1 1 10.5 4zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z"/></svg>`,
     calculator: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v4h8V5zm0 7v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM8 16v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>`,
