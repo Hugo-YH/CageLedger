@@ -36,6 +36,18 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.16",
+    releasedAt: "2026-06-11 13:58",
+    title: "系统性能与长期运行稳定性优化",
+    items: [
+      "优化数量统计表连续录入焦点顺序缓存，减少 Tab 和 Enter 高频录入时的 DOM 重复扫描",
+      "远端模式下本地 UI 状态未变化时跳过重复序列化和 localStorage 写入",
+      "为结算预览、详情数据、列表片段、单价折扣和日期列表等前端缓存增加容量上限",
+      "笼位图改为根节点事件委托，减少大规模笼位图渲染后的逐项事件绑定成本",
+      "根节点委托监听器增加生命周期管理，避免多次渲染后重复绑定和长期内存增长",
+    ],
+  },
+  {
     version: "0.5.15a",
     releasedAt: "2026-06-09 16:56",
     title: "数量统计表日期与录入顺序优化",
@@ -857,6 +869,13 @@ let WORKFLOW_DETAIL_SECTION_CACHE = new Map();
 let LIST_SECTION_CACHE = new Map();
 let UNIT_PRICE_CACHE = new Map();
 let DISCOUNT_CACHE = new Map();
+let QUANTITY_ENTRY_CONTROL_ORDER_CACHE = new WeakMap();
+const HTML_SECTION_CACHE_LIMIT = 160;
+const DETAIL_DATA_CACHE_LIMIT = 80;
+const DERIVED_RENDER_CACHE_LIMIT = 80;
+const BILLING_STATEMENT_CACHE_LIMIT = 80;
+const RATE_LOOKUP_CACHE_LIMIT = 5000;
+const DATE_LIST_CACHE_LIMIT = 120;
 let iacucIndexMeta = null;
 let systemUpdateInfo = null;
 let lastRenderedView = "";
@@ -864,7 +883,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.15a",
+  version: "0.5.16",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -895,6 +914,8 @@ let renderFrameId = 0;
 let persistScheduled = false;
 let persistTimerId = 0;
 let lastPersistedStateJson = "";
+let lastPersistedLocalUiSignature = "";
+let appRootDelegatedAbortController = null;
 const lazyDataState = {
   intakeBatchesLoaded: false,
   intakeBatchesLoading: false,
@@ -1615,20 +1636,26 @@ function loadState() {
 
 function saveState() {
   const payload = remotePersistence ? localUiStateSnapshot() : { ...state };
+  const localUiSignature = remotePersistence ? localUiStateSignature(payload) : "";
+  if (remotePersistence && localUiSignature === lastPersistedLocalUiSignature && lastPersistedStateJson) {
+    return;
+  }
   const startedAt = performance.now();
   try {
     const serialized = JSON.stringify({ ...payload, flashNotice: null, confirmDialog: null });
     if (serialized === lastPersistedStateJson) {
-      logClientPerf("state.persist.skip", startedAt, { remote: remotePersistence ? 1 : 0 });
+      if (remotePersistence) lastPersistedLocalUiSignature = localUiSignature;
       return;
     }
     localStorage.setItem(STORAGE_KEY, serialized);
     lastPersistedStateJson = serialized;
+    if (remotePersistence) lastPersistedLocalUiSignature = localUiSignature;
     logClientPerf("state.persist", startedAt, { remote: remotePersistence ? 1 : 0, bytes: serialized.length });
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     lastPersistedStateJson = "";
+    lastPersistedLocalUiSignature = "";
   }
 }
 
@@ -1659,6 +1686,12 @@ function invalidatePagedLoads() {
 
 function localUiStateSnapshot() {
   return localUiOnlyState(state);
+}
+
+function localUiStateSignature(snapshot = {}) {
+  return Object.entries(snapshot)
+    .map(([key, value]) => `${key}=${String(value).replaceAll("\u001f", " ")}`)
+    .join("\u001f");
 }
 
 function scheduleRender(reason = "") {
@@ -7777,6 +7810,7 @@ function bindEvents() {
   decorateRequiredFields();
   bindHelpHints();
   const appRoot = document.querySelector("#app");
+  const appRootDelegatedSignal = resetAppRootDelegatedEvents(appRoot);
   document.querySelector("#logoutButton")?.addEventListener("click", logout);
   document.querySelector("#sidebarToggle")?.addEventListener("click", () => {
     state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -7818,35 +7852,7 @@ function bindEvents() {
     state.selectedSlotIds = [];
     scheduleRender("rack.select");
   });
-  document.querySelectorAll("[data-slot]").forEach((button) => {
-    button.addEventListener("pointerdown", (event) => startBatchSlotDrag(event, button));
-    button.addEventListener("click", () => {
-      if (suppressNextSlotClick) {
-        suppressNextSlotClick = false;
-        return;
-      }
-      if (state.placementAssignmentMode) {
-        togglePlacementAssignmentSlot(button.dataset.slot);
-        return;
-      }
-      if (state.selectedPlacementTaskId && !state.batchMode) {
-        reservePlacementTask(state.selectedPlacementTaskId, button.dataset.slot);
-        return;
-      }
-      if (state.batchMode) {
-        toggleBatchSlot(button.dataset.slot);
-      } else {
-        state.selectedSlotId = button.dataset.slot;
-        state.selectedSlotIds = [];
-      }
-      scheduleRender("slot.select");
-    });
-    button.addEventListener("mouseenter", () => showSlotHoverPreview(button));
-    button.addEventListener("mousemove", () => positionSlotHoverPreview(button));
-    button.addEventListener("mouseleave", hideSlotHoverPreview);
-    button.addEventListener("focus", () => showSlotHoverPreview(button));
-    button.addEventListener("blur", hideSlotHoverPreview);
-  });
+  bindSlotDelegatedEvents(appRoot, appRootDelegatedSignal);
 
   document.querySelector("#batchModeToggle")?.addEventListener("click", () => {
     if (state.placementAssignmentMode) return;
@@ -8208,6 +8214,11 @@ function bindEvents() {
       scheduleRender(`dashboard.loaded.${action}`);
       return;
     }
+    const slotButton = event.target.closest("[data-slot]");
+    if (slotButton) {
+      handleSlotButtonClick(slotButton);
+      return;
+    }
     const slotFilterButton = event.target.closest("[data-filter]");
     if (slotFilterButton) {
       state.slotFilter = slotFilterButton.dataset.filter;
@@ -8513,7 +8524,7 @@ function bindEvents() {
     if (deleteRackButton) {
       deleteRack(deleteRackButton.dataset.deleteRack);
     }
-  });
+  }, appRootDelegatedSignal ? { signal: appRootDelegatedSignal } : undefined);
   appRoot?.addEventListener("change", async (event) => {
     const placementGroupCheckbox = event.target.closest("[data-select-placement-task-group]");
     if (placementGroupCheckbox) {
@@ -8573,7 +8584,7 @@ function bindEvents() {
       const form = roomAccessCheckbox.closest("form");
       if (form) syncUserRoomAccessControls(form);
     }
-  });
+  }, appRootDelegatedSignal ? { signal: appRootDelegatedSignal } : undefined);
   document.querySelector("#closeReimbursementDetail")?.addEventListener("click", closeReimbursementDetail);
   document.querySelector("#closeReimbursementDetailButton")?.addEventListener("click", closeReimbursementDetail);
   document.querySelector("[data-toggle-reimbursement-workflow-lines]")?.addEventListener("click", async () => {
@@ -8735,6 +8746,71 @@ function bindAuthEvents() {
   document.querySelector("#loginForm")?.addEventListener("submit", login);
 }
 
+function resetAppRootDelegatedEvents(appRoot) {
+  if (!appRoot || typeof AbortController === "undefined") return null;
+  appRootDelegatedAbortController?.abort();
+  appRootDelegatedAbortController = new AbortController();
+  return appRootDelegatedAbortController.signal;
+}
+
+function delegatedListenerOptions(signal) {
+  return signal ? { signal } : undefined;
+}
+
+function bindSlotDelegatedEvents(appRoot, signal = null) {
+  if (!appRoot) return;
+  appRoot.addEventListener("pointerdown", (event) => {
+    const slotButton = event.target.closest("[data-slot]");
+    if (slotButton) startBatchSlotDrag(event, slotButton);
+  }, delegatedListenerOptions(signal));
+  appRoot.addEventListener("mouseover", (event) => {
+    const slotButton = event.target.closest("[data-slot]");
+    if (!slotButton || slotButton.contains(event.relatedTarget)) return;
+    showSlotHoverPreview(slotButton);
+  }, delegatedListenerOptions(signal));
+  appRoot.addEventListener("mousemove", (event) => {
+    const slotButton = event.target.closest("[data-slot]");
+    if (slotButton) positionSlotHoverPreview(slotButton);
+  }, delegatedListenerOptions(signal));
+  appRoot.addEventListener("mouseout", (event) => {
+    const slotButton = event.target.closest("[data-slot]");
+    if (!slotButton || slotButton.contains(event.relatedTarget)) return;
+    hideSlotHoverPreview();
+  }, delegatedListenerOptions(signal));
+  appRoot.addEventListener("focusin", (event) => {
+    const slotButton = event.target.closest("[data-slot]");
+    if (slotButton) showSlotHoverPreview(slotButton);
+  }, delegatedListenerOptions(signal));
+  appRoot.addEventListener("focusout", (event) => {
+    const slotButton = event.target.closest("[data-slot]");
+    if (!slotButton || slotButton.contains(event.relatedTarget)) return;
+    hideSlotHoverPreview();
+  }, delegatedListenerOptions(signal));
+}
+
+function handleSlotButtonClick(button) {
+  if (!button?.dataset.slot) return;
+  if (suppressNextSlotClick) {
+    suppressNextSlotClick = false;
+    return;
+  }
+  if (state.placementAssignmentMode) {
+    togglePlacementAssignmentSlot(button.dataset.slot);
+    return;
+  }
+  if (state.selectedPlacementTaskId && !state.batchMode) {
+    reservePlacementTask(state.selectedPlacementTaskId, button.dataset.slot);
+    return;
+  }
+  if (state.batchMode) {
+    toggleBatchSlot(button.dataset.slot);
+  } else {
+    state.selectedSlotId = button.dataset.slot;
+    state.selectedSlotIds = [];
+  }
+  scheduleRender("slot.select");
+}
+
 function handleQuantityTemplateKeydown(event) {
   if (!["Enter", "Tab"].includes(event.key)) return;
   const target = event.target;
@@ -8834,6 +8910,11 @@ function nextQuantityControlInEntryOrder(target, direction = 1) {
 }
 
 function quantityControlsInQuantityEntryOrder(table) {
+  if (!table) return [];
+  const cells = [...table.querySelectorAll("td[data-quantity-row][data-quantity-field]")];
+  const signature = cells.map((cell) => `${cell.dataset.quantityRow}:${cell.dataset.quantityField}:${cell.querySelectorAll("input, select").length}`).join("|");
+  const cached = QUANTITY_ENTRY_CONTROL_ORDER_CACHE.get(table);
+  if (cached?.signature === signature) return cached.controls.filter((control) => control.offsetParent !== null && !control.disabled);
   const fieldOrder = new Map([
     ["date", 0],
     ["added", 1],
@@ -8841,13 +8922,19 @@ function quantityControlsInQuantityEntryOrder(table) {
     ["animal", 3],
     ["cage", 4],
   ]);
-  return [...(table?.querySelectorAll?.("td[data-quantity-row][data-quantity-field]") || [])]
+  const controls = cells
     .sort((a, b) => {
       const rowDiff = numericOrZero(a.dataset.quantityRow) - numericOrZero(b.dataset.quantityRow);
       if (rowDiff) return rowDiff;
       return numericOrZero(fieldOrder.get(a.dataset.quantityField)) - numericOrZero(fieldOrder.get(b.dataset.quantityField));
     })
     .flatMap((cell) => quantityControlsInScope(cell));
+  QUANTITY_ENTRY_CONTROL_ORDER_CACHE.set(table, {
+    ...(cached || {}),
+    signature,
+    controls,
+  });
+  return controls;
 }
 
 function nextQuantityControlInColumn(target) {
@@ -8855,7 +8942,7 @@ function nextQuantityControlInColumn(target) {
   const cell = target.closest("td");
   const row = target.closest("tr");
   if (!table || !cell || !row) return null;
-  const rows = [...table.querySelectorAll("tbody tr")];
+  const rows = quantityRowsInVisualOrder(table);
   const rowIndex = rows.indexOf(row);
   const cellIndex = cell.cellIndex;
   const controlsInCell = quantityControlsInScope(cell);
@@ -8863,6 +8950,20 @@ function nextQuantityControlInColumn(target) {
   const nextCell = rows[rowIndex + 1]?.cells[cellIndex];
   const nextControls = quantityControlsInScope(nextCell);
   return nextControls[controlIndex] || nextControls[0] || null;
+}
+
+function quantityRowsInVisualOrder(table) {
+  if (!table) return [];
+  const rows = [...table.querySelectorAll("tbody tr")];
+  const signature = rows.length;
+  const cached = QUANTITY_ENTRY_CONTROL_ORDER_CACHE.get(table);
+  if (cached?.rowSignature === signature) return cached.rows;
+  QUANTITY_ENTRY_CONTROL_ORDER_CACHE.set(table, {
+    ...(cached || {}),
+    rowSignature: signature,
+    rows,
+  });
+  return rows;
 }
 
 function quantityControlsInScope(scope) {
@@ -11382,7 +11483,7 @@ function cachedQuantitySheetDetail(sheet) {
 
 function rememberQuantitySheetDetail(sheet) {
   if (!sheet?.id || !Array.isArray(sheet.rows)) return sheet || null;
-  QUANTITY_SHEET_DETAIL_CACHE.set(sheet.id, sheet);
+  setLimitedCacheValue(QUANTITY_SHEET_DETAIL_CACHE, sheet.id, sheet, DETAIL_DATA_CACHE_LIMIT);
   return sheet;
 }
 
@@ -11399,7 +11500,7 @@ function cachedReimbursementRecordDetail(recordId) {
 function rememberReimbursementRecordDetail(detail) {
   const recordId = detail?.item?.id || "";
   if (!recordId) return detail || null;
-  REIMBURSEMENT_DETAIL_CACHE.set(recordId, detail);
+  setLimitedCacheValue(REIMBURSEMENT_DETAIL_CACHE, recordId, detail, DETAIL_DATA_CACHE_LIMIT);
   return detail;
 }
 
@@ -11417,7 +11518,7 @@ function cachedBillingWorkflowDetail(workflowId) {
 function rememberBillingWorkflowDetail(detail) {
   const workflowId = detail?.workflow?.id || "";
   if (!workflowId) return detail || null;
-  BILLING_WORKFLOW_DETAIL_CACHE.set(workflowId, detail);
+  setLimitedCacheValue(BILLING_WORKFLOW_DETAIL_CACHE, workflowId, detail, DETAIL_DATA_CACHE_LIMIT);
   return detail;
 }
 
@@ -11432,7 +11533,7 @@ function cachedBillingWorkflowLines(workflowId, versionId) {
 
 function rememberBillingWorkflowLines(workflowId, versionId, lines) {
   if (!workflowId || !versionId || !Array.isArray(lines)) return lines || null;
-  BILLING_WORKFLOW_LINES_CACHE.set(billingWorkflowLinesCacheKey(workflowId, versionId), lines);
+  setLimitedCacheValue(BILLING_WORKFLOW_LINES_CACHE, billingWorkflowLinesCacheKey(workflowId, versionId), lines, DETAIL_DATA_CACHE_LIMIT);
   return lines;
 }
 
@@ -12110,6 +12211,7 @@ function clearBillingDerivedCaches() {
   LIST_SECTION_CACHE = new Map();
   UNIT_PRICE_CACHE = new Map();
   DISCOUNT_CACHE = new Map();
+  QUANTITY_ENTRY_CONTROL_ORDER_CACHE = new WeakMap();
 }
 
 function quantitySheetStatementCacheKey(sheet) {
@@ -12184,7 +12286,7 @@ function cageMapBillingStatement(pi, month) {
   const cached = CAGE_MAP_STATEMENT_CACHE.get(key);
   if (cached) return cached;
   const statement = buildStatement(pi, month);
-  CAGE_MAP_STATEMENT_CACHE.set(key, statement);
+  setLimitedCacheValue(CAGE_MAP_STATEMENT_CACHE, key, statement, BILLING_STATEMENT_CACHE_LIMIT);
   return statement;
 }
 
@@ -12193,7 +12295,7 @@ function quantitySheetBillingStatement(sheet) {
   const cached = QUANTITY_SHEET_STATEMENT_CACHE.get(key);
   if (cached) return cached;
   const statement = buildQuantitySheetStatement(sheet);
-  QUANTITY_SHEET_STATEMENT_CACHE.set(key, statement);
+  setLimitedCacheValue(QUANTITY_SHEET_STATEMENT_CACHE, key, statement, BILLING_STATEMENT_CACHE_LIMIT);
   return statement;
 }
 
@@ -12202,7 +12304,7 @@ function quantityStatisticExportForms(statement, info) {
   const cached = QUANTITY_STATISTIC_FORMS_CACHE.get(key);
   if (cached) return cached;
   const forms = buildQuantityStatisticExportForms(statement, info);
-  QUANTITY_STATISTIC_FORMS_CACHE.set(key, forms);
+  setLimitedCacheValue(QUANTITY_STATISTIC_FORMS_CACHE, key, forms, DERIVED_RENDER_CACHE_LIMIT);
   return forms;
 }
 
@@ -12211,7 +12313,7 @@ function quantityStatisticPages(statement, forms) {
   const cached = QUANTITY_STATISTIC_PAGES_HTML_CACHE.get(key);
   if (cached) return cached;
   const html = quantityStatisticPagesHtml(statement, forms);
-  QUANTITY_STATISTIC_PAGES_HTML_CACHE.set(key, html);
+  setLimitedCacheValue(QUANTITY_STATISTIC_PAGES_HTML_CACHE, key, html, DERIVED_RENDER_CACHE_LIMIT);
   return html;
 }
 
@@ -12220,7 +12322,7 @@ function cachedSettlementTemplateModel(statement, rows) {
   const cached = SETTLEMENT_TEMPLATE_MODEL_CACHE.get(key);
   if (cached) return cached;
   const model = buildSettlementTemplateModel(statement, rows);
-  SETTLEMENT_TEMPLATE_MODEL_CACHE.set(key, model);
+  setLimitedCacheValue(SETTLEMENT_TEMPLATE_MODEL_CACHE, key, model, DERIVED_RENDER_CACHE_LIMIT);
   return model;
 }
 
@@ -12229,7 +12331,7 @@ function cachedWorkflowDetailSection(kind, key, render) {
   const cached = WORKFLOW_DETAIL_SECTION_CACHE.get(cacheKey);
   if (cached) return cached;
   const html = render();
-  WORKFLOW_DETAIL_SECTION_CACHE.set(cacheKey, html);
+  setLimitedCacheValue(WORKFLOW_DETAIL_SECTION_CACHE, cacheKey, html, HTML_SECTION_CACHE_LIMIT);
   return html;
 }
 
@@ -12238,8 +12340,18 @@ function cachedListSection(kind, key, render) {
   const cached = LIST_SECTION_CACHE.get(cacheKey);
   if (cached) return cached;
   const html = render();
-  LIST_SECTION_CACHE.set(cacheKey, html);
+  setLimitedCacheValue(LIST_SECTION_CACHE, cacheKey, html, HTML_SECTION_CACHE_LIMIT);
   return html;
+}
+
+function setLimitedCacheValue(cache, key, value, limit) {
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > limit) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) break;
+    cache.delete(oldestKey);
+  }
 }
 
 function workflowDetailListKey(items, fields) {
@@ -12721,7 +12833,7 @@ function unitPriceFor(date) {
     return item.unit === "cage_day" && afterStart && beforeEnd;
   });
   const price = Number(rule?.price ?? state.baseRate ?? 4.5);
-  UNIT_PRICE_CACHE.set(date, price);
+  setLimitedCacheValue(UNIT_PRICE_CACHE, date, price, RATE_LOOKUP_CACHE_LIMIT);
   return price;
 }
 
@@ -12734,7 +12846,7 @@ function discountFor(iacuc, date) {
     return item.targetType === "iacuc" && item.targetId === iacuc && item.type === "discount" && inRange;
   });
   const value = Number(adjustment?.value ?? 0);
-  DISCOUNT_CACHE.set(cacheKey, value);
+  setLimitedCacheValue(DISCOUNT_CACHE, cacheKey, value, RATE_LOOKUP_CACHE_LIMIT);
   return value;
 }
 
@@ -14071,7 +14183,7 @@ function datesInMonth(month) {
     dates.push(formatLocalDate(date));
     date.setDate(date.getDate() + 1);
   }
-  DATE_LIST_CACHE.set(month, dates);
+  setLimitedCacheValue(DATE_LIST_CACHE, month, dates, DATE_LIST_CACHE_LIMIT);
   return dates;
 }
 
