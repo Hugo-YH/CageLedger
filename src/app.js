@@ -36,6 +36,17 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.16a",
+    releasedAt: "2026-06-15 14:54",
+    title: "笼卡打印状态流转修复",
+    items: [
+      "修复笼卡打印后未自动标记为已打印的问题",
+      "待接收批次列表增加手动标记已打印入口，支持单条和批量处理",
+      "限制未打印批次直接标记为已接收，保持未打印、已打印、已接收的状态链路一致",
+      "本次问题由 @吴玉婷 反馈",
+    ],
+  },
+  {
     version: "0.5.16",
     releasedAt: "2026-06-11 13:58",
     title: "系统性能与长期运行稳定性优化",
@@ -883,7 +894,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.16",
+  version: "0.5.16a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -5638,7 +5649,7 @@ function renderIntakeBatchView() {
               <label>
                 状态
                 <select name="status">
-                  ${INTAKE_STATUS_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === draft.status ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
+                  ${intakeStatusOptionsForBatch(draft).map(([value, label]) => `<option value="${value}" ${value === draft.status ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
                 </select>
               </label>
             </div>
@@ -5665,6 +5676,7 @@ function renderIntakeBatchView() {
             selectedCount,
             actions: `
               <button id="printSelectedCageCards" class="primary" type="button">${iconSvg("download")}打印当前页勾选批次</button>
+              <button id="markSelectedIntakeBatchesPrinted" class="secondary" type="button">${iconSvg("check")}标记已打印</button>
               <button id="confirmSelectedIntakeBatches" class="secondary" type="button">${iconSvg("check")}批量标记接收</button>
             `,
           })}
@@ -5760,6 +5772,7 @@ function renderIntakeBatchRow(batch) {
       <td>${escapeText(batch.confirmedCardCount || 0)} / ${escapeText(batch.finalCardCount || 0)} 张</td>
       <td>
         ${batch.status !== "received" ? `<button class="ghost" type="button" data-print-intake-batch="${escapeAttr(batch.id)}">打印</button>` : ""}
+        ${canMarkIntakeBatchPrinted(batch) ? `<button class="ghost" type="button" data-mark-intake-printed="${escapeAttr(batch.id)}">标记已打印</button>` : ""}
         ${batch.status === "printed" ? `<button class="ghost" type="button" data-confirm-intake-batch="${escapeAttr(batch.id)}">确认已接收</button>` : ""}
         <button class="ghost" type="button" data-open-intake-batch-button="${escapeAttr(batch.id)}">编辑</button>
         <button class="ghost danger-text" type="button" data-delete-intake-batch="${escapeAttr(batch.id)}">删除</button>
@@ -5876,7 +5889,7 @@ function renderIntakeBatchEditorModal() {
           <label>
             状态
             <select name="status">
-              ${INTAKE_STATUS_OPTIONS.map(([value, label]) => `<option value="${value}" ${value === draft.status ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
+              ${intakeStatusOptionsForBatch(draft).map(([value, label]) => `<option value="${value}" ${value === draft.status ? "selected" : ""}>${escapeText(label)}</option>`).join("")}
             </select>
           </label>
         </div>
@@ -5906,6 +5919,15 @@ function renderIntakeBatchEditorModal() {
 function intakeStatusLabel(value) {
   if (value === "draft") return "未打印";
   return INTAKE_STATUS_OPTIONS.find(([key]) => key === value)?.[1] || "未打印";
+}
+
+function canMarkIntakeBatchPrinted(batch = {}) {
+  return batch.status !== "printed" && batch.status !== "received";
+}
+
+function intakeStatusOptionsForBatch(batch = {}) {
+  if (batch.status === "printed" || batch.status === "received") return INTAKE_STATUS_OPTIONS;
+  return INTAKE_STATUS_OPTIONS.filter(([value]) => value !== "received");
 }
 
 function formatShortDate(value) {
@@ -8054,6 +8076,11 @@ function bindEvents() {
     event.preventDefault();
     try {
       const editedBatch = readIncomingBatchForm(event.target);
+      const originalBatch = state.intakeBatches.find((item) => item.id === editedBatch.id) || state.editingIntakeBatchDraft || null;
+      if (editedBatch.status === "received" && originalBatch?.status !== "printed" && originalBatch?.status !== "received") {
+        showFlashNotice("无法标记接收", "请先将批次标记为已打印，再确认接收。", "warning");
+        return;
+      }
       const savedBatch = await saveIntakeBatch(editedBatch);
       pushLog(`更新待接收批次：${savedBatch.batchNo || savedBatch.id}`);
       closeIntakeBatchEditor();
@@ -8097,6 +8124,11 @@ function bindEvents() {
     const pageBatchIds = new Set(pagedIntakeBatches().map((item) => item.id));
     const batches = state.intakeBatches.filter((item) => pageBatchIds.has(item.id) && state.selectedIntakeBatchIds.includes(item.id));
     await printAndMarkIntakeBatches(batches);
+  });
+  document.querySelector("#markSelectedIntakeBatchesPrinted")?.addEventListener("click", async () => {
+    const pageBatchIds = new Set(pagedIntakeBatches().map((item) => item.id));
+    const batches = state.intakeBatches.filter((item) => pageBatchIds.has(item.id) && state.selectedIntakeBatchIds.includes(item.id));
+    await markIntakeBatchesPrinted(batches);
   });
   document.querySelector("#confirmSelectedIntakeBatches")?.addEventListener("click", () => confirmSelectedIntakeBatches());
   document.querySelector("[data-select-all-intake-batches]")?.addEventListener("change", (event) => {
@@ -8331,7 +8363,7 @@ function bindEvents() {
       return;
     }
     const openIntakeBatchRow = event.target.closest("[data-open-intake-batch]");
-    if (openIntakeBatchRow && !event.target.closest("[data-select-intake-batch]") && !event.target.closest("[data-open-intake-batch-button]") && !event.target.closest("[data-delete-intake-batch]") && !event.target.closest("[data-confirm-intake-batch]") && !event.target.closest("[data-print-intake-batch]")) {
+    if (openIntakeBatchRow && !event.target.closest("[data-select-intake-batch]") && !event.target.closest("[data-open-intake-batch-button]") && !event.target.closest("[data-delete-intake-batch]") && !event.target.closest("[data-confirm-intake-batch]") && !event.target.closest("[data-print-intake-batch]") && !event.target.closest("[data-mark-intake-printed]")) {
       openIntakeBatchEditor(openIntakeBatchRow.dataset.openIntakeBatch);
       scheduleRender("intake_batch.open");
       return;
@@ -8369,6 +8401,13 @@ function bindEvents() {
       event.stopPropagation();
       const batch = state.intakeBatches.find((item) => item.id === printIntakeBatchButton.dataset.printIntakeBatch);
       if (batch) await printAndMarkIntakeBatches([batch]);
+      return;
+    }
+    const markIntakePrintedButton = event.target.closest("[data-mark-intake-printed]");
+    if (markIntakePrintedButton) {
+      event.stopPropagation();
+      const batch = state.intakeBatches.find((item) => item.id === markIntakePrintedButton.dataset.markIntakePrinted);
+      if (batch) await markIntakeBatchesPrinted([batch]);
       return;
     }
     const reimbursementFilterButton = event.target.closest("[data-reimbursement-filter]");
@@ -10879,18 +10918,39 @@ function printIntakeBatches(batches, afterPrint) {
   requestPrintIntakeCardItems(items, afterPrint);
 }
 
-async function printAndMarkIntakeBatches(batches) {
-  printIntakeBatches(batches, async () => {
-    try {
-      for (const batch of batches) {
-        if (batch.status === "received" || batch.status === "printed") continue;
-        await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
-      }
-      showFlashNotice("打印完成", `已打印并标记 ${batches.length} 个待接收批次。`, "success");
-      scheduleRender("intake_batch.print.complete");
-    } catch (error) {
-      reportSaveError(error);
+async function markIntakeBatchesPrinted(batches, { noticeTitle = "标记成功" } = {}) {
+  const targets = batches.filter(canMarkIntakeBatchPrinted);
+  if (!targets.length) {
+    showFlashNotice("没有可标记批次", "请选择未打印的待接收批次。", "warning");
+    return [];
+  }
+  const savedBatches = [];
+  try {
+    for (const batch of targets) {
+      const savedBatch = await saveIntakeBatch({ ...batch, status: "printed", updatedAt: new Date().toISOString() });
+      savedBatches.push(savedBatch);
     }
+    showFlashNotice(noticeTitle, `已标记 ${savedBatches.length} 个待接收批次为已打印。`, "success");
+    scheduleRender("intake_batch.mark_printed");
+    return savedBatches;
+  } catch (error) {
+    reportSaveError(error);
+    return savedBatches;
+  }
+}
+
+async function printAndMarkIntakeBatches(batches) {
+  if (!batches.length) {
+    showFlashNotice("当前无法打印", "请先勾选需要打印的待接收批次。", "warning");
+    return;
+  }
+  printIntakeBatches(batches, async () => {
+    const targets = batches.filter(canMarkIntakeBatchPrinted);
+    if (!targets.length) {
+      showFlashNotice("打印完成", `已打印 ${batches.length} 个待接收批次。`, "success");
+      return;
+    }
+    await markIntakeBatchesPrinted(targets, { noticeTitle: "打印完成" });
   });
 }
 
