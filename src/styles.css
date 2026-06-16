@@ -3484,6 +3484,8 @@ input[type="checkbox"]:focus {
 .slot-hover-preview {
   position: absolute;
   z-index: 25;
+  left: 0;
+  top: 0;
   width: min(340px, calc(100% - 24px));
   border: 1px solid #c7d9dc;
   border-radius: 8px;
@@ -3491,6 +3493,8 @@ input[type="checkbox"]:focus {
   box-shadow: 0 18px 38px rgba(16, 42, 47, 0.18);
   padding: 14px;
   pointer-events: none;
+  contain: layout paint style;
+  will-change: transform;
 }
 
 .slot-hover-preview[hidden],
@@ -5755,5 +5759,36 @@ tr:last-child td {
 
   .public-scan-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .flash-notice,
+  .confirm-dialog,
+  .quantity-template-table td.quantity-cell-attention {
+    animation: none !important;
+  }
+
+  .help-hint-bubble,
+  .dashboard-overview-card,
+  .dense-table tbody tr,
+  .workflow-row,
+  .placement-task-floating-card,
+  .sidebar-toggle,
+  button,
+  input,
+  select,
+  textarea {
+    transition-duration: 0.01ms !important;
+  }
+
+  .dashboard-overview-card:hover {
+    transform: none;
   }
 }

@@ -920,8 +920,13 @@ let quantitySavedHighlightTimer = null;
 let quantityIssueAttentionTimer = null;
 let pendingQuantityProblemFocusTimer = null;
 let pendingQuantityFocusTarget = null;
+let pendingQuantityEntryStatusForm = null;
+let quantityEntryStatusFrameId = 0;
 let renderScheduled = false;
 let renderFrameId = 0;
+let slotHoverPreviewFrameId = 0;
+let pendingSlotHoverPreviewButton = null;
+let slotHoverPreviewSize = { width: 0, height: 0 };
 let persistScheduled = false;
 let persistTimerId = 0;
 let lastPersistedStateJson = "";
@@ -3614,7 +3619,7 @@ function render() {
 
   bindEvents();
   lastRenderedView = state.activeView;
-  if (shouldPreserveScroll) {
+  if (shouldPreserveScroll && (previousScrollY > 0 || previousWorkspaceScrollTop > 0)) {
     requestAnimationFrame(() => {
       const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 0);
       window.scrollTo({ top: Math.min(previousScrollY, maxScroll) });
@@ -6788,6 +6793,17 @@ function syncQuantityEntryStatus(form = document.querySelector("#quantitySheetFo
   }
 }
 
+function scheduleQuantityEntryStatusSync(form = document.querySelector("#quantitySheetForm")) {
+  pendingQuantityEntryStatusForm = form;
+  if (quantityEntryStatusFrameId) return;
+  quantityEntryStatusFrameId = window.requestAnimationFrame(() => {
+    quantityEntryStatusFrameId = 0;
+    const nextForm = pendingQuantityEntryStatusForm;
+    pendingQuantityEntryStatusForm = null;
+    if (nextForm?.isConnected) syncQuantityEntryStatus(nextForm);
+  });
+}
+
 function quantityEntryStatusFromForm(form) {
   const rows = [];
   form?.querySelectorAll?.(".quantity-template-table tbody tr").forEach((tableRow) => {
@@ -8019,8 +8035,8 @@ function bindEvents() {
     sanitizeQuantitySheetInput(event.target);
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
-      syncQuantityChangeTypeWarnings(event.currentTarget);
-      syncQuantityEntryStatus(event.currentTarget);
+      syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
+      scheduleQuantityEntryStatusSync(event.currentTarget);
     }
   });
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("change", (event) => {
@@ -8028,13 +8044,13 @@ function bindEvents() {
     if (name === "quantityDatePicker") {
       applyQuantityDatePickerValue(event.target);
       captureQuantitySheetDetailDraft(event.currentTarget);
-      syncQuantityEntryStatus(event.currentTarget);
+      scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
     if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
-      syncQuantityChangeTypeWarnings(event.currentTarget);
-      syncQuantityEntryStatus(event.currentTarget);
+      syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
+      scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
     if (["month", "roomId", "addedType", "removedType"].includes(name)) {
@@ -8043,7 +8059,7 @@ function bindEvents() {
         pendingQuantityFocusTarget = syncQuantityTransferLookupEditor(event.target);
         focusPendingQuantityField();
         captureQuantitySheetDetailDraft(event.currentTarget);
-        syncQuantityEntryStatus(event.currentTarget);
+        scheduleQuantityEntryStatusSync(event.currentTarget);
         return;
       }
       scheduleRender("quantity_sheet.detail.form_change");
@@ -8647,8 +8663,8 @@ function bindEvents() {
     sanitizeQuantitySheetInput(event.target);
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
       captureQuantitySheetDraft();
-      syncQuantityChangeTypeWarnings();
-      syncQuantityEntryStatus(event.currentTarget);
+      syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
+      scheduleQuantityEntryStatusSync(event.currentTarget);
     }
   });
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
@@ -8656,7 +8672,7 @@ function bindEvents() {
     if (name === "quantityDatePicker") {
       applyQuantityDatePickerValue(event.target);
       captureQuantitySheetDraft();
-      syncQuantityEntryStatus(event.currentTarget);
+      scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
     if (event.target?.id === "quantitySheetMonth") {
@@ -8669,13 +8685,13 @@ function bindEvents() {
     }
     if (name === "rowDate") {
       captureQuantitySheetDraft();
-      syncQuantityEntryStatus(event.currentTarget);
+      scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
     if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount", "handler"].includes(name)) {
       captureQuantitySheetDraft();
-      syncQuantityChangeTypeWarnings();
-      syncQuantityEntryStatus(event.currentTarget);
+      syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
+      scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
     if (["addedType", "removedType"].includes(name)) {
@@ -8683,7 +8699,7 @@ function bindEvents() {
       pendingQuantityFocusTarget = syncQuantityTransferLookupEditor(event.target);
       focusPendingQuantityField();
       captureQuantitySheetDraft();
-      syncQuantityEntryStatus(event.currentTarget);
+      scheduleQuantityEntryStatusSync(event.currentTarget);
     }
   });
   document.querySelector("#quantitySheetForm select[name='roomId']")?.addEventListener("change", syncQuantitySheetRoomName);
@@ -8796,6 +8812,10 @@ function delegatedListenerOptions(signal) {
   return signal ? { signal } : undefined;
 }
 
+function delegatedPassiveListenerOptions(signal) {
+  return signal ? { signal, passive: true } : { passive: true };
+}
+
 function bindSlotDelegatedEvents(appRoot, signal = null) {
   if (!appRoot) return;
   appRoot.addEventListener("pointerdown", (event) => {
@@ -8806,25 +8826,25 @@ function bindSlotDelegatedEvents(appRoot, signal = null) {
     const slotButton = event.target.closest("[data-slot]");
     if (!slotButton || slotButton.contains(event.relatedTarget)) return;
     showSlotHoverPreview(slotButton);
-  }, delegatedListenerOptions(signal));
+  }, delegatedPassiveListenerOptions(signal));
   appRoot.addEventListener("mousemove", (event) => {
     const slotButton = event.target.closest("[data-slot]");
-    if (slotButton) positionSlotHoverPreview(slotButton);
-  }, delegatedListenerOptions(signal));
+    if (slotButton) scheduleSlotHoverPreviewPosition(slotButton);
+  }, delegatedPassiveListenerOptions(signal));
   appRoot.addEventListener("mouseout", (event) => {
     const slotButton = event.target.closest("[data-slot]");
     if (!slotButton || slotButton.contains(event.relatedTarget)) return;
     hideSlotHoverPreview();
-  }, delegatedListenerOptions(signal));
+  }, delegatedPassiveListenerOptions(signal));
   appRoot.addEventListener("focusin", (event) => {
     const slotButton = event.target.closest("[data-slot]");
     if (slotButton) showSlotHoverPreview(slotButton);
-  }, delegatedListenerOptions(signal));
+  }, delegatedPassiveListenerOptions(signal));
   appRoot.addEventListener("focusout", (event) => {
     const slotButton = event.target.closest("[data-slot]");
     if (!slotButton || slotButton.contains(event.relatedTarget)) return;
     hideSlotHoverPreview();
-  }, delegatedListenerOptions(signal));
+  }, delegatedPassiveListenerOptions(signal));
 }
 
 function handleSlotButtonClick(button) {
@@ -9084,7 +9104,7 @@ function syncQuantityTransferLookupEditor(select) {
   const existingLookup = editor.querySelector(".iacuc-lookup-field");
   if (select.value !== transferType) {
     existingLookup?.remove();
-    syncQuantityChangeTypeWarnings(form);
+    syncQuantityChangeTypeWarnings(editor);
     return null;
   }
   if (!existingLookup) {
@@ -9092,8 +9112,12 @@ function syncQuantityTransferLookupEditor(select) {
     warning?.insertAdjacentHTML("beforebegin", renderIacucLookupInput(inputName, "", { placeholder, compact: true }));
     bindIacucLookupInputs(`#${cssEscape(form.id)}`, () => {});
   }
-  syncQuantityChangeTypeWarnings(form);
+  syncQuantityChangeTypeWarnings(editor);
   return quantityFocusTargetFromCell(cell, inputName);
+}
+
+function quantityChangeWarningScope(target) {
+  return target?.closest?.(".quantity-change-editor") || target?.closest?.("form") || document;
 }
 
 function focusFirstQuantitySheetProblem({ invalidDateInputs = [], form = null } = {}) {
@@ -9134,7 +9158,8 @@ function queueQuantitySheetProblemFocus(options = {}) {
 }
 
 function syncQuantityChangeTypeWarnings(scope = document) {
-  scope.querySelectorAll?.(".quantity-change-editor").forEach((editor) => {
+  const editors = scope?.matches?.(".quantity-change-editor") ? [scope] : [...(scope.querySelectorAll?.(".quantity-change-editor") || [])];
+  editors.forEach((editor) => {
     const textInput = editor.querySelector("input[name='addedText'], input[name='removedText']");
     const typeSelect = editor.querySelector("select[name='addedType'], select[name='removedType']");
     const warning = editor.querySelector(".quantity-change-type-warning");
@@ -10874,7 +10899,7 @@ function toggleSelectedIntakeBatch(batchId, checked) {
   if (checked) next.add(batchId);
   else next.delete(batchId);
   state.selectedIntakeBatchIds = [...next];
-  saveState();
+  scheduleStatePersist();
 }
 
 function toggleSelectedIntakeBatchPage(checked) {
@@ -10884,7 +10909,7 @@ function toggleSelectedIntakeBatchPage(checked) {
     else next.delete(batch.id);
   }
   state.selectedIntakeBatchIds = [...next];
-  saveState();
+  scheduleStatePersist();
 }
 
 async function deleteIntakeBatch(batchId) {
@@ -11700,7 +11725,24 @@ function showSlotHoverPreview(slotButton) {
 
   preview.innerHTML = template.innerHTML;
   preview.hidden = false;
+  const previewRect = preview.getBoundingClientRect();
+  slotHoverPreviewSize = {
+    width: previewRect.width || preview.offsetWidth || 0,
+    height: previewRect.height || preview.offsetHeight || 0,
+  };
   positionSlotHoverPreview(slotButton);
+}
+
+function scheduleSlotHoverPreviewPosition(slotButton) {
+  if (!slotButton) return;
+  pendingSlotHoverPreviewButton = slotButton;
+  if (slotHoverPreviewFrameId) return;
+  slotHoverPreviewFrameId = window.requestAnimationFrame(() => {
+    slotHoverPreviewFrameId = 0;
+    const nextButton = pendingSlotHoverPreviewButton;
+    pendingSlotHoverPreviewButton = null;
+    if (nextButton?.isConnected) positionSlotHoverPreview(nextButton);
+  });
 }
 
 function positionSlotHoverPreview(slotButton) {
@@ -11711,25 +11753,32 @@ function positionSlotHoverPreview(slotButton) {
   const gap = 12;
   const containerRect = container.getBoundingClientRect();
   const slotRect = slotButton.getBoundingClientRect();
-  const previewRect = preview.getBoundingClientRect();
-  const maxLeft = Math.max(gap, container.clientWidth - previewRect.width - gap);
+  const previewWidth = slotHoverPreviewSize.width || preview.offsetWidth;
+  const previewHeight = slotHoverPreviewSize.height || preview.offsetHeight;
+  const maxLeft = Math.max(gap, container.clientWidth - previewWidth - gap);
   let left = slotRect.right - containerRect.left + gap;
-  if (left > maxLeft) left = slotRect.left - containerRect.left - previewRect.width - gap;
+  if (left > maxLeft) left = slotRect.left - containerRect.left - previewWidth - gap;
   left = Math.min(Math.max(gap, left), maxLeft);
 
   let top = slotRect.top - containerRect.top;
-  const maxTop = Math.max(gap, container.clientHeight - previewRect.height - gap);
+  const maxTop = Math.max(gap, container.clientHeight - previewHeight - gap);
   top = Math.min(Math.max(gap, top), maxTop);
 
-  preview.style.left = `${Math.round(left)}px`;
-  preview.style.top = `${Math.round(top)}px`;
+  preview.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
 }
 
 function hideSlotHoverPreview() {
   const preview = document.querySelector("#slotHoverPreview");
+  pendingSlotHoverPreviewButton = null;
+  if (slotHoverPreviewFrameId) {
+    window.cancelAnimationFrame(slotHoverPreviewFrameId);
+    slotHoverPreviewFrameId = 0;
+  }
   if (!preview) return;
   preview.hidden = true;
   preview.innerHTML = "";
+  preview.style.transform = "";
+  slotHoverPreviewSize = { width: 0, height: 0 };
 }
 
 function numericOrNull(value) {
