@@ -6354,11 +6354,12 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         user = self.require_user()
         if not user:
             return
-        if user["role"] != "admin":
-            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-            return
         try:
             body = self.read_json_body()
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement(conn, body, user)
                 workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
@@ -6371,11 +6372,12 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         user = self.require_user()
         if not user:
             return
-        if user["role"] != "admin":
-            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-            return
         try:
             body = self.read_json_body()
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement_by_pi(conn, body, user)
                 workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None

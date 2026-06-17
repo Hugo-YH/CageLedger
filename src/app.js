@@ -36,6 +36,17 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.16d",
+    releasedAt: "2026-06-17 17:26",
+    title: "数量统计表多类型录入与权限优化",
+    items: [
+      "数量统计表同一日期的新增和减少支持选择多个类型，并在同一格内按类型显示多行数量输入",
+      "保存时将同日多类型变更拆分为同日期明细，保持导出、结算和转入转出同步口径一致",
+      "房间管理员支持导出结算单和发起结算流程，贴合饲养费由房间管理人员负责的工作方式",
+      "本次建议由 @邹志成 提供",
+    ],
+  },
+  {
     version: "0.5.16c",
     releasedAt: "2026-06-17 13:01",
     title: "系统 UI 与交互动画优化",
@@ -913,7 +924,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.16c",
+  version: "0.5.16d",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -6146,11 +6157,6 @@ function renderCageMapBillingView() {
             </tbody>
           </table>
         </div>
-        ${
-          canGenerateStatement
-            ? ""
-            : `<p class="muted">共享模式下只有系统管理员可以生成和导出正式结算单。</p>`
-        }
       </div>
     </section>
   `;
@@ -6828,16 +6834,21 @@ function quantityEntryStatusFromForm(form) {
   form?.querySelectorAll?.(".quantity-template-table tbody tr").forEach((tableRow) => {
     [[0, 1, 2], [5, 6, 7]].forEach(([dateIndex, addedIndex, removedIndex]) => {
       const dateValue = String(tableRow.cells[dateIndex]?.querySelector("[name='rowDate']")?.value || "").trim();
-      const addedEditor = tableRow.cells[addedIndex]?.querySelector(".quantity-change-editor");
-      const removedEditor = tableRow.cells[removedIndex]?.querySelector(".quantity-change-editor");
-      if (!dateValue && !addedEditor && !removedEditor) return;
-      rows.push({
-        addedCount: parseQuantityChangeCell(addedEditor?.querySelector("[name='addedText']")?.value || "", "", "added").count,
-        addedType: addedEditor?.querySelector("[name='addedType']")?.value || "",
-        transferInFromIacuc: addedEditor?.querySelector("[name='transferInFromIacuc']")?.value || "",
-        removedCount: parseQuantityChangeCell(removedEditor?.querySelector("[name='removedText']")?.value || "", "", "removed").count,
-        removedType: removedEditor?.querySelector("[name='removedType']")?.value || "",
-        transferOutToIacuc: removedEditor?.querySelector("[name='transferOutToIacuc']")?.value || "",
+      const addedEntries = readQuantityChangeEditors(tableRow.cells[addedIndex], "added");
+      const removedEntries = readQuantityChangeEditors(tableRow.cells[removedIndex], "removed");
+      if (!dateValue && !addedEntries.length && !removedEntries.length) return;
+      const maxLength = Math.max(addedEntries.length, removedEntries.length, 1);
+      Array.from({ length: maxLength }, (_, index) => {
+        const added = addedEntries[index] || {};
+        const removed = removedEntries[index] || {};
+        rows.push({
+          addedCount: numericOrZero(added.count) > 0 ? numericOrZero(added.count) : null,
+          addedType: added.type || "",
+          transferInFromIacuc: added.transferIacuc || "",
+          removedCount: numericOrZero(removed.count) > 0 ? numericOrZero(removed.count) : null,
+          removedType: removed.type || "",
+          transferOutToIacuc: removed.transferIacuc || "",
+        });
       });
     });
   });
@@ -6899,8 +6910,6 @@ function renderQuantitySheetCalendarRows(entries) {
 function renderQuantitySheetCalendarCell(entry) {
   if (!entry) return `<td></td><td></td><td></td><td></td><td></td>`;
   const row = entry.row || {};
-  const addedText = quantityChangeInputValue(row, "added");
-  const removedText = quantityChangeInputValue(row, "removed");
   const animalManual = row.animalCount !== null && row.animalCount !== undefined;
   const cageManual = row.cageCount !== null && row.cageCount !== undefined;
   const isInitialRow = entry.index === 0;
@@ -6919,8 +6928,8 @@ function renderQuantitySheetCalendarCell(entry) {
         <input class="quantity-date-picker-native" name="quantityDatePicker" type="date" value="${escapeAttr(pickerValue)}" min="${escapeAttr(pickerMin)}" max="${escapeAttr(pickerMax)}" tabindex="-1" aria-hidden="true" />
       </div>
     </td>
-    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="added">${renderQuantityChangeEditor("added", row, addedText)}</td>
-    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="removed">${renderQuantityChangeEditor("removed", row, removedText)}</td>
+    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="added">${renderQuantityChangeStack("added", entry)}</td>
+    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="removed">${renderQuantityChangeStack("removed", entry)}</td>
     <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="animal">
       <input class="quantity-balance-input" name="animalCount" type="number" min="0" value="${escapeAttr(animalValue)}" data-auto-value="${escapeAttr(entry.autoAnimalCount)}" data-manual="${animalManual || isInitialRow ? "true" : "false"}" />
     </td>
@@ -6930,7 +6939,28 @@ function renderQuantitySheetCalendarCell(entry) {
   `;
 }
 
-function renderQuantityChangeEditor(kind, row, value) {
+function renderQuantityChangeStack(kind, entry) {
+  const rows = quantityChangeRowsForEntry(entry, kind);
+  return `
+    <div class="quantity-change-stack" data-change-kind="${kind}">
+      <div class="quantity-change-lines">
+        ${rows.map((row, index) => renderQuantityChangeEditor(kind, row, quantityChangeInputValue(row, kind), index)).join("")}
+      </div>
+      ${renderQuantityChangeTypeMenu(kind, rows)}
+    </div>
+  `;
+}
+
+function quantityChangeRowsForEntry(entry, kind) {
+  const rows = Array.isArray(entry?.changeRows) ? entry.changeRows : [entry?.row || {}];
+  const countKey = kind === "added" ? "addedCount" : "removedCount";
+  const typeKey = kind === "added" ? "addedType" : "removedType";
+  const transferKey = kind === "added" ? "transferInFromIacuc" : "transferOutToIacuc";
+  const filtered = rows.filter((row) => numericOrZero(row?.[countKey]) > 0 || row?.[typeKey] || row?.[transferKey]);
+  return filtered.length ? filtered : [entry?.row || {}];
+}
+
+function renderQuantityChangeEditor(kind, row, value, index = 0) {
   const type = kind === "added" ? row.addedType || "" : row.removedType || "";
   const transferName = kind === "added" ? "transferInFromIacuc" : "transferOutToIacuc";
   const transferValue = kind === "added" ? row.transferInFromIacuc || "" : row.transferOutToIacuc || "";
@@ -6941,11 +6971,10 @@ function renderQuantityChangeEditor(kind, row, value) {
   const missingTransferIacuc = count > 0 && showTransfer && !normalizeIacucNumber(transferValue);
   const editorClasses = ["quantity-change-editor", missingType ? "missing-type" : "", missingTransferIacuc ? "missing-transfer" : ""].filter(Boolean).join(" ");
   return `
-    <div class="${editorClasses}">
+    <div class="${editorClasses}" data-change-index="${escapeAttr(index)}">
       <input name="${kind}Text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(value)}" />
-      <select name="${kind}Type" title="变更类型">
-        ${options.map((option) => `<option value="${option}" ${type === option ? "selected" : ""}>${option || "类型"}</option>`).join("")}
-      </select>
+      <button class="quantity-change-type-trigger" type="button" data-action="toggle-quantity-type-menu" data-kind="${kind}" title="选择变更类型">${escapeText(type || "类型")}</button>
+      <input type="hidden" name="${kind}Type" value="${escapeAttr(type)}" />
       ${showTransfer ? renderIacucLookupInput(transferName, transferValue, { placeholder: kind === "added" ? "来源伦理号" : "目标伦理号", compact: true }) : ""}
       <small class="quantity-change-type-warning" ${missingType ? "" : "hidden"}>请选择类型</small>
       <small class="quantity-transfer-warning" ${missingTransferIacuc ? "" : "hidden"}>请填写伦理号</small>
@@ -6953,9 +6982,25 @@ function renderQuantityChangeEditor(kind, row, value) {
   `;
 }
 
+function renderQuantityChangeTypeMenu(kind, rows) {
+  const options = kind === "added" ? ["购入", "转入", "分笼"] : ["取材", "死亡", "转出"];
+  const selected = new Set((rows || []).map((row) => kind === "added" ? row.addedType || "" : row.removedType || "").filter(Boolean));
+  return `
+    <div class="quantity-change-type-menu" hidden>
+      ${options.map((option) => `
+        <button class="quantity-change-type-option ${selected.has(option) ? "selected" : ""}" type="button" data-action="toggle-quantity-change-type" data-kind="${kind}" data-type="${escapeAttr(option)}">
+          <span class="quantity-change-type-check">${selected.has(option) ? "✓" : ""}</span>
+          <span>${escapeText(option)}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
 function quantitySheetEntryHasInputIssues(entry) {
   if (!entry?.row) return false;
-  return quantitySheetRowInputIssues(entry.row).length > 0;
+  const rows = Array.isArray(entry.changeRows) && entry.changeRows.length ? entry.changeRows : [entry.row];
+  return rows.some((row) => quantitySheetRowInputIssues(row).length > 0);
 }
 
 function quantitySheetRowInputIssues(row) {
@@ -6980,25 +7025,45 @@ function buildQuantitySheetCalendarRows(sheet) {
     row: normalizeQuantitySheetDraftRow(row, draft.month),
     index,
   }));
+  const groupedSourceRows = [];
+  const groupedByDate = new Map();
+  sourceRows.forEach((item) => {
+    const dateKey = item.row.date || "";
+    const hasChange = numericOrZero(item.row.addedCount) > 0 || numericOrZero(item.row.removedCount) > 0 || item.row.addedType || item.row.removedType || item.row.transferInFromIacuc || item.row.transferOutToIacuc;
+    if (dateKey && hasChange && groupedByDate.has(dateKey)) {
+      groupedByDate.get(dateKey).changeRows.push(item.row);
+      return;
+    }
+    const grouped = { ...item, changeRows: [item.row] };
+    groupedSourceRows.push(grouped);
+    if (dateKey && hasChange) groupedByDate.set(dateKey, grouped);
+  });
   let animalCount = 0;
   let cageCount = 0;
-  return sourceRows.map((item) => {
+  return groupedSourceRows.map((item) => {
     const row = item.row;
     const date = row.date || "";
-    const added = numericOrZero(row.addedCount);
-    const removed = numericOrZero(row.removedCount);
+    const changeRows = Array.isArray(item.changeRows) && item.changeRows.length ? item.changeRows : [row];
+    const added = changeRows.reduce((sum, changeRow) => sum + numericOrZero(changeRow.addedCount), 0);
+    const removed = changeRows.reduce((sum, changeRow) => sum + numericOrZero(changeRow.removedCount), 0);
     const autoAnimalCount = Math.max(animalCount + added - removed, 0);
     const autoCageCount = cageCount;
-    const hasManualAnimal = row.animalCount !== null && row.animalCount !== undefined;
-    const hasManualCage = row.cageCount !== null && row.cageCount !== undefined;
-    const nextAnimalCount = hasManualAnimal ? numericOrZero(row.animalCount) : autoAnimalCount;
-    const nextCageCount = hasManualCage ? numericOrZero(row.cageCount) : autoCageCount;
-    const conflict = hasManualAnimal && added + removed > 0 && numericOrZero(row.animalCount) !== autoAnimalCount;
+    const balanceRow = [...changeRows].reverse().find((changeRow) => changeRow.animalCount !== null || changeRow.cageCount !== null) || row;
+    const hasManualAnimal = balanceRow.animalCount !== null && balanceRow.animalCount !== undefined;
+    const hasManualCage = balanceRow.cageCount !== null && balanceRow.cageCount !== undefined;
+    const nextAnimalCount = hasManualAnimal ? numericOrZero(balanceRow.animalCount) : autoAnimalCount;
+    const nextCageCount = hasManualCage ? numericOrZero(balanceRow.cageCount) : autoCageCount;
+    const conflict = hasManualAnimal && added + removed > 0 && numericOrZero(balanceRow.animalCount) !== autoAnimalCount;
     animalCount = nextAnimalCount;
     cageCount = nextCageCount;
     return {
       date,
-      row,
+      row: {
+        ...row,
+        animalCount: balanceRow.animalCount,
+        cageCount: balanceRow.cageCount,
+      },
+      changeRows,
       index: item.index,
       profile,
       autoAnimalCount,
@@ -8023,7 +8088,37 @@ function bindEvents() {
     if (event.target?.closest?.("[data-action='focus-quantity-issue']")) {
       syncQuantityEntryFormState(event.currentTarget);
       focusFirstQuantitySheetProblem({ form: event.currentTarget });
+      return;
     }
+    const typeMenuTrigger = event.target?.closest?.("[data-action='toggle-quantity-type-menu']");
+    if (typeMenuTrigger) {
+      toggleQuantityChangeTypeMenu(typeMenuTrigger);
+      return;
+    }
+    const typeOption = event.target?.closest?.("[data-action='toggle-quantity-change-type']");
+    if (typeOption) {
+      toggleQuantityChangeTypeOption(typeOption);
+      return;
+    }
+    closeQuantityChangeTypeMenus(event.target);
+  });
+  document.querySelector("#quantitySheetDetailForm")?.addEventListener("click", (event) => {
+    const datePickerButton = event.target?.closest?.("[data-action='open-quantity-date-picker']");
+    if (datePickerButton) {
+      openQuantityDatePicker(datePickerButton);
+      return;
+    }
+    const typeMenuTrigger = event.target?.closest?.("[data-action='toggle-quantity-type-menu']");
+    if (typeMenuTrigger) {
+      toggleQuantityChangeTypeMenu(typeMenuTrigger);
+      return;
+    }
+    const typeOption = event.target?.closest?.("[data-action='toggle-quantity-change-type']");
+    if (typeOption) {
+      toggleQuantityChangeTypeOption(typeOption);
+      return;
+    }
+    closeQuantityChangeTypeMenus(event.target);
   });
   document.querySelector("#quantitySheetSelect")?.addEventListener("change", (event) => {
     handleQuantitySheetSelect(event).catch(reportSaveError);
@@ -8043,10 +8138,6 @@ function bindEvents() {
   });
   bindIacucLookupInputs("#quantitySheetDetailForm", autofillQuantitySheetDetailIacucFields);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("submit", handleQuantitySheetDetailSubmit);
-  document.querySelector("#quantitySheetDetailForm")?.addEventListener("click", (event) => {
-    const datePickerButton = event.target?.closest?.("[data-action='open-quantity-date-picker']");
-    if (datePickerButton) openQuantityDatePicker(datePickerButton);
-  });
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("focusin", handleQuantityEntryFocusIn);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("focusout", handleQuantityEntryFocusOut);
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("input", (event) => {
@@ -9087,19 +9178,21 @@ function clearActiveQuantityEntryCell(scope = document) {
   scope.querySelectorAll?.(".quantity-cell-active").forEach((cell) => cell.classList.remove("quantity-cell-active"));
 }
 
-function quantityFocusTargetFromCell(cell, inputName) {
+function quantityFocusTargetFromCell(cell, inputName, editor = null) {
   if (!cell) return null;
   const row = cell.dataset.quantityRow || "";
   const field = cell.dataset.quantityField || "";
   if (!row || !field || !inputName) return null;
-  return { row, field, inputName };
+  const changeIndex = editor?.dataset?.changeIndex;
+  return changeIndex === undefined ? { row, field, inputName } : { row, field, inputName, changeIndex };
 }
 
 function focusPendingQuantityField() {
   if (!pendingQuantityFocusTarget) return;
   const target = { ...pendingQuantityFocusTarget };
   window.setTimeout(() => {
-    const selector = `[data-quantity-row="${cssEscape(target.row)}"][data-quantity-field="${cssEscape(target.field)}"] input[name="${cssEscape(target.inputName)}"]`;
+    const editorSelector = target.changeIndex !== undefined ? ` .quantity-change-editor[data-change-index="${cssEscape(String(target.changeIndex))}"]` : "";
+    const selector = `[data-quantity-row="${cssEscape(target.row)}"][data-quantity-field="${cssEscape(target.field)}"]${editorSelector} input[name="${cssEscape(target.inputName)}"]`;
     const input = document.querySelector(selector);
     if (input instanceof HTMLInputElement) {
       input.focus();
@@ -9132,11 +9225,99 @@ function syncQuantityTransferLookupEditor(select) {
     bindIacucLookupInputs(`#${cssEscape(form.id)}`, () => {});
   }
   syncQuantityChangeTypeWarnings(editor);
-  return quantityFocusTargetFromCell(cell, inputName);
+  return quantityFocusTargetFromCell(cell, inputName, editor);
 }
 
 function quantityChangeWarningScope(target) {
   return target?.closest?.(".quantity-change-editor") || target?.closest?.("form") || document;
+}
+
+function toggleQuantityChangeTypeMenu(trigger) {
+  const stack = trigger?.closest?.(".quantity-change-stack");
+  const menu = stack?.querySelector?.(".quantity-change-type-menu");
+  if (!stack || !menu) return;
+  const shouldOpen = menu.hidden;
+  closeQuantityChangeTypeMenus(trigger);
+  menu.hidden = !shouldOpen;
+  stack.classList.toggle("type-menu-open", shouldOpen);
+}
+
+function closeQuantityChangeTypeMenus(target = null) {
+  document.querySelectorAll(".quantity-change-type-menu:not([hidden])").forEach((menu) => {
+    if (target && menu.closest(".quantity-change-stack")?.contains(target)) return;
+    menu.hidden = true;
+    menu.closest(".quantity-change-stack")?.classList.remove("type-menu-open");
+  });
+}
+
+function toggleQuantityChangeTypeOption(button) {
+  const stack = button?.closest?.(".quantity-change-stack");
+  const form = button?.closest?.("form");
+  const kind = button?.dataset?.kind || stack?.dataset?.changeKind || "";
+  const type = button?.dataset?.type || "";
+  if (!stack || !form || !["added", "removed"].includes(kind) || !type) return;
+  const entries = readQuantityChangeEditors(stack, kind);
+  const options = quantityChangeOptions(kind);
+  const selected = new Set(entries.map((entry) => entry.type).filter(Boolean));
+  if (selected.has(type)) selected.delete(type);
+  else selected.add(type);
+  const rows = quantityRowsFromSelectedChangeTypes(kind, entries, selected, options);
+  replaceQuantityChangeStack(stack, kind, rows, true);
+  bindIacucLookupInputs(`#${cssEscape(form.id)}`, form.id === "quantitySheetForm" ? autofillQuantitySheetIacucFields : autofillQuantitySheetDetailIacucFields);
+  syncQuantityEntryFormState(form);
+  QUANTITY_ENTRY_CONTROL_ORDER_CACHE.delete(form.querySelector(".quantity-template-table"));
+  const focusType = selected.has(type) ? type : [...selected][0] || "";
+  const focusEditor = focusType ? [...stack.querySelectorAll(".quantity-change-editor")].find((editor) => editor.querySelector(`input[name='${kind}Type']`)?.value === focusType) : stack.querySelector(".quantity-change-editor");
+  const focusInput = focusEditor?.querySelector(`input[name='${kind}Text']`);
+  if (focusInput instanceof HTMLInputElement) focusQuantityControl(focusInput);
+}
+
+function quantityChangeOptions(kind) {
+  return kind === "added" ? ["购入", "转入", "分笼"] : ["取材", "死亡", "转出"];
+}
+
+function quantityRowsFromSelectedChangeTypes(kind, entries, selected, options) {
+  const selectedTypes = options.filter((option) => selected.has(option));
+  const byType = new Map(entries.filter((entry) => entry.type).map((entry) => [entry.type, entry]));
+  const blankEntry = entries.find((entry) => !entry.type && (numericOrZero(entry.count) > 0 || entry.transferIacuc));
+  if (!selectedTypes.length) {
+    const preserved = blankEntry || entries[0] || { count: null, type: "", transferIacuc: "" };
+    return [quantityChangeRowFromEntry(kind, { ...preserved, type: "", transferIacuc: "" })];
+  }
+  return selectedTypes.map((type, index) => {
+    const entry = byType.get(type) || (index === 0 ? blankEntry : null) || { count: null, type, transferIacuc: "" };
+    return quantityChangeRowFromEntry(kind, { ...entry, type });
+  });
+}
+
+function quantityChangeRowFromEntry(kind, entry) {
+  if (kind === "added") {
+    return {
+      addedCount: numericOrZero(entry?.count) > 0 ? numericOrZero(entry.count) : null,
+      addedType: entry?.type || "",
+      transferInFromIacuc: entry?.type === "转入" ? entry?.transferIacuc || "" : "",
+    };
+  }
+  return {
+    removedCount: numericOrZero(entry?.count) > 0 ? numericOrZero(entry.count) : null,
+    removedType: entry?.type || "",
+    transferOutToIacuc: entry?.type === "转出" ? entry?.transferIacuc || "" : "",
+  };
+}
+
+function replaceQuantityChangeStack(stack, kind, rows, keepMenuOpen = false) {
+  const lines = stack.querySelector(".quantity-change-lines");
+  if (lines) {
+    lines.innerHTML = rows.map((row, index) => renderQuantityChangeEditor(kind, row, quantityChangeInputValue(row, kind), index)).join("");
+  }
+  const oldMenu = stack.querySelector(".quantity-change-type-menu");
+  oldMenu?.remove();
+  stack.insertAdjacentHTML("beforeend", renderQuantityChangeTypeMenu(kind, rows));
+  const nextMenu = stack.querySelector(".quantity-change-type-menu");
+  if (keepMenuOpen && nextMenu) {
+    nextMenu.hidden = false;
+    stack.classList.add("type-menu-open");
+  }
 }
 
 function focusFirstQuantitySheetProblem({ invalidDateInputs = [], form = null } = {}) {
@@ -9148,7 +9329,7 @@ function focusFirstQuantitySheetProblem({ invalidDateInputs = [], form = null } 
     target = [...scope.querySelectorAll(".quantity-entry-wrap input[name='rowDate']")].find((input) => invalidDates.has(String(input.value || "").trim()));
   }
   if (!target) {
-    target = scope.querySelector(".quantity-change-editor.missing-type select, .quantity-change-editor.missing-transfer input[name='transferInFromIacuc'], .quantity-change-editor.missing-transfer input[name='transferOutToIacuc']");
+    target = scope.querySelector(".quantity-change-editor.missing-type .quantity-change-type-trigger, .quantity-change-editor.missing-transfer input[name='transferInFromIacuc'], .quantity-change-editor.missing-transfer input[name='transferOutToIacuc']");
   }
   if (!target) return;
   const cell = target.closest("td");
@@ -9180,14 +9361,14 @@ function syncQuantityChangeTypeWarnings(scope = document) {
   const editors = scope?.matches?.(".quantity-change-editor") ? [scope] : [...(scope.querySelectorAll?.(".quantity-change-editor") || [])];
   editors.forEach((editor) => {
     const textInput = editor.querySelector("input[name='addedText'], input[name='removedText']");
-    const typeSelect = editor.querySelector("select[name='addedType'], select[name='removedType']");
+    const typeInput = editor.querySelector("input[name='addedType'], input[name='removedType'], select[name='addedType'], select[name='removedType']");
     const warning = editor.querySelector(".quantity-change-type-warning");
     const transferInput = editor.querySelector("input[name='transferInFromIacuc'], input[name='transferOutToIacuc']");
     const transferWarning = editor.querySelector(".quantity-transfer-warning");
-    const kind = typeSelect?.name === "addedType" ? "added" : "removed";
+    const kind = typeInput?.name === "addedType" ? "added" : "removed";
     const hasCount = numericOrZero(parseQuantityChangeCell(textInput?.value || "", "", kind).count) > 0;
-    const missingType = hasCount && !typeSelect?.value;
-    const missingTransfer = hasCount && ((kind === "added" && typeSelect?.value === "转入") || (kind === "removed" && typeSelect?.value === "转出")) && !normalizeIacucNumber(transferInput?.value || "");
+    const missingType = hasCount && !typeInput?.value;
+    const missingTransfer = hasCount && ((kind === "added" && typeInput?.value === "转入") || (kind === "removed" && typeInput?.value === "转出")) && !normalizeIacucNumber(transferInput?.value || "");
     editor.classList.toggle("missing-type", missingType);
     editor.classList.toggle("missing-transfer", missingTransfer);
     if (warning) warning.hidden = !missingType;
@@ -11369,16 +11550,18 @@ function readQuantitySheetForm(form, options = {}) {
       if (b.date) return 1;
       return a.rowIndex - b.rowIndex;
     })
-    .map(({ rowCells, rowIndex, rawDateInput, date }) => {
+    .flatMap(({ rowCells, rowIndex, rawDateInput, date }) => {
       const previous = baseSheet?.rows?.[rowIndex] || {};
-      const added = parseQuantityChangeCell(rowCells.added?.querySelector("[name='addedText']")?.value || "", rowCells.added?.querySelector("[name='addedType']")?.value || "", "added");
-      const removed = parseQuantityChangeCell(rowCells.removed?.querySelector("[name='removedText']")?.value || "", rowCells.removed?.querySelector("[name='removedType']")?.value || "", "removed");
+      const addedEntries = readQuantityChangeEditors(rowCells.added, "added");
+      const removedEntries = readQuantityChangeEditors(rowCells.removed, "removed");
+      const added = primaryQuantityChangeEntry(addedEntries);
+      const removed = primaryQuantityChangeEntry(removedEntries);
       const animalInput = rowCells.animal?.querySelector("[name='animalCount']");
       const cageInput = rowCells.cage?.querySelector("[name='cageCount']");
       let manualAnimalCount = manualQuantityBalanceValue(animalInput);
       let manualCageCount = manualQuantityBalanceValue(cageInput);
-      let addedCount = added.count;
-      let removedCount = removed.count;
+      let addedCount = sumQuantityChangeEntries(addedEntries);
+      let removedCount = sumQuantityChangeEntries(removedEntries);
       let addedType = added.type;
       let removedType = removed.type;
       const hasChange = numericOrZero(addedCount) > 0 || numericOrZero(removedCount) > 0;
@@ -11405,54 +11588,30 @@ function readQuantitySheetForm(form, options = {}) {
       runningAnimalCount = nextAnimalCount;
       runningCageCount = nextCageCount;
       const handler = previous.handler || previous.notes || "";
-      const transferInFromIacucInput = rowCells.added?.querySelector("[name='transferInFromIacuc']")?.value || "";
-      const transferOutToIacucInput = rowCells.removed?.querySelector("[name='transferOutToIacuc']")?.value || "";
+      const transferInFromIacucInput = added.transferIacuc || "";
+      const transferOutToIacucInput = removed.transferIacuc || "";
       const hasManualBalance = manualAnimalCount !== null || manualCageCount !== null;
-      const hasTypedChange = Boolean(addedType || removedType || transferInFromIacucInput || transferOutToIacucInput);
+      const hasTypedChange = Boolean(addedEntries.length || removedEntries.length);
       const hasContent = Boolean(rawDateInput || numericOrZero(addedCount) || numericOrZero(removedCount) || hasManualBalance || handler || hasTypedChange);
-      if (!hasContent) return null;
+      if (!hasContent) return [];
+      const expandedRows = buildQuantitySheetExpandedRows({
+        previous,
+        date,
+        rawDateInput,
+        rowIndex,
+        addedEntries,
+        removedEntries,
+        manualAnimalCount,
+        manualCageCount,
+        handler,
+        hasManualBalance,
+      });
       if (!date && rowIndex > 0) {
         if (rawDateInput) invalidDateInputs.push(rawDateInput);
-        if (!preserveInvalidDates) return null;
-        return {
-          id: previous.id || crypto.randomUUID(),
-          date: "",
-          rawDateInput,
-          addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
-          addedType: numericOrZero(addedCount) > 0 ? addedType || "" : "",
-          transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
-          removedCount: numericOrZero(removedCount) > 0 ? numericOrZero(removedCount) : null,
-          removedType: numericOrZero(removedCount) > 0 ? removedType || "" : "",
-          transferOutToIacuc: removedType === "转出" ? normalizeIacucNumber(transferOutToIacucInput || previous.transferOutToIacuc || "") : "",
-          animalCount: manualAnimalCount,
-          cageCount: manualCageCount,
-          handler,
-          balanceSource: hasManualBalance ? "manual" : "auto",
-          notes: handler,
-          transferSourceSheetId: previous.transferSourceSheetId || "",
-          transferSourceIacuc: previous.transferSourceIacuc || "",
-          transferMirrorContrib: previous.transferMirrorContrib || null,
-        };
+        if (!preserveInvalidDates) return [];
+        return expandedRows.map((row) => ({ ...row, date: "", rawDateInput }));
       }
-      return {
-        id: previous.id || crypto.randomUUID(),
-        date,
-        rawDateInput: rowIndex === 0 ? rawDateInput : rawDateInput || date,
-        addedCount: numericOrZero(addedCount) > 0 ? numericOrZero(addedCount) : null,
-        addedType: numericOrZero(addedCount) > 0 ? addedType || "" : "",
-        transferInFromIacuc: addedType === "转入" ? normalizeIacucNumber(transferInFromIacucInput || previous.transferInFromIacuc || "") : "",
-        removedCount: numericOrZero(removedCount) > 0 ? numericOrZero(removedCount) : null,
-        removedType: numericOrZero(removedCount) > 0 ? removedType || "" : "",
-        transferOutToIacuc: removedType === "转出" ? normalizeIacucNumber(transferOutToIacucInput || previous.transferOutToIacuc || "") : "",
-        animalCount: manualAnimalCount,
-        cageCount: manualCageCount,
-        handler,
-        balanceSource: hasManualBalance ? "manual" : "auto",
-        notes: handler,
-        transferSourceSheetId: previous.transferSourceSheetId || "",
-        transferSourceIacuc: previous.transferSourceIacuc || "",
-        transferMirrorContrib: previous.transferMirrorContrib || null,
-      };
+      return expandedRows;
     })
     .filter(Boolean);
 
@@ -11474,6 +11633,63 @@ function readQuantitySheetForm(form, options = {}) {
     pageCount: quantitySheetPageCount(baseSheet),
     rows,
     invalidDateInputs,
+  });
+}
+
+function readQuantityChangeEditors(cell, kind) {
+  return [...(cell?.querySelectorAll?.(".quantity-change-editor") || [])]
+    .map((editor) => {
+      const textInput = editor.querySelector(`input[name='${kind}Text']`);
+      const typeInput = editor.querySelector(`input[name='${kind}Type'], select[name='${kind}Type']`);
+      const parsed = parseQuantityChangeCell(textInput?.value || "", typeInput?.value || "", kind);
+      const transferName = kind === "added" ? "transferInFromIacuc" : "transferOutToIacuc";
+      const transferIacuc = normalizeIacucNumber(editor.querySelector(`input[name='${transferName}']`)?.value || "");
+      const hasContent = numericOrZero(parsed.count) > 0 || parsed.type || transferIacuc;
+      if (!hasContent) return null;
+      return {
+        count: parsed.count,
+        type: parsed.type || "",
+        transferIacuc,
+      };
+    })
+    .filter(Boolean);
+}
+
+function primaryQuantityChangeEntry(entries) {
+  return entries.find((entry) => numericOrZero(entry.count) > 0 || entry.type || entry.transferIacuc) || { count: null, type: "", transferIacuc: "" };
+}
+
+function sumQuantityChangeEntries(entries) {
+  const total = (entries || []).reduce((sum, entry) => sum + numericOrZero(entry.count), 0);
+  return total > 0 ? total : null;
+}
+
+function buildQuantitySheetExpandedRows({ previous, date, rawDateInput, rowIndex, addedEntries, removedEntries, manualAnimalCount, manualCageCount, handler, hasManualBalance }) {
+  const maxLength = Math.max(addedEntries.length, removedEntries.length, 1);
+  return Array.from({ length: maxLength }, (_, index) => {
+    const added = addedEntries[index] || { count: null, type: "", transferIacuc: "" };
+    const removed = removedEntries[index] || { count: null, type: "", transferIacuc: "" };
+    const addedCount = numericOrZero(added.count) > 0 ? numericOrZero(added.count) : null;
+    const removedCount = numericOrZero(removed.count) > 0 ? numericOrZero(removed.count) : null;
+    return {
+      id: index === 0 ? previous.id || crypto.randomUUID() : crypto.randomUUID(),
+      date,
+      rawDateInput: rowIndex === 0 ? rawDateInput : rawDateInput || date,
+      addedCount,
+      addedType: addedCount ? added.type || "" : "",
+      transferInFromIacuc: addedCount && added.type === "转入" ? normalizeIacucNumber(added.transferIacuc || (index === 0 ? previous.transferInFromIacuc : "") || "") : "",
+      removedCount,
+      removedType: removedCount ? removed.type || "" : "",
+      transferOutToIacuc: removedCount && removed.type === "转出" ? normalizeIacucNumber(removed.transferIacuc || (index === 0 ? previous.transferOutToIacuc : "") || "") : "",
+      animalCount: index === maxLength - 1 ? manualAnimalCount : null,
+      cageCount: index === maxLength - 1 ? manualCageCount : null,
+      handler: index === 0 ? handler : "",
+      balanceSource: index === maxLength - 1 && hasManualBalance ? "manual" : "auto",
+      notes: index === 0 ? handler : "",
+      transferSourceSheetId: index === 0 ? previous.transferSourceSheetId || "" : "",
+      transferSourceIacuc: index === 0 ? previous.transferSourceIacuc || "" : "",
+      transferMirrorContrib: index === 0 ? previous.transferMirrorContrib || null : null,
+    };
   });
 }
 
@@ -13129,10 +13345,6 @@ async function statementForExport() {
     const statement = cageMapBillingStatement(state.billingPi, state.billingMonth);
     return { statement, info: statementInfoForExport(statement) };
   }
-  if (currentUser?.role !== "admin") {
-    throw new Error("共享模式下只有系统管理员可以生成和导出正式结算单");
-  }
-
   const response = await fetch(API_BILLING_STATEMENT_GENERATE_BY_PI_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
