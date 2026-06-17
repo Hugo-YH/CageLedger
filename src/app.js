@@ -10466,12 +10466,23 @@ async function handleQuantitySheetSubmit(event) {
     const sheet = await saveQuantitySheetDraft();
     pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
     markSavedQuantitySheetForFeedback(sheet.id);
+    resetQuantitySheetDraftAfterSave(sheet);
     showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
     scheduleRender("quantity_sheet.submit");
     scrollSavedQuantitySheetIntoView(sheet.id);
   } catch (error) {
     reportSaveError(error);
   }
+}
+
+function resetQuantitySheetDraftAfterSave(savedSheet) {
+  const month = savedSheet?.month || state.quantitySheetDraft?.month || state.billingMonth || today.slice(0, 7);
+  state.billingMonth = month;
+  state.billingIacuc = "";
+  state.billingPi = "";
+  state.billingPrincipalType = principalTypeForPi("");
+  state.freeCageAllowance = freeCageAllowanceForPi("");
+  state.quantitySheetDraft = makeQuantitySheetDraft(month);
 }
 
 function markSavedQuantitySheetForFeedback(sheetId) {
