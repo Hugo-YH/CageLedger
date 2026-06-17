@@ -36,6 +36,15 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.16b",
+    releasedAt: "2026-06-17 11:58",
+    title: "数量统计表连续录入优化",
+    items: [
+      "数量统计表保存成功后自动清空当前录入内容，并保留当前月份，方便继续录入下一张统计表",
+      "刚保存的统计表继续在已保存列表中高亮并保持勾选状态，便于导出和发起后续流程",
+    ],
+  },
+  {
     version: "0.5.16a",
     releasedAt: "2026-06-15 14:54",
     title: "笼卡打印状态流转修复",
@@ -894,7 +903,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.16a",
+  version: "0.5.16b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
