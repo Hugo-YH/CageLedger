@@ -3730,6 +3730,7 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     now = now_iso()
     sheet = normalize_quantity_sheet(payload, sheet_id, now)
     validate_quantity_sheet_permission(actor, sheet)
+    validate_quantity_sheet_animal_requirements(conn, sheet)
     exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
     db_values = quantity_sheet_db_values(sheet)
     if exists:
@@ -3827,6 +3828,7 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "contact": clean_text(source.get("contact", "")),
         "funding": clean_text(source.get("funding", "")),
         "billingUnit": "animal_day" if clean_text(source.get("billingUnit", "")) == "animal_day" else "cage_day",
+        "animalDetailEnabled": parse_bool(source.get("animalDetailEnabled")),
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
         "initialCageCount": as_int(source.get("initialCageCount")),
         "pageCount": max(as_int(source.get("pageCount")) or 1, 1),
@@ -3835,6 +3837,23 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
     }
     sheet["rows"] = sorted(sheet["rows"], key=lambda item: (item["date"], item["id"]))
     return sheet
+
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    return clean_text(value).lower() in ("1", "true", "yes", "on")
+
+
+def validate_quantity_sheet_animal_requirements(conn, sheet):
+    rooms = read_payloads(conn, "rooms", "rowid")
+    room = next((item for item in rooms if item.get("id") == sheet.get("roomId")), None)
+    profile = billing_profile_for_room(room, sheet.get("billingUnit"))
+    if profile["unit"] != "animal_day":
+        return
+    has_animal_balance = any((row.get("animalCount") or 0) > 0 for row in sheet.get("rows", []))
+    if not has_animal_balance:
+        raise ValueError("该房间按只/天计费，请打开动物数量并补充结余总数")
 
 
 def normalize_quantity_sheet_row(row, month):

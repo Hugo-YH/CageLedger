@@ -36,6 +36,18 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.17",
+    releasedAt: "2026-06-17 21:14",
+    title: "数量统计表动物数量与录入体验优化",
+    items: [
+      "数量统计表新增动物数量开关，按笼/天计费房间可隐藏新增、减少和结余总数列，按只/天计费房间默认打开并保持必填校验",
+      "兔、猴、猪、犬等按只计费项目默认按 1 只 1 笼辅助录入，保存时继续校验动物数量明细完整性",
+      "数量统计表计费口径、动物数量说明和页数检查信息改为保存确认弹层与按钮提示，减少录入区常驻干扰",
+      "系统卡片标题栏统一为卡片内吸附工具条，长表单录入时可直接保存或执行主操作",
+      "动物数量变化隐藏功能由 @苏玉霞 提供",
+    ],
+  },
+  {
     version: "0.5.16d",
     releasedAt: "2026-06-17 17:26",
     title: "数量统计表多类型录入与权限优化",
@@ -924,7 +936,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.16d",
+  version: "0.5.17",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -951,6 +963,7 @@ let quantityIssueAttentionTimer = null;
 let pendingQuantityProblemFocusTimer = null;
 let pendingQuantityFocusTarget = null;
 let pendingQuantityEntryStatusForm = null;
+let pendingQuantitySheetSaveJob = null;
 let quantityEntryStatusFrameId = 0;
 let renderScheduled = false;
 let renderFrameId = 0;
@@ -3665,12 +3678,13 @@ function render() {
 
 function renderConfirmDialog() {
   if (!state.confirmDialog?.message) return "";
+  const dialogClass = state.confirmDialog.type ? ` confirm-dialog-${escapeAttr(state.confirmDialog.type)}` : "";
   return `
     <div class="confirm-dialog-backdrop" role="presentation">
-      <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle">
+      <section class="confirm-dialog${dialogClass}" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle">
         <div>
           <h2 id="confirmDialogTitle">${escapeText(state.confirmDialog.title || "请确认")}</h2>
-          <p>${escapeText(state.confirmDialog.message)}</p>
+          ${renderConfirmDialogBody(state.confirmDialog)}
         </div>
         <div class="confirm-dialog-actions">
           <button class="secondary" type="button" id="cancelConfirmDialog">${escapeText(state.confirmDialog.cancelLabel || "取消")}</button>
@@ -3679,6 +3693,38 @@ function renderConfirmDialog() {
       </section>
     </div>
   `;
+}
+
+function renderConfirmDialogBody(dialog) {
+  if (dialog?.type === "save-quantity-sheet") {
+    const billingParts = Array.isArray(dialog.payload?.billingParts) ? dialog.payload.billingParts : [];
+    const statusItems = Array.isArray(dialog.payload?.statusItems) ? dialog.payload.statusItems : [];
+    return `
+      <div class="quantity-save-confirm">
+        <section class="quantity-save-confirm-section">
+          <span class="quantity-save-confirm-label">计费口径</span>
+          <div class="quantity-save-confirm-chips">
+            ${billingParts.map((part) => `<span>${escapeText(part)}</span>`).join("")}
+          </div>
+        </section>
+        <section class="quantity-save-confirm-note">
+          ${iconSvg("info")}
+          <p>${escapeText(dialog.payload?.animalNotice || "")}</p>
+        </section>
+        <section class="quantity-save-confirm-stats" aria-label="数量统计表状态">
+          ${statusItems
+            .map((item) => `
+              <div class="${item.tone ? `is-${escapeAttr(item.tone)}` : ""}">
+                <span>${escapeText(item.label)}</span>
+                <strong>${escapeText(item.value)}</strong>
+              </div>
+            `)
+            .join("")}
+        </section>
+      </div>
+    `;
+  }
+  return `<p>${escapeText(dialog?.message || "")}</p>`;
 }
 
 function renderFlashNotice() {
@@ -6169,6 +6215,8 @@ function renderQuantitySheetBillingView() {
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(draft));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
   const quantityRooms = quantitySheetSelectableRooms();
+  const animalDetails = quantitySheetAnimalDetailState(draft, quantityProfile);
+  const saveHint = quantitySheetSaveButtonHint(draft);
 
   return `
     <section class="billing-layout quantity-billing-layout">
@@ -6179,8 +6227,9 @@ function renderQuantitySheetBillingView() {
             helpKey: "quantityBilling",
             actions: `
             <div class="quantity-sheet-actions quantity-sheet-head-actions">
+              ${renderQuantityAnimalDetailToggle(animalDetails)}
               <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
-              <button id="saveQuantitySheet" class="secondary" type="submit">${iconSvg("save")}保存统计表</button>
+              <button id="saveQuantitySheet" class="secondary" type="submit" title="${escapeAttr(saveHint)}">${iconSvg("save")}保存统计表</button>
             </div>
             `,
           })}
@@ -6242,18 +6291,9 @@ function renderQuantitySheetBillingView() {
               `,
             })}
             <input type="hidden" name="billingUnit" value="${escapeAttr(quantityProfile.unit)}" />
-            <div class="room-billing-hint">
-              <span>${escapeText(facilityLabel(quantityProfile.facility))}</span>
-              <span>${escapeText(billingItemLabel(quantityProfile.billingItem))}</span>
-              <span>${escapeText(customerTypeLabel(quantityProfile.customerType))}</span>
-              <span>单价 ¥${MONEY_FORMAT.format(quantityProfile.unitPrice)} / ${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
-            </div>
+            <input type="hidden" name="animalDetailEnabled" value="${animalDetails.enabled ? "true" : "false"}" />
           </div>
-          <div class="quantity-page-toolbar">
-            <div class="quantity-page-meta">
-              <span>数量统计表页数：${quantitySheetPageCount(draft)} 页</span>
-              ${renderQuantityEntryStatus(draft)}
-            </div>
+          <div class="quantity-page-toolbar compact">
             <button id="addQuantitySheetPage" class="secondary" type="button">${iconSvg("plus")}新增统计表页</button>
           </div>
           <div class="quantity-entry-wrap">
@@ -6329,6 +6369,7 @@ function renderQuantitySheetDetailModal() {
   const sheet = state.quantitySheets.find((item) => item.id === state.viewingQuantitySheetId);
   if (!sheet) return "";
   const mode = state.viewingQuantitySheetMode === "edit" ? "edit" : "preview";
+  const saveHint = quantitySheetSaveButtonHint(sheet);
   return renderModalFrame({
     backdropId: "closeQuantitySheetDetail",
     closeButtonId: "closeQuantitySheetDetailButton",
@@ -6336,7 +6377,7 @@ function renderQuantitySheetDetailModal() {
     title: mode === "edit" ? "编辑数量统计表" : "预览数量统计表",
     subtitle: [sheet.month, sheet.iacuc, sheet.pi].filter(Boolean).join(" · "),
     helpKey: mode === "edit" ? "quantityBilling" : "quantityPreview",
-    actions: mode === "edit" ? `<button id="saveQuantitySheetDetail" class="primary" type="submit" form="quantitySheetDetailForm">${iconSvg("save")}保存修改</button>` : "",
+    actions: mode === "edit" ? `<button id="saveQuantitySheetDetail" class="primary" type="submit" form="quantitySheetDetailForm" title="${escapeAttr(saveHint)}">${iconSvg("save")}保存修改</button>` : "",
     body: mode === "edit" ? renderSavedQuantitySheetEditor(sheet) : renderSavedQuantitySheetPreview(sheet),
   });
 }
@@ -6361,9 +6402,13 @@ function renderSavedQuantitySheetEditor(sheet) {
   const quantityRooms = quantitySheetSelectableRooms();
   const quantityRoom = state.rooms.find((room) => room.id === quantitySheetRoomId(sheet));
   const quantityProfile = billingProfileForRoom(quantityRoom || {});
+  const animalDetails = quantitySheetAnimalDetailState(sheet, quantityProfile);
   return `
     <div class="quantity-sheet-detail-workbench">
       <form id="quantitySheetDetailForm" class="quantity-sheet-detail-form" data-sheet-id="${escapeAttr(sheet.id)}">
+        <div class="quantity-detail-action-strip">
+          ${renderQuantityAnimalDetailToggle(animalDetails)}
+        </div>
         <div class="quantity-sheet-fields">
           ${renderFieldCluster({
             title: "基础信息",
@@ -6421,12 +6466,7 @@ function renderSavedQuantitySheetEditor(sheet) {
             `,
           })}
           <input type="hidden" name="billingUnit" value="${escapeAttr(sheet.billingUnit || quantityProfile.unit)}" />
-          <div class="room-billing-hint">
-            <span>${escapeText(facilityLabel(quantityProfile.facility))}</span>
-            <span>${escapeText(billingItemLabel(quantityProfile.billingItem))}</span>
-            <span>${escapeText(customerTypeLabel(quantityProfile.customerType))}</span>
-            <span>单价 ¥${MONEY_FORMAT.format(quantityProfile.unitPrice)} / ${escapeText(billingUnitLabel(quantityProfile.unit))}</span>
-          </div>
+          <input type="hidden" name="animalDetailEnabled" value="${animalDetails.enabled ? "true" : "false"}" />
         </div>
         <div class="quantity-entry-wrap quantity-detail-entry-wrap">
           ${renderQuantitySheetCalendarPages(sheet)}
@@ -6782,6 +6822,66 @@ function quantitySheetPageCount(draft) {
   return Math.max(numericOrZero(draft?.pageCount), Math.ceil(Math.max((draft?.rows || []).length, 30) / 30), 1);
 }
 
+function quantitySheetHasAnimalDetails(sheet) {
+  return (sheet?.rows || []).some((row) =>
+    numericOrZero(row?.addedCount) > 0
+    || numericOrZero(row?.removedCount) > 0
+    || row?.addedType
+    || row?.removedType
+    || row?.transferInFromIacuc
+    || row?.transferOutToIacuc
+    || row?.animalCount !== null && row?.animalCount !== undefined,
+  );
+}
+
+function quantitySheetAnimalDetailState(sheet, profile = null) {
+  const draft = normalizeQuantitySheetDraft(sheet || {});
+  const roomId = quantitySheetRoomId(draft);
+  const resolvedProfile = profile || billingProfileForRoom(state.rooms.find((room) => room.id === roomId) || {});
+  const billingUnit = profile || roomId ? resolvedProfile.unit : draft.billingUnit;
+  const required = billingUnit === "animal_day";
+  const explicit = sheet?.animalDetailEnabled;
+  const enabled = required || explicit === true || (explicit !== false && quantitySheetHasAnimalDetails(draft));
+  return {
+    enabled,
+    required,
+    locked: required,
+    billingUnit,
+    note: required ? "按只/天计费，必须维护动物数量；结余笼数默认按 1 只 1 笼同步。" : "按笼/天计费，动物数量仅作辅助台账。",
+  };
+}
+
+function renderQuantityAnimalDetailToggle(stateInfo) {
+  const stateClass = stateInfo.enabled ? "enabled" : "disabled";
+  const noticeText = quantityAnimalDetailNoticeText(stateInfo);
+  return `
+    <label class="quantity-animal-toggle ${stateClass} ${stateInfo.locked ? "locked" : ""}" title="${escapeAttr(noticeText)}">
+      <input type="checkbox" data-quantity-animal-toggle ${stateInfo.enabled ? "checked" : ""} ${stateInfo.locked ? "disabled" : ""} />
+      <span class="quantity-animal-toggle-track" aria-hidden="true"><span></span></span>
+      <span class="quantity-animal-toggle-label">动物数量</span>
+      ${stateInfo.locked ? `<small>必填</small>` : ""}
+    </label>
+  `;
+}
+
+function quantityAnimalDetailNoticeText(stateInfo) {
+  return stateInfo.required
+    ? "当前房间按只/天计费，动物数量明细已锁定打开；结余笼数默认等于结余总数，可按实际笼数修正。"
+    : stateInfo.enabled
+      ? "动物数量明细已打开：可录入增加、减少和结余总数；本房间仍按结余笼数计费。"
+      : "动物数量明细已关闭：当前只录入日期和结余笼数，系统按笼/天计费。";
+}
+
+function showQuantityAnimalDetailNotice(sheet) {
+  const stateInfo = quantitySheetAnimalDetailState(sheet);
+  const title = stateInfo.required
+    ? "动物数量明细必填"
+    : stateInfo.enabled
+      ? "动物数量明细已打开"
+      : "动物数量明细已关闭";
+  showFlashNotice(title, quantityAnimalDetailNoticeText(stateInfo), stateInfo.enabled || stateInfo.required ? "success" : "warning");
+}
+
 function renderQuantityEntryStatus(draft) {
   const { filledRows, issueRows, transferRows } = quantityEntryStatusFromDraft(draft);
   return `
@@ -6791,6 +6891,73 @@ function renderQuantityEntryStatus(draft) {
       <button class="quantity-entry-status-pill" data-quantity-entry-stat="issues" data-action="focus-quantity-issue" type="button" ${issueRows ? "" : "disabled"}>${issueRows ? `待检查 ${issueRows} 行` : "无待检查行"}</button>
     </div>
   `;
+}
+
+function quantitySheetStatusSummaryText(draft) {
+  const { filledRows, issueRows, transferRows } = quantityEntryStatusFromDraft(draft);
+  return [
+    `数量统计表页数：${quantitySheetPageCount(draft)} 页`,
+    `变更 ${filledRows} 行`,
+    `转移 ${transferRows} 行`,
+    issueRows ? `待检查 ${issueRows} 行` : "无待检查行",
+  ].join("\n");
+}
+
+function quantitySheetStatusItems(draft) {
+  const { filledRows, issueRows, transferRows } = quantityEntryStatusFromDraft(draft);
+  return [
+    { label: "页数", value: `${quantitySheetPageCount(draft)} 页` },
+    { label: "变更", value: `${filledRows} 行` },
+    { label: "转移", value: `${transferRows} 行` },
+    { label: "检查", value: issueRows ? `${issueRows} 行待检查` : "无待检查行", tone: issueRows ? "warning" : "ok" },
+  ];
+}
+
+function quantitySheetSaveButtonHint(draft) {
+  return quantitySheetStatusSummaryText(draft);
+}
+
+function quantitySheetBillingProfileText(sheet) {
+  return quantitySheetBillingProfileParts(sheet).join(" / ");
+}
+
+function quantitySheetBillingProfileParts(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const profile = quantitySheetBillingProfile(normalized);
+  const room = state.rooms.find((item) => item.id === quantitySheetRoomId(normalized));
+  return [
+    facilityLabel(profile.facility),
+    billingItemLabel(profile.billingItem),
+    customerTypeLabel(profile.customerType),
+    `单价 ${billingPriceLabel(profile)}`,
+    room?.name ? `房间 ${room.name}` : "",
+  ].filter(Boolean);
+}
+
+function quantitySheetSaveConfirmMessage(draft) {
+  const animalNotice = quantityAnimalDetailNoticeText(quantitySheetAnimalDetailState(draft));
+  return [
+    `计费口径：${quantitySheetBillingProfileText(draft)}`,
+    animalNotice,
+    quantitySheetStatusSummaryText(draft),
+  ].join("\n");
+}
+
+function openQuantitySheetSaveConfirm({ mode, draft }) {
+  pendingQuantitySheetSaveJob = { mode, draft };
+  const animalNotice = quantityAnimalDetailNoticeText(quantitySheetAnimalDetailState(draft));
+  openConfirmDialog({
+    type: "save-quantity-sheet",
+    title: "确认保存数量统计表",
+    message: quantitySheetSaveConfirmMessage(draft),
+    confirmLabel: "确认保存",
+    confirmClass: "primary",
+    payload: {
+      billingParts: quantitySheetBillingProfileParts(draft),
+      animalNotice,
+      statusItems: quantitySheetStatusItems(draft),
+    },
+  });
 }
 
 function quantityEntryStatusFromDraft(draft) {
@@ -6804,8 +6971,20 @@ function quantityEntryStatusFromDraft(draft) {
 
 function syncQuantityEntryStatus(form = document.querySelector("#quantitySheetForm")) {
   const status = form?.querySelector?.(".quantity-entry-status");
-  if (!status) return;
   const stats = quantityEntryStatusFromForm(form);
+  const saveButton = form?.querySelector?.("#saveQuantitySheet, #saveQuantitySheetDetail");
+  if (saveButton) {
+    const pageCount = form.id === "quantitySheetDetailForm"
+      ? quantitySheetPageCount(captureQuantitySheetDetailDraft(form))
+      : quantitySheetPageCount(state.quantitySheetDraft || {});
+    saveButton.title = [
+      `数量统计表页数：${pageCount} 页`,
+      `变更 ${stats.filledRows} 行`,
+      `转移 ${stats.transferRows} 行`,
+      stats.issueRows ? `待检查 ${stats.issueRows} 行` : "无待检查行",
+    ].join("\n");
+  }
+  if (!status) return;
   status.classList.toggle("has-issues", stats.issueRows > 0);
   const filled = status.querySelector("[data-quantity-entry-stat='filled']");
   const transfer = status.querySelector("[data-quantity-entry-stat='transfer']");
@@ -6857,6 +7036,7 @@ function quantityEntryStatusFromForm(form) {
 
 function renderQuantitySheetCalendarPages(draft) {
   const entries = buildQuantitySheetCalendarRows(draft);
+  const animalDetails = quantitySheetAnimalDetailState(draft);
   const pages = Math.max(Math.ceil(entries.length / 30), 1);
   return Array.from({ length: pages }, (_, pageIndex) => {
     const pageEntries = entries.slice(pageIndex * 30, pageIndex * 30 + 30);
@@ -6864,18 +7044,18 @@ function renderQuantitySheetCalendarPages(draft) {
       <div class="quantity-template-page">
         <div class="quantity-template-page-title">第 ${pageIndex + 1} 页</div>
         <div class="table-wrap">
-          <table class="quantity-entry-table quantity-template-table">
+          <table class="quantity-entry-table quantity-template-table ${animalDetails.enabled ? "animal-details-enabled" : "animal-details-hidden"}">
             <thead>
               <tr>
                 <th><span class="quantity-table-head-label">日期${renderHelpHint("quantityDateFormat")}</span></th>
-                <th>新增<br />（购/转/分）</th>
-                <th>减少<br />（取/死/转）</th>
-                <th>结余<br />总数</th>
+                <th class="animal-detail-col">新增<br />（购/转/分）</th>
+                <th class="animal-detail-col">减少<br />（取/死/转）</th>
+                <th class="animal-detail-col">结余<br />总数</th>
                 <th>结余<br />笼数</th>
                 <th><span class="quantity-table-head-label">日期${renderHelpHint("quantityDateFormat")}</span></th>
-                <th>新增<br />（购/转/分）</th>
-                <th>减少<br />（取/死/转）</th>
-                <th>结余<br />总数</th>
+                <th class="animal-detail-col">新增<br />（购/转/分）</th>
+                <th class="animal-detail-col">减少<br />（取/死/转）</th>
+                <th class="animal-detail-col">结余<br />总数</th>
                 <th>结余<br />笼数</th>
               </tr>
             </thead>
@@ -6908,7 +7088,7 @@ function renderQuantitySheetCalendarRows(entries) {
 }
 
 function renderQuantitySheetCalendarCell(entry) {
-  if (!entry) return `<td></td><td></td><td></td><td></td><td></td>`;
+  if (!entry) return `<td></td><td class="animal-detail-col"></td><td class="animal-detail-col"></td><td class="animal-detail-col"></td><td></td>`;
   const row = entry.row || {};
   const animalManual = row.animalCount !== null && row.animalCount !== undefined;
   const cageManual = row.cageCount !== null && row.cageCount !== undefined;
@@ -6928,9 +7108,9 @@ function renderQuantitySheetCalendarCell(entry) {
         <input class="quantity-date-picker-native" name="quantityDatePicker" type="date" value="${escapeAttr(pickerValue)}" min="${escapeAttr(pickerMin)}" max="${escapeAttr(pickerMax)}" tabindex="-1" aria-hidden="true" />
       </div>
     </td>
-    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="added">${renderQuantityChangeStack("added", entry)}</td>
-    <td class="quantity-change-cell" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="removed">${renderQuantityChangeStack("removed", entry)}</td>
-    <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="animal">
+    <td class="quantity-change-cell animal-detail-col" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="added">${renderQuantityChangeStack("added", entry)}</td>
+    <td class="quantity-change-cell animal-detail-col" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="removed">${renderQuantityChangeStack("removed", entry)}</td>
+    <td class="animal-detail-col" data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="animal">
       <input class="quantity-balance-input" name="animalCount" type="number" min="0" value="${escapeAttr(animalValue)}" data-auto-value="${escapeAttr(entry.autoAnimalCount)}" data-manual="${animalManual || isInitialRow ? "true" : "false"}" />
     </td>
     <td data-quantity-row="${escapeAttr(entry.index)}" data-quantity-field="cage">
@@ -7017,6 +7197,7 @@ function quantitySheetRowInputIssues(row) {
 function buildQuantitySheetCalendarRows(sheet) {
   const draft = normalizeQuantitySheetDraft(sheet || {});
   const profile = billingProfileForRoom(state.rooms.find((room) => room.id === quantitySheetRoomId(draft)) || {});
+  const animalDetails = quantitySheetAnimalDetailState(draft, profile);
   const baseRows = [...(draft.rows || [])];
   const slotCount = quantitySheetPageCount(draft) * 30;
   while (baseRows.length < slotCount) baseRows.push(makeBlankQuantitySheetRow(draft.month));
@@ -7047,7 +7228,7 @@ function buildQuantitySheetCalendarRows(sheet) {
     const added = changeRows.reduce((sum, changeRow) => sum + numericOrZero(changeRow.addedCount), 0);
     const removed = changeRows.reduce((sum, changeRow) => sum + numericOrZero(changeRow.removedCount), 0);
     const autoAnimalCount = Math.max(animalCount + added - removed, 0);
-    const autoCageCount = cageCount;
+    const autoCageCount = animalDetails.required ? autoAnimalCount : cageCount;
     const balanceRow = [...changeRows].reverse().find((changeRow) => changeRow.animalCount !== null || changeRow.cageCount !== null) || row;
     const hasManualAnimal = balanceRow.animalCount !== null && balanceRow.animalCount !== undefined;
     const hasManualCage = balanceRow.cageCount !== null && balanceRow.cageCount !== undefined;
@@ -8151,6 +8332,14 @@ function bindEvents() {
   });
   document.querySelector("#quantitySheetDetailForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
+    if (event.target?.matches?.("[data-quantity-animal-toggle]")) {
+      const form = event.currentTarget;
+      form.elements.animalDetailEnabled.value = event.target.checked ? "true" : "false";
+      const draft = captureQuantitySheetDetailDraft(form);
+      showQuantityAnimalDetailNotice(draft);
+      scheduleRender("quantity_sheet.detail.animal_detail");
+      return;
+    }
     if (name === "quantityDatePicker") {
       applyQuantityDatePickerValue(event.target);
       captureQuantitySheetDetailDraft(event.currentTarget);
@@ -8779,6 +8968,14 @@ function bindEvents() {
   });
   document.querySelector("#quantitySheetForm")?.addEventListener("change", (event) => {
     const name = event.target?.name;
+    if (event.target?.matches?.("[data-quantity-animal-toggle]")) {
+      const form = event.currentTarget;
+      form.elements.animalDetailEnabled.value = event.target.checked ? "true" : "false";
+      state.quantitySheetDraft = readQuantitySheetForm(form, { preserveInvalidDates: true });
+      showQuantityAnimalDetailNotice(state.quantitySheetDraft);
+      scheduleRender("quantity_sheet.animal_detail");
+      return;
+    }
     if (name === "quantityDatePicker") {
       applyQuantityDatePickerValue(event.target);
       captureQuantitySheetDraft();
@@ -10663,13 +10860,10 @@ async function updateBillingPi(value) {
 async function handleQuantitySheetSubmit(event) {
   event.preventDefault();
   try {
-    const sheet = await saveQuantitySheetDraft();
-    pushLog(`保存数量统计表：${sheet.iacuc} ${sheet.month}`);
-    markSavedQuantitySheetForFeedback(sheet.id);
-    resetQuantitySheetDraftAfterSave(sheet);
-    showFlashNotice("保存成功", `数量统计表已保存：${[sheet.month, sheet.iacuc].filter(Boolean).join(" · ")}`);
-    scheduleRender("quantity_sheet.submit");
-    scrollSavedQuantitySheetIntoView(sheet.id);
+    const form = event.currentTarget;
+    const draft = readQuantitySheetForm(form, { preserveInvalidDates: true });
+    state.quantitySheetDraft = draft;
+    openQuantitySheetSaveConfirm({ mode: "main", draft });
   } catch (error) {
     reportSaveError(error);
   }
@@ -10750,15 +10944,34 @@ async function handleQuantitySheetDetailSubmit(event) {
     const form = event.currentTarget;
     const draft = captureQuantitySheetDetailDraft(form);
     if (!draft) throw new Error("当前数量统计表不存在");
-    const savedSheet = await saveQuantitySheetObject(draft, { updateDraft: false });
-    state.viewingQuantitySheetId = savedSheet.id;
-    markSavedQuantitySheetForFeedback(savedSheet.id);
-    showFlashNotice("保存成功", `数量统计表已保存：${[savedSheet.month, savedSheet.iacuc].filter(Boolean).join(" · ")}`);
-    scheduleRender("quantity_sheet.detail.submit");
-    scrollSavedQuantitySheetIntoView(savedSheet.id);
+    openQuantitySheetSaveConfirm({ mode: "detail", draft });
   } catch (error) {
     reportSaveError(error);
   }
+}
+
+async function executePendingQuantitySheetSave() {
+  const job = pendingQuantitySheetSaveJob;
+  pendingQuantitySheetSaveJob = null;
+  if (!job?.draft) return;
+  if (job.mode === "detail") {
+    const savedSheet = await saveQuantitySheetObject(job.draft, { updateDraft: false });
+    state.viewingQuantitySheetId = savedSheet.id;
+    state.viewingQuantitySheetMode = "preview";
+    markSavedQuantitySheetForFeedback(savedSheet.id);
+    showFlashNotice("保存成功", `数量统计表已更新：${savedSheet.iacuc || savedSheet.month}`, "success");
+    scheduleRender("quantity_sheet.detail.submit");
+    scrollSavedQuantitySheetIntoView(savedSheet.id);
+    return;
+  }
+  const savedSheet = await saveQuantitySheetObject(job.draft, { startedAt: performance.now(), updateDraft: true });
+  const optionalAnimalNotice = quantitySheetOptionalAnimalNotice(savedSheet);
+  pushLog(`保存数量统计表：${savedSheet.iacuc || savedSheet.id}（${savedSheet.month}）`);
+  markSavedQuantitySheetForFeedback(savedSheet.id);
+  resetQuantitySheetDraftAfterSave(savedSheet);
+  showFlashNotice("保存成功", optionalAnimalNotice || `数量统计表已保存：${savedSheet.iacuc || savedSheet.month}`, optionalAnimalNotice ? "warning" : "success");
+  scheduleRender("quantity_sheet.submit");
+  scrollSavedQuantitySheetIntoView(savedSheet.id);
 }
 
 function toggleQuantitySheetSelection(sheetId, checked) {
@@ -10940,6 +11153,7 @@ async function saveQuantitySheetObject(sheetDraft, { startedAt = performance.now
     queueQuantitySheetProblemFocus();
     throw new Error(`请先补全数量统计表：${inputIssues.slice(0, 5).join("、")}${inputIssues.length > 5 ? " 等" : ""}`);
   }
+  assertQuantitySheetAnimalRequirements(sheetDraft);
   const sheet = hydrateQuantitySheetIacucInfo(sheetDraft);
   const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
   if (!remotePersistence) {
@@ -11533,6 +11747,7 @@ function readQuantitySheetForm(form, options = {}) {
   const iacuc = String(data.get("iacuc") || "").trim();
   const iacucInfo = findIacucInfo(iacuc) || {};
   const profile = billingProfileForRoom(room || {});
+  const animalDetailEnabled = profile.unit === "animal_day" || data.get("animalDetailEnabled") === "true";
   let runningAnimalCount = 0;
   let runningCageCount = 0;
   const invalidDateInputs = [];
@@ -11552,13 +11767,13 @@ function readQuantitySheetForm(form, options = {}) {
     })
     .flatMap(({ rowCells, rowIndex, rawDateInput, date }) => {
       const previous = baseSheet?.rows?.[rowIndex] || {};
-      const addedEntries = readQuantityChangeEditors(rowCells.added, "added");
-      const removedEntries = readQuantityChangeEditors(rowCells.removed, "removed");
+      const addedEntries = animalDetailEnabled ? readQuantityChangeEditors(rowCells.added, "added") : [];
+      const removedEntries = animalDetailEnabled ? readQuantityChangeEditors(rowCells.removed, "removed") : [];
       const added = primaryQuantityChangeEntry(addedEntries);
       const removed = primaryQuantityChangeEntry(removedEntries);
       const animalInput = rowCells.animal?.querySelector("[name='animalCount']");
       const cageInput = rowCells.cage?.querySelector("[name='cageCount']");
-      let manualAnimalCount = manualQuantityBalanceValue(animalInput);
+      let manualAnimalCount = animalDetailEnabled ? manualQuantityBalanceValue(animalInput) : null;
       let manualCageCount = manualQuantityBalanceValue(cageInput);
       let addedCount = sumQuantityChangeEntries(addedEntries);
       let removedCount = sumQuantityChangeEntries(removedEntries);
@@ -11576,12 +11791,14 @@ function readQuantitySheetForm(form, options = {}) {
         }
       }
       const autoAnimalCount = Math.max(runningAnimalCount + numericOrZero(addedCount) - numericOrZero(removedCount), 0);
-      const autoCageCount = runningCageCount;
+      const autoCageCount = profile.unit === "animal_day" && animalDetailEnabled ? autoAnimalCount : runningCageCount;
       if (manualAnimalCount !== null && manualAnimalCount === autoAnimalCount && animalInput?.dataset.manual !== "true") manualAnimalCount = null;
       if (manualCageCount !== null && manualCageCount === autoCageCount && cageInput?.dataset.manual !== "true") manualCageCount = null;
+      if (profile.unit === "animal_day" && animalDetailEnabled && manualCageCount === null) manualCageCount = autoCageCount;
       if (rowIndex === 0) {
-        manualAnimalCount = numericOrZero(animalInput?.value);
+        manualAnimalCount = animalDetailEnabled ? numericOrZero(animalInput?.value) : null;
         manualCageCount = numericOrZero(cageInput?.value);
+        if (profile.unit === "animal_day" && animalDetailEnabled && manualCageCount === 0 && numericOrZero(animalInput?.value) > 0) manualCageCount = numericOrZero(animalInput?.value);
       }
       const nextAnimalCount = manualAnimalCount !== null ? manualAnimalCount : autoAnimalCount;
       const nextCageCount = manualCageCount !== null ? manualCageCount : autoCageCount;
@@ -11628,6 +11845,7 @@ function readQuantitySheetForm(form, options = {}) {
     contact: "",
     funding: iacucInfo.funding || data.get("funding")?.trim() || "",
     billingUnit: data.get("billingUnit") || billingProfileForRoom(room || {}).unit,
+    animalDetailEnabled,
     initialAnimalCount: numericOrZero(rows[0]?.animalCount),
     initialCageCount: numericOrZero(rows[0]?.cageCount),
     pageCount: quantitySheetPageCount(baseSheet),
@@ -11714,6 +11932,36 @@ function quantitySheetInputIssueLabels(sheet) {
     });
 }
 
+function quantitySheetBillingProfile(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const room = state.rooms.find((item) => item.id === quantitySheetRoomId(normalized));
+  if (room) return billingProfileForRoom(room);
+  return {
+    ...billingProfileForRoom({}),
+    unit: normalized.billingUnit === "animal_day" ? "animal_day" : "cage_day",
+  };
+}
+
+function quantitySheetHasRequiredAnimalBalance(sheet) {
+  return (sheet?.rows || []).some((row) => row?.animalCount !== null && row?.animalCount !== undefined && numericOrZero(row.animalCount) > 0);
+}
+
+function assertQuantitySheetAnimalRequirements(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const profile = quantitySheetBillingProfile(normalized);
+  if (profile.unit !== "animal_day") return;
+  if (quantitySheetHasRequiredAnimalBalance(normalized)) return;
+  throw new Error("该房间按只/天计费，请打开动物数量并补充结余总数。");
+}
+
+function quantitySheetOptionalAnimalNotice(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const profile = quantitySheetBillingProfile(normalized);
+  if (profile.unit !== "cage_day") return "";
+  if (quantitySheetHasAnimalDetails(normalized)) return "";
+  return "数量统计表已保存；当前未填写动物数量，系统将仅按结余笼数计算饲养费。";
+}
+
 function cellsForQuantityDateCell(cell) {
   const date = cell;
   const added = cell.nextElementSibling;
@@ -11747,6 +11995,7 @@ function makeQuantitySheetDraft(month = today.slice(0, 7)) {
     contact: "",
     funding: "",
     billingUnit: "cage_day",
+    animalDetailEnabled: false,
     initialAnimalCount: 0,
     initialCageCount: 0,
     pageCount: 1,
@@ -11794,6 +12043,7 @@ function normalizeQuantitySheetDraft(sheet) {
     contact: sheet?.contact || "",
     funding: sheet?.funding || "",
     billingUnit: sheet?.billingUnit === "animal_day" ? "animal_day" : "cage_day",
+    animalDetailEnabled: sheet?.animalDetailEnabled === true,
     initialAnimalCount: numericOrZero(sheet?.initialAnimalCount),
     initialCageCount: numericOrZero(sheet?.initialCageCount),
     pageCount: Math.max(numericOrZero(sheet?.pageCount), 1),
@@ -15081,6 +15331,9 @@ function closeConfirmDialog() {
   if (state.confirmDialog?.type === "print-intake-cards-fill-blanks") {
     pendingIntakeCardPrintJob = null;
   }
+  if (state.confirmDialog?.type === "save-quantity-sheet") {
+    pendingQuantitySheetSaveJob = null;
+  }
   state.confirmDialog = null;
   scheduleRender("confirm.close");
 }
@@ -15093,6 +15346,9 @@ function handleCancelConfirmDialog() {
     scheduleRender("confirm.cancel");
     return;
   }
+  if (dialog?.type === "save-quantity-sheet") {
+    pendingQuantitySheetSaveJob = null;
+  }
   scheduleRender("confirm.cancel");
 }
 
@@ -15103,6 +15359,10 @@ async function handleConfirmDialogAction() {
   try {
     if (dialog.type === "print-intake-cards-fill-blanks") {
       finishPendingIntakeCardPrint(true);
+      return;
+    }
+    if (dialog.type === "save-quantity-sheet") {
+      await executePendingQuantitySheetSave();
       return;
     }
     if (dialog.type === "delete-intake-batch") {
@@ -15240,6 +15500,7 @@ function iconSvg(name) {
     database: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3zm0 2C8.2 5 6 6 6 6s2.2 1 6 1 6-1 6-1-2.2-1-6-1zM6 9v3c.8.5 2.9 1 6 1s5.2-.5 6-1V9c-1.4.6-3.5 1-6 1s-4.6-.4-6-1zm0 6v3c.8.5 2.9 1 6 1s5.2-.5 6-1v-3c-1.4.6-3.5 1-6 1s-4.6-.4-6-1z"/></svg>`,
     users: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z"/></svg>`,
     settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.9 7.9 0 0 0 .1-1.5 7.9 7.9 0 0 0-.1-1.5l2-1.5-2-3.4-2.4 1a7.7 7.7 0 0 0-2.5-1.4L14.2 3h-4.4l-.4 2.2A7.7 7.7 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5A7.9 7.9 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.4 2.4-1a7.7 7.7 0 0 0 2.5 1.4l.4 2.2h4.4l.4-2.2a7.7 7.7 0 0 0 2.5-1.4l2.4 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>`,
+    info: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 10h2v8h-2zm0-4h2v2h-2z"/><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16z"/></svg>`,
     save: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5zM8 5v5h8V5zm1 11h6v3H9z"/></svg>`,
     edit: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5L17.8 8.7l-2.5-2.5zM19.7 6.8a1 1 0 0 0 0-1.4l-1.1-1.1a1 1 0 0 0-1.4 0l-.8.8 2.5 2.5z"/></svg>`,
     logout: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9v2H7v12h7v2H5zm11.6 4.6L20 12l-3.4 3.4-1.4-1.4 1-1H10v-2h6.2l-1-1z"/></svg>`,
