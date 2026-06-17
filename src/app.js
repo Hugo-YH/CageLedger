@@ -36,6 +36,16 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.16c",
+    releasedAt: "2026-06-17 13:01",
+    title: "系统 UI 与交互动画优化",
+    items: [
+      "统一按钮、输入框、导航项、卡片和表格行的交互反馈节奏",
+      "优化系统设置抽屉、确认弹层和帮助提示气泡的入场动效与层级表现",
+      "修复工作台标题区帮助气泡可能被裁切的问题，并补齐低动效模式适配",
+    ],
+  },
+  {
     version: "0.5.16b",
     releasedAt: "2026-06-17 11:58",
     title: "数量统计表连续录入优化",
@@ -903,7 +913,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.16b",
+  version: "0.5.16c",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",

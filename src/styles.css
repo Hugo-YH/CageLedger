@@ -35,6 +35,11 @@
   --title-sm: 16px;
   --text-md: 14px;
   --text-sm: 12px;
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasis: cubic-bezier(0.2, 1, 0.2, 1);
   font-family:
     "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -289,6 +294,33 @@ button:disabled {
   opacity: 0.55;
 }
 
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color var(--motion-base) var(--ease-standard),
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard),
+    color var(--motion-base) var(--ease-standard),
+    opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(13, 118, 104, 0.38);
+  outline-offset: 2px;
+}
+
 svg {
   width: 18px;
   height: 18px;
@@ -378,9 +410,10 @@ svg {
   justify-content: center;
   padding: 0;
   transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease;
+    background var(--motion-base) var(--ease-standard),
+    border-color var(--motion-base) var(--ease-standard),
+    color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
 }
 
 .nav-toggle-rail {
@@ -451,6 +484,10 @@ svg {
   gap: 10px;
   padding: 12px 14px;
   text-align: left;
+  transition:
+    background-color var(--motion-base) var(--ease-standard),
+    color var(--motion-base) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 
 .nav-item-settings-root {
@@ -493,6 +530,8 @@ svg {
   box-shadow: 0 18px 44px rgba(16, 35, 38, 0.28);
   z-index: 220;
   pointer-events: auto;
+  transform-origin: left top;
+  animation: settingsDrawerIn var(--motion-slow) var(--ease-emphasis) both;
 }
 
 .settings-drawer-head {
@@ -630,6 +669,10 @@ svg {
 .nav-item:hover {
   background: #1d393c;
   color: #ffffff;
+}
+
+.nav-item:hover {
+  transform: translateX(2px);
 }
 
 .sidebar-account {
@@ -859,7 +902,7 @@ svg {
   padding: 20px;
   display: grid;
   gap: 18px;
-  animation: flashNoticeIn 0.4s cubic-bezier(0.2, 1.1, 0.3, 1) both;
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
 }
 
 .confirm-dialog h2 {
@@ -897,6 +940,28 @@ svg {
   62% {
     opacity: 1;
     transform: translate3d(0, 2px, 0) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes modalSurfaceIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes settingsDrawerIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(-8px, 0, 0) scale(0.98);
   }
   100% {
     opacity: 1;
@@ -982,20 +1047,21 @@ h3 {
     linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 252, 250, 0.94) 58%, rgba(236, 245, 241, 0.9) 100%);
   box-shadow: var(--shadow-soft);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .workspace-head::after {
   content: "";
   position: absolute;
   right: 18px;
-  bottom: -34px;
+  bottom: 10px;
   width: 180px;
   height: 92px;
   border: 1px solid rgba(13, 118, 104, 0.14);
   border-radius: 999px;
   transform: rotate(-12deg);
   pointer-events: none;
+  opacity: 0.45;
 }
 
 .workspace-head-main {
@@ -1122,7 +1188,7 @@ h3 {
   height: 19px;
   color: var(--primary);
   vertical-align: middle;
-  z-index: 5;
+  z-index: 70;
 }
 
 .help-hint-icon {
@@ -1144,7 +1210,7 @@ h3 {
   position: absolute;
   left: 0;
   top: calc(100% + 10px);
-  z-index: 20;
+  z-index: 260;
   width: clamp(240px, 26vw, 360px);
   max-width: min(360px, calc(100vw - 64px));
   padding: 10px 12px;
@@ -1163,9 +1229,9 @@ h3 {
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity 140ms ease,
-    transform 140ms ease,
-    visibility 140ms ease;
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard),
+    visibility var(--motion-fast) var(--ease-standard);
 }
 
 .help-hint-bubble::after {
@@ -1227,9 +1293,10 @@ h3 {
   gap: 8px;
   box-shadow: var(--shadow);
   transition:
-    transform 140ms ease,
-    box-shadow 140ms ease,
-    border-color 140ms ease;
+    transform var(--motion-base) var(--ease-emphasis),
+    box-shadow var(--motion-base) var(--ease-standard),
+    border-color var(--motion-base) var(--ease-standard),
+    background-color var(--motion-base) var(--ease-standard);
 }
 
 .dashboard-overview-card:hover {
@@ -1276,6 +1343,16 @@ h3 {
   display: grid;
   gap: 14px;
   background: linear-gradient(180deg, #fbfdfd 0%, #f4f9f8 100%);
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-emphasis);
+}
+
+.dashboard-facility-card:hover {
+  border-color: rgba(15, 118, 110, 0.24);
+  box-shadow: 0 12px 26px rgba(16, 42, 47, 0.08);
+  transform: translateY(-1px);
 }
 
 .dashboard-facility-head {
@@ -1304,6 +1381,15 @@ h3 {
   border-radius: 12px;
   padding: 12px 14px;
   min-width: 92px;
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    background-color var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-emphasis);
+}
+
+.metric:hover {
+  border-color: rgba(15, 118, 110, 0.2);
+  transform: translateY(-1px);
 }
 
 .metric span,
@@ -1385,6 +1471,16 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    background-color var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-emphasis);
+}
+
+.chart-legend-item:hover {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: #f7fbfa;
+  transform: translateY(-1px);
 }
 
 .chart-legend-item small {
@@ -2913,6 +3009,9 @@ h3 {
   padding: 18px;
   min-width: 0;
   position: relative;
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
 }
 
 .panel::before {
@@ -2951,6 +3050,14 @@ h3 {
   border-radius: var(--radius-md);
   background:
     linear-gradient(180deg, rgba(247, 250, 248, 0.9), rgba(255, 255, 255, 0.98));
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
+}
+
+.field-cluster:focus-within {
+  border-color: rgba(13, 118, 104, 0.28);
+  box-shadow: 0 10px 24px rgba(16, 42, 47, 0.06);
 }
 
 .field-cluster-head {
@@ -3098,6 +3205,12 @@ input:focus,
 textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(13, 118, 104, 0.14);
+}
+
+select:hover,
+input:hover,
+textarea:hover {
+  border-color: var(--line-strong);
 }
 
 input[type="checkbox"]:focus {
@@ -4075,6 +4188,12 @@ input[type="checkbox"]:focus {
   gap: 7px;
   justify-content: center;
   white-space: nowrap;
+  transition:
+    background-color var(--motion-base) var(--ease-standard),
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard),
+    color var(--motion-base) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 
 .primary {
@@ -4084,12 +4203,19 @@ input[type="checkbox"]:focus {
 
 .primary:hover {
   background: var(--primary-dark);
+  box-shadow: 0 8px 18px rgba(13, 118, 104, 0.18);
 }
 
 .secondary {
   background: #edf4f3;
   color: var(--primary-dark);
   border: 1px solid #cce2df;
+}
+
+.secondary:hover {
+  background: #e6f2ef;
+  border-color: #b7d9d3;
+  box-shadow: 0 6px 16px rgba(13, 118, 104, 0.08);
 }
 
 .ghost {
@@ -4147,10 +4273,20 @@ input[type="checkbox"]:focus {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px;
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-emphasis);
 }
 
 .summary-tile strong {
   font-size: 20px;
+}
+
+.summary-tile:hover {
+  border-color: rgba(15, 118, 110, 0.2);
+  box-shadow: 0 10px 22px rgba(16, 42, 47, 0.07);
+  transform: translateY(-1px);
 }
 
 .table-wrap {
@@ -4181,6 +4317,16 @@ table {
   min-width: 720px;
   background: #ffffff;
   font-variant-numeric: tabular-nums;
+}
+
+.table-wrap table:not(.quantity-template-table) tbody tr {
+  transition:
+    background-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
+}
+
+.table-wrap table:not(.quantity-template-table) tbody tr:hover td {
+  background-color: #f6fbfa;
 }
 
 th,
@@ -5771,16 +5917,26 @@ tr:last-child td {
 
   .flash-notice,
   .confirm-dialog,
+  .settings-drawer-desktop,
   .quantity-template-table td.quantity-cell-attention {
     animation: none !important;
   }
 
   .help-hint-bubble,
   .dashboard-overview-card,
+  .dashboard-facility-card,
+  .metric,
+  .chart-legend-item,
+  .summary-tile,
+  .field-cluster,
+  .panel,
   .dense-table tbody tr,
+  .table-wrap table:not(.quantity-template-table) tbody tr,
   .workflow-row,
   .placement-task-floating-card,
   .sidebar-toggle,
+  .nav-item,
+  .nav-toggle,
   button,
   input,
   select,
@@ -5788,7 +5944,12 @@ tr:last-child td {
     transition-duration: 0.01ms !important;
   }
 
-  .dashboard-overview-card:hover {
+  .dashboard-overview-card:hover,
+  .dashboard-facility-card:hover,
+  .metric:hover,
+  .chart-legend-item:hover,
+  .summary-tile:hover,
+  .nav-item:hover {
     transform: none;
   }
 }
