@@ -21,12 +21,20 @@
   --amber: #b66b12;
   --gray: #7d8b91;
   --danger: #b42318;
+  --danger-soft: #fff0ee;
+  --danger-line: #efc1ba;
+  --info-soft: #edf5fb;
+  --info-line: #bfd6ee;
+  --warning-line: #efd7a4;
   --success-soft: #e8f6ee;
+  --success-line: #b9e3d6;
   --warning-soft: #fff3dc;
   --todo-soft: #edf5fb;
   --finance-soft: #f1eff9;
   --shadow: 0 20px 54px rgba(19, 42, 44, 0.1);
   --shadow-soft: 0 10px 28px rgba(19, 42, 44, 0.07);
+  --shadow-lift: 0 18px 38px rgba(18, 45, 48, 0.12);
+  --focus-ring: 0 0 0 3px rgba(13, 118, 104, 0.14);
   --radius-xl: 18px;
   --radius-lg: 14px;
   --radius-md: 10px;
@@ -285,6 +293,12 @@ textarea {
   font: inherit;
 }
 
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+select,
+textarea {
+  min-height: 40px;
+}
+
 button {
   cursor: pointer;
 }
@@ -319,6 +333,7 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 2px solid rgba(13, 118, 104, 0.38);
   outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }
 
 svg {
@@ -820,11 +835,12 @@ svg {
   right: 22px;
   z-index: 110;
   width: min(420px, calc(100vw - 44px));
-  border: 1px solid #b9e3d6;
-  border-radius: 12px;
-  background: #edf9f4;
+  border: 1px solid var(--success-line);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(237, 249, 244, 0.98), rgba(247, 253, 250, 0.96));
   color: #155946;
-  box-shadow: 0 14px 30px rgba(16, 35, 38, 0.12);
+  box-shadow: var(--shadow-lift);
   padding: 14px 16px;
   display: grid;
   gap: 4px;
@@ -845,14 +861,16 @@ svg {
 }
 
 .flash-notice.warning {
-  border-color: #efd7a4;
-  background: #fff9ec;
+  border-color: var(--warning-line);
+  background:
+    linear-gradient(135deg, rgba(255, 249, 236, 0.98), rgba(255, 252, 244, 0.96));
   color: #8b6112;
 }
 
 .flash-notice.error {
-  border-color: #efc1c1;
-  background: #fff4f4;
+  border-color: var(--danger-line);
+  background:
+    linear-gradient(135deg, rgba(255, 244, 244, 0.98), rgba(255, 250, 249, 0.96));
   color: #9f2f2f;
 }
 
@@ -863,11 +881,12 @@ svg {
   z-index: 109;
   width: min(560px, calc(100vw - 44px));
   transform: translateX(-50%);
-  border: 1px solid #efd7a4;
-  border-radius: 12px;
-  background: #fff9ec;
+  border: 1px solid var(--warning-line);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(255, 249, 236, 0.98), rgba(255, 253, 248, 0.96));
   color: #7a5410;
-  box-shadow: 0 14px 30px rgba(16, 35, 38, 0.12);
+  box-shadow: var(--shadow-lift);
   padding: 12px 16px;
   display: grid;
   gap: 4px;
@@ -886,8 +905,10 @@ svg {
   position: fixed;
   inset: 0;
   z-index: 95;
-  background: rgba(16, 35, 38, 0.28);
-  backdrop-filter: blur(4px);
+  background:
+    radial-gradient(circle at 50% 20%, rgba(13, 118, 104, 0.12), transparent 34%),
+    rgba(16, 35, 38, 0.3);
+  backdrop-filter: blur(5px);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -896,9 +917,10 @@ svg {
 .confirm-dialog {
   width: min(420px, 100%);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 24px 60px rgba(16, 35, 38, 0.24);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 252, 251, 0.98));
+  box-shadow: 0 24px 60px rgba(16, 35, 38, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   padding: 20px;
   display: grid;
   gap: 18px;
@@ -1057,6 +1079,18 @@ svg {
   }
 }
 
+@keyframes workspaceViewIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 @keyframes modalSurfaceIn {
   0% {
     opacity: 0;
@@ -1136,6 +1170,7 @@ h3 {
 .workspace-view {
   display: grid;
   gap: 20px;
+  animation: workspaceViewIn var(--motion-slow) var(--ease-emphasis) both;
 }
 
 .workspace-body {
@@ -1155,7 +1190,7 @@ h3 {
   background:
     radial-gradient(circle at top right, rgba(13, 118, 104, 0.16), transparent 30%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 252, 250, 0.94) 58%, rgba(236, 245, 241, 0.9) 100%);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.82);
   position: relative;
   overflow: visible;
 }
@@ -1172,6 +1207,17 @@ h3 {
   transform: rotate(-12deg);
   pointer-events: none;
   opacity: 0.45;
+}
+
+.workspace-head::before {
+  content: "";
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(13, 118, 104, 0.18), rgba(182, 107, 18, 0.18), transparent);
+  pointer-events: none;
 }
 
 .workspace-head-main {
@@ -1242,6 +1288,16 @@ h3 {
   display: grid;
   gap: 4px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86) inset;
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-emphasis);
+}
+
+.workspace-meta-card:hover {
+  border-color: rgba(15, 118, 110, 0.22);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
 }
 
 .workspace-meta-card span {
@@ -1314,6 +1370,7 @@ h3 {
   font-size: 12px;
   line-height: 1;
   font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .help-hint-bubble {
@@ -1361,6 +1418,13 @@ h3 {
   opacity: 1;
   visibility: visible;
   transform: translate(var(--help-bubble-shift, 0px), 8px);
+}
+
+.help-hint:hover .help-hint-icon,
+.help-hint:focus-within .help-hint-icon {
+  border-color: rgba(15, 118, 110, 0.42);
+  background: #e2f4f0;
+  box-shadow: var(--focus-ring);
 }
 
 .help-hint:focus-within .help-hint-bubble {
@@ -3314,7 +3378,8 @@ h3 {
   position: relative;
   transition:
     border-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard);
+    box-shadow var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-emphasis);
 }
 
 .panel::before {
@@ -3324,6 +3389,16 @@ h3 {
   border-radius: inherit;
   pointer-events: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.panel:hover {
+  border-color: rgba(13, 118, 104, 0.18);
+  box-shadow: var(--shadow-lift);
+}
+
+.panel:focus-within {
+  border-color: rgba(13, 118, 104, 0.28);
+  box-shadow: var(--shadow-lift), var(--focus-ring);
 }
 
 .panel.large {
@@ -3433,6 +3508,11 @@ h3 {
   align-items: center;
   gap: 8px 12px;
   width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(13, 118, 104, 0.1);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(249, 253, 252, 0.92), rgba(244, 249, 248, 0.86));
 }
 
 .command-bar-filters {
@@ -3458,6 +3538,7 @@ h3 {
   grid-area: meta;
   color: var(--muted);
   font-size: 12px;
+  font-weight: 650;
 }
 
 .list-meta,
@@ -3482,6 +3563,7 @@ h3 {
     linear-gradient(90deg, rgba(47, 111, 189, 0.1), rgba(13, 118, 104, 0.08)),
     #f6fbfb;
   color: #24536e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .bulk-action-bar > div {
@@ -4515,6 +4597,8 @@ input[type="checkbox"]:focus {
   gap: 7px;
   justify-content: center;
   white-space: nowrap;
+  font-weight: 700;
+  letter-spacing: 0;
   transition:
     background-color var(--motion-base) var(--ease-standard),
     border-color var(--motion-base) var(--ease-standard),
@@ -4524,19 +4608,26 @@ input[type="checkbox"]:focus {
 }
 
 .primary {
-  background: var(--primary);
+  background:
+    linear-gradient(180deg, #128277 0%, var(--primary) 100%);
   color: #ffffff;
+  box-shadow:
+    0 10px 20px rgba(13, 118, 104, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .primary:hover {
-  background: var(--primary-dark);
+  background:
+    linear-gradient(180deg, #0f766c 0%, var(--primary-dark) 100%);
   box-shadow: 0 8px 18px rgba(13, 118, 104, 0.18);
 }
 
 .secondary {
-  background: #edf4f3;
+  background:
+    linear-gradient(180deg, #f5fbfa 0%, #edf4f3 100%);
   color: var(--primary-dark);
   border: 1px solid #cce2df;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .secondary:hover {
@@ -4548,10 +4639,12 @@ input[type="checkbox"]:focus {
 .ghost {
   background: transparent;
   color: var(--primary-dark);
+  border: 1px solid transparent;
 }
 
 .ghost:hover {
   background: #edf4f3;
+  border-color: rgba(13, 118, 104, 0.12);
 }
 
 .danger-text {
@@ -4559,7 +4652,13 @@ input[type="checkbox"]:focus {
 }
 
 .ghost.danger-text {
-  background: #fff4f2;
+  background: var(--danger-soft);
+  border-color: rgba(180, 35, 24, 0.12);
+}
+
+.ghost.danger-text:hover {
+  background: #ffe8e4;
+  border-color: var(--danger-line);
 }
 
 .history {
@@ -4624,6 +4723,14 @@ input[type="checkbox"]:focus {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
   scrollbar-gutter: stable;
   position: relative;
+  transition:
+    border-color var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
+}
+
+.table-wrap:focus-within {
+  border-color: rgba(13, 118, 104, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72), var(--focus-ring);
 }
 
 .table-wrap::after {
@@ -4649,11 +4756,16 @@ table {
 .table-wrap table:not(.quantity-template-table) tbody tr {
   transition:
     background-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard);
+    box-shadow var(--motion-base) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 
 .table-wrap table:not(.quantity-template-table) tbody tr:hover td {
   background-color: #f6fbfa;
+}
+
+.table-wrap table:not(.quantity-template-table) tbody tr:hover {
+  box-shadow: inset 3px 0 0 rgba(13, 118, 104, 0.24);
 }
 
 th,
@@ -4688,7 +4800,9 @@ th {
 
 .selected-row td {
   background: #edf7ff;
-  box-shadow: inset 0 1px 0 rgba(47, 111, 189, 0.08);
+  box-shadow:
+    inset 3px 0 0 rgba(47, 111, 189, 0.32),
+    inset 0 1px 0 rgba(47, 111, 189, 0.08);
 }
 
 tr:last-child td {
@@ -5171,8 +5285,11 @@ tr:last-child td {
 .editor-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(11, 30, 39, 0.35);
+  background:
+    radial-gradient(circle at 78% 18%, rgba(13, 118, 104, 0.16), transparent 28%),
+    rgba(11, 30, 39, 0.35);
   z-index: 80;
+  backdrop-filter: blur(4px);
 }
 
 .editor-modal {
@@ -5183,7 +5300,8 @@ tr:last-child td {
   width: min(560px, calc(100vw - 48px));
   z-index: 90;
   overflow: auto;
-  box-shadow: 0 18px 40px rgba(9, 31, 38, 0.2);
+  box-shadow: 0 24px 60px rgba(9, 31, 38, 0.22);
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
 }
 
 .modal-shell {
@@ -5191,6 +5309,7 @@ tr:last-child td {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   padding: 18px;
+  border-color: rgba(13, 118, 104, 0.18);
 }
 
 .modal-shell-head {
@@ -5203,7 +5322,9 @@ tr:last-child td {
   position: sticky;
   top: 0;
   z-index: 4;
-  background: linear-gradient(180deg, var(--panel) 0%, rgba(255, 255, 255, 0.94) 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 252, 250, 0.94) 100%);
+  backdrop-filter: blur(12px);
 }
 
 .modal-shell-head .panel-head {
@@ -6244,7 +6365,9 @@ tr:last-child td {
 
   .flash-notice,
   .confirm-dialog,
+  .editor-modal,
   .settings-drawer-desktop,
+  .workspace-view,
   .quantity-template-table td.quantity-cell-attention {
     animation: none !important;
   }
@@ -6261,6 +6384,7 @@ tr:last-child td {
   .table-wrap table:not(.quantity-template-table) tbody tr,
   .workflow-row,
   .placement-task-floating-card,
+  .workspace-meta-card,
   .sidebar-toggle,
   .nav-item,
   .nav-toggle,
@@ -6276,6 +6400,8 @@ tr:last-child td {
   .metric:hover,
   .chart-legend-item:hover,
   .summary-tile:hover,
+  .workspace-meta-card:hover,
+  .panel:hover,
   .nav-item:hover {
     transform: none;
   }
