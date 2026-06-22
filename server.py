@@ -3845,9 +3845,16 @@ def parse_bool(value):
     return clean_text(value).lower() in ("1", "true", "yes", "on")
 
 
+def read_room_payload(conn, room_id):
+    room_key = clean_text(room_id)
+    if not room_key:
+        return None
+    row = conn.execute("SELECT payload FROM rooms WHERE id = ?", (room_key,)).fetchone()
+    return json.loads(row["payload"]) if row else None
+
+
 def validate_quantity_sheet_animal_requirements(conn, sheet):
-    rooms = read_payloads(conn, "rooms", "rowid")
-    room = next((item for item in rooms if item.get("id") == sheet.get("roomId")), None)
+    room = read_room_payload(conn, sheet.get("roomId"))
     profile = billing_profile_for_room(room, sheet.get("billingUnit"))
     if profile["unit"] != "animal_day":
         return
