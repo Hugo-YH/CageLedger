@@ -15093,16 +15093,14 @@ function iacucOptions(currentValue = "") {
   const normalizedIacuc = normalizeIacucNumber(typedValue);
   const cache = iacucSearchCache();
   const exact = typedValue ? cache.byRaw.get(typedValue) || cache.byNumber.get(normalizedIacuc) : null;
-  const matches = keyword
-    ? cache.items.filter((item) => item.searchText.includes(keyword) || normalizeIacucNumber(item.iacuc).includes(normalizedIacuc))
-    : cache.items;
   const limited = [];
   if (exact) limited.push(exact);
-  matches.forEach((item) => {
-    if (limited.length >= IACUC_OPTION_LIMIT) return;
-    if (iacucOptionKey(item) === iacucOptionKey(exact)) return;
+  for (const item of cache.items) {
+    if (limited.length >= IACUC_OPTION_LIMIT) break;
+    if (keyword && !item.searchText.includes(keyword) && !item.normalizedIacuc.includes(normalizedIacuc)) continue;
+    if (iacucOptionKey(item) === iacucOptionKey(exact)) continue;
     limited.push(item);
-  });
+  }
   if (typedValue && !exact && limited.length < IACUC_OPTION_LIMIT) {
     limited.unshift({ iacuc: typedValue, project: "", pi: "", owner: "", funding: "", searchText: keyword });
   }
@@ -15121,6 +15119,7 @@ function iacucSearchCache() {
     const hasNumber = byNumber.has(iacuc);
     const normalized = {
       iacuc: item.iacuc || iacuc,
+      normalizedIacuc: iacuc,
       rawIacuc: item.rawIacuc || item.iacuc || iacuc,
       project: item.project || "",
       pi: item.pi || "",
