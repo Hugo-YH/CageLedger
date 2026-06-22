@@ -40,6 +40,7 @@ def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, wher
         iacuc=_clean(filters.get("iacuc", "")),
         pi=_clean(filters.get("pi", "")),
         room_id=_clean(filters.get("roomId", "")),
+        room_ids=filters.get("roomIds", []),
         room_name=_clean(filters.get("roomName", "")),
         source_type=_clean(filters.get("sourceType", "")),
     )

@@ -3,6 +3,7 @@ import json
 from server_app.cache import cache_get, cache_key, cache_set
 
 from .payload import dump_json
+from .payload import cached_paginated_payloads
 from .payload import paginated_payloads
 
 
@@ -63,7 +64,7 @@ def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
     if filters.get("month"):
         where = " AND ".join([part for part in (where, "intake_date LIKE ?") if part])
         params = (*params, f"{filters['month']}%")
-    return paginated_payloads(conn, "intake_batches", entity_order_by.get("intake_batches", "rowid"), where, params, filters["limit"], filters["offset"])
+    return cached_paginated_payloads(conn, "intake_batches", "intake_batches", entity_order_by.get("intake_batches", "rowid"), filters, where, params)
 
 
 def list_placement_tasks_page(conn, filters, entity_order_by, clean_text):
@@ -90,7 +91,7 @@ def list_placement_tasks_page(conn, filters, entity_order_by, clean_text):
     if filters.get("month"):
         where = " AND ".join([part for part in (where, "planned_move_in_date LIKE ?") if part])
         params = (*params, f"{filters['month']}%")
-    return paginated_payloads(conn, "placement_tasks", entity_order_by.get("placement_tasks", "rowid"), where, params, filters["limit"], filters["offset"])
+    return cached_paginated_payloads(conn, "placement_tasks", "placement_tasks", entity_order_by.get("placement_tasks", "rowid"), filters, where, params)
 
 
 def upsert_principal_identity(conn, pi_name, principal_type, updated_at, payload_json):

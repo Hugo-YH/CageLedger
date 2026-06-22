@@ -1860,7 +1860,7 @@ def write_infrastructure_entity_state(collection, method, item_id, payload, acto
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::")
     response = {
         "item": item,
         "updatedAt": updated_at,
@@ -1917,7 +1917,7 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
         conn.commit()
 
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::")
     response = {
         "item": item,
         "updatedAt": updated_at,
@@ -1975,7 +1975,7 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec):
         conn.commit()
 
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "placement_tasks::")
     response = {
         "item": item,
         "affectedSlots": affected_slots,
@@ -2001,7 +2001,7 @@ def persist_intake_receipt_confirmation(batch_id, body, actor):
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::")
     log_perf("intake_batch.confirm", started_at, tasks=len(tasks))
     return {
         "batch": batch,
