@@ -36,6 +36,18 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.18",
+    releasedAt: "2026-06-22 19:33",
+    title: "系统响应与结算性能优化",
+    items: [
+      "优化 IACUC 检索、PI 选项和数量统计表录入状态计算，减少连续录入和切页时的重复扫描",
+      "待接收批次、待进驻任务、操作日志和结算流程相关列表继续使用分页、短缓存和写后局部刷新",
+      "结算占用、结算单生成和报销台账详情改为按月份、项目负责人、伦理号和关联房间定向读取数据",
+      "单条结算单深链查询改为直接读取当前版本摘要并使用短缓存，减少大型结算单的重复解析",
+      "同步完善性能待办文档，记录后续继续裁剪详情载荷和局部渲染的方向",
+    ],
+  },
+  {
     version: "0.5.17",
     releasedAt: "2026-06-17 21:14",
     title: "数量统计表动物数量与录入体验优化",
@@ -940,7 +952,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.17",
+  version: "0.5.18",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
