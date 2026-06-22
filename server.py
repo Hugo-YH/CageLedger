@@ -1691,6 +1691,18 @@ def read_payloads_by_ids(conn, table, ids, order_by="rowid"):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def read_billing_state_for_occupancies(conn, occupancies):
+    slot_ids = {item.get("slotId") for item in occupancies if item.get("slotId")}
+    slots = read_payloads_by_ids(conn, "cage_slots", slot_ids, "rack_id, row_no, col_no, rowid")
+    rack_ids = {slot.get("rackId") for slot in slots if slot.get("rackId")}
+    rack_ids.update(item.get("rackId") for item in occupancies if item.get("rackId"))
+    racks = read_payloads_by_ids(conn, "racks", rack_ids, "room_id, index_no, rowid")
+    room_ids = {rack.get("roomId") for rack in racks if rack.get("roomId")}
+    room_ids.update(item.get("roomId") for item in occupancies if item.get("roomId"))
+    rooms = read_payloads_by_ids(conn, "rooms", room_ids, "rowid")
+    return {"rooms": rooms, "racks": racks, "slots": slots}
+
+
 def filter_state_for_actor(state, actor):
     if not state or not actor or actor.get("role") == "admin":
         return state
@@ -3888,6 +3900,14 @@ def validate_quantity_sheet_animal_requirements(conn, sheet):
         raise ValueError("该房间按只/天计费，请打开动物数量并补充结余总数")
 
 
+def read_rooms_for_quantity_sheets(conn, sheets):
+    return read_room_payloads_for_context(
+        conn,
+        room_ids=[sheet.get("roomId", "") for sheet in sheets],
+        room_names=[sheet.get("roomName", "") for sheet in sheets],
+    )
+
+
 def normalize_quantity_sheet_row(row, month):
     if not isinstance(row, dict):
         raise ValueError("统计表明细行必须是 JSON 对象")
@@ -3964,7 +3984,7 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
     # IACUC 分表阶段不应用 PI 免费笼位，避免跨伦理号结算失真。
     free_cages = 0
-    rooms = read_payloads(conn, "rooms", "rowid")
+    rooms = read_rooms_for_quantity_sheets(conn, sheets)
     lines = quantity_sheet_statement_lines(sheets, free_cages, rooms)
     generated_at = now_iso()
     iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
@@ -4158,12 +4178,8 @@ def generate_billing_statement(conn, payload, actor):
 
     occupancies = read_occupancies_for_billing(conn, month, iacuc=iacuc)
     applications_by_iacuc = read_applications_by_iacuc(conn)
-    rooms = read_payloads(conn, "rooms", "rowid")
-    state = {
-        "rooms": rooms,
-        "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
-        "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
-    }
+    state = read_billing_state_for_occupancies(conn, occupancies)
+    rooms = state["rooms"]
     dates = dates_in_month(month)
     generated_at = now_iso()
     cumulative = 0
@@ -4328,12 +4344,8 @@ def generate_billing_statement_by_pi(conn, payload, actor):
     if source_type == "cage_map":
         applications_by_iacuc = read_applications_by_iacuc(conn)
         occupancies = read_occupancies_for_billing(conn, month, pi=pi_name)
-        rooms = read_payloads(conn, "rooms", "rowid")
-        state = {
-            "rooms": rooms,
-            "racks": read_payloads(conn, "racks", "room_id, index_no, rowid"),
-            "slots": read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid"),
-        }
+        state = read_billing_state_for_occupancies(conn, occupancies)
+        rooms = state["rooms"]
         iacucs = sorted(
             {
                 normalize_iacuc_number(item.get("iacuc", ""))
@@ -4446,7 +4458,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         for item in sheets:
             validate_quantity_sheet_permission(actor, item)
         iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
-        rooms = read_payloads(conn, "rooms", "rowid")
+        rooms = read_rooms_for_quantity_sheets(conn, sheets)
         lines = quantity_sheet_statement_lines(sheets, free_cages, rooms)
         statement = {
             "id": new_id("stmt"),
