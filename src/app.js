@@ -14923,6 +14923,7 @@ function stateIndexes() {
   const occupanciesByIacuc = new Map();
   const piInfoPartsByName = cloneIacucPiInfoPartsByName();
   const billableOccupancies = [];
+  const piOptionRowsFromOccupancies = [];
   indexedOccupancies.forEach((item) => {
     if ((item.status === "active" || item.status === "reserved") && item.slotId) {
       currentOccupancyBySlotId.set(item.slotId, item);
@@ -14934,6 +14935,10 @@ function stateIndexes() {
     }
     if (item.status === "active" || item.status === "ended") {
       billableOccupancies.push(item);
+      piOptionRowsFromOccupancies.push({
+        pi: item.pi,
+        iacuc: item.iacuc,
+      });
       const piKey = normalizePersonName(item.pi);
       if (piKey) {
         if (!occupanciesByPi.has(piKey)) occupanciesByPi.set(piKey, []);
@@ -14947,7 +14952,12 @@ function stateIndexes() {
   const quantitySheetsById = new Map(state.quantitySheets.map((sheet) => [sheet.id, sheet]));
   const quantitySheetsByMonth = new Map();
   const quantitySheetsByIacuc = new Map();
+  const piOptionRowsFromSheets = [];
   state.quantitySheets.forEach((sheet) => {
+    piOptionRowsFromSheets.push({
+      pi: sheet.pi,
+      iacuc: sheet.iacuc,
+    });
     if (sheet.month) {
       if (!quantitySheetsByMonth.has(sheet.month)) quantitySheetsByMonth.set(sheet.month, []);
       quantitySheetsByMonth.get(sheet.month).push(sheet);
@@ -14995,6 +15005,8 @@ function stateIndexes() {
     reimbursementRecordById,
     reimbursementRecordsSorted: sortReimbursementRecords(state.reimbursementRecords),
     piInfoByName,
+    piOptionRowsFromOccupancies,
+    piOptionRowsFromSheets,
   };
   return STATE_INDEX_CACHE;
 }
@@ -15153,15 +15165,10 @@ function iacucPiOptionRows() {
 }
 
 function piOptions(currentValue = "") {
+  const indexes = stateIndexes();
   const fromIndex = iacucPiOptionRows();
-  const fromOccupancies = stateIndexes().billableOccupancies.map((item) => ({
-    pi: item.pi,
-    iacuc: item.iacuc,
-  }));
-  const fromSheets = stateIndexes().quantitySheets.map((item) => ({
-    pi: item.pi,
-    iacuc: item.iacuc,
-  }));
+  const fromOccupancies = indexes.piOptionRowsFromOccupancies;
+  const fromSheets = indexes.piOptionRowsFromSheets;
   const typedValue = String(currentValue || "").trim();
   const fromCurrentValue = typedValue ? [{ pi: typedValue, iacuc: "" }] : [];
   const byPi = new Map();
