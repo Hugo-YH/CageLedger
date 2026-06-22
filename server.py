@@ -1670,17 +1670,25 @@ def read_occupancies_for_billing(conn, month, iacuc="", pi=""):
     ).fetchall()
     items = [json.loads(row["payload"]) for row in rows]
     slot_ids = {item.get("slotId") for item in items if item.get("slotId")}
-    slots = read_payloads(conn, "cage_slots", "rack_id, row_no, col_no, rowid") if slot_ids else []
-    slots = [slot for slot in slots if slot.get("id") in slot_ids]
+    slots = read_payloads_by_ids(conn, "cage_slots", slot_ids, "rack_id, row_no, col_no, rowid")
     rack_ids = {slot.get("rackId") for slot in slots if slot.get("rackId")}
-    racks = read_payloads(conn, "racks", "room_id, index_no, rowid") if rack_ids else []
-    racks = [rack for rack in racks if rack.get("id") in rack_ids]
+    racks = read_payloads_by_ids(conn, "racks", rack_ids, "room_id, index_no, rowid")
     room_ids = {rack.get("roomId") for rack in racks if rack.get("roomId")}
-    rooms = read_payloads(conn, "rooms", "rowid") if room_ids else []
-    rooms = [room for room in rooms if room.get("id") in room_ids]
+    rooms = read_payloads_by_ids(conn, "rooms", room_ids, "rowid")
     applications_by_iacuc = read_applications_by_iacuc(conn)
     state = {"rooms": rooms, "racks": racks, "slots": slots}
     return [occupancy_with_snapshots(item, state, applications_by_iacuc) for item in items]
+
+
+def read_payloads_by_ids(conn, table, ids, order_by="rowid"):
+    id_list = sorted({clean_text(item) for item in ids if clean_text(item)})
+    if not id_list:
+        return []
+    rows = conn.execute(
+        f"SELECT payload FROM {table} WHERE id IN ({placeholders(id_list)}) ORDER BY {order_by}",
+        tuple(id_list),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
 
 
 def filter_state_for_actor(state, actor):
