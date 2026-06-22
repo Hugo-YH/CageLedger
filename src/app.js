@@ -7013,7 +7013,7 @@ function scheduleQuantityEntryStatusSync(form = document.querySelector("#quantit
 }
 
 function quantityEntryStatusFromForm(form) {
-  const rows = [];
+  const stats = { filledRows: 0, issueRows: 0, transferRows: 0 };
   form?.querySelectorAll?.(".quantity-template-table tbody tr").forEach((tableRow) => {
     [[0, 1, 2], [5, 6, 7]].forEach(([dateIndex, addedIndex, removedIndex]) => {
       const dateValue = String(tableRow.cells[dateIndex]?.querySelector("[name='rowDate']")?.value || "").trim();
@@ -7021,21 +7021,27 @@ function quantityEntryStatusFromForm(form) {
       const removedEntries = readQuantityChangeEditors(tableRow.cells[removedIndex], "removed");
       if (!dateValue && !addedEntries.length && !removedEntries.length) return;
       const maxLength = Math.max(addedEntries.length, removedEntries.length, 1);
-      Array.from({ length: maxLength }, (_, index) => {
+      for (let index = 0; index < maxLength; index += 1) {
         const added = addedEntries[index] || {};
         const removed = removedEntries[index] || {};
-        rows.push({
-          addedCount: numericOrZero(added.count) > 0 ? numericOrZero(added.count) : null,
-          addedType: added.type || "",
-          transferInFromIacuc: added.transferIacuc || "",
-          removedCount: numericOrZero(removed.count) > 0 ? numericOrZero(removed.count) : null,
-          removedType: removed.type || "",
-          transferOutToIacuc: removed.transferIacuc || "",
-        });
-      });
+        const addedCount = numericOrZero(added.count);
+        const removedCount = numericOrZero(removed.count);
+        const addedType = added.type || "";
+        const removedType = removed.type || "";
+        if (addedCount > 0 || removedCount > 0) stats.filledRows += 1;
+        if (addedType === "转入" || removedType === "转出") stats.transferRows += 1;
+        if (
+          (addedCount > 0 && !addedType) ||
+          (removedCount > 0 && !removedType) ||
+          (addedCount > 0 && addedType === "转入" && !normalizeIacucNumber(added.transferIacuc || "")) ||
+          (removedCount > 0 && removedType === "转出" && !normalizeIacucNumber(removed.transferIacuc || ""))
+        ) {
+          stats.issueRows += 1;
+        }
+      }
     });
   });
-  return quantityEntryStatusFromDraft({ rows });
+  return stats;
 }
 
 function renderQuantitySheetCalendarPages(draft) {
