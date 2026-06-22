@@ -903,6 +903,10 @@ const HELP_TEXTS = {
 let IACUC_INDEX = [];
 let IACUC_BY_NUMBER = new Map();
 let IACUC_SEARCH_CACHE = null;
+let IACUC_PI_INFO_PARTS_CACHE = null;
+let IACUC_PI_INFO_PARTS_SOURCE = null;
+let IACUC_PI_OPTION_ROWS_CACHE = null;
+let IACUC_PI_OPTION_ROWS_SOURCE = null;
 let IACUC_INDEX_LOADING = false;
 let IACUC_INDEX_LOADED = false;
 let IACUC_INDEX_PROMISE = null;
@@ -14917,30 +14921,8 @@ function stateIndexes() {
   const currentOccupancyBySlotId = new Map();
   const occupanciesByPi = new Map();
   const occupanciesByIacuc = new Map();
-  const piInfoPartsByName = new Map();
+  const piInfoPartsByName = cloneIacucPiInfoPartsByName();
   const billableOccupancies = [];
-  const rememberPiInfoPart = (pi, field, value) => {
-    const key = normalizePersonName(pi);
-    const text = String(value || "").trim();
-    if (!key || !text) return;
-    const current =
-      piInfoPartsByName.get(key) ||
-      {
-        pi: String(pi || "").trim(),
-        projects: new Set(),
-        owners: new Set(),
-        fundings: new Set(),
-      };
-    if (field === "project") current.projects.add(text);
-    if (field === "owner") current.owners.add(text);
-    if (field === "funding") current.fundings.add(text);
-    piInfoPartsByName.set(key, current);
-  };
-  IACUC_INDEX.forEach((item) => {
-    rememberPiInfoPart(item.pi, "project", item.project);
-    rememberPiInfoPart(item.pi, "owner", item.owner);
-    rememberPiInfoPart(item.pi, "funding", item.funding);
-  });
   indexedOccupancies.forEach((item) => {
     if ((item.status === "active" || item.status === "reserved") && item.slotId) {
       currentOccupancyBySlotId.set(item.slotId, item);
@@ -14957,9 +14939,9 @@ function stateIndexes() {
         if (!occupanciesByPi.has(piKey)) occupanciesByPi.set(piKey, []);
         occupanciesByPi.get(piKey).push(item);
       }
-      rememberPiInfoPart(item.pi, "project", item.project);
-      rememberPiInfoPart(item.pi, "owner", item.owner);
-      rememberPiInfoPart(item.pi, "funding", item.funding);
+      rememberPiInfoPart(piInfoPartsByName, item.pi, "project", item.project);
+      rememberPiInfoPart(piInfoPartsByName, item.pi, "owner", item.owner);
+      rememberPiInfoPart(piInfoPartsByName, item.pi, "funding", item.funding);
     }
   });
   const quantitySheetsById = new Map(state.quantitySheets.map((sheet) => [sheet.id, sheet]));
@@ -15015,6 +14997,51 @@ function stateIndexes() {
     piInfoByName,
   };
   return STATE_INDEX_CACHE;
+}
+
+function rememberPiInfoPart(map, pi, field, value) {
+  const key = normalizePersonName(pi);
+  const text = String(value || "").trim();
+  if (!key || !text) return;
+  const current =
+    map.get(key) ||
+    {
+      pi: String(pi || "").trim(),
+      projects: new Set(),
+      owners: new Set(),
+      fundings: new Set(),
+    };
+  if (field === "project") current.projects.add(text);
+  if (field === "owner") current.owners.add(text);
+  if (field === "funding") current.fundings.add(text);
+  map.set(key, current);
+}
+
+function iacucPiInfoPartsByName() {
+  if (IACUC_PI_INFO_PARTS_CACHE && IACUC_PI_INFO_PARTS_SOURCE === IACUC_INDEX) return IACUC_PI_INFO_PARTS_CACHE;
+  const parts = new Map();
+  IACUC_INDEX.forEach((item) => {
+    rememberPiInfoPart(parts, item.pi, "project", item.project);
+    rememberPiInfoPart(parts, item.pi, "owner", item.owner);
+    rememberPiInfoPart(parts, item.pi, "funding", item.funding);
+  });
+  IACUC_PI_INFO_PARTS_SOURCE = IACUC_INDEX;
+  IACUC_PI_INFO_PARTS_CACHE = parts;
+  return parts;
+}
+
+function cloneIacucPiInfoPartsByName() {
+  return new Map(
+    [...iacucPiInfoPartsByName().entries()].map(([key, item]) => [
+      key,
+      {
+        pi: item.pi,
+        projects: new Set(item.projects),
+        owners: new Set(item.owners),
+        fundings: new Set(item.fundings),
+      },
+    ]),
+  );
 }
 
 function invalidateStateIndexCache() {
@@ -15109,13 +15136,24 @@ function iacucSearchCache() {
 
 function invalidateIacucSearchCache() {
   IACUC_SEARCH_CACHE = null;
+  IACUC_PI_INFO_PARTS_CACHE = null;
+  IACUC_PI_INFO_PARTS_SOURCE = null;
+  IACUC_PI_OPTION_ROWS_CACHE = null;
+  IACUC_PI_OPTION_ROWS_SOURCE = null;
 }
 
-function piOptions(currentValue = "") {
-  const fromIndex = IACUC_INDEX.map((item) => ({
+function iacucPiOptionRows() {
+  if (IACUC_PI_OPTION_ROWS_CACHE && IACUC_PI_OPTION_ROWS_SOURCE === IACUC_INDEX) return IACUC_PI_OPTION_ROWS_CACHE;
+  IACUC_PI_OPTION_ROWS_SOURCE = IACUC_INDEX;
+  IACUC_PI_OPTION_ROWS_CACHE = IACUC_INDEX.map((item) => ({
     pi: item.pi,
     iacuc: item.iacuc,
   }));
+  return IACUC_PI_OPTION_ROWS_CACHE;
+}
+
+function piOptions(currentValue = "") {
+  const fromIndex = iacucPiOptionRows();
   const fromOccupancies = stateIndexes().billableOccupancies.map((item) => ({
     pi: item.pi,
     iacuc: item.iacuc,
