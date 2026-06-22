@@ -583,17 +583,27 @@ def list_current_billing_statements(conn):
 
 
 def get_current_billing_statement(conn, statement_id):
-    row = conn.execute("SELECT payload FROM billing_statement_versions WHERE id = ?", (statement_id,)).fetchone()
+    key = cache_key("billing_statements::current_item", id=statement_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    row = conn.execute(
+        """
+        SELECT versions.payload
+        FROM billing_statement_versions AS versions
+        JOIN billing_workflows AS workflows
+          ON workflows.current_version_id = versions.id
+        WHERE versions.id = ?
+        """,
+        (statement_id,),
+    ).fetchone()
     if not row:
-        return None
+        return cache_set(key, None)
     version = json.loads(row["payload"])
     statement = dict(version.get("statement") or {})
     if not statement:
-        return None
-    workflow = get_billing_workflow(conn, version.get("workflowId", ""))
-    if workflow and (workflow.get("currentVersionId") or "") != statement_id:
-        return None
-    return billing_statement_list_item(statement)
+        return cache_set(key, None)
+    return cache_set(key, billing_statement_list_item(statement))
 
 
 def insert_quantity_sheet(conn, sheet, db_values):
