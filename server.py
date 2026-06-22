@@ -3853,6 +3853,23 @@ def read_room_payload(conn, room_id):
     return json.loads(row["payload"]) if row else None
 
 
+def read_room_payloads_for_context(conn, room_ids=None, room_names=None):
+    ids = [clean_text(item) for item in (room_ids or []) if clean_text(item)]
+    names = [clean_text(item) for item in (room_names or []) if clean_text(item)]
+    clauses = []
+    params = []
+    if ids:
+        clauses.append(f"id IN ({placeholders(ids)})")
+        params.extend(ids)
+    if names:
+        clauses.append(f"name IN ({placeholders(names)})")
+        params.extend(names)
+    if not clauses:
+        return []
+    rows = conn.execute(f"SELECT payload FROM rooms WHERE {' OR '.join(clauses)} ORDER BY rowid", tuple(params)).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
 def validate_quantity_sheet_animal_requirements(conn, sheet):
     room = read_room_payload(conn, sheet.get("roomId"))
     profile = billing_profile_for_room(room, sheet.get("billingUnit"))
@@ -5200,10 +5217,20 @@ def reimbursement_detail_context_from_workflow(conn, workflow, statement):
     applications_by_iacuc = read_applications_by_iacuc(conn)
     if statement.get("sourceType") == "pi_merged_quantity_sheet":
         sheets = list_quantity_sheets_by_month_pi(conn, statement.get("month"), clean_text(statement.get("pi")))
-        detail_context = quantity_sheet_detail_context(sheets, read_payloads(conn, "rooms", "rowid"))
+        rooms = read_room_payloads_for_context(
+            conn,
+            room_ids=[item.get("roomId", "") for item in sheets],
+            room_names=[item.get("roomName", "") for item in sheets],
+        )
+        detail_context = quantity_sheet_detail_context(sheets, rooms)
     elif statement.get("sourceType") == "quantity_sheet":
         sheets = list_quantity_sheets_by_month_iacuc(conn, statement.get("month"), normalize_iacuc_number(statement.get("iacuc")))
-        detail_context = quantity_sheet_detail_context(sheets, read_payloads(conn, "rooms", "rowid"))
+        rooms = read_room_payloads_for_context(
+            conn,
+            room_ids=[item.get("roomId", "") for item in sheets],
+            room_names=[item.get("roomName", "") for item in sheets],
+        )
+        detail_context = quantity_sheet_detail_context(sheets, rooms)
     else:
         occupancies = read_occupancies_for_billing(
             conn,
@@ -5211,7 +5238,8 @@ def reimbursement_detail_context_from_workflow(conn, workflow, statement):
             iacuc="" if clean_text(statement.get("sourceType", "")).startswith("pi_merged_") else statement.get("iacuc", ""),
             pi=statement.get("pi", "") if clean_text(statement.get("pi", "")) else "",
         )
-        detail_context = occupancy_detail_context(occupancies, read_payloads(conn, "rooms", "rowid"))
+        rooms = read_room_payloads_for_context(conn, room_ids=[item.get("roomId", "") for item in occupancies])
+        detail_context = occupancy_detail_context(occupancies, rooms)
     for iacuc in iacucs:
         snapshot = statement_application_snapshot(iacuc, applications_by_iacuc, [])
         current = detail_context.get(iacuc, {"roomNames": []})
