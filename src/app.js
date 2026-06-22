@@ -14899,8 +14899,10 @@ function stateIndexes() {
   if (STATE_INDEX_CACHE) return STATE_INDEX_CACHE;
   const roomById = new Map(state.rooms.map((room) => [room.id, room]));
   const rackById = new Map(state.racks.map((rack) => [rack.id, rack]));
-  const indexedSlots = [...state.slots, ...billingInfrastructureState.slots.filter((slot) => !state.slots.some((item) => item.id === slot.id))];
-  const indexedOccupancies = [...state.occupancies, ...billingInfrastructureState.occupancies.filter((item) => !state.occupancies.some((current) => current.id === item.id))];
+  const localSlotIds = new Set(state.slots.map((slot) => slot.id));
+  const localOccupancyIds = new Set(state.occupancies.map((item) => item.id));
+  const indexedSlots = [...state.slots, ...billingInfrastructureState.slots.filter((slot) => !localSlotIds.has(slot.id))];
+  const indexedOccupancies = [...state.occupancies, ...billingInfrastructureState.occupancies.filter((item) => !localOccupancyIds.has(item.id))];
   const slotById = new Map(indexedSlots.map((slot) => [slot.id, slot]));
   const racksByRoomId = new Map();
   state.racks.forEach((rack) => {
