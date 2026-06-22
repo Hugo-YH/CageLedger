@@ -1599,7 +1599,6 @@ def occupancy_overlaps_month(item, month):
 
 def read_billing_occupancies(conn, actor, filters):
     started_at = time.perf_counter()
-    state = filter_state_for_actor(read_cached_state(conn), actor)
     month = clean_text(filters.get("month", ""))
     iacuc = clean_text(filters.get("iacuc", ""))
     pi = clean_text(filters.get("pi", ""))
@@ -1617,28 +1616,17 @@ def read_billing_occupancies(conn, actor, filters):
         log_perf("billing_occupancies", started_at, cached=1, month=month, occupancies=len(cached.get("occupancies", [])))
         return cached
 
-    slots = state.get("slots", [])
-    occupancies = []
-    matched_slot_ids = set()
-    normalized_iacuc = normalize_iacuc_number(iacuc)
-    normalized_pi = clean_text(pi)
-    for item in state.get("occupancies", []):
-        if item.get("status") not in ("active", "ended"):
-            continue
-        if not occupancy_overlaps_month(item, month):
-            continue
-        if normalized_iacuc and normalize_iacuc_number(item.get("iacuc")) != normalized_iacuc:
-            continue
-        if normalized_pi and clean_text(item.get("pi")) != normalized_pi:
-            continue
-        occupancies.append(item)
-        if item.get("slotId"):
-            matched_slot_ids.add(item["slotId"])
+    occupancies = read_occupancies_for_billing(conn, month, iacuc=iacuc, pi=pi)
+    if actor and actor.get("role") != "admin":
+        allowed_room_ids = {clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)}
+        occupancies = [item for item in occupancies if clean_text(item.get("roomId", "")) in allowed_room_ids]
+    state = read_billing_state_for_occupancies(conn, occupancies)
+    matched_slot_ids = {item.get("slotId") for item in occupancies if item.get("slotId")}
     payload = {
         "month": month,
         "pi": pi,
         "iacuc": iacuc,
-        "slots": [slot for slot in slots if slot.get("id") in matched_slot_ids],
+        "slots": [slot for slot in state["slots"] if slot.get("id") in matched_slot_ids],
         "occupancies": occupancies,
     }
     cache_set(key, payload)
