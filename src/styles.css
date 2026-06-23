@@ -17,23 +17,38 @@
   --primary: #0d7668;
   --primary-dark: #0b5f56;
   --primary-ink: #083f3b;
+  --primary-soft: #e9f6f4;
   --brand: #0d7668;
   --brand-strong: #0b5f56;
-  --blue: #2f6fbd;
+  --reserved: #2f8f86;
+  --reserved-soft: #eef8f5;
+  --reserved-line: #b9dcd6;
+  --reserved-text: #0b6f63;
+  --selection-soft: #eef8f5;
+  --selection-line: rgba(13, 118, 104, 0.34);
+  --selection-shadow: rgba(13, 118, 104, 0.08);
+  --inspect: #4c8f63;
+  --inspect-soft: #edf8ee;
+  --inspect-line: #bddfbe;
   --green: #1f7a55;
   --amber: #b66b12;
   --gray: #7d8b91;
   --danger: #b42318;
   --danger-soft: #fff0ee;
   --danger-line: #efc1ba;
-  --info-soft: #edf5fb;
-  --info-line: #bfd6ee;
+  --info-soft: #eef8f5;
+  --info-line: #b9dcd6;
+  --info-text: #0b5f56;
   --warning-line: #efd7a4;
   --success-soft: #e8f6ee;
   --success-line: #b9e3d6;
   --warning-soft: #fff3dc;
-  --todo-soft: #edf5fb;
+  --todo-soft: #eef8f5;
+  --todo-line: #b9dcd6;
+  --todo-text: #0b5f56;
   --finance-soft: #f1eff9;
+  --finance-line: #d5cfee;
+  --finance-text: #4b3f7a;
   --shadow: 0 20px 54px rgba(19, 42, 44, 0.1);
   --shadow-soft: 0 10px 28px rgba(19, 42, 44, 0.07);
   --shadow-lift: 0 18px 38px rgba(18, 45, 48, 0.12);
@@ -1678,7 +1693,7 @@ h3 {
 }
 
 .metric.reserved strong {
-  color: var(--blue);
+  color: var(--reserved);
 }
 
 .metric.empty strong {
@@ -1700,7 +1715,7 @@ h3 {
     radial-gradient(circle at center, var(--panel) 0 54%, transparent 55%),
     conic-gradient(
       var(--green) 0 calc(var(--active) * 1%),
-      var(--blue) calc(var(--active) * 1%) calc((var(--active) + var(--reserved)) * 1%),
+      var(--reserved) calc(var(--active) * 1%) calc((var(--active) + var(--reserved)) * 1%),
       #c7d1d5 calc((var(--active) + var(--reserved)) * 1%) 100%
     );
   display: grid;
@@ -1887,7 +1902,7 @@ h3 {
 }
 
 .stacked-capacity-track i.reserved {
-  background: var(--blue);
+  background: var(--reserved);
 }
 
 .stacked-capacity-track i.empty {
@@ -1942,8 +1957,8 @@ h3 {
 }
 
 .room-capacity-meta .meta-pill.reserved {
-  background: #edf6ff;
-  border-color: #b8d8f4;
+  background: var(--reserved-soft);
+  border-color: var(--reserved-line);
 }
 
 .room-capacity-meta .meta-pill.empty {
@@ -1977,7 +1992,7 @@ h3 {
 }
 
 .capacity-track i.reserved {
-  background: var(--blue);
+  background: var(--reserved);
 }
 
 .capacity-track i.empty {
@@ -3990,12 +4005,12 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(47, 111, 189, 0.22);
+  border: 1px solid rgba(13, 118, 104, 0.22);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(90deg, rgba(47, 111, 189, 0.1), rgba(13, 118, 104, 0.08)),
+    linear-gradient(90deg, rgba(13, 118, 104, 0.1), rgba(31, 122, 85, 0.08)),
     #f6fbfb;
-  color: #24536e;
+  color: var(--info-text);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
@@ -4047,7 +4062,7 @@ input[type="checkbox"] {
   padding: 0;
   border-radius: 5px;
   vertical-align: middle;
-  accent-color: var(--blue);
+  accent-color: var(--primary);
   box-shadow: none;
 }
 
@@ -4071,7 +4086,7 @@ textarea:hover {
 }
 
 input[type="checkbox"]:focus {
-  box-shadow: 0 0 0 2px rgba(47, 111, 189, 0.16);
+  box-shadow: 0 0 0 2px rgba(13, 118, 104, 0.16);
 }
 
 .toolbar select,
@@ -4240,8 +4255,8 @@ input[type="checkbox"]:focus {
 
 .status-dot.reserved,
 .pill.reserved {
-  background: #e8f0ff;
-  color: #245ba6;
+  background: var(--reserved-soft);
+  color: var(--reserved-text);
 }
 
 .status-dot.active,
@@ -4344,8 +4359,8 @@ input[type="checkbox"]:focus {
 }
 
 .slot.reserved {
-  background: #edf6ff;
-  border-color: #b8d8f4;
+  background: var(--reserved-soft);
+  border-color: var(--reserved-line);
 }
 
 .slot.empty {
@@ -4414,7 +4429,7 @@ input[type="checkbox"]:focus {
 }
 
 .slot.reserved .slot-iacuc {
-  color: #234f86;
+  color: var(--reserved-text);
 }
 
 .slot-person,
@@ -4509,8 +4524,8 @@ input[type="checkbox"]:focus {
 }
 
 .slot-preview-head em.reserved {
-  background: #e3f1ff;
-  color: #1d5f9f;
+  background: var(--reserved-soft);
+  color: var(--reserved-text);
 }
 
 .slot-preview-head em.active {
@@ -5305,10 +5320,17 @@ th {
 }
 
 .selected-row td {
-  background: #edf7ff;
+  background: var(--selection-soft);
   box-shadow:
-    inset 3px 0 0 rgba(47, 111, 189, 0.32),
-    inset 0 1px 0 rgba(47, 111, 189, 0.08);
+    inset 3px 0 0 var(--selection-line),
+    inset 0 1px 0 var(--selection-shadow);
+}
+
+.intake-batch-table .selected-row td {
+  background: var(--selection-soft);
+  box-shadow:
+    inset 3px 0 0 var(--selection-line),
+    inset 0 1px 0 var(--selection-shadow);
 }
 
 tr:last-child td {

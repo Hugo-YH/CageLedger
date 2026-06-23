@@ -37,6 +37,16 @@ import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STOR
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.20",
+    releasedAt: "2026-06-23 15:49",
+    title: "全系统配色语义整理",
+    items: [
+      "统一表格选中、批量选择、复选框、已预约笼位和预留图例的配色体系，避免局部出现旧蓝色底色",
+      "新增选中态、预留态、盘点态、待办态和财务态等语义色变量，后续功能可按业务语义复用",
+      "补充 UI 配色语义开发文档，并在开发规范中增加前端配色规则入口",
+    ],
+  },
+  {
     version: "0.5.19b",
     releasedAt: "2026-06-23 14:21",
     title: "笼卡扫码查询与预览修复",
@@ -987,7 +997,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.19b",
+  version: "0.5.20",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
