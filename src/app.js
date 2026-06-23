@@ -34,7 +34,19 @@ import {
 } from "./api/billing.js";
 import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksUrl as buildPlacementTasksApiUrl } from "./api/intake.js";
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
+import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.5.19a",
+    releasedAt: "2026-06-23 13:25",
+    title: "移动端笼卡识别优化",
+    items: [
+      "笼卡识别加入本地二维码解码能力，移动浏览器缺少原生识别接口时仍可通过摄像头扫码",
+      "扫码页上方调整为二维码识别和 QRID 两栏布局，笼卡信息展示区保持在下方",
+      "精简移动端扫码页提示文案，保留核心标题、短码输入、查询和识别结果",
+      "手机端非 HTTPS 访问时明确提示使用线上 HTTPS 地址测试摄像头权限",
+    ],
+  },
   {
     version: "0.5.19",
     releasedAt: "2026-06-23 13:09",
@@ -964,7 +976,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.19",
+  version: "0.5.19a",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1551,6 +1563,7 @@ const cageCardScannerState = {
 let cageCardScannerStream = null;
 let cageCardScannerLoopToken = 0;
 let cageCardScannerDetector = null;
+let cageCardScannerCanvas = null;
 
 const seedData = {
   activeView: "dashboard",
@@ -4031,8 +4044,7 @@ function renderCageCardScannerResult() {
   if (!result) {
     return `
       <div class="scanner-empty-card">
-        <strong>笼卡信息展示区</strong>
-        <span>扫描二维码或输入短码后显示动物信息、项目信息和当前位置。</span>
+        <strong>笼卡信息</strong>
       </div>
     `;
   }
@@ -4058,8 +4070,6 @@ function renderCageCardScannerView() {
         kicker: "移动扫码工作台",
         title: "笼卡识别",
         helpKey: "intakeScanner",
-        summary: "用于手机或平板快速识别笼卡二维码，查看动物、项目和房间信息。",
-        status: cageCardScannerState.result?.qrId || "等待识别",
         actions: `<button class="secondary" type="button" data-view="intake">${iconSvg("chevronLeft")}返回笼卡管理</button>`,
       })}
       ${renderWorkspaceBody(`
@@ -4067,13 +4077,12 @@ function renderCageCardScannerView() {
           <div class="scanner-top-grid">
             <div class="panel scanner-zone-card">
               <div class="scanner-card-title">
-                <strong>二维码识别区</strong>
+                <strong>二维码识别</strong>
                 <span>${escapeText(cageCardScannerState.active ? "识别中" : "摄像头待开启")}</span>
               </div>
               <div class="cage-card-scanner-reader ${cageCardScannerState.active ? "active" : ""}">
                 <video id="cageCardScannerVideo" muted playsinline></video>
                 <div class="scanner-frame" aria-hidden="true"></div>
-                <p>${escapeText(cageCardScannerState.active ? "把笼卡二维码放入框内，识别后自动查询。" : cageCardScannerState.message)}</p>
               </div>
               <div class="scanner-button-row">
                 <button id="startCageCardScanner" class="primary" type="button" ${cageCardScannerState.active ? "disabled" : ""}>${iconSvg("search")}开启识别</button>
@@ -4083,16 +4092,13 @@ function renderCageCardScannerView() {
             <div class="panel scanner-query-card">
               <div class="scanner-card-title">
                 <strong>QRID</strong>
-                <span>扫码结果或手工输入</span>
               </div>
-              <label class="scanner-manual-field">
-                笼卡短码
+              <div class="scanner-manual-field">
                 <div class="scanner-manual-row">
-                  <input id="cageCardScannerQuery" value="${escapeAttr(cageCardScannerState.query)}" placeholder="例如 3HKM" autocomplete="off" />
+                  <input id="cageCardScannerQuery" value="${escapeAttr(cageCardScannerState.query)}" placeholder="扫码结果或手动输入" autocomplete="off" />
                   <button id="lookupCageCardScanner" class="primary" type="button" ${cageCardScannerState.loading ? "disabled" : ""}>查询</button>
                 </div>
-              </label>
-              <p class="scanner-query-note">可输入 4 位短码，也兼容旧版完整扫码链接。</p>
+              </div>
             </div>
           </div>
           <div class="panel scanner-info-panel">
@@ -15989,15 +15995,21 @@ function stopCageCardScanner({ renderAfter = true } = {}) {
   if (renderAfter) scheduleRender("cage_card_scanner.stop");
 }
 
+function cageCardScannerSecurityMessage() {
+  if (window.isSecureContext || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) return "";
+  return "手机浏览器需要通过 HTTPS 打开系统才能调用摄像头。请使用 https://cl.cellnucle.us/ 测试。";
+}
+
 async function startCageCardScanner() {
+  const securityMessage = cageCardScannerSecurityMessage();
+  if (securityMessage) {
+    cageCardScannerState.error = securityMessage;
+    scheduleRender("cage_card_scanner.insecure_context");
+    return;
+  }
   if (!navigator.mediaDevices?.getUserMedia) {
     cageCardScannerState.error = "当前浏览器无法调用摄像头，请手工输入笼卡短码查询。";
     scheduleRender("cage_card_scanner.unsupported_camera");
-    return;
-  }
-  if (!("BarcodeDetector" in window)) {
-    cageCardScannerState.error = "当前浏览器缺少二维码识别能力，请手工输入笼卡短码查询。";
-    scheduleRender("cage_card_scanner.unsupported_detector");
     return;
   }
   try {
@@ -16006,7 +16018,9 @@ async function startCageCardScanner() {
     cageCardScannerState.message = "摄像头启动中...";
     cageCardScannerState.active = true;
     scheduleRender("cage_card_scanner.starting");
-    cageCardScannerDetector = cageCardScannerDetector || new window.BarcodeDetector({ formats: ["qr_code"] });
+    if ("BarcodeDetector" in window) {
+      cageCardScannerDetector = cageCardScannerDetector || new window.BarcodeDetector({ formats: ["qr_code"] });
+    }
     cageCardScannerStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -16024,6 +16038,32 @@ async function startCageCardScanner() {
   }
 }
 
+async function decodeCageCardQrFromVideo(video) {
+  if ("BarcodeDetector" in window && cageCardScannerDetector) {
+    const codes = await cageCardScannerDetector.detect(video);
+    const rawValue = codes?.[0]?.rawValue || "";
+    if (rawValue) return rawValue;
+  }
+  const jsQr = window.jsQR;
+  if (typeof jsQr !== "function") return "";
+  const width = video.videoWidth || 0;
+  const height = video.videoHeight || 0;
+  if (!width || !height) return "";
+  const maxScanWidth = 720;
+  const scale = Math.min(1, maxScanWidth / width);
+  const canvasWidth = Math.max(Math.round(width * scale), 1);
+  const canvasHeight = Math.max(Math.round(height * scale), 1);
+  cageCardScannerCanvas = cageCardScannerCanvas || document.createElement("canvas");
+  if (cageCardScannerCanvas.width !== canvasWidth) cageCardScannerCanvas.width = canvasWidth;
+  if (cageCardScannerCanvas.height !== canvasHeight) cageCardScannerCanvas.height = canvasHeight;
+  const context = cageCardScannerCanvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return "";
+  context.drawImage(video, 0, 0, canvasWidth, canvasHeight);
+  const imageData = context.getImageData(0, 0, canvasWidth, canvasHeight);
+  const code = jsQr(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+  return code?.data || "";
+}
+
 function runCageCardScannerLoop(token) {
   cageCardScannerLoopToken = token;
   const tick = async () => {
@@ -16031,10 +16071,9 @@ function runCageCardScannerLoop(token) {
     const video = document.querySelector("#cageCardScannerVideo");
     if (video && cageCardScannerStream) {
       attachCageCardScannerVideo();
-      if (video.readyState >= 2 && cageCardScannerDetector) {
+      if (video.readyState >= 2) {
         try {
-          const codes = await cageCardScannerDetector.detect(video);
-          const rawValue = codes?.[0]?.rawValue || "";
+          const rawValue = await decodeCageCardQrFromVideo(video);
           const qrId = normalizeCageCardScanText(rawValue);
           if (qrId) {
             stopCageCardScanner({ renderAfter: false });

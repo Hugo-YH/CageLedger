@@ -3239,7 +3239,7 @@ h3 {
 
 .scanner-top-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 0.74fr) minmax(300px, 1.26fr);
+  grid-template-columns: minmax(220px, 0.78fr) minmax(280px, 1.22fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -6336,8 +6336,7 @@ tr:last-child td {
   .dashboard-facility-grid,
   .dashboard-main-grid,
   .billing-guide-grid,
-  .cage-card-scanner-grid,
-  .scanner-top-grid {
+  .cage-card-scanner-grid {
     grid-template-columns: 1fr;
   }
 
@@ -6351,6 +6350,54 @@ tr:last-child td {
 
   .status-chart {
     grid-template-columns: 1fr;
+  }
+
+  .scanner-top-grid {
+    grid-template-columns: minmax(128px, 0.9fr) minmax(170px, 1.1fr);
+    gap: 10px;
+  }
+
+  .scanner-zone-card,
+  .scanner-query-card,
+  .scanner-info-panel {
+    padding: 12px;
+  }
+
+  .scanner-card-title {
+    padding-bottom: 8px;
+  }
+
+  .scanner-card-title strong {
+    font-size: 16px;
+  }
+
+  .scanner-card-title span {
+    font-size: 12px;
+  }
+
+  .scanner-zone-card .cage-card-scanner-reader {
+    min-height: 136px;
+    aspect-ratio: 1;
+  }
+
+  .scanner-manual-row {
+    grid-template-columns: minmax(0, 1fr) 64px;
+    gap: 8px;
+  }
+
+  .scanner-manual-row input {
+    min-height: 38px;
+    font-size: 14px;
+  }
+
+  .scanner-manual-row button {
+    min-height: 38px;
+    padding-inline: 10px;
+  }
+
+  .scanner-info-panel,
+  .scanner-empty-card {
+    min-height: 44vh;
   }
 
   .workspace-title-line h1 {
