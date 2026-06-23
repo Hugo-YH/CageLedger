@@ -1271,6 +1271,12 @@ def public_cage_card_payload(conn, qr_id):
                 cage_card_qr_id_from_batch_card(batch, sequence).upper(),
                 legacy_cage_card_qr_id(batch, sequence).upper(),
             }
+            cards = batch.get("cards") if isinstance(batch.get("cards"), list) else []
+            card_index = sequence - 1
+            if 0 <= card_index < len(cards) and isinstance(cards[card_index], dict):
+                stored_qr_id = clean_text(cards[card_index].get("qrId")).upper()
+                if stored_qr_id:
+                    candidate_ids.add(stored_qr_id)
             if task and clean_text(task.get("qrId")):
                 candidate_ids.add(clean_text(task.get("qrId")).upper())
             if target not in candidate_ids:

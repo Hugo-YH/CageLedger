@@ -5855,6 +5855,17 @@ tr:last-child td {
   overflow: auto;
 }
 
+.intake-card-preview-modal.modal-shell,
+.quantity-sheet-detail-modal.preview-mode.modal-shell {
+  grid-template-rows: auto auto;
+}
+
+.intake-card-preview-modal .modal-shell-body,
+.quantity-sheet-detail-modal.preview-mode .modal-shell-body {
+  min-height: auto;
+  overflow: visible;
+}
+
 .workflow-detail-modal {
   left: max(292px, calc(50vw - 520px));
   right: 24px;

@@ -37,6 +37,17 @@ import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STOR
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.19b",
+    releasedAt: "2026-06-23 14:21",
+    title: "笼卡扫码查询与预览修复",
+    items: [
+      "打印当前笼卡改为先保存 QRID 再打开打印页，避免扫码识别到短码后查询不到笼卡信息",
+      "公开笼卡查询兼容历史批次中直接保存的 qrId，旧版已打印笼卡继续可查",
+      "笼卡二维码在现有卡片尺寸内放大显示，并针对短 QRID 收紧二维码静区",
+      "修复笼卡预览和数量统计表预览弹窗内容区被压缩导致看不到内容的问题",
+    ],
+  },
+  {
     version: "0.5.19a",
     releasedAt: "2026-06-23 13:25",
     title: "移动端笼卡识别优化",
@@ -976,7 +987,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.19a",
+  version: "0.5.19b",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -8588,8 +8599,14 @@ function bindEvents() {
   });
   document.querySelector("#parseIncomingMessage")?.addEventListener("click", parseCurrentIncomingMessage);
   document.querySelector("#printCurrentCageCards")?.addEventListener("click", async () => {
-    captureIntakeBatchDraft();
-    await printAndMarkIntakeBatches([normalizeIncomingBatchDraft(state.intakeBatchDraft)]);
+    try {
+      captureIntakeBatchDraft();
+      const savedBatch = await saveIntakeBatchDraft();
+      showFlashNotice("已保存笼卡", "笼卡短码已写入系统，开始打印。", "success");
+      await printAndMarkIntakeBatches([savedBatch]);
+    } catch (error) {
+      reportSaveError(error);
+    }
   });
   document.querySelector("#previewCurrentCageCard")?.addEventListener("click", () => {
     captureIntakeBatchDraft();
@@ -11765,12 +11782,12 @@ function intakeCardsPrintHtml(items) {
             white-space: nowrap;
           }
           .card .qr-cell {
-            padding: 0.15mm;
+            padding: 0;
           }
           .card .qr-cell svg {
             display: block;
-            width: 16.5mm;
-            height: 16.5mm;
+            width: 17.8mm;
+            height: 17.8mm;
             margin: 0 auto;
           }
           @media print {
@@ -14843,7 +14860,7 @@ const QR_VERSION_SPECS = [
 function qrCodeSvg(text, ariaLabel = "二维码") {
   const modules = qrCodeMatrix(text);
   const size = modules.length;
-  const quiet = 4;
+  const quiet = String(text || "").trim().length <= CAGE_CARD_QR_LENGTH ? 2 : 4;
   const viewBoxSize = size + quiet * 2;
   const cells = [];
   for (let row = 0; row < size; row += 1) {
