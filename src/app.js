@@ -36,6 +36,17 @@ import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksU
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.19",
+    releasedAt: "2026-06-23 13:09",
+    title: "笼卡二维码短码与移动端识别",
+    items: [
+      "笼卡二维码改为短 QRID 识别码，新打印笼卡二维码内容更轻量，便于手机和平板扫码",
+      "笼卡管理新增笼卡识别入口，打开独立移动扫码工作台，支持摄像头识别和手工输入短码查询",
+      "扫码结果集中展示笼卡状态、房间、笼位、IACUC、项目负责人、实验负责人、品系和数量",
+      "公开笼卡查询兼容新短码和旧版笼卡二维码，已打印历史笼卡仍可查询",
+    ],
+  },
+  {
     version: "0.5.18",
     releasedAt: "2026-06-22 19:33",
     title: "系统响应与结算性能优化",
@@ -876,6 +887,7 @@ const HELP_TEXTS = {
   dashboardRooms: "按饲养间展示状态与饲养周期分类，便于比较容量与超期分布。",
   intake: "粘贴课题组预约接收消息，系统解析批次、项目和装笼建议，并保存为待打印批次。",
   intakeList: "流程：未打印 -> 已打印 -> 已接收。已接收批次会同步进入目标房间的待进驻任务。",
+  intakeScanner: "扫描笼卡二维码或输入短码，快速查看对应动物、项目、房间和当前状态。",
   intakePreview: "按实际打印模板预览第一张笼卡；完整张数仍以打印张数为准。",
   intakeEdit: "修改后只更新这条记录，预约消息识别区保持当前输入。",
   cages: "按饲养间和笼架查看笼位状态。点击笼位可查看或编辑占用信息。",
@@ -952,7 +964,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.18",
+  version: "0.5.19",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1140,6 +1152,14 @@ const SUPPLIER_SHORT_NAME_RULES = [
   [/北京华阜康|华阜康/, "北京华阜康"],
   [/北京百奥赛图|百奥赛图/, "北京百奥赛图"],
 ];
+const CAGE_CARD_QR_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const CAGE_CARD_QR_LENGTH = 4;
+const CAGE_CARD_QR_CAPACITY = CAGE_CARD_QR_ALPHABET.length ** CAGE_CARD_QR_LENGTH;
+const CAGE_CARD_QR_MULTIPLIER = 739391;
+const CAGE_CARD_QR_OFFSET = 48691;
+const CAGE_CARD_QR_INVERSE = modularInverse(CAGE_CARD_QR_MULTIPLIER, CAGE_CARD_QR_CAPACITY);
+const CAGE_CARD_QR_PATTERN = new RegExp(`^[${CAGE_CARD_QR_ALPHABET}]{${CAGE_CARD_QR_LENGTH}}$`);
+const LEGACY_CAGE_CARD_QR_PATTERN = /^[A-Z0-9]{8}$/;
 
 function makeIncomingBatchDraft() {
   return normalizeIncomingBatchDraft({
@@ -1494,12 +1514,14 @@ function buildIncomingCards(batch) {
   const quantity = Math.max(numericOrNull(batch.quantity) || 0, 0);
   const remainder = quantity && perCage ? quantity % perCage : 0;
   const existingCards = Array.isArray(batch.cards) ? batch.cards : [];
+  const usedQrIds = collectCageCardQrIds(batch.id);
   return Array.from({ length: cardCount }, (_, index) => {
     const isLast = index === cardCount - 1;
     const suggestedQuantity = !quantity ? "" : remainder && isLast ? "" : String(perCage);
     const existingCard = existingCards[index] || {};
-    const existingQrId = String(existingCard.qrId || "").trim();
-    const qrId = /^[A-Z0-9]{8}$/.test(existingQrId) ? existingQrId : cageCardQrId(batch.id, index + 1);
+    const existingQrId = String(existingCard.qrId || "").trim().toUpperCase();
+    const qrId = isCageCardQrId(existingQrId) ? existingQrId : nextCageCardQrId(usedQrIds);
+    usedQrIds.add(qrId);
     return {
       id: `${batch.id}-card-${index + 1}`,
       index: index + 1,
@@ -1518,6 +1540,17 @@ let publicCageCardState = {
   error: "",
   qrId: "",
 };
+const cageCardScannerState = {
+  loading: false,
+  active: false,
+  query: "",
+  result: null,
+  error: "",
+  message: "支持识别笼卡短码，也兼容旧版 /c/ 笼卡链接。",
+};
+let cageCardScannerStream = null;
+let cageCardScannerLoopToken = 0;
+let cageCardScannerDetector = null;
 
 const seedData = {
   activeView: "dashboard",
@@ -2115,7 +2148,7 @@ function normalizePlacementTask(item = {}) {
     strainStandard: String(item.strainStandard || ""),
     animalCount: numericOrNull(item.animalCount),
     cardSequence: numericOrNull(item.cardSequence),
-    qrId: String(item.qrId || cageCardQrId(item.sourceBatchId || "", item.cardSequence || 0)),
+    qrId: String(item.qrId || cageCardQrId(item.sourceBatchId || "", item.cardSequence || 0)).trim().toUpperCase(),
     updatedAt: String(item.updatedAt || ""),
   };
 }
@@ -3663,6 +3696,7 @@ function render() {
         ${state.activeView === "dashboard" ? renderDashboardView() : ""}
         ${state.activeView === "cages" ? renderCageView() : ""}
         ${state.activeView === "intake" ? renderIntakeBatchView() : ""}
+        ${state.activeView === "cage-card-scanner" ? renderCageCardScannerView() : ""}
         ${state.activeView === "billing" ? renderBillingView() : ""}
         ${state.activeView === "workflow-center" ? renderWorkflowCenterView() : ""}
         ${state.activeView === "rooms" ? renderRoomManagementView() : ""}
@@ -3969,6 +4003,107 @@ function renderPublicCageCardScanView() {
   `;
 }
 
+function cageCardDetailsForDisplay(item = {}) {
+  return [
+    ["短码", item.qrId || ""],
+    ["当前状态", item.statusLabel || ""],
+    ["笼号", item.cageCode || item.slotCode || ""],
+    ["房间", item.roomName || ""],
+    ["笼架/笼位", [item.rackName, item.slotCode].filter(Boolean).join(" · ")],
+    ["IACUC 编号", item.iacuc || ""],
+    ["项目名称", item.project || ""],
+    ["项目负责人", item.pi || ""],
+    ["实验负责人", item.owner || ""],
+    ["动物品系", item.strainStandard || item.speciesLabel || item.species || ""],
+    ["数量", item.animalCount ? `${item.animalCount} 只` : ""],
+    ["入驻日期", item.startDate || item.actualMoveInDate || ""],
+  ];
+}
+
+function renderCageCardScannerResult() {
+  const result = cageCardScannerState.result || null;
+  if (cageCardScannerState.loading) {
+    return `<div class="scanner-state">正在查询笼卡信息...</div>`;
+  }
+  if (cageCardScannerState.error) {
+    return `<div class="scanner-state error">${escapeText(cageCardScannerState.error)}</div>`;
+  }
+  if (!result) {
+    return `
+      <div class="scanner-empty-card">
+        <strong>笼卡信息展示区</strong>
+        <span>扫描二维码或输入短码后显示动物信息、项目信息和当前位置。</span>
+      </div>
+    `;
+  }
+  return `
+    <div class="scanner-result-card">
+      <div class="scanner-result-head">
+        <strong>${escapeText(result.batchNo || result.qrId || "笼卡详情")}</strong>
+        <span>${escapeText(result.statusLabel || "已识别")}</span>
+      </div>
+      <dl class="scanner-result-grid">
+        ${cageCardDetailsForDisplay(result)
+          .map(([label, value]) => `<div><dt>${escapeText(label)}</dt><dd>${escapeText(value || "-")}</dd></div>`)
+          .join("")}
+      </dl>
+    </div>
+  `;
+}
+
+function renderCageCardScannerView() {
+  return `
+    <section class="workspace-view scanner-workspace">
+      ${renderWorkspaceHeader({
+        kicker: "移动扫码工作台",
+        title: "笼卡识别",
+        helpKey: "intakeScanner",
+        summary: "用于手机或平板快速识别笼卡二维码，查看动物、项目和房间信息。",
+        status: cageCardScannerState.result?.qrId || "等待识别",
+        actions: `<button class="secondary" type="button" data-view="intake">${iconSvg("chevronLeft")}返回笼卡管理</button>`,
+      })}
+      ${renderWorkspaceBody(`
+        <section class="cage-card-scanner-page">
+          <div class="scanner-top-grid">
+            <div class="panel scanner-zone-card">
+              <div class="scanner-card-title">
+                <strong>二维码识别区</strong>
+                <span>${escapeText(cageCardScannerState.active ? "识别中" : "摄像头待开启")}</span>
+              </div>
+              <div class="cage-card-scanner-reader ${cageCardScannerState.active ? "active" : ""}">
+                <video id="cageCardScannerVideo" muted playsinline></video>
+                <div class="scanner-frame" aria-hidden="true"></div>
+                <p>${escapeText(cageCardScannerState.active ? "把笼卡二维码放入框内，识别后自动查询。" : cageCardScannerState.message)}</p>
+              </div>
+              <div class="scanner-button-row">
+                <button id="startCageCardScanner" class="primary" type="button" ${cageCardScannerState.active ? "disabled" : ""}>${iconSvg("search")}开启识别</button>
+                <button id="stopCageCardScanner" class="secondary" type="button" ${cageCardScannerState.active ? "" : "disabled"}>${iconSvg("refresh")}停止识别</button>
+              </div>
+            </div>
+            <div class="panel scanner-query-card">
+              <div class="scanner-card-title">
+                <strong>QRID</strong>
+                <span>扫码结果或手工输入</span>
+              </div>
+              <label class="scanner-manual-field">
+                笼卡短码
+                <div class="scanner-manual-row">
+                  <input id="cageCardScannerQuery" value="${escapeAttr(cageCardScannerState.query)}" placeholder="例如 3HKM" autocomplete="off" />
+                  <button id="lookupCageCardScanner" class="primary" type="button" ${cageCardScannerState.loading ? "disabled" : ""}>查询</button>
+                </div>
+              </label>
+              <p class="scanner-query-note">可输入 4 位短码，也兼容旧版完整扫码链接。</p>
+            </div>
+          </div>
+          <div class="panel scanner-info-panel">
+            ${renderCageCardScannerResult()}
+          </div>
+        </section>
+      `, "scanner-workspace-body")}
+    </section>
+  `;
+}
+
 function pageMeta(view) {
   return {
     cages: {
@@ -3982,6 +4117,10 @@ function pageMeta(view) {
     intake: {
       title: "笼卡管理",
       description: "解析预约接收消息、保存待接收批次并批量打印笼卡。",
+    },
+    "cage-card-scanner": {
+      title: "笼卡识别",
+      description: "扫码或输入短码查询笼卡对应动物、项目和房间信息。",
     },
     "workflow-center": {
       title: "流程中心",
@@ -5641,6 +5780,7 @@ function renderIntakeBatchView() {
           { label: "当前筛选", value: intakeBatchFilterLabel(state.intakeBatchFilter) },
           { label: "已选批次", value: selectedCount, tone: selectedCount ? "todo" : "neutral" },
         ],
+        actions: `<button class="primary" type="button" data-view="cage-card-scanner">${iconSvg("search")}笼卡识别</button>`,
       })}
       ${renderWorkspaceBody(`
         <section class="billing-layout quantity-billing-layout intake-layout">
@@ -8132,6 +8272,7 @@ function renderRackEditForm(room, rack) {
 }
 
 function bindEvents() {
+  attachCageCardScannerVideo();
   decorateRequiredFields();
   bindHelpHints();
   const appRoot = document.querySelector("#app");
@@ -8457,6 +8598,24 @@ function bindEvents() {
     state.showIntakeCardPreview = false;
     scheduleRender("intake_card.preview.close");
   });
+  document.querySelector("#startCageCardScanner")?.addEventListener("click", () => {
+    startCageCardScanner().catch(reportSaveError);
+  });
+  document.querySelector("#stopCageCardScanner")?.addEventListener("click", () => {
+    stopCageCardScanner();
+  });
+  document.querySelector("#lookupCageCardScanner")?.addEventListener("click", () => {
+    lookupCageCardForScanner(document.querySelector("#cageCardScannerQuery")?.value || "").catch(reportSaveError);
+  });
+  document.querySelector("#cageCardScannerQuery")?.addEventListener("input", (event) => {
+    cageCardScannerState.query = event.target.value || "";
+  });
+  document.querySelector("#cageCardScannerQuery")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      lookupCageCardForScanner(event.target.value || "").catch(reportSaveError);
+    }
+  });
   document.querySelector("#printSelectedCageCards")?.addEventListener("click", async () => {
     const pageBatchIds = new Set(pagedIntakeBatches().map((item) => item.id));
     const batches = state.intakeBatches.filter((item) => pageBatchIds.has(item.id) && state.selectedIntakeBatchIds.includes(item.id));
@@ -8533,6 +8692,9 @@ function bindEvents() {
   appRoot?.addEventListener("click", async (event) => {
     const viewButton = event.target.closest("[data-view]");
     if (viewButton) {
+      if (state.activeView === "cage-card-scanner" && viewButton.dataset.view !== "cage-card-scanner") {
+        stopCageCardScanner({ renderAfter: false });
+      }
       state.activeView = viewButton.dataset.view;
       if (["rooms", "data", "users", "system", "logs"].includes(state.activeView)) {
         state.lastSettingsView = state.activeView;
@@ -8550,6 +8712,9 @@ function bindEvents() {
     const dashboardActionButton = event.target.closest("[data-dashboard-action]");
     if (dashboardActionButton) {
       const action = dashboardActionButton.dataset.dashboardAction;
+      if (state.activeView === "cage-card-scanner") {
+        stopCageCardScanner({ renderAfter: false });
+      }
       if (action === "intake") state.activeView = "intake";
       if (action === "cages") state.activeView = "cages";
       if (action === "billing") {
@@ -11634,7 +11799,7 @@ function chunkIntakePrintItems(items, pageSize) {
 function renderIntakeCardPrint(batch, card) {
   const supplierShortName = abbreviateSupplierName(batch.supplier);
   const batchNoHtml = renderBatchNoWithHighlightedIacuc(batch.batchNo, batch.iacuc);
-  const qrHtml = card?.blank ? "" : qrCodeSvg(cageCardScanUrl(card.qrId), "笼卡二维码");
+  const qrHtml = card?.blank ? "" : qrCodeSvg(card.qrId, "笼卡二维码");
   return `
     <section class="card">
       <table>
@@ -14533,10 +14698,83 @@ function hashBase36(value, length = 8) {
   return hash.toString(36).toUpperCase().padStart(length, "0").slice(-length);
 }
 
+function modularInverse(value, modulo) {
+  let current = value;
+  let next = modulo;
+  let currentCoeff = 1;
+  let nextCoeff = 0;
+  while (next) {
+    const quotient = Math.floor(current / next);
+    [current, next] = [next, current - quotient * next];
+    [currentCoeff, nextCoeff] = [nextCoeff, currentCoeff - quotient * nextCoeff];
+  }
+  if (current !== 1) throw new Error("短码置换参数无效");
+  return ((currentCoeff % modulo) + modulo) % modulo;
+}
+
+function encodeCageCardSequence(sequence) {
+  const value = Math.max(numericOrNull(sequence) || 1, 1);
+  const permuted = ((value - 1) * CAGE_CARD_QR_MULTIPLIER + CAGE_CARD_QR_OFFSET) % CAGE_CARD_QR_CAPACITY;
+  let number = permuted;
+  let output = "";
+  for (let index = 0; index < CAGE_CARD_QR_LENGTH; index += 1) {
+    output = CAGE_CARD_QR_ALPHABET[number % CAGE_CARD_QR_ALPHABET.length] + output;
+    number = Math.floor(number / CAGE_CARD_QR_ALPHABET.length);
+  }
+  return output;
+}
+
+function decodeCageCardSequence(qrId) {
+  const text = String(qrId || "").trim().toUpperCase();
+  if (!CAGE_CARD_QR_PATTERN.test(text)) return null;
+  let number = 0;
+  for (const char of text) {
+    const digit = CAGE_CARD_QR_ALPHABET.indexOf(char);
+    if (digit < 0) return null;
+    number = number * CAGE_CARD_QR_ALPHABET.length + digit;
+  }
+  return (((number - CAGE_CARD_QR_OFFSET + CAGE_CARD_QR_CAPACITY) * CAGE_CARD_QR_INVERSE) % CAGE_CARD_QR_CAPACITY) + 1;
+}
+
+function isCageCardQrId(value) {
+  const text = String(value || "").trim().toUpperCase();
+  return CAGE_CARD_QR_PATTERN.test(text) || LEGACY_CAGE_CARD_QR_PATTERN.test(text);
+}
+
+function collectCageCardQrIds(excludeBatchId = "") {
+  const used = new Set();
+  const add = (value) => {
+    const text = String(value || "").trim().toUpperCase();
+    if (isCageCardQrId(text)) used.add(text);
+  };
+  (state.intakeBatches || []).forEach((batch) => {
+    if (excludeBatchId && batch.id === excludeBatchId) return;
+    (batch.cards || []).forEach((card) => add(card.qrId));
+  });
+  (state.placementTasks || []).forEach((task) => add(task.qrId));
+  (state.occupancies || []).forEach((occupancy) => add(occupancy.qrId));
+  return used;
+}
+
+function nextCageCardQrId(usedQrIds = collectCageCardQrIds()) {
+  let nextSequence = 1;
+  usedQrIds.forEach((qrId) => {
+    const sequence = decodeCageCardSequence(qrId);
+    if (sequence) nextSequence = Math.max(nextSequence, sequence + 1);
+  });
+  for (let offset = 0; offset < CAGE_CARD_QR_CAPACITY; offset += 1) {
+    const candidate = encodeCageCardSequence(nextSequence + offset);
+    if (!usedQrIds.has(candidate)) return candidate;
+  }
+  throw new Error("笼卡短码已用尽");
+}
+
 function cageCardQrId(batchId, sequence) {
-  const sourceBatchId = String(batchId || "batch").trim() || "batch";
-  const cardNo = String(Math.max(numericOrNull(sequence) || 0, 0)).padStart(2, "0");
-  return hashBase36(`${sourceBatchId}:${cardNo}`, 8);
+  const usedQrIds = collectCageCardQrIds(batchId);
+  for (let index = 1; index < Math.max(numericOrNull(sequence) || 1, 1); index += 1) {
+    usedQrIds.add(nextCageCardQrId(usedQrIds));
+  }
+  return nextCageCardQrId(usedQrIds);
 }
 
 function rmbUppercase(value) {
@@ -15598,6 +15836,7 @@ function decorateRequiredFields() {
 }
 
 window.addEventListener("beforeunload", () => {
+  stopCageCardScanner({ renderAfter: false });
   persistStateNow();
 });
 
@@ -15683,6 +15922,134 @@ async function loadPublicCageCardScan() {
       qrId,
     };
   }
+}
+
+function normalizeCageCardScanText(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const pathMatch = text.match(/(?:^|\/)(?:c|scan\/cage-card)\/([^/?#]+)/i);
+  if (pathMatch) return decodeURIComponent(pathMatch[1]).trim().toUpperCase();
+  try {
+    const url = new URL(text);
+    const urlMatch = url.pathname.match(/^\/(?:c|scan\/cage-card)\/([^/]+)$/i);
+    if (urlMatch) return decodeURIComponent(urlMatch[1]).trim().toUpperCase();
+  } catch {
+    // Plain short codes are expected.
+  }
+  return text.replace(/\s+/g, "").toUpperCase();
+}
+
+async function lookupCageCardForScanner(rawValue) {
+  const qrId = normalizeCageCardScanText(rawValue);
+  cageCardScannerState.query = qrId || String(rawValue || "").trim();
+  cageCardScannerState.error = "";
+  cageCardScannerState.result = null;
+  if (!qrId) {
+    cageCardScannerState.error = "请输入笼卡短码或扫码内容。";
+    scheduleRender("cage_card_scanner.empty");
+    return null;
+  }
+  cageCardScannerState.loading = true;
+  scheduleRender("cage_card_scanner.lookup.start");
+  try {
+    const response = await fetch(`${API_PUBLIC_CAGE_CARD_URL}/${encodeURIComponent(qrId)}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "该短码没有匹配到笼卡记录。");
+    cageCardScannerState.result = payload.item || null;
+    cageCardScannerState.query = qrId;
+    cageCardScannerState.message = `已识别 ${qrId}`;
+    cageCardScannerState.error = "";
+    return cageCardScannerState.result;
+  } catch (error) {
+    cageCardScannerState.error = error?.message || "该短码没有匹配到笼卡记录。";
+    cageCardScannerState.result = null;
+    return null;
+  } finally {
+    cageCardScannerState.loading = false;
+    scheduleRender("cage_card_scanner.lookup.done");
+  }
+}
+
+function attachCageCardScannerVideo() {
+  const video = document.querySelector("#cageCardScannerVideo");
+  if (!video || !cageCardScannerStream) return;
+  if (video.srcObject !== cageCardScannerStream) {
+    video.srcObject = cageCardScannerStream;
+    video.play().catch(() => {});
+  }
+}
+
+function stopCageCardScanner({ renderAfter = true } = {}) {
+  cageCardScannerLoopToken += 1;
+  if (cageCardScannerStream) {
+    cageCardScannerStream.getTracks().forEach((track) => track.stop());
+  }
+  cageCardScannerStream = null;
+  cageCardScannerState.active = false;
+  if (renderAfter) scheduleRender("cage_card_scanner.stop");
+}
+
+async function startCageCardScanner() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    cageCardScannerState.error = "当前浏览器无法调用摄像头，请手工输入笼卡短码查询。";
+    scheduleRender("cage_card_scanner.unsupported_camera");
+    return;
+  }
+  if (!("BarcodeDetector" in window)) {
+    cageCardScannerState.error = "当前浏览器缺少二维码识别能力，请手工输入笼卡短码查询。";
+    scheduleRender("cage_card_scanner.unsupported_detector");
+    return;
+  }
+  try {
+    stopCageCardScanner({ renderAfter: false });
+    cageCardScannerState.error = "";
+    cageCardScannerState.message = "摄像头启动中...";
+    cageCardScannerState.active = true;
+    scheduleRender("cage_card_scanner.starting");
+    cageCardScannerDetector = cageCardScannerDetector || new window.BarcodeDetector({ formats: ["qr_code"] });
+    cageCardScannerStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+    attachCageCardScannerVideo();
+    runCageCardScannerLoop(cageCardScannerLoopToken + 1);
+  } catch (error) {
+    stopCageCardScanner({ renderAfter: false });
+    cageCardScannerState.error = error?.message || "摄像头启动失败，请手工输入笼卡短码查询。";
+    scheduleRender("cage_card_scanner.start_failed");
+  }
+}
+
+function runCageCardScannerLoop(token) {
+  cageCardScannerLoopToken = token;
+  const tick = async () => {
+    if (!cageCardScannerState.active || token !== cageCardScannerLoopToken) return;
+    const video = document.querySelector("#cageCardScannerVideo");
+    if (video && cageCardScannerStream) {
+      attachCageCardScannerVideo();
+      if (video.readyState >= 2 && cageCardScannerDetector) {
+        try {
+          const codes = await cageCardScannerDetector.detect(video);
+          const rawValue = codes?.[0]?.rawValue || "";
+          const qrId = normalizeCageCardScanText(rawValue);
+          if (qrId) {
+            stopCageCardScanner({ renderAfter: false });
+            await lookupCageCardForScanner(qrId);
+            showFlashNotice("识别成功", `已读取笼卡短码：${qrId}`, "success");
+            return;
+          }
+        } catch (error) {
+          cageCardScannerState.error = error?.message || "二维码识别失败，请调整距离或手工输入短码。";
+        }
+      }
+    }
+    window.setTimeout(tick, 260);
+  };
+  tick();
 }
 
 function statementIdFromDocumentNumber(value) {

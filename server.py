@@ -1169,6 +1169,14 @@ def hash_base36(value, length=8):
     return base36_encode(hash_value).rjust(length, "0")[-length:]
 
 
+CAGE_CARD_QR_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+
+def is_cage_card_qr_id(value):
+    text = clean_text(value).upper()
+    return bool(re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{4}}", text) or re.fullmatch(r"[A-Z0-9]{8}", text))
+
+
 def cage_card_qr_id(batch, sequence):
     batch_id = clean_text(batch.get("id") or batch.get("sourceBatchId") or "batch") or "batch"
     card_no = str(max(as_int(sequence) or 0, 0)).zfill(2)
@@ -1179,8 +1187,8 @@ def cage_card_qr_id_from_batch_card(batch, sequence):
     cards = batch.get("cards") if isinstance(batch.get("cards"), list) else []
     index = max(as_int(sequence) or 0, 0) - 1
     if 0 <= index < len(cards) and isinstance(cards[index], dict):
-        qr_id = clean_text(cards[index].get("qrId"))
-        if re.match(r"^[A-Z0-9]{8}$", qr_id):
+        qr_id = clean_text(cards[index].get("qrId")).upper()
+        if is_cage_card_qr_id(qr_id):
             return qr_id
     return cage_card_qr_id(batch, sequence)
 
@@ -1236,7 +1244,7 @@ def animal_age_text(birth_date, reference_date=None):
 
 
 def public_cage_card_payload(conn, qr_id):
-    target = clean_text(qr_id)
+    target = clean_text(qr_id).upper()
     if not target:
         raise LookupError("二维码地址无效")
     state = assemble_state(conn) or empty_state()
@@ -1249,7 +1257,7 @@ def public_cage_card_payload(conn, qr_id):
         for task in state.get("placementTasks", [])
     }
     occupancies_by_id = {item.get("id"): item for item in state.get("occupancies", [])}
-    occupancies_by_qr = {clean_text(item.get("qrId")): item for item in state.get("occupancies", []) if clean_text(item.get("qrId"))}
+    occupancies_by_qr = {clean_text(item.get("qrId")).upper(): item for item in state.get("occupancies", []) if clean_text(item.get("qrId"))}
 
     for batch in state.get("intakeBatches", []):
         card_count = max(
@@ -1260,11 +1268,11 @@ def public_cage_card_payload(conn, qr_id):
         for sequence in range(1, card_count + 1):
             task = tasks_by_batch_and_sequence.get((batch.get("id"), sequence))
             candidate_ids = {
-                cage_card_qr_id_from_batch_card(batch, sequence),
-                legacy_cage_card_qr_id(batch, sequence),
+                cage_card_qr_id_from_batch_card(batch, sequence).upper(),
+                legacy_cage_card_qr_id(batch, sequence).upper(),
             }
             if task and clean_text(task.get("qrId")):
-                candidate_ids.add(clean_text(task.get("qrId")))
+                candidate_ids.add(clean_text(task.get("qrId")).upper())
             if target not in candidate_ids:
                 continue
             occupancy = occupancies_by_qr.get(target)
