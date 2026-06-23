@@ -6473,6 +6473,7 @@ function renderQuantitySheetBillingView() {
                 </div>
               `,
             })}
+            ${renderQuantityFreeCageControls(draft, quantityProfile)}
             <input type="hidden" name="billingUnit" value="${escapeAttr(quantityProfile.unit)}" />
             <input type="hidden" name="animalDetailEnabled" value="${animalDetails.enabled ? "true" : "false"}" />
           </div>
@@ -6648,6 +6649,7 @@ function renderSavedQuantitySheetEditor(sheet) {
               </div>
             `,
           })}
+          ${renderQuantityFreeCageControls(sheet, quantityProfile)}
           <input type="hidden" name="billingUnit" value="${escapeAttr(sheet.billingUnit || quantityProfile.unit)}" />
           <input type="hidden" name="animalDetailEnabled" value="${animalDetails.enabled ? "true" : "false"}" />
         </div>
@@ -7072,6 +7074,44 @@ function renderQuantityEntryStatus(draft) {
       <span data-quantity-entry-stat="filled">变更 ${filledRows} 行</span>
       <span data-quantity-entry-stat="transfer">转移 ${transferRows} 行</span>
       <button class="quantity-entry-status-pill" data-quantity-entry-stat="issues" data-action="focus-quantity-issue" type="button" ${issueRows ? "" : "disabled"}>${issueRows ? `待检查 ${issueRows} 行` : "无待检查行"}</button>
+    </div>
+  `;
+}
+
+function renderQuantityFreeCageControls(sheet, profile = quantitySheetBillingProfile(sheet)) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const pi = normalizePersonName(normalized.pi);
+  const allowance = freeCageAllowanceForPi(pi);
+  const supportsFree = Boolean(profile.freeAllowance && profile.unit === "cage_day" && allowance > 0);
+  const allocation = quantityFreeCageAllocationSummary(normalized);
+  const preferredValue = normalized.preferredFreeCages ?? "";
+  const enabled = supportsFree && (numericOrZero(normalized.preferredFreeCages) > 0 || normalized.freeCagePriority !== null);
+  const summary = pi
+    ? `总额度 ${allowance} 笼/天；已指定 ${allocation.assigned} 笼/天；剩余 ${allocation.remaining} 笼/天`
+    : "选择 IACUC 后显示项目负责人减免额度";
+  return `
+    <div class="quantity-free-cage-module ${supportsFree ? "" : "muted-field"}">
+      <div class="quantity-free-cage-head">
+        <div>
+          <strong>优先减免</strong>
+          <span>${escapeText(summary)}</span>
+        </div>
+        <label class="quantity-animal-toggle quantity-free-cage-toggle ${enabled ? "enabled" : ""} ${supportsFree ? "" : "locked"}" title="${supportsFree ? "打开后先按本伦理设置的笼数减免。" : "当前计费口径没有项目负责人减免额度。"}">
+          <input name="freeCageEnabled" type="checkbox" value="true" ${enabled ? "checked" : ""} ${supportsFree ? "" : "disabled"} />
+          <span class="quantity-animal-toggle-track" aria-hidden="true"><span></span></span>
+          <span class="quantity-animal-toggle-label">优先减免</span>
+        </label>
+      </div>
+      ${
+        enabled
+          ? `<label class="quantity-free-cage-field">
+              优先减免笼数/天
+              <input name="preferredFreeCages" type="number" min="0" step="1" value="${escapeAttr(preferredValue)}" placeholder="请输入笼数" />
+              <input name="freeCagePriority" type="hidden" value="1" />
+              <small>开启后先占用该项目负责人每日减免额度，剩余额度继续自动分配。</small>
+            </label>`
+          : `<input name="preferredFreeCages" type="hidden" value="" /><input name="freeCagePriority" type="hidden" value="" />`
+      }
     </div>
   `;
 }
@@ -8536,19 +8576,23 @@ function bindEvents() {
       scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
-    if (["addedText", "removedText", "animalCount", "cageCount"].includes(name)) {
+    if (["addedText", "removedText", "animalCount", "cageCount", "preferredFreeCages", "freeCagePriority"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
       syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
       scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
-    if (["month", "roomId", "addedType", "removedType"].includes(name)) {
+    if (["month", "roomId", "addedType", "removedType", "preferredFreeCages", "freeCagePriority", "freeCageEnabled"].includes(name)) {
       captureQuantitySheetDetailDraft(event.currentTarget);
       if (["addedType", "removedType"].includes(name)) {
         pendingQuantityFocusTarget = syncQuantityTransferLookupEditor(event.target);
         focusPendingQuantityField();
         captureQuantitySheetDetailDraft(event.currentTarget);
         scheduleQuantityEntryStatusSync(event.currentTarget);
+        return;
+      }
+      if (name === "freeCageEnabled") {
+        scheduleRender("quantity_sheet.detail.free_cage_toggle");
         return;
       }
       scheduleRender("quantity_sheet.detail.form_change");
@@ -9180,7 +9224,7 @@ function bindEvents() {
   document.querySelector("#quantitySheetForm")?.addEventListener("input", (event) => {
     const name = event.target?.name;
     sanitizeQuantitySheetInput(event.target);
-    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount"].includes(name)) {
+    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount", "preferredFreeCages", "freeCagePriority"].includes(name)) {
       captureQuantitySheetDraft();
       syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
       scheduleQuantityEntryStatusSync(event.currentTarget);
@@ -9215,10 +9259,15 @@ function bindEvents() {
       scheduleQuantityEntryStatusSync(event.currentTarget);
       return;
     }
-    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount", "handler"].includes(name)) {
+    if (["addedText", "removedText", "transferInFromIacuc", "transferOutToIacuc", "animalCount", "cageCount", "handler", "preferredFreeCages", "freeCagePriority"].includes(name)) {
       captureQuantitySheetDraft();
       syncQuantityChangeTypeWarnings(quantityChangeWarningScope(event.target));
       scheduleQuantityEntryStatusSync(event.currentTarget);
+      return;
+    }
+    if (name === "freeCageEnabled") {
+      captureQuantitySheetDraft();
+      scheduleRender("quantity_sheet.free_cage_toggle");
       return;
     }
     if (["addedType", "removedType"].includes(name)) {
@@ -11375,6 +11424,7 @@ async function saveQuantitySheetObject(sheetDraft, { startedAt = performance.now
   }
   assertQuantitySheetAnimalRequirements(sheetDraft);
   const sheet = hydrateQuantitySheetIacucInfo(sheetDraft);
+  assertQuantitySheetFreeCageSettings(sheet);
   const existingSheet = state.quantitySheets.find((item) => item.id === sheet.id) || null;
   if (!remotePersistence) {
     upsertById(state.quantitySheets, sheet);
@@ -11968,6 +12018,7 @@ function readQuantitySheetForm(form, options = {}) {
   const iacucInfo = findIacucInfo(iacuc) || {};
   const profile = billingProfileForRoom(room || {});
   const animalDetailEnabled = profile.unit === "animal_day" || data.get("animalDetailEnabled") === "true";
+  const freeCageEnabled = data.get("freeCageEnabled") === "true";
   let runningAnimalCount = 0;
   let runningCageCount = 0;
   const invalidDateInputs = [];
@@ -12064,6 +12115,8 @@ function readQuantitySheetForm(form, options = {}) {
     owner: iacucInfo.owner || data.get("owner")?.trim() || "",
     contact: "",
     funding: iacucInfo.funding || data.get("funding")?.trim() || "",
+    preferredFreeCages: freeCageEnabled ? optionalNonNegativeInteger(data.get("preferredFreeCages")) : null,
+    freeCagePriority: freeCageEnabled ? 1 : null,
     billingUnit: data.get("billingUnit") || billingProfileForRoom(room || {}).unit,
     animalDetailEnabled,
     initialAnimalCount: numericOrZero(rows[0]?.animalCount),
@@ -12214,6 +12267,8 @@ function makeQuantitySheetDraft(month = today.slice(0, 7)) {
     owner: "",
     contact: "",
     funding: "",
+    preferredFreeCages: null,
+    freeCagePriority: null,
     billingUnit: "cage_day",
     animalDetailEnabled: false,
     initialAnimalCount: 0,
@@ -12262,6 +12317,8 @@ function normalizeQuantitySheetDraft(sheet) {
     owner: sheet?.owner || "",
     contact: sheet?.contact || "",
     funding: sheet?.funding || "",
+    preferredFreeCages: optionalNonNegativeInteger(sheet?.preferredFreeCages),
+    freeCagePriority: optionalNonNegativeInteger(sheet?.freeCagePriority),
     billingUnit: sheet?.billingUnit === "animal_day" ? "animal_day" : "cage_day",
     animalDetailEnabled: sheet?.animalDetailEnabled === true,
     initialAnimalCount: numericOrZero(sheet?.initialAnimalCount),
@@ -12503,6 +12560,11 @@ function numericOrNull(value) {
 
 function numericOrZero(value) {
   return Number(value || 0);
+}
+
+function optionalNonNegativeInteger(value) {
+  const number = numericOrNull(value);
+  return number === null || !Number.isFinite(number) ? null : Math.max(Math.floor(number), 0);
 }
 
 function syncRackFormIndex(event) {
@@ -12908,10 +12970,17 @@ function buildQuantitySheetStatement(sheet) {
           overageUnitPrice: item.profile.tiered ? BILLING_TIER_OVER_PRICE : 0,
           tiered: Boolean(item.profile.tiered),
           freeAllowance: Boolean(item.profile.freeAllowance),
+          preferredFreeCages: numericOrZero(item.sheet.preferredFreeCages),
+          freeCagePriority: numericOrNull(item.sheet.freeCagePriority),
+          freeCages: 0,
         });
       }
     }
-    const charge = combinedDailyCharge(chargeGroups, freeCageAllowance);
+    const freeAllocations = allocateDailyFreeCagesByIacuc(iacucBreakdown, freeCageAllowance);
+    iacucBreakdown.forEach((item) => {
+      item.freeCages = numericOrZero(freeAllocations.get(normalizeIacucNumber(item.iacuc)));
+    });
+    const charge = combinedDailyCharge(chargeGroups, sumMapValues(freeAllocations));
     const amount = charge.amount;
     cumulative += amount;
     return {
@@ -13042,7 +13111,7 @@ function clearBillingDerivedCaches() {
 function quantitySheetStatementCacheKey(sheet) {
   const normalized = normalizeQuantitySheetDraft(sheet);
   const sourceIds = quantitySheetsForStatement(normalized, normalized.month || state.billingMonth, normalized.pi || state.billingPi || "")
-    .map((item) => `${item.id}:${item.updatedAt || ""}:${item.rows?.length || 0}:${item.pageCount || 1}`)
+    .map((item) => `${item.id}:${item.updatedAt || ""}:${item.rows?.length || 0}:${item.pageCount || 1}:${item.preferredFreeCages ?? ""}:${item.freeCagePriority ?? ""}`)
     .join("|");
   return [
     normalized.id,
@@ -13095,7 +13164,12 @@ function quantityStatisticPagesHtmlCacheKey(statement, forms) {
 
 function settlementTemplateCacheKey(statement, rows) {
   const rowSignature = rows
-    .map((row) => `${row.date}:${row.animalCount || 0}:${row.cageCount || 0}:${row.freeCages || 0}:${row.tier2BillableCages || 0}:${row.amount || 0}:${row.iacucBreakdown?.length || 0}`)
+    .map((row) => {
+      const breakdownSignature = (row.iacucBreakdown || [])
+        .map((item) => `${item.iacuc || ""}:${item.cageCount || 0}:${item.animalCount || 0}:${item.freeCages || 0}:${item.amount || 0}`)
+        .join(",");
+      return `${row.date}:${row.animalCount || 0}:${row.cageCount || 0}:${row.freeCages || 0}:${row.tier2BillableCages || 0}:${row.amount || 0}:${breakdownSignature}`;
+    })
     .join("|");
   return [
     statement.sourceType || "",
@@ -13406,6 +13480,78 @@ function combinedDailyCharge(groups, freeCageAllowance) {
   return totals;
 }
 
+function sumMapValues(map) {
+  let total = 0;
+  for (const value of map?.values?.() || []) total += numericOrZero(value);
+  return total;
+}
+
+function freeCageAllocationSortKey(item) {
+  const priority = numericOrNull(item.freeCagePriority);
+  return {
+    priority: priority === null ? 999999 : Math.max(priority, 0),
+    iacuc: normalizeIacucNumber(item.iacuc || ""),
+  };
+}
+
+function sortFreeCageAllocationItems(a, b) {
+  const left = freeCageAllocationSortKey(a);
+  const right = freeCageAllocationSortKey(b);
+  return left.priority - right.priority || left.iacuc.localeCompare(right.iacuc, "zh-CN");
+}
+
+function allocateDailyFreeCagesByIacuc(breakdown, freeCageAllowance) {
+  const remainingByIacuc = new Map();
+  const allocations = new Map();
+  const eligible = (breakdown || [])
+    .filter((item) => item.freeAllowance && item.billingUnit === "cage_day" && numericOrZero(item.cageCount) > 0)
+    .map((item) => ({
+      iacuc: normalizeIacucNumber(item.iacuc || ""),
+      cageCount: numericOrZero(item.cageCount),
+      preferredFreeCages: Math.max(numericOrZero(item.preferredFreeCages), 0),
+      freeCagePriority: numericOrNull(item.freeCagePriority),
+    }))
+    .filter((item) => item.iacuc);
+
+  eligible.forEach((item) => {
+    remainingByIacuc.set(item.iacuc, numericOrZero(remainingByIacuc.get(item.iacuc)) + item.cageCount);
+    if (!allocations.has(item.iacuc)) allocations.set(item.iacuc, 0);
+  });
+
+  let remaining = Math.max(numericOrZero(freeCageAllowance), 0);
+  const preferredItems = [...eligible].filter((item) => item.preferredFreeCages > 0).sort(sortFreeCageAllocationItems);
+  for (const item of preferredItems) {
+    if (remaining <= 0) break;
+    const currentRemaining = numericOrZero(remainingByIacuc.get(item.iacuc));
+    const applied = Math.min(item.preferredFreeCages, currentRemaining, remaining);
+    if (applied <= 0) continue;
+    allocations.set(item.iacuc, numericOrZero(allocations.get(item.iacuc)) + applied);
+    remainingByIacuc.set(item.iacuc, currentRemaining - applied);
+    remaining -= applied;
+  }
+
+  while (remaining > 0) {
+    const candidates = eligible
+      .map((item) => ({ ...item, remainingCages: numericOrZero(remainingByIacuc.get(item.iacuc)) }))
+      .filter((item) => item.remainingCages > 0);
+    if (!candidates.length) break;
+    const coverable = candidates.filter((item) => item.remainingCages <= remaining).sort(sortFreeCageAllocationItems);
+    if (coverable.length) {
+      const target = coverable[0];
+      allocations.set(target.iacuc, numericOrZero(allocations.get(target.iacuc)) + target.remainingCages);
+      remainingByIacuc.set(target.iacuc, 0);
+      remaining -= target.remainingCages;
+      continue;
+    }
+    const target = candidates.sort(sortFreeCageAllocationItems)[0];
+    allocations.set(target.iacuc, numericOrZero(allocations.get(target.iacuc)) + remaining);
+    remainingByIacuc.set(target.iacuc, Math.max(target.remainingCages - remaining, 0));
+    remaining = 0;
+  }
+
+  return allocations;
+}
+
 function statementBillingUnitFromRows(rows) {
   const hasAnimals = rows.some((row) => numericOrZero(row.animalCount) > 0);
   const hasCages = rows.some((row) => numericOrZero(row.cageCount) > 0);
@@ -13577,6 +13723,41 @@ function occupancyBreakdown(items) {
 
 function freeCageAllowanceForPi(pi) {
   return freeCageAllowanceForPrincipalType(principalTypeForPi(pi));
+}
+
+function quantityFreeCageAllocationSummary(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const pi = normalizePersonName(normalized.pi);
+  const month = normalized.month || state.billingMonth || "";
+  const allowance = freeCageAllowanceForPi(pi);
+  const sheets = quantitySheetsForMonth(month)
+    .map((item) => normalizeQuantitySheetDraft(item))
+    .filter((item) => item.id !== normalized.id && normalizePersonName(item.pi) === pi);
+  const assignedOthers = sheets.reduce((sum, item) => sum + Math.max(numericOrZero(item.preferredFreeCages), 0), 0);
+  const current = Math.max(numericOrZero(normalized.preferredFreeCages), 0);
+  const assigned = assignedOthers + current;
+  return {
+    allowance,
+    assignedOthers,
+    current,
+    assigned,
+    remaining: Math.max(allowance - assigned, 0),
+    exceeded: assigned > allowance,
+  };
+}
+
+function assertQuantitySheetFreeCageSettings(sheet) {
+  const normalized = normalizeQuantitySheetDraft(sheet || {});
+  const preferred = Math.max(numericOrZero(normalized.preferredFreeCages), 0);
+  if (!preferred) return;
+  const pi = normalizePersonName(normalized.pi);
+  if (!pi) throw new Error("设置优先减免笼数前，请先填写项目负责人。");
+  const allowance = freeCageAllowanceForPi(pi);
+  if (preferred > allowance) throw new Error(`优先减免笼数不能超过 ${pi} 的每日总减免额度 ${allowance} 笼。`);
+  const allocation = quantityFreeCageAllocationSummary(normalized);
+  if (allocation.exceeded) {
+    throw new Error(`${pi} 本月已指定优先减免 ${allocation.assigned} 笼/天，超过总额度 ${allowance} 笼/天。`);
+  }
 }
 
 function principalTypeForPi(pi) {
@@ -14212,8 +14393,12 @@ function billingBreakdownGroups(row, billingUnit) {
         tiered: Boolean(item.tiered),
         freeAllowance: Boolean(item.freeAllowance),
         countsByIacuc: new Map(),
+        freeByIacuc: new Map(),
+        hasExplicitFree: false,
       };
     current.countsByIacuc.set(iacuc, numericOrZero(current.countsByIacuc.get(iacuc)) + count);
+    if (Object.prototype.hasOwnProperty.call(item, "freeCages")) current.hasExplicitFree = true;
+    current.freeByIacuc.set(iacuc, numericOrZero(current.freeByIacuc.get(iacuc)) + numericOrZero(item.freeCages));
     groups.set(key, current);
   }
   return [...groups.values()];
@@ -14235,7 +14420,8 @@ function buildSettlementTemplateModel(statement, rows) {
         const current = perIacuc.get(iacuc) || { count: 0, free: 0, amount: 0 };
         current.count += count;
         if (group.tiered) {
-          const free = Math.min(remainingFree, count);
+          const explicitFree = numericOrZero(group.freeByIacuc?.get(iacuc));
+          const free = group.hasExplicitFree ? Math.min(explicitFree, count) : Math.min(remainingFree, count);
           remainingFree -= free;
           const billable = Math.max(count - free, 0);
           const tier1 = Math.min(remainingTier1, billable);

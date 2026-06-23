@@ -3753,6 +3753,7 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     sheet = normalize_quantity_sheet(payload, sheet_id, now)
     validate_quantity_sheet_permission(actor, sheet)
     validate_quantity_sheet_animal_requirements(conn, sheet)
+    validate_quantity_sheet_free_cage_settings(conn, sheet)
     exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
     db_values = quantity_sheet_db_values(sheet)
     if exists:
@@ -3849,6 +3850,8 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "owner": clean_text(source.get("owner", "")),
         "contact": clean_text(source.get("contact", "")),
         "funding": clean_text(source.get("funding", "")),
+        "preferredFreeCages": max(as_int(source.get("preferredFreeCages")) or 0, 0) if source.get("preferredFreeCages") not in (None, "") else None,
+        "freeCagePriority": max(as_int(source.get("freeCagePriority")) or 0, 0) if source.get("freeCagePriority") not in (None, "") else None,
         "billingUnit": "animal_day" if clean_text(source.get("billingUnit", "")) == "animal_day" else "cage_day",
         "animalDetailEnabled": parse_bool(source.get("animalDetailEnabled")),
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
@@ -3900,6 +3903,26 @@ def validate_quantity_sheet_animal_requirements(conn, sheet):
     has_animal_balance = any((row.get("animalCount") or 0) > 0 for row in sheet.get("rows", []))
     if not has_animal_balance:
         raise ValueError("该房间按只/天计费，请打开动物数量并补充结余总数")
+
+
+def validate_quantity_sheet_free_cage_settings(conn, sheet):
+    preferred = max(as_int(sheet.get("preferredFreeCages")) or 0, 0)
+    if preferred <= 0:
+        return
+    pi_name = clean_text(sheet.get("pi", ""))
+    if not pi_name:
+        raise ValueError("设置优先减免笼数前，请先填写项目负责人")
+    principal_type_by_pi = read_principal_type_by_pi(conn)
+    allowance = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
+    if preferred > allowance:
+        raise ValueError(f"优先减免笼数不能超过 {pi_name} 的每日总减免额度 {allowance} 笼")
+    total = preferred
+    for item in list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name):
+        if item.get("id") == sheet.get("id"):
+            continue
+        total += max(as_int(item.get("preferredFreeCages")) or 0, 0)
+    if total > allowance:
+        raise ValueError(f"{pi_name} 本月已指定优先减免 {total} 笼/天，超过总额度 {allowance} 笼/天")
 
 
 def read_rooms_for_quantity_sheets(conn, sheets):
@@ -4051,6 +4074,68 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     return statement, lines, merge_audit_logs([], [event])
 
 
+def free_cage_allocation_sort_key(item):
+    priority = as_int(item.get("freeCagePriority"))
+    priority_value = priority if priority is not None else 999999
+    return (max(priority_value, 0), normalize_iacuc_number(item.get("iacuc", "")))
+
+
+def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
+    remaining_by_iacuc = {}
+    allocations = {}
+    eligible = []
+    for item in breakdown or []:
+        if not item.get("freeAllowance") or item.get("billingUnit") != "cage_day":
+            continue
+        count = max(as_int(item.get("cageCount")) or 0, 0)
+        iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+        if not count or not iacuc:
+            continue
+        entry = {
+            "iacuc": iacuc,
+            "cageCount": count,
+            "preferredFreeCages": max(as_int(item.get("preferredFreeCages")) or 0, 0),
+            "freeCagePriority": as_int(item.get("freeCagePriority")),
+        }
+        eligible.append(entry)
+        remaining_by_iacuc[iacuc] = remaining_by_iacuc.get(iacuc, 0) + count
+        allocations.setdefault(iacuc, 0)
+
+    remaining = max(as_int(free_cages) or 0, 0)
+    for item in sorted((entry for entry in eligible if entry["preferredFreeCages"] > 0), key=free_cage_allocation_sort_key):
+        if remaining <= 0:
+            break
+        current_remaining = remaining_by_iacuc.get(item["iacuc"], 0)
+        applied = min(item["preferredFreeCages"], current_remaining, remaining)
+        if applied <= 0:
+            continue
+        allocations[item["iacuc"]] = allocations.get(item["iacuc"], 0) + applied
+        remaining_by_iacuc[item["iacuc"]] = current_remaining - applied
+        remaining -= applied
+
+    while remaining > 0:
+        candidates = [
+            {**item, "remainingCages": remaining_by_iacuc.get(item["iacuc"], 0)}
+            for item in eligible
+            if remaining_by_iacuc.get(item["iacuc"], 0) > 0
+        ]
+        if not candidates:
+            break
+        coverable = sorted((item for item in candidates if item["remainingCages"] <= remaining), key=free_cage_allocation_sort_key)
+        if coverable:
+            target = coverable[0]
+            allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
+            remaining_by_iacuc[target["iacuc"]] = 0
+            remaining -= target["remainingCages"]
+            continue
+        target = sorted(candidates, key=free_cage_allocation_sort_key)[0]
+        allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + remaining
+        remaining_by_iacuc[target["iacuc"]] = max(target["remainingCages"] - remaining, 0)
+        remaining = 0
+
+    return allocations
+
+
 def quantity_sheet_statement_lines(sheets, free_cages, rooms=None):
     if not sheets:
         return []
@@ -4144,10 +4229,16 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None):
                         "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
                         "tiered": bool(profile["tiered"]),
                         "freeAllowance": bool(profile["freeAllowance"]),
+                        "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0),
+                        "freeCagePriority": as_int(sheet.get("freeCagePriority")),
+                        "freeCages": 0,
                     }
                 )
 
-        charges = combined_daily_charge(charge_groups, free_cages)
+        free_allocations = allocate_daily_free_cages_by_iacuc(breakdown, free_cages)
+        for item in breakdown:
+            item["freeCages"] = free_allocations.get(normalize_iacuc_number(item.get("iacuc", "")), 0)
+        charges = combined_daily_charge(charge_groups, sum(free_allocations.values()))
         cumulative += charges["amount"]
         lines.append(
             {

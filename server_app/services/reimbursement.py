@@ -95,8 +95,13 @@ def billing_breakdown_groups(row, billing_unit):
             "tiered": bool(item.get("tiered")),
             "freeAllowance": bool(item.get("freeAllowance")),
             "countsByIacuc": {},
+            "freeByIacuc": {},
+            "hasExplicitFree": False,
         }
         current["countsByIacuc"][iacuc] = current["countsByIacuc"].get(iacuc, 0) + count
+        if "freeCages" in item:
+            current["hasExplicitFree"] = True
+        current["freeByIacuc"][iacuc] = current["freeByIacuc"].get(iacuc, 0) + numeric(item.get("freeCages"))
         groups[key] = current
     return list(groups.values())
 
@@ -117,7 +122,8 @@ def summarize_statement(statement, lines, detail_context_by_iacuc, tier_limit):
                 current = per_iacuc[iacuc]
                 current["count"] += count
                 if group.get("tiered"):
-                    free = min(remaining_free, count)
+                    explicit_free = numeric(group.get("freeByIacuc", {}).get(iacuc))
+                    free = min(explicit_free, count) if group.get("hasExplicitFree") else min(remaining_free, count)
                     remaining_free -= free
                     billable = max(count - free, 0)
                     tier1 = min(remaining_tier1, billable)

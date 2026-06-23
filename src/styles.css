@@ -2386,6 +2386,65 @@ h3 {
   max-width: none;
 }
 
+.quantity-free-cage-module {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(47, 122, 114, 0.18);
+  border-radius: 12px;
+  background: rgba(244, 250, 248, 0.7);
+}
+
+.quantity-free-cage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.quantity-free-cage-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.quantity-free-cage-head strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.quantity-free-cage-head span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.quantity-free-cage-field {
+  max-width: 320px;
+}
+
+.quantity-free-cage-field small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.quantity-free-cage-module.muted-field {
+  color: var(--muted);
+}
+
+.quantity-free-cage-module.muted-field input {
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.quantity-free-cage-toggle {
+  flex: 0 0 auto;
+}
+
 .room-billing-hint {
   display: flex;
   flex-wrap: wrap;
