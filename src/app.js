@@ -37,6 +37,17 @@ import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STOR
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.21",
+    releasedAt: "2026-06-24 11:18",
+    title: "IACUC 有效期与减免规则完善",
+    items: [
+      "IACUC 索引导入改为保留标准字段和原始整行字段，项目起止日期、申请通过日期、动物品系、实验场所、经费号和饲养费字段可直接用于后续业务",
+      "数量统计表和动态笼位图按 PI 合表时，超过伦理有效期的 IACUC 不再参与免费笼位减免，有效期内的其他伦理继续正常分配减免额度",
+      "结算预览缓存加入伦理有效期信息，更新 IACUC 索引后会按最新项目起止日期重新计算减免结果",
+    ],
+    notes: "“过期不减免”规则由 @邹志成 建议完善。",
+  },
+  {
     version: "0.5.20",
     releasedAt: "2026-06-23 15:49",
     title: "全系统配色语义整理",
@@ -997,7 +1008,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.20",
+  version: "0.5.21",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -12970,6 +12981,7 @@ function buildQuantitySheetStatement(sheet) {
           overageUnitPrice: item.profile.tiered ? BILLING_TIER_OVER_PRICE : 0,
           tiered: Boolean(item.profile.tiered),
           freeAllowance: Boolean(item.profile.freeAllowance),
+          freeEligible: iacucFreeAllowanceEligible(item.sheet.iacuc, date),
           preferredFreeCages: numericOrZero(item.sheet.preferredFreeCages),
           freeCagePriority: numericOrNull(item.sheet.freeCagePriority),
           freeCages: 0,
@@ -13048,7 +13060,16 @@ function buildStatement(pi, month) {
       const count = profile.unit === "animal_day" ? occupancyAnimalCount(item, profile) : 1;
       addChargeGroup(chargeGroups, profile, count);
     });
-    const charge = combinedDailyCharge(chargeGroups, freeCageAllowance);
+    const iacucBreakdown = occupancyBreakdown(activeItems).map((item) => ({
+      ...item,
+      freeEligible: iacucFreeAllowanceEligible(item.iacuc, date),
+      freeCages: 0,
+    }));
+    const freeAllocations = allocateDailyFreeCagesByIacuc(iacucBreakdown, freeCageAllowance);
+    iacucBreakdown.forEach((item) => {
+      item.freeCages = numericOrZero(freeAllocations.get(normalizeIacucNumber(item.iacuc)));
+    });
+    const charge = combinedDailyCharge(chargeGroups, sumMapValues(freeAllocations));
     const amount = charge.amount;
     cumulative += amount;
 
@@ -13062,7 +13083,7 @@ function buildStatement(pi, month) {
       ...charge,
       amount,
       cumulative,
-      iacucBreakdown: occupancyBreakdown(activeItems),
+      iacucBreakdown,
     };
   });
 
@@ -13110,9 +13131,11 @@ function clearBillingDerivedCaches() {
 
 function quantitySheetStatementCacheKey(sheet) {
   const normalized = normalizeQuantitySheetDraft(sheet);
-  const sourceIds = quantitySheetsForStatement(normalized, normalized.month || state.billingMonth, normalized.pi || state.billingPi || "")
+  const statementSheets = quantitySheetsForStatement(normalized, normalized.month || state.billingMonth, normalized.pi || state.billingPi || "");
+  const sourceIds = statementSheets
     .map((item) => `${item.id}:${item.updatedAt || ""}:${item.rows?.length || 0}:${item.pageCount || 1}:${item.preferredFreeCages ?? ""}:${item.freeCagePriority ?? ""}`)
     .join("|");
+  const validitySignature = iacucValiditySignature(statementSheets.map((item) => item.iacuc));
   return [
     normalized.id,
     normalized.month,
@@ -13123,6 +13146,7 @@ function quantitySheetStatementCacheKey(sheet) {
     normalized.initialAnimalCount,
     normalized.initialCageCount,
     sourceIds,
+    validitySignature,
   ].join("::");
 }
 
@@ -13131,6 +13155,7 @@ function cageMapStatementCacheKey(pi, month) {
   const occupancySignature = occupancies
     .map((item) => `${item.id}:${item.updatedAt || ""}:${item.startDate || ""}:${item.endDate || ""}:${item.status || ""}:${item.slotId || ""}:${item.iacuc || ""}:${item.animalCount || ""}`)
     .join("|");
+  const validitySignature = iacucValiditySignature(occupancies.map((item) => item.iacuc));
   return [
     normalizePersonName(pi),
     month || "",
@@ -13139,8 +13164,19 @@ function cageMapStatementCacheKey(pi, month) {
     normalizeIacucNumber(billingInfrastructureState.iacuc || ""),
     occupancies.length,
     occupancySignature,
+    validitySignature,
     freeCageAllowanceForPi(pi),
   ].join("::");
+}
+
+function iacucValiditySignature(iacucs) {
+  return [...new Set((iacucs || []).map((item) => normalizeIacucNumber(item)).filter(Boolean))]
+    .sort()
+    .map((iacuc) => {
+      const info = findIacucInfo(iacuc) || {};
+      return `${iacuc}:${info.projectStartDate || ""}:${info.projectEndDate || ""}`;
+    })
+    .join("|");
 }
 
 function quantityStatisticFormsCacheKey(statement) {
@@ -13500,11 +13536,20 @@ function sortFreeCageAllocationItems(a, b) {
   return left.priority - right.priority || left.iacuc.localeCompare(right.iacuc, "zh-CN");
 }
 
+function iacucFreeAllowanceEligible(iacuc, date) {
+  const info = findIacucInfo(iacuc) || {};
+  const startDate = normalizeDateInput(info.projectStartDate || "");
+  const endDate = normalizeDateInput(info.projectEndDate || "");
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
+  return true;
+}
+
 function allocateDailyFreeCagesByIacuc(breakdown, freeCageAllowance) {
   const remainingByIacuc = new Map();
   const allocations = new Map();
   const eligible = (breakdown || [])
-    .filter((item) => item.freeAllowance && item.billingUnit === "cage_day" && numericOrZero(item.cageCount) > 0)
+    .filter((item) => item.freeAllowance && item.freeEligible !== false && item.billingUnit === "cage_day" && numericOrZero(item.cageCount) > 0)
     .map((item) => ({
       iacuc: normalizeIacucNumber(item.iacuc || ""),
       cageCount: numericOrZero(item.cageCount),
@@ -15600,10 +15645,43 @@ function iacucSearchCache() {
       pi: item.pi || "",
       owner: item.owner || "",
       funding: item.funding || "",
+      fundCode: item.fundCode || "",
+      supportProjectPeriod: item.supportProjectPeriod || "",
+      experimentNo: item.experimentNo || "",
+      species: item.species || "",
+      facility: item.facility || "",
+      maxFeedingPeriod: item.maxFeedingPeriod || "",
+      iacucApprovalDate: item.iacucApprovalDate || "",
+      applicationApprovalDate: item.applicationApprovalDate || "",
+      projectStartDate: item.projectStartDate || "",
+      projectEndDate: item.projectEndDate || "",
+      approvedFeedingFee: item.approvedFeedingFee ?? "",
+      approvalLeader: item.approvalLeader || "",
+      actualFeedingFee: item.actualFeedingFee ?? "",
+      pendingReimbursementFee: item.pendingReimbursementFee ?? "",
+      assistant: item.assistant || "",
+      notes: item.notes || "",
+      applicationDate: item.applicationDate || "",
+      rawFields: item.rawFields && typeof item.rawFields === "object" ? item.rawFields : {},
       source,
     };
+    const rawFieldText = Object.values(normalized.rawFields).join(" ");
     normalized.searchText = normalizeSearchText(
-      [normalized.iacuc, normalized.rawIacuc, normalized.project, normalized.pi, normalized.owner, normalized.funding].join(" "),
+      [
+        normalized.iacuc,
+        normalized.rawIacuc,
+        normalized.project,
+        normalized.pi,
+        normalized.owner,
+        normalized.funding,
+        normalized.fundCode,
+        normalized.experimentNo,
+        normalized.species,
+        normalized.facility,
+        normalized.projectStartDate,
+        normalized.projectEndDate,
+        rawFieldText,
+      ].join(" "),
     );
     if (!byRaw.has(rawKey)) byRaw.set(rawKey, normalized);
     if (!hasNumber) byNumber.set(iacuc, normalized);
