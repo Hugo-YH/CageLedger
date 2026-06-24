@@ -566,6 +566,18 @@ def initialize_schema(conn):
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS project_sync_snapshots (
+            id TEXT PRIMARY KEY,
+            imported_at TEXT NOT NULL,
+            actor_user_id TEXT,
+            actor_display_name TEXT,
+            summary TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS audit_logs (
             id TEXT PRIMARY KEY,
             message TEXT,
@@ -662,6 +674,7 @@ def create_performance_indexes(conn):
         "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_pi ON reimbursement_records(pi)",
         "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_status ON reimbursement_records(reimbursement_status)",
         "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_workflow_id ON reimbursement_records(workflow_id)",
+        "CREATE INDEX IF NOT EXISTS idx_project_sync_snapshots_imported_at ON project_sync_snapshots(imported_at)",
         "CREATE INDEX IF NOT EXISTS idx_audit_events_at ON audit_events(at)",
         "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
@@ -3320,6 +3333,181 @@ def read_iacuc_index():
 
 def write_experiment_applications(conn, items, imported_at):
     replace_experiment_applications(conn, items, imported_at, application_payload)
+
+
+PROJECT_DERIVED_FIELDS = (
+    "project",
+    "pi",
+    "owner",
+    "funding",
+    "projectStartDate",
+    "projectEndDate",
+    "applicationApprovalDate",
+    "iacucApprovalDate",
+    "fundCode",
+    "supportProjectPeriod",
+    "experimentNo",
+    "species",
+    "facility",
+    "maxFeedingPeriod",
+    "approvedFeedingFee",
+    "approvalLeader",
+    "actualFeedingFee",
+    "pendingReimbursementFee",
+    "assistant",
+    "applicationDate",
+)
+
+
+def application_by_iacuc(items):
+    applications = {}
+    for item in items:
+        iacuc = normalize_iacuc_number((item or {}).get("iacuc", ""))
+        if iacuc:
+            applications[iacuc] = item
+    return applications
+
+
+def project_field_snapshot(item):
+    return {field: clean_text((item or {}).get(field, "")) for field in PROJECT_DERIVED_FIELDS}
+
+
+def changed_project_fields(before, after):
+    return {field for field in PROJECT_DERIVED_FIELDS if clean_text(before.get(field, "")) != clean_text(after.get(field, ""))}
+
+
+def read_current_applications(conn):
+    rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def source_iacuc_for_placement_tasks(conn):
+    rows = conn.execute("SELECT id, iacuc, payload FROM intake_batches").fetchall()
+    by_batch = {}
+    for row in rows:
+        payload = json.loads(row["payload"])
+        by_batch[row["id"]] = normalize_iacuc_number(payload.get("iacuc") or row["iacuc"] or "")
+    return by_batch
+
+
+def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imported_at, source_iacuc_by_batch=None):
+    rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+    changes = []
+    for row in rows:
+        payload = json.loads(row["payload"])
+        if table == "placement_tasks":
+            source_iacuc = (source_iacuc_by_batch or {}).get(clean_text(payload.get("sourceBatchId", "")), "")
+            iacuc = normalize_iacuc_number(payload.get("iacuc", "") or source_iacuc)
+        else:
+            iacuc = normalize_iacuc_number(payload.get("iacuc", "") or (row["iacuc"] if "iacuc" in row.keys() else ""))
+        if not iacuc or iacuc not in changed_iacucs or iacuc not in applications:
+            continue
+
+        before = project_field_snapshot(payload)
+        after = project_field_snapshot(applications[iacuc])
+        changed_fields = sorted(changed_project_fields(before, after))
+        if not changed_fields:
+            continue
+
+        for field in PROJECT_DERIVED_FIELDS:
+            payload[field] = after[field]
+        payload["projectSyncedAt"] = imported_at
+        payload["projectSyncSource"] = "iacuc_upload"
+        payload["updatedAt"] = imported_at
+        payload_json = dump_json(payload)
+
+        if table == "quantity_sheets":
+            conn.execute(
+                """
+                UPDATE quantity_sheets
+                SET project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
+                WHERE id = ?
+                """,
+                (after["project"], after["pi"], after["owner"], after["funding"], imported_at, payload_json, row["id"]),
+            )
+        elif table == "occupancies":
+            conn.execute(
+                """
+                UPDATE occupancies
+                SET project = ?, pi = ?, owner = ?, funding = ?, species = ?, updated_at = ?, payload = ?
+                WHERE id = ?
+                """,
+                (after["project"], after["pi"], after["owner"], after["funding"], after["species"], imported_at, payload_json, row["id"]),
+            )
+        elif table == "intake_batches":
+            conn.execute("UPDATE intake_batches SET updated_at = ?, payload = ? WHERE id = ?", (imported_at, payload_json, row["id"]))
+        elif table == "placement_tasks":
+            conn.execute("UPDATE placement_tasks SET updated_at = ?, payload = ? WHERE id = ?", (imported_at, payload_json, row["id"]))
+
+        changes.append(
+            {
+                "table": table,
+                "id": row["id"],
+                "iacuc": iacuc,
+                "changedFields": changed_fields,
+                "before": {field: before[field] for field in changed_fields},
+                "after": {field: after[field] for field in changed_fields},
+            }
+        )
+    return changes
+
+
+def sync_project_derived_fields_after_iacuc_upload(conn, old_items, new_items, actor, imported_at):
+    old_by_iacuc = application_by_iacuc(old_items)
+    new_by_iacuc = application_by_iacuc(new_items)
+    changed_iacucs = {
+        iacuc
+        for iacuc, new_item in new_by_iacuc.items()
+        if iacuc not in old_by_iacuc or changed_project_fields(project_field_snapshot(old_by_iacuc[iacuc]), project_field_snapshot(new_item))
+    }
+    if not changed_iacucs:
+        return {"changedIacucCount": 0, "updatedRecordCount": 0, "tableCounts": {}, "snapshotId": ""}
+
+    source_iacuc_by_batch = source_iacuc_for_placement_tasks(conn)
+    changes = []
+    for table in ("quantity_sheets", "occupancies", "intake_batches", "placement_tasks"):
+        changes.extend(sync_project_fields_for_table(conn, table, new_by_iacuc, changed_iacucs, imported_at, source_iacuc_by_batch))
+
+    table_counts = {}
+    for item in changes:
+        table_counts[item["table"]] = table_counts.get(item["table"], 0) + 1
+
+    snapshot_id = ""
+    if changes:
+        snapshot_id = new_id("project-sync")
+        summary = {
+            "changedIacucCount": len(changed_iacucs),
+            "updatedRecordCount": len(changes),
+            "tableCounts": table_counts,
+        }
+        payload = {
+            **summary,
+            "changedIacucs": sorted(changed_iacucs),
+            "changes": changes,
+        }
+        conn.execute(
+            """
+            INSERT INTO project_sync_snapshots (
+                id, imported_at, actor_user_id, actor_display_name, summary, payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                snapshot_id,
+                imported_at,
+                actor.get("id", ""),
+                actor.get("displayName", ""),
+                dump_json(summary),
+                dump_json(payload),
+            ),
+        )
+
+    return {
+        "changedIacucCount": len(changed_iacucs),
+        "updatedRecordCount": len(changes),
+        "tableCounts": table_counts,
+        "snapshotId": snapshot_id,
+    }
 
 
 def list_principal_identities(conn):
@@ -6632,15 +6820,29 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 {"filename": filename, **parsed["summary"]},
             )
             with connect_db() as conn:
+                old_items = read_current_applications(conn)
                 write_experiment_applications(conn, parsed["items"], now)
+                sync_summary = sync_project_derived_fields_after_iacuc_upload(conn, old_items, file_items, user, now)
                 write_audit_events(conn, [event])
                 conn.commit()
+            invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities")
+            invalidate_data_cache_prefixes(
+                "bootstrap_summary::",
+                "billing_occupancies::",
+                "quantity_sheets::",
+                "billing_workflows::",
+                "billing_statements::",
+                "reimbursement_records::",
+                "intake_batches::",
+                "placement_tasks::",
+            )
             self.send_json(
                 {
                     "ok": True,
                     "filename": filename,
                     "updatedAt": now,
                     **parsed["summary"],
+                    "syncSummary": sync_summary,
                     "items": file_items,
                     "auditLogs": merge_audit_logs([], [event]),
                 }

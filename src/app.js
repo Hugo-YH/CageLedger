@@ -37,6 +37,17 @@ import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STOR
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.22",
+    releasedAt: "2026-06-24 16:41",
+    title: "项目汇总表同步与核算汇总修正",
+    items: [
+      "IACUC 项目汇总表上传后，系统自动按最新汇总表同步数量统计表、笼位占用、待接收批次和待进驻任务中的项目派生字段",
+      "新增项目同步快照归档，记录同步前后的项目名称、负责人、实验负责人、支撑经费、项目起止日期等字段变化",
+      "修复饲养费核算汇总表中按伦理明细已有减免、前方减免总笼数仍显示为 0 的问题",
+      "修复数量统计表按笼收费时因同时记录动物数量而误显示计费单位为混合的问题",
+    ],
+  },
+  {
     version: "0.5.21",
     releasedAt: "2026-06-24 11:18",
     title: "IACUC 有效期与减免规则完善",
@@ -1008,7 +1019,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.21",
+  version: "0.5.22",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -10210,7 +10221,13 @@ async function handleIacucUpload(event) {
       source: "data",
     };
     mergeServerAuditLogs(payload);
-    showFlashNotice("上传完成", `已生成 IACUC 索引 ${payload.count} 条，重复编号 ${payload.duplicateCount || 0} 条。`, "success");
+    const syncSummary = payload.syncSummary || {};
+    const syncedRecords = Number(syncSummary.updatedRecordCount || 0);
+    const changedIacucs = Number(syncSummary.changedIacucCount || 0);
+    const syncText = syncedRecords
+      ? `已同步 ${changedIacucs} 个变更伦理号，更新派生记录 ${syncedRecords} 条。`
+      : "未发现需要同步的派生记录。";
+    showFlashNotice("上传完成", `已生成 IACUC 索引 ${payload.count} 条，重复编号 ${payload.duplicateCount || 0} 条。${syncText}`, "success");
     scheduleRender("iacuc.upload");
   } catch {
     showFlashNotice("上传失败", "请检查网络或文件格式。", "error");
@@ -13598,6 +13615,14 @@ function allocateDailyFreeCagesByIacuc(breakdown, freeCageAllowance) {
 }
 
 function statementBillingUnitFromRows(rows) {
+  const explicitUnits = new Set();
+  rows.forEach((row) => {
+    (row.iacucBreakdown || []).forEach((item) => {
+      if (item.billingUnit === "animal_day" || item.billingUnit === "cage_day") explicitUnits.add(item.billingUnit);
+    });
+  });
+  if (explicitUnits.size > 1) return "mixed";
+  if (explicitUnits.size === 1) return [...explicitUnits][0];
   const hasAnimals = rows.some((row) => numericOrZero(row.animalCount) > 0);
   const hasCages = rows.some((row) => numericOrZero(row.cageCount) > 0);
   if (hasAnimals && hasCages) return "mixed";
@@ -14454,6 +14479,12 @@ function buildSettlementTemplateModel(statement, rows) {
   const iacucs = statementColumnIacucs(statement, rows, billingUnit);
   const quantityLabel = billingUnit === "animal_day" ? "数量" : "笼数";
   const totalLabel = billingUnit === "animal_day" ? "总数量" : "总笼数";
+  const rowFreeCages = (row) => {
+    const breakdown = row.iacucBreakdown || [];
+    const hasExplicitFree = breakdown.some((item) => Object.prototype.hasOwnProperty.call(item, "freeCages"));
+    const breakdownFree = breakdown.reduce((sum, item) => sum + numericOrZero(item.freeCages), 0);
+    return hasExplicitFree ? breakdownFree : numericOrZero(row.freeCages);
+  };
   const dayRows = rows.map((row) => {
     const perIacuc = new Map(iacucs.map((iacuc) => [iacuc, { count: 0, free: 0, amount: 0 }]));
     for (const group of billingBreakdownGroups(row, billingUnit)) {
@@ -14483,7 +14514,7 @@ function buildSettlementTemplateModel(statement, rows) {
     return {
       date: row.date,
       totalCount: billingUnit === "animal_day" ? numericOrZero(row.animalCount) : numericOrZero(row.cageCount),
-      totalFree: billingUnit === "cage_day" ? numericOrZero(row.freeCages) : 0,
+      totalFree: rowFreeCages(row),
       totalTier2: billingUnit === "cage_day" ? numericOrZero(row.tier2BillableCages) : 0,
       totalAmount: numericOrZero(row.amount),
       perIacuc,
@@ -14507,7 +14538,7 @@ function buildSettlementTemplateModel(statement, rows) {
     dayRows,
     totals,
     totalCount: billingUnit === "animal_day" ? numericOrZero(statement.totalAnimalDays) : numericOrZero(statement.totalCageDays),
-    totalFree: billingUnit === "cage_day" ? numericOrZero(statement.totalFreeCageDays) : 0,
+    totalFree: dayRows.reduce((sum, row) => sum + numericOrZero(row.totalFree), 0),
     totalTier2: billingUnit === "cage_day" ? numericOrZero(statement.totalTier2CageDays) : 0,
     totalAmount: numericOrZero(statement.totalAmount),
   };
