@@ -37,6 +37,18 @@ import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STOR
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.24",
+    releasedAt: "2026-06-26 15:46",
+    title: "按钮层级与预览弹窗优化",
+    items: [
+      "全系统按钮按主操作、次操作、流程推进、信息查看、警示和危险操作重新规划颜色层级",
+      "折叠模块的展开和收起状态使用不同视觉样式，展开态更容易识别当前区域",
+      "笼卡预览、数量统计表预览和编辑弹窗改为相对浏览器窗口定位，减少滚动后弹窗偏离操作位置的问题",
+      "饲养费管理模块标题统一为“动态笼位图（自动）”和“数量统计表（录入）”，与核算入口语义一致",
+      "已保存数量统计表列表聚焦数据维护，结算入口集中到按项目负责人结算模块",
+    ],
+  },
+  {
     version: "0.5.23",
     releasedAt: "2026-06-26 08:18",
     title: "笼卡识别码稳定性修复",
@@ -966,6 +978,7 @@ const HELP_TEXTS = {
   quantityBilling: "录入纸质数量统计表中的变更行，系统按房间计费口径展开每日明细，支持按项目负责人合表。",
   quantityDateFormat: "只需填写当月日期，推荐输入日号，例如 15；系统会按当前统计月份自动归一。",
   quantityPreview: "预览按同月同项目负责人名下全部统计表汇总展开，并保持与导出结算单一致的合表口径。",
+  settlementWorkflow: "按月份和项目负责人生成结算单。数量统计表来源会自动纳入同月同负责人名下全部已保存统计表。",
   workflow: "按项目负责人汇总单据跟踪发送、签回和交财务进度；单据内可包含多个伦理号。",
   reimbursementLedger: "按每月每项目负责人维护结算与报销台账，自动承接结算金额并滚动累计未缴金额。",
   reimbursementHistory: "展示同一项目负责人历月金额、已缴和未缴累计，便于持续跟踪欠缴情况。",
@@ -1029,7 +1042,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.23",
+  version: "0.5.24",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1627,6 +1640,7 @@ const seedData = {
   batchMode: false,
   samplingMode: "",
   sidebarCollapsed: false,
+  collapsedPanels: {},
   rackFormDraft: {
     roomId: "",
     rows: 5,
@@ -1640,6 +1654,9 @@ const seedData = {
   billingMonth: today.slice(0, 7),
   billingIacuc: "IACUC-2026-001",
   billingPi: "张教授",
+  settlementSource: "cage_map",
+  settlementMonth: today.slice(0, 7),
+  settlementPi: "张教授",
   billingPrincipalType: BILLING_PRINCIPAL_PI,
   freeCageAllowance: FREE_CAGES_DEFAULT,
   reimbursementFilter: "pending_submission",
@@ -1671,6 +1688,7 @@ const seedData = {
   selectedPlacementTaskIds: [],
   placementAssignmentMode: false,
   showPlacementTaskPanel: false,
+  previewPopoverAnchor: null,
   reassigningPlacementReceiptId: "",
   intakeBatchFilter: "unprinted",
   intakeBatchDraft: makeIncomingBatchDraft(),
@@ -2063,6 +2081,10 @@ async function loadBootstrapState() {
     billingMonth: localState.billingMonth || today.slice(0, 7),
     billingIacuc: localState.billingIacuc || "",
     billingPi: localState.billingPi || "",
+    settlementSource: localState.settlementSource || localState.billingSource || seedData.settlementSource,
+    settlementMonth: localState.settlementMonth || localState.billingMonth || today.slice(0, 7),
+    settlementPi: localState.settlementPi || localState.billingPi || "",
+    collapsedPanels: typeof localState.collapsedPanels === "object" && localState.collapsedPanels ? localState.collapsedPanels : {},
     billingPrincipalType: principalTypeForPi(localState.billingPi || ""),
     freeCageAllowance: Number(localState.freeCageAllowance ?? seedData.freeCageAllowance),
     reimbursementFilter: localState.reimbursementFilter || "pending_submission",
@@ -2173,6 +2195,7 @@ function localUiOnlyState(source = {}) {
     lastSettingsView: source.lastSettingsView || "",
     sidebarCollapsed: Boolean(source.sidebarCollapsed),
     settingsNavExpanded: Boolean(source.settingsNavExpanded),
+    collapsedPanels: typeof source.collapsedPanels === "object" && source.collapsedPanels ? source.collapsedPanels : {},
     selectedRoomId: source.selectedRoomId || "",
     selectedRackId: source.selectedRackId || "",
     selectedSlotId: source.selectedSlotId || "",
@@ -2181,6 +2204,9 @@ function localUiOnlyState(source = {}) {
     billingMonth: source.billingMonth || today.slice(0, 7),
     billingIacuc: source.billingIacuc || "",
     billingPi: source.billingPi || "",
+    settlementSource: source.settlementSource || source.billingSource || "cage_map",
+    settlementMonth: source.settlementMonth || source.billingMonth || today.slice(0, 7),
+    settlementPi: source.settlementPi || source.billingPi || "",
     reimbursementFilter: source.reimbursementFilter || "pending_submission",
     reimbursementSearchPi: source.reimbursementSearchPi || "",
     reimbursementOnlyUnpaid: source.reimbursementOnlyUnpaid ?? true,
@@ -3389,6 +3415,16 @@ function normalize(data) {
   next.selectedPlacementTaskIds = Array.isArray(next.selectedPlacementTaskIds) ? next.selectedPlacementTaskIds.filter(Boolean) : [];
   next.placementAssignmentMode = Boolean(next.placementAssignmentMode);
   next.showPlacementTaskPanel = Boolean(next.showPlacementTaskPanel);
+  next.previewPopoverAnchor =
+    next.previewPopoverAnchor && typeof next.previewPopoverAnchor === "object"
+      ? {
+          left: Number(next.previewPopoverAnchor.left || 0),
+          top: Number(next.previewPopoverAnchor.top || 0),
+          width: Number(next.previewPopoverAnchor.width || 0),
+          arrowLeft: Number(next.previewPopoverAnchor.arrowLeft || 32),
+          placement: ["window", "below", "above"].includes(next.previewPopoverAnchor.placement) ? next.previewPopoverAnchor.placement : "window",
+        }
+      : null;
   next.reassigningPlacementReceiptId = String(next.reassigningPlacementReceiptId || "");
   next.intakeBatchFilter = INTAKE_BATCH_FILTER_OPTIONS.some(([value]) => value === next.intakeBatchFilter) ? next.intakeBatchFilter : "unprinted";
   next.intakeBatchDraft = normalizeIncomingBatchDraft(next.intakeBatchDraft || next.intakeBatches.find((item) => item.id === next.selectedIntakeBatchId) || makeIncomingBatchDraft());
@@ -3772,6 +3808,7 @@ function render() {
         ${state.activeView === "logs" ? renderAuditView() : ""}
         ${renderWorkspaceFooter()}
       </main>
+      ${renderGlobalPreviewModals()}
       ${renderConfirmDialog()}
     </div>
   `;
@@ -4123,7 +4160,7 @@ function renderCageCardScannerView() {
         kicker: "移动扫码工作台",
         title: "笼卡识别",
         helpKey: "intakeScanner",
-        actions: `<button class="secondary" type="button" data-view="intake">${iconSvg("chevronLeft")}返回笼卡管理</button>`,
+        actions: `<button class="secondary info-button" type="button" data-view="intake">${iconSvg("chevronLeft")}返回笼卡管理</button>`,
       })}
       ${renderWorkspaceBody(`
         <section class="cage-card-scanner-page">
@@ -4138,8 +4175,8 @@ function renderCageCardScannerView() {
                 <div class="scanner-frame" aria-hidden="true"></div>
               </div>
               <div class="scanner-button-row">
-                <button id="startCageCardScanner" class="primary" type="button" ${cageCardScannerState.active ? "disabled" : ""}>${iconSvg("search")}开启识别</button>
-                <button id="stopCageCardScanner" class="secondary" type="button" ${cageCardScannerState.active ? "" : "disabled"}>${iconSvg("refresh")}停止识别</button>
+                <button id="startCageCardScanner" class="primary flow-button" type="button" ${cageCardScannerState.active ? "disabled" : ""}>${iconSvg("search")}开启识别</button>
+                <button id="stopCageCardScanner" class="secondary warning-button" type="button" ${cageCardScannerState.active ? "" : "disabled"}>${iconSvg("refresh")}停止识别</button>
               </div>
             </div>
             <div class="panel scanner-query-card">
@@ -4149,7 +4186,7 @@ function renderCageCardScannerView() {
               <div class="scanner-manual-field">
                 <div class="scanner-manual-row">
                   <input id="cageCardScannerQuery" value="${escapeAttr(cageCardScannerState.query)}" placeholder="扫码结果或手动输入" autocomplete="off" />
-                  <button id="lookupCageCardScanner" class="primary" type="button" ${cageCardScannerState.loading ? "disabled" : ""}>查询</button>
+                  <button id="lookupCageCardScanner" class="primary flow-button" type="button" ${cageCardScannerState.loading ? "disabled" : ""}>查询</button>
                 </div>
               </div>
             </div>
@@ -4237,6 +4274,71 @@ function renderPanelHead({ title, subtitle = "", helpKey = "", actions = "", com
   `;
 }
 
+const DEFAULT_COLLAPSED_PANEL_KEYS = new Set(["intakeBatchList", "quantitySavedList", "billingSettlement"]);
+
+function panelCollapsed(key) {
+  if (!key) return false;
+  const value = state.collapsedPanels?.[key];
+  return value === undefined ? DEFAULT_COLLAPSED_PANEL_KEYS.has(key) : Boolean(value);
+}
+
+function setPanelCollapsed(key, collapsed) {
+  if (!key) return;
+  state.collapsedPanels = {
+    ...(state.collapsedPanels || {}),
+    [key]: Boolean(collapsed),
+  };
+  scheduleStatePersist();
+}
+
+function renderPanelSummaryChip(text, tone = "") {
+  if (!text) return "";
+  return `<span class="panel-summary-chip ${tone ? `tone-${escapeAttr(tone)}` : ""}">${escapeText(text)}</span>`;
+}
+
+function renderCollapseToggle(key, collapsed) {
+  const stateClass = collapsed ? "info-button" : "flow-button state-active-button";
+  return `
+    <button class="secondary ${stateClass} compact panel-collapse-toggle" type="button" data-toggle-panel="${escapeAttr(key)}" aria-expanded="${collapsed ? "false" : "true"}">
+      ${collapsed ? "展开" : "收起"}
+    </button>
+  `;
+}
+
+function setPreviewPopoverAnchorFromElement(element) {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+  const modalWidth = Math.min(860, Math.max(420, viewportWidth - 96));
+  state.previewPopoverAnchor = {
+    left: 0,
+    top: 24,
+    width: Math.round(modalWidth),
+    arrowLeft: 0,
+    placement: "window",
+  };
+}
+
+function previewPopoverStyle() {
+  const anchor = state.previewPopoverAnchor;
+  if (!anchor) return "";
+  return `--preview-left:${escapeAttr(anchor.left)}px;--preview-top:${escapeAttr(anchor.top)}px;--preview-width:${escapeAttr(anchor.width)}px;--preview-arrow-left:${escapeAttr(anchor.arrowLeft || 32)}px;`;
+}
+
+function previewPopoverClass() {
+  const placement = state.previewPopoverAnchor?.placement || "window";
+  return `anchored-preview-modal placement-${placement}`;
+}
+
+function renderGlobalPreviewModals() {
+  const modals = [];
+  if (state.showIntakeCardPreview) {
+    modals.push(renderIntakeCardPreviewModal(state.intakeBatchDraft || makeIncomingBatchDraft()));
+  }
+  if (state.viewingQuantitySheetId && state.viewingQuantitySheetMode === "preview") {
+    modals.push(renderQuantitySheetDetailModal());
+  }
+  return modals.join("");
+}
+
 function renderCommandBar({ filters = "", actions = "", meta = "", className = "" } = {}) {
   if (!filters && !actions && !meta) return "";
   return `
@@ -4292,17 +4394,17 @@ function renderBulkActionBar({ selectedCount = 0, actions = "", label = "已选"
   `;
 }
 
-function renderModalFrame({ backdropId = "", className = "", closeButtonId = "", title = "", subtitle = "", helpKey = "", actions = "", body = "" } = {}) {
+function renderModalFrame({ backdropId = "", className = "", closeButtonId = "", title = "", subtitle = "", helpKey = "", actions = "", body = "", style = "" } = {}) {
   return `
     <div class="editor-modal-backdrop" ${backdropId ? `id="${escapeAttr(backdropId)}"` : ""}></div>
-    <div class="panel detail-panel editor-modal modal-shell ${escapeAttr(className)}">
+    <div class="panel detail-panel editor-modal modal-shell ${escapeAttr(className)}" ${style ? `style="${escapeAttr(style)}"` : ""}>
       <div class="modal-shell-head">
         <div>
           ${renderPanelHead({ title, subtitle, helpKey, compact: true })}
         </div>
         <div class="modal-shell-actions">
           ${actions}
-          ${closeButtonId ? `<button class="secondary" type="button" id="${escapeAttr(closeButtonId)}">${iconSvg("chevronRight")}关闭</button>` : ""}
+          ${closeButtonId ? `<button class="secondary info-button" type="button" id="${escapeAttr(closeButtonId)}">${iconSvg("chevronRight")}关闭</button>` : ""}
         </div>
       </div>
       <div class="modal-shell-body">
@@ -4351,7 +4453,7 @@ function formatMonthDisplay(value) {
 }
 
 function renderSidebarAccount() {
-  const refreshButtonClass = ["secondary", "sidebar-cache-button", clientVersionStatus.stale ? "needs-refresh" : ""].filter(Boolean).join(" ");
+  const refreshButtonClass = ["secondary", "warning-button", "sidebar-cache-button", clientVersionStatus.stale ? "needs-refresh" : ""].filter(Boolean).join(" ");
   if (!currentUser) {
     return `
       <div class="sidebar-account">
@@ -5066,7 +5168,7 @@ function renderCageView() {
               <div class="cage-editor-backdrop" id="closeCageEditor"></div>
               <div class="panel detail-panel cage-editor cage-editor-popover" id="cageEditorPopover">
                 <div class="editor-modal-actions">
-                  <button class="secondary" type="button" id="closeCageEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
+                  <button class="secondary info-button" type="button" id="closeCageEditorButton">${iconSvg("chevronRight")}关闭编辑</button>
                 </div>
                 ${state.batchMode ? renderBatchSlotDetail(selectedBatchSlots) : renderSlotDetail(selectedSlot)}
               </div>
@@ -5124,8 +5226,8 @@ function renderPlacementTaskPanel(tasks, room, options = {}) {
         actions: `
         <div class="toolbar placement-task-toolbar">
           ${selectedCount ? `<span class="muted">当前页已选择 ${selectedCount} 笼，请在下方笼位图选择空笼位。</span>` : ""}
-          ${selectedCount ? `<button class="secondary" type="button" id="clearSelectedPlacementTasks">清空勾选</button>` : ""}
-          ${floating ? `<button class="secondary" type="button" data-toggle-placement-task-panel="close">${iconSvg("chevronRight")}收起</button>` : ""}
+          ${selectedCount ? `<button class="secondary warning-button" type="button" id="clearSelectedPlacementTasks">清空勾选</button>` : ""}
+          ${floating ? `<button class="secondary info-button" type="button" data-toggle-placement-task-panel="close">${iconSvg("chevronRight")}收起</button>` : ""}
         </div>
         `,
       })}
@@ -5193,11 +5295,11 @@ function renderPlacementTaskGroupRow(group) {
       <td>${escapeText(group.length)} 笼</td>
       <td>${pendingTasks.length ? `${reservedTasks.length} 已预留 / ${pendingTasks.length} 待分配` : escapeText(occupancyCodes.join("、") || "-")}</td>
       <td>
-        <button class="ghost" type="button" data-print-placement-task-group="${escapeAttr(groupKey)}">打印笼卡</button>
-        ${!pendingTasks.length ? reservedTasks.map((task) => `<button class="primary" type="button" data-move-in-placement-task="${escapeAttr(task.id)}">正式入驻</button>`).join("") : ""}
+        <button class="ghost info-button" type="button" data-print-placement-task-group="${escapeAttr(groupKey)}">打印笼卡</button>
+        ${!pendingTasks.length ? reservedTasks.map((task) => `<button class="primary flow-button" type="button" data-move-in-placement-task="${escapeAttr(task.id)}">正式入驻</button>`).join("") : ""}
         ${
           currentUser?.role === "admin" && pendingTasks.length
-            ? `<button class="ghost" type="button" data-open-placement-room-change="${escapeAttr(first.sourceReceiptId)}">变更饲养间</button>`
+            ? `<button class="ghost info-button" type="button" data-open-placement-room-change="${escapeAttr(first.sourceReceiptId)}">变更饲养间</button>`
             : ""
         }
         <button class="ghost danger-text" type="button" data-delete-placement-task-group="${escapeAttr(groupKey)}">删除</button>
@@ -5251,7 +5353,7 @@ function renderPlacementRoomChangeModal() {
     <div class="editor-modal-backdrop" id="closePlacementRoomChange"></div>
     <div class="panel detail-panel editor-modal placement-room-change-modal">
       <div class="editor-modal-actions">
-        <button class="secondary" type="button" id="closePlacementRoomChangeButton">${iconSvg("chevronRight")}关闭</button>
+        <button class="secondary info-button" type="button" id="closePlacementRoomChangeButton">${iconSvg("chevronRight")}关闭</button>
       </div>
       ${renderPanelHead({
         title: "变更饲养间",
@@ -5270,7 +5372,7 @@ function renderPlacementRoomChangeModal() {
           </select>
         </label>
         <div class="form-actions">
-          <button class="primary" type="submit">${iconSvg("save")}确认变更</button>
+          <button class="primary flow-button" type="submit">${iconSvg("save")}确认变更</button>
         </div>
       </form>
     </div>
@@ -5280,7 +5382,7 @@ function renderPlacementRoomChangeModal() {
 function renderCageEditorQuickAction(selectedSlot, selectedBatchSlots) {
   if (state.placementAssignmentMode) {
     return `
-      <button class="primary cage-editor-fab" type="button" id="confirmPlacementBatchMoveIn">
+      <button class="primary flow-button cage-editor-fab" type="button" id="confirmPlacementBatchMoveIn">
         ${iconSvg("check")}批量入驻 ${selectedBatchSlots.length || 0} / ${state.selectedPlacementTaskIds.length} 笼
       </button>
     `;
@@ -5509,10 +5611,10 @@ function renderSlotDetail(slot) {
         <button type="submit" class="primary">${iconSvg("save")}保存笼位</button>
         ${
           occupancy.status === "active"
-            ? `<button type="button" class="secondary" id="openSampleSlot">${iconSvg("check")}已取材</button>`
+            ? `<button type="button" class="secondary warning-button" id="openSampleSlot">${iconSvg("check")}已取材</button>`
             : ""
         }
-        <button type="button" class="ghost" id="clearSlot">${iconSvg("trash")}设为空</button>
+        <button type="button" class="ghost danger-text" id="clearSlot">${iconSvg("trash")}设为空</button>
       </div>
       ${occupancy.status === "active" && state.samplingMode === "single" ? renderSamplingPanel("single", occupancy.endDate || today) : ""}
     </form>
@@ -5524,7 +5626,7 @@ function renderSlotDetail(slot) {
             <div class="placement-slot-list">
               ${pendingTasks
                 .map(
-                  (task) => `<button class="secondary" type="button" data-reserve-slot-for-task="${escapeAttr(task.id)}" data-slot-id="${escapeAttr(slot.id)}">${escapeText(task.batchNo || "未命名批次")} · ${escapeText(task.plannedMoveInDate || "-")}</button>`,
+                  (task) => `<button class="secondary flow-button" type="button" data-reserve-slot-for-task="${escapeAttr(task.id)}" data-slot-id="${escapeAttr(slot.id)}">${escapeText(task.batchNo || "未命名批次")} · ${escapeText(task.plannedMoveInDate || "-")}</button>`,
                 )
                 .join("")}
             </div>
@@ -5573,13 +5675,13 @@ function renderBatchSlotDetail(slots) {
       </div>
 
       <div class="form-actions">
-        <button type="button" class="secondary" id="clearBatchSelection">${iconSvg("refresh")}重新选择</button>
+        <button type="button" class="secondary warning-button" id="clearBatchSelection">${iconSvg("refresh")}重新选择</button>
         ${
           activeCount
-            ? `<button type="button" class="secondary" id="openSampleBatchSlots">${iconSvg("check")}批量已取材 (${activeCount})</button>`
+            ? `<button type="button" class="secondary warning-button" id="openSampleBatchSlots">${iconSvg("check")}批量已取材 (${activeCount})</button>`
             : ""
         }
-        <button type="button" class="ghost" id="clearBatchSlots">${iconSvg("trash")}批量设为空</button>
+        <button type="button" class="ghost danger-text" id="clearBatchSlots">${iconSvg("trash")}批量设为空</button>
       </div>
       ${activeCount && state.samplingMode === "batch" ? renderSamplingPanel("batch", today, activeCount) : ""}
     `;
@@ -5652,10 +5754,10 @@ function renderBatchSlotDetail(slots) {
         <button type="submit" class="primary">${iconSvg("save")}批量保存</button>
         ${
           activeCount
-            ? `<button type="button" class="secondary" id="openSampleBatchSlots">${iconSvg("check")}批量已取材 (${activeCount})</button>`
+            ? `<button type="button" class="secondary warning-button" id="openSampleBatchSlots">${iconSvg("check")}批量已取材 (${activeCount})</button>`
             : ""
         }
-        <button type="button" class="ghost" id="clearBatchSlots">${iconSvg("trash")}批量设为空</button>
+        <button type="button" class="ghost danger-text" id="clearBatchSlots">${iconSvg("trash")}批量设为空</button>
       </div>
       ${activeCount && state.samplingMode === "batch" ? renderSamplingPanel("batch", today, activeCount) : ""}
     </form>
@@ -5735,10 +5837,10 @@ function renderSamplingPanel(mode, defaultDate, count = 1) {
         <input type="date" id="${mode === "batch" ? "batchSampleDate" : "sampleDate"}" value="${defaultDate || today}" placeholder="请选择取材日期" />
       </label>
       <div class="form-actions compact-actions">
-        <button type="button" class="primary" id="${mode === "batch" ? "confirmSampleBatchSlots" : "confirmSampleSlot"}">
+        <button type="button" class="primary warning-button" id="${mode === "batch" ? "confirmSampleBatchSlots" : "confirmSampleSlot"}">
           ${iconSvg("check")}${mode === "batch" ? `确认 ${count} 笼已取材` : "确认已取材"}
         </button>
-        <button type="button" class="secondary" id="cancelSampling">取消</button>
+        <button type="button" class="secondary info-button" id="cancelSampling">取消</button>
       </div>
     </div>
   `;
@@ -5826,6 +5928,7 @@ function renderIntakeBatchView() {
   const visibleBatches = remotePersistence ? allVisibleBatches : allVisibleBatches.slice((intakePage.page - 1) * intakePage.limit, intakePage.page * intakePage.limit);
   const selectedCount = state.selectedIntakeBatchIds.filter((id) => visibleBatches.some((batch) => batch.id === id)).length;
   const canPrintCurrent = draft.cards.length > 0;
+  const intakeListCollapsed = panelCollapsed("intakeBatchList");
   return `
     <section class="workspace-view intake-workspace">
       ${renderWorkspaceHeader({
@@ -5839,7 +5942,7 @@ function renderIntakeBatchView() {
           { label: "当前筛选", value: intakeBatchFilterLabel(state.intakeBatchFilter) },
           { label: "已选批次", value: selectedCount, tone: selectedCount ? "todo" : "neutral" },
         ],
-        actions: `<button class="primary" type="button" data-view="cage-card-scanner">${iconSvg("search")}笼卡识别</button>`,
+        actions: `<button class="primary flow-button" type="button" data-view="cage-card-scanner">${iconSvg("search")}笼卡识别</button>`,
       })}
       ${renderWorkspaceBody(`
         <section class="billing-layout quantity-billing-layout intake-layout">
@@ -5851,7 +5954,7 @@ function renderIntakeBatchView() {
             <div class="intake-message-field">
               <div class="intake-message-head">
                 <span>预约消息识别</span>
-                <button id="parseIncomingMessage" class="secondary compact-action" type="button">${iconSvg("refresh")}识别文本</button>
+                <button id="parseIncomingMessage" class="secondary info-button compact-action" type="button">${iconSvg("refresh")}识别文本</button>
               </div>
               <textarea name="rawMessage" rows="8" placeholder="粘贴课题组发送的预约接收文本，点击“识别文本”自动提取批次号、供应商、品系、数量、房间、进驻日期等信息。">${escapeText(draft.rawMessage)}</textarea>
             </div>
@@ -5866,8 +5969,8 @@ function renderIntakeBatchView() {
               </select>
               <div class="intake-action-grid">
                 <button id="saveIntakeBatch" class="primary" type="submit">${iconSvg("save")}保存为待接收批次</button>
-                <button id="printCurrentCageCards" class="secondary" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("download")}打印当前笼卡</button>
-                <button id="previewCurrentCageCard" class="secondary" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("search")}预览当前笼卡</button>
+                <button id="printCurrentCageCards" class="secondary flow-button" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("download")}打印当前笼卡</button>
+                <button id="previewCurrentCageCard" class="secondary info-button" type="button" ${canPrintCurrent ? "" : "disabled"}>${iconSvg("search")}预览当前笼卡</button>
               </div>
             </div>
           </div>
@@ -5955,25 +6058,29 @@ function renderIntakeBatchView() {
             <input type="hidden" name="suggestedCardCount" value="${escapeAttr(draft.suggestedCardCount ?? 0)}" />
           </div>
         </form>
+          </div>
 
         <div class="panel intake-batch-list-panel">
           ${renderPanelHead({
             title: "待接收批次列表",
             helpKey: "intakeList",
-            compact: true,
-            actions: `
+        compact: true,
+        actions: `
+          ${renderPanelSummaryChip(`${allVisibleBatches.length} 条 · 已选 ${selectedCount}`)}
+          ${renderCollapseToggle("intakeBatchList", intakeListCollapsed)}
+            `,
+          })}
+          ${intakeListCollapsed ? "" : `
           ${renderCommandBar({
             className: "intake-batch-toolbar",
             filters: `<div class="filter-row intake-filter-row" role="group" aria-label="待接收批次筛选">${INTAKE_BATCH_FILTER_OPTIONS.map(([value, label]) => intakeBatchFilterButton(value, label)).join("")}</div>`,
           })}
-            `,
-          })}
           ${renderBulkActionBar({
             selectedCount,
             actions: `
-              <button id="printSelectedCageCards" class="primary" type="button">${iconSvg("download")}打印当前页勾选批次</button>
-              <button id="markSelectedIntakeBatchesPrinted" class="secondary" type="button">${iconSvg("check")}标记已打印</button>
-              <button id="confirmSelectedIntakeBatches" class="secondary" type="button">${iconSvg("check")}批量标记接收</button>
+              <button id="printSelectedCageCards" class="primary flow-button" type="button">${iconSvg("download")}打印当前页勾选批次</button>
+              <button id="markSelectedIntakeBatchesPrinted" class="secondary info-button" type="button">${iconSvg("check")}标记已打印</button>
+              <button id="confirmSelectedIntakeBatches" class="secondary flow-button" type="button">${iconSvg("check")}批量标记接收</button>
             `,
           })}
         <div class="table-wrap">
@@ -5981,12 +6088,11 @@ function renderIntakeBatchView() {
               <thead><tr><th><input type="checkbox" data-select-all-intake-batches ${visibleBatches.length && selectedCount === visibleBatches.length ? "checked" : ""} aria-label="全选当前页待接收批次" /></th><th>状态</th><th>批次号</th><th>购买单位</th><th>项目负责人</th><th>实验负责人</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
               <tbody>${renderIntakeBatchRowsHtml(visibleBatches)}</tbody>
             </table>
-          </div>
+        </div>
           ${renderPager("intakeBatches", intakePage, remotePersistence ? intakePage.total || allVisibleBatches.length : allVisibleBatches.length)}
+          `}
         </div>
         ${renderIntakeBatchEditorModal()}
-        ${state.showIntakeCardPreview ? renderIntakeCardPreviewModal(draft) : ""}
-      </div>
     </section>
       `, "intake-workspace-body")}
     </section>
@@ -6016,10 +6122,11 @@ function renderIntakeCardPreviewModal(batch) {
   return renderModalFrame({
     backdropId: "closeIntakeCardPreview",
     closeButtonId: "closeIntakeCardPreviewButton",
-    className: "intake-card-preview-modal",
+    className: `intake-card-preview-modal ${previewPopoverClass()}`,
     title: "预览当前笼卡",
     subtitle: normalized.batchNo || normalized.iacuc || "未命名批次",
     helpKey: "intakePreview",
+    style: previewPopoverStyle(),
     body: renderIntakeCardVisualPreview(normalized),
   });
 }
@@ -6067,10 +6174,10 @@ function renderIntakeBatchRow(batch) {
       <td>${escapeText(batch.intakeDate || "-")}</td>
       <td>${escapeText(batch.confirmedCardCount || 0)} / ${escapeText(batch.finalCardCount || 0)} 张</td>
       <td>
-        ${batch.status !== "received" ? `<button class="ghost" type="button" data-print-intake-batch="${escapeAttr(batch.id)}">打印</button>` : ""}
-        ${canMarkIntakeBatchPrinted(batch) ? `<button class="ghost" type="button" data-mark-intake-printed="${escapeAttr(batch.id)}">标记已打印</button>` : ""}
-        ${batch.status === "printed" ? `<button class="ghost" type="button" data-confirm-intake-batch="${escapeAttr(batch.id)}">确认已接收</button>` : ""}
-        <button class="ghost" type="button" data-open-intake-batch-button="${escapeAttr(batch.id)}">编辑</button>
+        ${batch.status !== "received" ? `<button class="ghost info-button" type="button" data-print-intake-batch="${escapeAttr(batch.id)}">打印</button>` : ""}
+        ${canMarkIntakeBatchPrinted(batch) ? `<button class="ghost info-button" type="button" data-mark-intake-printed="${escapeAttr(batch.id)}">标记已打印</button>` : ""}
+        ${batch.status === "printed" ? `<button class="ghost flow-button" type="button" data-confirm-intake-batch="${escapeAttr(batch.id)}">确认已接收</button>` : ""}
+        <button class="ghost info-button" type="button" data-open-intake-batch-button="${escapeAttr(batch.id)}">编辑</button>
         <button class="ghost danger-text" type="button" data-delete-intake-batch="${escapeAttr(batch.id)}">删除</button>
       </td>
     </tr>
@@ -6191,7 +6298,7 @@ function renderIntakeBatchEditorModal() {
         </div>
         <div class="form-actions">
           <button type="submit" class="primary">${iconSvg("save")}保存修改</button>
-          <button type="button" class="secondary" id="cancelIntakeBatchEdit">取消</button>
+          <button type="button" class="secondary info-button" id="cancelIntakeBatchEdit">取消</button>
         </div>
       </form>
       ${
@@ -6202,7 +6309,7 @@ function renderIntakeBatchEditorModal() {
               <form id="confirmIntakeReceiptForm" data-batch-id="${escapeAttr(draft.id)}" class="compact-inline-form">
                 <label>实际接收日期<input type="date" name="actualReceiptDate" value="${today}" required /></label>
                 <label>实际到货笼卡数<input type="number" name="cardCount" min="1" max="${escapeAttr(draft.remainingCardCount || draft.finalCardCount || 1)}" value="${escapeAttr(draft.remainingCardCount || draft.finalCardCount || 1)}" required /></label>
-                <button class="primary" type="submit">${iconSvg("check")}确认已接收</button>
+                <button class="primary flow-button" type="submit">${iconSvg("check")}确认已接收</button>
               </form>
             </div>
           `
@@ -6264,6 +6371,7 @@ function renderBillingView() {
         </div>
       </section>
       ${state.billingSource === "quantity_sheet" ? renderQuantitySheetBillingView() : renderCageMapBillingView()}
+      ${renderBillingSettlementPanel()}
       `, "billing-workspace-body")}
     </section>
   `;
@@ -6353,7 +6461,7 @@ function renderCageMapBillingView() {
     <section class="billing-layout quantity-billing-layout">
       <div class="panel large">
         ${renderPanelHead({
-          title: "动态笼位图结算",
+          title: "动态笼位图（自动）",
           helpKey: "cageMapBilling",
           actions: `
           <div class="billing-sheet-actions">
@@ -6362,18 +6470,13 @@ function renderCageMapBillingView() {
                 月份
                 <input id="billingMonth" type="month" value="${state.billingMonth}" placeholder="请选择结算月份" />
               </label>
-              <div class="billing-action-grid">
-                <button id="exportBilling" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
-                <button id="exportSettlementPdf" class="secondary" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
-                <span class="billing-action-spacer" aria-hidden="true"></span>
+              <div class="billing-action-grid single">
+                <button id="exportBilling" class="secondary info-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
               </div>
               <label>
                 课题组
                 <input id="billingPi" type="text" value="${escapeAttr(state.billingPi)}" list="billingPiOptions" placeholder="请输入或选择项目负责人" />
               </label>
-              <div class="billing-action-grid">
-                <button id="generateBillingWorkflow" class="primary billing-workflow-button" type="button" ${canGenerateStatement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
-              </div>
             </div>
           </div>
           `,
@@ -6423,6 +6526,136 @@ function renderCageMapBillingView() {
   `;
 }
 
+function billingSourceLabel(value) {
+  return value === "quantity_sheet" ? "数量统计表" : "动态笼位图";
+}
+
+function settlementSourceValue() {
+  return state.settlementSource === "quantity_sheet" ? "quantity_sheet" : "cage_map";
+}
+
+function settlementContext() {
+  const source = settlementSourceValue();
+  const month = state.settlementMonth || state.billingMonth || today.slice(0, 7);
+  const pi = state.settlementPi || state.billingPi || state.quantitySheetDraft?.pi || "";
+  return { source, month, pi };
+}
+
+function quantitySettlementSheets(month, pi) {
+  const normalizedPi = normalizePersonName(pi);
+  if (!month || !normalizedPi) return [];
+  return (state.quantitySheets || [])
+    .map((sheet) => normalizeQuantitySheetDraft(sheet))
+    .filter((sheet) => sheet.month === month && normalizePersonName(sheet.pi) === normalizedPi)
+    .sort((a, b) => `${a.iacuc || ""}`.localeCompare(`${b.iacuc || ""}`, "zh-CN"));
+}
+
+function settlementPreviewStatement(context = settlementContext()) {
+  if (!context.pi || !context.month) return null;
+  if (context.source === "quantity_sheet") {
+    const sheets = quantitySettlementSheets(context.month, context.pi);
+    return sheets.length ? quantitySheetBillingStatement(sheets[0]) : null;
+  }
+  return cageMapBillingStatement(context.pi, context.month);
+}
+
+function billingSettlementSummary(context = settlementContext()) {
+  const statement = settlementPreviewStatement(context);
+  if (context.source === "quantity_sheet") {
+    const sheets = quantitySettlementSheets(context.month, context.pi);
+    const iacucs = [...new Set(sheets.map((sheet) => normalizeIacucNumber(sheet.iacuc)).filter(Boolean))];
+    const rooms = [...new Set(sheets.map((sheet) => sheet.roomName || roomNameById(sheet.roomId)).filter(Boolean))];
+    return {
+      statement,
+      matched: sheets.length,
+      iacucCount: iacucs.length,
+      roomText: rooms.length ? rooms.join("、") : "-",
+      note: sheets.length
+        ? `已自动纳入 ${sheets.length} 张统计表 / ${iacucs.length} 个 IACUC`
+        : remotePersistence
+        ? "生成时将从服务器匹配该负责人同月全部数量统计表。"
+        : "当前月份和项目负责人下没有已保存数量统计表。",
+    };
+  }
+  const iacucCount = statement?.iacucs?.length || 0;
+  const rooms = new Set(
+    occupanciesForPi(context.pi)
+      .filter((item) => occupancyOverlapsMonthLocal(item, context.month))
+      .map((item) => item.roomName || roomNameById(item.roomId))
+      .filter(Boolean),
+  );
+  return {
+    statement,
+    matched: statement ? iacucCount : 0,
+    iacucCount,
+    roomText: rooms.size ? [...rooms].join("、") : "-",
+    note: statement?.iacucs?.length ? `已自动纳入 ${statement.iacucs.length} 个 IACUC 的笼位占用` : "当前项目负责人没有可结算占用。",
+  };
+}
+
+function renderBillingSettlementPanel() {
+  const context = settlementContext();
+  const summary = billingSettlementSummary(context);
+  const statement = summary.statement;
+  const canGenerateStatement = !remotePersistence || Boolean(currentUser);
+  const canUseSettlement = canGenerateStatement && Boolean(context.month && context.pi && (remotePersistence || statement));
+  const collapsed = panelCollapsed("billingSettlement");
+  const summaryText = [billingSourceLabel(context.source), context.month, context.pi || "未选负责人"].filter(Boolean).join(" · ");
+  return `
+    <section class="panel billing-settlement-panel">
+      ${renderPanelHead({
+        title: "按项目负责人结算",
+        helpKey: "settlementWorkflow",
+        compact: true,
+        actions: `
+          ${renderPanelSummaryChip(statement ? `${summaryText} · ¥${MONEY_FORMAT.format(statement.totalAmount)}` : summaryText)}
+          ${renderCollapseToggle("billingSettlement", collapsed)}
+        `,
+      })}
+      ${collapsed ? "" : `
+      <div class="billing-settlement-grid">
+        <div class="billing-settlement-controls">
+          <label>
+            数据来源
+            <select id="settlementSource">
+              <option value="cage_map" ${context.source === "cage_map" ? "selected" : ""}>动态笼位图</option>
+              <option value="quantity_sheet" ${context.source === "quantity_sheet" ? "selected" : ""}>数量统计表</option>
+            </select>
+          </label>
+          <label>
+            月份
+            <input id="settlementMonth" type="month" value="${escapeAttr(context.month)}" max="${escapeAttr(today.slice(0, 7))}" />
+          </label>
+          <label>
+            项目负责人
+            <input id="settlementPi" type="text" value="${escapeAttr(context.pi)}" list="settlementPiOptions" placeholder="请选择项目负责人" />
+          </label>
+          <datalist id="settlementPiOptions">
+            ${piOptions(context.pi)
+              .map((item) => `<option value="${escapeAttr(item.pi)}" label="${escapeAttr(item.iacucs.join("、"))}"></option>`)
+              .join("")}
+          </datalist>
+        </div>
+        <div class="billing-settlement-actions">
+          <button id="previewSettlementStatement" class="secondary info-button" type="button" ${canUseSettlement ? "" : "disabled"}>${iconSvg("eye")}生成结算预览</button>
+          <button id="exportSettlementPanelPdf" class="secondary info-button" type="button" ${canUseSettlement ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
+          <button id="generateSettlementPanelWorkflow" class="primary flow-button" type="button" ${canUseSettlement ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
+        </div>
+      </div>
+      <div class="billing-settlement-summary">
+        ${summaryTile("数据来源", billingSourceLabel(context.source))}
+        ${summaryTile("IACUC 数", summary.iacucCount)}
+        ${summaryTile("统计表数", context.source === "quantity_sheet" ? summary.matched : "-")}
+        ${summaryTile("涉及房间", summary.roomText)}
+        ${summaryTile("减免笼日", statement ? statement.totalFreeCageDays : "-")}
+        ${summaryTile("预计金额", statement ? `¥${MONEY_FORMAT.format(statement.totalAmount)}` : "-")}
+      </div>
+      <p class="billing-settlement-note ${statement ? "" : "empty"}">${escapeText(summary.note)}</p>
+      `}
+    </section>
+  `;
+}
+
 function renderQuantitySheetBillingView() {
   const draft = state.quantitySheetDraft || makeQuantitySheetDraft(state.billingMonth);
   const quantityLoading = remotePersistence && lazyDataState.quantitySheetsLoading && !state.quantitySheets.length;
@@ -6438,13 +6671,13 @@ function renderQuantitySheetBillingView() {
       <div class="panel large quantity-editor-panel quantity-entry-panel">
         <form id="quantitySheetForm">
           ${renderPanelHead({
-            title: "数量统计表结算",
+            title: "数量统计表（录入）",
             helpKey: "quantityBilling",
             actions: `
             <div class="quantity-sheet-actions quantity-sheet-head-actions">
               ${renderQuantityAnimalDetailToggle(animalDetails)}
-              <button id="newQuantitySheet" class="secondary" type="button">${iconSvg("plus")}新建</button>
-              <button id="saveQuantitySheet" class="secondary" type="submit" title="${escapeAttr(saveHint)}">${iconSvg("save")}保存统计表</button>
+              <button id="newQuantitySheet" class="secondary info-button" type="button">${iconSvg("plus")}新建</button>
+              <button id="saveQuantitySheet" class="primary" type="submit" title="${escapeAttr(saveHint)}">${iconSvg("save")}保存统计表</button>
             </div>
             `,
           })}
@@ -6510,7 +6743,7 @@ function renderQuantitySheetBillingView() {
             <input type="hidden" name="animalDetailEnabled" value="${animalDetails.enabled ? "true" : "false"}" />
           </div>
           <div class="quantity-page-toolbar compact">
-            <button id="addQuantitySheetPage" class="secondary" type="button">${iconSvg("plus")}新增统计表页</button>
+            <button id="addQuantitySheetPage" class="secondary info-button" type="button">${iconSvg("plus")}新增统计表页</button>
           </div>
           <div class="quantity-entry-wrap">
             ${renderQuantitySheetCalendarPages(draft)}
@@ -6520,7 +6753,7 @@ function renderQuantitySheetBillingView() {
       <div class="panel quantity-saved-panel">
         ${renderSavedQuantitySheetsPanel(quantityLoading)}
       </div>
-      ${renderQuantitySheetDetailModal()}
+      ${state.viewingQuantitySheetMode === "edit" ? renderQuantitySheetDetailModal() : ""}
     </section>
   `;
 }
@@ -6533,8 +6766,8 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
   const selectedIds = new Set(state.selectedQuantitySheetIds || []);
   const selectedCount = selectedIds.size;
   const allVisibleSelected = Boolean(filteredItems.length) && filteredItems.every((sheet) => selectedIds.has(sheet.id));
-  const canGenerateStatement = !remotePersistence || Boolean(currentUser);
-  const canUseSheetAction = selectedCount > 0 && canGenerateStatement;
+  const canUseSheetAction = selectedCount > 0;
+  const collapsed = panelCollapsed("quantitySavedList");
   return `
     <div class="quantity-saved-list-section">
       ${renderPanelHead({
@@ -6542,6 +6775,11 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
         helpKey: "quantityPreview",
         compact: true,
         actions: `
+          ${renderPanelSummaryChip(`${filteredItems.length} 条 · 已选 ${selectedCount}`)}
+          ${renderCollapseToggle("quantitySavedList", collapsed)}
+        `,
+      })}
+      ${collapsed ? "" : `
           ${renderCommandBar({
             className: "quantity-saved-command",
             filters: `
@@ -6556,16 +6794,13 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
             `,
             actions: `
               <button id="deleteSelectedQuantitySheets" class="ghost danger-text" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
-              <button id="exportBilling" class="secondary" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
-              <button id="exportSettlementPdf" class="secondary" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("download")}导出结算单 PDF</button>
-              <button id="generateBillingWorkflow" class="primary quantity-workflow-button" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("refresh")}发起结算流程</button>
+              <button id="exportBilling" class="secondary info-button" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
             `,
           })}
-        `,
-      })}
       ${renderListMeta({
         left: `当前命中 ${filteredItems.length} / 已加载 ${items.length} 条 · 已选 ${selectedCount} 条`,
       })}
+      <p class="quantity-saved-hint">勾选用于导出数量统计表或删除统计表；结算单请在下方“按项目负责人结算”区生成。</p>
       <div class="table-wrap quantity-saved-list">
         <table class="dense-table">
           <thead>
@@ -6577,6 +6812,7 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
         </table>
       </div>
       ${remotePersistence ? renderPager("quantitySheets", page, page.total || items.length) : ""}
+      `}
     </div>
   `;
 }
@@ -6589,11 +6825,12 @@ function renderQuantitySheetDetailModal() {
   return renderModalFrame({
     backdropId: "closeQuantitySheetDetail",
     closeButtonId: "closeQuantitySheetDetailButton",
-    className: `quantity-sheet-detail-modal ${mode === "edit" ? "edit-mode" : "preview-mode"}`,
+    className: `quantity-sheet-detail-modal ${mode === "edit" ? "edit-mode" : `preview-mode ${previewPopoverClass()}`}`,
     title: mode === "edit" ? "编辑数量统计表" : "预览数量统计表",
     subtitle: [sheet.month, sheet.iacuc, sheet.pi].filter(Boolean).join(" · "),
     helpKey: mode === "edit" ? "quantityBilling" : "quantityPreview",
     actions: mode === "edit" ? `<button id="saveQuantitySheetDetail" class="primary" type="submit" form="quantitySheetDetailForm" title="${escapeAttr(saveHint)}">${iconSvg("save")}保存修改</button>` : "",
+    style: mode === "edit" ? "" : previewPopoverStyle(),
     body: mode === "edit" ? renderSavedQuantitySheetEditor(sheet) : renderSavedQuantitySheetPreview(sheet),
   });
 }
@@ -6720,8 +6957,8 @@ function renderSavedQuantitySheetRow(sheet, selectedIds) {
       <td>${escapeText(sheet.pi || "-")}</td>
       <td>${escapeText(formatLogTime(sheet.updatedAt) || "-")}</td>
       <td class="quantity-row-actions">
-        <button class="secondary compact" type="button" data-preview-quantity-sheet="${escapeAttr(sheet.id)}">预览</button>
-        <button class="secondary compact" type="button" data-edit-quantity-sheet="${escapeAttr(sheet.id)}">编辑</button>
+        <button class="secondary info-button compact" type="button" data-preview-quantity-sheet="${escapeAttr(sheet.id)}">预览</button>
+        <button class="secondary info-button compact" type="button" data-edit-quantity-sheet="${escapeAttr(sheet.id)}">编辑</button>
         <button class="ghost danger-text compact" type="button" data-delete-quantity-sheet-row="${escapeAttr(sheet.id)}">${iconSvg("trash")}删除</button>
       </td>
     </tr>
@@ -6768,7 +7005,7 @@ function renderBillingWorkflowPanel() {
               <input id="reimbursementPiFilter" type="search" value="${escapeAttr(state.reimbursementSearchPi)}" placeholder="检索项目负责人" />
               <label class="checkbox-label reimbursement-unpaid-toggle"><input id="reimbursementOnlyUnpaid" type="checkbox" ${state.reimbursementOnlyUnpaid ? "checked" : ""} />仅看有欠缴</label>
             `,
-            actions: `<button class="secondary" type="button" id="applyReimbursementFilters">${iconSvg("search")}检索</button>`,
+            actions: `<button class="secondary info-button" type="button" id="applyReimbursementFilters">${iconSvg("search")}检索</button>`,
           })}
           `,
         })}
@@ -6824,9 +7061,9 @@ function renderBillingWorkflowRow(item) {
       <td>${escapeText(formatLogTime(item.latestEventAt || item.generatedAt || "")) || "-"}</td>
       <td>
         <div class="workflow-row-actions">
-          <button class="secondary" type="button" data-open-reimbursement-button="${escapeAttr(item.id)}">查看</button>
-          <button class="secondary" type="button" data-open-reimbursement-button="${escapeAttr(item.id)}">登记报销</button>
-          <button class="secondary" type="button" data-complete-reimbursement="${escapeAttr(item.id)}" ${Number(item.paidAmount || 0) + 1e-9 < Number(item.payableAmount || 0) ? "disabled" : ""}>标记完成</button>
+          <button class="secondary info-button" type="button" data-open-reimbursement-button="${escapeAttr(item.id)}">查看</button>
+          <button class="secondary flow-button" type="button" data-open-reimbursement-button="${escapeAttr(item.id)}">登记报销</button>
+          <button class="secondary flow-button" type="button" data-complete-reimbursement="${escapeAttr(item.id)}" ${Number(item.paidAmount || 0) + 1e-9 < Number(item.payableAmount || 0) ? "disabled" : ""}>标记完成</button>
           <button class="ghost danger-text" type="button" data-delete-reimbursement="${escapeAttr(item.id)}">删除</button>
         </div>
       </td>
@@ -6961,7 +7198,7 @@ function renderBillingWorkflowDetailModal() {
             </label>
             <div class="form-actions">
               <button class="primary" type="submit">${iconSvg("save")}保存报销登记</button>
-              <button class="secondary" type="button" data-complete-reimbursement="${escapeAttr(record.id || "")}" ${Number(record.paidAmount || 0) + 1e-9 < Number(record.payableAmount || 0) ? "disabled" : ""}>标记完成</button>
+              <button class="secondary flow-button" type="button" data-complete-reimbursement="${escapeAttr(record.id || "")}" ${Number(record.paidAmount || 0) + 1e-9 < Number(record.payableAmount || 0) ? "disabled" : ""}>标记完成</button>
             </div>
           </form>
         </section>
@@ -6985,13 +7222,18 @@ function renderBillingWorkflowDetailModal() {
                 <div class="workflow-event-list">${eventsHtml}</div>
                 ${
                   nextWorkflowStep
-                    ? `<button class="secondary" type="button" data-advance-workflow="${escapeAttr(workflow.id)}" data-next-status="${escapeAttr(nextWorkflowStep)}">${escapeText(workflowActionLabel(nextWorkflowStep))}</button>`
+                    ? `<button class="secondary flow-button" type="button" data-advance-workflow="${escapeAttr(workflow.id)}" data-next-status="${escapeAttr(nextWorkflowStep)}">${escapeText(workflowActionLabel(nextWorkflowStep))}</button>`
                     : ""
                 }
               </section>
             </div>
             <section class="panel workflow-detail-card">
-              ${renderPanelHead({ title: "当前结算单明细", helpKey: "workflowLines", compact: true, actions: `<button class="secondary workflow-statement-toggle ${state.showReimbursementWorkflowLines ? "active" : ""}" type="button" data-toggle-reimbursement-workflow-lines>${iconSvg("receipt")}展开结算单明细</button>` })}
+              ${renderPanelHead({
+                title: "当前结算单明细",
+                helpKey: "workflowLines",
+                compact: true,
+                actions: `<button class="secondary ${state.showReimbursementWorkflowLines ? "flow-button state-active-button" : "info-button"} workflow-statement-toggle ${state.showReimbursementWorkflowLines ? "active" : ""}" type="button" data-toggle-reimbursement-workflow-lines>${iconSvg("receipt")}${state.showReimbursementWorkflowLines ? "收起结算单明细" : "展开结算单明细"}</button>`,
+              })}
               ${
                 state.showReimbursementWorkflowLines
                   ? `
@@ -7607,7 +7849,7 @@ function renderRoomManagementView() {
           ${renderPanelHead({
             title: "饲养间与笼架",
             helpKey: "rooms",
-            actions: canManageRooms ? `<button id="resetDemo" class="secondary">${iconSvg("refresh")}重置示例数据</button>` : "",
+            actions: canManageRooms ? `<button id="resetDemo" class="secondary warning-button">${iconSvg("refresh")}重置示例数据</button>` : "",
           })}
           <div class="room-list">
             ${visibleRooms().map(renderRoomCard).join("") || `<p class="muted">当前账号没有授权饲养间。</p>`}
@@ -7616,8 +7858,8 @@ function renderRoomManagementView() {
         <div class="panel">
           ${renderPanelHead({ title: "编辑操作", helpKey: "roomActions", compact: true })}
           <div class="form-actions">
-            ${canManageRooms ? `<button class="secondary" type="button" id="openRoomForm">${iconSvg("plus")}新增饲养间</button>` : ""}
-            <button class="secondary" type="button" id="openRackForm" ${visibleRooms().length ? "" : "disabled"}>${iconSvg("plus")}新增笼架</button>
+            ${canManageRooms ? `<button class="secondary info-button" type="button" id="openRoomForm">${iconSvg("plus")}新增饲养间</button>` : ""}
+            <button class="secondary info-button" type="button" id="openRackForm" ${visibleRooms().length ? "" : "disabled"}>${iconSvg("plus")}新增笼架</button>
           </div>
         </div>
         ${
@@ -7631,7 +7873,7 @@ function renderRoomManagementView() {
             <div class="editor-modal-backdrop" id="closeRackForm"></div>
             <div class="panel detail-panel editor-modal">
               <div class="editor-modal-actions">
-                <button class="secondary" type="button" id="closeRackFormButton">${iconSvg("chevronRight")}关闭编辑</button>
+                <button class="secondary info-button" type="button" id="closeRackFormButton">${iconSvg("chevronRight")}关闭编辑</button>
               </div>
               ${renderPanelHead({ title: "新增笼架", helpKey: "rackForm", compact: true })}
               <form id="rackForm" class="form">
@@ -7678,7 +7920,7 @@ function renderRoomForm(room) {
     <div class="editor-modal-backdrop" id="closeRoomForm"></div>
     <div class="panel detail-panel editor-modal">
       <div class="editor-modal-actions">
-        <button class="secondary" type="button" id="closeRoomFormButton">${iconSvg("chevronRight")}关闭编辑</button>
+        <button class="secondary info-button" type="button" id="closeRoomFormButton">${iconSvg("chevronRight")}关闭编辑</button>
       </div>
       ${renderPanelHead({ title: isEditing ? "编辑饲养间" : "新增饲养间", helpKey: "roomForm", compact: true })}
       <form id="roomForm" class="form">
@@ -7924,8 +8166,8 @@ function renderPrincipalIdentityPanel() {
       ${renderPanelHead({ title: "项目负责人身份", helpKey: "principalIdentity", compact: true })}
       <div class="toolbar">
         <input id="principalIdentityFilter" type="search" value="${escapeAttr(state.principalIdentityFilter)}" placeholder="检索姓名、PI、独立科研人员、10 或 20" />
-        <button id="applyPrincipalIdentityFilter" class="secondary" type="button">${iconSvg("search")}检索</button>
-        <button id="clearPrincipalIdentityFilter" class="secondary" type="button">清空</button>
+        <button id="applyPrincipalIdentityFilter" class="secondary info-button" type="button">${iconSvg("search")}检索</button>
+        <button id="clearPrincipalIdentityFilter" class="secondary warning-button" type="button">清空</button>
         <span class="muted">${loading ? "正在加载负责人身份" : `${items.length} / ${allItems.length} 人`}</span>
       </div>
       <div class="table-wrap">
@@ -7965,7 +8207,7 @@ function renderPrincipalIdentityRow(item) {
         </select>
       </td>
       <td>${freeCageAllowanceForPrincipalType(principalType)}</td>
-      <td><button class="secondary" type="button" data-save-principal="${escapeAttr(item.pi)}">${iconSvg("save")}保存</button></td>
+      <td><button class="secondary info-button" type="button" data-save-principal="${escapeAttr(item.pi)}">${iconSvg("save")}保存</button></td>
     </tr>
   `;
 }
@@ -7989,7 +8231,7 @@ function renderSystemUpdateCard() {
       ${info?.checkedAt ? `<p>检查时间：${escapeText(formatLogTime(info.checkedAt))}</p>` : ""}
       ${info?.error ? `<p class="error-text">${escapeText(info.error)}</p>` : ""}
       <div class="update-card-actions">
-        <button id="checkSystemUpdate" class="secondary" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
+        <button id="checkSystemUpdate" class="secondary warning-button" type="button">${iconSvg("refresh")}${info?.loading ? "检查中" : "检查更新"}</button>
       </div>
     </div>
   `;
@@ -8124,14 +8366,14 @@ function renderReimbursementImportPanel() {
           月汇总 Excel
           <input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
         </label>
-        <button class="secondary" type="submit">${iconSvg("upload")}导入月汇总</button>
+        <button class="secondary info-button" type="submit">${iconSvg("upload")}导入月汇总</button>
       </form>
       <form id="arrearsReimbursementImportForm" class="form">
         <label class="field-required">
           欠缴汇算 Excel
           <input name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
         </label>
-        <button class="secondary" type="submit">${iconSvg("upload")}导入欠缴汇算</button>
+        <button class="secondary info-button" type="submit">${iconSvg("upload")}导入欠缴汇算</button>
       </form>
     </div>
   `;
@@ -8175,7 +8417,7 @@ function renderUserRow(user) {
           isCurrent
             ? `<span class="muted">当前账号</span>`
             : `
-              <button class="secondary" type="submit">${iconSvg("save")}保存</button>
+              <button class="secondary info-button" type="submit">${iconSvg("save")}保存</button>
               <button class="icon-danger" type="button" data-delete-user="${escapeAttr(user.id)}" aria-label="删除 ${escapeAttr(user.displayName)}">${iconSvg("trash")}</button>
             `
         }
@@ -8253,8 +8495,8 @@ function renderPager(kind, pageState, total) {
       </label>
       <span class="muted">第 ${page} / ${pages} 页 · 共 ${total} 条</span>
       <div class="pager-actions">
-        <button class="secondary" type="button" data-page-prev="${escapeAttr(kind)}" ${prevDisabled}>上一页</button>
-        <button class="secondary" type="button" data-page-next="${escapeAttr(kind)}" ${nextDisabled}>下一页</button>
+        <button class="secondary info-button" type="button" data-page-prev="${escapeAttr(kind)}" ${prevDisabled}>上一页</button>
+        <button class="secondary info-button" type="button" data-page-next="${escapeAttr(kind)}" ${nextDisabled}>下一页</button>
       </div>
     </div>
   `;
@@ -8364,7 +8606,7 @@ function renderRackEditForm(room, rack) {
       </label>
       <div class="rack-edit-actions">
         <button class="primary" type="submit">${iconSvg("save")}保存</button>
-        <button class="secondary" type="button" data-cancel-rack-edit="${escapeAttr(rack.id)}">取消</button>
+        <button class="secondary info-button" type="button" data-cancel-rack-edit="${escapeAttr(rack.id)}">取消</button>
       </div>
     </form>
   `;
@@ -8509,8 +8751,40 @@ function bindEvents() {
       updateBillingPi(event.target.value);
     }
   });
+  document.querySelector("#settlementSource")?.addEventListener("change", (event) => {
+    updateSettlementContext({ source: event.target.value });
+    scheduleRender("settlement.source");
+  });
+  document.querySelector("#settlementMonth")?.addEventListener("change", (event) => {
+    updateSettlementContext({ month: event.target.value });
+    scheduleRender("settlement.month");
+  });
+  document.querySelector("#settlementPi")?.addEventListener("change", (event) => {
+    updateSettlementContext({ pi: event.target.value });
+    scheduleRender("settlement.pi");
+  });
+  document.querySelector("#settlementPi")?.addEventListener("blur", (event) => {
+    updateSettlementContext({ pi: event.target.value });
+    scheduleRender("settlement.pi.blur");
+  });
+  document.querySelector("#settlementPi")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      updateSettlementContext({ pi: event.target.value });
+      scheduleRender("settlement.pi.enter");
+    }
+  });
   document.querySelector("#exportBilling")?.addEventListener("click", exportBillingCsv);
   document.querySelector("#exportSettlementPdf")?.addEventListener("click", exportSettlementPdf);
+  document.querySelector("#previewSettlementStatement")?.addEventListener("click", previewSettlementStatement);
+  document.querySelector("#exportSettlementPanelPdf")?.addEventListener("click", exportSettlementPanelPdf);
+  document.querySelector("#generateSettlementPanelWorkflow")?.addEventListener("click", async () => {
+    try {
+      await persistSettlementWorkflowFromPanel();
+    } catch (error) {
+      reportSaveError(error);
+    }
+  });
   document.querySelector("#generateBillingWorkflow")?.addEventListener("click", async () => {
     try {
       await persistBillingWorkflowFromCurrent();
@@ -8645,6 +8919,7 @@ function bindEvents() {
       pushLog(`保存待接收批次：${savedBatch.batchNo || savedBatch.id}`);
       state.selectedIntakeBatchId = "";
       state.intakeBatchDraft = makeIncomingBatchDraft();
+      setPanelCollapsed("intakeBatchList", false);
       showFlashNotice("保存成功", `已保存为待接收批次：${savedBatch.batchNo || savedBatch.id}`);
       scheduleRender("intake_batch.create");
     } catch (error) {
@@ -8694,17 +8969,20 @@ function bindEvents() {
       reportSaveError(error);
     }
   });
-  document.querySelector("#previewCurrentCageCard")?.addEventListener("click", () => {
+  document.querySelector("#previewCurrentCageCard")?.addEventListener("click", (event) => {
     captureIntakeBatchDraft();
+    setPreviewPopoverAnchorFromElement(event.currentTarget);
     state.showIntakeCardPreview = true;
     scheduleRender("intake_card.preview.open");
   });
   document.querySelector("#closeIntakeCardPreview")?.addEventListener("click", () => {
     state.showIntakeCardPreview = false;
+    state.previewPopoverAnchor = null;
     scheduleRender("intake_card.preview.close");
   });
   document.querySelector("#closeIntakeCardPreviewButton")?.addEventListener("click", () => {
     state.showIntakeCardPreview = false;
+    state.previewPopoverAnchor = null;
     scheduleRender("intake_card.preview.close");
   });
   document.querySelector("#startCageCardScanner")?.addEventListener("click", () => {
@@ -8799,6 +9077,13 @@ function bindEvents() {
     }
   });
   appRoot?.addEventListener("click", async (event) => {
+    const panelToggle = event.target.closest("[data-toggle-panel]");
+    if (panelToggle) {
+      const key = panelToggle.dataset.togglePanel;
+      setPanelCollapsed(key, !panelCollapsed(key));
+      scheduleRender(`panel.toggle.${key}`);
+      return;
+    }
     const viewButton = event.target.closest("[data-view]");
     if (viewButton) {
       if (state.activeView === "cage-card-scanner" && viewButton.dataset.view !== "cage-card-scanner") {
@@ -8921,6 +9206,9 @@ function bindEvents() {
     if (billingSourceButton) {
       captureQuantitySheetDraft();
       state.billingSource = billingSourceButton.dataset.billingSource;
+      state.settlementSource = state.billingSource;
+      state.settlementMonth = state.billingMonth || state.settlementMonth;
+      state.settlementPi = state.billingPi || state.settlementPi;
       scheduleRender("billing.source");
       if (state.activeView === "billing") {
         try {
@@ -8935,7 +9223,7 @@ function bindEvents() {
     const previewQuantitySheetButton = event.target.closest("[data-preview-quantity-sheet]");
     if (previewQuantitySheetButton) {
       try {
-        await openQuantitySheetDetail(previewQuantitySheetButton.dataset.previewQuantitySheet, "preview");
+        await openQuantitySheetDetail(previewQuantitySheetButton.dataset.previewQuantitySheet, "preview", previewQuantitySheetButton);
       } catch (error) {
         reportSaveError(error);
       }
@@ -8944,6 +9232,7 @@ function bindEvents() {
     const editQuantitySheetButton = event.target.closest("[data-edit-quantity-sheet]");
     if (editQuantitySheetButton) {
       try {
+        state.previewPopoverAnchor = null;
         await openQuantitySheetDetail(editQuantitySheetButton.dataset.editQuantitySheet, "edit");
       } catch (error) {
         reportSaveError(error);
@@ -11164,6 +11453,25 @@ async function updateBillingPi(value) {
   scheduleRender("billing.pi");
 }
 
+function updateSettlementContext(patch = {}) {
+  if (patch.source !== undefined) state.settlementSource = patch.source === "quantity_sheet" ? "quantity_sheet" : "cage_map";
+  if (patch.month !== undefined) state.settlementMonth = patch.month || today.slice(0, 7);
+  if (patch.pi !== undefined) {
+    const rawPi = String(patch.pi || "").trim();
+    const match = piOptions(rawPi).find((item) => normalizePersonName(item.pi) === normalizePersonName(rawPi));
+    state.settlementPi = match?.pi || rawPi;
+  }
+}
+
+function syncBillingContextFromSettlement() {
+  const context = settlementContext();
+  state.billingSource = context.source;
+  state.billingMonth = context.month;
+  state.billingPi = context.pi;
+  state.billingPrincipalType = principalTypeForPi(context.pi);
+  state.freeCageAllowance = freeCageAllowanceForPi(context.pi);
+}
+
 async function handleQuantitySheetSubmit(event) {
   event.preventDefault();
   try {
@@ -11213,11 +11521,13 @@ async function handleQuantitySheetSelect(event) {
   await openQuantitySheetDetail(event.target.value, "preview");
 }
 
-async function openQuantitySheetDetail(sheetId, mode = "preview") {
+async function openQuantitySheetDetail(sheetId, mode = "preview", anchorElement = null) {
   const sheet = state.quantitySheets.find((item) => item.id === sheetId);
   state.selectedQuantitySheetId = sheet?.id || "";
   state.viewingQuantitySheetId = sheet?.id || "";
   state.viewingQuantitySheetMode = mode === "edit" ? "edit" : "preview";
+  if (state.viewingQuantitySheetMode === "preview") setPreviewPopoverAnchorFromElement(anchorElement);
+  else state.previewPopoverAnchor = null;
   await ensureQuantitySheetDetail(sheet);
   scheduleRender(`quantity_sheet.${state.viewingQuantitySheetMode}.open`);
 }
@@ -11266,6 +11576,12 @@ async function executePendingQuantitySheetSave() {
     state.viewingQuantitySheetId = savedSheet.id;
     state.viewingQuantitySheetMode = "preview";
     markSavedQuantitySheetForFeedback(savedSheet.id);
+    setPanelCollapsed("quantitySavedList", false);
+    updateSettlementContext({
+      source: "quantity_sheet",
+      month: savedSheet.month || state.billingMonth,
+      pi: savedSheet.pi || state.billingPi,
+    });
     showFlashNotice("保存成功", `数量统计表已更新：${savedSheet.iacuc || savedSheet.month}`, "success");
     scheduleRender("quantity_sheet.detail.submit");
     scrollSavedQuantitySheetIntoView(savedSheet.id);
@@ -11275,6 +11591,12 @@ async function executePendingQuantitySheetSave() {
   const optionalAnimalNotice = quantitySheetOptionalAnimalNotice(savedSheet);
   pushLog(`保存数量统计表：${savedSheet.iacuc || savedSheet.id}（${savedSheet.month}）`);
   markSavedQuantitySheetForFeedback(savedSheet.id);
+  setPanelCollapsed("quantitySavedList", false);
+  updateSettlementContext({
+    source: "quantity_sheet",
+    month: savedSheet.month || state.billingMonth,
+    pi: savedSheet.pi || state.billingPi,
+  });
   resetQuantitySheetDraftAfterSave(savedSheet);
   showFlashNotice("保存成功", optionalAnimalNotice || `数量统计表已保存：${savedSheet.iacuc || savedSheet.month}`, optionalAnimalNotice ? "warning" : "success");
   scheduleRender("quantity_sheet.submit");
@@ -11304,6 +11626,7 @@ function toggleVisibleQuantitySheetSelection(checked) {
 function closeQuantitySheetDetail() {
   state.viewingQuantitySheetId = "";
   state.viewingQuantitySheetMode = "preview";
+  state.previewPopoverAnchor = null;
   scheduleRender("quantity_sheet.detail.close");
 }
 
@@ -13979,6 +14302,112 @@ async function exportSettlementPdf() {
   opened.document.close();
   opened.focus();
   opened.print();
+}
+
+async function statementForSettlementPanel({ persist = false } = {}) {
+  syncBillingContextFromSettlement();
+  const context = settlementContext();
+  if (!context.pi || !context.month) {
+    throw new Error("请先选择项目负责人和结算月份");
+  }
+  if (context.source === "quantity_sheet") {
+    const sheets = quantitySettlementSheets(context.month, context.pi);
+    if (!remotePersistence) {
+      if (!sheets.length) throw new Error("当前月份和项目负责人下没有已保存数量统计表");
+      const statement = quantitySheetBillingStatement(sheets[0]);
+      return { statement, info: statementInfoForExport(statement) };
+    }
+  } else if (!remotePersistence) {
+    const statement = cageMapBillingStatement(context.pi, context.month);
+    return { statement, info: statementInfoForExport(statement) };
+  }
+
+  const response = await fetch(API_BILLING_STATEMENT_GENERATE_BY_PI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pi: context.pi,
+      month: context.month,
+      sourceType: context.source,
+      status: "draft",
+      persist,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    scheduleRender("auth.expired");
+    throw new Error("请先登录");
+  }
+  if (!response.ok) throw new Error(payload.error || (persist ? "发起结算流程失败" : "生成结算单失败"));
+  if (!payload.statement) throw new Error("生成结算单失败：服务端未返回结算单");
+  mergeServerAuditLogs(payload);
+  if (persist) {
+    if (payload.workflow) updateBillingWorkflowListFromServer(payload.workflow);
+    if (payload.reimbursementItem) updateReimbursementRecordListFromServer(payload.reimbursementItem);
+    lazyDataState.billingWorkflowsLoaded = false;
+    lazyDataState.billingWorkflowsLoading = false;
+    lazyDataState.reimbursementRecordsLoaded = false;
+  }
+  const statement = statementPayloadForExport(payload.statement, payload.lines || []);
+  return { statement, info: statementInfoForExport(statement), payload };
+}
+
+async function previewSettlementStatement() {
+  const opened = window.open("", "_blank");
+  if (!opened) {
+    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
+    return;
+  }
+  const exportData = await statementForSettlementPanel({ persist: false }).catch((error) => {
+    opened.close();
+    reportSaveError(error);
+    return null;
+  });
+  if (!exportData?.statement) return;
+  const { statement, info } = exportData;
+  const rowsWithCages = statement.rows.filter((row) => row.cageCount > 0);
+  const nonZeroRows = rowsWithCages.length ? rowsWithCages : statement.rows;
+  opened.document.write(settlementHtml(statement, info, nonZeroRows));
+  opened.document.close();
+  opened.focus();
+  pushLog(`预览结算单：${statement.pi} ${statement.month}`);
+  showFlashNotice("预览已生成", `${statement.month} ${statement.pi} 的结算单已打开。`, "success");
+}
+
+async function exportSettlementPanelPdf() {
+  const opened = window.open("", "_blank");
+  if (!opened) {
+    showFlashNotice("打开失败", "浏览器阻止了弹出窗口，请允许弹出窗口后重试。", "error");
+    return;
+  }
+  const exportData = await statementForSettlementPanel({ persist: false }).catch((error) => {
+    opened.close();
+    reportSaveError(error);
+    return null;
+  });
+  if (!exportData?.statement) return;
+  const { statement, info } = exportData;
+  const rowsWithCages = statement.rows.filter((row) => row.cageCount > 0);
+  const nonZeroRows = rowsWithCages.length ? rowsWithCages : statement.rows;
+  opened.document.write(settlementHtml(statement, info, nonZeroRows));
+  opened.document.close();
+  opened.focus();
+  opened.print();
+  pushLog(`导出结算单：${statement.pi} ${statement.month}`);
+}
+
+async function persistSettlementWorkflowFromPanel() {
+  if (!remotePersistence) {
+    throw new Error("本地离线模式不支持结算流程跟踪");
+  }
+  const startedAt = performance.now();
+  const { statement } = await statementForSettlementPanel({ persist: true });
+  const source = settlementSourceValue();
+  logClientPerf("billing_workflow.create", startedAt, { source });
+  pushLog(`发起结算流程：${statement.pi} ${statement.month}`);
+  showFlashNotice("发起成功", `结算流程已创建，请到流程中心跟踪 ${statement.month} ${statement.pi} 的进度。`);
+  return statement;
 }
 
 async function persistBillingWorkflowFromCurrent() {
