@@ -4,6 +4,14 @@ from server_app.cache import cache_get, cache_key, cache_set
 
 from .payload import dump_json
 
+QUANTITY_SHEET_LIST_COLUMNS = {
+    "month": {"expr": "month", "order": "month"},
+    "iacuc": {"expr": "iacuc", "order": "iacuc"},
+    "roomName": {"expr": "room_name", "order": "room_name"},
+    "pi": {"expr": "pi", "order": "pi"},
+    "updatedAt": {"expr": "updated_at", "order": "updated_at"},
+}
+
 
 def list_quantity_sheets(conn):
     rows = conn.execute("SELECT payload FROM quantity_sheets ORDER BY month DESC, iacuc, updated_at DESC").fetchall()
@@ -11,19 +19,15 @@ def list_quantity_sheets(conn):
 
 
 def list_quantity_sheets_page(conn, filters, filtered_where):
-    where, params = filtered_where(
-        [
-            ("month", "month = ?"),
-            ("iacuc", "iacuc = ?"),
-            ("pi", "pi = ?"),
-            ("roomId", "room_id = ?"),
-        ],
-        filters,
-    )
+    where, params = quantity_sheet_where(filters, filtered_where)
+    order_by = quantity_sheet_order_by(filters)
     key = cache_key(
         "quantity_sheets",
         limit=filters["limit"],
         offset=filters["offset"],
+        sort_key=str(filters.get("sortKey", "")).strip(),
+        sort_dir=str(filters.get("sortDir", "")).strip(),
+        column_filters=filters.get("columnFilters", {}),
         month=str(filters.get("month", "")).strip(),
         iacuc=str(filters.get("iacuc", "")).strip(),
         pi=str(filters.get("pi", "")).strip(),
@@ -53,7 +57,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
             json_extract(payload, '$.initialAnimalCount') AS initial_animal_count,
             json_extract(payload, '$.billingUnit') AS billing_unit
         FROM quantity_sheets{where_clause}
-        ORDER BY month DESC, iacuc, updated_at DESC
+        ORDER BY {order_by}
         LIMIT ? OFFSET ?
         """,
         (*params, filters["limit"], filters["offset"]),
@@ -68,6 +72,64 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         },
     }
     return cache_set(key, payload)
+
+
+def quantity_sheet_where(filters, filtered_where, exclude_column=""):
+    where, params = filtered_where(
+        [
+            ("month", "month = ?"),
+            ("iacuc", "iacuc = ?"),
+            ("pi", "pi = ?"),
+            ("roomId", "room_id = ?"),
+        ],
+        filters,
+    )
+    where_parts = [where] if where else []
+    next_params = list(params)
+    for key, values in (filters.get("columnFilters") or {}).items():
+        if key == exclude_column:
+            continue
+        spec = QUANTITY_SHEET_LIST_COLUMNS.get(key)
+        cleaned = [str(value).strip() for value in values if str(value).strip()]
+        if not spec or not cleaned:
+            continue
+        placeholders = ", ".join("?" for _ in cleaned)
+        where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
+        next_params.extend(cleaned)
+    return " AND ".join(where_parts), tuple(next_params)
+
+
+def quantity_sheet_order_by(filters):
+    sort_key = str(filters.get("sortKey", "") or "").strip()
+    sort_dir = "ASC" if str(filters.get("sortDir", "") or "").lower() == "asc" else "DESC"
+    spec = QUANTITY_SHEET_LIST_COLUMNS.get(sort_key)
+    if not spec:
+        return "month DESC, iacuc, updated_at DESC"
+    return f"{spec['order']} {sort_dir}, rowid DESC"
+
+
+def list_quantity_sheet_filter_options(conn, filters, filtered_where, column):
+    spec = QUANTITY_SHEET_LIST_COLUMNS.get(column)
+    if not spec:
+        return {"items": []}
+    where, params = quantity_sheet_where(filters, filtered_where, exclude_column=column)
+    where_clause = f" WHERE {where}" if where else ""
+    rows = conn.execute(
+        f"""
+        SELECT COALESCE({spec['expr']}, '') AS value, COUNT(*) AS count
+        FROM quantity_sheets{where_clause}
+        GROUP BY value
+        ORDER BY value COLLATE NOCASE
+        LIMIT 500
+        """,
+        params,
+    ).fetchall()
+    return {
+        "items": [
+            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]}
+            for row in rows
+        ],
+    }
 
 
 def quantity_sheet_list_row(row):

@@ -30,12 +30,25 @@ import {
   buildBillingWorkflowsUrl as buildBillingWorkflowsApiUrl,
   buildReimbursementRecordUrl as buildReimbursementRecordApiUrl,
   buildReimbursementRecordsUrl as buildReimbursementRecordsApiUrl,
+  buildQuantitySheetFilterOptionsUrl as buildQuantitySheetFilterOptionsApiUrl,
   buildQuantitySheetsUrl as buildQuantitySheetsApiUrl,
 } from "./api/billing.js";
-import { buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksUrl as buildPlacementTasksApiUrl } from "./api/intake.js";
+import { buildIntakeBatchFilterOptionsUrl as buildIntakeBatchFilterOptionsApiUrl, buildIntakeBatchesUrl as buildIntakeBatchesApiUrl, buildPlacementTasksUrl as buildPlacementTasksApiUrl } from "./api/intake.js";
 import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STORAGE_KEY, VERSION_REFRESH_KEY } from "./state/storage.js";
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
+  {
+    version: "0.5.25",
+    releasedAt: "2026-06-26 22:49",
+    title: "列表表头筛选与排序",
+    items: [
+      "已保存数量统计表和笼卡列表新增类 Excel 表头筛选，按当前展示列筛选全库数据",
+      "列表表头支持点击切换升序、降序和默认排序，筛选漏斗仅在悬停、聚焦、已筛选或打开时显示",
+      "移除已保存数量统计表独立搜索框和笼卡列表标签筛选，筛选入口统一收敛到表头",
+      "已保存数量统计表顶部仅保留导出操作，删除保留在列表行内逐条处理",
+    ],
+    notes: "筛选功能由 @吴玉婷 提出。",
+  },
   {
     version: "0.5.24",
     releasedAt: "2026-06-26 15:46",
@@ -1029,6 +1042,7 @@ let LIST_SECTION_CACHE = new Map();
 let UNIT_PRICE_CACHE = new Map();
 let DISCOUNT_CACHE = new Map();
 let QUANTITY_ENTRY_CONTROL_ORDER_CACHE = new WeakMap();
+let TABLE_FILTER_OPTIONS_CACHE = new Map();
 const HTML_SECTION_CACHE_LIMIT = 160;
 const DETAIL_DATA_CACHE_LIMIT = 80;
 const DERIVED_RENDER_CACHE_LIMIT = 80;
@@ -1042,7 +1056,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.24",
+  version: "0.5.25",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1113,6 +1127,61 @@ const paginationState = {
   placementTasks: { limit: 5, page: 1 },
   releaseNotes: { limit: 5, page: 1 },
 };
+
+const TABLE_COLUMN_DEFS = {
+  quantitySheets: [
+    { key: "month", label: "月份" },
+    { key: "iacuc", label: "IACUC" },
+    { key: "roomName", label: "房间" },
+    { key: "pi", label: "负责人" },
+    { key: "updatedAt", label: "更新时间" },
+  ],
+  intakeBatches: [
+    { key: "status", label: "状态", format: intakeStatusLabel },
+    { key: "batchNo", label: "批次号" },
+    { key: "supplier", label: "购买单位" },
+    { key: "pi", label: "项目负责人" },
+    { key: "owner", label: "实验负责人" },
+    { key: "quantity", label: "数量" },
+    { key: "roomName", label: "房间" },
+    { key: "intakeDate", label: "接收日期" },
+    { key: "cardCount", label: "笼卡" },
+  ],
+};
+
+function makeDefaultTableControls() {
+  return {
+    quantitySheets: { sortKey: "", sortDir: "", filters: {}, openFilter: "", filterSearch: "" },
+    intakeBatches: { sortKey: "", sortDir: "", filters: {}, openFilter: "", filterSearch: "" },
+  };
+}
+
+function normalizeTableControls(source = {}) {
+  const defaults = makeDefaultTableControls();
+  const next = {};
+  Object.keys(defaults).forEach((tableId) => {
+    const raw = source?.[tableId] && typeof source[tableId] === "object" ? source[tableId] : {};
+    const allowed = new Set(TABLE_COLUMN_DEFS[tableId].map((column) => column.key));
+    const sortKey = allowed.has(String(raw.sortKey || "")) ? String(raw.sortKey || "") : "";
+    const sortDir = ["asc", "desc"].includes(String(raw.sortDir || "")) ? String(raw.sortDir || "") : "";
+    const filters = {};
+    if (raw.filters && typeof raw.filters === "object") {
+      Object.entries(raw.filters).forEach(([key, values]) => {
+        if (!allowed.has(key) || !Array.isArray(values)) return;
+        const cleaned = values.map((value) => String(value || "").trim()).filter(Boolean);
+        if (cleaned.length) filters[key] = [...new Set(cleaned)];
+      });
+    }
+    next[tableId] = {
+      sortKey,
+      sortDir: sortKey ? sortDir || "asc" : "",
+      filters,
+      openFilter: allowed.has(String(raw.openFilter || "")) ? String(raw.openFilter || "") : "",
+      filterSearch: String(raw.filterSearch || ""),
+    };
+  });
+  return next;
+}
 const pagedLoadSeq = {
   quantitySheets: 0,
   reimbursementRecords: 0,
@@ -1188,12 +1257,6 @@ const INTAKE_STATUS_OPTIONS = [
   ["pending_print", "未打印"],
   ["printed", "已打印"],
   ["received", "已接收"],
-];
-const INTAKE_BATCH_FILTER_OPTIONS = [
-  ["unprinted", "未打印"],
-  ["printed", "已打印"],
-  ["received", "已接收"],
-  ["all", "全部"],
 ];
 const STRAIN_STANDARD_MAP = {
   c57: "C57BL/6J",
@@ -1679,6 +1742,7 @@ const seedData = {
   viewingQuantitySheetMode: "preview",
   recentSavedQuantitySheetId: "",
   quantitySheetListSearch: "",
+  tableControls: makeDefaultTableControls(),
   quantitySheetDraft: makeQuantitySheetDraft(today.slice(0, 7)),
   quantitySheets: [],
   quantitySheetRooms: [],
@@ -1690,7 +1754,7 @@ const seedData = {
   showPlacementTaskPanel: false,
   previewPopoverAnchor: null,
   reassigningPlacementReceiptId: "",
-  intakeBatchFilter: "unprinted",
+  intakeBatchFilter: "all",
   intakeBatchDraft: makeIncomingBatchDraft(),
   editingIntakeBatchId: "",
   editingIntakeBatchDraft: null,
@@ -1902,8 +1966,12 @@ function buildBootstrapUrl(scope = "summary", roomId = "") {
   return buildBootstrapApiUrl(scope, roomId);
 }
 
-function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId = "", limit = 50, offset = 0 } = {}) {
-  return buildQuantitySheetsApiUrl({ month, iacuc, pi, roomId, limit, offset });
+function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId = "", limit = 50, offset = 0, sortKey = "", sortDir = "", columnFilters = {} } = {}) {
+  return buildQuantitySheetsApiUrl({ month, iacuc, pi, roomId, limit, offset, sortKey, sortDir, columnFilters });
+}
+
+function buildQuantitySheetFilterOptionsUrl(options = {}) {
+  return buildQuantitySheetFilterOptionsApiUrl(options);
 }
 
 function buildBillingWorkflowsUrl({ month = "", status = "todo", limit = 50, offset = 0 } = {}) {
@@ -1926,8 +1994,12 @@ function buildBillingOccupanciesUrl({ month = "", iacuc = "", pi = "" } = {}) {
   return buildBillingOccupanciesApiUrl({ month, iacuc, pi });
 }
 
-function buildIntakeBatchesUrl({ status = "", month = "", limit = 5, offset = 0 } = {}) {
-  return buildIntakeBatchesApiUrl({ status, month, limit, offset });
+function buildIntakeBatchesUrl({ status = "", month = "", limit = 5, offset = 0, sortKey = "", sortDir = "", columnFilters = {} } = {}) {
+  return buildIntakeBatchesApiUrl({ status, month, limit, offset, sortKey, sortDir, columnFilters });
+}
+
+function buildIntakeBatchFilterOptionsUrl(options = {}) {
+  return buildIntakeBatchFilterOptionsApiUrl(options);
 }
 
 function buildPlacementTasksUrl({ roomId = "", month = "", status = "", limit = 5, offset = 0 } = {}) {
@@ -2211,10 +2283,11 @@ function localUiOnlyState(source = {}) {
     reimbursementSearchPi: source.reimbursementSearchPi || "",
     reimbursementOnlyUnpaid: source.reimbursementOnlyUnpaid ?? true,
     billingWorkflowFilter: source.billingWorkflowFilter || "todo",
+    tableControls: normalizeTableControls(source.tableControls),
     selectedQuantitySheetId: source.selectedQuantitySheetId || "",
-    quantitySheetListSearch: source.quantitySheetListSearch || "",
+    quantitySheetListSearch: "",
     selectedIntakeBatchId: source.selectedIntakeBatchId || "",
-    intakeBatchFilter: source.intakeBatchFilter || "unprinted",
+    intakeBatchFilter: "all",
     principalIdentityFilter: source.principalIdentityFilter || "",
   };
 }
@@ -2320,12 +2393,16 @@ async function loadIntakeBatchesPage(page = 1, limit = paginationState.intakeBat
   }
   const nextLimit = Math.max(Number(limit) || 10, 1);
   const nextPage = Math.max(Number(page) || 1, 1);
+  const tableControl = tableControlState("intakeBatches");
   const requestId = ++pagedLoadSeq.intakeBatches;
   const response = await fetch(
     buildIntakeBatchesUrl({
-      status: state.intakeBatchFilter || "unprinted",
+      status: state.intakeBatchFilter || "all",
       limit: nextLimit,
       offset: (nextPage - 1) * nextLimit,
+      sortKey: tableControl.sortKey,
+      sortDir: tableControl.sortDir,
+      columnFilters: tableControl.filters,
     }),
     { cache: "no-store" },
   );
@@ -2643,6 +2720,9 @@ async function loadQuantitySheets(options = {}) {
     roomId: options.roomId ?? paginationState.quantitySheets.roomId ?? "",
     limit: options.limit ?? paginationState.quantitySheets.limit,
     offset: options.offset ?? 0,
+    sortKey: tableControlState("quantitySheets").sortKey,
+    sortDir: tableControlState("quantitySheets").sortDir,
+    columnFilters: tableControlState("quantitySheets").filters,
   };
   const requestId = ++pagedLoadSeq.quantitySheets;
   const response = await fetch(buildQuantitySheetsUrl(filters), { cache: "no-store" });
@@ -3409,6 +3489,7 @@ function normalize(data) {
   next.selectedBillingWorkflowId = String(next.selectedBillingWorkflowId || "");
   next.selectedBillingWorkflowDetail = next.selectedBillingWorkflowDetail && typeof next.selectedBillingWorkflowDetail === "object" ? next.selectedBillingWorkflowDetail : null;
   next.showWorkflowStatements = Boolean(next.showWorkflowStatements);
+  next.tableControls = normalizeTableControls(next.tableControls);
   next.selectedIntakeBatchId = String(next.selectedIntakeBatchId || "");
   next.selectedIntakeBatchIds = Array.isArray(next.selectedIntakeBatchIds) ? next.selectedIntakeBatchIds.filter(Boolean) : [];
   next.selectedPlacementTaskId = String(next.selectedPlacementTaskId || "");
@@ -3426,7 +3507,7 @@ function normalize(data) {
         }
       : null;
   next.reassigningPlacementReceiptId = String(next.reassigningPlacementReceiptId || "");
-  next.intakeBatchFilter = INTAKE_BATCH_FILTER_OPTIONS.some(([value]) => value === next.intakeBatchFilter) ? next.intakeBatchFilter : "unprinted";
+  next.intakeBatchFilter = "all";
   next.intakeBatchDraft = normalizeIncomingBatchDraft(next.intakeBatchDraft || next.intakeBatches.find((item) => item.id === next.selectedIntakeBatchId) || makeIncomingBatchDraft());
   next.editingIntakeBatchId = String(next.editingIntakeBatchId || "");
   next.editingIntakeBatchDraft = next.editingIntakeBatchDraft ? normalizeIncomingBatchDraft(next.editingIntakeBatchDraft) : null;
@@ -4296,6 +4377,166 @@ function renderPanelSummaryChip(text, tone = "") {
   return `<span class="panel-summary-chip ${tone ? `tone-${escapeAttr(tone)}` : ""}">${escapeText(text)}</span>`;
 }
 
+function tableControlState(tableId) {
+  state.tableControls = normalizeTableControls(state.tableControls);
+  return state.tableControls[tableId];
+}
+
+function tableColumnDef(tableId, columnKey) {
+  return TABLE_COLUMN_DEFS[tableId]?.find((column) => column.key === columnKey) || null;
+}
+
+function renderFilterableTableHeader(tableId, columnKey, extraClass = "") {
+  const column = tableColumnDef(tableId, columnKey);
+  if (!column) return `<th>${escapeText(columnKey)}</th>`;
+  const control = tableControlState(tableId);
+  const isSorted = control.sortKey === columnKey;
+  const isFiltered = Array.isArray(control.filters[columnKey]) && control.filters[columnKey].length > 0;
+  const isOpen = control.openFilter === columnKey;
+  const sortLabel = isSorted ? `当前${control.sortDir === "desc" ? "降序" : "升序"}，点击切换排序` : "点击排序";
+  return `
+    <th class="filterable-th ${extraClass} ${isSorted ? "is-sorted" : ""} ${isFiltered ? "is-filtered" : ""} ${isOpen ? "is-filter-open" : ""}">
+      <button class="table-sort-button" type="button" data-table-sort="${escapeAttr(tableId)}" data-column="${escapeAttr(columnKey)}" aria-label="${escapeAttr(`${column.label}，${sortLabel}`)}">
+        <span>${escapeText(column.label)}</span>
+      </button>
+      <button class="table-filter-button" type="button" data-table-filter-open="${escapeAttr(tableId)}" data-column="${escapeAttr(columnKey)}" aria-label="筛选${escapeAttr(column.label)}">${iconSvg("filter")}</button>
+      ${isOpen ? renderTableFilterPanel(tableId, columnKey) : ""}
+    </th>
+  `;
+}
+
+function renderTableFilterPanel(tableId, columnKey) {
+  const control = tableControlState(tableId);
+  const cacheKey = tableFilterOptionsCacheKey(tableId, columnKey);
+  const options = TABLE_FILTER_OPTIONS_CACHE.get(cacheKey) || [];
+  const search = normalizeSearchText(control.filterSearch || "");
+  const selected = new Set(control.filters[columnKey] || []);
+  const visibleOptions = search
+    ? options.filter((item) => normalizeSearchText(`${item.label} ${item.value}`).includes(search))
+    : options;
+  return `
+    <div class="table-filter-panel" data-table-filter-panel="${escapeAttr(tableId)}" data-column="${escapeAttr(columnKey)}">
+      <div class="table-filter-search">
+        <input type="search" value="${escapeAttr(control.filterSearch || "")}" placeholder="搜索当前列" data-table-filter-search="${escapeAttr(tableId)}" data-column="${escapeAttr(columnKey)}" />
+      </div>
+      <div class="table-filter-options">
+        ${
+          visibleOptions.length
+            ? visibleOptions
+                .map((item) => `
+                  <label>
+                    <input type="checkbox" data-table-filter-value="${escapeAttr(tableId)}" data-column="${escapeAttr(columnKey)}" value="${escapeAttr(item.value)}" ${selected.has(item.value) ? "checked" : ""} />
+                    <span>${escapeText(item.label)}</span>
+                    <small>${escapeText(item.count ?? "")}</small>
+                  </label>
+                `)
+                .join("")
+            : `<p class="muted">当前列没有可选项。</p>`
+        }
+      </div>
+      <div class="table-filter-actions">
+        <button class="ghost compact" type="button" data-table-filter-clear="${escapeAttr(tableId)}" data-column="${escapeAttr(columnKey)}">清空</button>
+        <button class="primary compact" type="button" data-table-filter-apply="${escapeAttr(tableId)}">应用</button>
+      </div>
+    </div>
+  `;
+}
+
+function tableFilterOptionsCacheKey(tableId, columnKey) {
+  const control = tableControlState(tableId);
+  return [
+    tableId,
+    columnKey,
+    control.sortKey || "",
+    control.sortDir || "",
+    JSON.stringify(control.filters || {}),
+    state.intakeBatchFilter || "",
+    paginationState.quantitySheets.month || "",
+    paginationState.quantitySheets.iacuc || "",
+    paginationState.quantitySheets.pi || "",
+    paginationState.quantitySheets.roomId || "",
+  ].join("::");
+}
+
+async function loadTableFilterOptions(tableId, columnKey) {
+  const cacheKey = tableFilterOptionsCacheKey(tableId, columnKey);
+  if (TABLE_FILTER_OPTIONS_CACHE.has(cacheKey)) return TABLE_FILTER_OPTIONS_CACHE.get(cacheKey);
+  if (!remotePersistence) {
+    const sourceItems = tableId === "quantitySheets"
+      ? filterSavedQuantitySheets(state.quantitySheets || [], "")
+      : filteredIntakeBatches();
+    const counts = new Map();
+    sourceItems.forEach((item) => {
+      const value = tableCellValue(tableId, columnKey, item);
+      counts.set(value, (counts.get(value) || 0) + 1);
+    });
+    const column = tableColumnDef(tableId, columnKey);
+    const options = [...counts.entries()]
+      .sort(([a], [b]) => String(a).localeCompare(String(b), "zh-CN", { numeric: true }))
+      .map(([value, count]) => ({
+        value: String(value || ""),
+        label: column?.format ? column.format(value) : String(value || "空白"),
+        count,
+      }));
+    TABLE_FILTER_OPTIONS_CACHE.set(cacheKey, options);
+    return options;
+  }
+  const control = tableControlState(tableId);
+  const url = tableId === "quantitySheets"
+    ? buildQuantitySheetFilterOptionsUrl({
+        column: columnKey,
+        month: paginationState.quantitySheets.month || "",
+        iacuc: paginationState.quantitySheets.iacuc || "",
+        pi: paginationState.quantitySheets.pi || "",
+        roomId: paginationState.quantitySheets.roomId || "",
+        sortKey: control.sortKey,
+        sortDir: control.sortDir,
+        columnFilters: control.filters,
+      })
+    : buildIntakeBatchFilterOptionsUrl({
+        column: columnKey,
+        status: state.intakeBatchFilter || "all",
+        sortKey: control.sortKey,
+        sortDir: control.sortDir,
+        columnFilters: control.filters,
+      });
+  const response = await fetch(url, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    currentUser = null;
+    scheduleRender("auth.expired");
+    throw new Error("请先登录");
+  }
+  if (!response.ok) throw new Error(payload.error || "加载筛选选项失败");
+  const column = tableColumnDef(tableId, columnKey);
+  const options = (payload.items || []).map((item) => ({
+    value: String(item.value || ""),
+    label: column?.format ? column.format(item.value) : String(item.label || item.value || "空白"),
+    count: item.count,
+  }));
+  TABLE_FILTER_OPTIONS_CACHE.set(cacheKey, options);
+  return options;
+}
+
+function setTableSort(tableId, columnKey) {
+  const control = tableControlState(tableId);
+  if (control.sortKey !== columnKey) {
+    control.sortKey = columnKey;
+    control.sortDir = "asc";
+  } else if (control.sortDir === "asc") {
+    control.sortDir = "desc";
+  } else {
+    control.sortKey = "";
+    control.sortDir = "";
+  }
+}
+
+async function reloadControlledTable(tableId) {
+  if (tableId === "quantitySheets") await goToQuantitySheetsPage(1, paginationState.quantitySheets.limit);
+  if (tableId === "intakeBatches") await goToIntakeBatchesPage(1, paginationState.intakeBatches.limit);
+  scheduleStatePersist();
+}
+
 function renderCollapseToggle(key, collapsed) {
   const stateClass = collapsed ? "info-button" : "flow-button state-active-button";
   return `
@@ -4341,8 +4582,9 @@ function renderGlobalPreviewModals() {
 
 function renderCommandBar({ filters = "", actions = "", meta = "", className = "" } = {}) {
   if (!filters && !actions && !meta) return "";
+  const emptyFilterClass = filters ? "" : " no-filters";
   return `
-    <div class="command-bar ${escapeAttr(className)}">
+    <div class="command-bar ${escapeAttr(`${className}${emptyFilterClass}`.trim())}">
       <div class="command-bar-filters">${filters}</div>
       ${meta ? `<div class="command-bar-meta">${meta}</div>` : ""}
       <div class="command-bar-actions">${actions}</div>
@@ -5936,10 +6178,9 @@ function renderIntakeBatchView() {
         title: "笼卡管理",
         helpKey: "intake",
         summary: "从预约消息识别批次信息，保存待接收记录，统一打印笼卡并推进到待进驻任务。",
-        status: `${visibleBatches.length} 个当前筛选批次`,
+        status: `${visibleBatches.length} 个批次`,
         metrics: [
           { label: "待接收批次", value: allVisibleBatches.length },
-          { label: "当前筛选", value: intakeBatchFilterLabel(state.intakeBatchFilter) },
           { label: "已选批次", value: selectedCount, tone: selectedCount ? "todo" : "neutral" },
         ],
         actions: `<button class="primary flow-button" type="button" data-view="cage-card-scanner">${iconSvg("search")}笼卡识别</button>`,
@@ -6071,10 +6312,6 @@ function renderIntakeBatchView() {
             `,
           })}
           ${intakeListCollapsed ? "" : `
-          ${renderCommandBar({
-            className: "intake-batch-toolbar",
-            filters: `<div class="filter-row intake-filter-row" role="group" aria-label="待接收批次筛选">${INTAKE_BATCH_FILTER_OPTIONS.map(([value, label]) => intakeBatchFilterButton(value, label)).join("")}</div>`,
-          })}
           ${renderBulkActionBar({
             selectedCount,
             actions: `
@@ -6085,7 +6322,21 @@ function renderIntakeBatchView() {
           })}
         <div class="table-wrap">
             <table class="workflow-table intake-batch-table dense-table">
-              <thead><tr><th><input type="checkbox" data-select-all-intake-batches ${visibleBatches.length && selectedCount === visibleBatches.length ? "checked" : ""} aria-label="全选当前页待接收批次" /></th><th>状态</th><th>批次号</th><th>购买单位</th><th>项目负责人</th><th>实验负责人</th><th>数量</th><th>房间</th><th>接收日期</th><th>笼卡</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" data-select-all-intake-batches ${visibleBatches.length && selectedCount === visibleBatches.length ? "checked" : ""} aria-label="全选当前页待接收批次" /></th>
+                  ${renderFilterableTableHeader("intakeBatches", "status")}
+                  ${renderFilterableTableHeader("intakeBatches", "batchNo")}
+                  ${renderFilterableTableHeader("intakeBatches", "supplier")}
+                  ${renderFilterableTableHeader("intakeBatches", "pi")}
+                  ${renderFilterableTableHeader("intakeBatches", "owner")}
+                  ${renderFilterableTableHeader("intakeBatches", "quantity")}
+                  ${renderFilterableTableHeader("intakeBatches", "roomName")}
+                  ${renderFilterableTableHeader("intakeBatches", "intakeDate")}
+                  ${renderFilterableTableHeader("intakeBatches", "cardCount")}
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>${renderIntakeBatchRowsHtml(visibleBatches)}</tbody>
             </table>
         </div>
@@ -6133,7 +6384,10 @@ function renderIntakeCardPreviewModal(batch) {
 
 function filteredIntakeBatches() {
   if (remotePersistence) return state.intakeBatches;
-  return state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, state.intakeBatchFilter));
+  return applyTableControls(
+    state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, state.intakeBatchFilter)),
+    "intakeBatches",
+  );
 }
 
 function pagedIntakeBatches() {
@@ -6147,15 +6401,6 @@ function intakeBatchMatchesFilter(batch, filter) {
   if (filter === "all") return true;
   if (filter === "unprinted") return batch.status === "draft" || batch.status === "pending_print";
   return batch.status === filter;
-}
-
-function intakeBatchFilterButton(value, label) {
-  const count = remotePersistence ? "" : ` ${state.intakeBatches.filter((batch) => intakeBatchMatchesFilter(batch, value)).length}`;
-  return `<button class="segmented ${state.intakeBatchFilter === value ? "active" : ""}" type="button" data-intake-batch-filter="${value}">${escapeText(label)}${count}</button>`;
-}
-
-function intakeBatchFilterLabel(value) {
-  return INTAKE_BATCH_FILTER_OPTIONS.find(([key]) => key === value)?.[1] || "未打印";
 }
 
 function renderIntakeBatchRow(batch) {
@@ -6760,8 +7005,7 @@ function renderQuantitySheetBillingView() {
 
 function renderSavedQuantitySheetsPanel(quantityLoading) {
   const items = state.quantitySheets || [];
-  const keyword = state.quantitySheetListSearch || "";
-  const filteredItems = filterSavedQuantitySheets(items, keyword);
+  const filteredItems = filterSavedQuantitySheets(items, "");
   const page = paginationState.quantitySheets;
   const selectedIds = new Set(state.selectedQuantitySheetIds || []);
   const selectedCount = selectedIds.size;
@@ -6782,29 +7026,26 @@ function renderSavedQuantitySheetsPanel(quantityLoading) {
       ${collapsed ? "" : `
           ${renderCommandBar({
             className: "quantity-saved-command",
-            filters: `
-              <div class="quantity-saved-list-toolbar">
-                <input
-                  id="quantitySheetListSearch"
-                  type="search"
-                  value="${escapeAttr(keyword)}"
-                  placeholder="检索月份 / IACUC / 房间 / 负责人"
-                />
-              </div>
-            `,
             actions: `
-              <button id="deleteSelectedQuantitySheets" class="ghost danger-text" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("trash")}删除统计表</button>
               <button id="exportBilling" class="secondary info-button" type="button" ${canUseSheetAction ? "" : "disabled"}>${iconSvg("download")}导出数量统计表 PDF</button>
             `,
           })}
       ${renderListMeta({
         left: `当前命中 ${filteredItems.length} / 已加载 ${items.length} 条 · 已选 ${selectedCount} 条`,
       })}
-      <p class="quantity-saved-hint">勾选用于导出数量统计表或删除统计表；结算单请在下方“按项目负责人结算”区生成。</p>
+      <p class="quantity-saved-hint">勾选用于导出数量统计表；单张统计表可在行内预览、编辑或删除，结算单请在下方“按项目负责人结算”区生成。</p>
       <div class="table-wrap quantity-saved-list">
         <table class="dense-table">
           <thead>
-            <tr><th class="quantity-select-col"><input id="toggleVisibleQuantitySheets" type="checkbox" ${allVisibleSelected ? "checked" : ""} ${filteredItems.length ? "" : "disabled"} /></th><th>月份</th><th>IACUC</th><th>房间</th><th>负责人</th><th>更新时间</th><th>操作</th></tr>
+            <tr>
+              <th class="quantity-select-col"><input id="toggleVisibleQuantitySheets" type="checkbox" ${allVisibleSelected ? "checked" : ""} ${filteredItems.length ? "" : "disabled"} /></th>
+              ${renderFilterableTableHeader("quantitySheets", "month")}
+              ${renderFilterableTableHeader("quantitySheets", "iacuc")}
+              ${renderFilterableTableHeader("quantitySheets", "roomName")}
+              ${renderFilterableTableHeader("quantitySheets", "pi")}
+              ${renderFilterableTableHeader("quantitySheets", "updatedAt")}
+              <th>操作</th>
+            </tr>
           </thead>
           <tbody>
             ${renderSavedQuantitySheetRowsHtml(filteredItems, selectedIds, quantityLoading, items.length)}
@@ -6932,17 +7173,50 @@ function renderSavedQuantitySheetEditor(sheet) {
 
 function filterSavedQuantitySheets(items, keyword) {
   const normalizedKeyword = normalizeSearchText(keyword);
-  if (!normalizedKeyword) return items;
-  return items.filter((sheet) =>
-    normalizeSearchText([
-      sheet.month,
-      sheet.iacuc,
-      sheet.roomName || roomNameById(sheet.roomId),
-      sheet.pi,
-      sheet.owner,
-      sheet.project,
-    ].join(" ")).includes(normalizedKeyword),
-  );
+  const filtered = normalizedKeyword
+    ? items.filter((sheet) =>
+        normalizeSearchText([
+          sheet.month,
+          sheet.iacuc,
+          sheet.roomName || roomNameById(sheet.roomId),
+          sheet.pi,
+          sheet.owner,
+          sheet.project,
+        ].join(" ")).includes(normalizedKeyword),
+      )
+    : items;
+  return remotePersistence ? filtered : applyTableControls(filtered, "quantitySheets");
+}
+
+function applyTableControls(items, tableId) {
+  const control = tableControlState(tableId);
+  const filtered = items.filter((item) => {
+    return Object.entries(control.filters || {}).every(([key, values]) => {
+      if (!Array.isArray(values) || !values.length) return true;
+      return values.includes(tableCellValue(tableId, key, item));
+    });
+  });
+  if (!control.sortKey || !control.sortDir) return filtered;
+  return [...filtered].sort((a, b) => {
+    const left = tableCellValue(tableId, control.sortKey, a);
+    const right = tableCellValue(tableId, control.sortKey, b);
+    const result = String(left).localeCompare(String(right), "zh-CN", { numeric: true });
+    return control.sortDir === "desc" ? -result : result;
+  });
+}
+
+function tableCellValue(tableId, key, item = {}) {
+  if (tableId === "quantitySheets") {
+    if (key === "roomName") return item.roomName || roomNameById(item.roomId) || "";
+    if (key === "updatedAt") return item.updatedAt || "";
+    return String(item[key] ?? "");
+  }
+  if (tableId === "intakeBatches") {
+    if (key === "status") return item.status || "";
+    if (key === "cardCount") return `${item.confirmedCardCount || 0} / ${item.finalCardCount || 0} 张`;
+    return String(item[key] ?? "");
+  }
+  return String(item[key] ?? "");
 }
 
 function renderSavedQuantitySheetRow(sheet, selectedIds) {
@@ -8904,10 +9178,6 @@ function bindEvents() {
       scheduleRender("quantity_sheet.detail.form_change");
     }
   });
-  document.querySelector("#quantitySheetListSearch")?.addEventListener("input", (event) => {
-    state.quantitySheetListSearch = event.target.value || "";
-    scheduleRender("quantity_sheet.list.search");
-  });
   document.querySelector("#newQuantitySheet")?.addEventListener("click", newQuantitySheetDraft);
   document.querySelector("#addQuantitySheetRow")?.addEventListener("click", addQuantitySheetRow);
   document.querySelector("#addQuantitySheetPage")?.addEventListener("click", addQuantitySheetPage);
@@ -9077,6 +9347,61 @@ function bindEvents() {
     }
   });
   appRoot?.addEventListener("click", async (event) => {
+    const tableSortButton = event.target.closest("[data-table-sort]");
+    if (tableSortButton) {
+      event.stopPropagation();
+      const tableId = tableSortButton.dataset.tableSort;
+      const column = tableSortButton.dataset.column;
+      setTableSort(tableId, column);
+      tableControlState(tableId).openFilter = "";
+      TABLE_FILTER_OPTIONS_CACHE.clear();
+      await reloadControlledTable(tableId).catch(reportSaveError);
+      scheduleRender(`table.sort.${tableId}.${column}`);
+      return;
+    }
+    const tableFilterOpenButton = event.target.closest("[data-table-filter-open]");
+    if (tableFilterOpenButton) {
+      event.stopPropagation();
+      const tableId = tableFilterOpenButton.dataset.tableFilterOpen;
+      const column = tableFilterOpenButton.dataset.column;
+      const control = tableControlState(tableId);
+      control.openFilter = control.openFilter === column ? "" : column;
+      control.filterSearch = "";
+      if (control.openFilter) {
+        await loadTableFilterOptions(tableId, column).catch(reportSaveError);
+      }
+      scheduleRender(`table.filter.open.${tableId}.${column}`);
+      return;
+    }
+    if (event.target.closest("[data-table-filter-panel]")) {
+      event.stopPropagation();
+    }
+    const tableFilterClearButton = event.target.closest("[data-table-filter-clear]");
+    if (tableFilterClearButton) {
+      event.stopPropagation();
+      const tableId = tableFilterClearButton.dataset.tableFilterClear;
+      const column = tableFilterClearButton.dataset.column;
+      const control = tableControlState(tableId);
+      delete control.filters[column];
+      control.openFilter = "";
+      control.filterSearch = "";
+      TABLE_FILTER_OPTIONS_CACHE.clear();
+      await reloadControlledTable(tableId).catch(reportSaveError);
+      scheduleRender(`table.filter.clear.${tableId}.${column}`);
+      return;
+    }
+    const tableFilterApplyButton = event.target.closest("[data-table-filter-apply]");
+    if (tableFilterApplyButton) {
+      event.stopPropagation();
+      const tableId = tableFilterApplyButton.dataset.tableFilterApply;
+      const control = tableControlState(tableId);
+      control.openFilter = "";
+      control.filterSearch = "";
+      TABLE_FILTER_OPTIONS_CACHE.clear();
+      await reloadControlledTable(tableId).catch(reportSaveError);
+      scheduleRender(`table.filter.apply.${tableId}`);
+      return;
+    }
     const panelToggle = event.target.closest("[data-toggle-panel]");
     if (panelToggle) {
       const key = panelToggle.dataset.togglePanel;
@@ -9242,24 +9567,6 @@ function bindEvents() {
     const deleteQuantitySheetRowButton = event.target.closest("[data-delete-quantity-sheet-row]");
     if (deleteQuantitySheetRowButton) {
       deleteSingleQuantitySheet(deleteQuantitySheetRowButton.dataset.deleteQuantitySheetRow);
-      return;
-    }
-    if (event.target.closest("#deleteSelectedQuantitySheets")) {
-      deleteCurrentQuantitySheet();
-      return;
-    }
-    const intakeBatchFilterButton = event.target.closest("[data-intake-batch-filter]");
-    if (intakeBatchFilterButton) {
-      state.intakeBatchFilter = intakeBatchFilterButton.dataset.intakeBatchFilter || "unprinted";
-      paginationState.intakeBatches.page = 1;
-      if (remotePersistence) {
-        try {
-          await loadIntakeBatchesPage(1, paginationState.intakeBatches.limit);
-        } catch (error) {
-          reportSaveError(error);
-        }
-      }
-      scheduleRender("intake_batch.filter");
       return;
     }
     const openIntakeBatchRow = event.target.closest("[data-open-intake-batch]");
@@ -9464,7 +9771,29 @@ function bindEvents() {
       deleteRack(deleteRackButton.dataset.deleteRack);
     }
   }, appRootDelegatedSignal ? { signal: appRootDelegatedSignal } : undefined);
+  appRoot?.addEventListener("input", (event) => {
+    const tableFilterSearch = event.target.closest("[data-table-filter-search]");
+    if (tableFilterSearch) {
+      const tableId = tableFilterSearch.dataset.tableFilterSearch;
+      const control = tableControlState(tableId);
+      control.filterSearch = tableFilterSearch.value || "";
+      scheduleRender(`table.filter.search.${tableId}`);
+    }
+  }, appRootDelegatedSignal ? { signal: appRootDelegatedSignal } : undefined);
   appRoot?.addEventListener("change", async (event) => {
+    const tableFilterValue = event.target.closest("[data-table-filter-value]");
+    if (tableFilterValue) {
+      const tableId = tableFilterValue.dataset.tableFilterValue;
+      const column = tableFilterValue.dataset.column;
+      const control = tableControlState(tableId);
+      const current = new Set(control.filters[column] || []);
+      if (tableFilterValue.checked) current.add(tableFilterValue.value);
+      else current.delete(tableFilterValue.value);
+      if (current.size) control.filters[column] = [...current];
+      else delete control.filters[column];
+      scheduleRender(`table.filter.value.${tableId}.${column}`);
+      return;
+    }
     const placementGroupCheckbox = event.target.closest("[data-select-placement-task-group]");
     if (placementGroupCheckbox) {
       const pageGroups = pagedPlacementTaskGroups(getSelectedRoom()?.id || "");
@@ -11613,7 +11942,7 @@ function toggleQuantitySheetSelection(sheetId, checked) {
 }
 
 function toggleVisibleQuantitySheetSelection(checked) {
-  const visibleIds = filterSavedQuantitySheets(state.quantitySheets || [], state.quantitySheetListSearch || "").map((sheet) => sheet.id);
+  const visibleIds = filterSavedQuantitySheets(state.quantitySheets || [], "").map((sheet) => sheet.id);
   const selected = new Set(state.selectedQuantitySheetIds || []);
   visibleIds.forEach((id) => {
     if (checked) selected.add(id);
@@ -16588,6 +16917,7 @@ function iconSvg(name) {
     download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v9l3-3 1.4 1.4L12 16.8l-5.4-5.4L8 10l3 3zM5 18h14v2H5z"/></svg>`,
     calendar: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v3h6V2h2v3h3v17H4V5h3zm11 8H6v10h12zM6 7v1h12V7z"/></svg>`,
     search: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 10.5l4 4-1.4 1.4-4-4A6.5 6.5 0 1 1 10.5 4zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/></svg>`,
+    filter: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v5l-4 2v-7z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z"/></svg>`,
     calculator: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v4h8V5zm0 7v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM8 16v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>`,
     tag: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9zm5-5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>`,

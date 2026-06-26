@@ -6,6 +6,21 @@ from .payload import dump_json
 from .payload import cached_paginated_payloads
 from .payload import paginated_payloads
 
+INTAKE_BATCH_LIST_COLUMNS = {
+    "status": {"expr": "status", "order": "status"},
+    "batchNo": {"expr": "batch_no", "order": "batch_no"},
+    "supplier": {"expr": "supplier", "order": "supplier"},
+    "pi": {"expr": "json_extract(payload, '$.pi')", "order": "json_extract(payload, '$.pi')"},
+    "owner": {"expr": "json_extract(payload, '$.owner')", "order": "json_extract(payload, '$.owner')"},
+    "quantity": {"expr": "CAST(json_extract(payload, '$.quantity') AS TEXT)", "order": "CAST(json_extract(payload, '$.quantity') AS INTEGER)"},
+    "roomName": {"expr": "room_name", "order": "room_name"},
+    "intakeDate": {"expr": "intake_date", "order": "intake_date"},
+    "cardCount": {
+        "expr": "COALESCE(json_extract(payload, '$.confirmedCardCount'), 0) || ' / ' || COALESCE(json_extract(payload, '$.finalCardCount'), 0) || ' 张'",
+        "order": "CAST(json_extract(payload, '$.finalCardCount') AS INTEGER)",
+    },
+}
+
 
 def read_principal_identity_payloads(conn):
     rows = conn.execute("SELECT payload FROM principal_identities").fetchall()
@@ -47,6 +62,11 @@ def list_audit_events_page(conn, filters, filtered_where):
 
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
+    where, params = intake_batch_where(filters, filtered_where)
+    return cached_paginated_payloads(conn, "intake_batches", "intake_batches", intake_batch_order_by(filters, entity_order_by), filters, where, params)
+
+
+def intake_batch_where(filters, filtered_where, exclude_column=""):
     status = str(filters.get("status", "") or "").strip()
     normalized_filters = dict(filters)
     if status in ("all", "unprinted"):
@@ -64,7 +84,52 @@ def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
     if filters.get("month"):
         where = " AND ".join([part for part in (where, "intake_date LIKE ?") if part])
         params = (*params, f"{filters['month']}%")
-    return cached_paginated_payloads(conn, "intake_batches", "intake_batches", entity_order_by.get("intake_batches", "rowid"), filters, where, params)
+    where_parts = [where] if where else []
+    next_params = list(params)
+    for key, values in (filters.get("columnFilters") or {}).items():
+        if key == exclude_column:
+            continue
+        spec = INTAKE_BATCH_LIST_COLUMNS.get(key)
+        cleaned = [str(value).strip() for value in values if str(value).strip()]
+        if not spec or not cleaned:
+            continue
+        placeholders = ", ".join("?" for _ in cleaned)
+        where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
+        next_params.extend(cleaned)
+    return " AND ".join(where_parts), tuple(next_params)
+
+
+def intake_batch_order_by(filters, entity_order_by):
+    sort_key = str(filters.get("sortKey", "") or "").strip()
+    sort_dir = "ASC" if str(filters.get("sortDir", "") or "").lower() == "asc" else "DESC"
+    spec = INTAKE_BATCH_LIST_COLUMNS.get(sort_key)
+    if not spec:
+        return entity_order_by.get("intake_batches", "rowid")
+    return f"{spec['order']} {sort_dir}, rowid DESC"
+
+
+def list_intake_batch_filter_options(conn, filters, filtered_where, column):
+    spec = INTAKE_BATCH_LIST_COLUMNS.get(column)
+    if not spec:
+        return {"items": []}
+    where, params = intake_batch_where(filters, filtered_where, exclude_column=column)
+    where_clause = f" WHERE {where}" if where else ""
+    rows = conn.execute(
+        f"""
+        SELECT COALESCE({spec['expr']}, '') AS value, COUNT(*) AS count
+        FROM intake_batches{where_clause}
+        GROUP BY value
+        ORDER BY value COLLATE NOCASE
+        LIMIT 500
+        """,
+        params,
+    ).fetchall()
+    return {
+        "items": [
+            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]}
+            for row in rows
+        ],
+    }
 
 
 def list_placement_tasks_page(conn, filters, entity_order_by, clean_text):

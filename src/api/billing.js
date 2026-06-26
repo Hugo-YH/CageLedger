@@ -7,8 +7,12 @@ import {
 } from "./endpoints.js";
 import { queryUrl } from "./client.js";
 
-export function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId = "", limit = 50, offset = 0 } = {}) {
-  return queryUrl(API_QUANTITY_SHEETS_URL, { month, iacuc, pi, roomId, limit, offset });
+export function buildQuantitySheetsUrl({ month = "", iacuc = "", pi = "", roomId = "", limit = 50, offset = 0, sortKey = "", sortDir = "", columnFilters = {} } = {}) {
+  return queryUrl(API_QUANTITY_SHEETS_URL, { month, iacuc, pi, roomId, limit, offset, sortKey, sortDir, columnFilters: JSON.stringify(columnFilters || {}) });
+}
+
+export function buildQuantitySheetFilterOptionsUrl({ column = "", month = "", iacuc = "", pi = "", roomId = "", sortKey = "", sortDir = "", columnFilters = {} } = {}) {
+  return queryUrl(`${API_QUANTITY_SHEETS_URL}/filter-options`, { column, month, iacuc, pi, roomId, sortKey, sortDir, columnFilters: JSON.stringify(columnFilters || {}) });
 }
 
 export function buildBillingWorkflowsUrl({ month = "", status = "todo", limit = 50, offset = 0 } = {}) {

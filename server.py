@@ -77,6 +77,7 @@ from server_app.repositories.billing import (
     list_billing_workflow_versions as list_billing_workflow_versions_repository,
     list_billing_workflows_page as list_billing_workflows_page_repository,
     list_current_billing_statements as list_current_billing_statements_repository,
+    list_quantity_sheet_filter_options as list_quantity_sheet_filter_options_repository,
     list_quantity_sheets as list_quantity_sheets_repository,
     list_quantity_sheets_page as list_quantity_sheets_page_repository,
     replace_billing_statement_version_lines as replace_billing_statement_version_lines_repository,
@@ -89,6 +90,7 @@ from server_app.repositories.entities import (
     delete_intake_batch as delete_intake_batch_repository,
     delete_placement_task as delete_placement_task_repository,
     list_audit_events_page,
+    list_intake_batch_filter_options,
     list_intake_batches_page,
     list_placement_tasks_page,
     list_distinct_principal_names,
@@ -4157,6 +4159,10 @@ def list_quantity_sheets_page(conn, filters):
     return list_quantity_sheets_page_repository(conn, filters, filtered_where)
 
 
+def list_quantity_sheet_filter_options(conn, filters, column):
+    return list_quantity_sheet_filter_options_repository(conn, filters, filtered_where, column)
+
+
 def get_quantity_sheet(conn, sheet_id):
     row = get_quantity_sheet_repository(conn, sheet_id)
     if not row:
@@ -6493,6 +6499,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
             with connect_db() as conn:
                 self.send_json(list_quantity_sheets_page(conn, self.list_filters()))
             return
+        if path == "/api/quantity-sheets/filter-options":
+            if not self.require_user():
+                return
+            query = parse_qs(urlparse(self.path).query)
+            column = clean_text(query.get("column", [""])[0])
+            with connect_db() as conn:
+                self.send_json(list_quantity_sheet_filter_options(conn, self.list_filters(), column))
+            return
         if path == "/api/quantity-sheet-rooms":
             if not self.require_user():
                 return
@@ -6600,6 +6614,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 return
             with connect_db() as conn:
                 self.send_json({"items": list_current_billing_statements(conn)})
+            return
+        if path == "/api/intake-batches/filter-options":
+            if not self.require_user():
+                return
+            query = parse_qs(urlparse(self.path).query)
+            column = clean_text(query.get("column", [""])[0])
+            with connect_db() as conn:
+                self.send_json(list_intake_batch_filter_options(conn, self.list_filters(), filtered_where, column))
             return
         statement_id = self.billing_statement_route(path)
         if statement_id:
@@ -7252,9 +7274,27 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
     def list_filters(self, default_limit=10000, max_limit=10000):
         query = parse_qs(urlparse(self.path).query)
         value = lambda key: query.get(key, [""])[0]
+        column_filters = {}
+        raw_column_filters = value("columnFilters") or value("filters")
+        if raw_column_filters:
+            try:
+                parsed = json.loads(raw_column_filters)
+            except json.JSONDecodeError:
+                parsed = {}
+            if isinstance(parsed, dict):
+                for key, values in parsed.items():
+                    if isinstance(values, list):
+                        cleaned = [clean_text(item) for item in values if clean_text(item)]
+                    else:
+                        cleaned = [clean_text(values)] if clean_text(values) else []
+                    if cleaned:
+                        column_filters[clean_text(key)] = cleaned
         return {
             "limit": bounded_int(value("limit"), default_limit, 1, max_limit),
             "offset": bounded_int(value("offset"), 0, 0, 1_000_000),
+            "sortKey": value("sortKey"),
+            "sortDir": value("sortDir"),
+            "columnFilters": column_filters,
             "status": value("status"),
             "month": value("month"),
             "iacuc": value("iacuc"),
