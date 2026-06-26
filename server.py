@@ -1183,11 +1183,97 @@ def hash_base36(value, length=8):
 
 
 CAGE_CARD_QR_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+CAGE_CARD_QR_LENGTH = 4
+CAGE_CARD_QR_CAPACITY = len(CAGE_CARD_QR_ALPHABET) ** CAGE_CARD_QR_LENGTH
+CAGE_CARD_QR_MULTIPLIER = 739391
+CAGE_CARD_QR_OFFSET = 48691
+
+
+def modular_inverse(value, modulo):
+    current = value
+    next_value = modulo
+    current_coeff = 1
+    next_coeff = 0
+    while next_value:
+        quotient = current // next_value
+        current, next_value = next_value, current - quotient * next_value
+        current_coeff, next_coeff = next_coeff, current_coeff - quotient * next_coeff
+    if current != 1:
+        raise ValueError("短码置换参数无效")
+    return current_coeff % modulo
+
+
+CAGE_CARD_QR_INVERSE = modular_inverse(CAGE_CARD_QR_MULTIPLIER, CAGE_CARD_QR_CAPACITY)
 
 
 def is_cage_card_qr_id(value):
     text = clean_text(value).upper()
-    return bool(re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{4}}", text) or re.fullmatch(r"[A-Z0-9]{8}", text))
+    return bool(re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{{CAGE_CARD_QR_LENGTH}}}", text) or re.fullmatch(r"[A-Z0-9]{8}", text))
+
+
+def encode_cage_card_sequence(sequence):
+    value = max(as_int(sequence) or 1, 1)
+    permuted = ((value - 1) * CAGE_CARD_QR_MULTIPLIER + CAGE_CARD_QR_OFFSET) % CAGE_CARD_QR_CAPACITY
+    output = ""
+    number = permuted
+    for _ in range(CAGE_CARD_QR_LENGTH):
+        output = CAGE_CARD_QR_ALPHABET[number % len(CAGE_CARD_QR_ALPHABET)] + output
+        number //= len(CAGE_CARD_QR_ALPHABET)
+    return output
+
+
+def decode_cage_card_sequence(qr_id):
+    text = clean_text(qr_id).upper()
+    if not re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{{CAGE_CARD_QR_LENGTH}}}", text):
+        return None
+    number = 0
+    for char in text:
+        digit = CAGE_CARD_QR_ALPHABET.find(char)
+        if digit < 0:
+            return None
+        number = number * len(CAGE_CARD_QR_ALPHABET) + digit
+    return (((number - CAGE_CARD_QR_OFFSET + CAGE_CARD_QR_CAPACITY) * CAGE_CARD_QR_INVERSE) % CAGE_CARD_QR_CAPACITY) + 1
+
+
+def collect_cage_card_qr_ids(state, exclude_batch_id=""):
+    used = set()
+    excluded_task_ids = set()
+
+    def add(value):
+        qr_id = clean_text(value).upper()
+        if is_cage_card_qr_id(qr_id):
+            used.add(qr_id)
+
+    for batch in state.get("intakeBatches", []):
+        if exclude_batch_id and batch.get("id") == exclude_batch_id:
+            continue
+        for card in batch.get("cards") or []:
+            if isinstance(card, dict):
+                add(card.get("qrId"))
+    for task in state.get("placementTasks", []):
+        if exclude_batch_id and task.get("sourceBatchId") == exclude_batch_id:
+            if task.get("id"):
+                excluded_task_ids.add(task.get("id"))
+            continue
+        add(task.get("qrId"))
+    for occupancy in state.get("occupancies", []):
+        if exclude_batch_id and occupancy.get("placementTaskId") and occupancy.get("placementTaskId") in excluded_task_ids:
+            continue
+        add(occupancy.get("qrId"))
+    return used
+
+
+def next_cage_card_qr_id(used_qr_ids):
+    next_sequence = 1
+    for qr_id in used_qr_ids:
+        sequence = decode_cage_card_sequence(qr_id)
+        if sequence:
+            next_sequence = max(next_sequence, sequence + 1)
+    for offset in range(CAGE_CARD_QR_CAPACITY):
+        candidate = encode_cage_card_sequence(next_sequence + offset)
+        if candidate not in used_qr_ids:
+            return candidate
+    raise ValueError("笼卡短码已用尽")
 
 
 def cage_card_qr_id(batch, sequence):
@@ -2425,8 +2511,45 @@ def insert_entity(state, collection, item):
     items = state.setdefault(collection, [])
     if any(existing.get("id") == item["id"] for existing in items):
         raise sqlite3.IntegrityError(f"Duplicate id: {item['id']}")
+    if collection == "intakeBatches":
+        item = ensure_intake_batch_card_qr_ids(state, item)
     validate_entity_references(state, collection, item)
     items.append(item)
+
+
+def intake_card_suggested_quantity(batch, index, card_count):
+    per_cage = max(as_int(batch.get("suggestedAnimalsPerCage")) or 1, 1)
+    quantity = max(as_int(batch.get("quantity")) or 0, 0)
+    remainder = quantity % per_cage if quantity and per_cage else 0
+    is_last = index == card_count - 1
+    if not quantity or (remainder and is_last):
+        return ""
+    return str(per_cage)
+
+
+def ensure_intake_batch_card_qr_ids(state, batch):
+    next_batch = dict(batch)
+    card_count = max(as_int(next_batch.get("finalCardCount")) or as_int(next_batch.get("suggestedCardCount")) or 0, 0)
+    existing_cards = next_batch.get("cards") if isinstance(next_batch.get("cards"), list) else []
+    used_qr_ids = collect_cage_card_qr_ids(state, next_batch.get("id", ""))
+    cards = []
+    for index in range(card_count):
+        existing = existing_cards[index] if index < len(existing_cards) and isinstance(existing_cards[index], dict) else {}
+        existing_qr_id = clean_text(existing.get("qrId")).upper()
+        qr_id = existing_qr_id if is_cage_card_qr_id(existing_qr_id) and existing_qr_id not in used_qr_ids else next_cage_card_qr_id(used_qr_ids)
+        used_qr_ids.add(qr_id)
+        cards.append(
+            {
+                **existing,
+                "id": clean_text(existing.get("id")) or f"{next_batch.get('id')}-card-{index + 1}",
+                "index": index + 1,
+                "label": f"{index + 1}/{card_count}",
+                "suggestedQuantity": clean_text(existing.get("suggestedQuantity")) or intake_card_suggested_quantity(next_batch, index, card_count),
+                "qrId": qr_id,
+            }
+        )
+    next_batch["cards"] = cards
+    return next_batch
 
 
 def reconcile_intake_batch_update(state, old_item, item):
@@ -2462,7 +2585,7 @@ def reconcile_intake_batch_update(state, old_item, item):
             task["targetRoomId"] = target_room.get("id", "") if target_room else ""
             task["targetRoomName"] = target_room.get("name", "") if target_room else new_room_name
             task["updatedAt"] = next_item.get("updatedAt") or now_iso()
-    return next_item
+    return ensure_intake_batch_card_qr_ids(state, next_item)
 
 
 def replace_entity(state, collection, item_id, item):

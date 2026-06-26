@@ -37,6 +37,16 @@ import { CACHE_RESET_NOTICE_KEY, LEGACY_STORAGE_KEY, MAX_LOCAL_STATE_BYTES, STOR
 import "./vendor/jsQR.js";
 const SYSTEM_RELEASE_NOTES = [
   {
+    version: "0.5.23",
+    releasedAt: "2026-06-26 08:18",
+    title: "笼卡识别码稳定性修复",
+    items: [
+      "笼卡识别码在录入、保存、打印、确认接收、待进驻、预留和入驻环节保持唯一且可追溯",
+      "后端保存待接收批次时会兜底校验笼卡识别码，避免同批次重复或跨批次重复",
+      "移动扫码页和查询结果统一使用“笼卡识别码”文案，内部字段继续保持 qrId 兼容既有数据",
+    ],
+  },
+  {
     version: "0.5.22",
     releasedAt: "2026-06-24 16:41",
     title: "项目汇总表同步与核算汇总修正",
@@ -942,7 +952,7 @@ const HELP_TEXTS = {
   dashboardRooms: "按饲养间展示状态与饲养周期分类，便于比较容量与超期分布。",
   intake: "粘贴课题组预约接收消息，系统解析批次、项目和装笼建议，并保存为待打印批次。",
   intakeList: "流程：未打印 -> 已打印 -> 已接收。已接收批次会同步进入目标房间的待进驻任务。",
-  intakeScanner: "扫描笼卡二维码或输入短码，快速查看对应动物、项目、房间和当前状态。",
+  intakeScanner: "扫描笼卡二维码或输入笼卡识别码，快速查看对应动物、项目、房间和当前状态。",
   intakePreview: "按实际打印模板预览第一张笼卡；完整张数仍以打印张数为准。",
   intakeEdit: "修改后只更新这条记录，预约消息识别区保持当前输入。",
   cages: "按饲养间和笼架查看笼位状态。点击笼位可查看或编辑占用信息。",
@@ -1019,7 +1029,7 @@ let systemInfo = {
   name: "CageLedger",
   title: "CageLedger 实验动物笼位管理与计费系统",
   description: "实验动物笼位管理与计费系统",
-  version: "0.5.22",
+  version: "0.5.23",
   organization: "中山大学中山眼科中心",
   department: "实验动物中心",
   developer: "Hugo",
@@ -1286,7 +1296,7 @@ function normalizeIncomingBatchDraft(item = {}) {
     suggestedCardCount,
     finalCardCount,
     receipts: Array.isArray(item.receipts) ? item.receipts.map((receipt) => ({ ...receipt })) : [],
-    cards: [],
+    cards: Array.isArray(item.cards) ? item.cards.map((card) => ({ ...card })) : [],
     updatedAt: String(item.updatedAt || ""),
   };
   normalized.confirmedCardCount = Math.max(numericOrNull(item.confirmedCardCount) || normalized.receipts.reduce((sum, receipt) => sum + (numericOrNull(receipt.cardCount) || 0), 0), 0);
@@ -1575,7 +1585,7 @@ function buildIncomingCards(batch) {
     const suggestedQuantity = !quantity ? "" : remainder && isLast ? "" : String(perCage);
     const existingCard = existingCards[index] || {};
     const existingQrId = String(existingCard.qrId || "").trim().toUpperCase();
-    const qrId = isCageCardQrId(existingQrId) ? existingQrId : nextCageCardQrId(usedQrIds);
+    const qrId = isCageCardQrId(existingQrId) && !usedQrIds.has(existingQrId) ? existingQrId : nextCageCardQrId(usedQrIds);
     usedQrIds.add(qrId);
     return {
       id: `${batch.id}-card-${index + 1}`,
@@ -1601,7 +1611,7 @@ const cageCardScannerState = {
   query: "",
   result: null,
   error: "",
-  message: "支持识别笼卡短码，也兼容旧版 /c/ 笼卡链接。",
+  message: "支持识别笼卡识别码，也兼容旧版 /c/ 笼卡链接。",
 };
 let cageCardScannerStream = null;
 let cageCardScannerLoopToken = 0;
@@ -4061,7 +4071,7 @@ function renderPublicCageCardScanView() {
 
 function cageCardDetailsForDisplay(item = {}) {
   return [
-    ["短码", item.qrId || ""],
+    ["识别码", item.qrId || ""],
     ["当前状态", item.statusLabel || ""],
     ["笼号", item.cageCode || item.slotCode || ""],
     ["房间", item.roomName || ""],
@@ -4134,7 +4144,7 @@ function renderCageCardScannerView() {
             </div>
             <div class="panel scanner-query-card">
               <div class="scanner-card-title">
-                <strong>QRID</strong>
+                <strong>笼卡识别码</strong>
               </div>
               <div class="scanner-manual-field">
                 <div class="scanner-manual-row">
@@ -4169,7 +4179,7 @@ function pageMeta(view) {
     },
     "cage-card-scanner": {
       title: "笼卡识别",
-      description: "扫码或输入短码查询笼卡对应动物、项目和房间信息。",
+      description: "扫码或输入笼卡识别码查询笼卡对应动物、项目和房间信息。",
     },
     "workflow-center": {
       title: "流程中心",
@@ -8678,7 +8688,7 @@ function bindEvents() {
     try {
       captureIntakeBatchDraft();
       const savedBatch = await saveIntakeBatchDraft();
-      showFlashNotice("已保存笼卡", "笼卡短码已写入系统，开始打印。", "success");
+      showFlashNotice("已保存笼卡", "笼卡识别码已写入系统，开始打印。", "success");
       await printAndMarkIntakeBatches([savedBatch]);
     } catch (error) {
       reportSaveError(error);
@@ -15003,7 +15013,7 @@ function modularInverse(value, modulo) {
     [current, next] = [next, current - quotient * next];
     [currentCoeff, nextCoeff] = [nextCoeff, currentCoeff - quotient * nextCoeff];
   }
-  if (current !== 1) throw new Error("短码置换参数无效");
+  if (current !== 1) throw new Error("笼卡识别码置换参数无效");
   return ((currentCoeff % modulo) + modulo) % modulo;
 }
 
@@ -15038,6 +15048,7 @@ function isCageCardQrId(value) {
 
 function collectCageCardQrIds(excludeBatchId = "") {
   const used = new Set();
+  const excludedTaskIds = new Set();
   const add = (value) => {
     const text = String(value || "").trim().toUpperCase();
     if (isCageCardQrId(text)) used.add(text);
@@ -15046,8 +15057,17 @@ function collectCageCardQrIds(excludeBatchId = "") {
     if (excludeBatchId && batch.id === excludeBatchId) return;
     (batch.cards || []).forEach((card) => add(card.qrId));
   });
-  (state.placementTasks || []).forEach((task) => add(task.qrId));
-  (state.occupancies || []).forEach((occupancy) => add(occupancy.qrId));
+  (state.placementTasks || []).forEach((task) => {
+    if (excludeBatchId && task.sourceBatchId === excludeBatchId) {
+      if (task.id) excludedTaskIds.add(task.id);
+      return;
+    }
+    add(task.qrId);
+  });
+  (state.occupancies || []).forEach((occupancy) => {
+    if (excludeBatchId && occupancy.placementTaskId && excludedTaskIds.has(occupancy.placementTaskId)) return;
+    add(occupancy.qrId);
+  });
   return used;
 }
 
@@ -15061,7 +15081,7 @@ function nextCageCardQrId(usedQrIds = collectCageCardQrIds()) {
     const candidate = encodeCageCardSequence(nextSequence + offset);
     if (!usedQrIds.has(candidate)) return candidate;
   }
-  throw new Error("笼卡短码已用尽");
+  throw new Error("笼卡识别码已用尽");
 }
 
 function cageCardQrId(batchId, sequence) {
@@ -16273,7 +16293,7 @@ async function lookupCageCardForScanner(rawValue) {
   cageCardScannerState.error = "";
   cageCardScannerState.result = null;
   if (!qrId) {
-    cageCardScannerState.error = "请输入笼卡短码或扫码内容。";
+    cageCardScannerState.error = "请输入笼卡识别码或扫码内容。";
     scheduleRender("cage_card_scanner.empty");
     return null;
   }
@@ -16282,14 +16302,14 @@ async function lookupCageCardForScanner(rawValue) {
   try {
     const response = await fetch(`${API_PUBLIC_CAGE_CARD_URL}/${encodeURIComponent(qrId)}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "该短码没有匹配到笼卡记录。");
+    if (!response.ok) throw new Error(payload.error || "该笼卡识别码没有匹配到笼卡记录。");
     cageCardScannerState.result = payload.item || null;
     cageCardScannerState.query = qrId;
     cageCardScannerState.message = `已识别 ${qrId}`;
     cageCardScannerState.error = "";
     return cageCardScannerState.result;
   } catch (error) {
-    cageCardScannerState.error = error?.message || "该短码没有匹配到笼卡记录。";
+    cageCardScannerState.error = error?.message || "该笼卡识别码没有匹配到笼卡记录。";
     cageCardScannerState.result = null;
     return null;
   } finally {
@@ -16330,7 +16350,7 @@ async function startCageCardScanner() {
     return;
   }
   if (!navigator.mediaDevices?.getUserMedia) {
-    cageCardScannerState.error = "当前浏览器无法调用摄像头，请手工输入笼卡短码查询。";
+    cageCardScannerState.error = "当前浏览器无法调用摄像头，请手工输入笼卡识别码查询。";
     scheduleRender("cage_card_scanner.unsupported_camera");
     return;
   }
@@ -16355,7 +16375,7 @@ async function startCageCardScanner() {
     runCageCardScannerLoop(cageCardScannerLoopToken + 1);
   } catch (error) {
     stopCageCardScanner({ renderAfter: false });
-    cageCardScannerState.error = error?.message || "摄像头启动失败，请手工输入笼卡短码查询。";
+    cageCardScannerState.error = error?.message || "摄像头启动失败，请手工输入笼卡识别码查询。";
     scheduleRender("cage_card_scanner.start_failed");
   }
 }
@@ -16400,11 +16420,11 @@ function runCageCardScannerLoop(token) {
           if (qrId) {
             stopCageCardScanner({ renderAfter: false });
             await lookupCageCardForScanner(qrId);
-            showFlashNotice("识别成功", `已读取笼卡短码：${qrId}`, "success");
+            showFlashNotice("识别成功", `已读取笼卡识别码：${qrId}`, "success");
             return;
           }
         } catch (error) {
-          cageCardScannerState.error = error?.message || "二维码识别失败，请调整距离或手工输入短码。";
+          cageCardScannerState.error = error?.message || "二维码识别失败，请调整距离或手工输入笼卡识别码。";
         }
       }
     }
