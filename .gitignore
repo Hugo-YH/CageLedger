@@ -12,6 +12,7 @@ __pycache__/
 node_modules
 dist
 dist-ssr
+web-dist
 *.local
 .env
 .env.*
@@ -20,6 +21,9 @@ data/
 *.sqlite
 *.sqlite-*
 src/iacuc-data.local.json
+.vite
+playwright-report
+test-results
 
 # Editor directories and files
 .vscode/*

@@ -45,12 +45,9 @@ let indexHtml = readText("index.html");
 indexHtml = indexHtml.replaceAll(`?v=${oldVersion}`, `?v=${newVersion}`);
 writeText("index.html", indexHtml);
 
-let appJs = readText("src/app.js");
-appJs = appJs.replace(
-  /(let systemInfo = \{[\s\S]*?\n\s*version: )"[^"]+"/,
-  `$1"${newVersion}"`,
-);
-writeText("src/app.js", appJs);
+let reactVersion = readText("src/react/version.ts");
+reactVersion = reactVersion.replace(/APP_VERSION = "[^"]+"/, `APP_VERSION = "${newVersion}"`);
+writeText("src/react/version.ts", reactVersion);
 
 let deployment = readText("wiki/部署与运行.md");
 deployment = deployment.replaceAll(oldVersion, newVersion);

@@ -13,16 +13,10 @@
 
 ## 本地运行
 
-共享模式会启动 Python 后端并写入 SQLite：
+开发模式会同时启动 Vite 前端和 Python API，并写入 SQLite：
 
 ```bash
 npm run dev
-```
-
-静态模式只启动静态文件服务，数据保存在浏览器本地：
-
-```bash
-npm run static
 ```
 
 默认访问地址：
@@ -42,12 +36,17 @@ http://localhost:5173
 
 ```bash
 npm run dev
-npm run static
+npm run build
 npm run check
+npm run test
+npm run test:e2e
+npm run benchmark
 npm run smoke:api
 npm run package:offline
 npm run release:local -- --version 0.5.3 --push
 ```
+
+`npm run package:offline` 生成包含 `web-dist` 的离线包。解压后可直接执行 `python3 server.py`，目标机器无需 Node.js。
 
 ## 部署与文档入口
 
@@ -60,7 +59,7 @@ npm run release:local -- --version 0.5.3 --push
 
 ## 项目事实
 
-- 当前版本：`0.5.3`
+- 当前版本：`0.5.25`
 - 正式上游仓库：`https://git.cellnucle.us/hugo/cageledger`
 - 正式容器镜像：`git.cellnucle.us/hugo/cageledger:<tag>`
 - 正式文档源：`wiki/`

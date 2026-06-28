@@ -37,6 +37,11 @@ jobs:
             echo "package.json version ${PACKAGE_VERSION} does not match tag ${TAG_VERSION}" >&2
             exit 1
           fi
+          grep -Fq "APP_VERSION = \"${TAG_VERSION}\"" src/react/version.ts
+          grep -Fq "version: \"${TAG_VERSION}\"" src/react/releaseNotes.ts
+
+      - name: Install frontend dependencies
+        run: npm ci
 
       - name: Build offline package
         id: package

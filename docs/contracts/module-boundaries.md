@@ -7,8 +7,8 @@
 
 ```mermaid
 graph TD
-    UI["views: DOM render + event binding"] --> State["state slices + render scheduler"]
-    State --> Api["api client + domain API modules"]
+    UI["React feature views"] --> State["local UI state + Query cache"]
+    State --> Api["typed API hooks"]
     Api --> Http["server HTTP handler"]
     Http --> Service["services: business workflows"]
     Service --> Repo["repositories: SQLite/runtime files"]
@@ -19,11 +19,10 @@ graph TD
 
 | Directory | Responsibility | First Migration Candidates |
 |:----------|:---------------|:---------------------------|
-| `src/api/` | fetch wrapper and domain API modules | `client.js`, `bootstrap.js`, `intake.js`, `billing.js` |
-| `src/state/` | state slices, local merge helpers, render scheduling | `session.js`, `infrastructure.js`, `intake.js`, `billing.js` |
+| `src/react/api/` | typed fetch wrapper、Query hooks 和查询键 | `client.ts`, `bootstrap.ts`, `intake.ts`, `quantitySheets.ts` |
+| `src/react/state/` | UI reducer 与界面偏好 | `ui.tsx`, `uiStorage.ts` |
 | `src/domain/` | pure business helpers | dates, IACUC normalization, intake parsing, billing math |
-| `src/views/` | page renderers and event wiring | about/system, intake list, placement tasks, workflow center |
-| `src/print/` | print/PDF/export HTML builders | cage cards, billing statement |
+| `src/react/features/` | 按业务域懒加载的 React 视图 | dashboard, intake, cages, billing, workflow, settings |
 
 ## 后端目标目录
 

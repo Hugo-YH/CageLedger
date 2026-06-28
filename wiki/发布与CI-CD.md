@@ -23,13 +23,16 @@ npm run release:local -- --version X.Y.Z --push
 
 发布前更新：
 
-- `src/app.js` 中的 `SYSTEM_RELEASE_NOTES`
+- `src/react/releaseNotes.ts` 中的 `SYSTEM_RELEASE_NOTES`
+- `src/react/version.ts` 由版本脚本自动同步，禁止手工单独改版本
 - 需要同步的 `wiki/` 页面
 
 ## 发布前检查
 
 ```bash
 npm run check
+npm run build
+npm run test:e2e
 npm run smoke:api
 npm run package:offline
 ```
@@ -48,7 +51,7 @@ npm run package:offline
 | --- | --- |
 | `GITEA_TOKEN` | 创建 Release、同步 Wiki |
 | `PACKAGE_USERNAME` | 镜像仓库登录用户名 |
-| `PACKAGE_PAT` | 镜像仓库登录令牌 |
+| `PACKAGE_PAT` Secret | 镜像仓库登录令牌 |
 
 ## 正式发布口径
 

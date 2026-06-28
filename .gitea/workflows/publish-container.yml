@@ -32,9 +32,22 @@ jobs:
         id: revision
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITEA_OUTPUT"
 
+      - name: Verify package version
+        id: version
+        run: |
+          PACKAGE_VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${PACKAGE_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "package.json version ${PACKAGE_VERSION} does not match tag ${TAG_VERSION}" >&2
+            exit 1
+          fi
+          grep -Fq "APP_VERSION = \"${TAG_VERSION}\"" src/react/version.ts
+          grep -Fq "version: \"${TAG_VERSION}\"" src/react/releaseNotes.ts
+          echo "value=${TAG_VERSION}" >> "$GITEA_OUTPUT"
+
       - name: Log in to Gitea Container Registry
         env:
-          REGISTRY_TOKEN: ${{ vars.PACKAGE_PAT }}
+          REGISTRY_TOKEN: ${{ secrets.PACKAGE_PAT }}
           REGISTRY_USERNAME: ${{ vars.PACKAGE_USERNAME }}
         run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${REGISTRY_USERNAME}" --password-stdin
 
@@ -45,7 +58,8 @@ jobs:
           IMAGE_TAG="${IMAGE_TAG#v}"
           IMAGE_REPO="${GITHUB_SERVER_URL#https://}/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           docker build \
-            --build-arg CAGELEDGER_VERSION="${{ steps.revision.outputs.sha }}" \
+            --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
+            --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
             -t "${IMAGE_REPO}:${IMAGE_TAG}" \
             -t "${IMAGE_REPO}:latest" \
             .

@@ -37,8 +37,8 @@ from server_app.config import (
     CAGELEDGER_LICENSE,
     CAGELEDGER_ORGANIZATION,
     CAGELEDGER_REPOSITORY_URL,
+    CAGELEDGER_REVISION,
     CAGELEDGER_UPDATE_CHECK_ENABLED,
-    CAGELEDGER_VERSION,
     DB_PATH,
     DEFAULT_ADMIN_PASSWORD,
     DEFAULT_ADMIN_USERNAME,
@@ -50,9 +50,11 @@ from server_app.config import (
     ROOT,
     SESSION_COOKIE,
     SESSION_TTL_DAYS,
+    frontend_root,
 )
 from server_app.db import configure_database, connect_db, ensure_database_ready
 from server_app.http import add_default_headers, send_json as send_json_response
+from server_app.static import send_frontend_asset
 from server_app.repositories.audit import insert_audit_events
 from server_app.repositories.billing import (
     delete_billing_workflow_tree as delete_billing_workflow_tree_repository,
@@ -438,6 +440,10 @@ def initialize_schema(conn):
             batch_no TEXT NOT NULL,
             iacuc TEXT,
             supplier TEXT,
+            pi TEXT,
+            owner TEXT,
+            quantity INTEGER,
+            card_count INTEGER,
             room_name TEXT,
             intake_date TEXT,
             status TEXT NOT NULL,
@@ -662,9 +668,18 @@ def create_performance_indexes(conn):
         "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month ON quantity_sheets(month)",
         "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc ON quantity_sheets(iacuc)",
         "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_pi ON quantity_sheets(pi)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month_updated ON quantity_sheets(month DESC, updated_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc_month ON quantity_sheets(iacuc, month DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_pi_month ON quantity_sheets(pi, month DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_room_month ON quantity_sheets(room_name, month DESC)",
         "CREATE INDEX IF NOT EXISTS idx_intake_batches_status ON intake_batches(status)",
         "CREATE INDEX IF NOT EXISTS idx_intake_batches_intake_date ON intake_batches(intake_date)",
         "CREATE INDEX IF NOT EXISTS idx_intake_batches_iacuc ON intake_batches(iacuc)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_status_date ON intake_batches(status, intake_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_pi_date ON intake_batches(pi, intake_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_owner_date ON intake_batches(owner, intake_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_room_date ON intake_batches(room_name, intake_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_intake_batches_updated ON intake_batches(updated_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_billing_statements_iacuc_month ON billing_statements(iacuc, month)",
         "CREATE INDEX IF NOT EXISTS idx_billing_statement_lines_statement_id ON billing_statement_lines(statement_id)",
         "CREATE INDEX IF NOT EXISTS idx_billing_workflows_month ON billing_workflows(month)",
@@ -689,6 +704,7 @@ def migrate_schema(conn):
     ensure_experiment_applications_duplicate_schema(conn)
     ensure_occupancies_history_schema(conn)
     ensure_occupancies_structured_columns(conn)
+    ensure_intake_batch_structured_columns(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
     migrate_reimbursement_record_schema(conn)
@@ -790,6 +806,44 @@ def backfill_occupancy_structured_columns(conn):
                 values["animal_count"],
                 dump_json(normalized),
                 normalized.get("id"),
+            ),
+        )
+
+
+def ensure_intake_batch_structured_columns(conn):
+    columns = table_columns(conn, "intake_batches")
+    additions = {
+        "pi": "TEXT",
+        "owner": "TEXT",
+        "quantity": "INTEGER",
+        "card_count": "INTEGER",
+    }
+    changed = False
+    for column, column_type in additions.items():
+        if column in columns:
+            continue
+        conn.execute(f"ALTER TABLE intake_batches ADD COLUMN {column} {column_type}")
+        changed = True
+    if changed:
+        backfill_intake_batch_structured_columns(conn)
+
+
+def backfill_intake_batch_structured_columns(conn):
+    rows = conn.execute("SELECT id, payload FROM intake_batches").fetchall()
+    for row in rows:
+        payload = json.loads(row["payload"])
+        conn.execute(
+            """
+            UPDATE intake_batches
+            SET pi = ?, owner = ?, quantity = ?, card_count = ?
+            WHERE id = ?
+            """,
+            (
+                clean_text(payload.get("pi", "")),
+                clean_text(payload.get("owner", "")),
+                as_int(payload.get("quantity")) or 0,
+                as_int(payload.get("finalCardCount")) or 0,
+                row["id"],
             ),
         )
 
@@ -2902,15 +2956,20 @@ def write_normalized_state(conn, state, updated_at):
         conn.execute(
             """
             INSERT INTO intake_batches (
-                id, batch_no, iacuc, supplier, room_name, intake_date, status, updated_at, payload
+                id, batch_no, iacuc, supplier, pi, owner, quantity, card_count,
+                room_name, intake_date, status, updated_at, payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 batch.get("id"),
                 batch.get("batchNo", ""),
                 batch.get("iacuc", ""),
                 batch.get("supplier", ""),
+                batch.get("pi", ""),
+                batch.get("owner", ""),
+                as_int(batch.get("quantity")) or 0,
+                as_int(batch.get("finalCardCount")) or 0,
                 batch.get("roomName", ""),
                 batch.get("intakeDate", ""),
                 batch.get("status", "draft"),
@@ -3560,7 +3619,10 @@ def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imp
                 (after["project"], after["pi"], after["owner"], after["funding"], after["species"], imported_at, payload_json, row["id"]),
             )
         elif table == "intake_batches":
-            conn.execute("UPDATE intake_batches SET updated_at = ?, payload = ? WHERE id = ?", (imported_at, payload_json, row["id"]))
+            conn.execute(
+                "UPDATE intake_batches SET pi = ?, owner = ?, updated_at = ?, payload = ? WHERE id = ?",
+                (after["pi"], after["owner"], imported_at, payload_json, row["id"]),
+            )
         elif table == "placement_tasks":
             conn.execute("UPDATE placement_tasks SET updated_at = ?, payload = ? WHERE id = ?", (imported_at, payload_json, row["id"]))
 
@@ -3813,8 +3875,8 @@ def app_version():
 
 
 def current_revision():
-    if CAGELEDGER_VERSION:
-        return CAGELEDGER_VERSION
+    if CAGELEDGER_REVISION:
+        return CAGELEDGER_REVISION
     return read_git_revision(ROOT)
 
 
@@ -6407,7 +6469,11 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
     server_version = "CageLedger/0.2"
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+        super().__init__(*args, directory=str(frontend_root()), **kwargs)
+
+    def handle_one_request(self):
+        self._request_started_at = time.perf_counter()
+        super().handle_one_request()
 
     def end_headers(self):
         add_default_headers(self)
@@ -6658,6 +6724,11 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         if path.startswith("/scan/cage-card/") or path.startswith("/c/"):
             self.send_spa_index()
             return
+        if send_frontend_asset(self, frontend_root()):
+            return
+        if not path.startswith("/api/") and "." not in path.rsplit("/", 1)[-1]:
+            self.send_spa_index()
+            return
         super().do_GET()
 
     def do_POST(self):
@@ -6869,7 +6940,7 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         send_json_response(self, payload, status)
 
     def send_spa_index(self):
-        body = (ROOT / "index.html").read_text(encoding="utf-8")
+        body = (frontend_root() / "index.html").read_text(encoding="utf-8")
         if "<base " not in body:
             body = body.replace("<head>", '<head>\n    <base href="/" />', 1)
         body_bytes = body.encode("utf-8")

@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+WEB_DIST_PATH = ROOT / "web-dist"
 DB_PATH = Path(os.environ.get("CAGELEDGER_DB", ROOT / "data" / "cageledger.sqlite"))
 IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DB_PATH.parent / "iacuc-index.json"))
 LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
@@ -12,10 +13,17 @@ MAX_BODY_BYTES = 10 * 1024 * 1024
 SESSION_COOKIE = "cageledger_session"
 SESSION_TTL_DAYS = 14
 
+
+def frontend_root():
+    if os.environ.get("CAGELEDGER_DEV_ASSETS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return ROOT
+    return WEB_DIST_PATH if (WEB_DIST_PATH / "index.html").exists() else ROOT
+
 DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")
 
-CAGELEDGER_VERSION = os.environ.get("CAGELEDGER_VERSION", "").strip()
+CAGELEDGER_REVISION = os.environ.get("CAGELEDGER_REVISION", os.environ.get("CAGELEDGER_VERSION", "")).strip()
+CAGELEDGER_VERSION = CAGELEDGER_REVISION
 CAGELEDGER_APP_VERSION = os.environ.get("CAGELEDGER_APP_VERSION", "").strip()
 CAGELEDGER_ORGANIZATION = os.environ.get("CAGELEDGER_ORGANIZATION", "中山大学中山眼科中心").strip()
 CAGELEDGER_DEPARTMENT = os.environ.get("CAGELEDGER_DEPARTMENT", "实验动物中心").strip()

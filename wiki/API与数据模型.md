@@ -13,7 +13,11 @@
 | 审计增量 | 写入接口可返回 `auditLogs`，前端按增量合并 |
 | 增量刷新 | 高频写入接口返回 `affectedSlots`、`affectedItems`、`tasks` 等增量对象，前端先本地合并，再后台定向刷新 |
 | 性能摘要 | 关键写入接口返回 `perf.total_ms`、`perf.rows_changed`，服务端同时输出低噪声 `[perf]` 日志 |
+| 响应计时 | HTTP 响应包含 `Server-Timing: app;dur=...`，用于浏览器和反向代理性能观测 |
+| 传输压缩 | 大于 1 KB 且客户端支持时，JSON 和前端资源使用 gzip |
 | 权限 | `admin` 全局；`room_admin` 按授权房间过滤 |
+
+笼卡列表的 `pi`、`owner`、`quantity` 和 `card_count` 具有独立 SQLite 热字段。历史记录在启动迁移时从 `payload` 回填，业务 JSON 契约保持不变。
 
 ## 主要 API 家族
 

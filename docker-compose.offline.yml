@@ -5,7 +5,8 @@ services:
     build:
       context: .
       args:
-        CAGELEDGER_VERSION: ${CAGELEDGER_VERSION:-local}
+        CAGELEDGER_APP_VERSION: ${CAGELEDGER_APP_VERSION:-local}
+        CAGELEDGER_REVISION: ${CAGELEDGER_REVISION:-local}
     container_name: cageledger
     restart: unless-stopped
     ports:

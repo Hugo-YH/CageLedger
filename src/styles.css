@@ -312,8 +312,80 @@
   box-sizing: border-box;
 }
 
+.react-boot-screen,
+.react-load-error {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  color: #17383a;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(47, 147, 136, 0.14), transparent 34%),
+    linear-gradient(145deg, #f7fbfa 0%, #edf5f3 100%);
+}
+
+.react-boot-screen img {
+  width: 54px;
+  height: 54px;
+}
+
+.react-boot-screen div,
+.react-load-error {
+  text-align: center;
+}
+
+.react-boot-screen strong,
+.react-boot-screen span,
+.react-load-error strong,
+.react-load-error span {
+  display: block;
+}
+
+.react-boot-screen strong,
+.react-load-error strong {
+  font-size: 1.25rem;
+}
+
+.react-boot-screen span,
+.react-load-error span {
+  margin-top: 6px;
+  color: #637779;
+}
+
+.react-boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #426466;
+  background: rgba(246, 251, 250, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.react-boot-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(15, 116, 106, 0.18);
+  border-top-color: #0f746a;
+  border-radius: 50%;
+  animation: reactBootSpin 700ms linear infinite;
+}
+
+.react-load-error button {
+  margin-top: 14px;
+}
+
+@keyframes reactBootSpin {
+  to { transform: rotate(360deg); }
+}
+
 html,
 body,
+#root,
 #app {
   height: 100%;
 }
@@ -1408,7 +1480,8 @@ h3 {
   max-width: 100%;
 }
 
-.workspace-status-badge {
+.workspace-status-badge,
+.workspace-status {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -1421,6 +1494,10 @@ h3 {
   font-weight: 800;
   white-space: nowrap;
   box-shadow: var(--shadow-inset);
+}
+
+.workspace-head-actions .workspace-status {
+  align-self: center;
 }
 
 .workspace-summary {
@@ -4360,6 +4437,52 @@ input[type="checkbox"]:focus {
   gap: 8px;
 }
 
+.pager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(219, 227, 230, 0.82);
+  color: var(--muted);
+}
+
+.pager > div {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  color: var(--text);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 17px;
+  min-width: 17px;
+  height: 17px;
+  min-height: 17px;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .pager {
+    grid-template-columns: 1fr;
+  }
+
+  .pager > div,
+  .pager > div button {
+    width: 100%;
+  }
+}
+
 .quantity-page-meta {
   margin: 0 0 10px;
   text-align: right;
@@ -5837,6 +5960,502 @@ th {
   background: #f3faf8;
 }
 
+.react-inline-notice {
+  margin: 14px 0;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, white);
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.react-table-sort {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.react-intake-view .intake-action-panel {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.react-intake-view .intake-action-panel > span {
+  color: var(--text-soft);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.react-intake-view .table-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.scanner-panel {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.scanner-query-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 20px;
+}
+
+.scanner-query-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.scanner-result {
+  padding: 0 20px 24px;
+}
+
+.scanner-camera {
+  position: relative;
+  width: min(560px, calc(100% - 40px));
+  margin: 20px auto 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: #071c1d;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.08);
+}
+
+.scanner-camera video {
+  display: block;
+  width: 100%;
+  max-height: 52vh;
+  object-fit: cover;
+}
+
+.scanner-camera span {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(4, 30, 31, .78);
+  color: #fff;
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+
+.scanner-camera-inactive {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .scanner-query-form {
+    grid-template-columns: 1fr;
+  }
+
+  .react-intake-view .intake-action-panel {
+    min-width: 0;
+  }
+}
+
+.react-billing-view .source-switch {
+  padding: 14px 18px 18px;
+}
+
+.react-quantity-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.react-quantity-layout .quantity-entry-wrap {
+  max-height: 68vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  scrollbar-gutter: stable;
+}
+
+.react-quantity-layout .quantity-entry-table {
+  min-width: 1040px;
+  margin: 0;
+}
+
+.react-quantity-layout .quantity-entry-table thead {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+}
+
+.react-quantity-layout .quantity-entry-table th,
+.react-quantity-layout .quantity-entry-table td {
+  padding: 5px;
+  vertical-align: top;
+}
+
+.react-quantity-layout .quantity-entry-table input,
+.react-quantity-layout .quantity-entry-table select {
+  min-width: 88px;
+  height: 36px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.react-quantity-layout .quantity-entry-table .quantity-date-cell input[name="rowDate"] {
+  min-width: 112px;
+}
+
+.react-quantity-layout .quantity-entry-table.animal-details-hidden {
+  min-width: 560px;
+}
+
+.react-quantity-layout .quantity-page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  color: var(--text-soft);
+}
+
+.react-quantity-layout .quantity-animal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  font-weight: 700;
+}
+
+.react-quantity-layout .quantity-animal-toggle.required {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, white);
+}
+
+.react-quantity-layout .quantity-animal-toggle span {
+  pointer-events: none;
+}
+
+.filterable-table-header {
+  position: relative;
+}
+
+.filterable-table-header .table-filter-trigger {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.filterable-table-header:hover .table-filter-trigger,
+.filterable-table-header:focus-within .table-filter-trigger,
+.filterable-table-header.filtered .table-filter-trigger {
+  opacity: 1;
+}
+
+.filterable-table-header .table-filter-popover {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 10px;
+  width: 230px;
+  max-height: 340px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(15, 47, 48, .18);
+}
+
+.filterable-table-header .table-filter-popover > div {
+  display: grid;
+  gap: 7px;
+}
+
+.filterable-table-header .table-filter-popover label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.quantity-react-preview {
+  width: min(1060px, calc(100vw - 32px));
+}
+
+.quantity-print-sheet {
+  padding: 24px;
+  border: 1px solid #aebabb;
+  background: #fff;
+  color: #172426;
+}
+
+.quantity-print-sheet header {
+  text-align: center;
+}
+
+.quantity-print-sheet dl,
+.quantity-confirm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+}
+
+.quantity-print-sheet dl div,
+.quantity-confirm-grid div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid #d8e0e0;
+}
+
+.quantity-print-sheet dt,
+.quantity-confirm-grid dt {
+  color: var(--text-soft);
+}
+
+.quantity-print-sheet dd,
+.quantity-confirm-grid dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.quantity-print-sheet table {
+  width: 100%;
+  margin-top: 18px;
+  border-collapse: collapse;
+}
+
+.quantity-print-sheet th,
+.quantity-print-sheet td {
+  padding: 7px;
+  border: 1px solid #9ea9aa;
+  text-align: center;
+}
+
+.quantity-save-confirm {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.quantity-confirm-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.settlement-command {
+  display: grid;
+  grid-template-columns: minmax(180px, .6fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 18px;
+}
+
+.settlement-command label {
+  display: grid;
+  gap: 7px;
+}
+
+.settlement-preview {
+  padding: 0 18px 20px;
+}
+
+.settlement-document-preview iframe {
+  width: 100%;
+  min-height: 720px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.settlement-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.settlement-metrics > div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.settlement-metrics span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.settlement-metrics strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .react-quantity-layout .quantity-sheet-head-actions,
+  .settlement-command {
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-print-sheet dl,
+  .quantity-confirm-grid,
+  .settlement-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .react-quantity-layout .quantity-entry-wrap {
+    max-height: 58vh;
+  }
+}
+
+.react-rack-scroll {
+  height: min(62vh, 720px);
+  overflow: auto;
+  padding: 8px 4px 80px;
+  border-top: 1px solid var(--line);
+  scrollbar-gutter: stable;
+}
+
+.react-rack-virtual {
+  position: relative;
+  min-width: 720px;
+}
+
+.react-rack-row {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  height: 96px;
+}
+
+.react-rack-row .slot {
+  min-width: 0;
+  height: 96px;
+}
+
+.react-rack-row .slot-position {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  opacity: .7;
+}
+
+.cage-reserve-bar {
+  position: sticky;
+  z-index: 8;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -66px 16px 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, white 92%, var(--accent));
+  box-shadow: 0 12px 36px rgba(15, 47, 48, .16);
+}
+
+.cage-reserve-bar div {
+  display: grid;
+  gap: 2px;
+}
+
+.cage-reserve-bar span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.cage-slot-modal {
+  width: min(880px, calc(100vw - 32px));
+}
+
+.placement-react-drawer {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.placement-react-list {
+  display: grid;
+  gap: 10px;
+}
+
+.placement-react-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.placement-react-list article > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.placement-react-list article small {
+  grid-column: 1 / -1;
+  color: var(--text-soft);
+}
+
+@media (max-width: 760px) {
+  .react-cage-view .panel-head-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .react-rack-scroll {
+    height: 58vh;
+  }
+
+  .placement-react-list article,
+  .cage-reserve-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .selected-row td {
   background: var(--selection-soft);
   box-shadow: inset 0 1px 0 var(--selection-shadow);
@@ -6363,6 +6982,36 @@ tr:last-child td {
   overflow: auto;
   box-shadow: 0 24px 60px rgba(9, 31, 38, 0.22), var(--shadow-inset);
   animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 76% 16%, rgba(13, 118, 104, 0.15), transparent 30%),
+    rgba(11, 30, 39, 0.38);
+  backdrop-filter: blur(5px);
+}
+
+.modal-backdrop > .modal-shell {
+  position: relative;
+  inset: auto;
+  width: min(var(--modal-width, 900px), 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(9, 31, 38, 0.25), var(--shadow-inset);
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.modal-backdrop > .confirm-dialog {
+  width: min(440px, 100%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .modal-shell {
@@ -7611,5 +8260,280 @@ tr:last-child td {
   .quantity-entry-status-pill:not(:disabled):hover,
   .nav-item:hover {
     transform: none;
+  }
+}
+
+/* React administration workspaces */
+.workflow-filter-bar .command-bar-filters {
+  grid-template-columns: 160px 180px minmax(220px, 1fr);
+  width: min(760px, 100%);
+}
+
+.workflow-detail-modal {
+  --modal-width: 1040px;
+}
+
+.settings-editor-modal {
+  --modal-width: 720px;
+}
+
+.quantity-react-preview {
+  --modal-width: 1060px;
+}
+
+.cage-slot-modal {
+  --modal-width: 880px;
+}
+
+.placement-react-drawer {
+  --modal-width: 760px;
+}
+
+.workflow-detail-summary,
+.system-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workflow-detail-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.workflow-detail-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-detail-summary strong {
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
+.workflow-step-actions,
+.workspace-head-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compact-audit-list {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.react-room-list,
+.react-user-list,
+.settings-side-stack,
+.data-import-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.react-room-list .room-card,
+.react-user-list .user-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.room-card-head,
+.user-card-head,
+.rack-tree-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.room-card-head > div:first-child,
+.user-card-head > div:first-child,
+.rack-tree-item > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.room-card-head span,
+.user-card-head span,
+.rack-tree-item span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rack-tree {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.rack-tree-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.room-add-rack {
+  width: 100%;
+}
+
+.settings-split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-side-panel,
+.settings-side-stack {
+  position: sticky;
+  top: 16px;
+}
+
+.user-card {
+  display: grid;
+  gap: 14px;
+}
+
+.user-fields-react {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.room-access-fieldset {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.room-access-fieldset legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.check-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 4px 16px 4px 0;
+}
+
+.check-row input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.compact-search {
+  width: min(260px, 100%);
+}
+
+.file-action {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed var(--primary-border);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.file-action input {
+  min-height: auto;
+  color: var(--muted);
+}
+
+.system-definition-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.system-definition-list div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.system-definition-list dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.system-definition-list dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+@media (max-width: 1180px) {
+  .settings-split-layout,
+  .system-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-side-panel,
+  .settings-side-stack {
+    position: static;
+  }
+
+  .workflow-detail-summary,
+  .system-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .workflow-filter-bar .command-bar-filters,
+  .user-fields-react,
+  .workflow-detail-summary,
+  .system-status-grid,
+  .system-definition-list {
+    grid-template-columns: 1fr;
+  }
+
+  .room-card-head,
+  .user-card-head,
+  .rack-tree-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .room-card-head .table-actions,
+  .rack-tree-item .table-actions,
+  .workspace-head-button-row,
+  .workflow-step-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .workflow-detail-modal,
+  .settings-editor-modal {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .modal-backdrop > .modal-shell {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-sm);
   }
 }

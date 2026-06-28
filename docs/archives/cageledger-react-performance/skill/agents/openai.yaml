@@ -1,0 +1,4 @@
+interface:
+  display_name: "CageLedger React Performance"
+  short_description: "执行 CageLedger React/Vite 性能迁移任务"
+  default_prompt: "读取 docs/progress/MASTER.md，继续当前 CageLedger React/Vite 性能迁移任务。"

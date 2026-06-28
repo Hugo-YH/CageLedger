@@ -5,9 +5,10 @@
 ## 1. 项目概览
 
 - 这是一个实验动物笼位管理与饲养费核算系统。
-- 前端是原生 HTML/CSS/JavaScript：
+- 前端是 React 19、TypeScript 和 Vite：
   - `index.html`
-  - `src/app.js`
+  - `src/main.tsx`
+  - `src/react/`
   - `src/styles.css`
 - 后端是 Python 标准库 HTTP 服务：
   - `server.py`
@@ -26,8 +27,8 @@
 
 - 共享模式启动命令：
   - `npm run dev`
-- 静态模式启动命令：
-  - `npm run static`
+- 生产前端构建命令：
+  - `npm run build`
 - 语法检查命令：
   - `npm run check`
 - 离线包命令：
@@ -42,7 +43,7 @@
 
 ## 3. 代码入口与改动归属
 
-- 前端主逻辑集中在 `src/app.js`。
+- 前端应用壳和业务视图集中在 `src/react/`，纯业务计算集中在 `src/domain/`。
 - 前端样式集中在 `src/styles.css`。
 - 后端 API、SQLite、权限、迁移、审计逻辑集中在 `server.py`。
 - 接口与数据模型说明以 `wiki/API与数据模型.md` 为准。
@@ -83,22 +84,22 @@
 - 少引入新框架、新状态层、新构建工具。
 - 前端通知统一走站内通知与站内确认弹层。
 - 不使用浏览器原生 `alert()` 和 `confirm()`。
-- 远端模式和本地静态模式都要考虑。
+- 正式前端统一通过 Python API 读写数据。
 - 修改缓存、bootstrap、懒加载、权限、SQLite 迁移、索引、版本刷新逻辑时，必须在结果里说明验证情况。
 - 修改版本号时只用仓库脚本，不手工散改多个文件。
-- 发布前先更新 `src/app.js` 中的 `SYSTEM_RELEASE_NOTES`。
+- 发布前先更新 `src/react/releaseNotes.ts` 中的 `SYSTEM_RELEASE_NOTES`。
 - 发布时要求 `commit -> version -> tag -> Release/Packages` 严格一一对应；不要复用旧 tag 修补新内容。
 - “系统更新”功能按 Gitea 最新 Release 判断，不按 `main` 最新 commit 判断；涉及更新检查时先确认 Release 语义没有被改回分支语义。
 - 私有 Gitea 更新检查依赖 `CAGELEDGER_UPDATE_CHECK_ENABLED=true` 和只读 `CAGELEDGER_GITEA_TOKEN`。
 - Gitea 发布链当前分工：
   - `GITEA_TOKEN` 用于创建 Release
-  - `PACKAGE_USERNAME` / `PACKAGE_PAT` 用于推送容器镜像
+  - `PACKAGE_USERNAME` Variable / `PACKAGE_PAT` Secret 用于推送容器镜像
 - 修改 `.gitea/workflows/*` 时，额外考虑 runner 是否只能访问内网资源、job 容器与 runner 容器网络是否一致、脚本是否兼容 `/bin/sh`。
 - 如果修改影响接口、数据结构、部署说明，连带更新对应 `wiki/` 页面。
 
 ## 6. 禁止事项
 
-- 不随意重写 `src/app.js` 的整体结构。
+- 不绕过 typed API hooks 在 React 组件中直接拼接跨域业务状态。
 - 不删除历史兼容逻辑，除非任务明确要求。
 - 不手工改 `dist/` 打包产物。
 - 不直接改 SQLite 数据文件内容。
@@ -130,7 +131,7 @@
   - 先检查 `5173` 端口和现有进程
   - 再执行 `npm run dev`
 - 修前端：
-  - 主要改 `src/app.js` 和 `src/styles.css`
+  - 主要改 `src/react/`、`src/domain/` 和 `src/styles.css`
   - 完成后运行 `npm run check`
   - 涉及交互时再确认 `http://localhost:5173`
 - 修后端：
@@ -138,7 +139,7 @@
   - 完成后运行 `npm run check`
   - 涉及接口和权限时检查对应 API 与前端联动
 - 发版：
-  - 先更新 `src/app.js` 中的 `SYSTEM_RELEASE_NOTES`
+  - 先更新 `src/react/releaseNotes.ts` 中的 `SYSTEM_RELEASE_NOTES`
   - 再执行 `npm run release:local -- --version ... --push`
 - 改更新检查：
   - 先确认目标是“最新 Release”还是“最新 commit”

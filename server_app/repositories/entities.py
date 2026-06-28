@@ -10,14 +10,14 @@ INTAKE_BATCH_LIST_COLUMNS = {
     "status": {"expr": "status", "order": "status"},
     "batchNo": {"expr": "batch_no", "order": "batch_no"},
     "supplier": {"expr": "supplier", "order": "supplier"},
-    "pi": {"expr": "json_extract(payload, '$.pi')", "order": "json_extract(payload, '$.pi')"},
-    "owner": {"expr": "json_extract(payload, '$.owner')", "order": "json_extract(payload, '$.owner')"},
-    "quantity": {"expr": "CAST(json_extract(payload, '$.quantity') AS TEXT)", "order": "CAST(json_extract(payload, '$.quantity') AS INTEGER)"},
+    "pi": {"expr": "pi", "order": "pi"},
+    "owner": {"expr": "owner", "order": "owner"},
+    "quantity": {"expr": "CAST(quantity AS TEXT)", "order": "quantity"},
     "roomName": {"expr": "room_name", "order": "room_name"},
     "intakeDate": {"expr": "intake_date", "order": "intake_date"},
     "cardCount": {
-        "expr": "COALESCE(json_extract(payload, '$.confirmedCardCount'), 0) || ' / ' || COALESCE(json_extract(payload, '$.finalCardCount'), 0) || ' 张'",
-        "order": "CAST(json_extract(payload, '$.finalCardCount') AS INTEGER)",
+        "expr": "COALESCE(json_extract(payload, '$.confirmedCardCount'), 0) || ' / ' || COALESCE(card_count, 0) || ' 张'",
+        "order": "card_count",
     },
 }
 
@@ -176,12 +176,19 @@ def upsert_principal_identity(conn, pi_name, principal_type, updated_at, payload
 def upsert_intake_batch(conn, batch):
     conn.execute(
         """
-        INSERT INTO intake_batches (id, batch_no, iacuc, supplier, room_name, intake_date, status, updated_at, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO intake_batches (
+            id, batch_no, iacuc, supplier, pi, owner, quantity, card_count,
+            room_name, intake_date, status, updated_at, payload
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             batch_no = excluded.batch_no,
             iacuc = excluded.iacuc,
             supplier = excluded.supplier,
+            pi = excluded.pi,
+            owner = excluded.owner,
+            quantity = excluded.quantity,
+            card_count = excluded.card_count,
             room_name = excluded.room_name,
             intake_date = excluded.intake_date,
             status = excluded.status,
@@ -193,6 +200,10 @@ def upsert_intake_batch(conn, batch):
             batch.get("batchNo", ""),
             batch.get("iacuc", ""),
             batch.get("supplier", ""),
+            batch.get("pi", ""),
+            batch.get("owner", ""),
+            int(batch.get("quantity") or 0),
+            int(batch.get("finalCardCount") or 0),
             batch.get("roomName", ""),
             batch.get("intakeDate", ""),
             batch.get("status", "draft"),
