@@ -1,0 +1,4 @@
+interface:
+  display_name: "CageLedger Modularization"
+  short_description: "Execute CageLedger modular refactoring safely"
+  default_prompt: "Use $project-modularization-dev to continue the active CageLedger modularization phase."

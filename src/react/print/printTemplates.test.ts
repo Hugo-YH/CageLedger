@@ -123,4 +123,34 @@ describe("print templates", () => {
     expect(html).toContain('class="sign-table"');
     expect(html).toContain("@page{size:A4;margin:10mm}");
   });
+
+  it("keeps the official quantity document title and two-column page structure", () => {
+    const html = quantitySheetPagesMarkup([
+      {
+        id: "sheet-1",
+        month: "2026-06",
+        roomId: "room-1",
+        roomName: "8014",
+        manager: "管理员",
+        iacuc: "Z1",
+        pi: "张教授",
+        owner: "陈老师",
+        project: "项目",
+        contact: "",
+        funding: "",
+        preferredFreeCages: null,
+        freeCagePriority: null,
+        billingUnit: "cage_day",
+        animalDetailEnabled: false,
+        initialAnimalCount: 0,
+        initialCageCount: 0,
+        pageCount: 1,
+        rows: [],
+        updatedAt: "2026-06-01T00:00:00Z",
+      },
+    ]);
+    expect(html).toContain("实验动物数量统计表");
+    expect(html.match(/新增（购\/转\/分）/g)).toHaveLength(2);
+    expect(html.match(/2026\.6\./g)).toHaveLength(30);
+  });
 });

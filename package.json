@@ -18,6 +18,7 @@
     "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "test:e2e": "playwright test",
     "benchmark": "python3 scripts/benchmark_performance.py",
+    "check:architecture": "node scripts/check_architecture.mjs",
     "format": "prettier --write . && python3 -m ruff format .",
     "format:check": "prettier --check . && python3 -m ruff format --check .",
     "lint": "npm run lint:ts && npm run lint:css && npm run lint:md && npm run lint:python && npm run lint:shell",
