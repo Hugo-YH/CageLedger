@@ -282,10 +282,6 @@
     max-height: none;
   }
 
-  .placement-task-floating-card::after {
-    display: none;
-  }
-
   .slot {
     min-height: 88px;
     padding: 8px;
@@ -393,10 +389,6 @@
   .quantity-field-group-project,
   .quantity-field-group-billing {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .quantity-field-group-billing {
-    max-width: none;
   }
 
   .quantity-field-group .wide {

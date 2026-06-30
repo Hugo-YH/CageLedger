@@ -22,7 +22,7 @@
 | 2     | 后端平台层          |     4 |    4 |     100% |
 | 3     | 后端领域拆分        |     5 |    4 |      80% |
 | 4     | 前端领域拆分        |     5 |    5 |     100% |
-| 5     | CSS、脚本与测试结构 |     4 |    3 |      75% |
+| 5     | CSS、脚本与测试结构 |     4 |    4 |     100% |
 | 6     | 全链路验收与归档    |     4 |    0 |       0% |
 
 ## Phase Checklist
@@ -31,7 +31,7 @@
 - [x] Phase 2: 后端平台层 (4/4) — [details](./phase-2-platform.md)
 - [ ] Phase 3: 后端领域拆分 (4/5) — [details](./phase-3-backend-domains.md)
 - [x] Phase 4: 前端领域拆分 (5/5) — [details](./phase-4-frontend-domains.md)
-- [ ] Phase 5: CSS、脚本与测试结构 (3/4) — [details](./phase-5-assets-tooling.md)
+- [x] Phase 5: CSS、脚本与测试结构 (4/4) — [details](./phase-5-assets-tooling.md)
 - [ ] Phase 6: 全链路验收与归档 (0/4) — [details](./phase-6-validation.md)
 
 ## Current Status
@@ -48,7 +48,7 @@
 | 2     |     0 |        1 |      2 |       3 |       4/4 |
 | 3     |     0 |        1 |      2 |       3 |       4/5 |
 | 4     |     0 |        1 |      2 |       3 |       5/5 |
-| 5     |     0 |        1 |      2 |       3 |       3/4 |
+| 5     |     0 |        1 |      2 |       3 |       4/4 |
 | 6     |     0 |        1 |      2 |       3 |       0/4 |
 
 ## Task Telemetry Log
@@ -73,6 +73,7 @@
 | 4.4  | M         | S      | 10/10 |              0 |     0 | 流程、房间页面与 model 拆分       |
 | 4.5  | S         | S      | 10/10 |              0 |     0 | release notes 历史记录拆分        |
 | 5.1  | L         | M      | 10/10 |              0 |     0 | CSS 按原始级联顺序拆分            |
+| 5.2  | M         | S      | 10/10 |              0 |     0 | 精确重复规则清理且视觉契约通过    |
 | 5.3  | M         | S      | 10/10 |              0 |     0 | demo、发布记录和 E2E 分域拆分     |
 | 5.4  | M         | S      | 10/10 |              0 |     0 | 强制架构检查接入 npm check        |
 
