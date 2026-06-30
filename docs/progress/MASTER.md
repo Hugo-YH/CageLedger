@@ -19,7 +19,7 @@
 | Phase | Name                | Tasks | Done | Progress |
 | ----- | ------------------- | ----: | ---: | -------: |
 | 1     | 行为基线与架构门禁  |     4 |    4 |     100% |
-| 2     | 后端平台层          |     4 |    0 |       0% |
+| 2     | 后端平台层          |     4 |    4 |     100% |
 | 3     | 后端领域拆分        |     5 |    0 |       0% |
 | 4     | 前端领域拆分        |     5 |    0 |       0% |
 | 5     | CSS、脚本与测试结构 |     4 |    0 |       0% |
@@ -28,7 +28,7 @@
 ## Phase Checklist
 
 - [x] Phase 1: 行为基线与架构门禁 (4/4) — [details](./phase-1-baseline.md)
-- [ ] Phase 2: 后端平台层 (0/4) — [details](./phase-2-platform.md)
+- [x] Phase 2: 后端平台层 (4/4) — [details](./phase-2-platform.md)
 - [ ] Phase 3: 后端领域拆分 (0/5) — [details](./phase-3-backend-domains.md)
 - [ ] Phase 4: 前端领域拆分 (0/5) — [details](./phase-4-frontend-domains.md)
 - [ ] Phase 5: CSS、脚本与测试结构 (0/4) — [details](./phase-5-assets-tooling.md)
@@ -36,8 +36,8 @@
 
 ## Current Status
 
-**Active Phase**: Phase 2
-**Active Task**: 2.1 提取 persistence schema、migration 和 index 注册
+**Active Phase**: Phase 3
+**Active Task**: 3.1 拆 administration、audit、system 与 iacuc
 **Blockers**: None
 
 ## Adaptive Control State
@@ -45,7 +45,7 @@
 | Phase | Drift | Annotate | Replan | Rescope | Completed |
 | ----- | ----: | -------: | -----: | ------: | --------: |
 | 1     |     0 |        1 |      2 |       3 |       4/4 |
-| 2     |     0 |        1 |      2 |       3 |       0/4 |
+| 2     |     0 |        1 |      2 |       3 |       4/4 |
 | 3     |     0 |        1 |      2 |       3 |       0/5 |
 | 4     |     0 |        1 |      2 |       3 |       0/5 |
 | 5     |     0 |        1 |      2 |       3 |       0/4 |
@@ -53,18 +53,22 @@
 
 ## Task Telemetry Log
 
-| Task | Estimated | Actual | SUPER | Unplanned Deps | Drift | Notes                       |
-| ---- | --------- | ------ | ----: | -------------: | ----: | --------------------------- |
-| 1.1  | S         | S      | 10/10 |              0 |     0 | 规格、进度和 Skill 校验完成 |
-| 1.2  | L         | S      | 10/10 |              0 |     0 | 业务与 API 特征测试完成     |
-| 1.3  | M         | M      | 10/10 |              0 |     0 | 打印与三档视觉契约完成      |
-| 1.4  | M         | S      | 10/10 |              0 |     0 | report-only 架构检查完成    |
+| Task | Estimated | Actual | SUPER | Unplanned Deps | Drift | Notes                            |
+| ---- | --------- | ------ | ----: | -------------: | ----: | -------------------------------- |
+| 1.1  | S         | S      | 10/10 |              0 |     0 | 规格、进度和 Skill 校验完成      |
+| 1.2  | L         | S      | 10/10 |              0 |     0 | 业务与 API 特征测试完成          |
+| 1.3  | M         | M      | 10/10 |              0 |     0 | 打印与三档视觉契约完成           |
+| 1.4  | M         | S      | 10/10 |              0 |     0 | report-only 架构检查完成         |
+| 2.1  | L         | M      | 10/10 |              0 |     0 | schema registry、建表与索引完成  |
+| 2.2  | L         | M      | 10/10 |              0 |     0 | HTTP 基类、响应与 Router 完成    |
+| 2.3  | L         | M      |  9/10 |              0 |     0 | 平台路由切换，领域 fallback 保留 |
+| 2.4  | M         | S      | 10/10 |              0 |     0 | server.py 收敛为兼容启动入口     |
 
 ## Next Steps
 
-1. 提取 persistence schema、migration 和 index 注册。
-2. 提取 web request、response、auth 和 Router。
-3. 将 Handler 切换为统一路由分发并收敛 server.py。
+1. 拆 administration、audit、system 与 iacuc。
+2. 拆 intake、QR 与 cages/placement。
+3. 按 quantity、billing、workflow、reimbursement 顺序清空 legacy。
 
 ## Session Log
 
