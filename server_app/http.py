@@ -1,7 +1,7 @@
 import gzip
 import json
-from http import HTTPStatus
 import time
+from http import HTTPStatus
 from urllib.parse import urlparse
 
 

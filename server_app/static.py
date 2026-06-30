@@ -1,10 +1,9 @@
 import gzip
-from http import HTTPStatus
 import mimetypes
-from pathlib import Path
 import threading
+from http import HTTPStatus
+from pathlib import Path
 from urllib.parse import unquote, urlparse
-
 
 STATIC_CACHE = {}
 STATIC_CACHE_LOCK = threading.Lock()
@@ -46,7 +45,11 @@ def send_frontend_asset(handler, root: Path) -> bool:
             STATIC_CACHE[cache_key] = body
 
     content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-    if content_type.startswith("text/") or content_type in {"application/javascript", "application/json", "image/svg+xml"}:
+    if content_type.startswith("text/") or content_type in {
+        "application/javascript",
+        "application/json",
+        "image/svg+xml",
+    }:
         content_type = f"{content_type}; charset=utf-8"
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", content_type)

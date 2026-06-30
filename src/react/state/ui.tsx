@@ -11,9 +11,7 @@ export interface UiState {
 }
 
 type UiAction =
-  | { type: "navigate"; view: WorkspaceView }
-  | { type: "toggle-sidebar" }
-  | { type: "set-settings"; expanded: boolean };
+  { type: "navigate"; view: WorkspaceView } | { type: "toggle-sidebar" } | { type: "set-settings"; expanded: boolean };
 
 function initialUiState(): UiState {
   return {

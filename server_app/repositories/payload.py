@@ -50,7 +50,9 @@ def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, wher
     cached = cache_get(key)
     if cached is not None:
         return cached
-    return cache_set(key, paginated_payloads(conn, table, order_by, where_sql, params, filters["limit"], filters["offset"]))
+    return cache_set(
+        key, paginated_payloads(conn, table, order_by, where_sql, params, filters["limit"], filters["offset"])
+    )
 
 
 def set_setting(conn, key, value, updated_at):

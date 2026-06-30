@@ -2,12 +2,33 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function ensureTestInfrastructure(page: Page) {
   const response = await page.request.get("/api/rooms");
-  const payload = await response.json() as { items?: Array<{ id: string; name: string }> };
+  const payload = (await response.json()) as { items?: Array<{ id: string; name: string }> };
   if ((payload.items || []).some((room) => room.name === "8014")) return;
-  await page.request.post("/api/rooms", { data: { item: { id: "room-e2e-8014", name: "8014", area: "E2E", facility: "zhujiang", defaultSpecies: "mouse", defaultBillingItem: "mouse_standard", defaultCustomerType: "internal", defaultAnimalCount: 1 } } });
-  await page.request.post("/api/racks", { data: { item: { id: "rack-e2e-8014-1", roomId: "room-e2e-8014", name: "8014 01 号笼架", index: 1, rows: 1, cols: 2 } } });
-  await page.request.post("/api/cage-slots", { data: { item: { id: "slot-e2e-8014-a01", rackId: "rack-e2e-8014-1", row: 1, col: 1, status: "empty" } } });
-  await page.request.post("/api/cage-slots", { data: { item: { id: "slot-e2e-8014-a02", rackId: "rack-e2e-8014-1", row: 1, col: 2, status: "empty" } } });
+  await page.request.post("/api/rooms", {
+    data: {
+      item: {
+        id: "room-e2e-8014",
+        name: "8014",
+        area: "E2E",
+        facility: "zhujiang",
+        defaultSpecies: "mouse",
+        defaultBillingItem: "mouse_standard",
+        defaultCustomerType: "internal",
+        defaultAnimalCount: 1,
+      },
+    },
+  });
+  await page.request.post("/api/racks", {
+    data: {
+      item: { id: "rack-e2e-8014-1", roomId: "room-e2e-8014", name: "8014 01 号笼架", index: 1, rows: 1, cols: 2 },
+    },
+  });
+  await page.request.post("/api/cage-slots", {
+    data: { item: { id: "slot-e2e-8014-a01", rackId: "rack-e2e-8014-1", row: 1, col: 1, status: "empty" } },
+  });
+  await page.request.post("/api/cage-slots", {
+    data: { item: { id: "slot-e2e-8014-a02", rackId: "rack-e2e-8014-1", row: 1, col: 2, status: "empty" } },
+  });
   await page.reload();
 }
 
@@ -23,7 +44,11 @@ test("login and open the main business workspaces", async ({ page }) => {
   await ensureTestInfrastructure(page);
   await page.getByRole("button", { name: "笼卡管理", exact: true }).click();
   await expect(page.getByRole("heading", { name: "笼卡管理", exact: true })).toBeVisible();
-  await page.getByLabel("预约消息").fill("锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8014 进驻日期：5月13日");
+  await page
+    .getByLabel("预约消息")
+    .fill(
+      "锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8014 进驻日期：5月13日",
+    );
   await page.getByRole("button", { name: "识别文本", exact: true }).click();
   await expect(page.getByLabel("批次号", { exact: true })).toHaveValue("（Z2025050）2026042903");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("70");
@@ -151,9 +176,17 @@ test("room administrator keeps the server-side permission boundary", async ({ pa
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
   const username = `e2e_room_${Date.now()}`;
-  const createResponse = await page.request.post("/api/users", { data: { username, displayName: "E2E 权限管理员", password: "e2e-password", role: "room_admin", roomIds: ["room-e2e-8014"] } });
+  const createResponse = await page.request.post("/api/users", {
+    data: {
+      username,
+      displayName: "E2E 权限管理员",
+      password: "e2e-password",
+      role: "room_admin",
+      roomIds: ["room-e2e-8014"],
+    },
+  });
   expect(createResponse.ok()).toBeTruthy();
-  const created = await createResponse.json() as { user: { id: string } };
+  const created = (await createResponse.json()) as { user: { id: string } };
   await page.getByRole("button", { name: "退出", exact: true }).click();
   await page.getByLabel("用户名", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill("e2e-password");

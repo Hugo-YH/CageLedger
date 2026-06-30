@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, requestJson } from "./client";
+import { requestJson } from "./client";
 
 describe("requestJson", () => {
   afterEach(() => vi.restoreAllMocks());

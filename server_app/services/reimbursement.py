@@ -1,6 +1,5 @@
 import re
 
-
 REIMBURSEMENT_STATUS_PENDING = "pending_submission"
 REIMBURSEMENT_STATUS_REIMBURSING = "reimbursing"
 REIMBURSEMENT_STATUS_COMPLETED = "completed"
@@ -107,7 +106,9 @@ def billing_breakdown_groups(row, billing_unit):
 
 
 def summarize_statement(statement, lines, detail_context_by_iacuc, tier_limit):
-    billing_unit = statement.get("billingUnit") or ("animal_day" if numeric(statement.get("totalAnimalDays")) > 0 else "cage_day")
+    billing_unit = statement.get("billingUnit") or (
+        "animal_day" if numeric(statement.get("totalAnimalDays")) > 0 else "cage_day"
+    )
     iacucs = statement_column_iacucs(statement, lines, billing_unit, tier_limit)
     per_iacuc = {iacuc: {"count": 0, "supportAmount": 0, "payableAmount": 0, "amount": 0} for iacuc in iacucs}
     free_allowance = numeric(statement.get("freeCageAllowance"))
@@ -169,17 +170,23 @@ def summarize_statement(statement, lines, detail_context_by_iacuc, tier_limit):
 def merge_reimbursement_edit(existing, patch):
     next_record = {**existing}
     next_record["fundBookNo"] = str(patch.get("fundBookNo", existing.get("fundBookNo", "")) or "").strip()
-    next_record["reimbursementFormNo"] = str(patch.get("reimbursementFormNo", existing.get("reimbursementFormNo", "")) or "").strip()
+    next_record["reimbursementFormNo"] = str(
+        patch.get("reimbursementFormNo", existing.get("reimbursementFormNo", "")) or ""
+    ).strip()
     next_record["notes"] = str(patch.get("notes", existing.get("notes", "")) or "").strip()
     approved_budget = patch.get("approvedBudget", existing.get("approvedBudget"))
     next_record["approvedBudget"] = "" if approved_budget in (None, "") else coerce_money(approved_budget)
     next_record["paidAmount"] = coerce_money(patch.get("paidAmount", existing.get("paidAmount", 0)))
-    requested_status = normalize_reimbursement_status(patch.get("reimbursementStatus", existing.get("reimbursementStatus", REIMBURSEMENT_STATUS_PENDING)))
+    requested_status = normalize_reimbursement_status(
+        patch.get("reimbursementStatus", existing.get("reimbursementStatus", REIMBURSEMENT_STATUS_PENDING))
+    )
     payable_amount = coerce_money(next_record.get("payableAmount", 0))
     next_record["unpaidAmount"] = coerce_money(max(payable_amount - next_record["paidAmount"], 0))
     if requested_status == REIMBURSEMENT_STATUS_COMPLETED and next_record["paidAmount"] + 1e-9 < payable_amount:
         raise ValueError("已缴金额达到本月应缴金额后才能标记完成")
-    if requested_status == REIMBURSEMENT_STATUS_REIMBURSING and not (next_record["fundBookNo"] or next_record["reimbursementFormNo"]):
+    if requested_status == REIMBURSEMENT_STATUS_REIMBURSING and not (
+        next_record["fundBookNo"] or next_record["reimbursementFormNo"]
+    ):
         raise ValueError("录入经费本号或报销单号后才能标记为报销中")
     next_record["reimbursementStatus"] = requested_status
     if requested_status == REIMBURSEMENT_STATUS_COMPLETED:

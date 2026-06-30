@@ -1,0 +1,118 @@
+name: Continuous integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ gitea.ref }}
+  cancel-in-progress: true
+
+permissions:
+  code: read
+
+jobs:
+  quality:
+    name: Frontend and documentation quality
+    runs-on: ubuntu-latest
+    container: node:22-bookworm
+    steps:
+      - name: Check out source
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git shellcheck
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting and lint
+        run: |
+          npx prettier --check .
+          npm run lint:ts
+          npm run lint:css
+          npm run lint:md
+          npm run lint:shell
+          shellcheck scripts/*.sh
+
+      - name: Typecheck and test
+        run: |
+          npm run typecheck
+          npm run test
+          npm run build
+
+  python:
+    name: Python quality
+    runs-on: ubuntu-latest
+    container: python:3.13-slim
+    steps:
+      - name: Check out source
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir -r requirements-dev.txt
+
+      - name: Lint and test
+        run: |
+          python -m ruff format --check .
+          python -m ruff check .
+          python -m unittest discover -s tests -p 'test_*.py'
+          python -m py_compile server.py scripts/*.py server_app/*.py server_app/repositories/*.py server_app/services/*.py
+
+  e2e:
+    name: Browser regression
+    needs: [quality, python]
+    runs-on: ubuntu-latest
+    container: node:22-bookworm
+    steps:
+      - name: Check out source
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git python3 python3-pip python3-venv
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install application and browser dependencies
+        run: |
+          npm ci
+          python3 -m venv .venv
+          .venv/bin/pip install --no-cache-dir -r requirements.txt
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        env:
+          CI: "true"
+        run: PATH="$PWD/.venv/bin:$PATH" npm run test:e2e
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14

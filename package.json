@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "start": "npm run build && python3 server.py",
@@ -15,9 +15,19 @@
     "preview": "vite preview --host 0.0.0.0 --port 5173",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "test:e2e": "playwright test",
     "benchmark": "python3 scripts/benchmark_performance.py",
-    "check": "npm run typecheck && npm run test && python3 -m unittest discover -s tests -p 'test_*.py' && find src -name '*.js' -print0 | xargs -0 -n1 node --check && python3 -m py_compile server.py scripts/generate_iacuc_index.py scripts/benchmark_performance.py",
+    "format": "prettier --write . && python3 -m ruff format .",
+    "format:check": "prettier --check . && python3 -m ruff format --check .",
+    "lint": "npm run lint:ts && npm run lint:css && npm run lint:md && npm run lint:python && npm run lint:shell",
+    "lint:ts": "eslint . --max-warnings 0",
+    "lint:css": "stylelint 'src/**/*.css'",
+    "lint:md": "markdownlint-cli2",
+    "lint:python": "python3 -m ruff check .",
+    "lint:shell": "bash -n scripts/*.sh",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:python",
+    "verify:full": "npm run check && npm run build && npm run test:e2e",
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
     "release:local": "bash scripts/release_local.sh"
@@ -29,6 +39,8 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -36,9 +48,24 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "markdownlint-cli2": "^0.22.1",
+    "prettier": "^3.9.4",
+    "stylelint": "^17.14.0",
+    "stylelint-config-standard": "^40.0.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1",
     "vite": "^8.1.0",
     "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "js-yaml": "4.3.0",
+    "markdown-it": "14.2.0"
   }
 }

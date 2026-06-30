@@ -70,7 +70,9 @@ def save_billing_statement_workflow(conn, statement, lines, actor, note, deps):
         version_id = current_version_id
         version_no = int(current_version.get("versionNo") or existing.get("currentVersionNo") or 1)
         lines = [{**line, "statementId": version_id} for line in lines]
-        document_number = current_version.get("documentNumber") or deps["make_statement_document_number"](statement, version_no)
+        document_number = current_version.get("documentNumber") or deps["make_statement_document_number"](
+            statement, version_no
+        )
         statement = deps["enrich_statement_for_workflow"](
             statement,
             workflow_id=workflow_id,

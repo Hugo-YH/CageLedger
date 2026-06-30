@@ -25,7 +25,7 @@ export function App() {
   const session = useSession();
 
   useEffect(() => {
-    const refreshSession = () => queryClient.invalidateQueries({ queryKey: queryKeys.session });
+    const refreshSession = () => void queryClient.invalidateQueries({ queryKey: queryKeys.session });
     window.addEventListener("cageledger:session-changed", refreshSession);
     return () => window.removeEventListener("cageledger:session-changed", refreshSession);
   }, [queryClient]);
@@ -44,7 +44,9 @@ function ServiceError() {
     <main className="react-load-error" role="alert">
       <strong>无法连接 CageLedger 服务</strong>
       <span>请检查 Python API 是否正在运行，然后重新加载页面。</span>
-      <button className="primary" type="button" onClick={() => window.location.reload()}>重新加载</button>
+      <button className="primary" type="button" onClick={() => window.location.reload()}>
+        重新加载
+      </button>
     </main>
   );
 }

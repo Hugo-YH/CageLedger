@@ -10,7 +10,7 @@ import re
 import secrets
 import sqlite3
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from email.utils import format_datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -25,7 +25,14 @@ except ImportError:
     openpyxl = None
     openpyxl_from_excel = None
 
-from server_app.cache import cache_get, cache_key, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes, log_perf
+from server_app.cache import (
+    cache_get,
+    cache_key,
+    cache_set,
+    invalidate_data_cache,
+    invalidate_data_cache_prefixes,
+    log_perf,
+)
 from server_app.config import (
     CAGELEDGER_APP_VERSION,
     CAGELEDGER_BRANCH,
@@ -53,54 +60,129 @@ from server_app.config import (
     frontend_root,
 )
 from server_app.db import configure_database, connect_db, ensure_database_ready
-from server_app.http import add_default_headers, send_json as send_json_response
-from server_app.static import send_frontend_asset
+from server_app.http import add_default_headers
+from server_app.http import send_json as send_json_response
 from server_app.repositories.audit import insert_audit_events
 from server_app.repositories.billing import (
-    delete_billing_workflow_tree as delete_billing_workflow_tree_repository,
-    delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
-    get_current_billing_statement as get_current_billing_statement_repository,
     billing_workflow_detail_item as billing_workflow_detail_item_repository,
-    get_billing_workflow_detail as get_billing_workflow_detail_repository,
+)
+from server_app.repositories.billing import (
+    delete_billing_workflow_tree as delete_billing_workflow_tree_repository,
+)
+from server_app.repositories.billing import (
+    delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
+)
+from server_app.repositories.billing import (
     get_billing_version as get_billing_version_repository,
+)
+from server_app.repositories.billing import (
     get_billing_workflow as get_billing_workflow_repository,
+)
+from server_app.repositories.billing import (
     get_billing_workflow_by_key as get_billing_workflow_by_key_repository,
+)
+from server_app.repositories.billing import (
+    get_billing_workflow_detail as get_billing_workflow_detail_repository,
+)
+from server_app.repositories.billing import (
+    get_current_billing_statement as get_current_billing_statement_repository,
+)
+from server_app.repositories.billing import (
     get_quantity_sheet as get_quantity_sheet_repository,
+)
+from server_app.repositories.billing import (
     insert_billing_version as insert_billing_version_repository,
+)
+from server_app.repositories.billing import (
     insert_billing_workflow as insert_billing_workflow_repository,
+)
+from server_app.repositories.billing import (
     insert_billing_workflow_event as insert_billing_workflow_event_repository,
+)
+from server_app.repositories.billing import (
     insert_quantity_sheet as insert_quantity_sheet_repository,
-    list_quantity_sheets_by_month_iacuc as list_quantity_sheets_by_month_iacuc_repository,
-    list_quantity_sheets_by_month_pi as list_quantity_sheets_by_month_pi_repository,
-    list_billing_workflows as list_billing_workflows_repository,
-    list_billing_statement_lines_for_version as list_billing_statement_lines_for_version_repository,
+)
+from server_app.repositories.billing import (
     list_billing_statement_line_summaries_for_version as list_billing_statement_line_summaries_for_version_repository,
+)
+from server_app.repositories.billing import (
+    list_billing_statement_lines_for_version as list_billing_statement_lines_for_version_repository,
+)
+from server_app.repositories.billing import (
     list_billing_workflow_events as list_billing_workflow_events_repository,
+)
+from server_app.repositories.billing import (
     list_billing_workflow_versions as list_billing_workflow_versions_repository,
+)
+from server_app.repositories.billing import (
+    list_billing_workflows as list_billing_workflows_repository,
+)
+from server_app.repositories.billing import (
     list_billing_workflows_page as list_billing_workflows_page_repository,
+)
+from server_app.repositories.billing import (
     list_current_billing_statements as list_current_billing_statements_repository,
+)
+from server_app.repositories.billing import (
     list_quantity_sheet_filter_options as list_quantity_sheet_filter_options_repository,
+)
+from server_app.repositories.billing import (
     list_quantity_sheets as list_quantity_sheets_repository,
+)
+from server_app.repositories.billing import (
+    list_quantity_sheets_by_month_iacuc as list_quantity_sheets_by_month_iacuc_repository,
+)
+from server_app.repositories.billing import (
+    list_quantity_sheets_by_month_pi as list_quantity_sheets_by_month_pi_repository,
+)
+from server_app.repositories.billing import (
     list_quantity_sheets_page as list_quantity_sheets_page_repository,
+)
+from server_app.repositories.billing import (
     replace_billing_statement_version_lines as replace_billing_statement_version_lines_repository,
+)
+from server_app.repositories.billing import (
     select_quantity_sheets_for_transfer as select_quantity_sheets_for_transfer_repository,
+)
+from server_app.repositories.billing import (
     update_billing_version as update_billing_version_repository,
+)
+from server_app.repositories.billing import (
     update_billing_workflow as update_billing_workflow_repository,
+)
+from server_app.repositories.billing import (
     update_quantity_sheet as update_quantity_sheet_repository,
 )
 from server_app.repositories.entities import (
     delete_intake_batch as delete_intake_batch_repository,
+)
+from server_app.repositories.entities import (
     delete_placement_task as delete_placement_task_repository,
+)
+from server_app.repositories.entities import (
     list_audit_events_page,
+    list_distinct_principal_names,
     list_intake_batch_filter_options,
     list_intake_batches_page,
     list_placement_tasks_page,
-    list_distinct_principal_names,
     read_principal_identity_payloads,
-    read_principal_type_by_pi as read_principal_type_by_pi_repository,
-    upsert_intake_batch as upsert_intake_batch_repository,
-    upsert_placement_task as upsert_placement_task_repository,
     upsert_principal_identity,
+)
+from server_app.repositories.entities import (
+    read_principal_type_by_pi as read_principal_type_by_pi_repository,
+)
+from server_app.repositories.entities import (
+    upsert_intake_batch as upsert_intake_batch_repository,
+)
+from server_app.repositories.entities import (
+    upsert_placement_task as upsert_placement_task_repository,
+)
+from server_app.repositories.iacuc import read_iacuc_index as read_iacuc_index_repository
+from server_app.repositories.iacuc import (
+    replace_experiment_applications,
+)
+from server_app.repositories.iacuc import (
+    save_iacuc_index_file as save_iacuc_index_file_repository,
 )
 from server_app.repositories.infrastructure import (
     delete_rack_record,
@@ -112,12 +194,8 @@ from server_app.repositories.infrastructure import (
     update_rack_record,
     update_room_record,
 )
-from server_app.repositories.iacuc import read_iacuc_index as read_iacuc_index_repository
-from server_app.repositories.iacuc import replace_experiment_applications, save_iacuc_index_file as save_iacuc_index_file_repository
 from server_app.repositories.payload import (
-    cached_paginated_payloads,
     dump_json,
-    paginated_payloads,
     read_payloads,
     read_setting,
     read_updated_at,
@@ -126,36 +204,73 @@ from server_app.repositories.payload import (
 )
 from server_app.repositories.reimbursement import (
     delete_reimbursement_record as delete_reimbursement_record_repository,
+)
+from server_app.repositories.reimbursement import (
     get_reimbursement_record as get_reimbursement_record_repository,
+)
+from server_app.repositories.reimbursement import (
     get_reimbursement_record_by_key as get_reimbursement_record_by_key_repository,
+)
+from server_app.repositories.reimbursement import (
     get_reimbursement_record_by_workflow_id as get_reimbursement_record_by_workflow_id_repository,
+)
+from server_app.repositories.reimbursement import (
     list_reimbursement_record_summaries_for_pi as list_reimbursement_record_summaries_for_pi_repository,
+)
+from server_app.repositories.reimbursement import (
     list_reimbursement_records_for_pi as list_reimbursement_records_for_pi_repository,
+)
+from server_app.repositories.reimbursement import (
     list_reimbursement_records_page as list_reimbursement_records_page_repository,
+)
+from server_app.repositories.reimbursement import (
     reimbursement_record_list_item,
+)
+from server_app.repositories.reimbursement import (
     upsert_reimbursement_record as upsert_reimbursement_record_repository,
 )
-from server_app.repositories.state import assemble_state as assemble_state_repository, read_applications_by_iacuc as read_applications_by_iacuc_repository, read_cached_state as read_cached_state_repository
+from server_app.repositories.state import (
+    assemble_state as assemble_state_repository,
+)
+from server_app.repositories.state import (
+    read_applications_by_iacuc as read_applications_by_iacuc_repository,
+)
+from server_app.repositories.state import (
+    read_cached_state as read_cached_state_repository,
+)
 from server_app.repositories.users import (
     delete_session_by_token_hash,
     delete_sessions_by_user_id,
     delete_user_by_id,
     get_active_user_by_username,
-    has_any_user,
     get_user_by_id,
     get_user_by_session_token_hash,
-    insert_user,
+    has_any_user,
     insert_session,
-    list_users as list_users_repository,
+    insert_user,
     update_user_with_password,
     update_user_without_password,
 )
-from server_app.services.billing import save_billing_statement_workflow as save_billing_statement_workflow_service, update_workflow_status as update_workflow_status_service
+from server_app.repositories.users import (
+    list_users as list_users_repository,
+)
+from server_app.services.billing import (
+    save_billing_statement_workflow as save_billing_statement_workflow_service,
+)
+from server_app.services.billing import (
+    update_workflow_status as update_workflow_status_service,
+)
 from server_app.services.intake import confirm_intake_receipt as confirm_intake_receipt_service
 from server_app.services.placement import (
     move_in_placement_task as move_in_placement_task_service,
+)
+from server_app.services.placement import (
     reassign_placement_task_room as reassign_placement_task_room_service,
+)
+from server_app.services.placement import (
     reserve_placement_task as reserve_placement_task_service,
+)
+from server_app.services.placement import (
     sync_slot_statuses,
 )
 from server_app.services.quantity import sync_quantity_sheet_transfer_rows as sync_quantity_sheet_transfer_rows_service
@@ -163,7 +278,6 @@ from server_app.services.reimbursement import (
     REIMBURSEMENT_STATUS_COMPLETED,
     REIMBURSEMENT_STATUS_PENDING,
     REIMBURSEMENT_STATUS_REIMBURSING,
-    coerce_money as coerce_reimbursement_money,
     infer_import_status,
     merge_reimbursement_edit,
     normalize_reimbursement_status,
@@ -171,6 +285,10 @@ from server_app.services.reimbursement import (
     reimbursement_has_manual_entry,
     summarize_statement,
 )
+from server_app.services.reimbursement import (
+    coerce_money as coerce_reimbursement_money,
+)
+from server_app.static import send_frontend_asset
 
 BILLING_PRINCIPAL_PI = "pi"
 BILLING_PRINCIPAL_INDEPENDENT = "independent"
@@ -181,15 +299,78 @@ BILLING_TIER_LIMIT = 160
 BILLING_TIER_BASE_PRICE = 4.5
 BILLING_TIER_OVER_PRICE = 6.5
 BILLING_RULES = {
-    "mouse_standard": {"species": "mouse", "unit": "cage_day", "internalPrice": 4.5, "externalPrice": 13.5, "tiered": True, "freeAllowance": True},
-    "mouse_diabetic": {"species": "mouse", "unit": "cage_day", "internalPrice": 7.2, "externalPrice": 21.6, "tiered": False, "freeAllowance": False},
-    "rat_standard": {"species": "rat", "unit": "cage_day", "internalPrice": 8.5, "externalPrice": 25.5, "tiered": False, "freeAllowance": False},
-    "rat_diabetic": {"species": "rat", "unit": "cage_day", "internalPrice": 14, "externalPrice": 42, "tiered": False, "freeAllowance": False},
-    "guinea_pig": {"species": "guinea_pig", "unit": "animal_day", "internalPrice": 3, "externalPrice": 9, "tiered": False, "freeAllowance": False},
-    "rabbit": {"species": "rabbit", "unit": "animal_day", "internalPrice": 5, "externalPrice": 15, "tiered": False, "freeAllowance": False},
-    "monkey": {"species": "monkey", "unit": "animal_day", "internalPrice": 35, "externalPrice": 65, "tiered": False, "freeAllowance": False},
-    "pig": {"species": "pig", "unit": "animal_day", "internalPrice": 15, "externalPrice": 45, "tiered": False, "freeAllowance": False},
-    "dog": {"species": "dog", "unit": "animal_day", "internalPrice": 15, "externalPrice": 45, "tiered": False, "freeAllowance": False},
+    "mouse_standard": {
+        "species": "mouse",
+        "unit": "cage_day",
+        "internalPrice": 4.5,
+        "externalPrice": 13.5,
+        "tiered": True,
+        "freeAllowance": True,
+    },
+    "mouse_diabetic": {
+        "species": "mouse",
+        "unit": "cage_day",
+        "internalPrice": 7.2,
+        "externalPrice": 21.6,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "rat_standard": {
+        "species": "rat",
+        "unit": "cage_day",
+        "internalPrice": 8.5,
+        "externalPrice": 25.5,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "rat_diabetic": {
+        "species": "rat",
+        "unit": "cage_day",
+        "internalPrice": 14,
+        "externalPrice": 42,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "guinea_pig": {
+        "species": "guinea_pig",
+        "unit": "animal_day",
+        "internalPrice": 3,
+        "externalPrice": 9,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "rabbit": {
+        "species": "rabbit",
+        "unit": "animal_day",
+        "internalPrice": 5,
+        "externalPrice": 15,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "monkey": {
+        "species": "monkey",
+        "unit": "animal_day",
+        "internalPrice": 35,
+        "externalPrice": 65,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "pig": {
+        "species": "pig",
+        "unit": "animal_day",
+        "internalPrice": 15,
+        "externalPrice": 45,
+        "tiered": False,
+        "freeAllowance": False,
+    },
+    "dog": {
+        "species": "dog",
+        "unit": "animal_day",
+        "internalPrice": 15,
+        "externalPrice": 45,
+        "tiered": False,
+        "freeAllowance": False,
+    },
 }
 WORKFLOW_STATUS_IN_FEEDING = "in_feeding"
 WORKFLOW_STATUS_GENERATED = "statement_generated"
@@ -256,6 +437,8 @@ WRITABLE_ENTITY_ENDPOINTS = {
     "/api/billing-adjustments": {"collection": "adjustments", "id_prefix": "adj"},
     "/api/intake-batches": {"collection": "intakeBatches", "id_prefix": "batch"},
 }
+
+
 def initialize_schema(conn):
     conn.execute(
         """
@@ -965,7 +1148,9 @@ def migrate_billing_workflow_schema(conn):
             """,
             (
                 workflow_id,
-                billing_workflow_business_key(*workflow_scope_for_statement(first_statement), first_statement.get("month", ""), source_type),
+                billing_workflow_business_key(
+                    *workflow_scope_for_statement(first_statement), first_statement.get("month", ""), source_type
+                ),
                 first_statement.get("iacuc", ""),
                 first_statement.get("month", ""),
                 source_type,
@@ -978,7 +1163,7 @@ def migrate_billing_workflow_schema(conn):
         )
         versions = []
         latest_at = ""
-        for index, (row, statement, grouped_source) in enumerate(items, start=1):
+        for index, (row, statement, grouped_source) in enumerate(items, start=1):  # noqa: B007
             version_id = row["id"]
             generated_at = statement.get("generatedAt") or row["generated_at"] or now_iso()
             lines = [
@@ -1118,14 +1303,20 @@ def backfill_billing_workflow_scope(conn):
         current_version = workflow.get("currentVersion") or {}
         statement = current_version.get("statement") or {}
         scope_type, scope_key = workflow_scope_for_statement(statement)
-        desired_key = billing_workflow_business_key(scope_type, scope_key, workflow.get("month", ""), workflow.get("sourceType", ""))
+        desired_key = billing_workflow_business_key(
+            scope_type, scope_key, workflow.get("month", ""), workflow.get("sourceType", "")
+        )
         conflict = conn.execute(
             "SELECT id FROM billing_workflows WHERE business_key = ? AND id != ?",
             (desired_key, row["id"]),
         ).fetchone()
         if conflict:
             desired_key = f"{desired_key}|legacy|{row['id']}"
-        if workflow.get("scopeType") == scope_type and workflow.get("scopeKey") == scope_key and desired_key == workflow.get("businessKey"):
+        if (
+            workflow.get("scopeType") == scope_type
+            and workflow.get("scopeKey") == scope_key
+            and desired_key == workflow.get("businessKey")
+        ):
             continue
         workflow["scopeType"] = scope_type
         workflow["scopeKey"] = scope_key
@@ -1154,10 +1345,7 @@ def repair_missing_cage_slots(conn):
         return
 
     existing_rows = conn.execute("SELECT rack_id, row_no, col_no FROM cage_slots").fetchall()
-    existing_positions = {
-        (row["rack_id"], int(row["row_no"] or 0), int(row["col_no"] or 0))
-        for row in existing_rows
-    }
+    existing_positions = {(row["rack_id"], int(row["row_no"] or 0), int(row["col_no"] or 0)) for row in existing_rows}
     for rack in racks:
         rows = max(as_int(rack["rows"]) or 0, 0)
         cols = max(as_int(rack["cols"]) or 0, 0)
@@ -1179,7 +1367,15 @@ def repair_missing_cage_slots(conn):
                     INSERT INTO cage_slots (id, rack_id, row_no, col_no, code, status, payload)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (slot["id"], slot["rackId"], slot["row"], slot["col"], slot["code"], slot["status"], dump_json(slot)),
+                    (
+                        slot["id"],
+                        slot["rackId"],
+                        slot["row"],
+                        slot["col"],
+                        slot["code"],
+                        slot["status"],
+                        dump_json(slot),
+                    ),
                 )
                 existing_positions.add(position)
 
@@ -1264,7 +1460,9 @@ CAGE_CARD_QR_INVERSE = modular_inverse(CAGE_CARD_QR_MULTIPLIER, CAGE_CARD_QR_CAP
 
 def is_cage_card_qr_id(value):
     text = clean_text(value).upper()
-    return bool(re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{{CAGE_CARD_QR_LENGTH}}}", text) or re.fullmatch(r"[A-Z0-9]{8}", text))
+    return bool(
+        re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{{CAGE_CARD_QR_LENGTH}}}", text) or re.fullmatch(r"[A-Z0-9]{8}", text)
+    )
 
 
 def encode_cage_card_sequence(sequence):
@@ -1313,7 +1511,11 @@ def collect_cage_card_qr_ids(state, exclude_batch_id=""):
             continue
         add(task.get("qrId"))
     for occupancy in state.get("occupancies", []):
-        if exclude_batch_id and occupancy.get("placementTaskId") and occupancy.get("placementTaskId") in excluded_task_ids:
+        if (
+            exclude_batch_id
+            and occupancy.get("placementTaskId")
+            and occupancy.get("placementTaskId") in excluded_task_ids
+        ):
             continue
         add(occupancy.get("qrId"))
     return used
@@ -1369,10 +1571,16 @@ def species_label(value):
 
 def cage_card_status_label(batch, task, occupancy):
     if occupancy:
-        return {"reserved": "已预留", "active": "已入驻", "ended": "已结束"}.get(occupancy.get("status"), occupancy.get("status", ""))
+        return {"reserved": "已预留", "active": "已入驻", "ended": "已结束"}.get(
+            occupancy.get("status"), occupancy.get("status", "")
+        )
     if task:
-        return {"pending": "待进驻", "reserved": "已预留", "active": "已入驻", "cancelled": "已取消"}.get(task.get("status"), task.get("status", ""))
-    return {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}.get(batch.get("status"), batch.get("status", ""))
+        return {"pending": "待进驻", "reserved": "已预留", "active": "已入驻", "cancelled": "已取消"}.get(
+            task.get("status"), task.get("status", "")
+        )
+    return {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}.get(
+        batch.get("status"), batch.get("status", "")
+    )
 
 
 def animal_age_text(birth_date, reference_date=None):
@@ -1412,7 +1620,11 @@ def public_cage_card_payload(conn, qr_id):
         for task in state.get("placementTasks", [])
     }
     occupancies_by_id = {item.get("id"): item for item in state.get("occupancies", [])}
-    occupancies_by_qr = {clean_text(item.get("qrId")).upper(): item for item in state.get("occupancies", []) if clean_text(item.get("qrId"))}
+    occupancies_by_qr = {
+        clean_text(item.get("qrId")).upper(): item
+        for item in state.get("occupancies", [])
+        if clean_text(item.get("qrId"))
+    }
 
     for batch in state.get("intakeBatches", []):
         card_count = max(
@@ -1441,8 +1653,12 @@ def public_cage_card_payload(conn, qr_id):
                 occupancy = occupancies_by_id.get(task.get("reservedOccupancyId"))
             slot = slots_by_id.get((occupancy or {}).get("slotId"))
             rack = racks_by_id.get((slot or {}).get("rackId") or (occupancy or {}).get("rackId"))
-            room = rooms_by_id.get((rack or {}).get("roomId") or (task or {}).get("targetRoomId") or (occupancy or {}).get("roomId"))
-            iacuc = normalize_iacuc_number(batch.get("iacuc") or (task or {}).get("iacuc") or (occupancy or {}).get("iacuc"))
+            room = rooms_by_id.get(
+                (rack or {}).get("roomId") or (task or {}).get("targetRoomId") or (occupancy or {}).get("roomId")
+            )
+            iacuc = normalize_iacuc_number(
+                batch.get("iacuc") or (task or {}).get("iacuc") or (occupancy or {}).get("iacuc")
+            )
             application = applications_by_iacuc.get(iacuc, {})
             animal_count = (task or {}).get("animalCount")
             if animal_count in (None, ""):
@@ -1457,16 +1673,32 @@ def public_cage_card_payload(conn, qr_id):
                 "qrId": target,
                 "batchNo": batch.get("batchNo", ""),
                 "cageCode": (occupancy or {}).get("cageCode", ""),
-                "roomName": (room or {}).get("name") or (task or {}).get("targetRoomName") or batch.get("roomName", "") or (occupancy or {}).get("roomName", ""),
+                "roomName": (room or {}).get("name")
+                or (task or {}).get("targetRoomName")
+                or batch.get("roomName", "")
+                or (occupancy or {}).get("roomName", ""),
                 "rackName": (rack or {}).get("name") or (occupancy or {}).get("rackName", ""),
                 "slotCode": (slot or {}).get("code") or (occupancy or {}).get("slotCode", ""),
                 "iacuc": iacuc,
-                "project": batch.get("project") or (task or {}).get("project") or (occupancy or {}).get("project") or application.get("project", ""),
-                "pi": batch.get("pi") or (task or {}).get("pi") or (occupancy or {}).get("pi") or application.get("pi", ""),
-                "owner": batch.get("owner") or (task or {}).get("owner") or (occupancy or {}).get("owner") or application.get("owner", ""),
+                "project": batch.get("project")
+                or (task or {}).get("project")
+                or (occupancy or {}).get("project")
+                or application.get("project", ""),
+                "pi": batch.get("pi")
+                or (task or {}).get("pi")
+                or (occupancy or {}).get("pi")
+                or application.get("pi", ""),
+                "owner": batch.get("owner")
+                or (task or {}).get("owner")
+                or (occupancy or {}).get("owner")
+                or application.get("owner", ""),
                 "species": batch.get("species") or (task or {}).get("species") or (occupancy or {}).get("species", ""),
-                "speciesLabel": species_label(batch.get("species") or (task or {}).get("species") or (occupancy or {}).get("species", "")),
-                "strainStandard": batch.get("strainStandard") or (task or {}).get("strainStandard") or (occupancy or {}).get("strainStandard", ""),
+                "speciesLabel": species_label(
+                    batch.get("species") or (task or {}).get("species") or (occupancy or {}).get("species", "")
+                ),
+                "strainStandard": batch.get("strainStandard")
+                or (task or {}).get("strainStandard")
+                or (occupancy or {}).get("strainStandard", ""),
                 "animalCount": animal_count,
                 "sex": batch.get("sex") or (occupancy or {}).get("sex", ""),
                 "birthDate": birth_date,
@@ -1580,7 +1812,9 @@ def summarize_infrastructure(state):
             room_summary["slotCount"] += 1
         if status == "active":
             dashboard["active"] += 1
-            ensure_facility_summary((room_summary and room_by_id.get(room_summary["roomId"], {}).get("facility")) or rack.get("facility"))["activeCageCount"] += 1
+            ensure_facility_summary(
+                (room_summary and room_by_id.get(room_summary["roomId"], {}).get("facility")) or rack.get("facility")
+            )["activeCageCount"] += 1
             if rack_summary:
                 rack_summary["activeCount"] += 1
             if room_summary:
@@ -1623,7 +1857,9 @@ def summarize_infrastructure(state):
         room = room_by_id.get(room_id, {})
         if item.get("status") == "active":
             facility_profile = billing_profile_for_room(room)
-            ensure_facility_summary(facility_profile.get("facility"))["activeAnimalCount"] += occupancy_animal_count(item, facility_profile)
+            ensure_facility_summary(facility_profile.get("facility"))["activeAnimalCount"] += occupancy_animal_count(
+                item, facility_profile
+            )
         if rack_id and rack_id in rack_summaries:
             rack_summaries[rack_id]["occupancyRecordCount"] += 1
         if room_id and room_id in room_summaries:
@@ -1680,9 +1916,7 @@ def summarize_infrastructure(state):
             ensure_facility_summary(key)["currentMonthWorkflowTodoCount"] += 1
 
     dashboard["exceptionCount"] = (
-        dashboard["unmatchedIntakeCount"]
-        + dashboard["overduePlacementCount"]
-        + dashboard["stalledWorkflowCount"]
+        dashboard["unmatchedIntakeCount"] + dashboard["overduePlacementCount"] + dashboard["stalledWorkflowCount"]
     )
 
     return {
@@ -1720,12 +1954,21 @@ def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
         return payload
     if scope == "room":
         room_id = clean_text(room_id)
-        payload["placementTasks"] = [item for item in state.get("placementTasks", []) if item.get("targetRoomId") == room_id]
+        payload["placementTasks"] = [
+            item for item in state.get("placementTasks", []) if item.get("targetRoomId") == room_id
+        ]
         rack_ids = {rack.get("id") for rack in state.get("racks", []) if rack.get("roomId") == room_id}
         payload["slots"] = [slot for slot in state.get("slots", []) if slot.get("rackId") in rack_ids]
         slot_ids = {slot.get("id") for slot in payload["slots"]}
         payload["occupancies"] = [item for item in state.get("occupancies", []) if item.get("slotId") in slot_ids]
-        log_perf("bootstrap", started_at, scope=scope, room_id=room_id, rooms=len(payload["rooms"]), slots=len(payload["slots"]))
+        log_perf(
+            "bootstrap",
+            started_at,
+            scope=scope,
+            room_id=room_id,
+            rooms=len(payload["rooms"]),
+            slots=len(payload["slots"]),
+        )
         return payload
     payload["slots"] = []
     payload["occupancies"] = []
@@ -1782,7 +2025,9 @@ def read_billing_occupancies(conn, actor, filters):
     )
     cached = cache_get(key)
     if cached is not None:
-        log_perf("billing_occupancies", started_at, cached=1, month=month, occupancies=len(cached.get("occupancies", [])))
+        log_perf(
+            "billing_occupancies", started_at, cached=1, month=month, occupancies=len(cached.get("occupancies", []))
+        )
         return cached
 
     occupancies = read_occupancies_for_billing(conn, month, iacuc=iacuc, pi=pi)
@@ -1941,7 +2186,7 @@ def read_slot_room_map(slot_ids):
 
 
 def write_state(state, actor, skip_permission=False):
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
         old_state = assemble_state(conn) or {}
         if not skip_permission:
@@ -1952,7 +2197,9 @@ def write_state(state, actor, skip_permission=False):
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state", "principal_identities")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "quantity_sheets::", "billing_workflows::")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::", "billing_occupancies::", "quantity_sheets::", "billing_workflows::"
+    )
     return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
 
 
@@ -1989,13 +2236,15 @@ def write_entity_state(endpoint, method, item_id, payload, actor):
     result = write_state(state, actor)
     response = {"item": item, "updatedAt": result["updatedAt"], "auditLogs": result["auditLogs"]}
     if collection == "intakeBatches" and method != "DELETE":
-        response["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")]
+        response["placementTasks"] = [
+            task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")
+        ]
     return response, status
 
 
 def write_infrastructure_entity_state(collection, method, item_id, payload, actor, spec):
     started_at = time.perf_counter()
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.OK
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
@@ -2037,7 +2286,9 @@ def write_infrastructure_entity_state(collection, method, item_id, payload, acto
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::"
+    )
     response = {
         "item": item,
         "updatedAt": updated_at,
@@ -2050,7 +2301,7 @@ def write_infrastructure_entity_state(collection, method, item_id, payload, acto
 
 def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
     started_at = time.perf_counter()
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.OK
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
@@ -2072,7 +2323,9 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
             delete_intake_batch_repository(conn, item_id)
             conn.execute("DELETE FROM placement_tasks WHERE source_batch_id = ?", (item_id,))
         else:
-            saved_item = next((entry for entry in state.get("intakeBatches", []) if entry.get("id") == item.get("id")), item)
+            saved_item = next(
+                (entry for entry in state.get("intakeBatches", []) if entry.get("id") == item.get("id")), item
+            )
             upsert_intake_batch_repository(conn, saved_item)
             item = saved_item
             next_task_ids = {
@@ -2094,7 +2347,9 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
         conn.commit()
 
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::"
+    )
     response = {
         "item": item,
         "updatedAt": updated_at,
@@ -2102,15 +2357,19 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
         "perf": write_perf_summary(started_at, rows_changed=1, method=method),
     }
     if method != "DELETE":
-        response["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")]
-        response["perf"] = write_perf_summary(started_at, rows_changed=1 + len(response["placementTasks"]), method=method)
+        response["placementTasks"] = [
+            task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == item.get("id")
+        ]
+        response["perf"] = write_perf_summary(
+            started_at, rows_changed=1 + len(response["placementTasks"]), method=method
+        )
     log_perf("intake_batch.save", started_at, method=method, tasks=len(response.get("placementTasks", [])))
     return response, status
 
 
 def write_placement_task_entity_state(method, item_id, payload, actor, spec):
     started_at = time.perf_counter()
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.OK
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
@@ -2142,7 +2401,9 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec):
             if removed_occupancy_id:
                 conn.execute("DELETE FROM occupancies WHERE id = ?", (removed_occupancy_id,))
         else:
-            saved_item = next((entry for entry in state.get("placementTasks", []) if entry.get("id") == item.get("id")), item)
+            saved_item = next(
+                (entry for entry in state.get("placementTasks", []) if entry.get("id") == item.get("id")), item
+            )
             upsert_placement_task_repository(conn, saved_item)
             item = saved_item
         affected_slots = [slot for slot in state.get("slots", []) if slot.get("id") in affected_slot_ids]
@@ -2166,7 +2427,7 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec):
 
 def persist_intake_receipt_confirmation(batch_id, body, actor):
     started_at = time.perf_counter()
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
@@ -2178,7 +2439,9 @@ def persist_intake_receipt_confirmation(batch_id, body, actor):
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::"
+    )
     log_perf("intake_batch.confirm", started_at, tasks=len(tasks))
     return {
         "batch": batch,
@@ -2192,7 +2455,7 @@ def persist_intake_receipt_confirmation(batch_id, body, actor):
 
 def persist_placement_action(task_id, actor, mutator):
     started_at = time.perf_counter()
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
@@ -2219,7 +2482,9 @@ def persist_placement_action(task_id, actor, mutator):
         "affectedSlots": affected_slots,
         "updatedAt": updated_at,
         "auditLogs": merge_audit_logs([], events),
-        "perf": write_perf_summary(started_at, rows_changed=1 + (1 if occupancy else 0) + len(affected_slots), slot_count=len(affected_slots)),
+        "perf": write_perf_summary(
+            started_at, rows_changed=1 + (1 if occupancy else 0) + len(affected_slots), slot_count=len(affected_slots)
+        ),
     }
     if occupancy:
         payload["occupancy"] = occupancy
@@ -2242,7 +2507,7 @@ def changed_placement_slot_ids(old_state, state):
 
 def write_occupancy_entity_state(method, item_id, payload, actor, spec):
     started_at = time.perf_counter()
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.OK
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
@@ -2269,7 +2534,9 @@ def write_occupancy_entity_state(method, item_id, payload, actor, spec):
         if method == "DELETE":
             conn.execute("DELETE FROM occupancies WHERE id = ?", (item_id,))
         else:
-            saved_item = next((entry for entry in state.get("occupancies", []) if entry.get("id") == item.get("id")), item)
+            saved_item = next(
+                (entry for entry in state.get("occupancies", []) if entry.get("id") == item.get("id")), item
+            )
             saved_item = occupancy_with_snapshots(saved_item, state, applications_by_iacuc)
             upsert_occupancy_record(conn, saved_item)
 
@@ -2388,7 +2655,7 @@ def write_infrastructure_state(payload, actor):
     created_slots = normalize_entity_batch("slots", payload.get("slots", []), "POST")
     deleted_slot_ids = normalize_id_batch(payload.get("slotDeletes", []), "slotDeletes")
 
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
@@ -2590,9 +2857,15 @@ def ensure_intake_batch_card_qr_ids(state, batch):
     used_qr_ids = collect_cage_card_qr_ids(state, next_batch.get("id", ""))
     cards = []
     for index in range(card_count):
-        existing = existing_cards[index] if index < len(existing_cards) and isinstance(existing_cards[index], dict) else {}
+        existing = (
+            existing_cards[index] if index < len(existing_cards) and isinstance(existing_cards[index], dict) else {}
+        )
         existing_qr_id = clean_text(existing.get("qrId")).upper()
-        qr_id = existing_qr_id if is_cage_card_qr_id(existing_qr_id) and existing_qr_id not in used_qr_ids else next_cage_card_qr_id(used_qr_ids)
+        qr_id = (
+            existing_qr_id
+            if is_cage_card_qr_id(existing_qr_id) and existing_qr_id not in used_qr_ids
+            else next_cage_card_qr_id(used_qr_ids)
+        )
         used_qr_ids.add(qr_id)
         cards.append(
             {
@@ -2600,7 +2873,8 @@ def ensure_intake_batch_card_qr_ids(state, batch):
                 "id": clean_text(existing.get("id")) or f"{next_batch.get('id')}-card-{index + 1}",
                 "index": index + 1,
                 "label": f"{index + 1}/{card_count}",
-                "suggestedQuantity": clean_text(existing.get("suggestedQuantity")) or intake_card_suggested_quantity(next_batch, index, card_count),
+                "suggestedQuantity": clean_text(existing.get("suggestedQuantity"))
+                or intake_card_suggested_quantity(next_batch, index, card_count),
                 "qrId": qr_id,
             }
         )
@@ -2610,31 +2884,55 @@ def ensure_intake_batch_card_qr_ids(state, batch):
 
 def reconcile_intake_batch_update(state, old_item, item):
     next_item = {**old_item, **item}
-    next_item["receipts"] = [dict(receipt) for receipt in (item.get("receipts") if isinstance(item.get("receipts"), list) else old_item.get("receipts", []))]
+    next_item["receipts"] = [
+        dict(receipt)
+        for receipt in (
+            item.get("receipts") if isinstance(item.get("receipts"), list) else old_item.get("receipts", [])
+        )
+    ]
     final_count = max(as_int(next_item.get("finalCardCount")) or 0, 0)
-    confirmed_count = max(as_int(next_item.get("confirmedCardCount")) or sum(max(as_int(receipt.get("cardCount")) or 0, 0) for receipt in next_item.get("receipts", [])), 0)
+    confirmed_count = max(
+        as_int(next_item.get("confirmedCardCount"))
+        or sum(max(as_int(receipt.get("cardCount")) or 0, 0) for receipt in next_item.get("receipts", [])),
+        0,
+    )
     next_item["confirmedCardCount"] = confirmed_count
-    next_item["remainingCardCount"] = max(as_int(next_item.get("remainingCardCount")) if next_item.get("remainingCardCount") not in (None, "") else final_count - confirmed_count, 0)
+    next_item["remainingCardCount"] = max(
+        as_int(next_item.get("remainingCardCount"))
+        if next_item.get("remainingCardCount") not in (None, "")
+        else final_count - confirmed_count,
+        0,
+    )
 
     old_status = clean_text(old_item.get("status", ""))
     new_status = clean_text(next_item.get("status", ""))
     old_room_name = clean_text(old_item.get("roomName", ""))
     new_room_name = clean_text(next_item.get("roomName", ""))
     if old_status == "received" and new_status == "printed":
-        related_tasks = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")]
+        related_tasks = [
+            task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")
+        ]
         blocking = [task for task in related_tasks if task.get("status") in ("reserved", "active")]
         if blocking:
             raise ValueError("该批次已有已预留或已入驻的待进驻任务，请先处理相关任务后再回退为已打印")
-        state["placementTasks"] = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") != old_item.get("id")]
+        state["placementTasks"] = [
+            task for task in state.get("placementTasks", []) if task.get("sourceBatchId") != old_item.get("id")
+        ]
         next_item["receipts"] = []
         next_item["confirmedCardCount"] = 0
         next_item["remainingCardCount"] = final_count
     if old_room_name != new_room_name:
-        related_tasks = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")]
+        related_tasks = [
+            task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == old_item.get("id")
+        ]
         blocking = [task for task in related_tasks if task.get("status") in ("reserved", "active")]
         if blocking:
             raise ValueError("该批次已有已预留或已入驻的待进驻任务，请先处理相关任务后再调整房间")
-        target_room = next((room for room in state.get("rooms", []) if clean_text(room.get("name", "")) == new_room_name), None) if new_room_name else None
+        target_room = (
+            next((room for room in state.get("rooms", []) if clean_text(room.get("name", "")) == new_room_name), None)
+            if new_room_name
+            else None
+        )
         if related_tasks and new_room_name and not target_room:
             raise ValueError("房间尚未在系统中配置，请先选择已配置饲养间后再保存")
         for task in related_tasks:
@@ -2681,7 +2979,9 @@ def delete_entity(state, collection, item_id):
         if task_status == "active":
             raise ValueError("已正式入驻的待进驻任务不能直接删除")
         if reserved_occupancy_id:
-            state["occupancies"] = [item for item in state.get("occupancies", []) if item.get("id") != reserved_occupancy_id]
+            state["occupancies"] = [
+                item for item in state.get("occupancies", []) if item.get("id") != reserved_occupancy_id
+            ]
             sync_slot_statuses(state)
 
     return deleted
@@ -2694,7 +2994,11 @@ def validate_entity_references(state, collection, item):
         raise ValueError("关联的笼架不存在")
     if collection == "occupancies" and not entity_exists(state, "slots", item.get("slotId")):
         raise ValueError("关联的笼位不存在")
-    if collection == "placementTasks" and item.get("targetRoomId") and not entity_exists(state, "rooms", item.get("targetRoomId")):
+    if (
+        collection == "placementTasks"
+        and item.get("targetRoomId")
+        and not entity_exists(state, "rooms", item.get("targetRoomId"))
+    ):
         raise ValueError("关联的目标饲养间不存在")
 
 
@@ -3126,7 +3430,7 @@ def verify_password(password, password_hash):
 def create_session(conn, user_id):
     token = secrets.token_urlsafe(32)
     token_hash = hash_token(token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(days=SESSION_TTL_DAYS)
     insert_session(conn, token_hash, user_id, now.isoformat(), expires_at.isoformat())
     conn.commit()
@@ -3231,7 +3535,9 @@ def update_user(conn, actor, user_id, payload):
 
     now = now_iso()
     if password:
-        update_user_with_password(conn, user_id, username, display_name, hash_password(password), role, dump_json(room_ids), now)
+        update_user_with_password(
+            conn, user_id, username, display_name, hash_password(password), role, dump_json(room_ids), now
+        )
     else:
         update_user_without_password(conn, user_id, username, display_name, role, dump_json(room_ids), now)
     delete_sessions_by_user_id(conn, user_id)
@@ -3362,10 +3668,18 @@ def build_audit_events(actor, old_state, new_state, at):
         elif new_item is None:
             action = "occupancy.deleted"
             message = f"{actor['displayName']} 删除笼位 {label} 的占用记录"
-        elif new_item.get("status") == "ended" and new_item.get("endReason") == "sampled" and old_item.get("status") != "ended":
+        elif (
+            new_item.get("status") == "ended"
+            and new_item.get("endReason") == "sampled"
+            and old_item.get("status") != "ended"
+        ):
             action = "occupancy.sampled"
             message = f"{actor['displayName']} 将笼位 {label} 标记为已取材，最后计费日期 {new_item.get('endDate', '')}"
-        elif new_item.get("status") == "ended" and new_item.get("endReason") == "cleared" and old_item.get("status") != "ended":
+        elif (
+            new_item.get("status") == "ended"
+            and new_item.get("endReason") == "cleared"
+            and old_item.get("status") != "ended"
+        ):
             action = "occupancy.cleared"
             message = f"{actor['displayName']} 将笼位 {label} 设为空"
         else:
@@ -3499,7 +3813,7 @@ def new_id(prefix):
 
 
 def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def today_iso():
@@ -3557,7 +3871,11 @@ def project_field_snapshot(item):
 
 
 def changed_project_fields(before, after):
-    return {field for field in PROJECT_DERIVED_FIELDS if clean_text(before.get(field, "")) != clean_text(after.get(field, ""))}
+    return {
+        field
+        for field in PROJECT_DERIVED_FIELDS
+        if clean_text(before.get(field, "")) != clean_text(after.get(field, ""))
+    }
 
 
 def read_current_applications(conn):
@@ -3616,7 +3934,16 @@ def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imp
                 SET project = ?, pi = ?, owner = ?, funding = ?, species = ?, updated_at = ?, payload = ?
                 WHERE id = ?
                 """,
-                (after["project"], after["pi"], after["owner"], after["funding"], after["species"], imported_at, payload_json, row["id"]),
+                (
+                    after["project"],
+                    after["pi"],
+                    after["owner"],
+                    after["funding"],
+                    after["species"],
+                    imported_at,
+                    payload_json,
+                    row["id"],
+                ),
             )
         elif table == "intake_batches":
             conn.execute(
@@ -3624,7 +3951,10 @@ def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imp
                 (after["pi"], after["owner"], imported_at, payload_json, row["id"]),
             )
         elif table == "placement_tasks":
-            conn.execute("UPDATE placement_tasks SET updated_at = ?, payload = ? WHERE id = ?", (imported_at, payload_json, row["id"]))
+            conn.execute(
+                "UPDATE placement_tasks SET updated_at = ?, payload = ? WHERE id = ?",
+                (imported_at, payload_json, row["id"]),
+            )
 
         changes.append(
             {
@@ -3645,7 +3975,8 @@ def sync_project_derived_fields_after_iacuc_upload(conn, old_items, new_items, a
     changed_iacucs = {
         iacuc
         for iacuc, new_item in new_by_iacuc.items()
-        if iacuc not in old_by_iacuc or changed_project_fields(project_field_snapshot(old_by_iacuc[iacuc]), project_field_snapshot(new_item))
+        if iacuc not in old_by_iacuc
+        or changed_project_fields(project_field_snapshot(old_by_iacuc[iacuc]), project_field_snapshot(new_item))
     }
     if not changed_iacucs:
         return {"changedIacucCount": 0, "updatedRecordCount": 0, "tableCounts": {}, "snapshotId": ""}
@@ -3653,7 +3984,9 @@ def sync_project_derived_fields_after_iacuc_upload(conn, old_items, new_items, a
     source_iacuc_by_batch = source_iacuc_for_placement_tasks(conn)
     changes = []
     for table in ("quantity_sheets", "occupancies", "intake_batches", "placement_tasks"):
-        changes.extend(sync_project_fields_for_table(conn, table, new_by_iacuc, changed_iacucs, imported_at, source_iacuc_by_batch))
+        changes.extend(
+            sync_project_fields_for_table(conn, table, new_by_iacuc, changed_iacucs, imported_at, source_iacuc_by_batch)
+        )
 
     table_counts = {}
     for item in changes:
@@ -4021,28 +4354,45 @@ def parse_iacuc_csv(raw):
         "owner": "实验负责人",
     }
     required_fields = {
-        key: field_name_for_labels(field_by_name, field_by_compact, [label])
-        for key, label in required.items()
+        key: field_name_for_labels(field_by_name, field_by_compact, [label]) for key, label in required.items()
     }
     missing = [required[key] for key, field_name in required_fields.items() if not field_name]
     if missing:
         raise ValueError(f"CSV 缺少必要列：{', '.join(missing)}")
     optional_fields = {
-        "funding": field_name_for_labels(field_by_name, field_by_compact, ("项目来源", "支撑经费", "经费来源", "课题来源", "经费项目")),
+        "funding": field_name_for_labels(
+            field_by_name, field_by_compact, ("项目来源", "支撑经费", "经费来源", "课题来源", "经费项目")
+        ),
         "fundCode": field_name_for_labels(field_by_name, field_by_compact, ("经费号", "经费本编号", "经费编号")),
-        "supportProjectPeriod": field_name_for_labels(field_by_name, field_by_compact, ("支撑科研项目起止时间", "科研项目起止时间", "项目起止时间")),
+        "supportProjectPeriod": field_name_for_labels(
+            field_by_name, field_by_compact, ("支撑科研项目起止时间", "科研项目起止时间", "项目起止时间")
+        ),
         "experimentNo": field_name_for_labels(field_by_name, field_by_compact, ("动物实验编号", "实验编号")),
         "species": field_name_for_labels(field_by_name, field_by_compact, ("动物品系", "品系", "动物种类")),
         "facility": field_name_for_labels(field_by_name, field_by_compact, ("动物实验场所", "实验场所", "动物房")),
         "maxFeedingPeriod": field_name_for_labels(field_by_name, field_by_compact, ("最长饲养周期", "饲养周期")),
-        "iacucApprovalDate": field_name_for_labels(field_by_name, field_by_compact, ("动物伦理通过日期", "伦理通过日期", "伦理批准日期")),
-        "applicationApprovalDate": field_name_for_labels(field_by_name, field_by_compact, ("实验申请通过日期", "申请通过日期", "实验批准日期")),
-        "projectStartDate": field_name_for_labels(field_by_name, field_by_compact, ("实验开始日期", "项目开始日期", "开始日期")),
-        "projectEndDate": field_name_for_labels(field_by_name, field_by_compact, ("实验结束日期", "项目结束日期", "结束日期", "有效期至")),
-        "approvedFeedingFee": field_name_for_labels(field_by_name, field_by_compact, ("实验审核通过饲养费（元）", "审核通过饲养费", "批准饲养费")),
+        "iacucApprovalDate": field_name_for_labels(
+            field_by_name, field_by_compact, ("动物伦理通过日期", "伦理通过日期", "伦理批准日期")
+        ),
+        "applicationApprovalDate": field_name_for_labels(
+            field_by_name, field_by_compact, ("实验申请通过日期", "申请通过日期", "实验批准日期")
+        ),
+        "projectStartDate": field_name_for_labels(
+            field_by_name, field_by_compact, ("实验开始日期", "项目开始日期", "开始日期")
+        ),
+        "projectEndDate": field_name_for_labels(
+            field_by_name, field_by_compact, ("实验结束日期", "项目结束日期", "结束日期", "有效期至")
+        ),
+        "approvedFeedingFee": field_name_for_labels(
+            field_by_name, field_by_compact, ("实验审核通过饲养费（元）", "审核通过饲养费", "批准饲养费")
+        ),
         "approvalLeader": field_name_for_labels(field_by_name, field_by_compact, ("中心审批领导", "审批领导")),
-        "actualFeedingFee": field_name_for_labels(field_by_name, field_by_compact, ("实际产生饲养费（元）", "实际产生饲养费", "实际饲养费")),
-        "pendingReimbursementFee": field_name_for_labels(field_by_name, field_by_compact, ("待报销饲养费（元）", "待报销饲养费", "欠缴饲养费")),
+        "actualFeedingFee": field_name_for_labels(
+            field_by_name, field_by_compact, ("实际产生饲养费（元）", "实际产生饲养费", "实际饲养费")
+        ),
+        "pendingReimbursementFee": field_name_for_labels(
+            field_by_name, field_by_compact, ("待报销饲养费（元）", "待报销饲养费", "欠缴饲养费")
+        ),
         "assistant": field_name_for_labels(field_by_name, field_by_compact, ("实验助手", "助手")),
         "notes": field_name_for_labels(field_by_name, field_by_compact, ("备注", "说明")),
         "applicationDate": field_name_for_labels(field_by_name, field_by_compact, ("申请日期", "提交日期")),
@@ -4063,33 +4413,35 @@ def parse_iacuc_csv(raw):
         if iacuc in seen_iacucs:
             duplicate_count += 1
         seen_iacucs.add(iacuc)
-        items.append({
-            "id": f"app-{row_count:06d}",
-            "iacuc": raw_iacuc,
-            "rawIacuc": raw_iacuc,
-            "project": csv_value(row, required_fields["project"]),
-            "pi": csv_value(row, required_fields["pi"]),
-            "owner": csv_value(row, required_fields["owner"]),
-            "funding": csv_value(row, optional_fields["funding"]),
-            "fundCode": csv_value(row, optional_fields["fundCode"]),
-            "supportProjectPeriod": csv_value(row, optional_fields["supportProjectPeriod"]),
-            "experimentNo": csv_value(row, optional_fields["experimentNo"]),
-            "species": csv_value(row, optional_fields["species"]),
-            "facility": csv_value(row, optional_fields["facility"]),
-            "maxFeedingPeriod": csv_value(row, optional_fields["maxFeedingPeriod"]),
-            "iacucApprovalDate": csv_value(row, optional_fields["iacucApprovalDate"]),
-            "applicationApprovalDate": csv_value(row, optional_fields["applicationApprovalDate"]),
-            "projectStartDate": csv_value(row, optional_fields["projectStartDate"]),
-            "projectEndDate": csv_value(row, optional_fields["projectEndDate"]),
-            "approvedFeedingFee": csv_value(row, optional_fields["approvedFeedingFee"]),
-            "approvalLeader": csv_value(row, optional_fields["approvalLeader"]),
-            "actualFeedingFee": csv_value(row, optional_fields["actualFeedingFee"]),
-            "pendingReimbursementFee": csv_value(row, optional_fields["pendingReimbursementFee"]),
-            "assistant": csv_value(row, optional_fields["assistant"]),
-            "notes": csv_value(row, optional_fields["notes"]),
-            "applicationDate": csv_value(row, optional_fields["applicationDate"]),
-            "rawFields": clean_csv_raw_fields(row),
-        })
+        items.append(
+            {
+                "id": f"app-{row_count:06d}",
+                "iacuc": raw_iacuc,
+                "rawIacuc": raw_iacuc,
+                "project": csv_value(row, required_fields["project"]),
+                "pi": csv_value(row, required_fields["pi"]),
+                "owner": csv_value(row, required_fields["owner"]),
+                "funding": csv_value(row, optional_fields["funding"]),
+                "fundCode": csv_value(row, optional_fields["fundCode"]),
+                "supportProjectPeriod": csv_value(row, optional_fields["supportProjectPeriod"]),
+                "experimentNo": csv_value(row, optional_fields["experimentNo"]),
+                "species": csv_value(row, optional_fields["species"]),
+                "facility": csv_value(row, optional_fields["facility"]),
+                "maxFeedingPeriod": csv_value(row, optional_fields["maxFeedingPeriod"]),
+                "iacucApprovalDate": csv_value(row, optional_fields["iacucApprovalDate"]),
+                "applicationApprovalDate": csv_value(row, optional_fields["applicationApprovalDate"]),
+                "projectStartDate": csv_value(row, optional_fields["projectStartDate"]),
+                "projectEndDate": csv_value(row, optional_fields["projectEndDate"]),
+                "approvedFeedingFee": csv_value(row, optional_fields["approvedFeedingFee"]),
+                "approvalLeader": csv_value(row, optional_fields["approvalLeader"]),
+                "actualFeedingFee": csv_value(row, optional_fields["actualFeedingFee"]),
+                "pendingReimbursementFee": csv_value(row, optional_fields["pendingReimbursementFee"]),
+                "assistant": csv_value(row, optional_fields["assistant"]),
+                "notes": csv_value(row, optional_fields["notes"]),
+                "applicationDate": csv_value(row, optional_fields["applicationDate"]),
+                "rawFields": clean_csv_raw_fields(row),
+            }
+        )
 
     return {
         "items": items,
@@ -4267,7 +4619,12 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         affected=len(affected_sheets),
         rows=len(sheet.get("rows", [])),
     )
-    perf = write_perf_summary(started_at, rows_changed=1 + len(affected_sheets), affected=len(affected_sheets), rows=len(sheet.get("rows", [])))
+    perf = write_perf_summary(
+        started_at,
+        rows_changed=1 + len(affected_sheets),
+        affected=len(affected_sheets),
+        rows=len(sheet.get("rows", [])),
+    )
     return sheet, affected_sheets, merge_audit_logs([], events), status, perf
 
 
@@ -4339,8 +4696,12 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "owner": clean_text(source.get("owner", "")),
         "contact": clean_text(source.get("contact", "")),
         "funding": clean_text(source.get("funding", "")),
-        "preferredFreeCages": max(as_int(source.get("preferredFreeCages")) or 0, 0) if source.get("preferredFreeCages") not in (None, "") else None,
-        "freeCagePriority": max(as_int(source.get("freeCagePriority")) or 0, 0) if source.get("freeCagePriority") not in (None, "") else None,
+        "preferredFreeCages": max(as_int(source.get("preferredFreeCages")) or 0, 0)
+        if source.get("preferredFreeCages") not in (None, "")
+        else None,
+        "freeCagePriority": max(as_int(source.get("freeCagePriority")) or 0, 0)
+        if source.get("freeCagePriority") not in (None, "")
+        else None,
         "billingUnit": "animal_day" if clean_text(source.get("billingUnit", "")) == "animal_day" else "cage_day",
         "animalDetailEnabled": parse_bool(source.get("animalDetailEnabled")),
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
@@ -4380,7 +4741,9 @@ def read_room_payloads_for_context(conn, room_ids=None, room_names=None):
         params.extend(names)
     if not clauses:
         return []
-    rows = conn.execute(f"SELECT payload FROM rooms WHERE {' OR '.join(clauses)} ORDER BY rowid", tuple(params)).fetchall()
+    rows = conn.execute(
+        f"SELECT payload FROM rooms WHERE {' OR '.join(clauses)} ORDER BY rowid", tuple(params)
+    ).fetchall()
     return [json.loads(row["payload"]) for row in rows]
 
 
@@ -4602,7 +4965,9 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
         allocations.setdefault(iacuc, 0)
 
     remaining = max(as_int(free_cages) or 0, 0)
-    for item in sorted((entry for entry in eligible if entry["preferredFreeCages"] > 0), key=free_cage_allocation_sort_key):
+    for item in sorted(
+        (entry for entry in eligible if entry["preferredFreeCages"] > 0), key=free_cage_allocation_sort_key
+    ):
         if remaining <= 0:
             break
         current_remaining = remaining_by_iacuc.get(item["iacuc"], 0)
@@ -4621,7 +4986,9 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
         ]
         if not candidates:
             break
-        coverable = sorted((item for item in candidates if item["remainingCages"] <= remaining), key=free_cage_allocation_sort_key)
+        coverable = sorted(
+            (item for item in candidates if item["remainingCages"] <= remaining), key=free_cage_allocation_sort_key
+        )
         if coverable:
             target = coverable[0]
             allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
@@ -4664,7 +5031,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
 
     cumulative = 0
     lines = []
-    for date in dates_in_month(month):
+    for line_date in dates_in_month(month):
         transfer_deltas = {}
         breakdown = []
         animal_count = 0
@@ -4672,7 +5039,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         charge_groups = {}
         quantity_row_ids = []
         for state in sheet_states:
-            day_rows = state["rowsByDate"].get(date, [])
+            day_rows = state["rowsByDate"].get(line_date, [])
             for row in day_rows:
                 added_count = row.get("addedCount") or 0
                 removed_count = row.get("removedCount") or 0
@@ -4696,7 +5063,9 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                     transfer_deltas[transfer_out_iacuc] = transfer_deltas.get(transfer_out_iacuc, 0) + removed_count
                 transfer_in_from_iacuc = normalize_iacuc_number(row.get("transferInFromIacuc", ""))
                 if transfer_in_from_iacuc and added_count > 0:
-                    transfer_deltas[transfer_in_from_iacuc] = transfer_deltas.get(transfer_in_from_iacuc, 0) - added_count
+                    transfer_deltas[transfer_in_from_iacuc] = (
+                        transfer_deltas.get(transfer_in_from_iacuc, 0) - added_count
+                    )
             sheet = state["sheet"]
             quantity_row_ids.extend(row["id"] for row in day_rows)
 
@@ -4732,7 +5101,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                         "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
                         "tiered": bool(profile["tiered"]),
                         "freeAllowance": bool(profile["freeAllowance"]),
-                        "freeEligible": iacuc_free_allowance_eligible(application or sheet, date),
+                        "freeEligible": iacuc_free_allowance_eligible(application or sheet, line_date),
                         "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0),
                         "freeCagePriority": as_int(sheet.get("freeCagePriority")),
                         "freeCages": 0,
@@ -4747,7 +5116,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         lines.append(
             {
                 "id": new_id("line"),
-                "date": date,
+                "date": line_date,
                 "animalCount": animal_count,
                 "cageCount": cage_count,
                 **charges,
@@ -4790,11 +5159,11 @@ def generate_billing_statement(conn, payload, actor):
     free_cages = 0
     iacucs = [iacuc]
 
-    for date in dates:
+    for line_date in dates:
         active_items = [
             item
             for item in occupancies
-            if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and occupancy_active_on_date(item, date)
+            if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and occupancy_active_on_date(item, line_date)
         ]
         charge_groups = {}
         cage_count = 0
@@ -4828,7 +5197,9 @@ def generate_billing_statement(conn, payload, actor):
                 if not found:
                     found = {
                         "iacuc": iacuc,
-                        "project": statement_application_snapshot(iacuc, applications_by_iacuc, occupancies).get("project", ""),
+                        "project": statement_application_snapshot(iacuc, applications_by_iacuc, occupancies).get(
+                            "project", ""
+                        ),
                         "animalCount": 0,
                         "cageCount": 0,
                         "billingItem": profile["billingItem"],
@@ -4846,7 +5217,7 @@ def generate_billing_statement(conn, payload, actor):
                     found["cageCount"] += 1
         line = {
             "id": new_id("line"),
-            "date": date,
+            "date": line_date,
             "animalCount": animal_count,
             "cageCount": cage_count,
             **charges,
@@ -4997,7 +5368,9 @@ def generate_billing_statement_by_pi(conn, payload, actor):
                         "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
                         "tiered": bool(profile["tiered"]),
                         "freeAllowance": bool(profile["freeAllowance"]),
-                        "freeEligible": iacuc_free_allowance_eligible(applications_by_iacuc.get(item_iacuc, item), date),
+                        "freeEligible": iacuc_free_allowance_eligible(
+                            applications_by_iacuc.get(item_iacuc, item), date
+                        ),
                         "freeCages": 0,
                     }
                     breakdown.append(found)
@@ -5213,10 +5586,9 @@ def room_has_manual_billing_profile(room=None, inferred_billing_item=""):
         return True
     if not room.get("billingProfileConfigured"):
         return False
-    fallback_mouse = (
-        clean_text(room.get("defaultBillingItem", "")) in ("", "mouse_standard")
-        and clean_text(room.get("defaultSpecies", "")) in ("", "mouse")
-    )
+    fallback_mouse = clean_text(room.get("defaultBillingItem", "")) in ("", "mouse_standard") and clean_text(
+        room.get("defaultSpecies", "")
+    ) in ("", "mouse")
     return not (fallback_mouse and inferred_billing_item and inferred_billing_item != "mouse_standard")
 
 
@@ -5391,9 +5763,8 @@ def billing_unit_price_for(rules, date):
 
 def billing_discount_for(adjustments, iacuc, date):
     for adjustment in adjustments:
-        in_range = (
-            (not adjustment.get("effectiveStart") or adjustment.get("effectiveStart") <= date)
-            and (not adjustment.get("effectiveEnd") or adjustment.get("effectiveEnd") >= date)
+        in_range = (not adjustment.get("effectiveStart") or adjustment.get("effectiveStart") <= date) and (
+            not adjustment.get("effectiveEnd") or adjustment.get("effectiveEnd") >= date
         )
         if (
             adjustment.get("targetType") == "iacuc"
@@ -5508,7 +5879,9 @@ def workflow_scope_for_statement(statement):
 
 
 def billing_workflow_business_key(scope_type, scope_key, month, source_type):
-    return "|".join([clean_text(scope_type), clean_text(scope_key), clean_text(month), normalize_workflow_source(source_type)])
+    return "|".join(
+        [clean_text(scope_type), clean_text(scope_key), clean_text(month), normalize_workflow_source(source_type)]
+    )
 
 
 def make_statement_document_number(statement, version_no):
@@ -5617,7 +5990,9 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
     }
 
 
-def build_workflow_event_payload(event_id, workflow_id, version_id, event_type, from_status, to_status, actor, at, channel, note):
+def build_workflow_event_payload(
+    event_id, workflow_id, version_id, event_type, from_status, to_status, actor, at, channel, note
+):
     return {
         "id": event_id,
         "workflowId": workflow_id,
@@ -5731,7 +6106,9 @@ def upsert_reimbursement_record(conn, payload):
     if existing_by_key and existing_by_key.get("id"):
         payload["id"] = existing_by_key["id"]
     else:
-        row = conn.execute("SELECT payload FROM reimbursement_records WHERE id = ?", (payload.get("id", ""),)).fetchone()
+        row = conn.execute(
+            "SELECT payload FROM reimbursement_records WHERE id = ?", (payload.get("id", ""),)
+        ).fetchone()
         if row:
             existing_by_id = json.loads(row["payload"])
             payload["id"] = existing_by_id.get("id", payload.get("id", ""))
@@ -5766,7 +6143,9 @@ def quantity_sheet_detail_context(sheets, rooms):
         iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
         if not iacuc:
             continue
-        room = room_by_id.get(sheet.get("roomId")) or next((item for item in rooms if clean_text(item.get("name")) == clean_text(sheet.get("roomName"))), {})
+        room = room_by_id.get(sheet.get("roomId")) or next(
+            (item for item in rooms if clean_text(item.get("name")) == clean_text(sheet.get("roomName"))), {}
+        )
         profile = billing_profile_for_room(room or {})
         current = context.get(iacuc) or {
             "facility": profile.get("facility", ""),
@@ -5847,7 +6226,9 @@ def reimbursement_detail_context_from_workflow(conn, workflow, statement):
         )
         detail_context = quantity_sheet_detail_context(sheets, rooms)
     elif statement.get("sourceType") == "quantity_sheet":
-        sheets = list_quantity_sheets_by_month_iacuc(conn, statement.get("month"), normalize_iacuc_number(statement.get("iacuc")))
+        sheets = list_quantity_sheets_by_month_iacuc(
+            conn, statement.get("month"), normalize_iacuc_number(statement.get("iacuc"))
+        )
         rooms = read_room_payloads_for_context(
             conn,
             room_ids=[item.get("roomId", "") for item in sheets],
@@ -5858,7 +6239,9 @@ def reimbursement_detail_context_from_workflow(conn, workflow, statement):
         occupancies = read_occupancies_for_billing(
             conn,
             statement.get("month", ""),
-            iacuc="" if clean_text(statement.get("sourceType", "")).startswith("pi_merged_") else statement.get("iacuc", ""),
+            iacuc=""
+            if clean_text(statement.get("sourceType", "")).startswith("pi_merged_")
+            else statement.get("iacuc", ""),
             pi=statement.get("pi", "") if clean_text(statement.get("pi", "")) else "",
         )
         rooms = read_room_payloads_for_context(conn, room_ids=[item.get("roomId", "") for item in occupancies])
@@ -5891,7 +6274,11 @@ def build_reimbursement_record_payload(existing, workflow, statement, lines, det
         "month": month,
         "pi": pi_name,
         "workflowId": workflow.get("id", "") if workflow else existing.get("workflowId", "") if existing else "",
-        "workflowStatus": workflow.get("workflowStatus", "") if workflow else existing.get("workflowStatus", "") if existing else "",
+        "workflowStatus": workflow.get("workflowStatus", "")
+        if workflow
+        else existing.get("workflowStatus", "")
+        if existing
+        else "",
         "reimbursementStatus": reimbursement_status,
         "currentMonthAmount": current_month_amount,
         "supportAmount": support_amount,
@@ -5918,13 +6305,22 @@ def build_reimbursement_record_payload(existing, workflow, statement, lines, det
         "owner": statement.get("owner", ""),
         "funding": statement.get("funding", ""),
     }
-    if payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED and payload["paidAmount"] + 1e-9 < payload["payableAmount"]:
-        payload["reimbursementStatus"] = REIMBURSEMENT_STATUS_REIMBURSING if (payload["fundBookNo"] or payload["reimbursementFormNo"]) else REIMBURSEMENT_STATUS_PENDING
+    if (
+        payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED
+        and payload["paidAmount"] + 1e-9 < payload["payableAmount"]
+    ):
+        payload["reimbursementStatus"] = (
+            REIMBURSEMENT_STATUS_REIMBURSING
+            if (payload["fundBookNo"] or payload["reimbursementFormNo"])
+            else REIMBURSEMENT_STATUS_PENDING
+        )
         payload["completedAt"] = ""
     return payload
 
 
-def upsert_reimbursement_record_from_statement(conn, workflow, statement, lines, detail_context_by_iacuc, source="workflow"):
+def upsert_reimbursement_record_from_statement(
+    conn, workflow, statement, lines, detail_context_by_iacuc, source="workflow"
+):
     business_key = reimbursement_business_key(statement.get("month", ""), statement.get("pi", ""))
     existing = get_reimbursement_record_by_key(conn, business_key) or {}
     payload = build_reimbursement_record_payload(existing, workflow, statement, lines, detail_context_by_iacuc, source)
@@ -5934,7 +6330,14 @@ def upsert_reimbursement_record_from_statement(conn, workflow, statement, lines,
 
 def recalculate_reimbursement_accumulations(conn, pi_name):
     records = list_reimbursement_records_for_pi(conn, clean_text(pi_name))
-    records = sorted(records, key=lambda item: (clean_text(item.get("month", "")), clean_text(item.get("latestEventAt", "")), clean_text(item.get("id", ""))))
+    records = sorted(
+        records,
+        key=lambda item: (
+            clean_text(item.get("month", "")),
+            clean_text(item.get("latestEventAt", "")),
+            clean_text(item.get("id", "")),
+        ),
+    )
     accumulated_payable = 0.0
     accumulated_paid = 0.0
     for record in records:
@@ -5966,7 +6369,7 @@ def month_key(value):
         return value.strftime("%Y-%m")
     if isinstance(value, date):
         return value.strftime("%Y-%m")
-    if isinstance(value, (int, float)) and openpyxl_from_excel:
+    if isinstance(value, int | float) and openpyxl_from_excel:
         try:
             parsed = openpyxl_from_excel(value)
         except Exception:
@@ -6108,7 +6511,11 @@ def build_monthly_import_groups(workbook):
                     "funding": [],
                 },
             )
-            support_amount = coerce_reimbursement_money(sheet.cell(row_index, support_amount_col).value) if support_amount_col else 0.0
+            support_amount = (
+                coerce_reimbursement_money(sheet.cell(row_index, support_amount_col).value)
+                if support_amount_col
+                else 0.0
+            )
             payable_amount = coerce_reimbursement_money(sheet.cell(row_index, payable_amount_col).value)
             note_parts = [clean_text(sheet.cell(row_index, notes_col).value)] if notes_col else []
             start_month = month_key(sheet.cell(row_index, start_col).value) if start_col else ""
@@ -6125,7 +6532,9 @@ def build_monthly_import_groups(workbook):
             entry["supportAmount"] += support_amount
             entry["payableAmount"] += payable_amount
             entry["fundBookNos"].append(clean_text(sheet.cell(row_index, fund_book_col).value) if fund_book_col else "")
-            entry["reimbursementFormNos"].append(clean_text(sheet.cell(row_index, reimbursement_form_col).value) if reimbursement_form_col else "")
+            entry["reimbursementFormNos"].append(
+                clean_text(sheet.cell(row_index, reimbursement_form_col).value) if reimbursement_form_col else ""
+            )
             entry["notes"].extend([part for part in note_parts if part])
             if species:
                 entry["species"].append(species)
@@ -6200,8 +6609,13 @@ def import_monthly_reimbursement_workbook(conn, file_body, actor):
             "funding": "；".join(distinct_text_list(entry["funding"])) or clean_text(existing.get("funding", "")),
         }
         payload["unpaidAmount"] = coerce_reimbursement_money(max(payload["payableAmount"] - payload["paidAmount"], 0))
-        if payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED and payload["paidAmount"] + 1e-9 < payload["payableAmount"]:
-            payload["reimbursementStatus"] = infer_import_status(payload["fundBookNo"], payload["reimbursementFormNo"], payload["notes"])
+        if (
+            payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED
+            and payload["paidAmount"] + 1e-9 < payload["payableAmount"]
+        ):
+            payload["reimbursementStatus"] = infer_import_status(
+                payload["fundBookNo"], payload["reimbursementFormNo"], payload["notes"]
+            )
             payload["completedAt"] = ""
         if payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED and not payload["completedAt"]:
             payload["completedAt"] = now_iso()
@@ -6226,7 +6640,12 @@ def import_monthly_reimbursement_workbook(conn, file_body, actor):
     write_audit_events(conn, [audit])
     audits.append(audit)
     invalidate_data_cache_prefixes("reimbursement_records::", "billing_workflows::")
-    return {"items": saved, "auditLogs": merge_audit_logs([], audits), "count": len(saved), "months": sorted(imported_months)}
+    return {
+        "items": saved,
+        "auditLogs": merge_audit_logs([], audits),
+        "count": len(saved),
+        "months": sorted(imported_months),
+    }
 
 
 def arrears_summary_columns(sheet):
@@ -6295,10 +6714,16 @@ def import_arrears_reimbursement_workbook(conn, file_body, actor):
                 "pi": pi_name,
                 "workflowId": existing.get("workflowId", ""),
                 "workflowStatus": existing.get("workflowStatus", ""),
-                "reimbursementStatus": normalize_reimbursement_status(existing.get("reimbursementStatus") or REIMBURSEMENT_STATUS_PENDING),
-                "currentMonthAmount": coerce_reimbursement_money(existing.get("currentMonthAmount", monthly_unpaid) or monthly_unpaid),
+                "reimbursementStatus": normalize_reimbursement_status(
+                    existing.get("reimbursementStatus") or REIMBURSEMENT_STATUS_PENDING
+                ),
+                "currentMonthAmount": coerce_reimbursement_money(
+                    existing.get("currentMonthAmount", monthly_unpaid) or monthly_unpaid
+                ),
                 "supportAmount": coerce_reimbursement_money(existing.get("supportAmount", 0)),
-                "payableAmount": coerce_reimbursement_money(existing.get("payableAmount", monthly_unpaid) or monthly_unpaid),
+                "payableAmount": coerce_reimbursement_money(
+                    existing.get("payableAmount", monthly_unpaid) or monthly_unpaid
+                ),
                 "paidAmount": coerce_reimbursement_money(existing.get("paidAmount", 0)),
                 "unpaidAmount": 0,
                 "accumulatedPayable": coerce_reimbursement_money(existing.get("accumulatedPayable", 0)),
@@ -6321,7 +6746,9 @@ def import_arrears_reimbursement_workbook(conn, file_body, actor):
                 "owner": clean_text(existing.get("owner", "")),
                 "funding": funding or clean_text(existing.get("funding", "")),
             }
-            payload["unpaidAmount"] = coerce_reimbursement_money(max(payload["payableAmount"] - payload["paidAmount"], 0))
+            payload["unpaidAmount"] = coerce_reimbursement_money(
+                max(payload["payableAmount"] - payload["paidAmount"], 0)
+            )
             upsert_reimbursement_record(conn, payload)
             saved.append(payload)
             imported_pis.add(pi_name)
@@ -6372,8 +6799,11 @@ def reimbursement_detail_payload(conn, record):
     }
     return cache_set(cache_key_value, payload)
 
+
 def save_billing_statement_workflow(conn, statement, lines, actor, note=""):
-    result = save_billing_statement_workflow_service(conn, statement, lines, actor, note, billing_workflow_service_deps())
+    result = save_billing_statement_workflow_service(
+        conn, statement, lines, actor, note, billing_workflow_service_deps()
+    )
     invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
     return result
 
@@ -6382,7 +6812,15 @@ def insert_billing_workflow(conn, payload):
     insert_billing_workflow_repository(
         conn,
         payload,
-        payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
+        payload.get(
+            "businessKey",
+            billing_workflow_business_key(
+                payload.get("scopeType", ""),
+                payload.get("scopeKey", ""),
+                payload.get("month", ""),
+                payload.get("sourceType", ""),
+            ),
+        ),
         payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
         as_int(payload.get("currentVersionNo")) or 0,
     )
@@ -6392,7 +6830,15 @@ def update_billing_workflow(conn, payload):
     update_billing_workflow_repository(
         conn,
         payload,
-        payload.get("businessKey", billing_workflow_business_key(payload.get("scopeType", ""), payload.get("scopeKey", ""), payload.get("month", ""), payload.get("sourceType", ""))),
+        payload.get(
+            "businessKey",
+            billing_workflow_business_key(
+                payload.get("scopeType", ""),
+                payload.get("scopeKey", ""),
+                payload.get("month", ""),
+                payload.get("sourceType", ""),
+            ),
+        ),
         payload.get("workflowStatus", WORKFLOW_STATUS_GENERATED),
         as_int(payload.get("currentVersionNo")) or 0,
     )
@@ -6441,7 +6887,9 @@ def parse_multipart_upload(content_type, raw):
             continue
         header_blob, body = part.split(b"\r\n\r\n", 1)
         headers = header_blob.decode("utf-8", errors="replace")
-        disposition = next((line for line in headers.split("\r\n") if line.lower().startswith("content-disposition:")), "")
+        disposition = next(
+            (line for line in headers.split("\r\n") if line.lower().startswith("content-disposition:")), ""
+        )
         if 'name="file"' not in disposition:
             continue
         filename = multipart_filename(disposition)
@@ -7078,9 +7526,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         try:
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement(conn, body, user)
-                workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
+                workflow = (
+                    get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
+                )
                 conn.commit()
-            self.send_json({"statement": statement, "lines": lines, "workflow": workflow, "auditLogs": audit_logs}, HTTPStatus.CREATED)
+            self.send_json(
+                {"statement": statement, "lines": lines, "workflow": workflow, "auditLogs": audit_logs},
+                HTTPStatus.CREATED,
+            )
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -7096,8 +7549,14 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
         try:
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement_by_pi(conn, body, user)
-                workflow = get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
-                reimbursement = get_reimbursement_record_by_workflow_id(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
+                workflow = (
+                    get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
+                )
+                reimbursement = (
+                    get_reimbursement_record_by_workflow_id(conn, statement.get("workflowId", ""))
+                    if statement.get("workflowId")
+                    else None
+                )
                 conn.commit()
             self.send_json(
                 {
@@ -7201,7 +7660,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 {
                     "ok": True,
                     "workflow": workflow,
-                    "reimbursementItem": reimbursement_record_list_item(reimbursement) if reimbursement and not deleted_reimbursement_id else None,
+                    "reimbursementItem": reimbursement_record_list_item(reimbursement)
+                    if reimbursement and not deleted_reimbursement_id
+                    else None,
                     "deletedReimbursementId": deleted_reimbursement_id,
                     "auditLogs": merge_audit_logs([], [audit]),
                 }
@@ -7344,7 +7805,10 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
 
     def list_filters(self, default_limit=10000, max_limit=10000):
         query = parse_qs(urlparse(self.path).query)
-        value = lambda key: query.get(key, [""])[0]
+
+        def value(key):
+            return query.get(key, [""])[0]
+
         column_filters = {}
         raw_column_filters = value("columnFilters") or value("filters")
         if raw_column_filters:
@@ -7404,7 +7868,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 items = payload["items"]
                 page = payload["page"]
             else:
-                rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {ENTITY_ORDER_BY.get(table, 'rowid')}").fetchall()
+                rows = conn.execute(
+                    f"SELECT payload FROM {table} ORDER BY {ENTITY_ORDER_BY.get(table, 'rowid')}"
+                ).fetchall()
                 items = [json.loads(row["payload"]) for row in rows]
                 page = None
         collection = {
@@ -7569,7 +8035,9 @@ class CageLedgerHandler(SimpleHTTPRequestHandler):
                 conn.commit()
             invalidate_data_cache("principal_identities")
             invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
-            self.send_json({"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs, "perf": perf}, status)
+            self.send_json(
+                {"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs, "perf": perf}, status
+            )
         except sqlite3.IntegrityError:
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
         except PermissionError as exc:

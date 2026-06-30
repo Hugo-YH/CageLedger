@@ -2,9 +2,7 @@ import json
 
 from server_app.cache import cache_get, cache_key, cache_set
 
-from .payload import dump_json
-from .payload import cached_paginated_payloads
-from .payload import paginated_payloads
+from .payload import cached_paginated_payloads, dump_json, paginated_payloads
 
 INTAKE_BATCH_LIST_COLUMNS = {
     "status": {"expr": "status", "order": "status"},
@@ -36,7 +34,9 @@ def list_distinct_principal_names(conn):
 
 
 def read_principal_type_by_pi(conn):
-    rows = conn.execute("SELECT pi, principal_type FROM principal_identities WHERE TRIM(COALESCE(pi, '')) != ''").fetchall()
+    rows = conn.execute(
+        "SELECT pi, principal_type FROM principal_identities WHERE TRIM(COALESCE(pi, '')) != ''"
+    ).fetchall()
     return {row["pi"]: row["principal_type"] for row in rows}
 
 
@@ -58,12 +58,25 @@ def list_audit_events_page(conn, filters, filtered_where):
     cached = cache_get(key)
     if cached is not None:
         return cached
-    return cache_set(key, paginated_payloads(conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"]))
+    return cache_set(
+        key,
+        paginated_payloads(
+            conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"]
+        ),
+    )
 
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
     where, params = intake_batch_where(filters, filtered_where)
-    return cached_paginated_payloads(conn, "intake_batches", "intake_batches", intake_batch_order_by(filters, entity_order_by), filters, where, params)
+    return cached_paginated_payloads(
+        conn,
+        "intake_batches",
+        "intake_batches",
+        intake_batch_order_by(filters, entity_order_by),
+        filters,
+        where,
+        params,
+    )
 
 
 def intake_batch_where(filters, filtered_where, exclude_column=""):
@@ -116,7 +129,7 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
     where_clause = f" WHERE {where}" if where else ""
     rows = conn.execute(
         f"""
-        SELECT COALESCE({spec['expr']}, '') AS value, COUNT(*) AS count
+        SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
         FROM intake_batches{where_clause}
         GROUP BY value
         ORDER BY value COLLATE NOCASE
@@ -126,8 +139,7 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
     ).fetchall()
     return {
         "items": [
-            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]}
-            for row in rows
+            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]} for row in rows
         ],
     }
 
@@ -156,7 +168,15 @@ def list_placement_tasks_page(conn, filters, entity_order_by, clean_text):
     if filters.get("month"):
         where = " AND ".join([part for part in (where, "planned_move_in_date LIKE ?") if part])
         params = (*params, f"{filters['month']}%")
-    return cached_paginated_payloads(conn, "placement_tasks", "placement_tasks", entity_order_by.get("placement_tasks", "rowid"), filters, where, params)
+    return cached_paginated_payloads(
+        conn,
+        "placement_tasks",
+        "placement_tasks",
+        entity_order_by.get("placement_tasks", "rowid"),
+        filters,
+        where,
+        params,
+    )
 
 
 def upsert_principal_identity(conn, pi_name, principal_type, updated_at, payload_json):

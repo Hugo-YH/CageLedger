@@ -8,14 +8,14 @@ import sqlite3
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from server import (
+from server import (  # noqa: E402 - repository root must be on sys.path before importing the application
     BILLING_PRINCIPAL_INDEPENDENT,
     BILLING_PRINCIPAL_PI,
     DB_PATH,
@@ -26,7 +26,6 @@ from server import (
     column_label,
     connect_db,
     delete_billing_workflow,
-    dump_json,
     empty_state,
     generate_billing_statement,
     generate_billing_statement_by_pi,
@@ -41,7 +40,6 @@ from server import (
     write_experiment_applications,
     write_state,
 )
-
 
 DEMO_PREFIX = "demo-202605"
 DEMO_MONTH = date.today().strftime("%Y-%m")
@@ -171,10 +169,26 @@ def strip_demo_state(state: dict) -> dict:
         for item in next_state.get("racks", [])
         if item.get("id") not in demo_rack_ids and not clean_text(item.get("id", "")).startswith(DEMO_PREFIX)
     ]
-    next_state["slots"] = [item for item in next_state.get("slots", []) if not clean_text(item.get("id", "")).startswith(f"slot-{DEMO_PREFIX}")]
-    next_state["occupancies"] = [item for item in next_state.get("occupancies", []) if not clean_text(item.get("id", "")).startswith(f"{DEMO_PREFIX}-occ")]
-    next_state["intakeBatches"] = [item for item in next_state.get("intakeBatches", []) if not clean_text(item.get("id", "")).startswith(f"{DEMO_PREFIX}-batch")]
-    next_state["placementTasks"] = [item for item in next_state.get("placementTasks", []) if not clean_text(item.get("id", "")).startswith(f"{DEMO_PREFIX}-task")]
+    next_state["slots"] = [
+        item
+        for item in next_state.get("slots", [])
+        if not clean_text(item.get("id", "")).startswith(f"slot-{DEMO_PREFIX}")
+    ]
+    next_state["occupancies"] = [
+        item
+        for item in next_state.get("occupancies", [])
+        if not clean_text(item.get("id", "")).startswith(f"{DEMO_PREFIX}-occ")
+    ]
+    next_state["intakeBatches"] = [
+        item
+        for item in next_state.get("intakeBatches", [])
+        if not clean_text(item.get("id", "")).startswith(f"{DEMO_PREFIX}-batch")
+    ]
+    next_state["placementTasks"] = [
+        item
+        for item in next_state.get("placementTasks", [])
+        if not clean_text(item.get("id", "")).startswith(f"{DEMO_PREFIX}-task")
+    ]
     next_state["auditLogs"] = [
         item
         for item in next_state.get("auditLogs", [])
@@ -740,7 +754,13 @@ def demo_applications() -> list[dict]:
 
 def replace_demo_applications(conn: sqlite3.Connection) -> None:
     existing = existing_applications(conn)
-    keep = [item for item in existing if item.get("id") not in {app["id"] for app in demo_applications()} and normalize_iacuc_number(item.get("iacuc", "")) not in {normalize_iacuc_number(value) for value in DEMO_IACUCS.values()}]
+    keep = [
+        item
+        for item in existing
+        if item.get("id") not in {app["id"] for app in demo_applications()}
+        and normalize_iacuc_number(item.get("iacuc", ""))
+        not in {normalize_iacuc_number(value) for value in DEMO_IACUCS.values()}
+    ]
     items = keep + demo_applications()
     imported_at = now_iso()
     write_experiment_applications(conn, items, imported_at)
@@ -761,7 +781,9 @@ def reset_demo_quantity_sheets(conn: sqlite3.Connection) -> None:
         if clean_text(payload.get("id", "")).startswith(DEMO_PREFIX):
             conn.execute("DELETE FROM quantity_sheets WHERE id = ?", (payload["id"],))
             continue
-        if normalize_iacuc_number(payload.get("iacuc", "")) in {normalize_iacuc_number(value) for value in DEMO_IACUCS.values()}:
+        if normalize_iacuc_number(payload.get("iacuc", "")) in {
+            normalize_iacuc_number(value) for value in DEMO_IACUCS.values()
+        }:
             conn.execute("DELETE FROM quantity_sheets WHERE id = ?", (payload["id"],))
 
 

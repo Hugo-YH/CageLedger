@@ -14,31 +14,113 @@ describe("print templates", () => {
   });
 
   it("prints persisted cage-card QR IDs as SVG", () => {
-    const batch = { batchNo: "B1", supplier: "S", strainStandard: "C57", pi: "PI", owner: "O", receiverName: "R", vetPhone: "1", intakeDate: "2026-06-01", endDate: "2026-06-30", roomName: "8014", finalCardCount: 1, cards: [{ qrId: "ABCD", label: "1/1", suggestedQuantity: "5" }] } as IntakeBatch;
+    const batch = {
+      batchNo: "B1",
+      supplier: "S",
+      strainStandard: "C57",
+      pi: "PI",
+      owner: "O",
+      receiverName: "R",
+      vetPhone: "1",
+      intakeDate: "2026-06-01",
+      endDate: "2026-06-30",
+      roomName: "8014",
+      finalCardCount: 1,
+      cards: [{ qrId: "ABCD", label: "1/1", suggestedQuantity: "5" }],
+    } as IntakeBatch;
     const html = intakeCardsPrintHtml([batch]);
-    expect(html).toContain("aria-label=\"笼卡二维码\"");
+    expect(html).toContain('aria-label="笼卡二维码"');
     expect(html).toContain("grid-auto-rows:40.09mm");
     expect(html).toContain("width:8.5mm");
     expect(html).not.toContain("保存后生成");
   });
 
   it("uses the two-column official quantity sheet layout", () => {
-    const sheet = { month: "2026-06", roomName: "8014", manager: "管理员", iacuc: "Z1", pi: "张教授", owner: "陈老师", project: "项目", pageCount: 1, rows: [{ date: "2026-06-01", addedCount: 5, addedType: "购入", transferInFromIacuc: "", removedCount: null, removedType: "", transferOutToIacuc: "", animalCount: 5, cageCount: 1 }] } as QuantitySheet;
+    const sheet = {
+      month: "2026-05",
+      roomName: "8014",
+      manager: "管理员",
+      iacuc: "Z1",
+      pi: "张教授",
+      owner: "陈老师",
+      project: "项目",
+      pageCount: 1,
+      rows: [
+        {
+          date: "2026-05-01",
+          addedCount: 5,
+          addedType: "购入",
+          transferInFromIacuc: "",
+          removedCount: null,
+          removedType: "",
+          transferOutToIacuc: "",
+          animalCount: 5,
+          cageCount: 1,
+        },
+        {
+          date: "2026-05-31",
+          addedCount: null,
+          addedType: "",
+          transferInFromIacuc: "",
+          removedCount: null,
+          removedType: "",
+          transferOutToIacuc: "",
+          animalCount: 5,
+          cageCount: 1,
+        },
+      ],
+    } as QuantitySheet;
     const html = quantitySheetPagesMarkup([sheet]);
     expect(html).toContain("实验动物数量统计表");
     expect(html.match(/新增（购\/转\/分）/g)).toHaveLength(2);
     expect(html.match(/<col/g)).toHaveLength(13);
     expect(html.match(/经手人/g)).toHaveLength(2);
+    expect(html.match(/2026\.5\./g)).toHaveLength(31);
+    expect(html).toContain("2026.5.31");
   });
 
   it("renders merged IACUC columns from the server breakdown", () => {
-    const result = { statement: { id: "s1", month: "2026-06", iacuc: "pi::张教授", iacucs: ["Z1", "Z2"], project: "项目", pi: "张教授", owner: "", funding: "", sourceType: "pi_merged_quantity_sheet", billingUnit: "cage_day", freeCageAllowance: 20, totalCageDays: 12, totalAnimalDays: 0, totalFreeCageDays: 10, totalBillableCageDays: 2, totalAmount: 9 }, lines: [{ date: "2026-06-01", animalCount: 0, cageCount: 12, freeCages: 10, billableCages: 2, amount: 9, cumulative: 9, iacucBreakdown: [{ iacuc: "Z1", cageCount: 6, freeCages: 6, unitPrice: 4.5 }, { iacuc: "Z2", cageCount: 6, freeCages: 4, unitPrice: 4.5 }] }] } as BillingStatementResponse;
+    const result = {
+      statement: {
+        id: "s1",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["Z1", "Z2"],
+        project: "项目",
+        pi: "张教授",
+        owner: "",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 20,
+        totalCageDays: 12,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 10,
+        totalBillableCageDays: 2,
+        totalAmount: 9,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 0,
+          cageCount: 12,
+          freeCages: 10,
+          billableCages: 2,
+          amount: 9,
+          cumulative: 9,
+          iacucBreakdown: [
+            { iacuc: "Z1", cageCount: 6, freeCages: 6, unitPrice: 4.5 },
+            { iacuc: "Z2", cageCount: 6, freeCages: 4, unitPrice: 4.5 },
+          ],
+        },
+      ],
+    } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
     expect(html).toContain("Z1");
     expect(html).toContain("Z2");
     expect(html).toContain("9.00");
-    expect(html).toContain("class=\"meta-table\"");
-    expect(html).toContain("class=\"sign-table\"");
+    expect(html).toContain('class="meta-table"');
+    expect(html).toContain('class="sign-table"');
     expect(html).toContain("@page{size:A4;margin:10mm}");
   });
 });

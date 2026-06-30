@@ -4,14 +4,12 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   retries: 1,
-  reporter: "list",
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: "http://127.0.0.1:5173",
     trace: "retain-on-failure",
   },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-  ],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "CAGELEDGER_EPHEMERAL_DB=1 npm run dev",
     url: "http://127.0.0.1:5173",

@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST_PATH = ROOT / "web-dist"
 DB_PATH = Path(os.environ.get("CAGELEDGER_DB", ROOT / "data" / "cageledger.sqlite"))
@@ -18,6 +17,7 @@ def frontend_root():
     if os.environ.get("CAGELEDGER_DEV_ASSETS", "").strip().lower() in {"1", "true", "yes", "on"}:
         return ROOT
     return WEB_DIST_PATH if (WEB_DIST_PATH / "index.html").exists() else ROOT
+
 
 DEFAULT_ADMIN_USERNAME = os.environ.get("CAGELEDGER_ADMIN_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("CAGELEDGER_ADMIN_PASSWORD", "admin123")

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calculateQuantityBalances, createQuantitySheet, roomBillingUnit, validateQuantitySheet } from "./quantitySheets";
+import {
+  calculateQuantityBalances,
+  createQuantitySheet,
+  roomBillingUnit,
+  validateQuantitySheet,
+} from "./quantitySheets";
 
 describe("quantity sheet domain", () => {
   it("calculates animal balances from changes", () => {

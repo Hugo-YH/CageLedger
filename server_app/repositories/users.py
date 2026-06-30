@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 def list_users(conn, sanitize_user):
@@ -124,7 +124,7 @@ def hash_token(token):
 def create_session(conn, user_id, session_ttl_days):
     token = secrets.token_urlsafe(32)
     token_hash = hash_token(token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(days=session_ttl_days)
     insert_session(conn, token_hash, user_id, now.isoformat(), expires_at.isoformat())
     conn.commit()

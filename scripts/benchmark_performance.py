@@ -7,12 +7,12 @@ import argparse
 import json
 import math
 import os
-from pathlib import Path
 import sqlite3
 import statistics
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 
 def percentile(values: list[float], ratio: float) -> float:
@@ -136,11 +136,20 @@ def populate(conn: sqlite3.Connection, slots: int, records: int) -> None:
 QUERIES = {
     "quantity_default": ("SELECT id FROM quantity_sheets ORDER BY month DESC, updated_at DESC LIMIT 20", ()),
     "quantity_pi": ("SELECT id FROM quantity_sheets WHERE pi = ? ORDER BY month DESC LIMIT 20", ("负责人 042",)),
-    "quantity_deep_page": ("SELECT id FROM quantity_sheets ORDER BY month DESC, updated_at DESC LIMIT 20 OFFSET 10000", ()),
+    "quantity_deep_page": (
+        "SELECT id FROM quantity_sheets ORDER BY month DESC, updated_at DESC LIMIT 20 OFFSET 10000",
+        (),
+    ),
     "quantity_filter_options": ("SELECT pi, COUNT(*) FROM quantity_sheets GROUP BY pi ORDER BY pi LIMIT 500", ()),
-    "intake_status": ("SELECT id FROM intake_batches WHERE status = ? ORDER BY intake_date DESC LIMIT 20", ("received",)),
+    "intake_status": (
+        "SELECT id FROM intake_batches WHERE status = ? ORDER BY intake_date DESC LIMIT 20",
+        ("received",),
+    ),
     "intake_pi": ("SELECT id FROM intake_batches WHERE pi = ? ORDER BY intake_date DESC LIMIT 20", ("负责人 042",)),
-    "intake_owner": ("SELECT id FROM intake_batches WHERE owner = ? ORDER BY intake_date DESC LIMIT 20", ("实验员 0042",)),
+    "intake_owner": (
+        "SELECT id FROM intake_batches WHERE owner = ? ORDER BY intake_date DESC LIMIT 20",
+        ("实验员 0042",),
+    ),
 }
 
 

@@ -1,86 +1,101 @@
 # 发布与 CI-CD
 
-本页描述当前正式发布链和 Gitea 工作流分工。
+正式发布由版本提交、tag、Gitea Release、容器镜像和 Wiki 同步组成。
 
-## 发布链
+## 发布顺序
 
 ```text
-commit
-→ version
-→ tag
-→ Gitea Release
-→ Gitea Container Registry
-→ Wiki Sync
+release notes
+-> check
+-> offline package
+-> commit
+-> v<version> tag
+-> push main and tag
+-> Gitea Release / Container Registry / Wiki Sync
 ```
 
-版本号、tag、Release 和镜像要求一一对应。
+版本号、提交、tag、Release、离线包和镜像保持一一对应。
 
-## 本地发布命令
+## 发布前准备
+
+1. 拉取远端并处理本地改动。
+2. 在 `src/react/releaseNotes.ts` 增加独立版本记录和更新时间。
+3. 同步受影响的 `wiki/` 和 `docs/contracts/`。
+4. 确认 `package.json` 中仍是发布前版本，版本脚本统一修改。
+
+## 本地发布
 
 ```bash
 npm run release:local -- --version X.Y.Z --push
 ```
 
-发布前更新：
+脚本会执行：
 
-- `src/react/releaseNotes.ts` 中的 `SYSTEM_RELEASE_NOTES`
-- `src/react/version.ts` 由版本脚本自动同步，禁止手工单独改版本
-- 需要同步的 `wiki/` 页面
+1. `scripts/set_version.mjs`
+2. 校验 `src/react/releaseNotes.ts`
+3. `npm run check`
+4. `npm run package:offline`
+5. Git commit
+6. annotated tag
+7. 推送 `main` 和新 tag
 
-## 发布前检查
+本地演练：
 
 ```bash
-npm run check
-npm run build
+npm run release:local -- --version X.Y.Z --dry-run
+```
+
+完整浏览器回归在发布前单独执行：
+
+```bash
 npm run test:e2e
 npm run smoke:api
-npm run package:offline
 ```
 
-## 工作流分工
+## Gitea 工作流
 
-| 工作流 | 作用 |
-| --- | --- |
-| `.gitea/workflows/release-package.yml` | 创建 Release、上传离线包 |
-| `.gitea/workflows/publish-container.yml` | 构建并推送容器镜像 |
-| `.gitea/workflows/sync-wiki.yml` | 同步 `wiki/` 到 Gitea Wiki |
+| 工作流                                   | 作用                              |
+| ---------------------------------------- | --------------------------------- |
+| `.gitea/workflows/ci.yml`                | PR 和 main 的质量、测试、构建门禁 |
+| `.gitea/workflows/release-package.yml`   | 创建 Release、上传离线包          |
+| `.gitea/workflows/publish-container.yml` | 多阶段构建并推送容器镜像          |
+| `.gitea/workflows/sync-wiki.yml`         | 将 `wiki/` 同步到 Gitea Wiki      |
 
-## 凭据分工
+## 凭据
 
-| 凭据 | 用途 |
-| --- | --- |
-| `GITEA_TOKEN` | 创建 Release、同步 Wiki |
-| `PACKAGE_USERNAME` | 镜像仓库登录用户名 |
-| `PACKAGE_PAT` Secret | 镜像仓库登录令牌 |
+| 凭据               | 类型     | 用途                    |
+| ------------------ | -------- | ----------------------- |
+| `GITEA_TOKEN`      | Secret   | 创建 Release、同步 Wiki |
+| `PACKAGE_USERNAME` | Variable | 容器仓库用户名          |
+| `PACKAGE_PAT`      | Secret   | 容器仓库令牌            |
 
-## 正式发布口径
+runner 可能位于内网。工作流脚本需要兼容 `/bin/sh`，并确认 job 容器能够访问 Gitea、容器仓库和依赖源。
 
-- 用户侧“系统更新”按 Gitea 最新 Release 判断
-- `main` 上的普通提交不会直接成为可安装更新
-- 正式镜像地址固定为 `git.cellnucle.us/hugo/cageledger:<tag>`
+## 持续集成门禁
 
-## 常见发布动作
+`ci.yml` 包含三个 job：
 
-### 拉取远端最新代码
+1. Frontend and documentation quality：Prettier、ESLint、Stylelint、Markdownlint、ShellCheck、TypeScript、Vitest 和生产构建。
+2. Python quality：Ruff、unittest 和 py_compile。
+3. Browser regression：完整 Playwright 和 axe serious/critical 扫描。
 
-```bash
-git pull --ff-only origin main
-```
+浏览器回归依赖前两个 job 成功。失败时上传 `playwright-report/` 和 `test-results/`，保留 14 天。
 
-### 发布新版本
+## 发布结果检查
 
-```bash
-npm run release:local -- --version 0.5.3 --push
-```
+- `git tag --list 'vX.Y.Z'` 存在新 tag。
+- Gitea Release 显示对应版本和离线包。
+- `git.cellnucle.us/hugo/cageledger:X.Y.Z` 可以拉取。
+- `/api/health` 返回对应版本和 revision。
+- 系统更新检查识别最新 Release。
+- Gitea Wiki 显示本次文档变更。
 
-### 只做本地校验
+## 版本修复规则
 
-```bash
-npm run release:local -- --version 0.5.3 --dry-run
-```
+每次修复创建新版本和新 tag。旧 tag、旧 Release 和旧镜像保持不可变，便于追溯和回滚。
 
 ## 相关页面
 
 - [[部署与运行]]
 - [[开发规范]]
-- [[常见问题]]
+- [[故障排查]]

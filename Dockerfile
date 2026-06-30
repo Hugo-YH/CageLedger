@@ -14,7 +14,8 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir openpyxl
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py package.json LICENSE NOTICE ./
 COPY server_app ./server_app

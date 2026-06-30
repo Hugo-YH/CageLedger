@@ -226,4 +226,3 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
             )
         )
     return events, list(affected_sheet_by_id.values())
-

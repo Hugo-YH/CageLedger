@@ -1,13 +1,12 @@
+import csv
 import json
 import os
 import re
 import sys
-import csv
 from datetime import date
 from pathlib import Path
 
 import openpyxl
-
 
 OUTPUT = Path("src/iacuc-data.local.json")
 
@@ -88,7 +87,13 @@ def normalize_application_amount(value):
 
 
 def normalize_application_record(record):
-    for key in ("iacucApprovalDate", "applicationApprovalDate", "projectStartDate", "projectEndDate", "applicationDate"):
+    for key in (
+        "iacucApprovalDate",
+        "applicationApprovalDate",
+        "projectStartDate",
+        "projectEndDate",
+        "applicationDate",
+    ):
         record[key] = normalize_application_date(record.get(key, ""))
     for key in ("approvedFeedingFee", "actualFeedingFee", "pendingReimbursementFee"):
         record[key] = normalize_application_amount(record.get(key, ""))
@@ -105,7 +110,7 @@ def normalize_iacuc(value):
 def main():
     source_arg = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("IACUC_SOURCE_XLSX")
     if not source_arg:
-      raise SystemExit("Usage: python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx|csv")
+        raise SystemExit("Usage: python3 scripts/generate_iacuc_index.py /path/to/iacuc-summary.xlsx|csv")
 
     source = Path(source_arg)
     output = Path(sys.argv[2]) if len(sys.argv) > 2 else OUTPUT
@@ -142,8 +147,12 @@ def main():
         text = source.read_text(encoding="utf-8-sig")
         reader = csv.DictReader(text.splitlines())
         field_by_name = {clean(name): name for name in reader.fieldnames or [] if clean(name)}
-        field_by_compact = {compact_field_name(name): name for name in reader.fieldnames or [] if compact_field_name(name)}
-        required_fields = {key: field_name_for_labels(field_by_name, field_by_compact, [label]) for key, label in required.items()}
+        field_by_compact = {
+            compact_field_name(name): name for name in reader.fieldnames or [] if compact_field_name(name)
+        }
+        required_fields = {
+            key: field_name_for_labels(field_by_name, field_by_compact, [label]) for key, label in required.items()
+        }
         missing = [required[key] for key, field_name in required_fields.items() if not field_name]
         if missing:
             raise SystemExit(f"Missing required columns: {', '.join(missing)}")
@@ -172,9 +181,13 @@ def main():
         sheet = workbook.active
         headers = [clean(cell.value) for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
         column_by_name = {name: index for index, name in enumerate(headers) if name}
-        column_by_compact = {compact_field_name(name): index for index, name in enumerate(headers) if compact_field_name(name)}
+        column_by_compact = {
+            compact_field_name(name): index for index, name in enumerate(headers) if compact_field_name(name)
+        }
         required_columns = {
-            key: column_by_name.get(label) if label in column_by_name else column_by_compact.get(compact_field_name(label))
+            key: column_by_name.get(label)
+            if label in column_by_name
+            else column_by_compact.get(compact_field_name(label))
             for key, label in required.items()
         }
         missing = [required[key] for key, column_index in required_columns.items() if column_index is None]
@@ -183,7 +196,9 @@ def main():
         optional_columns = {
             key: next(
                 (
-                    column_by_name.get(clean(label)) if clean(label) in column_by_name else column_by_compact.get(compact_field_name(label))
+                    column_by_name.get(clean(label))
+                    if clean(label) in column_by_name
+                    else column_by_compact.get(compact_field_name(label))
                     for label in labels
                     if clean(label) in column_by_name or compact_field_name(label) in column_by_compact
                 ),

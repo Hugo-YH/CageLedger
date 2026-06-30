@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta, timezone
 import threading
 import time
-
+from datetime import UTC, datetime, timedelta
 
 CACHE_TTL_SECONDS = 15
 DATA_CACHE_LOCK = threading.Lock()
@@ -13,7 +12,7 @@ def cache_get(key):
         entry = DATA_CACHE.get(key)
         if not entry:
             return None
-        if entry["expiresAt"] <= datetime.now(timezone.utc):
+        if entry["expiresAt"] <= datetime.now(UTC):
             DATA_CACHE.pop(key, None)
             return None
         return entry["value"]
@@ -23,7 +22,7 @@ def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS):
     with DATA_CACHE_LOCK:
         DATA_CACHE[key] = {
             "value": value,
-            "expiresAt": datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds),
+            "expiresAt": datetime.now(UTC) + timedelta(seconds=ttl_seconds),
         }
     return value
 
@@ -56,7 +55,7 @@ def cache_key(prefix, **fields):
     normalized = []
     for key in sorted(fields):
         value = fields[key]
-        if isinstance(value, (list, tuple, set)):
+        if isinstance(value, list | tuple | set):
             value = ",".join(str(item) for item in value)
         normalized.append(f"{key}={value}")
     return f"{prefix}::" + "|".join(normalized)

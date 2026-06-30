@@ -284,9 +284,7 @@ export const SYSTEM_RELEASE_NOTES: ReleaseNote[] = [
     version: "0.5.11c",
     releasedAt: "2026-06-02 17:29",
     title: "笼卡 IACUC 高亮微调",
-    items: [
-      "调整笼卡打印与预览中批次号 IACUC 高亮字号为 2.7mm，增强识别度并保持版面稳定",
-    ],
+    items: ["调整笼卡打印与预览中批次号 IACUC 高亮字号为 2.7mm，增强识别度并保持版面稳定"],
   },
   {
     version: "0.5.11b",
@@ -601,9 +599,7 @@ export const SYSTEM_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "0.4.6c",
     title: "数量统计表保存反馈优化",
-    items: [
-      "根据 @苏玉霞 建议，数量统计表保存成功后新增站内成功提示，明确显示已保存的结算月份和伦理号",
-    ],
+    items: ["根据 @苏玉霞 建议，数量统计表保存成功后新增站内成功提示，明确显示已保存的结算月份和伦理号"],
   },
   {
     version: "0.4.6b",
@@ -905,7 +901,11 @@ export const SYSTEM_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "0.3.1",
     title: "项目负责人汇总计费",
-    items: ["按项目负责人汇总多个 IACUC 结算", "新增项目负责人身份管理和 20/10 笼免费额度", "支持阶梯计价、离线包和 Release 自动发布"],
+    items: [
+      "按项目负责人汇总多个 IACUC 结算",
+      "新增项目负责人身份管理和 20/10 笼免费额度",
+      "支持阶梯计价、离线包和 Release 自动发布",
+    ],
   },
   {
     version: "0.3.0",
@@ -915,7 +915,11 @@ export const SYSTEM_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "0.2.1",
     title: "离线部署和文档整理",
-    items: ["支持 NAS 离线源码包构建", "README 拆分为入口文档、API 文档和部署文档", "补充环境变量模板和 Docker 构建忽略规则"],
+    items: [
+      "支持 NAS 离线源码包构建",
+      "README 拆分为入口文档、API 文档和部署文档",
+      "补充环境变量模板和 Docker 构建忽略规则",
+    ],
   },
   {
     version: "0.2.0",

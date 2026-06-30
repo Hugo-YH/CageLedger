@@ -116,7 +116,7 @@ def list_quantity_sheet_filter_options(conn, filters, filtered_where, column):
     where_clause = f" WHERE {where}" if where else ""
     rows = conn.execute(
         f"""
-        SELECT COALESCE({spec['expr']}, '') AS value, COUNT(*) AS count
+        SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
         FROM quantity_sheets{where_clause}
         GROUP BY value
         ORDER BY value COLLATE NOCASE
@@ -126,8 +126,7 @@ def list_quantity_sheet_filter_options(conn, filters, filtered_where, column):
     ).fetchall()
     return {
         "items": [
-            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]}
-            for row in rows
+            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]} for row in rows
         ],
     }
 
@@ -314,7 +313,9 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
     if cached is not None:
         return cached
     where_clause = f" WHERE {where}" if where else ""
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM billing_workflows{where_clause}", tuple(params)).fetchone()["total"]
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM billing_workflows{where_clause}", tuple(params)).fetchone()[
+        "total"
+    ]
     rows = conn.execute(
         f"""
         SELECT

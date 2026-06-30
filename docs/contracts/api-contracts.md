@@ -1,92 +1,144 @@
-# API 契约清单
+# CageLedger API 契约
 
-> Scope: Phase 1 / Task 1.2
-> Source: `server.py` at CageLedger `0.5.2c`
+本契约描述 React 前端与 Python 服务之间的稳定边界。后端路由源位于 `server.py`，前端类型和 hooks 位于 `src/react/api/`。
 
 ## 通用约定
 
-| Item | Contract |
-|:-----|:---------|
-| Auth | cookie session, `SESSION_COOKIE`, `GET /api/auth/me` 判断当前用户 |
-| Error shape | `{ "error": "message" }` |
-| List shape | `{ "items": [...], "page": { "limit", "offset", "total", "hasMore" } }` |
-| Single item shape | `{ "item": {...} }` |
-| Audit merge | 写入接口返回 `auditLogs` 时，前端按增量合并 |
-| Permission | admin 全局；room manager 按 `roomIds` 过滤房间、笼位、占用、待进驻任务 |
-| Cache | 服务端 cache key 由 scope/filter/actor 组成；写入路径显式失效相关 prefix |
+| 项目      | 契约                                                           |
+| --------- | -------------------------------------------------------------- |
+| 基础路径  | `/api`                                                         |
+| 认证      | HttpOnly Cookie Session，`SameSite=Lax`                        |
+| JSON 请求 | `Content-Type: application/json`                               |
+| 错误      | `{ "error": "可展示消息" }`                                    |
+| 分页      | `{ items, page: { limit, offset, total, hasMore } }`           |
+| 单对象    | 优先 `{ item }`，专用流程接口使用命名字段                      |
+| 缓存      | API 响应 `Cache-Control: no-store`；服务端内部使用 15 秒短缓存 |
+| 压缩      | 大响应和静态资源按客户端能力使用 gzip                          |
+| 计时      | 响应可包含 `Server-Timing`，关键写入可包含 `perf`              |
+| 权限      | `admin` 全局；`room_admin` 按授权和业务入口校验                |
+| 字段命名  | 前端 JSON 使用 camelCase，SQLite 列使用 snake_case             |
 
-## Auth / Session
+`requestJson<T>()` 统一发送 Cookie、禁用浏览器缓存并将错误转换为 `ApiError`。文件上传使用 `FormData`，由专用上传函数处理。
 
-| Method | Path | Request | Response | Permission |
-|:-------|:-----|:--------|:---------|:-----------|
-| POST | `/api/auth/login` | `{ username, password }` | `{ user }` + session cookie | public |
-| POST | `/api/auth/logout` | empty | `{ ok: true }` | public |
-| GET | `/api/auth/me` | empty | `{ user }` | authenticated |
-| GET | `/api/users` | query | `{ users }` | admin |
-| POST | `/api/users` | user payload | `{ user }` | admin |
-| PUT | `/api/users/{id}` | user payload | `{ user }` | admin |
-| DELETE | `/api/users/{id}` | empty | `{ ok: true }` | admin |
+## 会话和公开接口
 
-## Bootstrap / Infrastructure
+| 方法   | 路径                                     | 响应                         | 权限     |
+| ------ | ---------------------------------------- | ---------------------------- | -------- |
+| `GET`  | `/api/health`                            | `{ ok, database, system }`   | 公开     |
+| `GET`  | `/api/system/info`                       | 系统版本和构建信息           | 公开     |
+| `GET`  | `/api/public/cage-card/{animalRecordId}` | `{ batch, card }`            | 公开只读 |
+| `POST` | `/api/auth/login`                        | `{ user }` + Cookie          | 公开     |
+| `POST` | `/api/auth/logout`                       | `{ ok: true }` + 清除 Cookie | 公开     |
+| `GET`  | `/api/auth/me`                           | `{ user }`；未登录返回 401   | 会话     |
 
-| Method | Path | Query / Body | Response | Cache |
-|:-------|:-----|:-------------|:---------|:------|
-| GET | `/api/bootstrap` | `scope=summary` | rooms/racks summary, dashboard, rules summary | `bootstrap_summary` |
-| GET | `/api/bootstrap` | `scope=room&roomId=...` | selected room slots/racks/occupancies/tasks | room scoped |
-| GET | `/api/bootstrap` | `scope=full` | full infrastructure and shared lists | short TTL |
-| POST | `/api/infrastructure` | rooms/racks/slots/occupancies batch | updated infrastructure payload | invalidates bootstrap + billing occupancies |
-| GET | `/api/infrastructure/occupancies` | `month`, `iacuc`, `pi` | billing-oriented slots/occupancies | `billing_occupancies` |
+公开笼卡响应只提供查询所需信息。经费、账号、审计和报销字段不进入公开响应。
 
-## Intake / Placement
+## Bootstrap 和设施
 
-| Method | Path | Request | Response | Notes |
-|:-------|:-----|:--------|:---------|:------|
-| GET | `/api/intake-batches` | `status`, `month`, `iacuc`, `roomName`, `limit`, `offset` | paged `{ items, page }` | filtered by permissions through related room visibility when applicable |
-| POST | `/api/intake-batches` | batch payload | `{ item, placementTasks?, auditLogs? }` | saves batch |
-| PUT | `/api/intake-batches/{id}` | batch payload | `{ item, placementTasks?, auditLogs? }` | updates batch and reconciles generated tasks |
-| DELETE | `/api/intake-batches/{id}` | optional body | `{ ok, item?, auditLogs? }` | deletes batch and related open tasks |
-| POST | `/api/intake-batches/{id}/confirm-receipt` | `{ actualReceiptDate, cardCount }` | `{ batch, receipt, placementTasks, auditLogs }` | creates one task per received card |
-| GET | `/api/placement-tasks` | `status`, `roomId`, `month`, `limit`, `offset` | paged `{ items, page }` | `status=open` excludes active/cancelled |
-| POST | `/api/placement-tasks/{id}/reserve` | `{ slotId }` | `{ task, occupancy, auditLogs }` | creates reserved occupancy |
-| POST | `/api/placement-tasks/{id}/move-in` | `{ actualMoveInDate }` | `{ task, occupancy, auditLogs }` | reserved -> active |
-| POST | `/api/placement-tasks/{id}/reassign-room` | `{ roomId }` | `{ task, auditLogs }` | admin action |
+| 方法           | 路径                              | 关键参数                     | 响应                                 |
+| -------------- | --------------------------------- | ---------------------------- | ------------------------------------ |
+| `GET`          | `/api/bootstrap`                  | `scope=summary`              | 首页摘要和设施摘要                   |
+| `GET`          | `/api/bootstrap`                  | `scope=room&roomId=...`      | 当前房间笼架、笼位、占用和待进驻任务 |
+| `GET`          | `/api/bootstrap`                  | `scope=full`                 | 兼容全量状态                         |
+| `POST`         | `/api/infrastructure`             | rooms/racks/slots 的增量集合 | 受影响基础设施对象                   |
+| `GET`          | `/api/infrastructure/occupancies` | `month`、`iacuc`、`pi`       | 结算定向占用数据                     |
+| `POST` / `PUT` | `/api/occupancies[/{id}]`         | `{ item }`                   | `{ item, affectedSlots? }`           |
+| `DELETE`       | `/api/rooms/{id}`                 | 空                           | `{ ok: true }`                       |
 
-## Quantity Sheets / Billing
+`scope=room` 受房间授权过滤。结构写入后同时失效服务端 bootstrap 缓存和前端 bootstrap 查询。
 
-| Method | Path | Request | Response | Notes |
-|:-------|:-----|:--------|:---------|:------|
-| GET | `/api/quantity-sheets` | `month`, `iacuc`, `pi`, `roomId`, `limit`, `offset` | paged `{ items, page }` | high-frequency billing list |
-| GET | `/api/quantity-sheets/{id}` | empty | `{ item }` | permission checked |
-| POST | `/api/quantity-sheets` | sheet payload | `{ sheet, affectedSheets, auditLogs }` | creates sheet and transfer mirrors |
-| PUT | `/api/quantity-sheets/{id}` | sheet payload | `{ sheet, affectedSheets, auditLogs }` | updates sheet and transfer mirrors |
-| DELETE | `/api/quantity-sheets/{id}` | empty | `{ ok, deletedId, affectedSheets, auditLogs }` | removes mirrored transfer rows |
-| POST | `/api/quantity-sheets/{id}/generate-statement` | optional body | `{ statement, lines, workflow, auditLogs }` | creates billing workflow |
-| POST | `/api/billing-statements/generate` | statement filters | `{ statement, lines, workflow, auditLogs }` | admin |
-| POST | `/api/billing-statements/generate-by-pi` | statement filters | `{ statement, lines, workflow, auditLogs }` | admin |
-| GET | `/api/billing-workflows` | `month`, `status`, `limit`, `offset` | paged `{ items, page }` | workflow center |
-| GET | `/api/billing-workflows/{id}` | empty | `{ workflow, versions, events }` | detail shell |
-| GET | `/api/billing-workflows/{id}/lines` | `versionId` | `{ lines }` | detail table |
-| POST | `/api/billing-workflows/advance` | `{ workflowId, toStatus, note? }` | `{ workflow, event, auditLogs }` | admin |
-| DELETE | `/api/billing-workflows/{id}` | empty | `{ ok, workflow, auditLogs }` | admin |
+## 笼卡与待进驻
 
-## System / Data
+| 方法     | 路径                                       | 请求或参数                                               | 响应                                    |
+| -------- | ------------------------------------------ | -------------------------------------------------------- | --------------------------------------- |
+| `GET`    | `/api/intake-batches`                      | `limit`、`offset`、`sortKey`、`sortDir`、`columnFilters` | 分页批次                                |
+| `GET`    | `/api/intake-batches/filter-options`       | `column` + 当前筛选                                      | 筛选候选值                              |
+| `POST`   | `/api/intake-batches`                      | `{ item }`                                               | `{ item, placementTasks?, auditLogs? }` |
+| `PUT`    | `/api/intake-batches/{id}`                 | `{ item }`                                               | `{ item, placementTasks?, auditLogs? }` |
+| `DELETE` | `/api/intake-batches/{id}`                 | 空                                                       | 删除结果与受影响任务                    |
+| `POST`   | `/api/intake-batches/{id}/confirm-receipt` | `{ actualReceiptDate, cardCount }`                       | 批次、接收记录、任务和审计              |
+| `GET`    | `/api/placement-tasks`                     | 分页和状态筛选                                           | 分页任务                                |
+| `POST`   | `/api/placement-tasks/{id}/reserve`        | `{ slotId }`                                             | `{ task, occupancy, affectedSlots? }`   |
+| `POST`   | `/api/placement-tasks/{id}/move-in`        | `{ actualMoveInDate }`                                   | `{ task, occupancy, affectedSlots? }`   |
+| `POST`   | `/api/placement-tasks/{id}/reassign-room`  | `{ roomId }`                                             | 更新任务和审计                          |
 
-| Method | Path | Request | Response | Permission |
-|:-------|:-----|:--------|:---------|:-----------|
-| GET | `/api/health` | empty | `{ ok, database, system }` | public |
-| GET | `/api/system/info` | empty | system info | public |
-| GET | `/api/system/update-check` | empty | update status from latest Gitea Release | admin |
-| GET | `/api/iacuc-index` | empty | full index payload | authenticated |
-| GET | `/api/iacuc-index/status` | empty | `{ count, updatedAt, source }` | authenticated |
-| POST | `/api/iacuc-index/upload` | multipart CSV | parsed index + audit | admin |
-| GET | `/api/principal-identities` | empty | `{ items }` | authenticated |
-| PUT | `/api/principal-identities/{name}` | identity payload | saved identity | authenticated |
-| GET | `/api/audit-events` | filters | paged audit list | authenticated |
+Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开扫码之间保持唯一、持久和可追溯。
 
-## 拆分约束
+## 数量统计表与结算
 
-- HTTP handler 只负责鉴权、参数解析、状态码和 JSON 响应。
-- service 层返回纯 Python dict/list，保持可 JSON 序列化。
-- repository 层只处理 SQLite SQL、payload dump/load、事务内读写。
-- cache invalidation 从 service 返回 affected domains，由 handler 统一执行。
-- 每个写入接口必须返回足够前端局部合并的数据。
+| 方法     | 路径                                           | 请求或参数                           | 响应                              |
+| -------- | ---------------------------------------------- | ------------------------------------ | --------------------------------- |
+| `GET`    | `/api/quantity-sheet-rooms`                    | 空                                   | `{ items }`，跨房间录入候选       |
+| `GET`    | `/api/quantity-sheets`                         | 分页、排序、`columnFilters`          | 分页统计表                        |
+| `GET`    | `/api/quantity-sheets/filter-options`          | `column` + 当前筛选                  | 筛选候选值                        |
+| `GET`    | `/api/quantity-sheets/{id}`                    | 空                                   | `{ item }`                        |
+| `POST`   | `/api/quantity-sheets`                         | `{ sheet }`                          | `{ item, affectedItems? }`        |
+| `PUT`    | `/api/quantity-sheets/{id}`                    | `{ sheet }`                          | `{ item, affectedItems? }`        |
+| `DELETE` | `/api/quantity-sheets/{id}`                    | 空                                   | 删除结果、镜像变更和审计          |
+| `POST`   | `/api/quantity-sheets/{id}/generate-statement` | 结算选项                             | statement、lines、workflow        |
+| `POST`   | `/api/billing-statements/generate`             | month/IACUC 等筛选                   | 动态笼位图结算                    |
+| `POST`   | `/api/billing-statements/generate-by-pi`       | `{ pi, month, sourceType, persist }` | `{ statement, lines, workflow? }` |
+| `GET`    | `/api/billing-statements[/{id}]`               | 空                                   | 当前结算单列表或单条              |
+
+数量统计表保存会同步转入转出镜像。按 PI 结算自动纳入同月同负责人的全部有效 IACUC 和统计表。
+
+## 流程与报销台账
+
+| 方法     | 路径                                        | 请求或参数                                  | 响应                                      |
+| -------- | ------------------------------------------- | ------------------------------------------- | ----------------------------------------- |
+| `GET`    | `/api/billing-workflows`                    | 分页、月份和状态                            | 分页流程                                  |
+| `GET`    | `/api/billing-workflows/{id}`               | 空                                          | `{ workflow, versions, events }`          |
+| `GET`    | `/api/billing-workflows/{id}/lines`         | `versionId`                                 | 指定版本明细                              |
+| `POST`   | `/api/billing-workflows/advance`            | `{ workflowId, toStatus, note? }`           | workflow、event、auditLogs                |
+| `DELETE` | `/api/billing-workflows/{id}`               | 空                                          | 删除结果和审计                            |
+| `GET`    | `/api/reimbursement-records`                | `status`、`month`、`pi`、`onlyUnpaid`、分页 | 分页台账                                  |
+| `GET`    | `/api/reimbursement-records/{id}`           | 空                                          | item、workflow、versions、events、history |
+| `PUT`    | `/api/reimbursement-records/{id}`           | 台账可编辑字段                              | 更新后的完整详情                          |
+| `DELETE` | `/api/reimbursement-records/{id}`           | 空                                          | `{ ok: true }`                            |
+| `POST`   | `/api/reimbursement-records/import-monthly` | Excel 文件                                  | 导入摘要                                  |
+| `POST`   | `/api/reimbursement-records/import-arrears` | Excel 文件                                  | 导入摘要                                  |
+
+报销台账业务键是 `month + pi`。结算版本负责金额来源，台账负责报销状态、已缴和累计未缴。
+
+## 数据与系统管理
+
+| 方法             | 路径                               | 说明                           |
+| ---------------- | ---------------------------------- | ------------------------------ |
+| `GET` / `POST`   | `/api/users`                       | 管理账号                       |
+| `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                 |
+| `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                |
+| `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源           |
+| `POST`           | `/api/iacuc-index/upload`          | 上传 CSV，更新快照和派生字段   |
+| `GET`            | `/api/principal-identities`        | PI 身份和减免配置              |
+| `PUT`            | `/api/principal-identities/{name}` | 更新 PI 配置                   |
+| `GET`            | `/api/audit-events`                | 分页操作日志                   |
+| `GET`            | `/api/system/update-check`         | Gitea 最新 Release，管理员权限 |
+
+## Typed API 规则
+
+- 共享类型写入 `src/react/api/contracts.ts`。
+- endpoint hooks 按业务域拆在 `bootstrap.ts`、`intake.ts`、`cages.ts`、`quantitySheets.ts`、`workflows.ts`、`administration.ts`。
+- API 契约变更同步更新类型、Query key、缓存失效、服务端测试和浏览器回归。
+- 权限、迁移和写入接口按 `testing-strategy.md` 的 API 与双角色路径验证。
+- 查询键写入 `queryKeys.ts`。
+- 页面组件使用 hooks，文件上传使用 `uploadFile()`。
+- 新响应优先消除 `Record<string, unknown>`，为稳定字段定义接口。
+- mutation 成功回调更新详情缓存并失效对应根键。
+
+## 兼容与变更规则
+
+- 新字段保持可选，旧库启动迁移完成回填后再提升为必填。
+- 删除或重命名字段需要数据库迁移、payload 兼容和前端契约同步方案。
+- 列表新增筛选字段需要结构化列、索引、稳定排序和 Query key 参数。
+- 权限变化同时更新后端校验、前端可见性、API 文档和浏览器测试。
+- 接口变化同步更新本文件与 `wiki/API与数据模型.md`。
+
+## 验证
+
+```bash
+npm run check
+npm run smoke:api
+npm run test:e2e
+```
+
+涉及性能的列表和写入再运行 `npm run benchmark`，并检查 `Server-Timing`、`[perf]` 日志和 SQLite 查询计划。

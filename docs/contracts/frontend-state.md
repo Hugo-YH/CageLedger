@@ -1,72 +1,124 @@
-# 前端状态契约
+# CageLedger 前端状态契约
 
-> Scope: Phase 1 / Task 1.1
-> Source: `src/app.js` at CageLedger `0.5.2c`
+本契约约束 React 前端的状态归属、查询缓存和持久化。当前实现以 TanStack Query、页面局部状态和 `UiProvider` 为核心。
 
-## 目标
+## 状态分类
 
-本契约定义前端全局状态的长期边界。后续拆分 `src/app.js` 时，任何新 state helper、API client、view module 都按本页分区读写状态。
+| 类型           | Owner                   | 示例                                           | 生命周期                        |
+| -------------- | ----------------------- | ---------------------------------------------- | ------------------------------- |
+| 会话状态       | TanStack Query          | 当前用户、角色、房间授权                       | Cookie Session 有效期           |
+| 服务端状态     | TanStack Query          | bootstrap、笼卡、笼位、统计表、流程、台账      | staleTime 与精确失效控制        |
+| 工作区 UI 状态 | `UiProvider`            | activeView、sidebarCollapsed、settingsExpanded | 当前页面会话                    |
+| 持久 UI 偏好   | `uiStorage.ts`          | activeView                                     | localStorage `cageledger.ui.v2` |
+| 页面草稿       | feature component       | 表单值、当前分页、筛选、弹窗、选中项           | 页面挂载期间                    |
+| 高频录入状态   | 页面局部 state/ref      | 数量统计表单元格、焦点、当前行                 | 输入控件生命周期                |
+| 派生状态       | `useMemo` / pure helper | 汇总数、筛选结果、结算展示值                   | 由源状态重算                    |
 
-## 全局 State Slices
+服务端业务对象不写入 localStorage。旧键 `cageledger.v1` 和 `lahcas.v1` 在 UI 存储迁移时清理。
 
-| Slice | Owner | 主要字段 | 写入入口 | 失效条件 |
-|:------|:------|:---------|:---------|:---------|
-| `session` | app shell | `currentUser`, `remotePersistence` | auth API, bootstrap | 登录、登出、401 |
-| `infrastructureSummary` | app shell / room views | `rooms`, `racks` summary, dashboard summary | `/api/bootstrap?scope=summary` | 房间、笼架、笼位、占用写入 |
-| `roomInfrastructure` | cage map | selected room slots/racks/occupancies/placement tasks | `/api/bootstrap?scope=room&roomId=...` | 目标房间写入、任务预留、正式入驻 |
-| `fullInfrastructure` | billing / data admin | full rooms/racks/slots/occupancies | `/api/bootstrap?scope=full` | 任意基础设施写入 |
-| `intake` | intake page | `intakeBatches`, `selectedIntakeBatchIds`, `intakeBatchDraft` | `/api/intake-batches*` | 批次新增、编辑、打印、确认接收、删除 |
-| `placement` | cage map | `placementTasks`, `selectedPlacementTaskIds`, `placementAssignmentMode` | `/api/placement-tasks*` | 确认接收、预留、入驻、变更饲养间 |
-| `quantitySheets` | billing page | `quantitySheets`, `quantitySheetDraft`, pagination | `/api/quantity-sheets*` | 保存、删除、生成结算单、转入转出同步 |
-| `billingWorkflows` | workflow center | `billingWorkflows`, selected detail, pagination | `/api/billing-workflows*` | 生成结算单、推进状态、删除流程 |
-| `auditLogs` | logs page | `auditLogs`, pagination | `/api/audit-events` | 服务端返回审计增量后合并；进入日志页时按页拉取 |
-| `system` | about/system pages | `systemInfo`, update status, release notes | `/api/system/*`, local constants | 版本变更、手动检查更新 |
-| `ui` | app shell | active view, filters, modal, saving flags, pagination | local handlers | 用户交互、视图切换、写入完成 |
+## QueryClient 默认策略
+
+配置位于 `src/react/api/queryClient.ts`：
+
+| 配置                   | 当前值  | 目的                   |
+| ---------------------- | ------- | ---------------------- |
+| `staleTime`            | 15 秒   | 合并短时间重复读取     |
+| `gcTime`               | 5 分钟  | 保留近期页面缓存       |
+| query retry            | 1 次    | 吸收瞬时网络失败       |
+| mutation retry         | 0 次    | 避免写入重复执行       |
+| `refetchOnWindowFocus` | `false` | 保持高频工作台输入稳定 |
+
+## 查询键
+
+查询键集中在 `src/react/api/queryKeys.ts`。
+
+| 根键                    | 数据                         |
+| ----------------------- | ---------------------------- |
+| `session`               | 当前会话                     |
+| `bootstrap`             | summary、room、full 基础设施 |
+| `intake`                | 待接收批次和筛选项           |
+| `quantity-sheets`       | 数量统计表列表、详情和筛选项 |
+| `billing-workflows`     | 结算流程                     |
+| `reimbursement-records` | 报销台账列表与详情           |
+| `users`                 | 账号                         |
+| `principal-identities`  | PI 身份与减免配置            |
+| `iacuc-index`           | IACUC 数据和状态             |
+| `audit-events`          | 操作日志分页                 |
+| `system`                | 系统信息和更新检查           |
+
+查询键参数包含服务端筛选、排序、分页和 actor scope。对象参数保持可序列化与稳定。
 
 ## 加载边界
 
-| 场景 | 初始加载 | 按需升级 |
-|:-----|:---------|:---------|
-| 登录后首屏 | `bootstrap.summary` | 进入房间页后加载 `bootstrap.room` |
-| 笼位管理 | 当前房间 summary + room scope | 需要跨房间全量统计时升级到 full |
-| 笼卡管理 | intake batches + placement tasks page 1 | 翻页按页加载 |
-| 饲养费核算 | quantity sheets page 1 | 选择 cage map source 且具备 month/pi 时加载 billing occupancies |
-| 流程中心 | workflows page 1 | 打开详情时加载 versions/events/lines |
-| 数据管理 | IACUC status | 上传或查看时加载完整 index |
+| 页面       | 初始查询                   | 按需查询                   |
+| ---------- | -------------------------- | -------------------------- |
+| 主页       | `bootstrap(summary)`       | 无                         |
+| 笼卡管理   | intake 当前页              | 筛选项、批次编辑详情       |
+| 笼位管理   | `bootstrap(summary)`       | 当前房间 `bootstrap(room)` |
+| 饲养费管理 | 数量统计表当前页、房间列表 | 单表详情、IACUC、PI 结算   |
+| 流程中心   | 报销台账当前页             | 台账详情、流程版本和明细   |
+| 系统设置   | 对应页面的独立查询         | 更新检查、筛选项和上传结果 |
+| 公开扫码   | public cage-card endpoint  | 无登录会话依赖             |
 
-## 写入合并规则
+业务页面通过 `React.lazy` 加载，首页无需等待笼卡、结算和系统设置代码块。
 
-| 写入动作 | 本地合并 | 后台补拉 | 禁止行为 |
-|:---------|:---------|:---------|:---------|
-| 保存待接收批次 | upsert 当前批次；合并返回的相关待进驻任务 | 当前 intake/placement 页有分页缺口时按页刷新 | 全量 `loadPersistedState()` |
-| 确认接收 | 更新批次、追加任务、合并审计 | 当前房间 placement page 定向刷新 | 重拉 full infrastructure |
-| 预留待进驻任务 | 更新 task 和 occupancy；同步当前笼位状态 | 当前 room scope 定向刷新 | 清空全部 placement state |
-| 正式入驻 | reserved occupancy 转 active；任务转 active | 当前 room scope 定向刷新 | 重新拉取所有房间 |
-| 保存数量统计表 | upsert 当前 sheet；upsert affected sheets；合并审计 | 仅刷新受影响 sheet 或当前分页 | 扫描整月全部 sheets |
-| 推进结算流程 | upsert workflow；更新 selected detail events | 当前 workflow detail 可定向刷新 | 重拉全部流程列表 |
+## 写入和失效规则
 
-## 状态写入顺序
+| 写入                     | 必须失效或更新的查询                          |
+| ------------------------ | --------------------------------------------- |
+| 登录                     | 直接写入 `session`                            |
+| 登出                     | 清除 session 之外全部查询，写入空会话         |
+| 保存/删除/确认接收批次   | `intake` 根键；涉及入驻时同步房间 bootstrap   |
+| 保存占用、预留、正式入驻 | 当前 `bootstrap/room/{roomId}`                |
+| 保存/删除数量统计表      | `quantity-sheets` 根键                        |
+| 生成结算单或发起流程     | 数量统计表、流程、报销台账相关根键            |
+| 更新/删除报销台账        | `reimbursement-records` 根键和当前详情        |
+| 保存房间、笼架、笼位     | `bootstrap` 根键和设施查询                    |
+| 上传 IACUC               | IACUC 状态、完整索引、PI 配置和受影响业务列表 |
+| 保存账号                 | `users`                                       |
 
-1. 写入 API 返回结构先进入对应 slice。
-2. `auditLogs` 只合并服务端返回增量。
-3. pagination total/hasMore 只由分页接口更新。
-4. `scheduleRender(reason)` 是统一渲染入口。
-5. 后台补拉失败时保留用户可见变更，并显示站内通知。
+失效范围与服务端写入范围一致。高频输入期间不触发列表根键失效。
 
-## 拆分目标
+## 表单与焦点规则
 
-| 目标模块 | 责任 |
-|:---------|:-----|
-| `src/state/session.js` | auth、用户、远端模式 |
-| `src/state/infrastructure.js` | summary/room/full 基础设施缓存 |
-| `src/state/intake.js` | 待接收批次和待进驻任务本地合并 |
-| `src/state/billing.js` | quantity sheets、billing context、workflow |
-| `src/api/client.js` | fetch、401、JSON parse、错误标准化 |
-| `src/api/*.js` | 按业务域封装 API endpoint |
-| `src/views/*.js` | 纯渲染与事件绑定入口 |
+- 输入事件更新当前控件所属的局部草稿。
+- `Tab`、`Enter` 和日期选择保持焦点顺序稳定。
+- 保存前校验在局部草稿上执行，失败时定位到首个问题控件。
+- 保存成功后再失效服务端查询，并根据返回对象保持当前选择。
+- 弹窗关闭时清理对应草稿和临时预览资源。
+- 异步结果只更新仍然有效的页面实例；查询键变化负责隔离旧请求。
 
-## 验收标准
+## Bootstrap 范围
 
-- React 迁移后统一使用远端 API 模式，取消浏览器本地业务数据模式。
-- 所有跨模块状态读写都能映射到本页 slice。
-- 新增写入路径必须声明本地合并策略、后台补拉策略、缓存失效策略。
+| scope     | 内容                                                       | 使用场景                                 |
+| --------- | ---------------------------------------------------------- | ---------------------------------------- |
+| `summary` | rooms、racks、room/rack/dashboard/facility summaries       | 首页和导航摘要                           |
+| `room`    | 当前房间 rooms、racks、slots、occupancies、placement tasks | 笼位管理                                 |
+| `full`    | 兼容全量数据                                               | 管理和兼容场景，新增页面优先选择专用接口 |
+
+## 持久化规则
+
+- `persistWorkspaceView()` 只写当前工作区。
+- “清理本地缓存并刷新”调用 `clearUiStorage()` 后刷新页面。
+- 会话由 HttpOnly Cookie 管理。
+- 业务草稿默认不跨刷新持久化；需要草稿恢复时建立独立、带版本的存储契约。
+
+## 新状态评审
+
+新增状态前依次判断：
+
+1. 数据是否来自服务端。服务端数据进入 Query cache。
+2. 数据是否只属于一个页面。页面局部 state 管理。
+3. 数据是否跨多个页面共享。优先通过查询键或明确 Context 共享。
+4. 数据是否需要跨刷新保留。仅界面偏好进入带版本 localStorage。
+5. 数据是否可以由现有状态推导。使用 pure helper 或 memo 计算。
+
+## 验证要求
+
+- Query key 变化能隔离不同分页和筛选。
+- 写入后相关列表、详情和摘要及时更新。
+- 高频录入不会因 Query 失效导致失焦。
+- 登出后业务查询缓存清空。
+- 清理缓存后只清除 UI 偏好，服务端业务数据保持完整。
+- React Hooks、查询失效和高频录入改动通过 ESLint、Vitest 和 Playwright 验证。
+- 弹窗和异步状态保留键盘焦点、live region 和可访问名称。

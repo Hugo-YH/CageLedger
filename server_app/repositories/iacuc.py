@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from server_app.cache import cache_get, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes
 
@@ -36,7 +36,7 @@ def read_iacuc_index(conn, iacuc_index_path, legacy_iacuc_index_path):
         {
             "items": items,
             "count": len(items),
-            "updatedAt": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            "updatedAt": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
             "source": "data" if path == iacuc_index_path else "legacy",
         },
     )

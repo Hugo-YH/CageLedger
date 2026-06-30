@@ -3,7 +3,6 @@ import threading
 
 from .config import DB_PATH
 
-
 DB_INIT_LOCK = threading.Lock()
 DB_READY = False
 SCHEMA_INITIALIZER = None

@@ -23,25 +23,40 @@ function listUrl(params: ReimbursementListParams) {
 }
 
 export function useReimbursements(params: ReimbursementListParams) {
-  return useQuery({ queryKey: queryKeys.reimbursements({ ...params }), queryFn: () => requestJson<PagedResponse<ReimbursementRecord>>(listUrl(params)) });
+  return useQuery({
+    queryKey: queryKeys.reimbursements({ ...params }),
+    queryFn: () => requestJson<PagedResponse<ReimbursementRecord>>(listUrl(params)),
+  });
 }
 
 export function useReimbursement(id: string) {
-  return useQuery({ queryKey: queryKeys.reimbursement(id), queryFn: () => requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`), enabled: Boolean(id) });
+  return useQuery({
+    queryKey: queryKeys.reimbursement(id),
+    queryFn: () => requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`),
+    enabled: Boolean(id),
+  });
 }
 
 export function useUpdateReimbursement() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<ReimbursementRecord> }) => requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(patch) }),
-    onSuccess: (data) => { client.setQueryData(queryKeys.reimbursement(data.item.id), data); client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }); },
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<ReimbursementRecord> }) =>
+      requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.reimbursement(data.item.id), data);
+      void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+    },
   });
 }
 
 export function useDeleteReimbursement() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => requestJson<{ ok: true }>(`/api/reimbursement-records/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      requestJson<{ ok: true }>(`/api/reimbursement-records/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
   });
 }
@@ -49,7 +64,11 @@ export function useDeleteReimbursement() {
 export function useAdvanceWorkflow() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { workflowId: string; toStatus: string; note?: string }) => requestJson<Record<string, unknown>>("/api/billing-workflows/advance", { method: "POST", body: JSON.stringify(payload) }),
+    mutationFn: (payload: { workflowId: string; toStatus: string; note?: string }) =>
+      requestJson<Record<string, unknown>>("/api/billing-workflows/advance", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
   });
 }

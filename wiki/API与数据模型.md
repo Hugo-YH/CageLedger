@@ -1,230 +1,133 @@
 # API 与数据模型
 
-本页覆盖当前主要 API 家族、响应约定和核心数据语义。完整技术契约以 `docs/contracts/api-contracts.md` 为准。
+本页提供 API 和数据模型概览。完整工程契约见 `docs/contracts/api-contracts.md`，前端类型源位于 `src/react/api/contracts.ts`。
 
-## 通用约定
+## 架构链路
 
-| 项目 | 约定 |
-| --- | --- |
-| 认证 | Cookie Session，`GET /api/auth/me` 判断当前用户 |
-| 错误形状 | `{ "error": "message" }` |
-| 列表形状 | `{ "items": [...], "page": { "limit", "offset", "total", "hasMore" } }` |
-| 单对象形状 | `{ "item": {...} }` |
-| 审计增量 | 写入接口可返回 `auditLogs`，前端按增量合并 |
-| 增量刷新 | 高频写入接口返回 `affectedSlots`、`affectedItems`、`tasks` 等增量对象，前端先本地合并，再后台定向刷新 |
-| 性能摘要 | 关键写入接口返回 `perf.total_ms`、`perf.rows_changed`，服务端同时输出低噪声 `[perf]` 日志 |
-| 响应计时 | HTTP 响应包含 `Server-Timing: app;dur=...`，用于浏览器和反向代理性能观测 |
-| 传输压缩 | 大于 1 KB 且客户端支持时，JSON 和前端资源使用 gzip |
-| 权限 | `admin` 全局；`room_admin` 按授权房间过滤 |
-
-笼卡列表的 `pi`、`owner`、`quantity` 和 `card_count` 具有独立 SQLite 热字段。历史记录在启动迁移时从 `payload` 回填，业务 JSON 契约保持不变。
-
-## 主要 API 家族
-
-### 认证与账号
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `POST` | `/api/auth/login` | 登录 |
-| `POST` | `/api/auth/logout` | 登出 |
-| `GET` | `/api/auth/me` | 当前用户 |
-| `GET` / `POST` | `/api/users` | 查询或创建账号 |
-| `PUT` / `DELETE` | `/api/users/{id}` | 更新或删除账号 |
-
-### Bootstrap 与设施
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/bootstrap?scope=summary` | 首页摘要、房间摘要、笼架摘要 |
-| `GET` | `/api/bootstrap?scope=room&roomId=...` | 单房间设施、笼位、占用、待进驻任务 |
-| `GET` | `/api/bootstrap?scope=full` | 全量共享状态 |
-| `POST` | `/api/infrastructure` | 批量写入 rooms / racks / slots / occupancies |
-| `GET` | `/api/infrastructure/occupancies` | 结算定向占用读取 |
-
-### 笼卡与待进驻
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/intake-batches` | 分页查询待接收批次 |
-| `POST` | `/api/intake-batches` | 新建待接收批次 |
-| `PUT` | `/api/intake-batches/{id}` | 更新待接收批次 |
-| `DELETE` | `/api/intake-batches/{id}` | 删除待接收批次及相关开放任务 |
-| `POST` | `/api/intake-batches/{id}/confirm-receipt` | 确认实际接收并生成待进驻任务 |
-| `GET` | `/api/placement-tasks` | 分页查询待进驻任务 |
-| `POST` | `/api/placement-tasks/{id}/reserve` | 预留空笼位 |
-| `POST` | `/api/placement-tasks/{id}/move-in` | 正式入驻 |
-| `POST` | `/api/placement-tasks/{id}/reassign-room` | 改签目标饲养间 |
-
-### 数量统计表与结算
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/quantity-sheets` | 分页查询数量统计表 |
-| `GET` | `/api/quantity-sheets/{id}` | 查询单张统计表 |
-| `POST` / `PUT` | `/api/quantity-sheets` | 新建或更新统计表 |
-| `DELETE` | `/api/quantity-sheets/{id}` | 删除统计表和转移镜像行 |
-| `POST` | `/api/quantity-sheets/{id}/generate-statement` | 从统计表生成结算单 |
-| `POST` | `/api/billing-statements/generate` | 从动态笼位图生成结算单 |
-| `POST` | `/api/billing-statements/generate-by-pi` | 按项目负责人合表生成结算单 |
-| `GET` | `/api/reimbursement-records` | 分页查询报销台账主列表 |
-| `GET` | `/api/reimbursement-records/{id}` | 查询单条报销台账详情、关联流程和历史滚动 |
-| `PUT` | `/api/reimbursement-records/{id}` | 更新经费本号、报销单号、已缴金额和报销状态 |
-| `DELETE` | `/api/reimbursement-records/{id}` | 删除独立报销台账记录 |
-| `POST` | `/api/reimbursement-records/import-monthly` | 导入历史月汇总 Excel |
-| `POST` | `/api/reimbursement-records/import-arrears` | 导入历史欠缴汇算 Excel |
-| `GET` | `/api/billing-workflows` | 分页查询流程中心列表 |
-| `GET` | `/api/billing-workflows/{id}` | 查询流程详情摘要 |
-| `GET` | `/api/billing-workflows/{id}/lines` | 查询指定版本明细 |
-| `POST` | `/api/billing-workflows/advance` | 推进流程状态 |
-| `DELETE` | `/api/billing-workflows/{id}` | 删除流程 |
-
-### 系统与数据
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/health` | 健康检查 |
-| `GET` | `/api/system/info` | 系统信息 |
-| `GET` | `/api/system/update-check` | Gitea 最新 Release 检查 |
-| `GET` | `/api/iacuc-index` | IACUC 索引载荷 |
-| `GET` | `/api/iacuc-index/status` | IACUC 索引状态 |
-| `POST` | `/api/iacuc-index/upload` | 上传 CSV 索引 |
-| `GET` | `/api/principal-identities` | 查询负责人身份 |
-| `PUT` | `/api/principal-identities/{name}` | 更新负责人身份 |
-| `GET` | `/api/audit-events` | 查询审计日志 |
-
-## 关键响应形状
-
-### 列表分页
-
-```json
-{
-  "items": [],
-  "page": {
-    "limit": 5,
-    "offset": 0,
-    "total": 12,
-    "hasMore": true
-  }
-}
+```mermaid
+graph LR
+    React["React feature"] --> Query["TanStack Query hook"]
+    Query --> API["Python /api"]
+    API --> Service["service"]
+    Service --> Repo["repository"]
+    Repo --> DB["SQLite"]
 ```
 
-### 数量统计表保存
+开发模式由 Vite 将 `/api` 代理到 `5174`。生产模式由 Python 在 `5173` 同时提供 `web-dist/` 和 API。
 
-```json
-{
-  "item": {
-    "rows": [
-      {
-        "date": "2026-05-01",
-        "addedCount": 10,
-        "addedType": "购入",
-        "removedCount": null,
-        "removedType": "",
-        "animalCount": null,
-        "cageCount": null,
-        "handler": "经手人",
-        "balanceSource": "auto"
-      }
-    ],
-    "pageCount": 1
-  },
-  "affectedItems": [],
-  "auditLogs": [],
-  "perf": {
-    "total_ms": 24.1,
-    "rows_changed": 2
-  }
-}
-```
+## 通用响应
 
-数量统计表前端按纸质表展示固定录入槽位，每页左右两栏各 15 行。左侧第一行固定为当前统计表月份 1 号，仍可记录当日新增和减少，`animalCount` 和 `cageCount` 作为月初结余写入。其他日期输入会在保存前归一为 `YYYY-MM-DD`，支持 `2026/05/15`、`20260515`、`0515`；只输入日号时按当前统计表月份补全年月。`pageCount` 记录同一伦理同月的纸质页数；保存时按日期排序并压缩为有效 `rows`。`handler` 用于记录每日经手人，`balanceSource` 标记结余来自自动计算或人工输入；旧数据缺少这些字段时按默认值处理。
+| 类型     | 形状                                                                 |
+| -------- | -------------------------------------------------------------------- |
+| 错误     | `{ "error": "message" }`                                             |
+| 分页     | `{ "items": [], "page": { "limit", "offset", "total", "hasMore" } }` |
+| 单对象   | `{ "item": {} }`                                                     |
+| 会话     | `{ "user": {} }`                                                     |
+| 流程详情 | 命名字段组合，例如 `workflow`、`versions`、`events`                  |
 
-### 笼位与待进驻写入
+认证使用 HttpOnly Cookie Session。`admin` 具备全局管理权限，`room_admin` 按房间授权和具体业务入口校验。
 
-```json
-{
-  "item": {},
-  "task": {},
-  "occupancy": {},
-  "affectedSlots": [],
-  "auditLogs": [],
-  "perf": {
-    "total_ms": 18.4,
-    "rows_changed": 2
-  }
-}
-```
+## API 家族
 
-笼位占用、待进驻预留、正式入驻、改签和删除采用局部写入。接口只更新受影响的 `occupancies`、`placement_tasks` 和 `cage_slots`，返回最新对象与受影响笼位，前端据此立即更新笼位图。
+### 会话和公开查询
 
-### 待接收确认
+| 方法   | 路径                                     | 用途                          |
+| ------ | ---------------------------------------- | ----------------------------- |
+| `GET`  | `/api/health`                            | 服务、数据库、版本和 revision |
+| `GET`  | `/api/system/info`                       | 系统元数据                    |
+| `POST` | `/api/auth/login`                        | 登录                          |
+| `POST` | `/api/auth/logout`                       | 退出                          |
+| `GET`  | `/api/auth/me`                           | 当前会话                      |
+| `GET`  | `/api/public/cage-card/{animalRecordId}` | 免登录笼卡查询                |
 
-```json
-{
-  "batch": {},
-  "receipt": {},
-  "tasks": [],
-  "auditLogs": [],
-  "perf": {
-    "total_ms": 31.2,
-    "rows_changed": 3
-  }
-}
-```
+### 设施和笼位
 
-确认接收只更新当前批次并插入本次接收生成的待进驻任务。旧批次编辑、删除和回退逻辑仍保留历史兼容语义。
+| 方法           | 路径                                   | 用途                           |
+| -------------- | -------------------------------------- | ------------------------------ |
+| `GET`          | `/api/bootstrap?scope=summary`         | 首页摘要                       |
+| `GET`          | `/api/bootstrap?scope=room&roomId=...` | 单房间笼架、笼位、占用和待进驻 |
+| `GET`          | `/api/bootstrap?scope=full`            | 兼容全量状态                   |
+| `POST`         | `/api/infrastructure`                  | 房间、笼架和笼位增量维护       |
+| `POST` / `PUT` | `/api/occupancies[/{id}]`              | 占用写入                       |
+| `GET`          | `/api/infrastructure/occupancies`      | 月度结算定向占用               |
 
-### 流程推进
+### 笼卡和待进驻
 
-```json
-{
-  "workflow": {},
-  "event": {},
-  "auditLogs": []
-}
-```
+| 方法             | 路径                                       | 用途                     |
+| ---------------- | ------------------------------------------ | ------------------------ |
+| `GET` / `POST`   | `/api/intake-batches`                      | 分页查询或新建批次       |
+| `PUT` / `DELETE` | `/api/intake-batches/{id}`                 | 编辑或删除批次           |
+| `POST`           | `/api/intake-batches/{id}/confirm-receipt` | 确认接收并生成待进驻任务 |
+| `GET`            | `/api/placement-tasks`                     | 分页查询待进驻任务       |
+| `POST`           | `/api/placement-tasks/{id}/reserve`        | 预留笼位                 |
+| `POST`           | `/api/placement-tasks/{id}/move-in`        | 正式入驻                 |
+| `POST`           | `/api/placement-tasks/{id}/reassign-room`  | 变更目标房间             |
 
-### 报销台账详情
+### 数量统计表和结算
 
-```json
-{
-  "item": {
-    "month": "2026-03",
-    "pi": "张三",
-    "workflowStatus": "statement_sent",
-    "reimbursementStatus": "reimbursing",
-    "currentMonthAmount": 1200,
-    "supportAmount": 80,
-    "payableAmount": 1120,
-    "paidAmount": 500,
-    "unpaidAmount": 620,
-    "accumulatedUnpaid": 3500,
-    "fundBookNo": "3030902100001",
-    "reimbursementFormNo": "BXD1001202604000001",
-    "details": []
-  },
-  "workflow": {},
-  "workflowVersions": [],
-  "workflowEvents": [],
-  "history": []
-}
-```
+| 方法                     | 路径                                     | 用途                 |
+| ------------------------ | ---------------------------------------- | -------------------- |
+| `GET`                    | `/api/quantity-sheet-rooms`              | 统计表跨房间录入候选 |
+| `GET` / `POST`           | `/api/quantity-sheets`                   | 分页查询或新建统计表 |
+| `GET` / `PUT` / `DELETE` | `/api/quantity-sheets/{id}`              | 详情、编辑和删除     |
+| `POST`                   | `/api/billing-statements/generate`       | 动态笼位图结算       |
+| `POST`                   | `/api/billing-statements/generate-by-pi` | 按 PI 汇总结算       |
+| `GET`                    | `/api/billing-statements/{id}`           | 单张结算单           |
 
-## 核心数据语义
+### 流程和报销
 
-| 对象 | 语义 |
-| --- | --- |
-| `IACUC` | 串联占用、数量统计表和结算链路的核心业务键 |
-| `funding` | 财务来源字段，`项目来源` 是 source of truth |
-| `occupancies` | 笼位占用历史，状态重点在 `reserved` 与 `active` |
-| `placement_tasks` | 每张已接收笼卡生成一条待进驻任务 |
-| `quantity_sheets` | 月度数量统计表，支持伦理号之间转入转出 |
-| `reimbursement_records` | 每月每项目负责人一条报销台账，滚动维护应缴、已缴、未缴和报销状态 |
-| `billing_workflows` | 月度结算流程，不是单笼位生命周期 |
-| `audit_events` | 关键写操作审计记录 |
+| 方法                     | 路径                                        | 用途                 |
+| ------------------------ | ------------------------------------------- | -------------------- |
+| `GET`                    | `/api/billing-workflows`                    | 结算流程列表         |
+| `GET`                    | `/api/billing-workflows/{id}`               | 流程、版本和事件     |
+| `GET`                    | `/api/billing-workflows/{id}/lines`         | 指定版本逐日明细     |
+| `POST`                   | `/api/billing-workflows/advance`            | 推进流程             |
+| `GET`                    | `/api/reimbursement-records`                | 报销台账列表         |
+| `GET` / `PUT` / `DELETE` | `/api/reimbursement-records/{id}`           | 台账详情、登记和删除 |
+| `POST`                   | `/api/reimbursement-records/import-monthly` | 导入历史月汇总 Excel |
+| `POST`                   | `/api/reimbursement-records/import-arrears` | 导入历史欠缴 Excel   |
+
+### 管理
+
+| 方法             | 路径                                 | 用途                   |
+| ---------------- | ------------------------------------ | ---------------------- |
+| `GET` / `POST`   | `/api/users`                         | 账号查询和创建         |
+| `PUT` / `DELETE` | `/api/users/{id}`                    | 账号维护               |
+| `GET`            | `/api/iacuc-index`                   | 完整项目索引           |
+| `GET`            | `/api/iacuc-index/status`            | 索引状态               |
+| `POST`           | `/api/iacuc-index/upload`            | CSV 上传和派生数据同步 |
+| `GET` / `PUT`    | `/api/principal-identities[/{name}]` | PI 身份与减免配置      |
+| `GET`            | `/api/audit-events`                  | 分页审计日志           |
+| `GET`            | `/api/system/update-check`           | Gitea Release 更新检查 |
+
+## 核心数据对象
+
+| 对象                      | 业务键                   | 说明                               |
+| ------------------------- | ------------------------ | ---------------------------------- |
+| `experiment_applications` | IACUC                    | 项目、PI、实验负责人、来源和有效期 |
+| `intake_batches`          | batch id                 | 接收批次和打印卡集合               |
+| `cards`                   | Animal Record ID         | 单张笼卡的持久唯一身份             |
+| `placement_tasks`         | task id                  | 接收后到正式入驻的任务             |
+| `occupancies`             | occupancy id + slot id   | 笼位占用历史                       |
+| `quantity_sheets`         | month + IACUC + sheet id | 月度人工数量记录                   |
+| `billing_statements`      | statement/version id     | 月度结算结果                       |
+| `billing_workflows`       | workflow id              | 结算单状态和版本链                 |
+| `reimbursement_records`   | month + PI               | 应缴、已缴、未缴和报销状态         |
+| `audit_events`            | event id                 | 关键写操作审计                     |
+
+SQLite 同时保留结构化热字段和兼容 payload。启动迁移会补字段、索引和必要回填。
+
+## 前端缓存
+
+- API hooks 位于 `src/react/api/`。
+- 查询键位于 `queryKeys.ts`。
+- 默认 staleTime 15 秒，gcTime 5 分钟。
+- mutation 根据写入范围失效当前房间、当前列表或台账根键。
+- localStorage 只保存界面偏好。
 
 ## 相关页面
 
 - [[项目结构]]
 - [[数据管理与IACUC索引]]
 - [[饲养费核算]]
+- [[开发规范]]

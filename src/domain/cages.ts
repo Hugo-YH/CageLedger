@@ -1,7 +1,10 @@
 import type { CageSlot, Occupancy } from "../react/api/contracts";
 
 export function currentOccupancy(slotId: string, occupancies: Occupancy[]) {
-  return occupancies.find((item) => item.slotId === slotId && (item.status === "active" || item.status === "reserved")) || null;
+  return (
+    occupancies.find((item) => item.slotId === slotId && (item.status === "active" || item.status === "reserved")) ||
+    null
+  );
 }
 
 export function slotPosition(slot: CageSlot) {
@@ -30,5 +33,18 @@ export function occupancyPeriodTone(occupancy: Occupancy | null, today: string) 
 }
 
 export function emptyOccupancy(slotId: string, code: string, today: string): Occupancy {
-  return { id: crypto.randomUUID(), slotId, cageCode: code, status: "active", iacuc: "", project: "", pi: "", owner: "", startDate: today, endDate: "", notes: "", updatedAt: today };
+  return {
+    id: crypto.randomUUID(),
+    slotId,
+    cageCode: code,
+    status: "active",
+    iacuc: "",
+    project: "",
+    pi: "",
+    owner: "",
+    startDate: today,
+    endDate: "",
+    notes: "",
+    updatedAt: today,
+  };
 }

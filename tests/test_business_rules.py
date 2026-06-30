@@ -18,8 +18,24 @@ class BusinessRuleParityTests(unittest.TestCase):
 
     def test_preferred_and_expired_free_cage_allocation(self):
         breakdown = [
-            {"iacuc": "Z1", "cageCount": 8, "billingUnit": "cage_day", "freeAllowance": True, "freeEligible": True, "preferredFreeCages": 6, "freeCagePriority": 1},
-            {"iacuc": "Z2", "cageCount": 8, "billingUnit": "cage_day", "freeAllowance": True, "freeEligible": True, "preferredFreeCages": 0, "freeCagePriority": None},
+            {
+                "iacuc": "Z1",
+                "cageCount": 8,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 6,
+                "freeCagePriority": 1,
+            },
+            {
+                "iacuc": "Z2",
+                "cageCount": 8,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": None,
+            },
         ]
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z1": 8, "Z2": 2})
         breakdown[0]["freeEligible"] = False

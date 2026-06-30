@@ -29,7 +29,10 @@ export function useIntakeFilterOptions(params: IntakeListParams, column: string,
   }
   return useQuery({
     queryKey: ["intake", "filter-options", column, params.columnFilters || {}],
-    queryFn: () => requestJson<{ items: Array<{ value: string; label: string; count: number }> }>(`/api/intake-batches/filter-options?${search.toString()}`),
+    queryFn: () =>
+      requestJson<{ items: Array<{ value: string; label: string; count: number }> }>(
+        `/api/intake-batches/filter-options?${search.toString()}`,
+      ),
     enabled,
   });
 }
@@ -37,10 +40,11 @@ export function useIntakeFilterOptions(params: IntakeListParams, column: string,
 export function useSaveIntakeBatch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ item, exists }: { item: IntakeBatch; exists: boolean }) => requestJson<IntakeWriteResponse>(
-      exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
-      { method: exists ? "PUT" : "POST", body: JSON.stringify({ item }) },
-    ),
+    mutationFn: ({ item, exists }: { item: IntakeBatch; exists: boolean }) =>
+      requestJson<IntakeWriteResponse>(
+        exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
+        { method: exists ? "PUT" : "POST", body: JSON.stringify({ item }) },
+      ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
   });
 }
@@ -48,7 +52,8 @@ export function useSaveIntakeBatch() {
 export function useDeleteIntakeBatch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => requestJson<IntakeWriteResponse>(`/api/intake-batches/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      requestJson<IntakeWriteResponse>(`/api/intake-batches/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
   });
 }

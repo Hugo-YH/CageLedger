@@ -4,7 +4,6 @@ from server_app.cache import cache_get, cache_key, cache_set
 
 from .payload import dump_json
 
-
 REIMBURSEMENT_LIST_FIELDS = (
     "id",
     "businessKey",
@@ -67,7 +66,9 @@ def list_reimbursement_records_page(conn, filters, clean_text):
     if cached is not None:
         return cached
     where_clause = f" WHERE {where}" if where else ""
-    total = conn.execute(f"SELECT COUNT(*) AS total FROM reimbursement_records{where_clause}", tuple(params)).fetchone()["total"]
+    total = conn.execute(
+        f"SELECT COUNT(*) AS total FROM reimbursement_records{where_clause}", tuple(params)
+    ).fetchone()["total"]
     rows = conn.execute(
         f"""
         SELECT

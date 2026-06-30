@@ -1,5 +1,7 @@
 # CageLedger 演示数据与路径
 
+本文件用于本地和临时演示环境。演示数据写入运行数据库，`data/` 已加入 `.gitignore`，不会随代码推送到 Gitea。
+
 ## 已生成的演示房间
 
 - `演示-珠江小鼠间A`
@@ -71,3 +73,11 @@ python3 scripts/generate_demo_data.py
 ```
 
 脚本会先备份当前 SQLite，再重建这套演示数据。
+
+建议在独立数据库运行：
+
+```bash
+CAGELEDGER_DB=/tmp/cageledger-demo.sqlite python3 scripts/generate_demo_data.py
+```
+
+演示结束后删除临时数据库。生产数据库执行前先确认 `CAGELEDGER_DB`，避免覆盖真实业务数据。

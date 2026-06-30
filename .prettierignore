@@ -1,0 +1,11 @@
+docs/archives/
+.codex-run/
+src/vendor/
+web-dist/
+dist/
+data/
+node_modules/
+playwright-report/
+test-results/
+package-lock.json
+*.min.js

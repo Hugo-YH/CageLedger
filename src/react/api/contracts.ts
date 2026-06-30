@@ -360,7 +360,7 @@ export interface ReimbursementDetailResponse {
   history: ReimbursementRecord[];
 }
 
-export interface ManagedUser extends SessionUser {}
+export type ManagedUser = SessionUser;
 
 export interface PrincipalIdentity {
   pi: string;

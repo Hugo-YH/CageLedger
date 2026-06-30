@@ -5,8 +5,7 @@ def sync_slot_statuses(state):
         if item.get("status") in ("active", "reserved")
     }
     state["slots"] = [
-        {**slot, "status": status_by_slot.get(slot.get("id"), "empty")}
-        for slot in state.get("slots", [])
+        {**slot, "status": status_by_slot.get(slot.get("id"), "empty")} for slot in state.get("slots", [])
     ]
 
 
@@ -30,7 +29,10 @@ def reserve_placement_task(state, task_id, slot_id, actor, deps):
     rack = next((item for item in state.get("racks", []) if item.get("id") == slot.get("rackId")), None)
     if not rack or rack.get("roomId") != task.get("targetRoomId"):
         raise ValueError("只能在目标饲养间内预留笼位")
-    if any(item.get("slotId") == slot_id and item.get("status") in ("reserved", "active") for item in state.get("occupancies", [])):
+    if any(
+        item.get("slotId") == slot_id and item.get("status") in ("reserved", "active")
+        for item in state.get("occupancies", [])
+    ):
         raise ValueError("该笼位当前不可用")
     now = deps["now_iso"]()
     occupancy = {
@@ -66,7 +68,9 @@ def move_in_placement_task(state, task_id, actual_move_in_date, actor, deps):
     ensure_task_room_permission(actor, task)
     if task.get("status") != "reserved":
         raise ValueError("请先为待进驻任务预留笼位")
-    occupancy = next((item for item in state.get("occupancies", []) if item.get("id") == task.get("reservedOccupancyId")), None)
+    occupancy = next(
+        (item for item in state.get("occupancies", []) if item.get("id") == task.get("reservedOccupancyId")), None
+    )
     if not occupancy:
         raise LookupError("预留占用不存在")
     move_in_date = deps["clean_text"](actual_move_in_date)

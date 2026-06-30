@@ -4,9 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const processes = new Set();
-const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1"
-  ? mkdtempSync(join(tmpdir(), "cageledger-e2e-"))
-  : "";
+const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
 
 function launch(command, args, env = {}) {
   const child = spawn(command, args, {

@@ -19,7 +19,7 @@ export async function requestJson<T>(url: string, init: RequestInit = {}): Promi
       ...init.headers,
     },
   });
-  const payload = await response.json().catch(() => ({})) as T & { error?: string };
+  const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) {
     throw new ApiError(payload.error || `Request failed with ${response.status}`, response.status, payload);
   }

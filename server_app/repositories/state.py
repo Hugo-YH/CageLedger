@@ -6,7 +6,9 @@ from .payload import read_payloads, read_setting, table_has_rows
 
 
 def assemble_state(conn):
-    if not any(table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies", "intake_batches")):
+    if not any(
+        table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies", "intake_batches")
+    ):
         return None
     return {
         "baseRate": read_setting(conn, "baseRate", 4.5),

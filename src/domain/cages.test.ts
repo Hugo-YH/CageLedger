@@ -9,6 +9,24 @@ describe("cage map domain", () => {
     expect(cageCode(slot, 2, "8014")).toBe("8014-02-C2");
   });
   it("classifies active feeding periods", () => {
-    expect(occupancyPeriodTone({ id: "o1", slotId: "s1", cageCode: "", status: "active", iacuc: "", project: "", pi: "", owner: "", startDate: "2026-01-01", endDate: "", notes: "", updatedAt: "" }, "2026-06-28")).toBe("open");
+    expect(
+      occupancyPeriodTone(
+        {
+          id: "o1",
+          slotId: "s1",
+          cageCode: "",
+          status: "active",
+          iacuc: "",
+          project: "",
+          pi: "",
+          owner: "",
+          startDate: "2026-01-01",
+          endDate: "",
+          notes: "",
+          updatedAt: "",
+        },
+        "2026-06-28",
+      ),
+    ).toBe("open");
   });
 });
