@@ -26,16 +26,18 @@ npm run dev
 
 ## 代码边界
 
-| 改动                 | 入口                       |
-| -------------------- | -------------------------- |
-| React 页面和交互     | `src/react/features/`      |
-| 通用组件             | `src/react/components/`    |
-| typed API 和缓存     | `src/react/api/`           |
-| 纯业务函数           | `src/domain/`              |
-| 打印、二维码和 PDF   | `src/react/print/`         |
-| HTTP、鉴权和兼容入口 | `server.py`                |
-| SQLite 访问          | `server_app/repositories/` |
-| 跨表业务事务         | `server_app/services/`     |
+| 改动                | 入口                           |
+| ------------------- | ------------------------------ |
+| React 页面和交互    | `src/react/features/`          |
+| 通用组件            | `src/react/components/`        |
+| typed API 和缓存    | `src/react/api/`               |
+| API 数据契约        | `src/contracts/`               |
+| 纯业务函数          | `src/domain/`                  |
+| 打印、二维码和 PDF  | `src/react/print/`             |
+| HTTP 与应用装配     | `server.py`、`server_app/web/` |
+| 领域业务            | `server_app/domains/`          |
+| SQLite 访问         | `server_app/repositories/`     |
+| 迁移期 service 兼容 | `server_app/services/`         |
 
 跨边界数据使用显式 TypeScript 类型或可序列化 JSON 契约。服务端业务数据由 TanStack Query 管理，本地 reducer 只保存 UI 偏好。
 
@@ -92,7 +94,7 @@ Gitea Pull Request 会运行前端质量、Python 质量和 Playwright 三个 jo
 
 ## 发布
 
-1. 在 `src/react/releaseNotes.ts` 增加版本、日期和时间。
+1. 在 `src/react/releaseNotesCurrent.ts` 增加版本、日期和时间。
 2. 运行 `npm run release:local -- --version X.Y.Z --push`。
 3. 检查 commit、`vX.Y.Z` tag、Gitea Release 和容器镜像。
 

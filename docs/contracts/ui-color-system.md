@@ -1,6 +1,6 @@
 # CageLedger UI 颜色与交互语义
 
-本契约约束 React 工作台的颜色、状态、按钮、表格和浮层。颜色源位于 `src/styles.css :root`，页面代码使用语义类和 CSS 变量。
+本契约约束 React 工作台的颜色、状态、按钮、表格和浮层。颜色源位于 `src/styles/tokens.css :root`，页面代码使用语义类和 CSS 变量。
 
 ## 基础层
 

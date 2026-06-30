@@ -1,6 +1,6 @@
 # CageLedger API 契约
 
-本契约描述 React 前端与 Python 服务之间的稳定边界。后端路由源位于 `server.py`，前端类型和 hooks 位于 `src/react/api/`。
+本契约描述 React 前端与 Python 服务之间的稳定边界。后端入口位于 `server.py` 和 `server_app/web/`，前端类型位于 `src/contracts/`，请求 hooks 位于 `src/react/api/`。
 
 ## 通用约定
 
@@ -116,7 +116,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 ## Typed API 规则
 
-- 共享类型写入 `src/react/api/contracts.ts`。
+- 共享类型写入 `src/contracts/<domain>.ts`，`src/react/api/contracts.ts` 仅保留兼容 re-export。
 - endpoint hooks 按业务域拆在 `bootstrap.ts`、`intake.ts`、`cages.ts`、`quantitySheets.ts`、`workflows.ts`、`administration.ts`。
 - API 契约变更同步更新类型、Query key、缓存失效、服务端测试和浏览器回归。
 - 权限、迁移和写入接口按 `testing-strategy.md` 的 API 与双角色路径验证。

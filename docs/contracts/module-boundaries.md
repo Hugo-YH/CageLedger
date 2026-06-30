@@ -13,10 +13,9 @@ graph TD
     Features --> UiState["local UI state"]
     Features --> Domain["pure domain helpers"]
     Features --> Print["print templates"]
-    Query --> Http["server.py HTTP boundary"]
-    Http --> Services["server_app/services"]
-    Http --> Repositories["server_app/repositories"]
-    Services --> Repositories
+    Query --> Http["server.py + server_app/web"]
+    Http --> Domains["server_app/domains"]
+    Domains --> Repositories["domain repositories"]
     Repositories --> SQLite["SQLite + runtime files"]
 ```
 
@@ -31,24 +30,29 @@ graph TD
 | `src/react/features/shell/`    | 导航、权限可见性、页面懒加载              | features、UI state                   | 数据库和业务计算                |
 | `src/react/features/<domain>/` | 页面编排、表单草稿、交互和业务动作        | API hooks、domain、components、print | 自建全局缓存和直接 SQL 语义     |
 | `src/react/components/`        | 跨页面通用组件                            | React、样式类、通用类型              | 业务域专属请求                  |
-| `src/react/api/`               | 请求客户端、契约类型、查询键、Query hooks | `fetch`、TanStack Query              | DOM、页面布局和打印             |
+| `src/contracts/`               | 按业务域组织的前后端响应类型              | TypeScript 类型                      | React、DOM 和请求实现           |
+| `src/react/api/`               | 请求客户端、兼容契约入口、查询键和 hooks  | `src/contracts/`、TanStack Query     | DOM、页面布局和打印             |
 | `src/react/state/`             | 当前工作区、导航折叠、界面偏好            | React reducer、localStorage          | 服务端业务数据                  |
 | `src/domain/`                  | 可测试的纯业务函数                        | TypeScript 标准能力                  | React、DOM、网络和 localStorage |
 | `src/react/print/`             | 打印 HTML、二维码和文档版式               | domain 类型、模板工具                | 页面状态和服务端写入            |
-| `src/styles.css`               | 全局 token、布局、组件状态和响应式        | CSS 自定义属性                       | 业务条件判断                    |
+| `src/styles/`                  | token、基础、外壳、组件、领域和响应式样式 | CSS 自定义属性                       | 业务条件判断                    |
+| `src/styles.css`               | 样式兼容入口，仅导入 `styles/index.css`   | `src/styles/`                        | 直接追加业务规则                |
 
 ## 后端边界
 
-| 路径                       | 责任                                                         | 约束                                     |
-| -------------------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| `server.py`                | HTTP 路由、Cookie Session、输入解析、状态码、schema 兼容入口 | handler 保持短小，新业务编排下沉 service |
-| `server_app/config.py`     | 环境变量、路径、系统元数据                                   | 配置读取集中管理                         |
-| `server_app/http.py`       | JSON、gzip、缓存头和计时响应                                 | 统一响应行为                             |
-| `server_app/static.py`     | `web-dist/` 静态资源、ETag、gzip 和 SPA fallback             | 只处理前端传输                           |
-| `server_app/db.py`         | SQLite 连接辅助                                              | 连接参数和事务入口一致                   |
-| `server_app/cache.py`      | 15 秒短缓存和失效辅助                                        | key 包含 scope、filter 和 actor          |
-| `server_app/repositories/` | SQL、分页、结构化列、payload 兼容、行级读写                  | 返回可序列化 dict/list，不承载 HTTP      |
-| `server_app/services/`     | 接收、入驻、统计表转移、结算和报销事务                       | 聚合 repository、校验业务、生成审计结果  |
+| 路径                       | 责任                                               | 约束                                    |
+| -------------------------- | -------------------------------------------------- | --------------------------------------- |
+| `server.py`                | 服务启动、应用装配和历史导出兼容入口               | 保持短小，不放业务实现                  |
+| `server_app/web/`          | Router、HTTP 生命周期、请求解析和响应              | 只调用领域入口                          |
+| `server_app/persistence/`  | schema 注册、幂等迁移和索引                        | 迁移顺序固定                            |
+| `server_app/domains/`      | 领域 route、service、repository、rules 和 importer | 领域内保持 route → service → repository |
+| `server_app/config.py`     | 环境变量、路径、系统元数据                         | 配置读取集中管理                        |
+| `server_app/http.py`       | JSON、gzip、缓存头和计时响应                       | 统一响应行为                            |
+| `server_app/static.py`     | `web-dist/` 静态资源、ETag、gzip 和 SPA fallback   | 只处理前端传输                          |
+| `server_app/db.py`         | SQLite 连接辅助                                    | 连接参数和事务入口一致                  |
+| `server_app/cache.py`      | 15 秒短缓存和失效辅助                              | key 包含 scope、filter 和 actor         |
+| `server_app/repositories/` | SQL、分页、结构化列、payload 兼容、行级读写        | 返回可序列化 dict/list，不承载 HTTP     |
+| `server_app/services/`     | 迁移期 service 兼容导出                            | 新业务直接进入 domains                  |
 
 ## 服务端数据与本地状态
 
@@ -60,16 +64,16 @@ graph TD
 
 ## 功能落点
 
-| 需求             | 首选改动位置                                                        |
-| ---------------- | ------------------------------------------------------------------- |
-| 新增业务页面     | `src/react/features/<domain>/`，并在 shell 中懒加载                 |
-| 新增 API         | `server.py` 路由 + service/repository + `src/react/api/` typed hook |
-| 新增纯计算规则   | `src/domain/`，同步单元测试                                         |
-| 新增打印格式     | `src/react/print/`，预览和打印共享模板                              |
-| 新增列表筛选     | repository 结构化查询 + API 参数 + Query key                        |
-| 新增本地显示偏好 | `src/react/state/ui.tsx` 与 `uiStorage.ts`                          |
-| 新增颜色或状态   | `src/styles.css :root` + `ui-color-system.md`                       |
-| 修改正式用户流程 | 对应 `wiki/` 页面                                                   |
+| 需求             | 首选改动位置                                                      |
+| ---------------- | ----------------------------------------------------------------- |
+| 新增业务页面     | `src/react/features/<domain>/`，并在 shell 中懒加载               |
+| 新增 API         | `server_app/domains/<domain>/` + `src/react/api/` typed hook      |
+| 新增纯计算规则   | `src/domain/`，同步单元测试                                       |
+| 新增打印格式     | `src/react/print/`，预览和打印共享模板                            |
+| 新增列表筛选     | repository 结构化查询 + API 参数 + Query key                      |
+| 新增本地显示偏好 | `src/react/state/ui.tsx` 与 `uiStorage.ts`                        |
+| 新增颜色或状态   | `src/styles/tokens.css` + 对应 feature CSS + `ui-color-system.md` |
+| 修改正式用户流程 | 对应 `wiki/` 页面                                                 |
 
 ## 跨边界改动清单
 
@@ -87,9 +91,9 @@ graph TD
 
 ## 当前技术债边界
 
-- `server.py` 继续保留 schema 初始化、路由和兼容桥接，新增领域逻辑优先进入 `server_app/`。
-- `src/styles.css` 是共享全局样式，新增规则使用业务前缀并复用语义 token。
-- `src/react/api/contracts.ts` 覆盖当前高频契约；新增接口同步补齐类型，逐步减少 `Record<string, unknown>`。
+- `server_app/legacy.py` 是迁移期 HTTP 兼容层；新增实现进入 `server_app/domains/`。
+- `src/styles/index.css` 固定导入顺序；新增规则归入对应层或业务域文件。
+- `src/react/api/contracts.ts` 保留兼容 re-export；新增类型进入 `src/contracts/<domain>.ts`。
 - `ENTITY_ENDPOINTS` 保留旧通用实体接口；新高频流程优先使用专用 service endpoint。
 
 ## 验收标准
