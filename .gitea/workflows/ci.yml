@@ -43,7 +43,6 @@ jobs:
           npm run lint:css
           npm run lint:md
           npm run lint:shell
-          shellcheck scripts/*.sh
 
       - name: Typecheck and test
         run: |

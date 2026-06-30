@@ -1,5 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+import { expect, test } from "./fixtures";
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -27,7 +29,7 @@ test("login and dashboard have no serious accessibility violations", async ({ pa
   await expectNoSeriousViolations(page);
 });
 
-test("core workspaces and confirmation dialogs retain accessible semantics", async ({ page }) => {
+test("core workspaces and dialogs retain accessible semantics", async ({ page }) => {
   await login(page);
 
   await page.getByRole("button", { name: "笼卡管理", exact: true }).click();
@@ -41,4 +43,18 @@ test("core workspaces and confirmation dialogs retain accessible semantics", asy
   await page.getByRole("button", { name: "流程中心", exact: true }).click();
   await expect(page.getByRole("heading", { name: "流程中心", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
+
+  await page.getByRole("button", { name: "系统设置", exact: true }).click();
+  await page.getByRole("button", { name: "房间管理", exact: true }).click();
+  const openRoomEditor = page.getByRole("button", { name: "新增饲养间", exact: true });
+  await openRoomEditor.click();
+  const dialog = page.getByRole("dialog", { name: "新增饲养间" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("button", { name: "关闭", exact: true })).toBeFocused();
+  await expectNoSeriousViolations(page);
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByRole("button", { name: "取消", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(openRoomEditor).toBeFocused();
 });

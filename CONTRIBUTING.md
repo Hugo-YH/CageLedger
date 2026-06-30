@@ -1,11 +1,12 @@
 # 参与 CageLedger 开发
 
-本文说明本地环境、代码边界、验证门禁和提交要求。业务口径以 `AGENTS.md` 和 `docs/contracts/` 为准。
+本文说明本地环境、代码边界、质量检查和提交要求。业务口径以 `AGENTS.md` 和 `docs/contracts/` 为准。
 
 ## 环境
 
 - Node.js 22，建议使用 `.nvmrc`：`nvm use`。
 - Python 3.13，版本文件为 `.python-version`。
+- ShellCheck，macOS 使用 `brew install shellcheck` 安装。
 - Python 依赖分为运行依赖 `requirements.txt` 和开发依赖 `requirements-dev.txt`。
 
 ```bash
@@ -52,7 +53,7 @@ npm run typecheck
 - Stylelint 检查 CSS 标准语法、未知值和重复声明。
 - Markdownlint 检查活动文档。
 - Ruff 处理 Python 格式、import 和 lint。
-- `bash -n` 进入本地门禁，Gitea CI 额外执行 ShellCheck。
+- `bash -n` 和 ShellCheck 同时进入本地与 Gitea CI 的基础质量检查。
 
 `docs/archives/`、`src/vendor/`、`web-dist/`、`dist/` 和 `data/` 保持在批量格式化范围外。
 
@@ -67,13 +68,13 @@ npm run typecheck
 | 关键业务链             | `npm run test:e2e`                        |
 | 大列表和查询性能       | `npm run benchmark`                       |
 
-快速门禁：
+基础质量检查：
 
 ```bash
 npm run check
 ```
 
-完整门禁：
+完整发布验证：
 
 ```bash
 npm run verify:full

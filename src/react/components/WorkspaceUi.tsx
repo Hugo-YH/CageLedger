@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 export function WorkspaceHeader({
   kicker,
@@ -54,6 +54,88 @@ export function PageState({ title, detail, retry }: { title: string; detail?: st
   );
 }
 
+export function ModalShell({
+  ariaLabel,
+  className = "",
+  children,
+  onClose,
+}: {
+  ariaLabel: string;
+  className?: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const dialog = dialogRef.current;
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusable = () =>
+      Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) || []).filter(
+        (element) => element.getClientRects().length > 0,
+      );
+
+    document.body.style.overflow = "hidden";
+    const focusable = getFocusable();
+    (focusable[0] || dialog)?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const currentFocusable = getFocusable();
+      if (!currentFocusable.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+      const first = currentFocusable[0];
+      const last = currentFocusable[currentFocusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    dialog?.addEventListener("keydown", handleKeyDown);
+    return () => {
+      dialog?.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
+  return (
+    <div className="modal-backdrop">
+      <section
+        ref={dialogRef}
+        className={`modal-shell ${className}`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        tabIndex={-1}
+      >
+        {children}
+      </section>
+    </div>
+  );
+}
+
 export function ConfirmDialog({
   title,
   message,
@@ -71,73 +153,23 @@ export function ConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const onCancelRef = useRef(onCancel);
-  const titleId = useId();
-
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const dialog = dialogRef.current;
-    const focusable = dialog?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.[0]?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCancelRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !focusable?.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    dialog?.addEventListener("keydown", handleKeyDown);
-    return () => {
-      dialog?.removeEventListener("keydown", handleKeyDown);
-      previousFocus?.focus();
-    };
-  }, []);
-
   return (
-    <div className="modal-backdrop">
-      <section
-        ref={dialogRef}
-        className="modal-shell confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-      >
-        <div className="modal-shell-head">
-          <h2 id={titleId}>{title}</h2>
-        </div>
-        <div className="modal-shell-body">
-          <p>{message}</p>
-        </div>
-        <div className="modal-shell-actions">
-          <button className="secondary" type="button" onClick={onCancel}>
-            取消
-          </button>
-          <button className={danger ? "danger" : "primary"} type="button" disabled={pending} onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-        </div>
-      </section>
-    </div>
+    <ModalShell ariaLabel={title} className="confirm-dialog" onClose={onCancel}>
+      <div className="modal-shell-head">
+        <h2>{title}</h2>
+      </div>
+      <div className="modal-shell-body">
+        <p>{message}</p>
+      </div>
+      <div className="modal-shell-actions">
+        <button className="secondary" type="button" onClick={onCancel}>
+          取消
+        </button>
+        <button className={danger ? "danger" : "primary"} type="button" disabled={pending} onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 

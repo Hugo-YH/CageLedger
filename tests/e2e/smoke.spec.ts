@@ -1,4 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+import { expect, test } from "./fixtures";
 
 async function ensureTestInfrastructure(page: Page) {
   const response = await page.request.get("/api/rooms");
@@ -147,19 +149,20 @@ test("admin can create infrastructure and manage a room account", async ({ page 
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
   await openSettingsView(page, "房间管理");
+  const roomName = `E2E 测试饲养间 ${Date.now()}`;
   await page.getByRole("button", { name: "新增饲养间", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCSS("position", "relative");
   await expect(page.locator(".modal-backdrop")).toHaveCSS("position", "fixed");
-  await page.getByLabel("饲养间名称", { exact: true }).fill("E2E 测试饲养间");
+  await page.getByLabel("饲养间名称", { exact: true }).fill(roomName);
   await page.getByLabel("区域", { exact: true }).fill("E2E 区域");
   await page.getByRole("button", { name: "保存饲养间", exact: true }).click();
-  await expect(page.getByText("E2E 测试饲养间", { exact: true })).toBeVisible();
+  await expect(page.getByText(roomName, { exact: true })).toBeVisible();
   await openSettingsView(page, "账号管理");
   await page.getByLabel("登录名", { exact: true }).fill("e2e_room_admin");
   await page.getByLabel("显示姓名", { exact: true }).fill("E2E 房间管理员");
   await page.getByLabel("初始密码", { exact: true }).fill("e2e-password");
-  await page.getByLabel("E2E 测试饲养间", { exact: true }).check();
+  await page.getByLabel(roomName, { exact: true }).check();
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
   const userCard = page.locator(".user-card").filter({ hasText: "E2E 房间管理员" });
   await expect(userCard).toBeVisible();

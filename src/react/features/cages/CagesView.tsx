@@ -12,6 +12,7 @@ import type {
   RoomBootstrapResponse,
 } from "../../api/contracts";
 import { useMoveInPlacement, useReservePlacement, useSaveOccupancy } from "../../api/cages";
+import { ModalShell } from "../../components/WorkspaceUi";
 import { cageCode, currentOccupancy, emptyOccupancy, occupancyPeriodTone, slotPosition } from "../../../domain/cages";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -413,81 +414,78 @@ function SlotEditor({
     onClose();
   }
   return (
-    <div className="modal-backdrop">
-      <section
-        className="modal-shell cage-slot-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="slot-editor-title"
-      >
-        <div className="modal-shell-head">
-          <div>
-            <h2 id="slot-editor-title">编辑笼位 {cageCode(slot, rack.index, roomName)}</h2>
-            <p>{occupancy ? "维护当前占用记录" : "录入新的占用记录"}</p>
-          </div>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
+    <ModalShell
+      ariaLabel={`编辑笼位 ${cageCode(slot, rack.index, roomName)}`}
+      className="cage-slot-modal"
+      onClose={onClose}
+    >
+      <div className="modal-shell-head">
+        <div>
+          <h2 id="slot-editor-title">编辑笼位 {cageCode(slot, rack.index, roomName)}</h2>
+          <p>{occupancy ? "维护当前占用记录" : "录入新的占用记录"}</p>
+        </div>
+        <button className="secondary" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
+        <div className="compact-form-row third">
+          <label>
+            状态
+            <select value={draft.status} onChange={(event) => update("status", event.target.value)}>
+              <option value="active">在用</option>
+              <option value="reserved">已预约</option>
+            </select>
+          </label>
+          <Field label="笼盒编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />
+          <Field
+            label="动物数量"
+            type="number"
+            value={draft.animalCount || ""}
+            onChange={(value) => update("animalCount", value ? Number(value) : null)}
+          />
+        </div>
+        <div className="compact-form-row half">
+          <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
+          <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
+        </div>
+        <div className="compact-form-row half">
+          <Field label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
+          <Field label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
+        </div>
+        <div className="compact-form-row third">
+          <Field
+            label="开始日期"
+            type="date"
+            value={draft.startDate}
+            onChange={(value) => update("startDate", value)}
+          />
+          <Field
+            label="饲养周期（天）"
+            type="number"
+            value={draft.feedingDays || ""}
+            onChange={(value) => update("feedingDays", value ? Number(value) : null)}
+          />
+          <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
+        </div>
+        <label>
+          备注
+          <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
+        </label>
+        <div className="modal-shell-actions">
+          <button
+            className="ghost danger-text"
+            type="button"
+            onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}
+          >
+            {confirmClear ? "再次点击确认设为空" : "设为空"}
+          </button>
+          <button className="primary" type="submit" disabled={save.isPending}>
+            保存笼位
           </button>
         </div>
-        <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
-          <div className="compact-form-row third">
-            <label>
-              状态
-              <select value={draft.status} onChange={(event) => update("status", event.target.value)}>
-                <option value="active">在用</option>
-                <option value="reserved">已预约</option>
-              </select>
-            </label>
-            <Field label="笼盒编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />
-            <Field
-              label="动物数量"
-              type="number"
-              value={draft.animalCount || ""}
-              onChange={(value) => update("animalCount", value ? Number(value) : null)}
-            />
-          </div>
-          <div className="compact-form-row half">
-            <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
-            <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
-          </div>
-          <div className="compact-form-row half">
-            <Field label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
-            <Field label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
-          </div>
-          <div className="compact-form-row third">
-            <Field
-              label="开始日期"
-              type="date"
-              value={draft.startDate}
-              onChange={(value) => update("startDate", value)}
-            />
-            <Field
-              label="饲养周期（天）"
-              type="number"
-              value={draft.feedingDays || ""}
-              onChange={(value) => update("feedingDays", value ? Number(value) : null)}
-            />
-            <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
-          </div>
-          <label>
-            备注
-            <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
-          </label>
-          <div className="modal-shell-actions">
-            <button
-              className="ghost danger-text"
-              type="button"
-              onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}
-            >
-              {confirmClear ? "再次点击确认设为空" : "设为空"}
-            </button>
-            <button className="primary" type="submit" disabled={save.isPending}>
-              保存笼位
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>
+      </form>
+    </ModalShell>
   );
 }
 
@@ -506,52 +504,50 @@ function PlacementDrawer({
 }) {
   const moveIn = useMoveInPlacement(roomId);
   return (
-    <div className="modal-backdrop">
-      <section className="modal-shell placement-react-drawer" role="dialog" aria-modal="true">
-        <div className="modal-shell-head">
-          <div>
-            <h2>待进驻动物</h2>
-            <p>{tasks.length} 个待处理笼位</p>
+    <ModalShell ariaLabel="待进驻动物" className="placement-react-drawer" onClose={onClose}>
+      <div className="modal-shell-head">
+        <div>
+          <h2>待进驻动物</h2>
+          <p>{tasks.length} 个待处理笼位</p>
+        </div>
+        <button className="secondary" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <div className="modal-shell-body placement-react-list">
+        {tasks.length ? (
+          tasks.map((task) => (
+            <article key={task.id} className={selectedTaskId === task.id ? "selected" : ""}>
+              <div>
+                <span className={`pill ${task.status}`}>{task.status === "pending" ? "待分配" : "已预留"}</span>
+                <strong>{task.batchNo || "未命名批次"}</strong>
+                <small>
+                  {task.plannedMoveInDate || "-"} · {task.pi || "-"} · {task.owner || "-"}
+                </small>
+              </div>
+              {task.status === "pending" ? (
+                <button className="primary" type="button" onClick={() => onSelect(task)}>
+                  选择空笼位
+                </button>
+              ) : (
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={moveIn.isPending}
+                  onClick={() => void moveIn.mutateAsync({ taskId: task.id, actualMoveInDate: today })}
+                >
+                  正式入驻
+                </button>
+              )}
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            <h3>当前房间没有待进驻任务</h3>
           </div>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
-          </button>
-        </div>
-        <div className="modal-shell-body placement-react-list">
-          {tasks.length ? (
-            tasks.map((task) => (
-              <article key={task.id} className={selectedTaskId === task.id ? "selected" : ""}>
-                <div>
-                  <span className={`pill ${task.status}`}>{task.status === "pending" ? "待分配" : "已预留"}</span>
-                  <strong>{task.batchNo || "未命名批次"}</strong>
-                  <small>
-                    {task.plannedMoveInDate || "-"} · {task.pi || "-"} · {task.owner || "-"}
-                  </small>
-                </div>
-                {task.status === "pending" ? (
-                  <button className="primary" type="button" onClick={() => onSelect(task)}>
-                    选择空笼位
-                  </button>
-                ) : (
-                  <button
-                    className="primary"
-                    type="button"
-                    disabled={moveIn.isPending}
-                    onClick={() => void moveIn.mutateAsync({ taskId: task.id, actualMoveInDate: today })}
-                  >
-                    正式入驻
-                  </button>
-                )}
-              </article>
-            ))
-          ) : (
-            <div className="empty-state">
-              <h3>当前房间没有待进驻任务</h3>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
+        )}
+      </div>
+    </ModalShell>
   );
 }
 
@@ -611,66 +607,59 @@ function BatchSlotEditor({
     onDone(`已将 ${slots.length} 个笼位设为空。`);
   }
   return (
-    <div className="modal-backdrop">
-      <section
-        className="modal-shell cage-slot-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="batch-slot-title"
-      >
-        <div className="modal-shell-head">
-          <div>
-            <h2 id="batch-slot-title">批量编辑 {slots.length} 个笼位</h2>
-            <p>{slots.map(slotPosition).join("、")}</p>
-          </div>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
-          </button>
+    <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" onClose={onClose}>
+      <div className="modal-shell-head">
+        <div>
+          <h2 id="batch-slot-title">批量编辑 {slots.length} 个笼位</h2>
+          <p>{slots.map(slotPosition).join("、")}</p>
         </div>
-        <div className="modal-shell-body form compact-slot-form">
-          <div className="compact-form-row third">
-            <label>
-              状态
-              <select value={draft.status} onChange={(event) => update("status", event.target.value)}>
-                <option value="active">在用</option>
-                <option value="reserved">已预约</option>
-              </select>
-            </label>
-            <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
-            <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
-          </div>
-          <div className="compact-form-row half">
-            <Field label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
-            <Field label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
-          </div>
-          <div className="compact-form-row half">
-            <Field
-              label="开始日期"
-              type="date"
-              value={draft.startDate}
-              onChange={(value) => update("startDate", value)}
-            />
-            <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
-          </div>
+        <button className="secondary" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <div className="modal-shell-body form compact-slot-form">
+        <div className="compact-form-row third">
           <label>
-            备注
-            <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
+            状态
+            <select value={draft.status} onChange={(event) => update("status", event.target.value)}>
+              <option value="active">在用</option>
+              <option value="reserved">已预约</option>
+            </select>
           </label>
+          <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
+          <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
         </div>
-        <div className="modal-shell-actions">
-          <button
-            className="ghost danger-text"
-            type="button"
-            onClick={() => (confirmClear ? void clearAll() : setConfirmClear(true))}
-          >
-            {confirmClear ? "再次点击确认批量设空" : "批量设为空"}
-          </button>
-          <button className="primary" type="button" disabled={save.isPending} onClick={() => void saveAll()}>
-            批量保存
-          </button>
+        <div className="compact-form-row half">
+          <Field label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
+          <Field label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
         </div>
-      </section>
-    </div>
+        <div className="compact-form-row half">
+          <Field
+            label="开始日期"
+            type="date"
+            value={draft.startDate}
+            onChange={(value) => update("startDate", value)}
+          />
+          <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
+        </div>
+        <label>
+          备注
+          <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
+        </label>
+      </div>
+      <div className="modal-shell-actions">
+        <button
+          className="ghost danger-text"
+          type="button"
+          onClick={() => (confirmClear ? void clearAll() : setConfirmClear(true))}
+        >
+          {confirmClear ? "再次点击确认批量设空" : "批量设为空"}
+        </button>
+        <button className="primary" type="button" disabled={save.isPending} onClick={() => void saveAll()}>
+          批量保存
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 

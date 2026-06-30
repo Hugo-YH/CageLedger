@@ -11,6 +11,7 @@ import {
 } from "../../api/intake";
 import { useIacucIndex } from "../../api/iacuc";
 import { FilterableTableHeader } from "../../components/FilterableTableHeader";
+import { ModalShell } from "../../components/WorkspaceUi";
 import { createIntakeDraft, intakeStatusLabel, normalizeIntakeBatch, parseIntakeMessage } from "../../../domain/intake";
 import { openIntakeCardPrint } from "../../print/intakeCards";
 
@@ -494,36 +495,34 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
         </section>
       </div>
       {deleteTarget ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="delete-intake-title">
-            <div className="modal-shell-head">
-              <div>
-                <h2 id="delete-intake-title">删除待接收批次</h2>
-                <p>{deleteTarget.batchNo}</p>
-              </div>
+        <ModalShell ariaLabel="删除待接收批次" onClose={() => setDeleteTarget(null)}>
+          <div className="modal-shell-head">
+            <div>
+              <h2 id="delete-intake-title">删除待接收批次</h2>
+              <p>{deleteTarget.batchNo}</p>
             </div>
-            <div className="modal-shell-body">
-              <p>删除后，该批次及关联的待进驻任务会一并移除。</p>
-            </div>
-            <div className="modal-shell-actions">
-              <button className="secondary" type="button" onClick={() => setDeleteTarget(null)}>
-                取消
-              </button>
-              <button
-                className="danger"
-                type="button"
-                disabled={remove.isPending}
-                onClick={async () => {
-                  await remove.mutateAsync(deleteTarget.id);
-                  setSelected((current) => current.filter((id) => id !== deleteTarget.id));
-                  setDeleteTarget(null);
-                }}
-              >
-                确认删除
-              </button>
-            </div>
-          </section>
-        </div>
+          </div>
+          <div className="modal-shell-body">
+            <p>删除后，该批次及关联的待进驻任务会一并移除。</p>
+          </div>
+          <div className="modal-shell-actions">
+            <button className="secondary" type="button" onClick={() => setDeleteTarget(null)}>
+              取消
+            </button>
+            <button
+              className="danger"
+              type="button"
+              disabled={remove.isPending}
+              onClick={async () => {
+                await remove.mutateAsync(deleteTarget.id);
+                setSelected((current) => current.filter((id) => id !== deleteTarget.id));
+                setDeleteTarget(null);
+              }}
+            >
+              确认删除
+            </button>
+          </div>
+        </ModalShell>
       ) : null}
     </section>
   );

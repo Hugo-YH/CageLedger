@@ -25,7 +25,7 @@ npm run check
 
 ## 完整门禁
 
-`npm run verify:full` 在快速门禁后执行生产构建和完整 Playwright。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
+`npm run verify:full` 在基础质量检查后执行生产构建和完整 Playwright。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
 
 ## 业务回归
 

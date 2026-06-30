@@ -19,6 +19,7 @@ import {
   useSaveQuantitySheet,
 } from "../../api/quantitySheets";
 import { FilterableTableHeader } from "../../components/FilterableTableHeader";
+import { ModalShell } from "../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../print/quantitySheets";
 import {
   createQuantityRow,
@@ -273,8 +274,8 @@ export function QuantitySheetView({ user }: { user: SessionUser }) {
                   onBlur={(event) => applyIacuc(event.target.value)}
                 />
                 <datalist id="quantity-iacuc-options">
-                  {(iacucQuery.data?.items || []).slice(0, 500).map((item) => (
-                    <option key={item.iacuc} value={item.iacuc}>
+                  {(iacucQuery.data?.items || []).slice(0, 500).map((item, index) => (
+                    <option key={`${item.iacuc}-${item.project}-${item.pi}-${index}`} value={item.iacuc}>
                       {item.project || item.pi}
                     </option>
                   ))}
@@ -821,32 +822,30 @@ function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet) => voi
         <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
       ) : null}
       {deleteId ? (
-        <div className="modal-backdrop">
-          <section className="modal-shell" role="dialog" aria-modal="true">
-            <div className="modal-shell-head">
-              <h2>删除数量统计表</h2>
-            </div>
-            <div className="modal-shell-body">
-              <p>删除后，该统计表将退出结算合表范围。</p>
-            </div>
-            <div className="modal-shell-actions">
-              <button className="secondary" type="button" onClick={() => setDeleteId("")}>
-                取消
-              </button>
-              <button
-                className="danger"
-                type="button"
-                onClick={async () => {
-                  await remove.mutateAsync(deleteId);
-                  setSelected((current) => current.filter((id) => id !== deleteId));
-                  setDeleteId("");
-                }}
-              >
-                确认删除
-              </button>
-            </div>
-          </section>
-        </div>
+        <ModalShell ariaLabel="删除数量统计表" onClose={() => setDeleteId("")}>
+          <div className="modal-shell-head">
+            <h2>删除数量统计表</h2>
+          </div>
+          <div className="modal-shell-body">
+            <p>删除后，该统计表将退出结算合表范围。</p>
+          </div>
+          <div className="modal-shell-actions">
+            <button className="secondary" type="button" onClick={() => setDeleteId("")}>
+              取消
+            </button>
+            <button
+              className="danger"
+              type="button"
+              onClick={async () => {
+                await remove.mutateAsync(deleteId);
+                setSelected((current) => current.filter((id) => id !== deleteId));
+                setDeleteId("");
+              }}
+            >
+              确认删除
+            </button>
+          </div>
+        </ModalShell>
       ) : null}
     </section>
   );
@@ -892,22 +891,20 @@ function QuantityPreviewModal({
   onClose: () => void;
 }) {
   return (
-    <div className="modal-backdrop">
-      <section className="modal-shell quantity-react-preview" role="dialog" aria-modal="true">
-        <div className="modal-shell-head">
-          <div>
-            <h2>预览数量统计表</h2>
-            <p>{sheet ? `${sheet.month} · ${sheet.iacuc}` : "正在加载"}</p>
-          </div>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
-          </button>
+    <ModalShell ariaLabel="预览数量统计表" className="quantity-react-preview" onClose={onClose}>
+      <div className="modal-shell-head">
+        <div>
+          <h2>预览数量统计表</h2>
+          <p>{sheet ? `${sheet.month} · ${sheet.iacuc}` : "正在加载"}</p>
         </div>
-        <div className="modal-shell-body">
-          {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
-        </div>
-      </section>
-    </div>
+        <button className="secondary" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <div className="modal-shell-body">
+        {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
+      </div>
+    </ModalShell>
   );
 }
 
@@ -933,55 +930,53 @@ function ConfirmSave({
   const filled = sheet.rows.filter(hasRowContent).length;
   const profile = roomBillingProfile(room);
   return (
-    <div className="modal-backdrop">
-      <section className="modal-shell quantity-save-confirm" role="dialog" aria-modal="true">
-        <div className="modal-shell-head">
+    <ModalShell ariaLabel="确认保存数量统计表" className="quantity-save-confirm" onClose={onCancel}>
+      <div className="modal-shell-head">
+        <div>
+          <span className="workspace-kicker">保存前核对</span>
+          <h2>确认保存数量统计表</h2>
+        </div>
+      </div>
+      <div className="modal-shell-body">
+        <div className="quantity-confirm-profile">
           <div>
-            <span className="workspace-kicker">保存前核对</span>
-            <h2>确认保存数量统计表</h2>
+            <strong>{room?.name || "未选择房间"}</strong>
+            <span>
+              {profile.facilityLabel} · {profile.item} · {profile.customerLabel}
+            </span>
           </div>
+          <strong>
+            ¥{profile.price.toFixed(2)} / {profile.unit === "animal_day" ? "只/天" : "笼/天"}
+          </strong>
         </div>
-        <div className="modal-shell-body">
-          <div className="quantity-confirm-profile">
-            <div>
-              <strong>{room?.name || "未选择房间"}</strong>
-              <span>
-                {profile.facilityLabel} · {profile.item} · {profile.customerLabel}
-              </span>
-            </div>
-            <strong>
-              ¥{profile.price.toFixed(2)} / {profile.unit === "animal_day" ? "只/天" : "笼/天"}
-            </strong>
+        <dl className="quantity-confirm-grid">
+          <div>
+            <dt>月份</dt>
+            <dd>{sheet.month}</dd>
           </div>
-          <dl className="quantity-confirm-grid">
-            <div>
-              <dt>月份</dt>
-              <dd>{sheet.month}</dd>
-            </div>
-            <div>
-              <dt>IACUC</dt>
-              <dd>{sheet.iacuc}</dd>
-            </div>
-            <div>
-              <dt>项目负责人</dt>
-              <dd>{sheet.pi || "-"}</dd>
-            </div>
-            <div>
-              <dt>有效明细</dt>
-              <dd>{filled} 行</dd>
-            </div>
-          </dl>
-        </div>
-        <div className="modal-shell-actions">
-          <button className="secondary" type="button" onClick={onCancel}>
-            取消
-          </button>
-          <button className="primary" type="button" disabled={pending} onClick={onConfirm}>
-            确认保存
-          </button>
-        </div>
-      </section>
-    </div>
+          <div>
+            <dt>IACUC</dt>
+            <dd>{sheet.iacuc}</dd>
+          </div>
+          <div>
+            <dt>项目负责人</dt>
+            <dd>{sheet.pi || "-"}</dd>
+          </div>
+          <div>
+            <dt>有效明细</dt>
+            <dd>{filled} 行</dd>
+          </div>
+        </dl>
+      </div>
+      <div className="modal-shell-actions">
+        <button className="secondary" type="button" onClick={onCancel}>
+          取消
+        </button>
+        <button className="primary" type="button" disabled={pending} onClick={onConfirm}>
+          确认保存
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 

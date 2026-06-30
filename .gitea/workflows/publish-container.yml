@@ -14,7 +14,32 @@ permissions:
   packages: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    container: node:22-bookworm
+    steps:
+      - name: Check out source
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv shellcheck
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_REF_NAME}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install quality dependencies
+        run: |
+          npm ci
+          python3 -m venv .venv
+          .venv/bin/pip install --no-cache-dir -r requirements-dev.txt
+
+      - name: Run release quality checks
+        run: PATH="$PWD/.venv/bin:$PATH" npm run check
+
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     container: docker:cli
     steps:

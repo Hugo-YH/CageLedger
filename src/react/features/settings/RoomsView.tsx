@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
-import { ConfirmDialog, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { ConfirmDialog, ModalShell, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 
 type RoomDraft = CageRoom & {
   billingProfileConfigured?: boolean;
@@ -263,65 +263,67 @@ function RoomEditor({
 }) {
   const update = (key: keyof RoomDraft, value: string | number) => onChange({ ...draft, [key]: value });
   return (
-    <div className="modal-backdrop">
-      <section className="modal-shell settings-editor-modal" role="dialog" aria-modal="true">
-        <div className="modal-shell-head">
-          <h2>{draft.name ? "编辑饲养间" : "新增饲养间"}</h2>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
-          </button>
-        </div>
-        <div className="modal-shell-body form">
-          <Field label="饲养间名称" value={draft.name} onChange={(value) => update("name", value)} />
-          <Field label="区域" value={draft.area || ""} onChange={(value) => update("area", value)} />
-          <div className="compact-form-row half">
-            <Select
-              label="所属设施"
-              value={draft.facility || "zhujiang"}
-              options={facilityOptions}
-              onChange={(value) => update("facility", value)}
-            />
-            <Select
-              label="默认动物"
-              value={draft.defaultSpecies || "mouse"}
-              options={speciesOptions}
-              onChange={(value) => update("defaultSpecies", value)}
-            />
-          </div>
+    <ModalShell
+      ariaLabel={draft.name ? "编辑饲养间" : "新增饲养间"}
+      className="settings-editor-modal"
+      onClose={onClose}
+    >
+      <div className="modal-shell-head">
+        <h2>{draft.name ? "编辑饲养间" : "新增饲养间"}</h2>
+        <button className="secondary" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <div className="modal-shell-body form">
+        <Field label="饲养间名称" value={draft.name} onChange={(value) => update("name", value)} />
+        <Field label="区域" value={draft.area || ""} onChange={(value) => update("area", value)} />
+        <div className="compact-form-row half">
           <Select
-            label="默认收费项目"
-            value={draft.defaultBillingItem || "mouse_standard"}
-            options={billingOptions}
-            onChange={(value) => update("defaultBillingItem", value)}
+            label="所属设施"
+            value={draft.facility || "zhujiang"}
+            options={facilityOptions}
+            onChange={(value) => update("facility", value)}
           />
-          <div className="compact-form-row half">
-            <Select
-              label="默认院内/院外"
-              value={draft.defaultCustomerType || "internal"}
-              options={[
-                ["internal", "院内"],
-                ["external", "院外"],
-              ]}
-              onChange={(value) => update("defaultCustomerType", value)}
-            />
-            <Field
-              label="默认每笼只数"
-              type="number"
-              value={String(draft.defaultAnimalCount || 1)}
-              onChange={(value) => update("defaultAnimalCount", Math.max(Number(value), 1))}
-            />
-          </div>
+          <Select
+            label="默认动物"
+            value={draft.defaultSpecies || "mouse"}
+            options={speciesOptions}
+            onChange={(value) => update("defaultSpecies", value)}
+          />
         </div>
-        <div className="modal-shell-actions">
-          <button className="secondary" type="button" onClick={onClose}>
-            取消
-          </button>
-          <button className="primary" type="button" disabled={pending || !draft.name.trim()} onClick={onSave}>
-            保存饲养间
-          </button>
+        <Select
+          label="默认收费项目"
+          value={draft.defaultBillingItem || "mouse_standard"}
+          options={billingOptions}
+          onChange={(value) => update("defaultBillingItem", value)}
+        />
+        <div className="compact-form-row half">
+          <Select
+            label="默认院内/院外"
+            value={draft.defaultCustomerType || "internal"}
+            options={[
+              ["internal", "院内"],
+              ["external", "院外"],
+            ]}
+            onChange={(value) => update("defaultCustomerType", value)}
+          />
+          <Field
+            label="默认每笼只数"
+            type="number"
+            value={String(draft.defaultAnimalCount || 1)}
+            onChange={(value) => update("defaultAnimalCount", Math.max(Number(value), 1))}
+          />
         </div>
-      </section>
-    </div>
+      </div>
+      <div className="modal-shell-actions">
+        <button className="secondary" type="button" onClick={onClose}>
+          取消
+        </button>
+        <button className="primary" type="button" disabled={pending || !draft.name.trim()} onClick={onSave}>
+          保存饲养间
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 function RackEditor({
@@ -341,56 +343,54 @@ function RackEditor({
 }) {
   const update = (key: keyof CageRack, value: string | number) => onChange({ ...draft, [key]: value });
   return (
-    <div className="modal-backdrop">
-      <section className="modal-shell settings-editor-modal" role="dialog" aria-modal="true">
-        <div className="modal-shell-head">
-          <h2>编辑笼架</h2>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
-          </button>
+    <ModalShell ariaLabel="编辑笼架" className="settings-editor-modal" onClose={onClose}>
+      <div className="modal-shell-head">
+        <h2>编辑笼架</h2>
+        <button className="secondary" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <div className="modal-shell-body form">
+        <label>
+          所属饲养间
+          <select value={draft.roomId} onChange={(event) => update("roomId", event.target.value)}>
+            {rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="compact-form-row third">
+          <Field
+            label="笼架编号"
+            type="number"
+            value={String(draft.index)}
+            onChange={(value) => update("index", Math.max(Number(value), 1))}
+          />
+          <Field
+            label="行数"
+            type="number"
+            value={String(draft.rows)}
+            onChange={(value) => update("rows", Math.max(Number(value), 1))}
+          />
+          <Field
+            label="列数"
+            type="number"
+            value={String(draft.cols)}
+            onChange={(value) => update("cols", Math.max(Number(value), 1))}
+          />
         </div>
-        <div className="modal-shell-body form">
-          <label>
-            所属饲养间
-            <select value={draft.roomId} onChange={(event) => update("roomId", event.target.value)}>
-              {rooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {room.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="compact-form-row third">
-            <Field
-              label="笼架编号"
-              type="number"
-              value={String(draft.index)}
-              onChange={(value) => update("index", Math.max(Number(value), 1))}
-            />
-            <Field
-              label="行数"
-              type="number"
-              value={String(draft.rows)}
-              onChange={(value) => update("rows", Math.max(Number(value), 1))}
-            />
-            <Field
-              label="列数"
-              type="number"
-              value={String(draft.cols)}
-              onChange={(value) => update("cols", Math.max(Number(value), 1))}
-            />
-          </div>
-        </div>
-        <div className="modal-shell-actions">
-          <button className="secondary" type="button" onClick={onClose}>
-            取消
-          </button>
-          <button className="primary" type="button" disabled={pending} onClick={onSave}>
-            保存笼架
-          </button>
-        </div>
-      </section>
-    </div>
+      </div>
+      <div className="modal-shell-actions">
+        <button className="secondary" type="button" onClick={onClose}>
+          取消
+        </button>
+        <button className="primary" type="button" disabled={pending} onClick={onSave}>
+          保存笼架
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 function Field({

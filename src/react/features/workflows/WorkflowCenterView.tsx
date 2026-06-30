@@ -12,6 +12,7 @@ import {
   ConfirmDialog,
   formatDateTime,
   formatMoney,
+  ModalShell,
   PageState,
   Pager,
   WorkspaceHeader,
@@ -226,8 +227,8 @@ function WorkflowDetail({ id, user, onClose }: { id: string; user: SessionUser; 
     await detail.refetch();
   }
   return (
-    <div className="modal-backdrop">
-      <section className="modal-shell workflow-detail-modal" role="dialog" aria-modal="true">
+    <>
+      <ModalShell ariaLabel="报销台账详情" className="workflow-detail-modal" onClose={onClose}>
         <div className="modal-shell-head">
           <div>
             <span className="workspace-kicker">报销台账详情</span>
@@ -360,7 +361,7 @@ function WorkflowDetail({ id, user, onClose }: { id: string; user: SessionUser; 
             </button>
           </div>
         ) : null}
-      </section>
+      </ModalShell>
       {confirmDelete ? (
         <ConfirmDialog
           title="删除报销台账"
@@ -376,7 +377,7 @@ function WorkflowDetail({ id, user, onClose }: { id: string; user: SessionUser; 
           }}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
