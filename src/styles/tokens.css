@@ -1,0 +1,122 @@
+:root {
+  color-scheme: light;
+
+  --bg: #eef3f2;
+  --panel: #fff;
+  --panel-soft: #f7faf8;
+  --panel-tint: #eaf5f1;
+  --surface: #fff;
+  --surface-soft: #f2f7f5;
+  --surface-strong: #e6efeb;
+  --surface-hover: #f4faf8;
+  --text: #142226;
+  --muted: #596a71;
+  --line: #d4e0df;
+  --line-strong: #b7cac6;
+  --table-head: #edf5f3;
+  --table-row-hover: #f6fbfa;
+  --primary: #0d7668;
+  --primary-dark: #0b5f56;
+  --primary-ink: #083f3b;
+  --primary-soft: #e9f6f4;
+  --button-primary: #0d7668;
+  --button-primary-hover: #0b5f56;
+  --button-primary-soft: #e9f6f4;
+  --button-secondary-bg: #f5fbfa;
+  --button-secondary-bg-hover: #e6f2ef;
+  --button-secondary-line: #cce2df;
+  --button-secondary-line-hover: #b7d9d3;
+  --button-flow: #0b6877;
+  --button-flow-hover: #075866;
+  --button-flow-soft: #e6f4f6;
+  --button-flow-line: #afd7de;
+  --button-info: #365a66;
+  --button-info-hover: #274a55;
+  --button-info-soft: #eef5f6;
+  --button-info-line: #c7d9dd;
+  --button-warning: #a86408;
+  --button-warning-hover: #8c5204;
+  --button-warning-soft: #fff5df;
+  --button-warning-line: #edcf91;
+  --brand: #0d7668;
+  --brand-strong: #0b5f56;
+  --reserved: #2f8f86;
+  --reserved-soft: #eef8f5;
+  --reserved-line: #b9dcd6;
+  --reserved-text: #0b6f63;
+  --selection-soft: #eef8f5;
+  --selection-line: rgb(13 118 104 / 34%);
+  --selection-shadow: rgb(13 118 104 / 8%);
+  --inspect: #4c8f63;
+  --inspect-soft: #edf8ee;
+  --inspect-line: #bddfbe;
+  --green: #1f7a55;
+  --amber: #b66b12;
+  --gray: #7d8b91;
+  --danger: #b42318;
+  --danger-hover: #8f1f16;
+  --danger-soft: #fff0ee;
+  --danger-line: #efc1ba;
+  --info-soft: #eef8f5;
+  --info-line: #b9dcd6;
+  --info-text: #0b5f56;
+  --warning-line: #efd7a4;
+  --success-soft: #e8f6ee;
+  --success-line: #b9e3d6;
+  --warning-soft: #fff3dc;
+  --todo-soft: #eef8f5;
+  --todo-line: #b9dcd6;
+  --todo-text: #0b5f56;
+  --finance-soft: #f1eff9;
+  --finance-line: #d5cfee;
+  --finance-text: #4b3f7a;
+  --shadow: 0 20px 54px rgb(19 42 44 / 10%);
+  --shadow-soft: 0 10px 28px rgb(19 42 44 / 7%);
+  --shadow-lift: 0 18px 38px rgb(18 45 48 / 12%);
+  --shadow-pop: 0 18px 42px rgb(9 31 38 / 16%);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 82%);
+  --focus-ring: 0 0 0 3px rgb(13 118 104 / 14%);
+  --focus-ring-danger: 0 0 0 3px rgb(180 35 24 / 14%);
+  --focus-ring-warning: 0 0 0 3px rgb(168 100 8 / 16%);
+  --focus-ring-info: 0 0 0 3px rgb(54 90 102 / 16%);
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --title-lg: 31px;
+  --title-md: 20px;
+  --title-sm: 16px;
+  --text-md: 14px;
+  --text-sm: 12px;
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasis: cubic-bezier(0.2, 1, 0.2, 1);
+
+  font-family:
+    "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizelegibility;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(13 118 104 / 32%) rgb(232 241 240 / 72%);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgb(232 241 240 / 72%);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid rgb(232 241 240 / 72%);
+  border-radius: 999px;
+  background: rgb(13 118 104 / 34%);
+}

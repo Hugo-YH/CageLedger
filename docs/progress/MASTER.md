@@ -21,8 +21,8 @@
 | 1     | 行为基线与架构门禁  |     4 |    4 |     100% |
 | 2     | 后端平台层          |     4 |    4 |     100% |
 | 3     | 后端领域拆分        |     5 |    4 |      80% |
-| 4     | 前端领域拆分        |     5 |    0 |       0% |
-| 5     | CSS、脚本与测试结构 |     4 |    0 |       0% |
+| 4     | 前端领域拆分        |     5 |    5 |     100% |
+| 5     | CSS、脚本与测试结构 |     4 |    3 |      75% |
 | 6     | 全链路验收与归档    |     4 |    0 |       0% |
 
 ## Phase Checklist
@@ -30,8 +30,8 @@
 - [x] Phase 1: 行为基线与架构门禁 (4/4) — [details](./phase-1-baseline.md)
 - [x] Phase 2: 后端平台层 (4/4) — [details](./phase-2-platform.md)
 - [ ] Phase 3: 后端领域拆分 (4/5) — [details](./phase-3-backend-domains.md)
-- [ ] Phase 4: 前端领域拆分 (0/5) — [details](./phase-4-frontend-domains.md)
-- [ ] Phase 5: CSS、脚本与测试结构 (0/4) — [details](./phase-5-assets-tooling.md)
+- [x] Phase 4: 前端领域拆分 (5/5) — [details](./phase-4-frontend-domains.md)
+- [ ] Phase 5: CSS、脚本与测试结构 (3/4) — [details](./phase-5-assets-tooling.md)
 - [ ] Phase 6: 全链路验收与归档 (0/4) — [details](./phase-6-validation.md)
 
 ## Current Status
@@ -47,8 +47,8 @@
 | 1     |     0 |        1 |      2 |       3 |       4/4 |
 | 2     |     0 |        1 |      2 |       3 |       4/4 |
 | 3     |     0 |        1 |      2 |       3 |       4/5 |
-| 4     |     0 |        1 |      2 |       3 |       0/5 |
-| 5     |     0 |        1 |      2 |       3 |       0/4 |
+| 4     |     0 |        1 |      2 |       3 |       5/5 |
+| 5     |     0 |        1 |      2 |       3 |       3/4 |
 | 6     |     0 |        1 |      2 |       3 |       0/4 |
 
 ## Task Telemetry Log
@@ -67,6 +67,14 @@
 | 3.2  | L         | M      |  9/10 |              0 |     0 | intake、QR 与笼位 service 归域    |
 | 3.3  | L         | M      | 10/10 |              0 |     0 | 数量统计 service/repository 拆分  |
 | 3.4  | L         | L      |  9/10 |              0 |     0 | 计费规则与流程 repository 拆分    |
+| 4.1  | M         | M      | 10/10 |              0 |     0 | API contracts 分域且兼容导出      |
+| 4.2  | L         | M      | 10/10 |              0 |     0 | 数量统计 View 与三类组件拆分      |
+| 4.3  | L         | M      | 10/10 |              0 |     0 | 笼位与笼卡 View 拆分              |
+| 4.4  | M         | S      | 10/10 |              0 |     0 | 流程、房间页面与 model 拆分       |
+| 4.5  | S         | S      | 10/10 |              0 |     0 | release notes 历史记录拆分        |
+| 5.1  | L         | M      | 10/10 |              0 |     0 | CSS 按原始级联顺序拆分            |
+| 5.3  | M         | S      | 10/10 |              0 |     0 | demo、发布记录和 E2E 分域拆分     |
+| 5.4  | M         | S      | 10/10 |              0 |     0 | 强制架构检查接入 npm check        |
 
 ## Next Steps
 

@@ -1,0 +1,620 @@
+@media (width <= 760px) {
+  .billing-settlement-actions,
+  .billing-settlement-summary {
+    grid-template-columns: 1fr;
+  }
+
+  html,
+  body,
+  #app {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 70;
+    height: 64px;
+    min-height: 64px;
+    padding: 8px 10px max(8px, env(safe-area-inset-bottom));
+    overflow: auto hidden;
+    border-top: 1px solid rgb(255 255 255 / 14%);
+    box-shadow: 0 -12px 30px rgb(16 35 38 / 16%);
+  }
+
+  .brand,
+  .sidebar-account,
+  .sidebar-version,
+  .nav-group-title {
+    display: none;
+  }
+
+  .settings-drawer-mobile {
+    position: fixed;
+    inset: auto 10px calc(72px + env(safe-area-inset-bottom));
+    z-index: 220;
+    width: auto;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--text);
+    box-shadow: 0 18px 44px rgb(16 35 38 / 22%);
+    padding: 14px;
+    pointer-events: auto;
+  }
+
+  .settings-drawer-head {
+    display: grid;
+    gap: 3px;
+    margin-bottom: 12px;
+  }
+
+  .settings-drawer-head strong {
+    font-size: 16px;
+    color: var(--text);
+  }
+
+  .settings-drawer-head span {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .settings-drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .settings-drawer-item {
+    min-height: 72px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel-soft);
+    color: var(--text);
+    grid-template-columns: 1fr;
+    place-items: center;
+    gap: 6px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+
+  .settings-drawer-item svg {
+    color: var(--primary);
+    width: 22px;
+    height: 22px;
+    grid-row: auto;
+  }
+
+  .settings-drawer-item span,
+  .settings-drawer-item small {
+    grid-column: auto;
+  }
+
+  .settings-drawer-item span {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .settings-drawer-item small {
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .settings-drawer-item.active {
+    border-color: var(--primary);
+    background: #e9f6f4;
+    color: var(--primary);
+  }
+
+  .nav,
+  .nav-group {
+    display: flex;
+    flex: 1 0 auto;
+    gap: 6px;
+  }
+
+  .nav-item,
+  .shell.sidebar-collapsed .nav-item {
+    width: 56px;
+    height: 48px;
+    flex: 0 0 56px;
+    display: grid;
+    place-items: center;
+    gap: 0;
+    border-radius: 10px;
+  }
+
+  .nav-item svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .workspace {
+    padding: 14px 12px calc(86px + env(safe-area-inset-bottom));
+    height: auto;
+    overflow: visible;
+  }
+
+  .workspace::before {
+    left: 0;
+    height: 160px;
+  }
+
+  .topbar,
+  .panel-head,
+  .workspace-head,
+  .room-tree-head,
+  .rack-tree-item {
+    display: grid;
+  }
+
+  .workspace-head,
+  .workspace-body,
+  .workspace-meta-strip,
+  .workspace-action-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-head-actions {
+    min-width: 0;
+  }
+
+  .metrics,
+  .dashboard-metrics,
+  .statement-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-overview-grid,
+  .dashboard-facility-grid,
+  .dashboard-main-grid,
+  .billing-guide-grid,
+  .cage-card-scanner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scanner-button-row {
+    grid-template-columns: 1fr;
+  }
+
+  .scanner-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-chart {
+    grid-template-columns: 1fr;
+  }
+
+  .scanner-top-grid {
+    grid-template-columns: minmax(128px, 0.9fr) minmax(170px, 1.1fr);
+    gap: 10px;
+  }
+
+  .scanner-zone-card,
+  .scanner-query-card,
+  .scanner-info-panel {
+    padding: 12px;
+  }
+
+  .scanner-card-title {
+    padding-bottom: 8px;
+  }
+
+  .scanner-card-title strong {
+    font-size: 16px;
+  }
+
+  .scanner-card-title span {
+    font-size: 12px;
+  }
+
+  .scanner-zone-card .cage-card-scanner-reader {
+    min-height: 136px;
+    aspect-ratio: 1;
+  }
+
+  .scanner-manual-row {
+    grid-template-columns: minmax(0, 1fr) 64px;
+    gap: 8px;
+  }
+
+  .scanner-manual-row input {
+    min-height: 38px;
+    font-size: 14px;
+  }
+
+  .scanner-manual-row button {
+    min-height: 38px;
+    padding-inline: 10px;
+  }
+
+  .scanner-info-panel,
+  .scanner-empty-card {
+    min-height: 44vh;
+  }
+
+  .workspace-title-line h1 {
+    font-size: 22px;
+  }
+
+  .donut-chart {
+    width: 100%;
+    max-width: 260px;
+  }
+
+  .rack-grid {
+    grid-template-columns: repeat(var(--cols), 76px);
+    gap: 8px;
+    min-width: max-content;
+  }
+
+  .cage-preview {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .placement-task-floating-stack {
+    position: sticky;
+    right: auto;
+    bottom: auto;
+    top: 0;
+    z-index: 12;
+    justify-items: stretch;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .placement-task-floating-card,
+  .placement-task-chat-trigger {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+  }
+
+  .placement-task-floating-card::after {
+    display: none;
+  }
+
+  .slot {
+    min-height: 88px;
+    padding: 8px;
+    gap: 5px;
+  }
+
+  .slot-code {
+    font-size: 10px;
+  }
+
+  .slot-iacuc {
+    font-size: 12px;
+    padding-right: 0;
+  }
+
+  .slot-person,
+  .slot-date {
+    font-size: 11px;
+  }
+
+  .slot-empty-text {
+    font-size: 13px;
+  }
+
+  .slot-selected-label {
+    right: 5px;
+    top: 5px;
+    padding: 2px 5px;
+    font-size: 10px;
+  }
+
+  .slot-hover-preview {
+    display: none;
+  }
+
+  .cage-editor,
+  .cage-editor-popover {
+    position: fixed;
+    left: 0 !important;
+    right: 0;
+    bottom: 64px;
+    top: auto !important;
+    z-index: 75;
+    width: auto;
+    max-height: min(72vh, 620px);
+    overflow: auto;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -14px 36px rgb(9 31 38 / 20%);
+  }
+
+  .cage-editor-backdrop {
+    z-index: 74;
+  }
+
+  .placement-task-floating-stack {
+    inset: auto 14px calc(142px + env(safe-area-inset-bottom));
+    justify-items: stretch;
+  }
+
+  .placement-task-floating-card,
+  .placement-task-chat-trigger {
+    width: 100%;
+  }
+
+  .placement-task-floating-card::after {
+    display: none;
+  }
+
+  .cage-editor-fab {
+    right: 14px;
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 28px);
+    justify-content: center;
+  }
+
+  .cage-editor .panel-head,
+  .cage-editor-popover .panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--panel);
+    padding-bottom: 10px;
+  }
+
+  .selected-list {
+    max-height: 92px;
+    overflow: auto;
+  }
+
+  .rack-edit-form {
+    grid-template-columns: 1fr;
+    padding-left: 0;
+  }
+
+  .rack-edit-actions {
+    justify-content: stretch;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-field-group,
+  .quantity-field-group-basic,
+  .quantity-field-group-project,
+  .quantity-field-group-billing {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quantity-field-group-billing {
+    max-width: none;
+  }
+
+  .quantity-field-group .wide {
+    grid-column: auto;
+  }
+
+  .intake-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-entry-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-field-row.two,
+  .intake-field-row.three,
+  .intake-field-row.four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .user-row-actions {
+    justify-content: stretch;
+  }
+
+  .compact-form-row.half,
+  .compact-form-row.two-one,
+  .compact-form-row.third {
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-field-group,
+  .quantity-field-group-basic,
+  .quantity-field-group-project,
+  .quantity-field-group-billing {
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-field-group-billing {
+    max-width: none;
+  }
+
+  .intake-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-field-row.two,
+  .intake-field-row.three,
+  .intake-field-row.four {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-slot-form label,
+  .compact-slot-form .full-field {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar,
+  .command-bar,
+  .command-bar-filters,
+  .command-bar-actions,
+  .bulk-action-bar,
+  .bulk-action-bar > div,
+  .toolbar select,
+  .toolbar input,
+  .command-bar input,
+  .command-bar select,
+  .billing-sheet-actions,
+  .billing-control-matrix,
+  .billing-control-matrix input,
+  .billing-action-grid,
+  .quantity-sheet-actions,
+  .quantity-action-grid,
+  .primary,
+  .secondary,
+  .ghost {
+    width: 100%;
+  }
+
+  .command-bar {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "filters"
+      "meta"
+      "actions";
+  }
+
+  .command-bar-actions,
+  .bulk-action-bar {
+    justify-content: stretch;
+  }
+
+  .panel-head-actions {
+    width: 100%;
+  }
+
+  .command-bar-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .command-bar-actions button,
+  .bulk-action-bar button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bulk-action-bar {
+    display: grid;
+  }
+
+  .billing-sheet-actions,
+  .quantity-sheet-actions {
+    display: grid;
+  }
+
+  .billing-control-matrix,
+  .billing-action-grid,
+  .quantity-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .billing-control-matrix label {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar .secondary,
+  .shell.sidebar-collapsed .sidebar .secondary {
+    width: 48px;
+  }
+
+  .brand span {
+    display: none;
+  }
+
+  .topbar {
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+
+  .topbar h1 {
+    font-size: 22px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panel.large {
+    min-height: auto;
+  }
+
+  .panel-head {
+    gap: 10px;
+  }
+
+  .metrics,
+  .dashboard-metrics,
+  .statement-summary,
+  .compact-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dashboard-overview-grid,
+  .dashboard-facility-grid,
+  .dashboard-facility-metrics,
+  .dashboard-shortcuts,
+  .billing-guide-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-wrap {
+    max-width: calc(100vw - 24px);
+  }
+
+  table {
+    min-width: 640px;
+  }
+
+  th,
+  td {
+    padding: 10px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    min-height: 44px;
+  }
+
+  .form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-entry-table {
+    min-width: 760px;
+  }
+
+  .quantity-entry-table .quantity-inline-field {
+    align-items: stretch;
+  }
+
+  .quantity-entry-table .quantity-inline-field input {
+    min-width: 104px;
+  }
+
+  .field-cluster {
+    padding: 12px;
+  }
+
+  .field-cluster-head {
+    display: grid;
+    gap: 4px;
+  }
+}

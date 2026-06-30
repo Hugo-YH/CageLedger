@@ -1,0 +1,476 @@
+.public-scan-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 0%, rgb(19 126 113 / 12%), transparent 34%),
+    linear-gradient(180deg, #f7fbfb 0%, #eef4f4 100%);
+}
+
+.public-scan-card {
+  width: min(720px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 18px 42px rgb(15 23 42 / 12%);
+}
+
+.public-scan-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.public-scan-brand img {
+  width: 44px;
+  height: 44px;
+}
+
+.public-scan-brand strong {
+  display: block;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.public-scan-brand span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.public-scan-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0 18px;
+}
+
+.public-scan-eyebrow {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.public-scan-header h1 {
+  margin: 4px 0 0;
+  font-size: 30px;
+}
+
+.public-scan-status {
+  padding: 8px 13px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.public-scan-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.public-scan-grid div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfd;
+}
+
+.public-scan-grid dt {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.public-scan-grid dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.public-scan-state {
+  padding: 28px 0 8px;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.public-scan-state h1 {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.public-scan-state p {
+  margin: 0 0 12px;
+}
+
+.public-scan-state small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.public-scan-state.error {
+  color: var(--danger);
+}
+
+@media (width <= 680px) {
+  .public-scan-page {
+    padding: 14px;
+    place-items: start center;
+  }
+
+  .public-scan-card {
+    padding: 18px;
+  }
+
+  .public-scan-header {
+    display: grid;
+  }
+
+  .public-scan-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .flash-notice,
+  .confirm-dialog,
+  .editor-modal,
+  .settings-drawer-desktop,
+  .workspace-view,
+  .quantity-template-table td.quantity-cell-attention {
+    animation: none !important;
+  }
+
+  .help-hint-bubble,
+  .dashboard-overview-card,
+  .dashboard-facility-card,
+  .metric,
+  .chart-legend-item,
+  .summary-tile,
+  .field-cluster,
+  .command-bar,
+  .panel,
+  .settings-drawer-item,
+  .table-wrap,
+  .quantity-entry-status-pill,
+  .dense-table tbody tr,
+  .table-wrap table:not(.quantity-template-table) tbody tr,
+  .workflow-row,
+  .placement-task-floating-card,
+  .workspace-meta-card,
+  .sidebar-toggle,
+  .nav-item,
+  .nav-toggle,
+  button,
+  input,
+  select,
+  textarea {
+    transition-duration: 0.01ms !important;
+  }
+
+  .dashboard-overview-card:hover,
+  .dashboard-facility-card:hover,
+  .metric:hover,
+  .chart-legend-item:hover,
+  .summary-tile:hover,
+  .workspace-meta-card:hover,
+  .panel:hover,
+  .settings-drawer-item:hover,
+  .quantity-entry-status-pill:not(:disabled):hover,
+  .nav-item:hover {
+    transform: none;
+  }
+}
+
+/* React administration workspaces */
+
+.workflow-filter-bar .command-bar-filters {
+  grid-template-columns: 160px 180px minmax(220px, 1fr);
+  width: min(760px, 100%);
+}
+
+.workflow-detail-modal {
+  --modal-width: 1040px;
+}
+
+.settings-editor-modal {
+  --modal-width: 720px;
+}
+
+.quantity-react-preview {
+  --modal-width: 1060px;
+}
+
+.cage-slot-modal {
+  --modal-width: 880px;
+}
+
+.placement-react-drawer {
+  --modal-width: 760px;
+}
+
+.workflow-detail-summary,
+.system-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workflow-detail-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.workflow-detail-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-detail-summary strong {
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
+.workflow-step-actions,
+.workspace-head-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compact-audit-list {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.react-room-list,
+.react-user-list,
+.settings-side-stack,
+.data-import-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.react-room-list .room-card,
+.react-user-list .user-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.room-card-head,
+.user-card-head,
+.rack-tree-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.room-card-head > div:first-child,
+.user-card-head > div:first-child,
+.rack-tree-item > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.room-card-head span,
+.user-card-head span,
+.rack-tree-item span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rack-tree {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.rack-tree-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.room-add-rack {
+  width: 100%;
+}
+
+.settings-split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-side-panel,
+.settings-side-stack {
+  position: sticky;
+  top: 16px;
+}
+
+.user-card {
+  display: grid;
+  gap: 14px;
+}
+
+.user-fields-react {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.room-access-fieldset {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.room-access-fieldset legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.check-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 4px 16px 4px 0;
+}
+
+.check-row input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.compact-search {
+  width: min(260px, 100%);
+}
+
+.file-action {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed var(--primary-border);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.file-action input {
+  min-height: auto;
+  color: var(--muted);
+}
+
+.system-definition-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.system-definition-list div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.system-definition-list dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.system-definition-list dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+@media (width <= 1180px) {
+  .settings-split-layout,
+  .system-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-side-panel,
+  .settings-side-stack {
+    position: static;
+  }
+
+  .workflow-detail-summary,
+  .system-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 760px) {
+  .workflow-filter-bar .command-bar-filters,
+  .user-fields-react,
+  .workflow-detail-summary,
+  .system-status-grid,
+  .system-definition-list {
+    grid-template-columns: 1fr;
+  }
+
+  .room-card-head,
+  .user-card-head,
+  .rack-tree-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .room-card-head .table-actions,
+  .rack-tree-item .table-actions,
+  .workspace-head-button-row,
+  .workflow-step-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .workflow-detail-modal,
+  .settings-editor-modal {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .modal-backdrop > .modal-shell {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-sm);
+  }
+}
