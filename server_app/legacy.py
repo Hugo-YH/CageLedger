@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
-import base64
 import calendar
-import csv
 import hashlib
-import hmac
 import io
 import json
 import re
 import secrets
 import sqlite3
 import time
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from email.utils import format_datetime
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
-from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
-from urllib.request import Request, urlopen
 
 try:
     import openpyxl
@@ -34,35 +29,75 @@ from server_app.cache import (
     log_perf,
 )
 from server_app.config import (
-    CAGELEDGER_APP_VERSION,
-    CAGELEDGER_BRANCH,
-    CAGELEDGER_CONTACT_EMAIL,
-    CAGELEDGER_COPYRIGHT,
-    CAGELEDGER_DEPARTMENT,
-    CAGELEDGER_DEVELOPER,
-    CAGELEDGER_GITEA_TOKEN,
-    CAGELEDGER_LICENSE,
-    CAGELEDGER_ORGANIZATION,
-    CAGELEDGER_REPOSITORY_URL,
-    CAGELEDGER_REVISION,
-    CAGELEDGER_UPDATE_CHECK_ENABLED,
     DB_PATH,
-    DEFAULT_ADMIN_PASSWORD,
-    DEFAULT_ADMIN_USERNAME,
     HOST,
     IACUC_INDEX_PATH,
     LEGACY_IACUC_INDEX_PATH,
     PORT,
-    ROOT,
     SESSION_COOKIE,
-    SESSION_TTL_DAYS,
     frontend_root,
 )
 from server_app.db import configure_database, connect_db, ensure_database_ready
+from server_app.domains.administration import (
+    action_label,
+    audit_event,
+    authenticate,
+    create_session,
+    create_user,
+    delete_session,
+    delete_user,
+    ensure_default_admin,
+    list_users,
+    merge_audit_logs,
+    system_info,
+    system_update_status,
+    update_user,
+    user_from_token,
+    write_audit_events,
+)
+from server_app.domains.billing import (
+    BILLING_PRINCIPAL_INDEPENDENT,
+    BILLING_TIER_BASE_PRICE,
+    BILLING_TIER_LIMIT,
+    BILLING_TIER_OVER_PRICE,
+    add_charge_group,
+    allocate_daily_free_cages_by_iacuc,
+    billing_free_cages_for_pi,
+    billing_profile_for_occupancy,
+    billing_profile_for_room,
+    combined_daily_charge,
+    dates_in_month,
+    free_cages_for_principal_type,
+    iacuc_free_allowance_eligible,
+    normalize_principal_type,
+    occupancy_active_on_date,
+    occupancy_animal_count,
+    pi_for_iacuc,
+    principal_type_label,
+    quantity_sheet_statement_lines,
+    statement_application_snapshot,
+    statement_billing_unit_from_lines,
+    statement_pi_snapshot,
+)
+from server_app.domains.iacuc import (
+    normalize_application_amount,
+    normalize_application_date,
+    normalize_iacuc_number,
+    parse_iacuc_csv,
+)
+from server_app.domains.intake import (
+    animal_age_text,
+    cage_card_qr_id_from_batch_card,
+    cage_card_status_label,
+    collect_cage_card_qr_ids,
+    is_cage_card_qr_id,
+    legacy_cage_card_qr_id,
+    next_cage_card_qr_id,
+    species_label,
+)
 from server_app.persistence import SchemaRegistry, SchemaStep
 from server_app.persistence.base_schema import initialize_base_schema
 from server_app.persistence.indexes import create_performance_indexes
-from server_app.repositories.audit import insert_audit_events
 from server_app.repositories.billing import (
     billing_workflow_detail_item as billing_workflow_detail_item_repository,
 )
@@ -238,22 +273,6 @@ from server_app.repositories.state import (
 from server_app.repositories.state import (
     read_cached_state as read_cached_state_repository,
 )
-from server_app.repositories.users import (
-    delete_session_by_token_hash,
-    delete_sessions_by_user_id,
-    delete_user_by_id,
-    get_active_user_by_username,
-    get_user_by_id,
-    get_user_by_session_token_hash,
-    has_any_user,
-    insert_session,
-    insert_user,
-    update_user_with_password,
-    update_user_without_password,
-)
-from server_app.repositories.users import (
-    list_users as list_users_repository,
-)
 from server_app.services.billing import (
     save_billing_statement_workflow as save_billing_statement_workflow_service,
 )
@@ -288,91 +307,10 @@ from server_app.services.reimbursement import (
 from server_app.services.reimbursement import (
     coerce_money as coerce_reimbursement_money,
 )
+from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
 from server_app.static import send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
 
-BILLING_PRINCIPAL_PI = "pi"
-BILLING_PRINCIPAL_INDEPENDENT = "independent"
-FREE_CAGES_PI = 20
-FREE_CAGES_INDEPENDENT = 10
-FREE_CAGES_DEFAULT = FREE_CAGES_PI
-BILLING_TIER_LIMIT = 160
-BILLING_TIER_BASE_PRICE = 4.5
-BILLING_TIER_OVER_PRICE = 6.5
-BILLING_RULES = {
-    "mouse_standard": {
-        "species": "mouse",
-        "unit": "cage_day",
-        "internalPrice": 4.5,
-        "externalPrice": 13.5,
-        "tiered": True,
-        "freeAllowance": True,
-    },
-    "mouse_diabetic": {
-        "species": "mouse",
-        "unit": "cage_day",
-        "internalPrice": 7.2,
-        "externalPrice": 21.6,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "rat_standard": {
-        "species": "rat",
-        "unit": "cage_day",
-        "internalPrice": 8.5,
-        "externalPrice": 25.5,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "rat_diabetic": {
-        "species": "rat",
-        "unit": "cage_day",
-        "internalPrice": 14,
-        "externalPrice": 42,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "guinea_pig": {
-        "species": "guinea_pig",
-        "unit": "animal_day",
-        "internalPrice": 3,
-        "externalPrice": 9,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "rabbit": {
-        "species": "rabbit",
-        "unit": "animal_day",
-        "internalPrice": 5,
-        "externalPrice": 15,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "monkey": {
-        "species": "monkey",
-        "unit": "animal_day",
-        "internalPrice": 35,
-        "externalPrice": 65,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "pig": {
-        "species": "pig",
-        "unit": "animal_day",
-        "internalPrice": 15,
-        "externalPrice": 45,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-    "dog": {
-        "species": "dog",
-        "unit": "animal_day",
-        "internalPrice": 15,
-        "externalPrice": 45,
-        "tiered": False,
-        "freeAllowance": False,
-    },
-}
 WORKFLOW_STATUS_IN_FEEDING = "in_feeding"
 WORKFLOW_STATUS_GENERATED = "statement_generated"
 WORKFLOW_STATUS_SENT = "statement_sent"
@@ -983,199 +921,6 @@ def current_occupancy_by_slot(state):
         if item.get("slotId") and item.get("status") in ("active", "reserved"):
             current[item.get("slotId")] = item
     return current
-
-
-def base36_encode(value):
-    digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    number = int(value or 0)
-    if number <= 0:
-        return "0"
-    output = ""
-    while number:
-        number, remainder = divmod(number, 36)
-        output = digits[remainder] + output
-    return output
-
-
-def hash_base36(value, length=8):
-    hash_value = 1469598103934665603
-    mask = (1 << 64) - 1
-    for char in str(value or ""):
-        hash_value ^= ord(char)
-        hash_value = (hash_value * 1099511628211) & mask
-    return base36_encode(hash_value).rjust(length, "0")[-length:]
-
-
-CAGE_CARD_QR_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-CAGE_CARD_QR_LENGTH = 4
-CAGE_CARD_QR_CAPACITY = len(CAGE_CARD_QR_ALPHABET) ** CAGE_CARD_QR_LENGTH
-CAGE_CARD_QR_MULTIPLIER = 739391
-CAGE_CARD_QR_OFFSET = 48691
-
-
-def modular_inverse(value, modulo):
-    current = value
-    next_value = modulo
-    current_coeff = 1
-    next_coeff = 0
-    while next_value:
-        quotient = current // next_value
-        current, next_value = next_value, current - quotient * next_value
-        current_coeff, next_coeff = next_coeff, current_coeff - quotient * next_coeff
-    if current != 1:
-        raise ValueError("短码置换参数无效")
-    return current_coeff % modulo
-
-
-CAGE_CARD_QR_INVERSE = modular_inverse(CAGE_CARD_QR_MULTIPLIER, CAGE_CARD_QR_CAPACITY)
-
-
-def is_cage_card_qr_id(value):
-    text = clean_text(value).upper()
-    return bool(
-        re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{{CAGE_CARD_QR_LENGTH}}}", text) or re.fullmatch(r"[A-Z0-9]{8}", text)
-    )
-
-
-def encode_cage_card_sequence(sequence):
-    value = max(as_int(sequence) or 1, 1)
-    permuted = ((value - 1) * CAGE_CARD_QR_MULTIPLIER + CAGE_CARD_QR_OFFSET) % CAGE_CARD_QR_CAPACITY
-    output = ""
-    number = permuted
-    for _ in range(CAGE_CARD_QR_LENGTH):
-        output = CAGE_CARD_QR_ALPHABET[number % len(CAGE_CARD_QR_ALPHABET)] + output
-        number //= len(CAGE_CARD_QR_ALPHABET)
-    return output
-
-
-def decode_cage_card_sequence(qr_id):
-    text = clean_text(qr_id).upper()
-    if not re.fullmatch(rf"[{CAGE_CARD_QR_ALPHABET}]{{{CAGE_CARD_QR_LENGTH}}}", text):
-        return None
-    number = 0
-    for char in text:
-        digit = CAGE_CARD_QR_ALPHABET.find(char)
-        if digit < 0:
-            return None
-        number = number * len(CAGE_CARD_QR_ALPHABET) + digit
-    return (((number - CAGE_CARD_QR_OFFSET + CAGE_CARD_QR_CAPACITY) * CAGE_CARD_QR_INVERSE) % CAGE_CARD_QR_CAPACITY) + 1
-
-
-def collect_cage_card_qr_ids(state, exclude_batch_id=""):
-    used = set()
-    excluded_task_ids = set()
-
-    def add(value):
-        qr_id = clean_text(value).upper()
-        if is_cage_card_qr_id(qr_id):
-            used.add(qr_id)
-
-    for batch in state.get("intakeBatches", []):
-        if exclude_batch_id and batch.get("id") == exclude_batch_id:
-            continue
-        for card in batch.get("cards") or []:
-            if isinstance(card, dict):
-                add(card.get("qrId"))
-    for task in state.get("placementTasks", []):
-        if exclude_batch_id and task.get("sourceBatchId") == exclude_batch_id:
-            if task.get("id"):
-                excluded_task_ids.add(task.get("id"))
-            continue
-        add(task.get("qrId"))
-    for occupancy in state.get("occupancies", []):
-        if (
-            exclude_batch_id
-            and occupancy.get("placementTaskId")
-            and occupancy.get("placementTaskId") in excluded_task_ids
-        ):
-            continue
-        add(occupancy.get("qrId"))
-    return used
-
-
-def next_cage_card_qr_id(used_qr_ids):
-    next_sequence = 1
-    for qr_id in used_qr_ids:
-        sequence = decode_cage_card_sequence(qr_id)
-        if sequence:
-            next_sequence = max(next_sequence, sequence + 1)
-    for offset in range(CAGE_CARD_QR_CAPACITY):
-        candidate = encode_cage_card_sequence(next_sequence + offset)
-        if candidate not in used_qr_ids:
-            return candidate
-    raise ValueError("笼卡短码已用尽")
-
-
-def cage_card_qr_id(batch, sequence):
-    batch_id = clean_text(batch.get("id") or batch.get("sourceBatchId") or "batch") or "batch"
-    card_no = str(max(as_int(sequence) or 0, 0)).zfill(2)
-    return hash_base36(f"{batch_id}:{card_no}", 8)
-
-
-def cage_card_qr_id_from_batch_card(batch, sequence):
-    cards = batch.get("cards") if isinstance(batch.get("cards"), list) else []
-    index = max(as_int(sequence) or 0, 0) - 1
-    if 0 <= index < len(cards) and isinstance(cards[index], dict):
-        qr_id = clean_text(cards[index].get("qrId")).upper()
-        if is_cage_card_qr_id(qr_id):
-            return qr_id
-    return cage_card_qr_id(batch, sequence)
-
-
-def legacy_cage_card_qr_id(batch, sequence):
-    iacuc = clean_text(batch.get("iacuc") or "NOIACUC") or "NOIACUC"
-    intake_date = clean_text(batch.get("intakeDate") or "nodate").replace("-", "")
-    card_no = str(max(as_int(sequence) or 0, 0)).zfill(2)
-    return "-".join([iacuc, intake_date, card_no])
-
-
-def species_label(value):
-    return {
-        "mouse": "小鼠",
-        "rat": "大鼠",
-        "guinea_pig": "豚鼠",
-        "rabbit": "兔",
-        "monkey": "猴",
-        "dog": "犬",
-        "pig": "猪",
-    }.get(clean_text(value), clean_text(value))
-
-
-def cage_card_status_label(batch, task, occupancy):
-    if occupancy:
-        return {"reserved": "已预留", "active": "已入驻", "ended": "已结束"}.get(
-            occupancy.get("status"), occupancy.get("status", "")
-        )
-    if task:
-        return {"pending": "待进驻", "reserved": "已预留", "active": "已入驻", "cancelled": "已取消"}.get(
-            task.get("status"), task.get("status", "")
-        )
-    return {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}.get(
-        batch.get("status"), batch.get("status", "")
-    )
-
-
-def animal_age_text(birth_date, reference_date=None):
-    raw = clean_text(birth_date)
-    if not raw:
-        return ""
-    try:
-        birth = date.fromisoformat(raw)
-        reference = date.fromisoformat(clean_text(reference_date)) if reference_date else date.today()
-    except ValueError:
-        return ""
-    if reference < birth:
-        return ""
-    months = (reference.year - birth.year) * 12 + reference.month - birth.month
-    if reference.day < birth.day:
-        months -= 1
-    years = months // 12
-    remaining_months = months % 12
-    if years and remaining_months:
-        return f"{years}岁{remaining_months}个月"
-    if years:
-        return f"{years}岁"
-    return f"{max(months, 0)}个月"
 
 
 def public_cage_card_payload(conn, qr_id):
@@ -2951,186 +2696,6 @@ def occupancy_structured_values(occupancy):
     }
 
 
-def as_int(value):
-    return int(value) if value not in (None, "") else None
-
-
-def as_float(value):
-    return float(value) if value not in (None, "") else None
-
-
-def ensure_default_admin(conn):
-    if has_any_user(conn):
-        return
-    now = now_iso()
-    insert_user(
-        conn,
-        {
-            "id": new_id("user"),
-            "username": DEFAULT_ADMIN_USERNAME,
-            "display_name": "系统管理员",
-            "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
-            "role": "admin",
-            "room_ids": "[]",
-            "active": 1,
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    conn.commit()
-
-
-def hash_password(password):
-    salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
-    return "pbkdf2_sha256$200000$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(digest).decode()
-
-
-def verify_password(password, password_hash):
-    try:
-        algorithm, iterations, salt_text, digest_text = password_hash.split("$", 3)
-        if algorithm != "pbkdf2_sha256":
-            return False
-        salt = base64.b64decode(salt_text)
-        expected = base64.b64decode(digest_text)
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations))
-        return hmac.compare_digest(actual, expected)
-    except Exception:
-        return False
-
-
-def create_session(conn, user_id):
-    token = secrets.token_urlsafe(32)
-    token_hash = hash_token(token)
-    now = datetime.now(UTC)
-    expires_at = now + timedelta(days=SESSION_TTL_DAYS)
-    insert_session(conn, token_hash, user_id, now.isoformat(), expires_at.isoformat())
-    conn.commit()
-    return token, expires_at
-
-
-def delete_session(conn, token):
-    if not token:
-        return
-    delete_session_by_token_hash(conn, hash_token(token))
-    conn.commit()
-
-
-def hash_token(token):
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def user_from_token(conn, token):
-    if not token:
-        return None
-    return get_user_by_session_token_hash(conn, hash_token(token), now_iso(), sanitize_user)
-
-
-def authenticate(conn, username, password):
-    row = get_active_user_by_username(conn, username)
-    if not row or not verify_password(password, row["password_hash"]):
-        return None
-    return sanitize_user(row)
-
-
-def sanitize_user(row):
-    if not row:
-        return None
-    return {
-        "id": row["id"],
-        "username": row["username"],
-        "displayName": row["display_name"],
-        "role": row["role"],
-        "roomIds": json.loads(row["room_ids"] or "[]"),
-        "active": bool(row["active"]),
-    }
-
-
-def list_users(conn):
-    return list_users_repository(conn, sanitize_user)
-
-
-def create_user(conn, payload):
-    username = str(payload.get("username", "")).strip()
-    password = str(payload.get("password", ""))
-    display_name = str(payload.get("displayName", "")).strip() or username
-    role = payload.get("role", "room_admin")
-    room_ids = payload.get("roomIds", [])
-    if not username or not password:
-        raise ValueError("用户名和密码不能为空")
-    if role not in ("admin", "room_admin"):
-        raise ValueError("角色只能是 admin 或 room_admin")
-    if not isinstance(room_ids, list):
-        raise ValueError("roomIds 必须是数组")
-
-    now = now_iso()
-    user_id = new_id("user")
-    insert_user(
-        conn,
-        {
-            "id": user_id,
-            "username": username,
-            "display_name": display_name,
-            "password_hash": hash_password(password),
-            "role": role,
-            "room_ids": dump_json(room_ids),
-            "active": 1,
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-    conn.commit()
-    row = get_user_by_id(conn, user_id)
-    return sanitize_user(row)
-
-
-def update_user(conn, actor, user_id, payload):
-    if user_id == actor["id"]:
-        raise PermissionError("不能在账号管理中修改当前登录账号")
-
-    row = get_user_by_id(conn, user_id)
-    if not row:
-        raise LookupError("账号不存在")
-
-    username = str(payload.get("username", row["username"])).strip()
-    display_name = str(payload.get("displayName", row["display_name"])).strip() or username
-    password = str(payload.get("password", ""))
-    role = payload.get("role", row["role"])
-    room_ids = payload.get("roomIds", json.loads(row["room_ids"] or "[]"))
-
-    if not username:
-        raise ValueError("用户名不能为空")
-    if role not in ("admin", "room_admin"):
-        raise ValueError("角色只能是 admin 或 room_admin")
-    if not isinstance(room_ids, list):
-        raise ValueError("roomIds 必须是数组")
-
-    now = now_iso()
-    if password:
-        update_user_with_password(
-            conn, user_id, username, display_name, hash_password(password), role, dump_json(room_ids), now
-        )
-    else:
-        update_user_without_password(conn, user_id, username, display_name, role, dump_json(room_ids), now)
-    delete_sessions_by_user_id(conn, user_id)
-    conn.commit()
-    row = get_user_by_id(conn, user_id)
-    return sanitize_user(row)
-
-
-def delete_user(conn, actor, user_id):
-    if user_id == actor["id"]:
-        raise PermissionError("不能删除当前登录账号")
-
-    row = get_user_by_id(conn, user_id)
-    if not row:
-        raise LookupError("账号不存在")
-
-    delete_sessions_by_user_id(conn, user_id)
-    delete_user_by_id(conn, user_id)
-    conn.commit()
-
-
 def validate_state_write_permission(conn, actor, old_state, new_state):
     if actor["role"] == "admin":
         return
@@ -3304,61 +2869,6 @@ def build_audit_events(actor, old_state, new_state, at):
     return events[:100]
 
 
-def action_label(action):
-    if action.endswith(".created"):
-        return "新增"
-    if action.endswith(".deleted"):
-        return "删除"
-    return "更新"
-
-
-def audit_event(actor, action, entity_type, entity_id, message, slot_ids, at, before, after):
-    return {
-        "id": new_id("audit"),
-        "actorUserId": actor["id"],
-        "actorUsername": actor["username"],
-        "actorDisplayName": actor["displayName"],
-        "action": action,
-        "entityType": entity_type,
-        "entityId": entity_id,
-        "message": message,
-        "slotIds": slot_ids,
-        "at": at,
-        "before": before,
-        "after": after,
-    }
-
-
-def write_audit_events(conn, events):
-    insert_audit_events(conn, events)
-    if events:
-        invalidate_data_cache_prefixes("audit_events::")
-
-
-def merge_audit_logs(client_logs, events):
-    normalized_events = [
-        {
-            "id": event["id"],
-            "message": event["message"],
-            "at": event["at"],
-            "actorUsername": event["actorUsername"],
-            "actorDisplayName": event["actorDisplayName"],
-            "action": event["action"],
-            "slotIds": event["slotIds"],
-        }
-        for event in events
-    ]
-    seen = set()
-    merged = []
-    for item in normalized_events + list(client_logs):
-        item_id = item.get("id")
-        if item_id in seen:
-            continue
-        seen.add(item_id)
-        merged.append(item)
-    return merged[:500]
-
-
 def write_perf_summary(started_at, rows_changed=0, **fields):
     return {
         "total_ms": round((time.perf_counter() - started_at) * 1000, 1),
@@ -3378,18 +2888,6 @@ def slot_label_map(state):
         rack_code = str(rack_index).zfill(2) if str(rack_index).isdigit() else str(rack_index)
         labels[slot.get("id")] = f"{room.get('name', '')}-{rack_code}-{slot.get('code', '')}".strip("-")
     return labels
-
-
-def new_id(prefix):
-    return f"{prefix}-{secrets.token_hex(8)}"
-
-
-def now_iso():
-    return datetime.now(UTC).isoformat()
-
-
-def today_iso():
-    return datetime.now().date().isoformat()
 
 
 def format_http_date(value):
@@ -3700,404 +3198,6 @@ def save_iacuc_index_file(items):
     save_iacuc_index_file_repository(IACUC_INDEX_PATH, items)
 
 
-def system_update_status():
-    current = current_revision()
-    current_version = normalize_release_version(app_version())
-    if not CAGELEDGER_UPDATE_CHECK_ENABLED:
-        return {
-            "repository": CAGELEDGER_REPOSITORY_URL,
-            "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
-            "branch": CAGELEDGER_BRANCH,
-            "appVersion": app_version(),
-            "current": current or None,
-            "currentShort": short_revision(current),
-            "currentVersion": current_version or None,
-            "latest": None,
-            "latestShort": "",
-            "latestVersion": None,
-            "latestUrl": None,
-            "latestMessage": None,
-            "latestDate": None,
-            "updateAvailable": None,
-            "checkedAt": now_iso(),
-            "disabled": True,
-        }
-
-    latest = latest_remote_release()
-    latest_sha = latest.get("sha") or ""
-    latest_version = normalize_release_version(latest.get("version"))
-    update_available = None
-    if current_version and latest_version:
-        update_available = compare_release_versions(current_version, latest_version) < 0
-
-    return {
-        "repository": CAGELEDGER_REPOSITORY_URL,
-        "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
-        "branch": CAGELEDGER_BRANCH,
-        "appVersion": app_version(),
-        "current": current or None,
-        "currentShort": short_revision(current),
-        "currentVersion": current_version or None,
-        "latest": latest_sha or None,
-        "latestShort": short_revision(latest_sha),
-        "latestVersion": latest_version or None,
-        "latestUrl": latest.get("url"),
-        "latestMessage": latest.get("message"),
-        "latestDate": latest.get("date"),
-        "updateAvailable": update_available,
-        "checkedAt": now_iso(),
-    }
-
-
-def system_info():
-    return {
-        "name": "CageLedger",
-        "title": "CageLedger 实验动物笼位管理与计费系统",
-        "description": "实验动物笼位管理与计费系统",
-        "version": app_version(),
-        "organization": CAGELEDGER_ORGANIZATION,
-        "department": CAGELEDGER_DEPARTMENT,
-        "developer": CAGELEDGER_DEVELOPER,
-        "contactEmail": CAGELEDGER_CONTACT_EMAIL,
-        "license": CAGELEDGER_LICENSE,
-        "copyright": CAGELEDGER_COPYRIGHT,
-        "repository": CAGELEDGER_REPOSITORY_URL,
-        "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
-        "branch": CAGELEDGER_BRANCH,
-        "revision": current_revision() or None,
-        "revisionShort": short_revision(current_revision()),
-    }
-
-
-def app_version():
-    if CAGELEDGER_APP_VERSION:
-        return CAGELEDGER_APP_VERSION
-    package_path = ROOT / "package.json"
-    try:
-        return json.loads(package_path.read_text(encoding="utf-8")).get("version", "")
-    except (OSError, json.JSONDecodeError):
-        return ""
-
-
-def current_revision():
-    if CAGELEDGER_REVISION:
-        return CAGELEDGER_REVISION
-    return read_git_revision(ROOT)
-
-
-def read_git_revision(root):
-    git_dir = root / ".git"
-    if git_dir.is_file():
-        content = git_dir.read_text(encoding="utf-8", errors="replace").strip()
-        if content.startswith("gitdir:"):
-            git_dir = (git_dir.parent / content.split(":", 1)[1].strip()).resolve()
-    if not git_dir.exists():
-        return ""
-
-    head_path = git_dir / "HEAD"
-    if not head_path.exists():
-        return ""
-    head = head_path.read_text(encoding="utf-8", errors="replace").strip()
-    if head.startswith("ref:"):
-        ref = head.split(":", 1)[1].strip()
-        ref_path = git_dir / ref
-        if ref_path.exists():
-            return ref_path.read_text(encoding="utf-8", errors="replace").strip()
-        packed_refs = git_dir / "packed-refs"
-        if packed_refs.exists():
-            for line in packed_refs.read_text(encoding="utf-8", errors="replace").splitlines():
-                if not line or line.startswith("#") or line.startswith("^"):
-                    continue
-                sha, _, packed_ref = line.partition(" ")
-                if packed_ref == ref:
-                    return sha.strip()
-        return ""
-    return head
-
-
-def latest_remote_release():
-    repository = parse_gitea_repository_url(CAGELEDGER_REPOSITORY_URL)
-    url = f"{repository['baseUrl']}/api/v1/repos/{repository['owner']}/{repository['repo']}/releases/latest"
-    headers = {"Accept": "application/json", "User-Agent": "CageLedger"}
-    if CAGELEDGER_GITEA_TOKEN:
-        headers["Authorization"] = f"token {CAGELEDGER_GITEA_TOKEN}"
-    request = Request(url, headers=headers)
-    try:
-        with urlopen(request, timeout=8) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        if exc.code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND):
-            raise ValueError("Gitea 更新检查失败：请确认仓库地址正确，并为私有仓库配置只读 token") from exc
-        raise ValueError(f"Gitea 返回错误：HTTP {exc.code}") from exc
-    except URLError as exc:
-        raise ValueError(f"无法连接 Gitea：{exc.reason}") from exc
-    except TimeoutError as exc:
-        raise ValueError("连接 Gitea 超时") from exc
-
-    tag_name = str(payload.get("tag_name") or "").strip()
-    if not tag_name:
-        raise ValueError("Gitea 未返回可用发布版本")
-
-    return {
-        "sha": payload.get("target_commitish", ""),
-        "version": tag_name,
-        "url": payload.get("html_url", ""),
-        "message": first_line(payload.get("name", "") or payload.get("body", "")),
-        "date": payload.get("published_at") or payload.get("created_at") or "",
-    }
-
-
-def parse_gitea_repository_url(value):
-    parsed = urlparse(str(value or "").strip())
-    path_parts = [part for part in parsed.path.strip("/").split("/") if part]
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or len(path_parts) < 2:
-        raise ValueError("项目仓库地址无效")
-
-    owner = path_parts[-2]
-    repo = path_parts[-1]
-    if repo.endswith(".git"):
-        repo = repo[:-4]
-    if not owner or not repo:
-        raise ValueError("项目仓库地址无效")
-
-    return {
-        "baseUrl": f"{parsed.scheme}://{parsed.netloc}",
-        "owner": owner,
-        "repo": repo,
-    }
-
-
-def revisions_match(current, latest):
-    current = str(current or "").strip()
-    latest = str(latest or "").strip()
-    return bool(current and latest and (current.startswith(latest) or latest.startswith(current)))
-
-
-def normalize_release_version(value):
-    return str(value or "").strip().removeprefix("v")
-
-
-def release_version_key(value):
-    version = normalize_release_version(value)
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)([A-Za-z]*)(\d*)", version)
-    if not match:
-        return None
-    major, minor, patch, suffix, suffix_number = match.groups()
-    return (
-        int(major),
-        int(minor),
-        int(patch),
-        suffix or "",
-        int(suffix_number) if suffix_number else -1,
-    )
-
-
-def compare_release_versions(left, right):
-    left_key = release_version_key(left)
-    right_key = release_version_key(right)
-    if left_key is None or right_key is None:
-        return (normalize_release_version(left) > normalize_release_version(right)) - (
-            normalize_release_version(left) < normalize_release_version(right)
-        )
-    return (left_key > right_key) - (left_key < right_key)
-
-
-def short_revision(value):
-    value = str(value or "").strip()
-    return value[:7] if value else None
-
-
-def first_line(value):
-    return str(value or "").splitlines()[0] if value else ""
-
-
-def parse_iacuc_csv(raw):
-    text = decode_csv_bytes(raw)
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
-        raise ValueError("CSV 文件缺少表头")
-
-    field_by_name = {clean_text(name): name for name in reader.fieldnames if clean_text(name)}
-    field_by_compact = {compact_field_name(name): name for name in reader.fieldnames if compact_field_name(name)}
-    required = {
-        "iacuc": "动物伦理编号",
-        "project": "动物实验名称",
-        "pi": "项目负责人",
-        "owner": "实验负责人",
-    }
-    required_fields = {
-        key: field_name_for_labels(field_by_name, field_by_compact, [label]) for key, label in required.items()
-    }
-    missing = [required[key] for key, field_name in required_fields.items() if not field_name]
-    if missing:
-        raise ValueError(f"CSV 缺少必要列：{', '.join(missing)}")
-    optional_fields = {
-        "funding": field_name_for_labels(
-            field_by_name, field_by_compact, ("项目来源", "支撑经费", "经费来源", "课题来源", "经费项目")
-        ),
-        "fundCode": field_name_for_labels(field_by_name, field_by_compact, ("经费号", "经费本编号", "经费编号")),
-        "supportProjectPeriod": field_name_for_labels(
-            field_by_name, field_by_compact, ("支撑科研项目起止时间", "科研项目起止时间", "项目起止时间")
-        ),
-        "experimentNo": field_name_for_labels(field_by_name, field_by_compact, ("动物实验编号", "实验编号")),
-        "species": field_name_for_labels(field_by_name, field_by_compact, ("动物品系", "品系", "动物种类")),
-        "facility": field_name_for_labels(field_by_name, field_by_compact, ("动物实验场所", "实验场所", "动物房")),
-        "maxFeedingPeriod": field_name_for_labels(field_by_name, field_by_compact, ("最长饲养周期", "饲养周期")),
-        "iacucApprovalDate": field_name_for_labels(
-            field_by_name, field_by_compact, ("动物伦理通过日期", "伦理通过日期", "伦理批准日期")
-        ),
-        "applicationApprovalDate": field_name_for_labels(
-            field_by_name, field_by_compact, ("实验申请通过日期", "申请通过日期", "实验批准日期")
-        ),
-        "projectStartDate": field_name_for_labels(
-            field_by_name, field_by_compact, ("实验开始日期", "项目开始日期", "开始日期")
-        ),
-        "projectEndDate": field_name_for_labels(
-            field_by_name, field_by_compact, ("实验结束日期", "项目结束日期", "结束日期", "有效期至")
-        ),
-        "approvedFeedingFee": field_name_for_labels(
-            field_by_name, field_by_compact, ("实验审核通过饲养费（元）", "审核通过饲养费", "批准饲养费")
-        ),
-        "approvalLeader": field_name_for_labels(field_by_name, field_by_compact, ("中心审批领导", "审批领导")),
-        "actualFeedingFee": field_name_for_labels(
-            field_by_name, field_by_compact, ("实际产生饲养费（元）", "实际产生饲养费", "实际饲养费")
-        ),
-        "pendingReimbursementFee": field_name_for_labels(
-            field_by_name, field_by_compact, ("待报销饲养费（元）", "待报销饲养费", "欠缴饲养费")
-        ),
-        "assistant": field_name_for_labels(field_by_name, field_by_compact, ("实验助手", "助手")),
-        "notes": field_name_for_labels(field_by_name, field_by_compact, ("备注", "说明")),
-        "applicationDate": field_name_for_labels(field_by_name, field_by_compact, ("申请日期", "提交日期")),
-    }
-
-    items = []
-    duplicate_count = 0
-    row_count = 0
-    empty_iacuc_count = 0
-    seen_iacucs = set()
-    for row in reader:
-        row_count += 1
-        raw_iacuc = csv_value(row, required_fields["iacuc"])
-        iacuc = normalize_iacuc_number(raw_iacuc)
-        if not iacuc:
-            empty_iacuc_count += 1
-            continue
-        if iacuc in seen_iacucs:
-            duplicate_count += 1
-        seen_iacucs.add(iacuc)
-        items.append(
-            {
-                "id": f"app-{row_count:06d}",
-                "iacuc": raw_iacuc,
-                "rawIacuc": raw_iacuc,
-                "project": csv_value(row, required_fields["project"]),
-                "pi": csv_value(row, required_fields["pi"]),
-                "owner": csv_value(row, required_fields["owner"]),
-                "funding": csv_value(row, optional_fields["funding"]),
-                "fundCode": csv_value(row, optional_fields["fundCode"]),
-                "supportProjectPeriod": csv_value(row, optional_fields["supportProjectPeriod"]),
-                "experimentNo": csv_value(row, optional_fields["experimentNo"]),
-                "species": csv_value(row, optional_fields["species"]),
-                "facility": csv_value(row, optional_fields["facility"]),
-                "maxFeedingPeriod": csv_value(row, optional_fields["maxFeedingPeriod"]),
-                "iacucApprovalDate": csv_value(row, optional_fields["iacucApprovalDate"]),
-                "applicationApprovalDate": csv_value(row, optional_fields["applicationApprovalDate"]),
-                "projectStartDate": csv_value(row, optional_fields["projectStartDate"]),
-                "projectEndDate": csv_value(row, optional_fields["projectEndDate"]),
-                "approvedFeedingFee": csv_value(row, optional_fields["approvedFeedingFee"]),
-                "approvalLeader": csv_value(row, optional_fields["approvalLeader"]),
-                "actualFeedingFee": csv_value(row, optional_fields["actualFeedingFee"]),
-                "pendingReimbursementFee": csv_value(row, optional_fields["pendingReimbursementFee"]),
-                "assistant": csv_value(row, optional_fields["assistant"]),
-                "notes": csv_value(row, optional_fields["notes"]),
-                "applicationDate": csv_value(row, optional_fields["applicationDate"]),
-                "rawFields": clean_csv_raw_fields(row),
-            }
-        )
-
-    return {
-        "items": items,
-        "summary": {
-            "rowCount": row_count,
-            "count": len(items),
-            "emptyIacucCount": empty_iacuc_count,
-            "duplicateCount": duplicate_count,
-        },
-    }
-
-
-def decode_csv_bytes(raw):
-    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
-        try:
-            return raw.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    raise ValueError("CSV 编码无法识别，请使用 UTF-8 或 GB18030")
-
-
-def clean_text(value):
-    if value is None:
-        return ""
-    return re.sub(r"\s+", " ", str(value).strip())
-
-
-def compact_field_name(value):
-    return re.sub(r"\s+", "", clean_text(value))
-
-
-def field_name_for_labels(field_by_name, field_by_compact, labels):
-    for label in labels:
-        clean_label = clean_text(label)
-        if clean_label in field_by_name:
-            return field_by_name[clean_label]
-        compact_label = compact_field_name(label)
-        if compact_label in field_by_compact:
-            return field_by_compact[compact_label]
-    return None
-
-
-def clean_csv_raw_fields(row):
-    raw_fields = {}
-    for header, value in row.items():
-        name = clean_text(header)
-        if not name:
-            continue
-        raw_fields[name] = clean_text(value)
-    return raw_fields
-
-
-def csv_value(row, field_name):
-    return clean_text(row.get(field_name, "")) if field_name else ""
-
-
-def normalize_application_date(value):
-    text = clean_text(value)
-    if not text:
-        return ""
-    text = text.replace("年", "-").replace("月", "-").replace("日", "")
-    text = re.sub(r"[./]", "-", text)
-    text = re.sub(r"\s*00:00:00$", "", text)
-    match = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", text)
-    if not match:
-        return text
-    year, month, day = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-    try:
-        return date(year, month, day).isoformat()
-    except ValueError:
-        return clean_text(value)
-
-
-def normalize_application_amount(value):
-    text = clean_text(value)
-    if not text:
-        return None
-    normalized = re.sub(r"[,\s￥¥元]", "", text)
-    try:
-        return round(float(normalized), 2)
-    except ValueError:
-        return text
-
-
 def bounded_int(value, default, min_value, max_value):
     try:
         number = int(value)
@@ -4116,17 +3216,6 @@ def filtered_where(filter_specs, filters):
         where.append(expression)
         params.append(value)
     return " AND ".join(where), tuple(params)
-
-
-def normalize_iacuc_number(value):
-    text = clean_text(value)
-    text = re.sub(r"（.*?）", "", text)
-    text = re.sub(r"\(.*?\)", "", text)
-    return text.strip()
-
-
-def is_valid_iacuc_number(value):
-    return bool(re.search(r"\d", value))
 
 
 def list_quantity_sheets(conn):
@@ -4499,208 +3588,6 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     return statement, lines, merge_audit_logs([], [event])
 
 
-def free_cage_allocation_sort_key(item):
-    priority = as_int(item.get("freeCagePriority"))
-    priority_value = priority if priority is not None else 999999
-    return (max(priority_value, 0), normalize_iacuc_number(item.get("iacuc", "")))
-
-
-def iacuc_free_allowance_eligible(application, target_date):
-    start_date = normalize_application_date((application or {}).get("projectStartDate", ""))
-    end_date = normalize_application_date((application or {}).get("projectEndDate", ""))
-    if start_date and target_date < start_date:
-        return False
-    if end_date and target_date > end_date:
-        return False
-    return True
-
-
-def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
-    remaining_by_iacuc = {}
-    allocations = {}
-    eligible = []
-    for item in breakdown or []:
-        if not item.get("freeAllowance") or item.get("freeEligible") is False or item.get("billingUnit") != "cage_day":
-            continue
-        count = max(as_int(item.get("cageCount")) or 0, 0)
-        iacuc = normalize_iacuc_number(item.get("iacuc", ""))
-        if not count or not iacuc:
-            continue
-        entry = {
-            "iacuc": iacuc,
-            "cageCount": count,
-            "preferredFreeCages": max(as_int(item.get("preferredFreeCages")) or 0, 0),
-            "freeCagePriority": as_int(item.get("freeCagePriority")),
-        }
-        eligible.append(entry)
-        remaining_by_iacuc[iacuc] = remaining_by_iacuc.get(iacuc, 0) + count
-        allocations.setdefault(iacuc, 0)
-
-    remaining = max(as_int(free_cages) or 0, 0)
-    for item in sorted(
-        (entry for entry in eligible if entry["preferredFreeCages"] > 0), key=free_cage_allocation_sort_key
-    ):
-        if remaining <= 0:
-            break
-        current_remaining = remaining_by_iacuc.get(item["iacuc"], 0)
-        applied = min(item["preferredFreeCages"], current_remaining, remaining)
-        if applied <= 0:
-            continue
-        allocations[item["iacuc"]] = allocations.get(item["iacuc"], 0) + applied
-        remaining_by_iacuc[item["iacuc"]] = current_remaining - applied
-        remaining -= applied
-
-    while remaining > 0:
-        candidates = [
-            {**item, "remainingCages": remaining_by_iacuc.get(item["iacuc"], 0)}
-            for item in eligible
-            if remaining_by_iacuc.get(item["iacuc"], 0) > 0
-        ]
-        if not candidates:
-            break
-        coverable = sorted(
-            (item for item in candidates if item["remainingCages"] <= remaining), key=free_cage_allocation_sort_key
-        )
-        if coverable:
-            target = coverable[0]
-            allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
-            remaining_by_iacuc[target["iacuc"]] = 0
-            remaining -= target["remainingCages"]
-            continue
-        target = sorted(candidates, key=free_cage_allocation_sort_key)[0]
-        allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + remaining
-        remaining_by_iacuc[target["iacuc"]] = max(target["remainingCages"] - remaining, 0)
-        remaining = 0
-
-    return allocations
-
-
-def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_by_iacuc=None):
-    if not sheets:
-        return []
-
-    applications_by_iacuc = applications_by_iacuc or {}
-    room_by_id = {room.get("id"): room for room in rooms or []}
-    sheet_states = []
-    sheet_state_by_iacuc = {}
-    month = sheets[0]["month"]
-    for sheet in sheets:
-        rows_by_date = {}
-        for row in sheet.get("rows", []):
-            rows_by_date.setdefault(row["date"], []).append(row)
-        profile = billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit"))
-        state = {
-            "sheet": sheet,
-            "rowsByDate": rows_by_date,
-            "profile": profile,
-            "animalCount": sheet.get("initialAnimalCount") or 0,
-            "cageCount": sheet.get("initialCageCount") or 0,
-        }
-        sheet_states.append(state)
-        iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
-        if iacuc and iacuc not in sheet_state_by_iacuc:
-            sheet_state_by_iacuc[iacuc] = state
-
-    cumulative = 0
-    lines = []
-    for line_date in dates_in_month(month):
-        transfer_deltas = {}
-        breakdown = []
-        animal_count = 0
-        cage_count = 0
-        charge_groups = {}
-        quantity_row_ids = []
-        for state in sheet_states:
-            day_rows = state["rowsByDate"].get(line_date, [])
-            for row in day_rows:
-                added_count = row.get("addedCount") or 0
-                removed_count = row.get("removedCount") or 0
-                profile = state["profile"]
-                if profile["unit"] == "animal_day":
-                    if row.get("animalCount") is not None:
-                        state["animalCount"] = row.get("animalCount") or 0
-                    else:
-                        state["animalCount"] = max(state["animalCount"] + added_count - removed_count, 0)
-                    if row.get("cageCount") is not None:
-                        state["cageCount"] = row.get("cageCount") or 0
-                else:
-                    if row.get("cageCount") is not None:
-                        state["cageCount"] = row.get("cageCount") or 0
-                    else:
-                        state["cageCount"] = max(state["cageCount"] + added_count - removed_count, 0)
-                    if row.get("animalCount") is not None:
-                        state["animalCount"] = row.get("animalCount") or 0
-                transfer_out_iacuc = normalize_iacuc_number(row.get("transferOutToIacuc", ""))
-                if transfer_out_iacuc and removed_count > 0:
-                    transfer_deltas[transfer_out_iacuc] = transfer_deltas.get(transfer_out_iacuc, 0) + removed_count
-                transfer_in_from_iacuc = normalize_iacuc_number(row.get("transferInFromIacuc", ""))
-                if transfer_in_from_iacuc and added_count > 0:
-                    transfer_deltas[transfer_in_from_iacuc] = (
-                        transfer_deltas.get(transfer_in_from_iacuc, 0) - added_count
-                    )
-            sheet = state["sheet"]
-            quantity_row_ids.extend(row["id"] for row in day_rows)
-
-        for iacuc, delta in transfer_deltas.items():
-            target = sheet_state_by_iacuc.get(iacuc)
-            if not target:
-                continue
-            if target["profile"]["unit"] == "animal_day":
-                target["animalCount"] = max((target.get("animalCount") or 0) + delta, 0)
-            else:
-                target["cageCount"] = max((target.get("cageCount") or 0) + delta, 0)
-
-        for state in sheet_states:
-            sheet = state["sheet"]
-            profile = state["profile"]
-            animal_count += state["animalCount"]
-            cage_count += state["cageCount"]
-            charge_count = state["animalCount"] if profile["unit"] == "animal_day" else state["cageCount"]
-            add_charge_group(charge_groups, profile, charge_count)
-            if state["cageCount"] or state["animalCount"]:
-                sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
-                application = applications_by_iacuc.get(sheet_iacuc, {})
-                breakdown.append(
-                    {
-                        "iacuc": sheet.get("iacuc", ""),
-                        "project": sheet.get("project", ""),
-                        "animalCount": state["animalCount"],
-                        "cageCount": state["cageCount"],
-                        "billingItem": profile["billingItem"],
-                        "billingUnit": profile["unit"],
-                        "customerType": profile["customerType"],
-                        "unitPrice": profile["unitPrice"],
-                        "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
-                        "tiered": bool(profile["tiered"]),
-                        "freeAllowance": bool(profile["freeAllowance"]),
-                        "freeEligible": iacuc_free_allowance_eligible(application or sheet, line_date),
-                        "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0),
-                        "freeCagePriority": as_int(sheet.get("freeCagePriority")),
-                        "freeCages": 0,
-                    }
-                )
-
-        free_allocations = allocate_daily_free_cages_by_iacuc(breakdown, free_cages)
-        for item in breakdown:
-            item["freeCages"] = free_allocations.get(normalize_iacuc_number(item.get("iacuc", "")), 0)
-        charges = combined_daily_charge(charge_groups, sum(free_allocations.values()))
-        cumulative += charges["amount"]
-        lines.append(
-            {
-                "id": new_id("line"),
-                "date": line_date,
-                "animalCount": animal_count,
-                "cageCount": cage_count,
-                **charges,
-                "cumulative": cumulative,
-                "iacucBreakdown": breakdown,
-                "quantitySheetRowIds": quantity_row_ids,
-                "occupancyIds": [],
-            }
-        )
-    return lines
-
-
 def generate_billing_statement(conn, payload, actor):
     iacuc = normalize_iacuc_number(payload.get("iacuc", ""))
     requested_pi = clean_text(payload.get("pi", ""))
@@ -5069,368 +3956,11 @@ def generate_billing_statement_by_pi(conn, payload, actor):
     return statement, lines, merge_audit_logs([], [event])
 
 
-def dates_in_month(month):
-    year, month_no = [int(part) for part in month.split("-")]
-    day_count = calendar.monthrange(year, month_no)[1]
-    return [f"{year:04d}-{month_no:02d}-{day:02d}" for day in range(1, day_count + 1)]
-
-
-def tiered_daily_charge(cage_count, free_cages):
-    cage_count = max(as_int(cage_count) or 0, 0)
-    free_cages = min(max(as_int(free_cages) or 0, 0), cage_count)
-    tier1_cages = min(cage_count, BILLING_TIER_LIMIT)
-    tier2_cages = max(cage_count - BILLING_TIER_LIMIT, 0)
-    tier1_free = min(free_cages, tier1_cages)
-    tier2_free = min(max(free_cages - tier1_free, 0), tier2_cages)
-    tier1_billable = max(tier1_cages - tier1_free, 0)
-    tier2_billable = max(tier2_cages - tier2_free, 0)
-    amount = tier1_billable * BILLING_TIER_BASE_PRICE + tier2_billable * BILLING_TIER_OVER_PRICE
-    return {
-        "freeCages": free_cages,
-        "billableCages": tier1_billable + tier2_billable,
-        "tier1Cages": tier1_cages,
-        "tier2Cages": tier2_cages,
-        "tier1BillableCages": tier1_billable,
-        "tier2BillableCages": tier2_billable,
-        "unitPrice": BILLING_TIER_BASE_PRICE,
-        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
-        "discountPercent": 0,
-        "amount": amount,
-    }
-
-
-def normalize_billing_item(value):
-    text = clean_text(value)
-    return text if text in BILLING_RULES else "mouse_standard"
-
-
-def normalize_customer_type(value):
-    return "external" if clean_text(value) == "external" else "internal"
-
-
-def normalize_billing_unit(value):
-    return "animal_day" if clean_text(value) == "animal_day" else "cage_day"
-
-
-def billing_item_for_species(species):
-    return {
-        "mouse": "mouse_standard",
-        "rat": "rat_standard",
-        "guinea_pig": "guinea_pig",
-        "rabbit": "rabbit",
-        "monkey": "monkey",
-        "pig": "pig",
-        "dog": "dog",
-    }.get(clean_text(species), "mouse_standard")
-
-
-def infer_billing_item_from_room(room=None):
-    room = room or {}
-    text = " ".join(
-        clean_text(room.get(key, ""))
-        for key in ("name", "area", "defaultSpecies", "species")
-        if clean_text(room.get(key, ""))
-    )
-    if re.search(r"糖尿病.*大鼠|大鼠.*糖尿病", text):
-        return "rat_diabetic"
-    if re.search(r"糖尿病.*小鼠|小鼠.*糖尿病", text):
-        return "mouse_diabetic"
-    if "豚鼠" in text:
-        return "guinea_pig"
-    if "大鼠" in text:
-        return "rat_standard"
-    if "兔" in text:
-        return "rabbit"
-    if "猴" in text:
-        return "monkey"
-    if "犬" in text or "狗" in text:
-        return "dog"
-    if "猪" in text:
-        return "pig"
-    if "小鼠" in text:
-        return "mouse_standard"
-    return ""
-
-
-def room_has_manual_billing_profile(room=None, inferred_billing_item=""):
-    room = room or {}
-    if room.get("billingProfileConfirmed"):
-        return True
-    if not room.get("billingProfileConfigured"):
-        return False
-    fallback_mouse = clean_text(room.get("defaultBillingItem", "")) in ("", "mouse_standard") and clean_text(
-        room.get("defaultSpecies", "")
-    ) in ("", "mouse")
-    return not (fallback_mouse and inferred_billing_item and inferred_billing_item != "mouse_standard")
-
-
-def billing_profile_for_room(room=None, fallback_unit=None):
-    room = room or {}
-    inferred_billing_item = infer_billing_item_from_room(room)
-    manual_billing = room_has_manual_billing_profile(room, inferred_billing_item)
-    billing_item = normalize_billing_item(
-        (room.get("defaultBillingItem") if manual_billing else inferred_billing_item)
-        or room.get("defaultBillingItem")
-        or billing_item_for_species(room.get("defaultSpecies", "mouse"))
-    )
-    if fallback_unit == "animal_day" and billing_item == "mouse_standard":
-        billing_item = "guinea_pig"
-    rule = BILLING_RULES.get(billing_item, BILLING_RULES["mouse_standard"])
-    customer_type = normalize_customer_type(room.get("defaultCustomerType", "internal"))
-    unit_price = rule["externalPrice"] if customer_type == "external" else rule["internalPrice"]
-    return {
-        "facility": clean_text(room.get("facility", "zhujiang")) or "zhujiang",
-        "species": rule["species"],
-        "billingItem": billing_item,
-        "customerType": customer_type,
-        "unit": rule["unit"],
-        "unitPrice": unit_price,
-        "tiered": bool(rule.get("tiered") and customer_type == "internal"),
-        "freeAllowance": bool(rule.get("freeAllowance") and customer_type == "internal"),
-        "defaultAnimalCount": max(as_int(room.get("defaultAnimalCount")) or 1, 1),
-    }
-
-
-def billing_profile_for_occupancy(occupancy, state):
-    slot = next((item for item in state.get("slots", []) if item.get("id") == occupancy.get("slotId")), None)
-    rack = next((item for item in state.get("racks", []) if item.get("id") == (slot or {}).get("rackId")), None)
-    room = next((item for item in state.get("rooms", []) if item.get("id") == (rack or {}).get("roomId")), None)
-    base = billing_profile_for_room(room)
-    billing_item = normalize_billing_item(occupancy.get("billingItem") or base["billingItem"])
-    rule = BILLING_RULES.get(billing_item, BILLING_RULES["mouse_standard"])
-    customer_type = normalize_customer_type(occupancy.get("customerType") or base["customerType"])
-    unit_price = rule["externalPrice"] if customer_type == "external" else rule["internalPrice"]
-    return {
-        **base,
-        "species": rule["species"],
-        "billingItem": billing_item,
-        "customerType": customer_type,
-        "unit": rule["unit"],
-        "unitPrice": unit_price,
-        "tiered": bool(rule.get("tiered") and customer_type == "internal"),
-        "freeAllowance": bool(rule.get("freeAllowance") and customer_type == "internal"),
-    }
-
-
-def occupancy_animal_count(occupancy, profile):
-    return max(as_int(occupancy.get("animalCount")) or as_int(profile.get("defaultAnimalCount")) or 1, 1)
-
-
-def flat_daily_charge(count, profile):
-    count = max(as_int(count) or 0, 0)
-    amount = count * float(profile.get("unitPrice") or 0)
-    if profile.get("unit") == "animal_day":
-        return {
-            "freeCages": 0,
-            "billableCages": 0,
-            "tier1Cages": 0,
-            "tier2Cages": 0,
-            "tier1BillableCages": 0,
-            "tier2BillableCages": 0,
-            "billableAnimals": count,
-            "unitPrice": profile.get("unitPrice") or 0,
-            "overageUnitPrice": 0,
-            "discountPercent": 0,
-            "amount": amount,
-        }
-    return {
-        "freeCages": 0,
-        "billableCages": count,
-        "tier1Cages": count,
-        "tier2Cages": 0,
-        "tier1BillableCages": count,
-        "tier2BillableCages": 0,
-        "billableAnimals": 0,
-        "unitPrice": profile.get("unitPrice") or 0,
-        "overageUnitPrice": 0,
-        "discountPercent": 0,
-        "amount": amount,
-    }
-
-
-def add_charge_group(groups, profile, count):
-    count = max(as_int(count) or 0, 0)
-    if count <= 0:
-        return
-    key = "|".join(
-        [
-            profile.get("billingItem", ""),
-            profile.get("customerType", ""),
-            profile.get("unit", ""),
-            str(profile.get("unitPrice") or 0),
-        ]
-    )
-    if key not in groups:
-        groups[key] = {"profile": profile, "count": 0}
-    groups[key]["count"] += count
-
-
-def combined_daily_charge(groups, free_cages):
-    total = {
-        "freeCages": 0,
-        "billableCages": 0,
-        "tier1Cages": 0,
-        "tier2Cages": 0,
-        "tier1BillableCages": 0,
-        "tier2BillableCages": 0,
-        "billableAnimals": 0,
-        "unitPrice": BILLING_TIER_BASE_PRICE,
-        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
-        "discountPercent": 0,
-        "amount": 0,
-    }
-    remaining_free_cages = max(as_int(free_cages) or 0, 0)
-    for group in groups.values():
-        profile = group["profile"]
-        count = group["count"]
-        if profile.get("tiered"):
-            allowance = remaining_free_cages if profile.get("freeAllowance") else 0
-            charges = tiered_daily_charge(count, allowance)
-            remaining_free_cages = max(remaining_free_cages - charges.get("freeCages", 0), 0)
-        else:
-            charges = flat_daily_charge(count, profile)
-        for key in (
-            "freeCages",
-            "billableCages",
-            "tier1Cages",
-            "tier2Cages",
-            "tier1BillableCages",
-            "tier2BillableCages",
-            "billableAnimals",
-            "amount",
-        ):
-            total[key] += charges.get(key, 0)
-        total["unitPrice"] = charges.get("unitPrice", total["unitPrice"])
-        if charges.get("overageUnitPrice"):
-            total["overageUnitPrice"] = charges.get("overageUnitPrice")
-    return total
-
-
-def statement_billing_unit_from_lines(lines):
-    has_animals = any((line.get("animalCount") or 0) > 0 for line in lines)
-    has_cages = any((line.get("cageCount") or 0) > 0 for line in lines)
-    if has_animals and has_cages:
-        return "mixed"
-    return "animal_day" if has_animals else "cage_day"
-
-
-def occupancy_active_on_date(item, date):
-    if item.get("status") not in ("active", "ended"):
-        return False
-    if not item.get("startDate") or item.get("startDate") > date:
-        return False
-    if item.get("endDate") and item.get("endDate") < date:
-        return False
-    return True
-
-
-def billing_unit_price_for(rules, date):
-    for rule in rules:
-        after_start = not rule.get("effectiveStart") or rule.get("effectiveStart") <= date
-        before_end = not rule.get("effectiveEnd") or rule.get("effectiveEnd") >= date
-        if rule.get("unit") == "cage_day" and after_start and before_end:
-            return float(rule.get("price") or 0)
-    return 4.5
-
-
-def billing_discount_for(adjustments, iacuc, date):
-    for adjustment in adjustments:
-        in_range = (not adjustment.get("effectiveStart") or adjustment.get("effectiveStart") <= date) and (
-            not adjustment.get("effectiveEnd") or adjustment.get("effectiveEnd") >= date
-        )
-        if (
-            adjustment.get("targetType") == "iacuc"
-            and normalize_iacuc_number(adjustment.get("targetId", "")) == iacuc
-            and adjustment.get("type") == "discount"
-            and in_range
-        ):
-            return float(adjustment.get("value") or 0)
-    return 0
-
-
-def billing_free_cages_for(adjustments, pi_name):
-    for adjustment in adjustments:
-        if (
-            adjustment.get("targetType") == "pi"
-            and clean_text(adjustment.get("targetId", "")) == pi_name
-            and adjustment.get("type") == "free_cages"
-        ):
-            if adjustment.get("principalType"):
-                return free_cages_for_principal_type(adjustment.get("principalType"))
-            return max(as_int(adjustment.get("value")) or 0, 0)
-    return FREE_CAGES_DEFAULT
-
-
 def read_principal_type_by_pi(conn):
     return {
         clean_text(pi_name): normalize_principal_type(principal_type)
         for pi_name, principal_type in read_principal_type_by_pi_repository(conn).items()
         if clean_text(pi_name)
-    }
-
-
-def billing_free_cages_for_pi(principal_type_by_pi, pi_name):
-    return free_cages_for_principal_type(principal_type_by_pi.get(clean_text(pi_name), BILLING_PRINCIPAL_INDEPENDENT))
-
-
-def normalize_principal_type(value):
-    return BILLING_PRINCIPAL_PI if value == BILLING_PRINCIPAL_PI else BILLING_PRINCIPAL_INDEPENDENT
-
-
-def free_cages_for_principal_type(value):
-    return FREE_CAGES_PI if normalize_principal_type(value) == BILLING_PRINCIPAL_PI else FREE_CAGES_INDEPENDENT
-
-
-def principal_type_label(value):
-    return "PI" if normalize_principal_type(value) == BILLING_PRINCIPAL_PI else "独立科研人员"
-
-
-def pi_for_iacuc(iacuc, applications_by_iacuc, occupancies):
-    if not iacuc:
-        return ""
-    application = applications_by_iacuc.get(iacuc)
-    if application and application.get("pi"):
-        return clean_text(application.get("pi", ""))
-    for item in occupancies:
-        if normalize_iacuc_number(item.get("iacuc", "")) == iacuc and item.get("pi"):
-            return clean_text(item.get("pi", ""))
-    return ""
-
-
-def statement_application_snapshot(iacuc, applications_by_iacuc, occupancies):
-    application = applications_by_iacuc.get(iacuc)
-    if application:
-        return application
-    for item in occupancies:
-        if normalize_iacuc_number(item.get("iacuc", "")) == iacuc:
-            return {
-                "project": item.get("project", ""),
-                "pi": item.get("pi", ""),
-                "owner": item.get("owner", ""),
-                "funding": item.get("funding", ""),
-            }
-    return {}
-
-
-def statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies):
-    projects = []
-    owners = []
-    fundings = []
-    for application in applications_by_iacuc.values():
-        if clean_text(application.get("pi", "")) == pi_name:
-            projects.append(application.get("project", ""))
-            owners.append(application.get("owner", ""))
-            fundings.append(application.get("funding", ""))
-    for item in occupancies:
-        if clean_text(item.get("pi", "")) == pi_name:
-            projects.append(item.get("project", ""))
-            owners.append(item.get("owner", ""))
-            fundings.append(item.get("funding", ""))
-    return {
-        "project": "、".join(sorted({value for value in projects if value})),
-        "pi": pi_name,
-        "owner": "、".join(sorted({value for value in owners if value})),
-        "funding": "、".join(sorted({value for value in fundings if value})),
     }
 
 

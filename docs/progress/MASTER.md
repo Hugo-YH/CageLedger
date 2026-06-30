@@ -20,7 +20,7 @@
 | ----- | ------------------- | ----: | ---: | -------: |
 | 1     | 行为基线与架构门禁  |     4 |    4 |     100% |
 | 2     | 后端平台层          |     4 |    4 |     100% |
-| 3     | 后端领域拆分        |     5 |    0 |       0% |
+| 3     | 后端领域拆分        |     5 |    4 |      80% |
 | 4     | 前端领域拆分        |     5 |    0 |       0% |
 | 5     | CSS、脚本与测试结构 |     4 |    0 |       0% |
 | 6     | 全链路验收与归档    |     4 |    0 |       0% |
@@ -29,7 +29,7 @@
 
 - [x] Phase 1: 行为基线与架构门禁 (4/4) — [details](./phase-1-baseline.md)
 - [x] Phase 2: 后端平台层 (4/4) — [details](./phase-2-platform.md)
-- [ ] Phase 3: 后端领域拆分 (0/5) — [details](./phase-3-backend-domains.md)
+- [ ] Phase 3: 后端领域拆分 (4/5) — [details](./phase-3-backend-domains.md)
 - [ ] Phase 4: 前端领域拆分 (0/5) — [details](./phase-4-frontend-domains.md)
 - [ ] Phase 5: CSS、脚本与测试结构 (0/4) — [details](./phase-5-assets-tooling.md)
 - [ ] Phase 6: 全链路验收与归档 (0/4) — [details](./phase-6-validation.md)
@@ -37,7 +37,7 @@
 ## Current Status
 
 **Active Phase**: Phase 3
-**Active Task**: 3.1 拆 administration、audit、system 与 iacuc
+**Active Task**: 3.5 拆 reimbursement 与 Excel import
 **Blockers**: None
 
 ## Adaptive Control State
@@ -46,29 +46,33 @@
 | ----- | ----: | -------: | -----: | ------: | --------: |
 | 1     |     0 |        1 |      2 |       3 |       4/4 |
 | 2     |     0 |        1 |      2 |       3 |       4/4 |
-| 3     |     0 |        1 |      2 |       3 |       0/5 |
+| 3     |     0 |        1 |      2 |       3 |       4/5 |
 | 4     |     0 |        1 |      2 |       3 |       0/5 |
 | 5     |     0 |        1 |      2 |       3 |       0/4 |
 | 6     |     0 |        1 |      2 |       3 |       0/4 |
 
 ## Task Telemetry Log
 
-| Task | Estimated | Actual | SUPER | Unplanned Deps | Drift | Notes                            |
-| ---- | --------- | ------ | ----: | -------------: | ----: | -------------------------------- |
-| 1.1  | S         | S      | 10/10 |              0 |     0 | 规格、进度和 Skill 校验完成      |
-| 1.2  | L         | S      | 10/10 |              0 |     0 | 业务与 API 特征测试完成          |
-| 1.3  | M         | M      | 10/10 |              0 |     0 | 打印与三档视觉契约完成           |
-| 1.4  | M         | S      | 10/10 |              0 |     0 | report-only 架构检查完成         |
-| 2.1  | L         | M      | 10/10 |              0 |     0 | schema registry、建表与索引完成  |
-| 2.2  | L         | M      | 10/10 |              0 |     0 | HTTP 基类、响应与 Router 完成    |
-| 2.3  | L         | M      |  9/10 |              0 |     0 | 平台路由切换，领域 fallback 保留 |
-| 2.4  | M         | S      | 10/10 |              0 |     0 | server.py 收敛为兼容启动入口     |
+| Task | Estimated | Actual | SUPER | Unplanned Deps | Drift | Notes                             |
+| ---- | --------- | ------ | ----: | -------------: | ----: | --------------------------------- |
+| 1.1  | S         | S      | 10/10 |              0 |     0 | 规格、进度和 Skill 校验完成       |
+| 1.2  | L         | S      | 10/10 |              0 |     0 | 业务与 API 特征测试完成           |
+| 1.3  | M         | M      | 10/10 |              0 |     0 | 打印与三档视觉契约完成            |
+| 1.4  | M         | S      | 10/10 |              0 |     0 | report-only 架构检查完成          |
+| 2.1  | L         | M      | 10/10 |              0 |     0 | schema registry、建表与索引完成   |
+| 2.2  | L         | M      | 10/10 |              0 |     0 | HTTP 基类、响应与 Router 完成     |
+| 2.3  | L         | M      |  9/10 |              0 |     0 | 平台路由切换，领域 fallback 保留  |
+| 2.4  | M         | S      | 10/10 |              0 |     0 | server.py 收敛为兼容启动入口      |
+| 3.1  | L         | M      |  9/10 |              0 |     0 | 管理、审计、系统与 IACUC 领域完成 |
+| 3.2  | L         | M      |  9/10 |              0 |     0 | intake、QR 与笼位 service 归域    |
+| 3.3  | L         | M      | 10/10 |              0 |     0 | 数量统计 service/repository 拆分  |
+| 3.4  | L         | L      |  9/10 |              0 |     0 | 计费规则与流程 repository 拆分    |
 
 ## Next Steps
 
-1. 拆 administration、audit、system 与 iacuc。
-2. 拆 intake、QR 与 cages/placement。
-3. 按 quantity、billing、workflow、reimbursement 顺序清空 legacy。
+1. 拆 reimbursement Excel 导入并切换领域路由。
+2. 完成 Query hooks 与大型 React View 拆分。
+3. 按现有级联顺序拆分 CSS。
 
 ## Session Log
 

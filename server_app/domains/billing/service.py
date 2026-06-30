@@ -1,3 +1,1 @@
-"""Compatibility exports for the billing workflow domain."""
-
 from server_app.domains.workflow.service import *  # noqa: F403

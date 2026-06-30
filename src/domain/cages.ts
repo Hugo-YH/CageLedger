@@ -1,4 +1,4 @@
-import type { CageSlot, Occupancy } from "../react/api/contracts";
+import type { CageSlot, Occupancy } from "../contracts/infrastructure";
 
 export function currentOccupancy(slotId: string, occupancies: Occupancy[]) {
   return (

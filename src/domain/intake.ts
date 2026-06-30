@@ -1,4 +1,4 @@
-import type { IntakeBatch, IntakeBatchStatus } from "../react/api/contracts";
+import type { IntakeBatch, IntakeBatchStatus } from "../contracts/intake";
 
 const validStatuses = new Set<IntakeBatchStatus>(["draft", "pending_print", "printed", "received"]);
 

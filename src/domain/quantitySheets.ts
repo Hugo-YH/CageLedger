@@ -1,4 +1,5 @@
-import type { BillingUnit, CageRoom, QuantitySheet, QuantitySheetRow } from "../react/api/contracts";
+import type { CageRoom } from "../contracts/infrastructure";
+import type { BillingUnit, QuantitySheet, QuantitySheetRow } from "../contracts/quantity";
 
 const animalDayItems = new Set(["guinea_pig", "rabbit", "monkey", "pig", "dog"]);
 
