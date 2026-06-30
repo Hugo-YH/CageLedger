@@ -5,13 +5,13 @@
 ## 验证结果
 
 - `npm run check`：通过，含 Prettier、ESLint、Stylelint、Markdownlint、Ruff、ShellCheck、TypeScript、Vitest、Python unittest 和架构强制门禁。
-- `npm run test:e2e`：9 项通过，覆盖登录导航、笼卡、数量统计、权限、公开扫码、可访问性和三档视觉契约。
+- `npm run test:e2e`：9 项一次通过，覆盖登录导航、笼卡、数量统计、权限、公开扫码、可访问性和三档视觉契约。
 - API smoke：隔离 SQLite 下 8 个端点通过。
 - 旧库迁移：正式库副本在临时目录完成幂等迁移，可读取 26 张表和 3 个用户。
 - 性能：1 万笼位、10 万记录下，单查询 P95 最高 1.65 ms，20 并发 P95 6.58 ms。
 - 构建：Vite 生产构建通过，主 CSS 129.63 kB，业务页面继续独立拆包。
 - 离线包：`CageLedger-offline-v0.5.25.tar.gz` 生成成功。
-- Docker：当前开发机缺少 Docker CLI，镜像实构由 Gitea CI 或发布机补充。
+- Docker：使用 Docker CLI + Colima 完成多阶段镜像实构，测试容器 `/api/health` 返回正常。
 
 ## 兼容边界
 

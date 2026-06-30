@@ -20,9 +20,8 @@ export const test = base.extend({
 });
 
 export async function ensureTestInfrastructure(page: Page) {
-  const response = await page.request.get("/api/rooms");
-  const payload = (await response.json()) as { items?: Array<{ id: string; name: string }> };
-  if ((payload.items || []).some((room) => room.name === "8014")) return;
+  // Every create is idempotent at the API boundary. Running the full sequence
+  // avoids observing another worker's partially-created room hierarchy.
   await page.request.post("/api/rooms", {
     data: {
       item: {

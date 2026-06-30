@@ -2,7 +2,7 @@
 
 > **Task**: 严格兼容现有行为，将前后端、样式、脚本和测试拆为领域内分层模块
 > **Started**: 2026-06-30
-> **Last Updated**: 2026-06-30
+> **Last Updated**: 2026-07-01
 > **Mode**: LOCAL_ONLY
 
 ## References
@@ -23,7 +23,7 @@
 | 3     | 后端领域拆分        |     5 |    5 |     100% |
 | 4     | 前端领域拆分        |     5 |    5 |     100% |
 | 5     | CSS、脚本与测试结构 |     4 |    4 |     100% |
-| 6     | 全链路验收与归档    |     4 |    3 |      75% |
+| 6     | 全链路验收与归档    |     4 |    4 |     100% |
 
 ## Phase Checklist
 
@@ -32,13 +32,13 @@
 - [x] Phase 3: 后端领域拆分 (5/5) — [details](./phase-3-backend-domains.md)
 - [x] Phase 4: 前端领域拆分 (5/5) — [details](./phase-4-frontend-domains.md)
 - [x] Phase 5: CSS、脚本与测试结构 (4/4) — [details](./phase-5-assets-tooling.md)
-- [ ] Phase 6: 全链路验收与归档 (3/4) — [details](./phase-6-validation.md)
+- [x] Phase 6: 全链路验收与归档 (4/4) — [details](./phase-6-validation.md)
 
 ## Current Status
 
-**Active Phase**: Phase 6
-**Active Task**: 6.3 Docker 镜像实构验证
-**Blockers**: 当前开发机缺少 Docker CLI 与 daemon
+**Active Phase**: Complete
+**Active Task**: None
+**Blockers**: None
 
 ## Adaptive Control State
 
@@ -49,7 +49,7 @@
 | 3     |     0 |        1 |      2 |       3 |       5/5 |
 | 4     |     0 |        1 |      2 |       3 |       5/5 |
 | 5     |     0 |        1 |      2 |       3 |       4/4 |
-| 6     |     0 |        1 |      2 |       3 |       3/4 |
+| 6     |     0 |        1 |      2 |       3 |       4/4 |
 
 ## Task Telemetry Log
 
@@ -79,16 +79,18 @@
 | 5.4  | M         | S      | 10/10 |              0 |     0 | 强制架构检查接入 npm check        |
 | 6.1  | L         | M      | 10/10 |              0 |     0 | 旧库、API、E2E 与打印回归通过     |
 | 6.2  | M         | S      | 10/10 |              0 |     0 | benchmark、构建与包体记录完成     |
+| 6.3  | M         | M      | 10/10 |              1 |     0 | 安装临时容器运行时并完成健康检查  |
 | 6.4  | S         | S      | 10/10 |              0 |     0 | 契约、Wiki 与项目资料归档完成     |
 
 ## Next Steps
 
-1. 拆 reimbursement Excel 导入并切换领域路由。
-2. 完成 Query hooks 与大型 React View 拆分。
-3. 按现有级联顺序拆分 CSS。
+1. 提交并推送模块化分支。
+2. 在 Gitea Pull Request 中执行 CI。
+3. 合并后按正常版本流程发布。
 
 ## Session Log
 
 | Date       | Session | Summary                            |
 | ---------- | ------- | ---------------------------------- |
 | 2026-06-30 | Initial | 创建拆分分支并建立规格驱动执行资料 |
+| 2026-07-01 | Final   | 完成旧库、E2E、性能、离线包和容器验收 |
