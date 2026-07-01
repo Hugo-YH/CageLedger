@@ -119,9 +119,60 @@ describe("print templates", () => {
     expect(html).toContain("Z1");
     expect(html).toContain("Z2");
     expect(html).toContain("9.00");
+    expect(html).toContain('<th colspan="3">Z1</th>');
+    expect(html).toContain('<th colspan="3">Z2</th>');
+    expect(html).toContain('<td class="money">0.00</td>');
+    expect(html).not.toContain("梯度笼数");
     expect(html).toContain('class="meta-table"');
     expect(html).toContain('class="sign-table"');
     expect(html).toContain("@page{size:A4;margin:10mm}");
+  });
+
+  it("hides unused allowance columns and keeps paid amounts explicit", () => {
+    const result = {
+      statement: {
+        id: "s2",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["Z1", "Z2"],
+        project: "项目",
+        pi: "张教授",
+        owner: "",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 6,
+        totalCageDays: 12,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 6,
+        totalBillableCageDays: 6,
+        totalTier2CageDays: 0,
+        totalAmount: 27,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 0,
+          cageCount: 12,
+          freeCages: 6,
+          billableCages: 6,
+          amount: 27,
+          cumulative: 27,
+          iacucBreakdown: [
+            { iacuc: "Z1", cageCount: 6, freeCages: 6, unitPrice: 4.5 },
+            { iacuc: "Z2", cageCount: 6, freeCages: 0, unitPrice: 4.5 },
+          ],
+        },
+      ],
+    } as BillingStatementResponse;
+    const html = settlementStatementHtml(result, false);
+    expect(html).toContain('<th colspan="3">Z1</th>');
+    expect(html).toContain('<th colspan="2">Z2</th>');
+    expect(html.match(/<th>减免<\/th>/g)).toHaveLength(1);
+    expect(html).toContain('<td class="money">0.00</td>');
+    expect(html).toContain('<td class="money">27.00</td>');
+    expect(html).not.toContain("梯度笼数");
+    expect(html).toContain('class="date-column"');
   });
 
   it("keeps the official quantity document title and two-column page structure", () => {

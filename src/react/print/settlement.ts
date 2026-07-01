@@ -21,22 +21,6 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   const unit = resolveUnit(statement, lines);
   const iacucs = collectIacucs(statement, lines);
   const model = lines.map((line) => modelLine(line, iacucs, unit));
-  const documentNumber = statement.documentNumber || documentNumberFor(statement);
-  const lookupUrl = `${window.location.origin}${window.location.pathname}?s=${encodeURIComponent(documentNumber)}`;
-  const titleSuffix =
-    unit === "cage_day" && Number(statement.freeCageAllowance || 0) > 0
-      ? `（减免${numberText(statement.freeCageAllowance)}笼）`
-      : "";
-  const title = `${escapeHtml(statement.pi || "-")}课题组实验动物饲养费核算汇总表${titleSuffix}`;
-  const columns = iacucs
-    .map(
-      (iacuc, index) =>
-        `<th colspan="3">${escapeHtml(index === 0 && Number(statement.totalTier2CageDays || 0) > 0 ? `${iacuc}（梯度收费）` : iacuc)}</th>`,
-    )
-    .join("");
-  const subColumns = iacucs
-    .map(() => `<th>${unit === "animal_day" ? "数量" : "笼数"}</th><th>减免</th><th>缴纳（元）</th>`)
-    .join("");
   const totals = iacucs.map((iacuc) =>
     model.reduce(
       (sum, row) => {
@@ -50,27 +34,54 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
       { count: 0, free: 0, amount: 0 },
     ),
   );
+  const hasTieredCharges = Number(statement.totalTier2CageDays || 0) > 0;
+  const iacucColumns = iacucs.map((iacuc, index) => ({
+    iacuc,
+    showFree: totals[index].free > 0,
+    span: totals[index].free > 0 ? 3 : 2,
+  }));
+  const leadingColumnCount = hasTieredCharges ? 4 : 3;
+  const tableColumnCount = leadingColumnCount + iacucColumns.reduce((sum, column) => sum + column.span, 0);
+  const documentNumber = statement.documentNumber || documentNumberFor(statement);
+  const lookupUrl = `${window.location.origin}${window.location.pathname}?s=${encodeURIComponent(documentNumber)}`;
+  const titleSuffix =
+    unit === "cage_day" && Number(statement.freeCageAllowance || 0) > 0
+      ? `（减免${numberText(statement.freeCageAllowance)}笼）`
+      : "";
+  const title = `${escapeHtml(statement.pi || "-")}课题组实验动物饲养费核算汇总表${titleSuffix}`;
+  const columns = iacucColumns
+    .map(
+      ({ iacuc, span }, index) =>
+        `<th colspan="${span}">${escapeHtml(index === 0 && hasTieredCharges ? `${iacuc}（梯度收费）` : iacuc)}</th>`,
+    )
+    .join("");
+  const subColumns = iacucColumns
+    .map(
+      ({ showFree }) =>
+        `<th>${unit === "animal_day" ? "数量" : "笼数"}</th>${showFree ? "<th>减免</th>" : ""}<th>缴纳（元）</th>`,
+    )
+    .join("");
   const detailRows = model
     .map(
       (row) =>
-        `<tr><td>${escapeHtml(row.date)}</td><td class="num">${numberText(row.totalCount)}</td><td class="num">${numberText(row.totalFree)}</td><td class="num">${numberText(row.totalTier2)}</td>${iacucs
-          .map((iacuc) => {
+        `<tr><td>${escapeHtml(row.date)}</td><td class="num">${numberText(row.totalCount)}</td><td class="num">${numberText(row.totalFree)}</td>${hasTieredCharges ? `<td class="num">${numberText(row.totalTier2)}</td>` : ""}${iacucColumns
+          .map(({ iacuc, showFree }) => {
             const item = row.perIacuc.get(iacuc) || { count: 0, free: 0, amount: 0 };
-            return `<td class="num">${numberText(item.count)}</td><td class="num">${numberText(item.free)}</td><td class="money">${item.amount ? money(item.amount) : ""}</td>`;
+            return `<td class="num">${numberText(item.count)}</td>${showFree ? `<td class="num">${numberText(item.free)}</td>` : ""}<td class="money">${money(item.amount)}</td>`;
           })
           .join("")}</tr>`,
     )
     .join("");
   const detailTotals = totals
     .map(
-      (item) =>
-        `<td class="num">${numberText(item.count)}</td><td class="num">${numberText(item.free)}</td><td class="money">${item.amount ? money(item.amount) : ""}</td>`,
+      (item, index) =>
+        `<td class="num">${numberText(item.count)}</td>${iacucColumns[index].showFree ? `<td class="num">${numberText(item.free)}</td>` : ""}<td class="money">${money(item.amount)}</td>`,
     )
     .join("");
   const totalCount = unit === "animal_day" ? statement.totalAnimalDays : statement.totalCageDays;
   return `<main class="document"><section class="header"><div class="header-grid"><div><h1>${title}</h1><p class="subtitle">实验动物中心</p><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div><div class="qr-box">${qrCodeSvg(lookupUrl, "结算单二维码")}<span>扫码访问在线单据</span></div></div></section>
 <table class="meta-table"><tbody><tr><td>出具科室：实验动物中心</td><td>计费单位：${unit === "animal_day" ? "只/天" : "笼/天"}</td><td>实验负责人：${escapeHtml(statement.owner || "-")}</td><td>支撑经费：${escapeHtml(statement.funding || "-")}</td></tr><tr><td colspan="4">IACUC 编号：${escapeHtml(iacucs.join("、") || "-")}</td></tr></tbody></table>
-<table class="summary-table"><thead><tr><th rowspan="2">日期</th><th rowspan="2">${unit === "animal_day" ? "总数量" : "总笼数"}</th><th rowspan="2">减免总${unit === "animal_day" ? "数量" : "笼数"}</th><th rowspan="2">梯度${unit === "animal_day" ? "数量" : "笼数"}</th>${columns}</tr><tr>${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td><td class="num">${numberText(totalCount)}</td><td class="num">${numberText(statement.totalFreeCageDays)}</td><td class="num">${numberText(statement.totalTier2CageDays)}</td>${detailTotals}</tr><tr><td class="row-label">本月待缴纳饲养费总计（元）</td><td colspan="3" class="money">${money(statement.totalAmount)}</td>${totals.map((item) => `<td colspan="3" class="meta-summary">单位支持 ${money(item.free * 4.5)} ／ 实际待缴纳 ${money(item.amount)}</td>`).join("")}</tr><tr><td class="row-label">未缴纳月份</td><td colspan="${3 + iacucs.length * 3}">　　　　　　　　　　　　　　未缴纳饲养费总计（元）：　　　　　　　　　　　　　　</td></tr></tfoot></table>
+<table class="summary-table"><thead><tr><th class="date-column" rowspan="2">日期</th><th rowspan="2">${unit === "animal_day" ? "总数量" : "总笼数"}</th><th rowspan="2">减免总${unit === "animal_day" ? "数量" : "笼数"}</th>${hasTieredCharges ? `<th rowspan="2">梯度${unit === "animal_day" ? "数量" : "笼数"}</th>` : ""}${columns}</tr><tr>${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td><td class="num">${numberText(totalCount)}</td><td class="num">${numberText(statement.totalFreeCageDays)}</td>${hasTieredCharges ? `<td class="num">${numberText(statement.totalTier2CageDays)}</td>` : ""}${detailTotals}</tr><tr><td class="row-label">本月待缴纳饲养费总计（元）</td><td colspan="${leadingColumnCount - 1}" class="money">${money(statement.totalAmount)}</td>${totals.map((item, index) => `<td colspan="${iacucColumns[index].span}" class="meta-summary">单位支持 ${money(item.free * 4.5)} ／ 实际待缴纳 ${money(item.amount)}</td>`).join("")}</tr><tr><td class="row-label">未缴纳月份</td><td colspan="${tableColumnCount - 1}">　　　　　　　　　　　　　　未缴纳饲养费总计（元）：　　　　　　　　　　　　　　</td></tr></tfoot></table>
 <div class="note-line">说明：</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><footer class="footer"><span>CageLedger · Apache-2.0</span><span>${escapeHtml(documentNumber)}</span></footer></main>`;
 }
 
@@ -138,7 +149,7 @@ function modelLine(line: BillingStatementLine, iacucs: string[], unit: string) {
       current.free += free;
       current.amount += group.tiered
         ? tier1 * group.unitPrice + tier2 * group.overageUnitPrice
-        : count * group.unitPrice;
+        : billable * group.unitPrice;
     }
   }
   return {
@@ -190,5 +201,5 @@ function escapeHtml(value: unknown) {
   );
 }
 function styles() {
-  return `@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;min-height:277mm;margin:0 auto}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:flex;justify-content:space-between;gap:10px}h1{font-size:15px;line-height:1.1;margin:0 0 4px}.subtitle{margin:0}.meta{display:grid;grid-template-columns:repeat(3,max-content);gap:2px 10px;margin-top:4px}.qr-box{display:grid;justify-items:center;gap:2px;text-align:center}.qr-box svg{width:20mm;height:20mm}.meta-table,.summary-table,.sign-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td{text-align:center}.summary-table th:first-child,.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table tfoot td{font-weight:700}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}.footer{border-top:1px solid #000;color:#333;display:flex;justify-content:space-between;margin-top:6px;padding-top:4px}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td{padding:2px 3px}}`;
+  return `@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;min-height:277mm;margin:0 auto}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:flex;justify-content:space-between;gap:10px}h1{font-size:15px;line-height:1.1;margin:0 0 4px}.subtitle{margin:0}.meta{display:grid;grid-template-columns:repeat(3,max-content);gap:2px 10px;margin-top:4px}.qr-box{display:grid;justify-items:center;gap:2px;text-align:center}.qr-box svg{width:20mm;height:20mm}.meta-table,.summary-table,.sign-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center}.summary-table tfoot td{font-weight:700}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}.footer{border-top:1px solid #000;color:#333;display:flex;justify-content:space-between;margin-top:6px;padding-top:4px}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td{padding:2px 3px}}`;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
@@ -43,6 +43,11 @@ export function QuantitySheetView({ user }: { user: SessionUser }) {
     freeCageAllowance > 0;
   const freeCageEnabled =
     supportsFreeCages && (Number(draft.preferredFreeCages || 0) > 0 || draft.freeCagePriority !== null);
+  const iacucOptions = useMemo(() => {
+    const query = draft.iacuc.trim().toUpperCase();
+    const items = iacucQuery.data?.items || [];
+    return query ? items.filter((item) => item.iacuc.trim().toUpperCase().includes(query)) : items;
+  }, [draft.iacuc, iacucQuery.data?.items]);
   const save = useSaveQuantitySheet();
 
   const recalculate = useCallback(() => {
@@ -130,14 +135,15 @@ export function QuantitySheetView({ user }: { user: SessionUser }) {
     try {
       const response = await save.mutateAsync({ sheet: confirmSave, exists });
       const normalized = normalizeQuantitySheet(response.item);
-      setDraft(normalized);
-      setEditorRows(makeEditorRows(normalized));
-      setExists(true);
+      const next = createQuantitySheet(normalized.month, user.displayName);
+      setDraft(next);
+      setEditorRows(makeEditorRows(next));
+      setExists(false);
       setConfirmSave(null);
       setNotice(
         unit === "cage_day" && !normalized.rows.some((row) => Number(row.animalCount || 0) > 0)
-          ? "统计表已保存；当前按结余笼数计算饲养费。"
-          : "数量统计表已保存。",
+          ? `${normalized.month} · ${normalized.iacuc} 统计表已保存；当前按结余笼数计算饲养费，录入区已清空。`
+          : `${normalized.month} · ${normalized.iacuc} 统计表已保存，录入区已清空。`,
       );
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "保存失败");
@@ -256,7 +262,7 @@ export function QuantitySheetView({ user }: { user: SessionUser }) {
                   onBlur={(event) => applyIacuc(event.target.value)}
                 />
                 <datalist id="quantity-iacuc-options">
-                  {(iacucQuery.data?.items || []).slice(0, 500).map((item, index) => (
+                  {iacucOptions.map((item, index) => (
                     <option key={`${item.iacuc}-${item.project}-${item.pi}-${index}`} value={item.iacuc}>
                       {item.project || item.pi}
                     </option>
