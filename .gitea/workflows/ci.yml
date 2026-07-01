@@ -80,30 +80,26 @@ jobs:
     name: Browser regression
     needs: [quality, python]
     runs-on: ubuntu-latest
-    container: node:22-bookworm
+    container: mcr.microsoft.com/playwright:v1.61.1-noble
     steps:
       - name: Check out source
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git python3 python3-pip python3-venv
+          apt-get install -y --no-install-recommends ca-certificates git python3
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
-      - name: Install application and browser dependencies
-        run: |
-          npm ci
-          python3 -m venv .venv
-          .venv/bin/pip install --no-cache-dir -r requirements.txt
-          npx playwright install --with-deps chromium
+      - name: Install application dependencies
+        run: npm ci
 
       - name: Run Playwright
         env:
           CI: "true"
-        run: PATH="$PWD/.venv/bin:$PATH" npm run test:e2e
+        run: npm run test:e2e
 
       - name: Upload Playwright artifacts
         if: always()
