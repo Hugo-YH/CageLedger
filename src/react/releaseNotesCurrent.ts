@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.1",
+    releasedAt: "2026-07-01 13:24",
+    title: "群晖部署与多架构镜像修复",
+    items: [
+      "容器镜像同时发布 linux/amd64 和 linux/arm64，群晖、Apple Silicon 和常见服务器可按设备架构自动拉取",
+      "前端构建固定使用构建主机架构，避免 Vite 与 Rolldown 原生依赖在跨架构构建时加载错误",
+      "重新生成前端依赖锁文件，完整记录 Linux x64 与 ARM64 平台依赖，保证自动发布可重复执行",
+      "Gitea 容器工作流改用 Buildx 生成多架构 manifest，后续版本继续沿用统一镜像标签",
+    ],
+  },
+  {
     version: "0.6.0",
     releasedAt: "2026-07-01 08:52",
     title: "React 迁移与项目模块化",
@@ -475,16 +486,6 @@ export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
       "保存待接收批次后改为局部更新批次和待进驻任务，去掉整套 bootstrap 重载",
       "结算单深链改为按单条查询，流程详情改为先加载摘要再按需加载结算单明细",
       "结算生成与数量统计表转入转出同步收紧到按月份和目标范围查询，减少全量占用与整月统计表扫描",
-    ],
-  },
-  {
-    version: "0.5.0",
-    title: "笼卡接收与待进驻流程串联",
-    items: [
-      "接收笼卡支持确认实际接收、部分到货和按实际接收日生成待进驻任务",
-      "笼位管理新增按批次聚合的待进驻动物列表，支持分批入驻、批量入驻和剩余笼位变更饲养间",
-      "待接收批次列表收敛为未打印、已打印、已接收三段主流程，并补充批量打印与批量确认接收",
-      "笼卡识别新增系统房间前置校验，减少未知房间拖到后续入驻阶段才暴露的问题",
     ],
   },
 ];

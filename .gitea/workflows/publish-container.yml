@@ -82,11 +82,13 @@ jobs:
         run: |
           IMAGE_TAG="${IMAGE_TAG#v}"
           IMAGE_REPO="${GITHUB_SERVER_URL#https://}/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          docker build \
+          docker buildx create --name cageledger-builder --driver docker-container --use
+          docker buildx inspect --bootstrap
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
             --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
             --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
             -t "${IMAGE_REPO}:${IMAGE_TAG}" \
             -t "${IMAGE_REPO}:latest" \
+            --push \
             .
-          docker push "${IMAGE_REPO}:${IMAGE_TAG}"
-          docker push "${IMAGE_REPO}:latest"

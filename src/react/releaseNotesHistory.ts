@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const HISTORICAL_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.0",
+    title: "笼卡接收与待进驻流程串联",
+    items: [
+      "接收笼卡支持确认实际接收、部分到货和按实际接收日生成待进驻任务",
+      "笼位管理新增按批次聚合的待进驻动物列表，支持分批入驻、批量入驻和剩余笼位变更饲养间",
+      "待接收批次列表收敛为未打印、已打印、已接收三段主流程，并补充批量打印与批量确认接收",
+      "笼卡识别新增系统房间前置校验，减少未知房间拖到后续入驻阶段才暴露的问题",
+    ],
+  },
+  {
     version: "0.4.10",
     title: "性能优化与系统 Wiki 整合",
     items: [
