@@ -163,6 +163,16 @@ describe("print templates", () => {
             { iacuc: "Z2", cageCount: 6, freeCages: 0, unitPrice: 4.5 },
           ],
         },
+        {
+          date: "2026-06-02",
+          animalCount: 0,
+          cageCount: 6,
+          freeCages: 0,
+          billableCages: 6,
+          amount: 27,
+          cumulative: 54,
+          iacucBreakdown: [{ iacuc: "Z2", cageCount: 6, freeCages: 0, unitPrice: 4.5 }],
+        },
       ],
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
@@ -171,6 +181,9 @@ describe("print templates", () => {
     expect(html.match(/<th>减免<\/th>/g)).toHaveLength(1);
     expect(html).toContain('<td class="money">0.00</td>');
     expect(html).toContain('<td class="money">27.00</td>');
+    expect(html).toContain(
+      '2026-06-02</td><td class="num">6</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="money"></td>',
+    );
     expect(html).not.toContain("梯度笼数");
     expect(html).toContain('class="date-column"');
   });

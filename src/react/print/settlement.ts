@@ -67,7 +67,8 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         `<tr><td>${escapeHtml(row.date)}</td><td class="num">${numberText(row.totalCount)}</td><td class="num">${numberText(row.totalFree)}</td>${hasTieredCharges ? `<td class="num">${numberText(row.totalTier2)}</td>` : ""}${iacucColumns
           .map(({ iacuc, showFree }) => {
             const item = row.perIacuc.get(iacuc) || { count: 0, free: 0, amount: 0 };
-            return `<td class="num">${numberText(item.count)}</td>${showFree ? `<td class="num">${numberText(item.free)}</td>` : ""}<td class="money">${money(item.amount)}</td>`;
+            const dailyAmount = item.count > 0 ? money(item.amount) : "";
+            return `<td class="num">${numberText(item.count)}</td>${showFree ? `<td class="num">${numberText(item.free)}</td>` : ""}<td class="money">${dailyAmount}</td>`;
           })
           .join("")}</tr>`,
     )
