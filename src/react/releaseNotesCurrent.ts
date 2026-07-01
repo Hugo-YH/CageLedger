@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.0",
+    releasedAt: "2026-07-01 08:52",
+    title: "React 迁移与项目模块化",
+    items: [
+      "前端迁移到 React 19、TypeScript、Vite 和 TanStack Query，保留笼卡、笼位、数量统计、结算与报销台账业务流程",
+      "后端按业务领域、数据访问、持久化和 Web 层拆分，继续兼容现有 SQLite 数据库、API 和历史 payload",
+      "建立格式检查、静态分析、单元测试、架构检查、浏览器回归和 Gitea CI，发布前自动执行基础质量检查",
+      "完成主分支数据库、旧备份和 6000 笼测试库的迁移验证，升级过程支持幂等执行和历史数据回读",
+    ],
+  },
+  {
     version: "0.5.25",
     releasedAt: "2026-06-26 22:49",
     title: "列表表头筛选与排序",

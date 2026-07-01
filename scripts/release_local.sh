@@ -78,9 +78,9 @@ fi
 
 run node scripts/set_version.mjs --version "$VERSION"
 
-MATCH_COUNT="$(rg -c "version: \"${VERSION}\"" src/react/releaseNotes.ts || true)"
+MATCH_COUNT="$(rg -l -F "version: \"${VERSION}\"" src/react/releaseNotes*.ts | wc -l | tr -d ' ')"
 if [[ "${MATCH_COUNT:-0}" -lt 1 ]]; then
-  echo "src/react/releaseNotes.ts is missing a dedicated ${VERSION} release note. Update release notes first." >&2
+  echo "src/react/releaseNotes*.ts is missing a dedicated ${VERSION} release note. Update release notes first." >&2
   exit 1
 fi
 
