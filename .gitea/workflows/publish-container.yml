@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
           grep -Fq "APP_VERSION = \"${TAG_VERSION}\"" src/react/version.ts
-          grep -Fq "version: \"${TAG_VERSION}\"" src/react/releaseNotes.ts
+          grep -Fq "version: \"${TAG_VERSION}\"" src/react/releaseNotes*.ts
           echo "value=${TAG_VERSION}" >> "$GITEA_OUTPUT"
 
       - name: Log in to Gitea Container Registry

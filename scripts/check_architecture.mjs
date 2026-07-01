@@ -7,7 +7,7 @@ import ts from "typescript";
 const root = process.cwd();
 const enforce = process.argv.includes("--enforce");
 const sourceExtensions = new Set([".ts", ".tsx", ".py", ".css"]);
-const ignoredParts = new Set(["node_modules", "web-dist", "dist", "data", "docs", "src/vendor"]);
+const ignoredParts = new Set([".venv", "node_modules", "web-dist", "dist", "data", "docs", "src/vendor"]);
 const sizeBudgets = { ".ts": 500, ".tsx": 500, ".py": 600, ".css": 1500 };
 const baselineHotspots = new Set(["server_app/legacy.py"]);
 
