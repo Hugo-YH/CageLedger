@@ -99,11 +99,39 @@ jobs:
       - name: Run Playwright
         env:
           CI: "true"
-        run: npm run test:e2e
+          CAGELEDGER_IACUC_INDEX: /tmp/cageledger-e2e-iacuc-index.json
+        run: |
+          python3 - <<'PY'
+          import json
+
+          items = [
+              {
+                  "id": f"e2e-{index:04d}",
+                  "iacuc": f"E2E{index:04d}",
+                  "project": f"测试项目{index}",
+                  "pi": "测试负责人",
+                  "owner": "测试经办人",
+              }
+              for index in range(1, 501)
+          ]
+          items.append(
+              {
+                  "id": "e2e-complete-index",
+                  "iacuc": "Z2025063",
+                  "project": "完整索引回归项目",
+                  "pi": "完整索引负责人",
+                  "owner": "完整索引经办人",
+              }
+          )
+          with open("/tmp/cageledger-e2e-iacuc-index.json", "w", encoding="utf-8") as handle:
+              json.dump(items, handle, ensure_ascii=False)
+          PY
+          npm run test:e2e
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        uses: actions/upload-artifact@v3
         with:
           name: playwright-report
           path: |

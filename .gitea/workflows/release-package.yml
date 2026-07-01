@@ -62,16 +62,24 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           API_BASE="${GITHUB_SERVER_URL%/}/api/v1"
-          RELEASE_JSON="$(curl -fsS \
+          RELEASE_FILE="$(mktemp)"
+          STATUS="$(curl -sS -o "${RELEASE_FILE}" -w '%{http_code}' \
             -H "Authorization: token ${GITEA_TOKEN}" \
-            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" || true)"
-          if [ -z "${RELEASE_JSON}" ]; then
+            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}")"
+          if [ "${STATUS}" = "200" ]; then
+            RELEASE_JSON="$(cat "${RELEASE_FILE}")"
+          elif [ "${STATUS}" = "404" ]; then
             RELEASE_JSON="$(curl -fsS -X POST \
               -H "Authorization: token ${GITEA_TOKEN}" \
               -H "Content-Type: application/json" \
               -d "{\"tag_name\":\"${GITHUB_REF_NAME}\",\"name\":\"CageLedger ${GITHUB_REF_NAME}\"}" \
               "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases")"
+          else
+            cat "${RELEASE_FILE}" >&2
+            echo "Unable to load Gitea release: HTTP ${STATUS}" >&2
+            exit 1
           fi
+          rm -f "${RELEASE_FILE}"
           RELEASE_ID="$(printf '%s' "${RELEASE_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
           echo "id=${RELEASE_ID}" >> "$GITEA_OUTPUT"
 
@@ -80,7 +88,16 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           API_BASE="${GITHUB_SERVER_URL%/}/api/v1"
+          ASSET_NAME="${{ steps.package.outputs.name }}"
+          ASSETS_JSON="$(curl -fsS \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/${{ steps.release.outputs.id }}/assets")"
+          ASSET_ID="$(printf '%s' "${ASSETS_JSON}" | python3 -c 'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item.get("name") == name), ""))' "${ASSET_NAME}")"
+          if [ -n "${ASSET_ID}" ]; then
+            echo "Release asset ${ASSET_NAME} already exists; keeping the immutable tag artifact."
+            exit 0
+          fi
           curl -fsS -X POST \
             -H "Authorization: token ${GITEA_TOKEN}" \
             -F "attachment=@${{ steps.package.outputs.path }}" \
-            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/${{ steps.release.outputs.id }}/assets?name=${{ steps.package.outputs.name }}"
+            "${API_BASE}/repos/${GITHUB_REPOSITORY}/releases/${{ steps.release.outputs.id }}/assets?name=${ASSET_NAME}"

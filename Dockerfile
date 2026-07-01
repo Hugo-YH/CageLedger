@@ -1,4 +1,7 @@
-FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend
+ARG NODE_IMAGE=node:22-bookworm-slim
+ARG PYTHON_IMAGE=python:3.13-slim
+
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 
 WORKDIR /build
 
@@ -10,7 +13,7 @@ COPY assets ./assets
 COPY src ./src
 RUN npm run build
 
-FROM python:3.13-slim
+FROM ${PYTHON_IMAGE}
 
 WORKDIR /app
 

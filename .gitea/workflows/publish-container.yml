@@ -81,14 +81,17 @@ jobs:
           IMAGE_TAG: ${{ gitea.ref_name }}
         run: |
           IMAGE_TAG="${IMAGE_TAG#v}"
-          IMAGE_REPO="${GITHUB_SERVER_URL#https://}/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          docker buildx create --name cageledger-builder --driver docker-container --use
-          docker buildx inspect --bootstrap
+          REGISTRY="${GITHUB_SERVER_URL#https://}"
+          REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          OWNER="${REPOSITORY%%/*}"
+          IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
+          BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
+            --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim-amd64" \
+            --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim-amd64" \
             --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
             --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
-            -t "${IMAGE_REPO}:${IMAGE_TAG}" \
-            -t "${IMAGE_REPO}:latest" \
+            -t "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
             --push \
             .
