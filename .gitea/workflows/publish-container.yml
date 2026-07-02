@@ -76,6 +76,22 @@ jobs:
           REGISTRY_USERNAME: ${{ vars.PACKAGE_USERNAME }}
         run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${REGISTRY_USERNAME}" --password-stdin
 
+      - name: Verify AMD64 base images
+        run: |
+          REGISTRY="${GITHUB_SERVER_URL#https://}"
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
+          for IMAGE in \
+            "${BASE_REPO}:node-22-bookworm-slim-amd64" \
+            "${BASE_REPO}:python-3.13-slim-amd64"; do
+            docker pull "${IMAGE}"
+            ARCHITECTURE="$(docker image inspect "${IMAGE}" --format '{{.Architecture}}')"
+            if [ "${ARCHITECTURE}" != "amd64" ]; then
+              echo "Base image ${IMAGE} uses ${ARCHITECTURE}; expected amd64" >&2
+              exit 1
+            fi
+          done
+
       - name: Build and publish image
         env:
           IMAGE_TAG: ${{ gitea.ref_name }}
