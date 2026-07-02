@@ -80,6 +80,7 @@ jobs:
     name: Browser regression
     needs: [quality, python]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container: mcr.microsoft.com/playwright:v1.61.1-noble
     steps:
       - name: Check out source

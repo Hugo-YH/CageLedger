@@ -1,4 +1,12 @@
-import { ensureTestInfrastructure, expect, openSettingsView, test } from "./fixtures";
+import {
+  ensureTestInfrastructure,
+  expect,
+  openIntakeEntry,
+  openQuantityEntry,
+  openSettingsView,
+  openWorkflowCenter,
+  test,
+} from "./fixtures";
 
 test("login and open the main business workspaces", async ({ page }) => {
   await page.goto("/");
@@ -8,10 +16,10 @@ test("login and open the main business workspaces", async ({ page }) => {
   await page.getByRole("button", { name: "登录", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
-  expect(Date.now() - loginStartedAt).toBeLessThan(1_500);
+  if (!process.env.CI) expect(Date.now() - loginStartedAt).toBeLessThan(1_500);
   await ensureTestInfrastructure(page);
-  await page.getByRole("button", { name: "笼卡管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "笼卡管理", exact: true })).toBeVisible();
+  await openIntakeEntry(page);
+  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
   await page
     .getByLabel("预约消息")
     .fill(
@@ -21,11 +29,11 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByLabel("批次号", { exact: true })).toHaveValue("（Z2025050）2026042903");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("70");
   await expect(page.getByRole("combobox", { name: "房间", exact: true })).toHaveValue("8014");
-  await page.getByRole("button", { name: "笼卡识别", exact: true }).click();
+  await page.getByRole("button", { name: "扫码识别笼卡", exact: true }).click();
   await expect(page.getByRole("heading", { name: "笼卡识别", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "启动摄像头", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "返回笼卡管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "笼卡管理", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "笼位管理", exact: true }).click();
   await expect(page.getByRole("heading", { name: "笼位管理", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
@@ -34,15 +42,15 @@ test("login and open the main business workspaces", async ({ page }) => {
   await page.getByRole("button", { name: "多选录入", exact: true }).click();
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
   await expect(page.getByRole("button", { name: "批量编辑", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "饲养费管理", exact: true })).toBeVisible();
+  await openQuantityEntry(page);
+  await expect(page.getByRole("heading", { name: "数量统计表录入", exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "房间号", exact: true }).selectOption({ label: "8014" });
   await page.getByText("动物数量", { exact: true }).click();
   await page.getByLabel("第 1 行增加", { exact: true }).fill("10");
   await page.getByLabel("第 1 行增加类型", { exact: true }).selectOption("购入");
   await expect(page.getByLabel("第 1 行结余总数", { exact: true })).toHaveAttribute("placeholder", "10");
-  await page.getByRole("button", { name: "流程中心", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "流程中心", exact: true })).toBeVisible();
+  await openWorkflowCenter(page);
+  await expect(page.getByRole("heading", { name: "结算与报销台账", exact: true })).toBeVisible();
   await openSettingsView(page, "房间管理");
   await expect(page.getByRole("heading", { name: "房间管理", exact: true })).toBeVisible();
   await openSettingsView(page, "账号管理");

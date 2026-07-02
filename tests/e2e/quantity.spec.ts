@@ -1,4 +1,4 @@
-import { ensureTestInfrastructure, expect, test } from "./fixtures";
+import { ensureTestInfrastructure, expect, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
 
 test("save and delete a quantity sheet in the ephemeral database", async ({ page }) => {
   await page.goto("/");
@@ -7,7 +7,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
+  await openQuantityEntry(page);
   const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
   await iacucInput.fill("Z202506");
   await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
@@ -23,6 +23,8 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");
   await expect(page.locator("form").getByLabel("项目负责人", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("");
+  await openSavedQuantitySheets(page);
+  await expect(page.getByRole("heading", { level: 1, name: "已保存数量统计表", exact: true })).toBeVisible();
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
   await expect(savedRow).toBeVisible();
   await savedRow.getByRole("button", { name: "删除", exact: true }).click();

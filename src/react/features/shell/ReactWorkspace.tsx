@@ -208,6 +208,7 @@ function NavItem({
     <button
       className={`nav-item ${activeView === view ? "active" : ""}`}
       type="button"
+      aria-label={label}
       aria-current={activeView === view ? "page" : undefined}
       onClick={() => onNavigate(view)}
     >
@@ -234,6 +235,7 @@ function NavGroupButton({
     <button
       className={`nav-item nav-group-button ${active ? "active" : ""}`}
       type="button"
+      aria-label={label}
       aria-expanded={expanded}
       onClick={onClick}
     >

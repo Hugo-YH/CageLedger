@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures";
+import { expect, openIntakeEntry, openQuantityEntry, openSettingsView, openWorkflowCenter, test } from "./fixtures";
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -32,20 +32,19 @@ test("login and dashboard have no serious accessibility violations", async ({ pa
 test("core workspaces and dialogs retain accessible semantics", async ({ page }) => {
   await login(page);
 
-  await page.getByRole("button", { name: "笼卡管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "笼卡管理", exact: true })).toBeVisible();
+  await openIntakeEntry(page);
+  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
 
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "饲养费管理", exact: true })).toBeVisible();
+  await openQuantityEntry(page);
+  await expect(page.getByRole("heading", { name: "数量统计表录入", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
 
-  await page.getByRole("button", { name: "流程中心", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "流程中心", exact: true })).toBeVisible();
+  await openWorkflowCenter(page);
+  await expect(page.getByRole("heading", { name: "结算与报销台账", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
 
-  await page.getByRole("button", { name: "系统设置", exact: true }).click();
-  await page.getByRole("button", { name: "房间管理", exact: true }).click();
+  await openSettingsView(page, "房间管理");
   const openRoomEditor = page.getByRole("button", { name: "新增饲养间", exact: true });
   await openRoomEditor.click();
   const dialog = page.getByRole("dialog", { name: "新增饲养间" });

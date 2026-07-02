@@ -1,4 +1,4 @@
-import { ensureTestInfrastructure, expect, test } from "./fixtures";
+import { ensureTestInfrastructure, expect, openIntakeEntry, openQuantityEntry, test } from "./fixtures";
 
 test("intake workspace remains operable at the mobile breakpoint", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 });
@@ -8,14 +8,14 @@ test("intake workspace remains operable at the mobile breakpoint", async ({ page
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
-  await page.getByRole("button", { name: "笼卡管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "笼卡管理", exact: true })).toBeVisible();
+  await openIntakeEntry(page);
+  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "保存待接收批次", exact: true })).toBeVisible();
   await expect(page.getByLabel("预约消息")).toBeVisible();
   await page.getByRole("button", { name: "笼位管理", exact: true }).click();
   await expect(page.getByRole("heading", { name: "笼位管理", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "房间", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
+  await openQuantityEntry(page);
   await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "保存统计表", exact: true })).toBeVisible();
 });
