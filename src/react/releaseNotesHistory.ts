@@ -2,6 +2,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const HISTORICAL_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.2b",
+    title: "核算界面与系统百科入口整理",
+    items: [
+      "重排动态笼位图和数量统计表结算入口，统一月份、课题组与 IACUC 的横向控件布局，并收紧操作区避免溢出工作区",
+      "移除数量统计表结算顶部脱节的分页提示，补齐系统百科与反馈需求入口，并更新问卷反馈链接",
+      "演示数据中的项目负责人统一调整为柯琼（演示），保持页面展示与演示脚本一致",
+    ],
+  },
+  {
     version: "0.5.2a",
     title: "全系统 UI 与提示体系优化",
     items: [
@@ -472,24 +481,5 @@ export const HISTORICAL_RELEASE_NOTES: ReleaseNote[] = [
       "新增项目负责人身份管理和 20/10 笼免费额度",
       "支持阶梯计价、离线包和 Release 自动发布",
     ],
-  },
-  {
-    version: "0.3.0",
-    title: "数量统计表结算",
-    items: ["新增数量统计表录入与保存", "支持按纸质统计表生成饲养费明细和结算单", "完善表单提示和 IACUC 支撑经费回填"],
-  },
-  {
-    version: "0.2.1",
-    title: "离线部署和文档整理",
-    items: [
-      "支持 NAS 离线源码包构建",
-      "README 拆分为入口文档、API 文档和部署文档",
-      "补充环境变量模板和 Docker 构建忽略规则",
-    ],
-  },
-  {
-    version: "0.2.0",
-    title: "共享模式和权限基础",
-    items: ["SQLite 拆表存储", "系统管理员和房间管理员账号", "IACUC CSV 上传、审计日志和系统更新检查"],
   },
 ];
