@@ -2,6 +2,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.7",
+    releasedAt: "2026-07-03 06:52",
+    title: "项目负责人结算列表与工作区交互优化",
+    items: [
+      "按项目负责人结算改为候选列表，按月份和负责人聚合全部 IACUC，并使用现有减免与计费规则直接展示应收金额",
+      "结算月份、项目负责人、IACUC 和金额支持类 Excel 全库筛选与升降序排序，行级预览可继续导出结算单和发起流程",
+      "数量统计表录入区取消模块内纵向滚动，月度双栏表格完整展开，窄屏继续保留横向滚动",
+      "预览、编辑、确认和详情弹窗统一挂载到页面顶层，侧栏展开或折叠时均可完整覆盖导航",
+      "Gitea CI、Release、容器发布和 Docker 构建的 npm、pip 安装增加重试与超时配置，降低网络抖动导致的发布失败",
+    ],
+  },
+  {
     version: "0.6.6",
     releasedAt: "2026-07-03 00:04",
     title: "导航、笼位信息与架构门禁优化",

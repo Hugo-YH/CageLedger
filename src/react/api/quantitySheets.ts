@@ -65,7 +65,10 @@ export function useSaveQuantitySheet() {
         exists ? `/api/quantity-sheets/${encodeURIComponent(sheet.id)}` : "/api/quantity-sheets",
         { method: exists ? "PUT" : "POST", body: JSON.stringify({ sheet }) },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+    },
   });
 }
 
@@ -76,7 +79,10 @@ export function useDeleteQuantitySheet() {
       requestJson<{ auditLogs?: Record<string, unknown>[] }>(`/api/quantity-sheets/${encodeURIComponent(id)}`, {
         method: "DELETE",
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+    },
   });
 }
 

@@ -38,6 +38,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "笼位管理", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
   await expect(page.getByRole("heading", { name: /编辑笼位 8014-01-A1/ })).toBeVisible();
+  await expect(page.locator("body > .modal-backdrop")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByRole("button", { name: "多选录入", exact: true }).click();
   await page.getByRole("button", { name: /8014-01-A1/ }).click();

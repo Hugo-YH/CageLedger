@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 export function WorkspaceHeader({
   kicker,
@@ -120,7 +121,7 @@ export function ModalShell({
     };
   }, []);
 
-  return (
+  return createPortal(
     <div className="modal-backdrop">
       <section
         ref={dialogRef}
@@ -132,7 +133,8 @@ export function ModalShell({
       >
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

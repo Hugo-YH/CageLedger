@@ -1,10 +1,8 @@
 import { useState } from "react";
 
-import type { BillingStatementResponse } from "../../api/contracts";
-import { useGenerateBillingStatement } from "../../api/quantitySheets";
-import { openSettlementPrint, settlementStatementHtml } from "../../print/settlement";
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
+import { SettlementCandidateList } from "./components/SettlementCandidateList";
 
 const currentMonth = new Date().toISOString().slice(0, 7);
 type BillingMode = "cage-map" | "quantity-entry" | "quantity-saved" | "settlement";
@@ -89,7 +87,7 @@ export function BillingView({ user, mode }: { user: SessionUser; mode: BillingMo
                 </button>
               </div>
             </section>
-            <SettlementWorkbench source={source} />
+            <SettlementCandidateList source={source} />
           </>
         ) : null}
       </div>
@@ -116,85 +114,4 @@ function billingDescription(mode: BillingMode) {
   if (mode === "quantity-entry") return "按伦理号和房间录入月度数量变化，保存后进入结算汇总范围。";
   if (mode === "quantity-saved") return "集中检索、预览、编辑和导出已保存的数量统计表。";
   return "选择月份、项目负责人和数据来源，自动合并负责人名下伦理并生成结算单。";
-}
-
-function SettlementWorkbench({ source }: { source: "quantity_sheet" | "cage_map" }) {
-  const [month, setMonth] = useState(currentMonth);
-  const [pi, setPi] = useState("");
-  const [result, setResult] = useState<BillingStatementResponse | null>(null);
-  const [error, setError] = useState("");
-  const generate = useGenerateBillingStatement();
-  async function run(persist: boolean) {
-    if (!month || !pi.trim()) {
-      setError("请填写结算月份和项目负责人。");
-      return;
-    }
-    try {
-      const response = await generate.mutateAsync({ month, pi: pi.trim(), sourceType: source, persist });
-      setResult(response);
-      setError(persist ? "结算流程已创建，可到流程中心继续处理。" : "结算预览已生成。");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "生成结算单失败");
-    }
-  }
-  return (
-    <section className="panel settlement-workbench">
-      <div className="panel-head">
-        <div className="panel-title-line">
-          <h2>按项目负责人结算</h2>
-          <p>同一负责人、同一月份下的多个伦理号会自动合表。</p>
-        </div>
-        <div className="panel-head-actions">
-          <button
-            className="secondary info-button"
-            type="button"
-            disabled={!result}
-            onClick={() => result && openSettlementPrint(result)}
-          >
-            导出结算单 PDF
-          </button>
-          <button
-            className="primary flow-button"
-            type="button"
-            disabled={generate.isPending}
-            onClick={() => void run(true)}
-          >
-            发起结算流程
-          </button>
-        </div>
-      </div>
-      <div className="settlement-command">
-        <label>
-          结算月份
-          <input type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} />
-        </label>
-        <label>
-          项目负责人
-          <input value={pi} onChange={(event) => setPi(event.target.value)} placeholder="输入负责人姓名" />
-        </label>
-        <button
-          className="secondary info-button"
-          type="button"
-          disabled={generate.isPending}
-          onClick={() => void run(false)}
-        >
-          生成预览
-        </button>
-      </div>
-      {error ? (
-        <div className="react-inline-notice" role="status">
-          {error}
-        </div>
-      ) : null}
-      {result ? <StatementPreview result={result} /> : null}
-    </section>
-  );
-}
-
-function StatementPreview({ result }: { result: BillingStatementResponse }) {
-  return (
-    <div className="settlement-preview settlement-document-preview">
-      <iframe title="结算单预览" srcDoc={settlementStatementHtml(result, false)} />
-    </div>
-  );
 }

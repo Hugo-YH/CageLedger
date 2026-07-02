@@ -74,6 +74,7 @@ class ApiContractTests(unittest.TestCase):
             "/api/intake-batches?limit=5&offset=0": {"items", "page"},
             "/api/placement-tasks?limit=5&offset=0": {"items", "page"},
             "/api/quantity-sheets?limit=5&offset=0": {"items", "page"},
+            "/api/billing-settlement-candidates?limit=5&offset=0": {"items", "page", "filterOptions"},
             "/api/billing-workflows?limit=5&offset=0": {"items", "page"},
             "/api/reimbursement-records?limit=5&offset=0": {"items", "page"},
             "/api/principal-identities": {"items"},

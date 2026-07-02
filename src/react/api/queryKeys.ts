@@ -7,6 +7,8 @@ export const queryKeys = {
   quantitySheets: (filters: Record<string, unknown>) => ["quantity-sheets", filters] as const,
   quantitySheetsRoot: ["quantity-sheets"] as const,
   quantitySheetRooms: ["quantity-sheet-rooms"] as const,
+  settlementCandidatesRoot: ["billing-settlement-candidates"] as const,
+  settlementCandidates: (filters: Record<string, unknown>) => ["billing-settlement-candidates", filters] as const,
   workflows: (filters: Record<string, unknown>) => ["billing-workflows", filters] as const,
   reimbursementRoot: ["reimbursement-records"] as const,
   reimbursements: (filters: Record<string, unknown>) => ["reimbursement-records", filters] as const,

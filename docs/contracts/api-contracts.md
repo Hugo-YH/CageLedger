@@ -75,6 +75,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `POST`   | `/api/quantity-sheets`                         | `{ sheet }`                          | `{ item, affectedItems? }`        |
 | `PUT`    | `/api/quantity-sheets/{id}`                    | `{ sheet }`                          | `{ item, affectedItems? }`        |
 | `DELETE` | `/api/quantity-sheets/{id}`                    | 空                                   | 删除结果、镜像变更和审计          |
+| `GET`    | `/api/billing-settlement-candidates`           | 分页、排序、`columnFilters`          | 按月份和负责人聚合的结算候选列表  |
 | `POST`   | `/api/quantity-sheets/{id}/generate-statement` | 结算选项                             | statement、lines、workflow        |
 | `POST`   | `/api/billing-statements/generate`             | month/IACUC 等筛选                   | 动态笼位图结算                    |
 | `POST`   | `/api/billing-statements/generate-by-pi`       | `{ pi, month, sourceType, persist }` | `{ statement, lines, workflow? }` |

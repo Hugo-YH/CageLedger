@@ -1,4 +1,5 @@
 import type { BillingUnit } from "./quantity";
+import type { PagedResponse } from "./common";
 
 export interface BillingStatementLine {
   date: string;
@@ -40,6 +41,27 @@ export interface BillingStatementResponse {
   statement: BillingStatement;
   lines: BillingStatementLine[];
   workflow?: Record<string, unknown>;
+}
+
+export interface SettlementCandidate {
+  id: string;
+  month: string;
+  pi: string;
+  iacucs: string[];
+  totalAmount: number | null;
+  error?: string;
+}
+
+export interface SettlementCandidateListParams {
+  limit: number;
+  offset: number;
+  sortKey?: "month" | "pi" | "iacuc" | "amount";
+  sortDir?: "asc" | "desc";
+  columnFilters?: Record<string, string[]>;
+}
+
+export interface SettlementCandidateListResponse extends PagedResponse<SettlementCandidate> {
+  filterOptions: Record<string, Array<{ value: string; label: string; count: number }>>;
 }
 
 export interface BillingWorkflow {

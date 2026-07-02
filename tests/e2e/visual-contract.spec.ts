@@ -16,6 +16,7 @@ test("quantity workspace keeps its desktop and mobile layout contract", async ({
   await expect(editor).toBeVisible();
   await expect(entryTable).toBeVisible();
   await expect(entryTable.locator("thead th")).toHaveCount(10);
+  await expect(page.locator(".quantity-entry-wrap")).toHaveCSS("max-height", "none");
   await attachViewport(page, testInfo, "quantity-1280");
 
   await page.setViewportSize({ width: 1180, height: 820 });

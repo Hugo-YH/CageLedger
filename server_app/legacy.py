@@ -76,6 +76,7 @@ from server_app.domains.billing import (
     statement_billing_unit_from_lines,
     statement_pi_snapshot,
 )
+from server_app.domains.billing.candidates import list_settlement_candidates
 from server_app.domains.iacuc import (
     normalize_application_amount,
     normalize_application_date,
@@ -192,6 +193,7 @@ from server_app.repositories.billing import (
 from server_app.repositories.billing import (
     update_quantity_sheet as update_quantity_sheet_repository,
 )
+from server_app.repositories.billing_candidates import list_quantity_settlement_groups
 from server_app.repositories.entities import (
     delete_intake_batch as delete_intake_batch_repository,
 )
@@ -5033,6 +5035,20 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             with connect_db() as conn:
                 self.send_json({"items": list_current_billing_statements(conn)})
+            return
+        if path == "/api/billing-settlement-candidates":
+            user = self.require_user()
+            if not user:
+                return
+            filters = self.list_filters(default_limit=10, max_limit=100)
+            with connect_db() as conn:
+                groups = list_quantity_settlement_groups(conn)
+
+                def calculate(month, pi):
+                    payload = {"month": month, "pi": pi, "sourceType": "quantity_sheet"}
+                    return generate_billing_statement_by_pi(conn, payload, user)[0]
+
+                self.send_json(list_settlement_candidates(groups, filters, calculate))
             return
         if path == "/api/intake-batches/filter-options":
             if not self.require_user():

@@ -590,11 +590,10 @@ th {
 }
 
 .react-quantity-layout .quantity-entry-wrap {
-  max-height: 68vh;
-  overflow: auto;
+  max-height: none;
+  overflow: auto visible;
   border: 1px solid var(--line);
   border-radius: 14px;
-  scrollbar-gutter: stable;
 }
 
 .react-quantity-layout .quantity-entry-table {
@@ -796,6 +795,47 @@ th {
   gap: 7px;
 }
 
+.settlement-candidate-table {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.settlement-col-month {
+  width: 140px;
+}
+
+.settlement-col-pi {
+  width: 210px;
+}
+
+.settlement-col-iacuc {
+  width: auto;
+}
+
+.settlement-col-amount {
+  width: 160px;
+}
+
+.settlement-col-actions {
+  width: 150px;
+}
+
+.settlement-candidate-table td:nth-child(3) {
+  overflow-wrap: anywhere;
+}
+
+.settlement-candidate-table td:last-child {
+  white-space: nowrap;
+}
+
+.settlement-preview-modal {
+  --modal-width: 1480px;
+}
+
+.settlement-preview-modal .settlement-preview {
+  padding: 0;
+}
+
 .settlement-preview {
   padding: 0 18px 20px;
 }
@@ -844,10 +884,6 @@ th {
   .quantity-confirm-grid,
   .settlement-metrics {
     grid-template-columns: 1fr;
-  }
-
-  .react-quantity-layout .quantity-entry-wrap {
-    max-height: 58vh;
   }
 }
 
