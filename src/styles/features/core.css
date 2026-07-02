@@ -395,7 +395,8 @@
 }
 
 .intake-batch-table {
-  min-width: 1040px;
+  width: 100%;
+  min-width: 1260px;
   table-layout: fixed;
 }
 
@@ -420,28 +421,27 @@
 
 .intake-batch-table th:nth-child(3),
 .intake-batch-table td:nth-child(3) {
-  width: 145px;
-  overflow-wrap: anywhere;
+  width: 200px;
 }
 
 .intake-batch-table th:nth-child(4),
 .intake-batch-table td:nth-child(4) {
-  width: 92px;
+  width: 180px;
 }
 
 .intake-batch-table th:nth-child(5),
 .intake-batch-table td:nth-child(5) {
-  width: 82px;
+  width: 110px;
 }
 
 .intake-batch-table th:nth-child(6),
 .intake-batch-table td:nth-child(6) {
-  width: 82px;
+  width: 110px;
 }
 
 .intake-batch-table th:nth-child(7),
 .intake-batch-table td:nth-child(7) {
-  width: 56px;
+  width: 64px;
 }
 
 .intake-batch-table th:nth-child(8),
@@ -451,7 +451,7 @@
 
 .intake-batch-table th:nth-child(9),
 .intake-batch-table td:nth-child(9) {
-  width: 102px;
+  width: 112px;
 }
 
 .intake-batch-table th:nth-child(10),
@@ -461,8 +461,17 @@
 
 .intake-batch-table th:nth-child(11),
 .intake-batch-table td:nth-child(11) {
-  width: 180px;
+  width: 150px;
   white-space: nowrap;
+}
+
+.intake-batch-table .table-cell-text {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .intake-batch-table .ghost {

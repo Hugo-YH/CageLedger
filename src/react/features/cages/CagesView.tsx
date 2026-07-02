@@ -5,14 +5,12 @@ import type { CageRoom, CageSlotStatus, RoomBootstrapResponse } from "../../api/
 import { currentOccupancy } from "../../../domain/cages";
 import {
   BatchSlotEditor,
-  CageEmpty,
-  CageLoading,
-  Legend,
   PlacementDrawer,
   ReserveBar,
   SlotEditor,
   VirtualRack,
 } from "./components/CageWorkspaceComponents";
+import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
 
 export function CagesView() {
   const summary = useBootstrap("summary");
@@ -174,6 +172,7 @@ export function CagesView() {
               <VirtualRack
                 rack={selectedRack}
                 roomName={selectedRoom?.name || ""}
+                roomSpecies={selectedRoom?.defaultSpecies || ""}
                 slots={visibleSlots}
                 occupancies={occupancies}
                 selectedSlotId={selectedSlotId}
@@ -224,6 +223,7 @@ export function CagesView() {
           slot={selectedSlot}
           rack={selectedRack}
           roomName={selectedRoom?.name || ""}
+          roomSpecies={selectedRoom?.defaultSpecies || ""}
           occupancy={currentOccupancy(selectedSlot.id, occupancies)}
           roomId={selectedRoomId}
           onClose={() => setSelectedSlotId("")}

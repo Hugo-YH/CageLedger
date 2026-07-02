@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useLogout } from "../../api/session";
@@ -96,7 +96,17 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               icon="tag"
               active={isIntakeView(ui.activeView)}
               expanded={activeDrawer === "intake"}
+              controls="nav-intake"
               onClick={() => toggleDrawer("intake", "intake-entry")}
+            />
+            <NavigationSubmenu
+              id="nav-intake"
+              drawer="intake"
+              expanded={activeDrawer === "intake"}
+              showCurrent={activeDrawer === null}
+              activeView={ui.activeView}
+              settingsViews={settingsViews}
+              onNavigate={navigate}
             />
             <NavItem view="cages" label="笼位管理" icon="grid" activeView={ui.activeView} onNavigate={navigate} />
             <NavGroupButton
@@ -104,13 +114,24 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               icon="calculator"
               active={isBillingView(ui.activeView)}
               expanded={activeDrawer === "billing"}
+              controls="nav-billing"
               onClick={() => toggleDrawer("billing", "billing-quantity-entry")}
+            />
+            <NavigationSubmenu
+              id="nav-billing"
+              drawer="billing"
+              expanded={activeDrawer === "billing"}
+              showCurrent={activeDrawer === null}
+              activeView={ui.activeView}
+              settingsViews={settingsViews}
+              onNavigate={navigate}
             />
             <button
               className={`nav-item nav-item-settings-root ${isSettingsView(ui.activeView) ? "active" : ""}`}
               type="button"
               aria-label="系统设置"
               aria-expanded={activeDrawer === "settings"}
+              aria-controls="nav-settings"
               onClick={() => toggleDrawer("settings", "rooms")}
             >
               <Icon name="settings" />
@@ -119,24 +140,17 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
                 ›
               </span>
             </button>
-          </div>
-        </nav>
-        {activeDrawer ? (
-          <div className="settings-drawer-layer">
-            <button
-              className="settings-drawer-backdrop"
-              type="button"
-              aria-label="关闭导航面板"
-              onClick={() => setActiveDrawer(null)}
-            />
-            <NavigationPanel
-              drawer={activeDrawer}
+            <NavigationSubmenu
+              id="nav-settings"
+              drawer="settings"
+              expanded={activeDrawer === "settings"}
+              showCurrent={activeDrawer === null}
               activeView={ui.activeView}
               settingsViews={settingsViews}
               onNavigate={navigate}
             />
           </div>
-        ) : null}
+        </nav>
         <div className="sidebar-account">
           <span>当前账号</span>
           <strong>{user.displayName}</strong>
@@ -223,12 +237,14 @@ function NavGroupButton({
   icon,
   active,
   expanded,
+  controls,
   onClick,
 }: {
   label: string;
   icon: IconName;
   active: boolean;
   expanded: boolean;
+  controls: string;
   onClick: () => void;
 }) {
   return (
@@ -237,6 +253,7 @@ function NavGroupButton({
       type="button"
       aria-label={label}
       aria-expanded={expanded}
+      aria-controls={controls}
       onClick={onClick}
     >
       <Icon name={icon} />
@@ -248,28 +265,37 @@ function NavGroupButton({
   );
 }
 
-function NavigationPanel({
+function NavigationSubmenu({
+  id,
   drawer,
+  expanded,
+  showCurrent,
   activeView,
   settingsViews,
   onNavigate,
 }: {
+  id: string;
   drawer: NavigationDrawer;
+  expanded: boolean;
+  showCurrent: boolean;
   activeView: WorkspaceView;
   settingsViews: Array<[WorkspaceView, string, IconName, string]>;
   onNavigate: (view: WorkspaceView) => void;
 }) {
-  const title = drawer === "intake" ? "笼卡管理" : drawer === "billing" ? "饲养费管理" : "系统设置";
-  const description =
-    drawer === "intake" ? "接收、识别和批次流转" : drawer === "billing" ? "核算、结算和报销台账" : "基础配置与系统维护";
+  const groupIsActive =
+    drawer === "intake"
+      ? isIntakeView(activeView)
+      : drawer === "billing"
+        ? isBillingView(activeView)
+        : isSettingsView(activeView);
   return (
-    <div className="settings-drawer settings-drawer-desktop navigation-panel" role="dialog" aria-label={`${title}导航`}>
-      <div className="settings-drawer-head">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
+    <div
+      id={id}
+      className={`nav-subtree navigation-submenu ${expanded ? "expanded" : ""} ${showCurrent && groupIsActive ? "current-group" : ""}`}
+      aria-label={`${drawer === "intake" ? "笼卡管理" : drawer === "billing" ? "饲养费管理" : "系统设置"}子菜单`}
+    >
       {drawer === "intake" ? (
-        <div className="settings-drawer-grid">
+        <>
           <NavigationPanelItem
             view="intake-entry"
             label="接收与识别"
@@ -286,60 +312,57 @@ function NavigationPanel({
             activeView={activeView}
             onNavigate={onNavigate}
           />
-        </div>
+        </>
       ) : null}
       {drawer === "billing" ? (
-        <div className="navigation-panel-sections">
-          <NavigationPanelSection label="核算数据">
-            <NavigationPanelItem
-              view="billing-cage-map"
-              label="动态笼位图结算"
-              description="按真实占用时间线自动核算"
-              icon="grid"
-              activeView={activeView}
-              onNavigate={onNavigate}
-            />
-          </NavigationPanelSection>
-          <NavigationPanelSection label="数量统计表结算">
-            <NavigationPanelItem
-              view="billing-quantity-entry"
-              label="数量统计表录入"
-              description="按伦理号和房间录入月度变化"
-              icon="calculator"
-              activeView={activeView}
-              onNavigate={onNavigate}
-            />
-            <NavigationPanelItem
-              view="billing-quantity-saved"
-              label="已保存数量统计表"
-              description="检索、预览和维护历史统计表"
-              icon="book"
-              activeView={activeView}
-              onNavigate={onNavigate}
-            />
-          </NavigationPanelSection>
-          <NavigationPanelSection label="结算管理">
-            <NavigationPanelItem
-              view="billing-settlement"
-              label="按项目负责人结算"
-              description="自动合并负责人名下伦理并出单"
-              icon="calculator"
-              activeView={activeView}
-              onNavigate={onNavigate}
-            />
-            <NavigationPanelItem
-              view="workflow-center"
-              label="结算与报销台账"
-              description="跟踪结算流程、报销和累计未缴"
-              icon="refresh"
-              activeView={activeView}
-              onNavigate={onNavigate}
-            />
-          </NavigationPanelSection>
-        </div>
+        <>
+          <span className="nav-submenu-label">核算数据</span>
+          <NavigationPanelItem
+            view="billing-cage-map"
+            label="动态笼位图结算"
+            description="按真实占用时间线自动核算"
+            icon="grid"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <span className="nav-submenu-label">数量统计表</span>
+          <NavigationPanelItem
+            view="billing-quantity-entry"
+            label="数量统计表录入"
+            description="按伦理号和房间录入月度变化"
+            icon="calculator"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <NavigationPanelItem
+            view="billing-quantity-saved"
+            label="已保存数量统计表"
+            description="检索、预览和维护历史统计表"
+            icon="book"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <span className="nav-submenu-label">结算管理</span>
+          <NavigationPanelItem
+            view="billing-settlement"
+            label="按项目负责人结算"
+            description="自动合并负责人名下伦理并出单"
+            icon="calculator"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <NavigationPanelItem
+            view="workflow-center"
+            label="结算与报销台账"
+            description="跟踪结算流程、报销和累计未缴"
+            icon="refresh"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+        </>
       ) : null}
       {drawer === "settings" ? (
-        <div className="settings-drawer-grid">
+        <>
           {settingsViews.map(([view, label, icon, itemDescription]) => (
             <NavigationPanelItem
               key={view}
@@ -351,18 +374,9 @@ function NavigationPanel({
               onNavigate={onNavigate}
             />
           ))}
-        </div>
+        </>
       ) : null}
     </div>
-  );
-}
-
-function NavigationPanelSection({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="navigation-panel-section">
-      <h3>{label}</h3>
-      <div className="settings-drawer-grid">{children}</div>
-    </section>
   );
 }
 
@@ -390,7 +404,7 @@ function NavigationPanelItem({
     >
       <Icon name={icon} />
       <span>{label}</span>
-      <small>{description}</small>
+      <small className="sr-only">{description}</small>
     </button>
   );
 }

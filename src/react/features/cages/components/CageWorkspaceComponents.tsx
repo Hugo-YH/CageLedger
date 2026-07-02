@@ -4,19 +4,15 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CageRack, CageSlot, CageSlotStatus, Occupancy, PlacementTask } from "../../../api/contracts";
 import { useMoveInPlacement, useReservePlacement, useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
-import {
-  cageCode,
-  currentOccupancy,
-  emptyOccupancy,
-  occupancyPeriodTone,
-  slotPosition,
-} from "../../../../domain/cages";
+import { animalAgeText, cageCode, currentOccupancy, emptyOccupancy, slotPosition } from "../../../../domain/cages";
+import { CageSlotButton } from "./CageSlotButton";
 
 const today = new Date().toISOString().slice(0, 10);
 
 export function VirtualRack({
   rack,
   roomName,
+  roomSpecies,
   slots,
   occupancies,
   selectedSlotId,
@@ -25,6 +21,7 @@ export function VirtualRack({
 }: {
   rack: CageRack;
   roomName: string;
+  roomSpecies: string;
   slots: CageSlot[];
   occupancies: Occupancy[];
   selectedSlotId: string;
@@ -36,7 +33,7 @@ export function VirtualRack({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 126,
+    estimateSize: () => (roomSpecies === "monkey" ? 144 : 126),
     overscan: 3,
   });
   return (
@@ -46,7 +43,7 @@ export function VirtualRack({
           const row = rows[virtualRow.index];
           return (
             <div
-              className="react-rack-row"
+              className={`react-rack-row ${roomSpecies === "monkey" ? "monkey-rack-row" : ""}`}
               key={row}
               style={{
                 transform: `translateY(${virtualRow.start}px)`,
@@ -57,13 +54,15 @@ export function VirtualRack({
                 .filter((slot) => slot.row === row)
                 .sort((a, b) => a.col - b.col)
                 .map((slot) => (
-                  <SlotButton
+                  <CageSlotButton
                     key={slot.id}
                     slot={slot}
                     rack={rack}
                     roomName={roomName}
+                    roomSpecies={roomSpecies}
                     occupancy={currentOccupancy(slot.id, occupancies)}
                     selected={slot.id === selectedSlotId || selectedSlotIds.includes(slot.id)}
+                    today={today}
                     onClick={() => onSelect(slot)}
                   />
                 ))}
@@ -75,50 +74,11 @@ export function VirtualRack({
   );
 }
 
-function SlotButton({
-  slot,
-  rack,
-  roomName,
-  occupancy,
-  selected,
-  onClick,
-}: {
-  slot: CageSlot;
-  rack: CageRack;
-  roomName: string;
-  occupancy: Occupancy | null;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const tone = occupancyPeriodTone(occupancy, today);
-  return (
-    <button
-      className={`slot ${slot.status} ${tone ? `period-${tone}` : ""} ${selected ? "selected" : ""}`}
-      type="button"
-      aria-label={`${cageCode(slot, rack.index, roomName)} ${occupancy?.iacuc || "空"}`}
-      onClick={onClick}
-    >
-      <span className="slot-code">{cageCode(slot, rack.index, roomName)}</span>
-      {occupancy ? (
-        <>
-          <strong className="slot-iacuc">{occupancy.iacuc || "未填写 IACUC"}</strong>
-          <span className="slot-person">
-            {occupancy.pi || "未填写PI"} / {occupancy.owner || "未填写负责人"}
-          </span>
-          <span className="slot-date">{occupancy.startDate || "未设置入住时间"}</span>
-        </>
-      ) : (
-        <strong className="slot-empty-text">空</strong>
-      )}
-      <span className="slot-position">{slotPosition(slot)}</span>
-    </button>
-  );
-}
-
 export function SlotEditor({
   slot,
   rack,
   roomName,
+  roomSpecies,
   occupancy,
   roomId,
   onClose,
@@ -127,6 +87,7 @@ export function SlotEditor({
   slot: CageSlot;
   rack: CageRack;
   roomName: string;
+  roomSpecies: string;
   occupancy: Occupancy | null;
   roomId: string;
   onClose: () => void;
@@ -136,6 +97,8 @@ export function SlotEditor({
     () => occupancy || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today),
   );
   const [confirmClear, setConfirmClear] = useState(false);
+  const showMonkeyFields = roomSpecies === "monkey";
+  const ageText = animalAgeText(draft.birthDate, today);
   const save = useSaveOccupancy(roomId);
   const update = (key: keyof Occupancy, value: string | number | null) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -193,6 +156,42 @@ export function SlotEditor({
             onChange={(value) => update("animalCount", value ? Number(value) : null)}
           />
         </div>
+        {showMonkeyFields ? (
+          <fieldset className="monkey-detail-fields">
+            <legend>猴个体信息</legend>
+            <div className="compact-form-row third">
+              <label>
+                性别
+                <select
+                  value={draft.animalSex || "unknown"}
+                  onChange={(event) => update("animalSex", event.target.value)}
+                >
+                  <option value="unknown">请选择</option>
+                  <option value="male">雄</option>
+                  <option value="female">雌</option>
+                </select>
+              </label>
+              <Field
+                label="出生日期"
+                type="date"
+                value={draft.birthDate || ""}
+                max={today}
+                onChange={(value) => update("birthDate", value)}
+              />
+              <div className="monkey-age-field">
+                <label htmlFor="monkey-age">年龄</label>
+                <input
+                  id="monkey-age"
+                  type="text"
+                  value={ageText || "自动计算"}
+                  readOnly
+                  aria-describedby="monkey-age-help"
+                />
+                <small id="monkey-age-help">根据出生日期自动计算</small>
+              </div>
+            </div>
+          </fieldset>
+        ) : null}
         <div className="compact-form-row half">
           <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
           <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
@@ -454,11 +453,13 @@ function Field({
   value,
   onChange,
   type = "text",
+  max,
 }: {
   label: string;
   value: string | number;
   onChange: (value: string) => void;
   type?: string;
+  max?: string;
 }) {
   return (
     <label>
@@ -467,33 +468,9 @@ function Field({
         type={type}
         value={value}
         min={type === "number" ? 0 : undefined}
+        max={max}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
-  );
-}
-export function Legend({ tone, label }: { tone: string; label: string }) {
-  return (
-    <span className="legend-item">
-      <i className={`status-dot ${tone}`} />
-      {label}
-    </span>
-  );
-}
-export function CageLoading() {
-  return (
-    <div className="empty-state" aria-busy="true">
-      <h3>正在加载笼位信息...</h3>
-    </div>
-  );
-}
-export function CageEmpty() {
-  return (
-    <section className="workspace-view">
-      <div className="empty-state">
-        <h2>尚未创建饲养间</h2>
-        <p>请先在房间管理中创建饲养间和笼架。</p>
-      </div>
-    </section>
   );
 }

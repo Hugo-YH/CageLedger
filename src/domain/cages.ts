@@ -32,6 +32,41 @@ export function occupancyPeriodTone(occupancy: Occupancy | null, today: string) 
   return today > occupancy.endDate ? "overdue" : "normal";
 }
 
+export function animalAgeText(birthDate: string | undefined, referenceDate: string) {
+  if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return "";
+  const birth = parseDateParts(birthDate);
+  const reference = parseDateParts(referenceDate);
+  if (!birth || !reference || birthDate > referenceDate) return "";
+  let years = reference.year - birth.year;
+  let months = reference.month - birth.month;
+  let days = reference.day - birth.day;
+  if (days < 0) {
+    months -= 1;
+    days += new Date(reference.year, reference.month - 1, 0).getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years > 0) return `${years}岁${months}月`;
+  if (months > 0) return `${months}月${days}天`;
+  return `${Math.max(days, 0)}天`;
+}
+
+export function animalSexLabel(value: string | undefined) {
+  if (value === "male") return "雄";
+  if (value === "female") return "雌";
+  return "未填写";
+}
+
+function parseDateParts(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
+  return { year, month, day };
+}
+
 export function emptyOccupancy(slotId: string, code: string, today: string): Occupancy {
   return {
     id: crypto.randomUUID(),

@@ -54,7 +54,7 @@ export async function ensureTestInfrastructure(page: Page) {
 
 export async function openSettingsView(page: Page, name: string) {
   await page.getByRole("button", { name: "系统设置", exact: true }).click();
-  const navigation = page.getByRole("dialog", { name: "系统设置导航", exact: true });
+  const navigation = page.locator("#nav-settings");
   await expect(navigation).toBeVisible();
   await navigation.getByRole("button", { name: new RegExp(`^${escapeRegExp(name)}(?:\\s|$)`) }).click();
 }

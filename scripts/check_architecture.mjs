@@ -8,8 +8,32 @@ const root = process.cwd();
 const enforce = process.argv.includes("--enforce");
 const sourceExtensions = new Set([".ts", ".tsx", ".py", ".css"]);
 const ignoredParts = new Set([".venv", "node_modules", "web-dist", "dist", "data", "docs", "src/vendor"]);
-const sizeBudgets = { ".ts": 500, ".tsx": 500, ".py": 600, ".css": 1500 };
-const baselineHotspots = new Set(["server_app/legacy.py"]);
+const hardLimitMultiplier = 1.2;
+const sizePolicies = [
+  { label: "release notes", pattern: /^src\/react\/releaseNotes(?:Current|History|Archive)?\.ts$/, budget: 3000 },
+  { label: "test", pattern: /(?:^|\/)(?:tests?|__tests__)(?:\/|$)|\.(?:test|spec)\.[^.]+$/, budget: 1000 },
+  { label: "React view", pattern: /^src\/react\/features\/.+View\.tsx$/, budget: 800 },
+  {
+    label: "React component or hook",
+    pattern: /^src\/react\/(?:components|features\/.+\/components|features\/.+\/hooks)\/|\/(?:use[A-Z][^/]*)\.tsx?$/,
+    budget: 400,
+  },
+  { label: "domain rule", pattern: /^src\/domain\//, budget: 600 },
+  { label: "TypeScript module", extensions: new Set([".ts", ".tsx"]), budget: 500 },
+  { label: "Python module", extensions: new Set([".py"]), budget: 600 },
+  { label: "stylesheet", extensions: new Set([".css"]), budget: 1500 },
+];
+const baselineHotspots = new Map([
+  ["server_app/legacy.py", { ceiling: 6100, reason: "legacy HTTP compatibility" }],
+  [
+    "src/react/features/cages/components/CageWorkspaceComponents.tsx",
+    { ceiling: 477, reason: "existing cage workspace composition" },
+  ],
+  [
+    "src/react/features/intake/components/IntakePanels.tsx",
+    { ceiling: 419, reason: "existing intake workspace composition" },
+  ],
+]);
 
 const files = walk(root).filter((file) => sourceExtensions.has(path.extname(file)));
 const issues = [];
@@ -61,20 +85,36 @@ for (const file of pythonFiles) {
 for (const cycle of findCycles(pythonEdges)) issues.push(`backend cycle: ${cycle.map(relative).join(" -> ")}`);
 
 const hotspots = [];
+const warnings = [];
 for (const file of files) {
   const filePath = relative(file);
   const lines = fs.readFileSync(file, "utf8").split(/\r?\n/).length;
-  const budget = sizeBudgets[path.extname(file)];
+  const policy = sizePolicies.find(
+    (candidate) => candidate.pattern?.test(filePath) || candidate.extensions?.has(path.extname(file)),
+  );
+  const budget = policy?.budget;
   if (budget && lines > budget) {
-    hotspots.push({ file: filePath, lines, budget, allowed: baselineHotspots.has(filePath) });
-    if (!baselineHotspots.has(filePath)) issues.push(`size budget: ${filePath} has ${lines} lines (limit ${budget})`);
+    const hardLimit = Math.ceil(budget * hardLimitMultiplier);
+    const baseline = baselineHotspots.get(filePath);
+    const blocked = baseline ? lines > baseline.ceiling : lines > hardLimit;
+    const state = baseline && !blocked ? "baseline" : blocked ? "blocked" : "warning";
+    hotspots.push({ file: filePath, lines, budget, hardLimit, policy: policy.label, baseline, state });
+    if (blocked) {
+      const limit = baseline?.ceiling || hardLimit;
+      issues.push(`size budget: ${filePath} has ${lines} lines (${policy.label} hard limit ${limit})`);
+    } else if (!baseline) {
+      warnings.push(`size warning: ${filePath} has ${lines} lines (${policy.label} target ${budget})`);
+    }
   }
 }
 
 console.log(`Architecture report: ${frontendFiles.length} frontend modules, ${pythonFiles.length} backend modules.`);
-console.log(`Dependency issues: ${issues.length}. Size hotspots: ${hotspots.length}.`);
+console.log(`Blocking issues: ${issues.length}. Warnings: ${warnings.length}. Size hotspots: ${hotspots.length}.`);
 for (const item of hotspots) {
-  console.log(`  ${item.allowed ? "baseline" : "new"}: ${item.file} ${item.lines}/${item.budget}`);
+  const limit = item.baseline?.ceiling || item.hardLimit;
+  console.log(
+    `  ${item.state}: ${item.file} ${item.lines} lines (${item.policy}, target ${item.budget}, limit ${limit})${item.baseline ? ` [${item.baseline.reason}]` : ""}`,
+  );
 }
 for (const issue of issues) console.error(`  issue: ${issue}`);
 

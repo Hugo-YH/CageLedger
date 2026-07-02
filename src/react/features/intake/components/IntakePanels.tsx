@@ -306,10 +306,26 @@ export function IntakeBatchList({
                   <td>
                     <span className={`pill ${item.status}`}>{intakeStatusLabel(item.status)}</span>
                   </td>
-                  <td>{item.batchNo}</td>
-                  <td>{item.supplier}</td>
-                  <td>{item.pi || "-"}</td>
-                  <td>{item.owner || "-"}</td>
+                  <td>
+                    <span className="table-cell-text" title={item.batchNo}>
+                      {item.batchNo}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="table-cell-text" title={item.supplier}>
+                      {item.supplier}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="table-cell-text" title={item.pi || "-"}>
+                      {item.pi || "-"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="table-cell-text" title={item.owner || "-"}>
+                      {item.owner || "-"}
+                    </span>
+                  </td>
                   <td>{item.quantity ?? "-"}</td>
                   <td>{item.roomName || "-"}</td>
                   <td>{item.intakeDate || "-"}</td>

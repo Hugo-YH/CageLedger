@@ -61,6 +61,10 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "操作日志", exact: true })).toBeVisible();
   await openSettingsView(page, "关于系统");
   await expect(page.getByRole("heading", { name: "关于系统", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "隐藏导航栏", exact: true }).click();
+  await expect(page.locator("#nav-settings")).toBeHidden();
+  await expect(page.getByRole("button", { name: "展开导航栏", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "展开导航栏", exact: true }).click();
   await page.getByRole("button", { name: "主页", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "退出", exact: true }).click();

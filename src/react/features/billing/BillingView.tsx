@@ -38,16 +38,23 @@ export function BillingView({ user, mode }: { user: SessionUser; mode: BillingMo
         {mode === "quantity-entry" ? <QuantitySheetView user={user} mode="entry" /> : null}
         {mode === "quantity-saved" ? <QuantitySheetView user={user} mode="saved" /> : null}
         {mode === "cage-map" ? (
-          <section className="panel">
+          <section className="panel billing-unavailable-panel" aria-labelledby="cage-map-panel-title">
             <div className="panel-head">
               <div className="panel-title-line">
-                <h2>动态笼位图核算</h2>
+                <h2 id="cage-map-panel-title">动态笼位图核算</h2>
                 <p>系统按当前笼位占用时间线生成每日费用。</p>
               </div>
             </div>
             <div className="empty-state">
               <h3>选择项目负责人生成结算预览</h3>
               <p>进入“按项目负责人结算”，选择动态笼位图来源后生成结算预览。</p>
+            </div>
+            <div className="billing-unavailable-overlay" role="status" aria-live="polite">
+              <span className="billing-unavailable-mark" aria-hidden="true">
+                调试
+              </span>
+              <strong>功能调试中，暂未启用</strong>
+              <p>动态笼位图核算完成校验后开放。当前请使用数量统计表录入和按项目负责人结算。</p>
             </div>
           </section>
         ) : null}
