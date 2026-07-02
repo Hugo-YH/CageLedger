@@ -36,7 +36,7 @@ export function IntakeEntryPanel({
   onUpdate: <K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) => void;
 }) {
   return (
-    <form className="panel large intake-entry-panel" onSubmit={onSubmit}>
+    <form id="intake-entry-panel" className="panel large intake-entry-panel" onSubmit={onSubmit}>
       <div className="panel-head">
         <div className="panel-title-line">
           <h2>{editing ? "编辑接收笼卡" : "接收笼卡"}</h2>
@@ -87,12 +87,12 @@ export function IntakeEntryPanel({
       <div className="intake-form-grid">
         <div className="intake-field-row three">
           <Field label="购买单位" required value={draft.supplier} onChange={(value) => onUpdate("supplier", value)} />
-          <Field label="批次号" required value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
-          <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => onUpdate("iacuc", value)} />
+          <Field label="批次号" value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
+          <Field label="IACUC 编号" required value={draft.iacuc} onChange={(value) => onUpdate("iacuc", value)} />
         </div>
         <div className="intake-field-row two">
-          <Field label="项目负责人" value={draft.pi} onChange={(value) => onUpdate("pi", value)} />
-          <Field label="实验负责人/助手" value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
+          <Field label="项目负责人" required value={draft.pi} onChange={(value) => onUpdate("pi", value)} />
+          <Field label="实验负责人" required value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
         </div>
         <div className="intake-field-row four">
           <label>
@@ -110,14 +110,13 @@ export function IntakeEntryPanel({
           <Field label="品系" value={draft.strainStandard} onChange={(value) => onUpdate("strainStandard", value)} />
           <Field
             label="数量（只）"
-            required
             type="number"
             value={draft.quantity ?? ""}
             onChange={(value) => onUpdate("quantity", value ? Number(value) : null)}
           />
-          <label>
+          <label className="field-required">
             房间
-            <select value={draft.roomName} onChange={(event) => onUpdate("roomName", event.target.value)}>
+            <select required value={draft.roomName} onChange={(event) => onUpdate("roomName", event.target.value)}>
               <option value="">请选择系统房间</option>
               {roomNames.map((room) => (
                 <option key={room} value={room}>

@@ -5,7 +5,12 @@ import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contr
 import { useConfirmIntakeBatch, useDeleteIntakeBatch, useIntakeBatches, useSaveIntakeBatch } from "../../api/intake";
 import { useIacucIndex } from "../../api/iacuc";
 import { ModalShell } from "../../components/WorkspaceUi";
-import { createIntakeDraft, normalizeIntakeBatch, parseIntakeMessage } from "../../../domain/intake";
+import {
+  createIntakeDraft,
+  missingIntakeRequiredFields,
+  normalizeIntakeBatch,
+  parseIntakeMessage,
+} from "../../../domain/intake";
 import { openIntakeCardPrint } from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
 
@@ -67,8 +72,9 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const item = normalizeIntakeBatch({ ...draft, updatedAt: new Date().toISOString() }, roomNames);
-    if (!item.supplier || !item.batchNo || !item.quantity || !item.intakeDate) {
-      setNotice("请填写购买单位、批次号、动物数量和接收日期。");
+    const missingFields = missingIntakeRequiredFields(item);
+    if (missingFields.length) {
+      setNotice(`请填写必填项目：${missingFields.join("、")}。`);
       return;
     }
     try {
@@ -90,7 +96,9 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
   function edit(item: IntakeBatch) {
     setDraft(normalizeIntakeBatch(item, roomNames));
     setEditing(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.requestAnimationFrame(() => {
+      document.getElementById("intake-entry-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function markPrinted(targets: IntakeBatch[]) {
@@ -106,17 +114,32 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
 
   async function printCurrentBatch() {
     const item = normalizeIntakeBatch({ ...draft, updatedAt: new Date().toISOString() }, roomNames);
-    if (!item.supplier || !item.batchNo || !item.quantity || !item.intakeDate) {
-      setNotice("打印前请填写购买单位、批次号、动物数量和接收日期。");
+    const missingFields = missingIntakeRequiredFields(item);
+    if (missingFields.length) {
+      setNotice(`打印前请填写必填项目：${missingFields.join("、")}。`);
       return;
     }
+    if (!item.quantity || item.quantity <= 0 || item.finalCardCount <= 0) {
+      setNotice("打印前请填写动物数量和打印张数。");
+      return;
+    }
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setNotice("打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。");
+      return;
+    }
+    popup.document.write(
+      '<!doctype html><html lang="zh-CN"><head><title>正在准备笼卡</title></head><body>正在准备笼卡...</body></html>',
+    );
+    popup.document.close();
     try {
       const response = await save.mutateAsync({ item, exists: editing });
       const saved = normalizeIntakeBatch(response.item, roomNames);
       setDraft(saved);
       setEditing(true);
-      if (openIntakeCardPrint([saved])) await markPrinted([saved]);
+      if (openIntakeCardPrint([saved], popup)) await markPrinted([saved]);
     } catch (error) {
+      popup.close();
       setNotice(error instanceof Error ? error.message : "保存笼卡失败");
     }
   }

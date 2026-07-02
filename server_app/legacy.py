@@ -2138,11 +2138,15 @@ def validate_entity_payload(collection, item):
         require_text(item, "targetType", "减免规则目标类型不能为空")
         require_text(item, "targetId", "减免规则目标不能为空")
     elif collection == "intakeBatches":
-        require_text(item, "batchNo", "批次号不能为空")
         require_text(item, "supplier", "购买单位不能为空")
+        require_text(item, "iacuc", "IACUC 编号不能为空")
+        require_text(item, "pi", "项目负责人不能为空")
+        require_text(item, "owner", "实验负责人不能为空")
+        require_text(item, "roomName", "房间不能为空")
+        require_text(item, "intakeDate", "接收日期不能为空")
         require_text(item, "status", "批次状态不能为空")
         quantity = as_int(item.get("quantity"))
-        if quantity is None or quantity <= 0:
+        if quantity is not None and quantity <= 0:
             raise ValueError("动物数量必须大于 0")
 
 

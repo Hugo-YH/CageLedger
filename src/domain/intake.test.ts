@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeIntakeBatch, parseIntakeMessage } from "./intake";
+import { missingIntakeRequiredFields, normalizeIntakeBatch, parseIntakeMessage } from "./intake";
 
 describe("intake message parser", () => {
   it("extracts the purchase and husbandry fields", () => {
@@ -26,5 +26,10 @@ describe("intake message parser", () => {
     });
     expect(result.cards).toHaveLength(1);
     expect(result.remainingCardCount).toBe(3);
+  });
+
+  it("reports the six required intake fields", () => {
+    const result = normalizeIntakeBatch({ supplier: "购买单位", iacuc: "Z2026001", pi: "负责人" });
+    expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人", "房间", "接收日期"]);
   });
 });

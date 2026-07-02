@@ -25,14 +25,30 @@ describe("print templates", () => {
       intakeDate: "2026-06-01",
       endDate: "2026-06-30",
       roomName: "8014",
+      quantity: 5,
       finalCardCount: 1,
-      cards: [{ qrId: "ABCD", label: "1/1", suggestedQuantity: "5" }],
+      cards: [{ qrId: "ABCD", label: "1/1", index: 1, suggestedQuantity: "5" }],
     } as IntakeBatch;
     const html = intakeCardsPrintHtml([batch]);
     expect(html).toContain('aria-label="笼卡二维码"');
     expect(html).toContain("grid-auto-rows:40.09mm");
-    expect(html).toContain("width:8.5mm");
+    expect(html).toContain("width:9.5mm");
+    expect(html).toContain("width:19mm;height:19mm");
+    expect(html).toContain('viewBox="0 0 23 23"');
+    expect(html).toContain("5/5");
+    expect(html).toContain('window.addEventListener("load"');
     expect(html).not.toContain("保存后生成");
+  });
+
+  it("keeps the last cage quantity blank when the batch cannot divide evenly", () => {
+    const batch = {
+      quantity: 23,
+      intakeDate: "2026-07-01",
+      endDate: "",
+      finalCardCount: 5,
+      cards: [{ qrId: "WXYZ", label: "5/5", index: 5, suggestedQuantity: "" }],
+    } as IntakeBatch;
+    expect(intakeCardsPrintHtml([batch])).toContain(" /23");
   });
 
   it("uses the two-column official quantity sheet layout", () => {

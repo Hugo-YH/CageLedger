@@ -61,6 +61,18 @@ export function createIntakeDraft(receiverName = ""): IntakeBatch {
   return normalizeIntakeBatch({ id: crypto.randomUUID(), receiverName, status: "pending_print" });
 }
 
+export function missingIntakeRequiredFields(item: IntakeBatch) {
+  const fields: Array<[keyof IntakeBatch, string]> = [
+    ["supplier", "购买单位"],
+    ["iacuc", "IACUC 编号"],
+    ["pi", "项目负责人"],
+    ["owner", "实验负责人"],
+    ["roomName", "房间"],
+    ["intakeDate", "接收日期"],
+  ];
+  return fields.filter(([key]) => !String(item[key] ?? "").trim()).map(([, label]) => label);
+}
+
 export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: string[] = []): IntakeBatch {
   const species =
     item.species || inferSpecies(`${item.strainStandard || ""} ${item.strainRaw || ""} ${item.rawMessage || ""}`);

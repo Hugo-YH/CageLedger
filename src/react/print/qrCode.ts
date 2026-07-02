@@ -6,9 +6,9 @@ const VERSION_SPECS = [
   { version: 5, dataCodewords: 108, eccCodewords: 26, alignmentCenters: [6, 30] },
 ];
 
-export function qrCodeSvg(text: string, ariaLabel = "二维码") {
+export function qrCodeSvg(text: string, ariaLabel = "二维码", quietModules?: number) {
   const modules = qrCodeMatrix(text);
-  const quiet = text.trim().length <= 4 ? 2 : 4;
+  const quiet = quietModules ?? (text.trim().length <= 4 ? 2 : 4);
   const viewBoxSize = modules.length + quiet * 2;
   const cells: string[] = [];
   modules.forEach((row, rowIndex) =>

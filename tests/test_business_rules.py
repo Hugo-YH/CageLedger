@@ -4,6 +4,25 @@ import server
 
 
 class BusinessRuleParityTests(unittest.TestCase):
+    def test_intake_batch_required_fields_and_print_quantities(self):
+        item = {
+            "id": "batch-1",
+            "supplier": "购买单位",
+            "iacuc": "Z2026001",
+            "pi": "项目负责人",
+            "owner": "实验负责人",
+            "roomName": "8101",
+            "intakeDate": "2026-07-01",
+            "status": "pending_print",
+        }
+        server.validate_entity_payload("intakeBatches", item)
+        with self.assertRaisesRegex(ValueError, "实验负责人不能为空"):
+            server.validate_entity_payload("intakeBatches", {**item, "owner": ""})
+        self.assertEqual(
+            server.intake_card_suggested_quantity({"quantity": 23, "suggestedAnimalsPerCage": 5}, 4, 5),
+            "",
+        )
+
     def test_cage_card_short_code_round_trip(self):
         values = [server.encode_cage_card_sequence(index) for index in range(1, 101)]
         self.assertEqual(len(values), len(set(values)))
