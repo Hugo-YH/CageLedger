@@ -42,9 +42,11 @@ jobs:
 
       - name: Install frontend dependencies
         run: |
-          npm ci
+          bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
+            --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
           python3 -m venv .venv
-          .venv/bin/pip install --no-cache-dir -r requirements-dev.txt
+          bash scripts/retry_command.sh .venv/bin/pip install --no-cache-dir --retries 5 --timeout 60 \
+            -r requirements-dev.txt
 
       - name: Run release quality checks
         run: PATH="$PWD/.venv/bin:$PATH" npm run check

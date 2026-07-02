@@ -34,7 +34,9 @@ jobs:
           git checkout --detach FETCH_HEAD
 
       - name: Install dependencies
-        run: npm ci
+        run: >-
+          bash scripts/retry_command.sh npm ci --prefer-offline --no-audit
+          --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
       - name: Check formatting and lint
         run: |
@@ -67,7 +69,7 @@ jobs:
           git checkout --detach FETCH_HEAD
 
       - name: Install dependencies
-        run: pip install --no-cache-dir -r requirements-dev.txt
+        run: bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 -r requirements-dev.txt
 
       - name: Lint and test
         run: |
@@ -95,7 +97,9 @@ jobs:
           git checkout --detach FETCH_HEAD
 
       - name: Install application dependencies
-        run: npm ci
+        run: >-
+          bash scripts/retry_command.sh npm ci --prefer-offline --no-audit
+          --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
       - name: Run Playwright
         env:

@@ -6,7 +6,9 @@ FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 WORKDIR /build
 
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY scripts/retry_command.sh ./scripts/retry_command.sh
+RUN bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
+    --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
 COPY index.html vite.config.ts tsconfig.json ./
 COPY assets ./assets
@@ -18,7 +20,8 @@ FROM ${PYTHON_IMAGE}
 WORKDIR /app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY scripts/retry_command.sh ./scripts/retry_command.sh
+RUN bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 
 COPY server.py package.json LICENSE NOTICE ./
 COPY server_app ./server_app
