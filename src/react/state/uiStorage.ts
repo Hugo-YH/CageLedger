@@ -5,9 +5,13 @@ const LEGACY_STORAGE_KEYS = ["cageledger.v1", "lahcas.v1"];
 const WORKSPACE_VIEWS = new Set<WorkspaceView>([
   "dashboard",
   "cages",
-  "intake",
+  "intake-entry",
+  "intake-batches",
   "cage-card-scanner",
-  "billing",
+  "billing-cage-map",
+  "billing-quantity-entry",
+  "billing-quantity-saved",
+  "billing-settlement",
   "workflow-center",
   "rooms",
   "data",
@@ -38,6 +42,8 @@ function readView(key: string): WorkspaceView | null {
   try {
     const raw = localStorage.getItem(key);
     const value = raw ? (JSON.parse(raw) as { activeView?: unknown }).activeView : "";
+    if (value === "intake") return "intake-entry";
+    if (value === "billing") return "billing-quantity-entry";
     return typeof value === "string" && WORKSPACE_VIEWS.has(value as WorkspaceView) ? (value as WorkspaceView) : null;
   } catch {
     localStorage.removeItem(key);

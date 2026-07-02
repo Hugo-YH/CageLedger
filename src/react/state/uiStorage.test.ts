@@ -6,8 +6,15 @@ describe("UI preference storage", () => {
   beforeEach(() => localStorage.clear());
 
   it("stores only the active React workspace", () => {
-    persistWorkspaceView("billing");
-    expect(JSON.parse(localStorage.getItem("cageledger.ui.v2") || "{}")).toEqual({ activeView: "billing" });
+    persistWorkspaceView("billing-quantity-entry");
+    expect(JSON.parse(localStorage.getItem("cageledger.ui.v2") || "{}")).toEqual({
+      activeView: "billing-quantity-entry",
+    });
+  });
+
+  it("migrates legacy combined workspaces to their primary child page", () => {
+    localStorage.setItem("cageledger.ui.v2", JSON.stringify({ activeView: "billing" }));
+    expect(readStoredWorkspaceView()).toBe("billing-quantity-entry");
   });
 
   it("migrates the active view and clears the legacy business snapshot", () => {

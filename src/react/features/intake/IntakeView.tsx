@@ -14,18 +14,26 @@ import {
 import { openIntakeCardPrint } from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
 
-const pageSize = 10;
-
-export function IntakeView({ user, navigateScanner }: { user: SessionUser; navigateScanner: () => void }) {
+export function IntakeView({
+  user,
+  navigateScanner,
+  mode,
+}: {
+  user: SessionUser;
+  navigateScanner: () => void;
+  mode: "entry" | "batches";
+}) {
   const bootstrap = useBootstrap("summary");
   const iacucQuery = useIacucIndex();
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selected, setSelected] = useState<string[]>([]);
   const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName));
   const [editing, setEditing] = useState(false);
+  const [editingDialog, setEditingDialog] = useState(false);
   const [notice, setNotice] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
   const params: IntakeListParams = {
@@ -96,9 +104,7 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
   function edit(item: IntakeBatch) {
     setDraft(normalizeIntakeBatch(item, roomNames));
     setEditing(true);
-    window.requestAnimationFrame(() => {
-      document.getElementById("intake-entry-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setEditingDialog(mode === "batches");
   }
 
   async function markPrinted(targets: IntakeBatch[]) {
@@ -168,10 +174,14 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
         <div className="workspace-head-main">
           <span className="workspace-kicker">笼卡接收工作台</span>
           <div className="workspace-title-line">
-            <h1>笼卡管理</h1>
-            <span className="workspace-status-badge">{total} 个批次</span>
+            <h1>{mode === "entry" ? "接收与识别" : "待接收批次"}</h1>
+            <span className="workspace-status-badge">{mode === "entry" ? "预约信息录入" : `${total} 个批次`}</span>
           </div>
-          <p>识别预约消息、保存待接收批次，统一打印笼卡并推进到待进驻任务。</p>
+          <p>
+            {mode === "entry"
+              ? "识别预约消息或扫描笼卡，核对信息后保存为待接收批次。"
+              : "集中查询、打印和接收已保存批次，接收后自动进入待进驻任务。"}
+          </p>
           <div className="workspace-meta-strip">
             <div className="workspace-meta-card">
               <span>待接收批次</span>
@@ -183,58 +193,96 @@ export function IntakeView({ user, navigateScanner }: { user: SessionUser; navig
             </div>
           </div>
         </div>
-        <div className="workspace-head-actions">
-          <button className="primary" type="button" onClick={navigateScanner}>
-            笼卡识别
-          </button>
-        </div>
+        {mode === "entry" ? (
+          <div className="workspace-head-actions">
+            <button className="primary" type="button" onClick={navigateScanner}>
+              扫码识别笼卡
+            </button>
+          </div>
+        ) : null}
       </header>
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">
-          <IntakeEntryPanel
-            editing={editing}
-            draft={draft}
-            roomNames={roomNames}
-            notice={notice}
-            saving={save.isPending}
-            onSubmit={submit}
-            onNew={startNew}
-            onParse={parseMessage}
-            onPrint={() => void printCurrentBatch()}
-            onUpdate={update}
-          />
-          <IntakeBatchList
-            total={total}
-            selected={selected}
-            selectedItems={selectedItems}
-            items={items}
-            loading={list.isFetching}
-            page={page}
-            totalPages={totalPages}
-            params={params}
-            filters={filters}
-            onTogglePage={togglePage}
-            onToggleItem={(id, checked) =>
-              setSelected((current) =>
-                checked ? [...new Set([...current, id])] : current.filter((selectedId) => selectedId !== id),
-              )
-            }
-            onSort={toggleSort}
-            onFilter={(key, values) => {
-              setFilters((current) => ({ ...current, [key]: values }));
-              setPage(1);
-            }}
-            onPrint={(targets) => {
-              if (openIntakeCardPrint(targets)) void markPrinted(targets);
-            }}
-            onMarkPrinted={(targets) => void markPrinted(targets)}
-            onReceive={(targets) => void receive(targets)}
-            onEdit={edit}
-            onDelete={setDeleteTarget}
-            onPage={setPage}
-          />
+          {mode === "entry" ? (
+            <IntakeEntryPanel
+              editing={editing}
+              draft={draft}
+              roomNames={roomNames}
+              notice={notice}
+              saving={save.isPending}
+              onSubmit={submit}
+              onNew={startNew}
+              onParse={parseMessage}
+              onPrint={() => void printCurrentBatch()}
+              onUpdate={update}
+            />
+          ) : (
+            <IntakeBatchList
+              total={total}
+              selected={selected}
+              selectedItems={selectedItems}
+              items={items}
+              loading={list.isFetching}
+              page={page}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              params={params}
+              filters={filters}
+              onTogglePage={togglePage}
+              onToggleItem={(id, checked) =>
+                setSelected((current) =>
+                  checked ? [...new Set([...current, id])] : current.filter((selectedId) => selectedId !== id),
+                )
+              }
+              onSort={toggleSort}
+              onFilter={(key, values) => {
+                setFilters((current) => ({ ...current, [key]: values }));
+                setPage(1);
+              }}
+              onPrint={(targets) => {
+                if (openIntakeCardPrint(targets)) void markPrinted(targets);
+              }}
+              onMarkPrinted={(targets) => void markPrinted(targets)}
+              onReceive={(targets) => void receive(targets)}
+              onEdit={edit}
+              onDelete={setDeleteTarget}
+              onPage={setPage}
+              onPageSize={(value) => {
+                setPageSize(value);
+                setPage(1);
+                setSelected([]);
+              }}
+            />
+          )}
         </section>
       </div>
+      {editingDialog ? (
+        <ModalShell ariaLabel="编辑待接收批次" className="intake-edit-modal" onClose={() => setEditingDialog(false)}>
+          <div className="modal-shell-head">
+            <div>
+              <h2>编辑待接收批次</h2>
+              <p>{draft.batchNo}</p>
+            </div>
+            <button className="secondary" type="button" onClick={() => setEditingDialog(false)}>
+              关闭
+            </button>
+          </div>
+          <div className="modal-shell-body">
+            <IntakeEntryPanel
+              editing={editing}
+              draft={draft}
+              roomNames={roomNames}
+              notice={notice}
+              saving={save.isPending}
+              onSubmit={submit}
+              onNew={startNew}
+              onParse={parseMessage}
+              onPrint={() => void printCurrentBatch()}
+              onUpdate={update}
+            />
+          </div>
+        </ModalShell>
+      ) : null}
       {deleteTarget ? (
         <ModalShell ariaLabel="删除待接收批次" onClose={() => setDeleteTarget(null)}>
           <div className="modal-shell-head">

@@ -6,6 +6,7 @@ QUANTITY_SHEET_LIST_COLUMNS = {
     "month": {"expr": "month", "order": "month"},
     "iacuc": {"expr": "iacuc", "order": "iacuc"},
     "roomName": {"expr": "room_name", "order": "room_name"},
+    "manager": {"expr": "manager", "order": "manager"},
     "pi": {"expr": "pi", "order": "pi"},
     "updatedAt": {"expr": "updated_at", "order": "updated_at"},
 }

@@ -174,6 +174,10 @@ const QuantityEntryCells = memo(
                 placeholder=""
                 value={row.rawDateInput || row.date}
                 onChange={(event) => setDate(event.target.value)}
+                onBlur={(event) => {
+                  const normalized = normalizeEditorDate(event.currentTarget.value, month);
+                  if (normalized) setDate(normalized, normalized);
+                }}
               />
               <button
                 className="quantity-date-picker-button"

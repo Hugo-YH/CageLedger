@@ -133,6 +133,34 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(lines[1]["amount"], 18)
         self.assertEqual(lines[-1]["cumulative"], 30 * 18)
 
+    def test_quantity_sheet_custom_unit_price_overrides_room_rate(self):
+        sheets = [
+            {
+                "id": "custom-rate",
+                "month": "2026-06",
+                "iacuc": "Z1",
+                "roomId": "r1",
+                "customBillingEnabled": True,
+                "customUnitPrice": 3.5,
+                "initialCageCount": 4,
+                "initialAnimalCount": 0,
+                "rows": [],
+            }
+        ]
+        rooms = [
+            {
+                "id": "r1",
+                "defaultBillingItem": "mouse_standard",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 0, rooms, {})
+        self.assertEqual(lines[0]["unitPrice"], 3.5)
+        self.assertEqual(lines[0]["amount"], 14)
+        self.assertEqual(lines[0]["iacucBreakdown"][0]["unitPrice"], 3.5)
+
     def test_workflow_scope_and_document_number_are_stable(self):
         statement = {
             "sourceType": "pi_merged_quantity_sheet",

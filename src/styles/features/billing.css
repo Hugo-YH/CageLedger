@@ -346,6 +346,10 @@ th {
   padding-bottom: 10px;
 }
 
+.dense-table:not(.quantity-template-table) td {
+  white-space: nowrap;
+}
+
 .dense-table tbody tr {
   transition:
     background 140ms ease,
@@ -395,6 +399,58 @@ th {
   display: flex;
   gap: 6px;
   white-space: nowrap;
+}
+
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.quantity-saved-table {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+.quantity-saved-table th,
+.quantity-saved-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quantity-saved-table .quantity-col-select {
+  width: 46px;
+}
+
+.quantity-saved-table .quantity-col-month {
+  width: 96px;
+}
+
+.quantity-saved-table .quantity-col-iacuc {
+  width: 130px;
+}
+
+.quantity-saved-table .quantity-col-room {
+  width: 190px;
+}
+
+.quantity-saved-table .quantity-col-manager {
+  width: 125px;
+}
+
+.quantity-saved-table .quantity-col-pi {
+  width: 135px;
+}
+
+.quantity-saved-table .quantity-col-updated {
+  width: 165px;
+}
+
+.quantity-saved-table .quantity-col-actions {
+  width: 220px;
 }
 
 .scanner-panel {

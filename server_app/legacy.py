@@ -3264,6 +3264,7 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     validate_quantity_sheet_permission(actor, sheet)
     validate_quantity_sheet_animal_requirements(conn, sheet)
     validate_quantity_sheet_free_cage_settings(conn, sheet)
+    validate_quantity_sheet_custom_billing(sheet)
     exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
     db_values = quantity_sheet_db_values(sheet)
     if exists:
@@ -3371,6 +3372,10 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "freeCagePriority": max(as_int(source.get("freeCagePriority")) or 0, 0)
         if source.get("freeCagePriority") not in (None, "")
         else None,
+        "customBillingEnabled": parse_bool(source.get("customBillingEnabled")),
+        "customUnitPrice": max(as_float(source.get("customUnitPrice")) or 0, 0)
+        if source.get("customUnitPrice") not in (None, "")
+        else None,
         "billingUnit": "animal_day" if clean_text(source.get("billingUnit", "")) == "animal_day" else "cage_day",
         "animalDetailEnabled": parse_bool(source.get("animalDetailEnabled")),
         "initialAnimalCount": as_int(source.get("initialAnimalCount")),
@@ -3444,6 +3449,14 @@ def validate_quantity_sheet_free_cage_settings(conn, sheet):
         total += max(as_int(item.get("preferredFreeCages")) or 0, 0)
     if total > allowance:
         raise ValueError(f"{pi_name} 本月已指定优先减免 {total} 笼/天，超过总额度 {allowance} 笼/天")
+
+
+def validate_quantity_sheet_custom_billing(sheet):
+    if not sheet.get("customBillingEnabled"):
+        return
+    unit_price = as_float(sheet.get("customUnitPrice"))
+    if unit_price is None or unit_price <= 0:
+        raise ValueError("启用自定义饲养费后，请填写大于 0 的收费标准")
 
 
 def read_rooms_for_quantity_sheets(conn, sheets):

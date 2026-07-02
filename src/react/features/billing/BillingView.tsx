@@ -7,66 +7,37 @@ import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
 
 const currentMonth = new Date().toISOString().slice(0, 7);
+type BillingMode = "cage-map" | "quantity-entry" | "quantity-saved" | "settlement";
 
-export function BillingView({ user }: { user: SessionUser }) {
+export function BillingView({ user, mode }: { user: SessionUser; mode: BillingMode }) {
   const [source, setSource] = useState<"quantity_sheet" | "cage_map">("quantity_sheet");
+  const title = billingTitle(mode);
   return (
     <section className="workspace-view billing-workspace react-billing-view">
       <header className="workspace-head">
         <div className="workspace-head-main">
-          <span className="workspace-kicker">财务核算工作台</span>
+          <span className="workspace-kicker">饲养费核算工作台</span>
           <div className="workspace-title-line">
-            <h1>饲养费管理</h1>
-            <span className="workspace-status-badge">
-              当前来源：{source === "quantity_sheet" ? "数量统计表" : "动态笼位图"}
-            </span>
+            <h1>{title}</h1>
+            <span className="workspace-status-badge">{billingBadge(mode, source)}</span>
           </div>
-          <p>统一管理动态笼位图和数量统计表两条结算入口，保持导出单据和流程口径一致。</p>
+          <p>{billingDescription(mode)}</p>
           <div className="workspace-meta-strip">
             <div className="workspace-meta-card">
               <span>结算月份</span>
               <strong>{currentMonth.replace("-", "年")}月</strong>
             </div>
             <div className="workspace-meta-card success">
-              <span>核算入口</span>
-              <strong>{source === "quantity_sheet" ? "录入" : "自动"}</strong>
+              <span>当前任务</span>
+              <strong>{title}</strong>
             </div>
           </div>
         </div>
       </header>
       <div className="workspace-body billing-workspace-body">
-        <section className="panel billing-guide-panel">
-          <div className="panel-head">
-            <div className="panel-title-line">
-              <h2>核算入口</h2>
-            </div>
-          </div>
-          <div className="billing-guide-grid" role="tablist" aria-label="饲养费核算方式">
-            <button
-              className={`billing-guide-card ${source === "cage_map" ? "active" : ""}`}
-              type="button"
-              role="tab"
-              aria-selected={source === "cage_map"}
-              onClick={() => setSource("cage_map")}
-            >
-              <strong>动态笼位图（自动）</strong>
-              <span>按笼位真实占用时间线核算</span>
-            </button>
-            <button
-              className={`billing-guide-card ${source === "quantity_sheet" ? "active" : ""}`}
-              type="button"
-              role="tab"
-              aria-selected={source === "quantity_sheet"}
-              onClick={() => setSource("quantity_sheet")}
-            >
-              <strong>数量统计表（录入）</strong>
-              <span>按月度纸质台账录入核算</span>
-            </button>
-          </div>
-        </section>
-        {source === "quantity_sheet" ? (
-          <QuantitySheetView user={user} />
-        ) : (
+        {mode === "quantity-entry" ? <QuantitySheetView user={user} mode="entry" /> : null}
+        {mode === "quantity-saved" ? <QuantitySheetView user={user} mode="saved" /> : null}
+        {mode === "cage-map" ? (
           <section className="panel">
             <div className="panel-head">
               <div className="panel-title-line">
@@ -76,14 +47,68 @@ export function BillingView({ user }: { user: SessionUser }) {
             </div>
             <div className="empty-state">
               <h3>选择项目负责人生成结算预览</h3>
-              <p>结算工作区会从服务端读取对应月份的完整占用记录。</p>
+              <p>进入“按项目负责人结算”，选择动态笼位图来源后生成结算预览。</p>
             </div>
           </section>
-        )}
-        <SettlementWorkbench source={source} />
+        ) : null}
+        {mode === "settlement" ? (
+          <>
+            <section className="panel billing-guide-panel">
+              <div className="panel-head">
+                <div className="panel-title-line">
+                  <h2>结算数据来源</h2>
+                </div>
+              </div>
+              <div className="billing-guide-grid" role="tablist" aria-label="结算数据来源">
+                <button
+                  className={`billing-guide-card ${source === "cage_map" ? "active" : ""}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={source === "cage_map"}
+                  onClick={() => setSource("cage_map")}
+                >
+                  <strong>动态笼位图（自动）</strong>
+                  <span>按笼位真实占用时间线核算</span>
+                </button>
+                <button
+                  className={`billing-guide-card ${source === "quantity_sheet" ? "active" : ""}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={source === "quantity_sheet"}
+                  onClick={() => setSource("quantity_sheet")}
+                >
+                  <strong>数量统计表（录入）</strong>
+                  <span>汇总当前月份已保存统计表</span>
+                </button>
+              </div>
+            </section>
+            <SettlementWorkbench source={source} />
+          </>
+        ) : null}
       </div>
     </section>
   );
+}
+
+function billingTitle(mode: BillingMode) {
+  if (mode === "cage-map") return "动态笼位图结算";
+  if (mode === "quantity-entry") return "数量统计表录入";
+  if (mode === "quantity-saved") return "已保存数量统计表";
+  return "按项目负责人结算";
+}
+
+function billingBadge(mode: BillingMode, source: "quantity_sheet" | "cage_map") {
+  if (mode === "cage-map") return "自动核算";
+  if (mode === "quantity-entry") return "人工录入";
+  if (mode === "quantity-saved") return "数据维护";
+  return `当前来源：${source === "quantity_sheet" ? "数量统计表" : "动态笼位图"}`;
+}
+
+function billingDescription(mode: BillingMode) {
+  if (mode === "cage-map") return "按笼位真实占用时间线检查核算数据，适用于日常维护完整的饲养间。";
+  if (mode === "quantity-entry") return "按伦理号和房间录入月度数量变化，保存后进入结算汇总范围。";
+  if (mode === "quantity-saved") return "集中检索、预览、编辑和导出已保存的数量统计表。";
+  return "选择月份、项目负责人和数据来源，自动合并负责人名下伦理并生成结算单。";
 }
 
 function SettlementWorkbench({ source }: { source: "quantity_sheet" | "cage_map" }) {

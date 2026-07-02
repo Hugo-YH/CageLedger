@@ -379,6 +379,59 @@ h3 {
   min-width: 320px;
 }
 
+.workspace-view:not(.dashboard-view) > .workspace-head {
+  min-height: 76px;
+  padding: 13px 18px;
+  align-items: center;
+  border-radius: var(--radius-lg);
+  background: rgb(255 255 255 / 88%);
+  box-shadow: var(--shadow-inset);
+  overflow: visible;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head::after {
+  display: none;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head::before {
+  left: 18px;
+  right: 18px;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-head-main {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 14px;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-kicker {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-title-line,
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-head-main > h1 {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-title-line h1,
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-head-main > h1 {
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-head-main > p,
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-summary,
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-meta-strip {
+  display: none;
+}
+
+.workspace-view:not(.dashboard-view) > .workspace-head .workspace-head-actions {
+  min-width: auto;
+  align-self: center;
+}
+
 .workspace-action-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

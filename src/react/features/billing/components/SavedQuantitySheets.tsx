@@ -9,13 +9,12 @@ import {
   useQuantitySheets,
 } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
-import { ModalShell } from "../../../components/WorkspaceUi";
+import { ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
-
-const pageSize = 5;
 
 export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet) => void }) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selected, setSelected] = useState<string[]>([]);
@@ -80,8 +79,18 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           第 {page} / {pages} 页
         </span>
       </div>
-      <div className="table-wrap" role="region" tabIndex={0} aria-label="已保存数量统计表">
-        <table className="dense-table">
+      <div className="table-wrap quantity-saved-list" role="region" tabIndex={0} aria-label="已保存数量统计表">
+        <table className="dense-table quantity-saved-table">
+          <colgroup>
+            <col className="quantity-col-select" />
+            <col className="quantity-col-month" />
+            <col className="quantity-col-iacuc" />
+            <col className="quantity-col-room" />
+            <col className="quantity-col-manager" />
+            <col className="quantity-col-pi" />
+            <col className="quantity-col-updated" />
+            <col className="quantity-col-actions" />
+          </colgroup>
           <thead>
             <tr>
               <th>
@@ -96,6 +105,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                 ["month", "月份"],
                 ["iacuc", "IACUC"],
                 ["roomName", "房间"],
+                ["manager", "管理员"],
                 ["pi", "负责人"],
                 ["updatedAt", "更新时间"],
               ].map(([key, label]) => (
@@ -138,8 +148,9 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                   </td>
                   <td>{item.month}</td>
                   <td>{item.iacuc}</td>
-                  <td>{item.roomName || "-"}</td>
-                  <td>{item.pi || "-"}</td>
+                  <td title={item.roomName || "-"}>{item.roomName || "-"}</td>
+                  <td>{item.manager || "-"}</td>
+                  <td title={item.pi || "-"}>{item.pi || "-"}</td>
                   <td>{formatTime(item.updatedAt)}</td>
                   <td>
                     <div className="table-actions">
@@ -166,33 +177,23 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
               ))
             ) : (
               <tr>
-                <td colSpan={7}>当前没有已保存数量统计表。</td>
+                <td colSpan={8}>当前没有已保存数量统计表。</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      <div className="pager">
-        <span>共 {total} 条</span>
-        <div>
-          <button
-            className="secondary"
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((value) => value - 1)}
-          >
-            上一页
-          </button>
-          <button
-            className="secondary"
-            type="button"
-            disabled={page >= pages}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            下一页
-          </button>
-        </div>
-      </div>
+      <Pager
+        page={page}
+        pages={pages}
+        total={total}
+        pageSize={pageSize}
+        onPage={setPage}
+        onPageSize={(value) => {
+          setPageSize(value);
+          setPage(1);
+        }}
+      />
       {viewId ? (
         <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
       ) : null}

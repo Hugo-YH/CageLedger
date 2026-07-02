@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { IntakeBatch, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
 import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
+import { Pager } from "../../../components/WorkspaceUi";
 import { intakeStatusLabel } from "../../../../domain/intake";
 
 const statuses: Array<[IntakeBatchStatus, string]> = [
@@ -181,6 +182,7 @@ export function IntakeBatchList({
   loading,
   page,
   totalPages,
+  pageSize,
   params,
   filters,
   onTogglePage,
@@ -193,6 +195,7 @@ export function IntakeBatchList({
   onEdit,
   onDelete,
   onPage,
+  onPageSize,
 }: {
   total: number;
   selected: string[];
@@ -201,6 +204,7 @@ export function IntakeBatchList({
   loading: boolean;
   page: number;
   totalPages: number;
+  pageSize: number;
   params: IntakeListParams;
   filters: Record<string, string[]>;
   onTogglePage: (checked: boolean) => void;
@@ -213,6 +217,7 @@ export function IntakeBatchList({
   onEdit: (item: IntakeBatch) => void;
   onDelete: (item: IntakeBatch) => void;
   onPage: (page: number) => void;
+  onPageSize: (pageSize: number) => void;
 }) {
   return (
     <section className="panel intake-batch-list-panel">
@@ -334,17 +339,7 @@ export function IntakeBatchList({
           </tbody>
         </table>
       </div>
-      <div className="pager">
-        <span>共 {total} 条</span>
-        <div>
-          <button className="secondary" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-            上一页
-          </button>
-          <button className="secondary" type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
-            下一页
-          </button>
-        </div>
-      </div>
+      <Pager page={page} pages={totalPages} total={total} pageSize={pageSize} onPage={onPage} onPageSize={onPageSize} />
     </section>
   );
 }

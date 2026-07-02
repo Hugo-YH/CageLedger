@@ -2,7 +2,13 @@ from server_app.domains.iacuc import normalize_iacuc_number
 from server_app.shared import as_int, clean_text, new_id
 
 from .allowance import allocate_daily_free_cages_by_iacuc, iacuc_free_allowance_eligible
-from .charging import BILLING_TIER_OVER_PRICE, add_charge_group, combined_daily_charge, dates_in_month
+from .charging import (
+    BILLING_TIER_BASE_PRICE,
+    BILLING_TIER_OVER_PRICE,
+    add_charge_group,
+    combined_daily_charge,
+    dates_in_month,
+)
 from .profiles import billing_profile_for_room
 
 
@@ -19,7 +25,9 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         rows_by_date = {}
         for row in sheet.get("rows", []):
             rows_by_date.setdefault(row["date"], []).append(row)
-        profile = billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit"))
+        profile = quantity_sheet_billing_profile(
+            billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit")), sheet
+        )
         state = {
             "sheet": sheet,
             "rowsByDate": rows_by_date,
@@ -101,7 +109,9 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                         "billingUnit": profile["unit"],
                         "customerType": profile["customerType"],
                         "unitPrice": profile["unitPrice"],
-                        "overageUnitPrice": BILLING_TIER_OVER_PRICE if profile["tiered"] else 0,
+                        "overageUnitPrice": (
+                            profile.get("overageUnitPrice", BILLING_TIER_OVER_PRICE) if profile["tiered"] else 0
+                        ),
                         "tiered": bool(profile["tiered"]),
                         "freeAllowance": bool(profile["freeAllowance"]),
                         "freeEligible": iacuc_free_allowance_eligible(application or sheet, line_date),
@@ -130,6 +140,19 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             }
         )
     return lines
+
+
+def quantity_sheet_billing_profile(profile, sheet):
+    if not sheet.get("customBillingEnabled") or sheet.get("customUnitPrice") in (None, ""):
+        return profile
+    unit_price = max(float(sheet.get("customUnitPrice") or 0), 0)
+    overage_delta = BILLING_TIER_OVER_PRICE - BILLING_TIER_BASE_PRICE
+    return {
+        **profile,
+        "unitPrice": unit_price,
+        "overageUnitPrice": unit_price + overage_delta if profile.get("tiered") else 0,
+        "customBilling": True,
+    }
 
 
 def pi_for_iacuc(iacuc, applications_by_iacuc, occupancies):

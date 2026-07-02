@@ -269,6 +269,17 @@
   background: rgb(244 250 248 / 70%);
 }
 
+.quantity-billing-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quantity-custom-billing-module {
+  border-color: rgb(40 105 152 / 18%);
+  background: rgb(244 248 251 / 78%);
+}
+
 .quantity-free-cage-head {
   display: flex;
   align-items: center;

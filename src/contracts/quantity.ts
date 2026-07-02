@@ -34,6 +34,8 @@ export interface QuantitySheet {
   funding: string;
   preferredFreeCages: number | null;
   freeCagePriority: number | null;
+  customBillingEnabled: boolean;
+  customUnitPrice: number | null;
   billingUnit: BillingUnit;
   animalDetailEnabled: boolean;
   initialAnimalCount: number;

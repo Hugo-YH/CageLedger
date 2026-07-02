@@ -178,14 +178,35 @@ export function Pager({
   pages,
   total,
   onPage,
+  pageSize,
+  onPageSize,
 }: {
   page: number;
   pages: number;
   total: number;
   onPage: (page: number) => void;
+  pageSize?: number;
+  onPageSize?: (pageSize: number) => void;
 }) {
   return (
     <div className="pager">
+      {pageSize && onPageSize ? (
+        <label className="pager-size">
+          每页
+          <select
+            aria-label="每页显示条数"
+            value={pageSize}
+            onChange={(event) => onPageSize(Number(event.target.value))}
+          >
+            {[5, 10, 15, 20].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          条
+        </label>
+      ) : null}
       <span>
         第 {page} / {pages} 页 · 共 {total} 条
       </span>

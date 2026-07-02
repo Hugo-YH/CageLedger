@@ -105,6 +105,8 @@ export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantityS
     funding: sheet.funding || "",
     preferredFreeCages: numberOrNull(sheet.preferredFreeCages),
     freeCagePriority: numberOrNull(sheet.freeCagePriority),
+    customBillingEnabled: Boolean(sheet.customBillingEnabled),
+    customUnitPrice: numberOrNull(sheet.customUnitPrice),
     billingUnit: sheet.billingUnit === "animal_day" ? "animal_day" : "cage_day",
     animalDetailEnabled: Boolean(sheet.animalDetailEnabled),
     initialAnimalCount: Number(sheet.initialAnimalCount || 0),
@@ -131,6 +133,8 @@ export function validateQuantitySheet(sheet: QuantitySheet) {
   if (!sheet.month) issues.push("请选择月份");
   if (!sheet.roomId) issues.push("请选择房间");
   if (!sheet.iacuc) issues.push("请填写 IACUC 编号");
+  if (sheet.customBillingEnabled && (!sheet.customUnitPrice || sheet.customUnitPrice <= 0))
+    issues.push("启用自定义饲养费后，请填写收费标准");
   for (const row of sheet.rows) {
     if (Number(row.addedCount || 0) > 0 && !row.addedType) issues.push(`${row.date || "未填日期"} 新增请选择类型`);
     if (Number(row.removedCount || 0) > 0 && !row.removedType) issues.push(`${row.date || "未填日期"} 减少请选择类型`);

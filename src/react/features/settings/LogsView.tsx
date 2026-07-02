@@ -3,10 +3,9 @@ import { useState } from "react";
 import { useAuditEvents } from "../../api/administration";
 import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 
-const pageSize = 20;
-
 export function LogsView() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   const query = useAuditEvents(pageSize, (page - 1) * pageSize);
   const total = query.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
@@ -48,7 +47,17 @@ export function LogsView() {
                   <PageState title="暂无操作日志" />
                 )}
               </div>
-              <Pager page={page} pages={pages} total={total} onPage={setPage} />
+              <Pager
+                page={page}
+                pages={pages}
+                total={total}
+                pageSize={pageSize}
+                onPage={setPage}
+                onPageSize={(value) => {
+                  setPageSize(value);
+                  setPage(1);
+                }}
+              />
             </>
           )}
         </section>

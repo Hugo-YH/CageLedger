@@ -220,6 +220,8 @@ describe("print templates", () => {
         funding: "",
         preferredFreeCages: null,
         freeCagePriority: null,
+        customBillingEnabled: false,
+        customUnitPrice: null,
         billingUnit: "cage_day",
         animalDetailEnabled: false,
         initialAnimalCount: 0,

@@ -5,12 +5,11 @@ import { useSystemInfo, useSystemUpdate } from "../../api/administration";
 import { Pager, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { SYSTEM_RELEASE_NOTES, type ReleaseNote } from "../../releaseNotes";
 
-const releasePageSize = 5;
-
 export function SystemView({ user }: { user: SessionUser }) {
   const info = useSystemInfo();
   const [checkEnabled, setCheckEnabled] = useState(false);
   const [releasePage, setReleasePage] = useState(1);
+  const [releasePageSize, setReleasePageSize] = useState(5);
   const update = useSystemUpdate(checkEnabled && user.role === "admin");
   if (info.isPending)
     return (
@@ -86,7 +85,12 @@ export function SystemView({ user }: { user: SessionUser }) {
                 page={releasePage}
                 pages={releasePages}
                 total={SYSTEM_RELEASE_NOTES.length}
+                pageSize={releasePageSize}
                 onPage={setReleasePage}
+                onPageSize={(value) => {
+                  setReleasePageSize(value);
+                  setReleasePage(1);
+                }}
               />
             </section>
             <section className="system-section">

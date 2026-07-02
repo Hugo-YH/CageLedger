@@ -5,7 +5,6 @@ import { useReimbursements } from "../../api/workflows";
 import { PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { WorkflowDetail, WorkflowRow } from "./components/WorkflowDetails";
 
-const pageSize = 10;
 const currentMonth = new Date().toISOString().slice(0, 7);
 const statusOptions: Array<[ReimbursementStatus | "all", string]> = [
   ["pending_submission", "待提交"],
@@ -16,6 +15,7 @@ const statusOptions: Array<[ReimbursementStatus | "all", string]> = [
 
 export function WorkflowCenterView({ user }: { user: SessionUser }) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   const [status, setStatus] = useState<ReimbursementStatus | "all">("pending_submission");
   const [month, setMonth] = useState(currentMonth);
   const [monthDraft, setMonthDraft] = useState(currentMonth);
@@ -37,7 +37,7 @@ export function WorkflowCenterView({ user }: { user: SessionUser }) {
     <section className="workspace-view workflow-center-view">
       <WorkspaceHeader
         kicker="结算与报销台账中心"
-        title="流程中心"
+        title="结算与报销台账"
         summary="按每月每项目负责人维护结算金额、报销登记和累计未缴，结算流程版本继续留在详情中追踪。"
         status={`当前筛选：${filterLabel}`}
         metrics={[
@@ -154,7 +154,17 @@ export function WorkflowCenterView({ user }: { user: SessionUser }) {
                     </tbody>
                   </table>
                 </div>
-                <Pager page={page} pages={pages} total={total} onPage={setPage} />
+                <Pager
+                  page={page}
+                  pages={pages}
+                  total={total}
+                  pageSize={pageSize}
+                  onPage={setPage}
+                  onPageSize={(value) => {
+                    setPageSize(value);
+                    setPage(1);
+                  }}
+                />
               </>
             )}
           </div>

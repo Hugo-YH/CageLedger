@@ -563,6 +563,61 @@ svg {
   margin-top: 6px;
 }
 
+.nav-group-button .nav-disclosure {
+  margin-left: auto;
+  color: #8fb0ad;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.nav-subtree {
+  display: grid;
+  gap: 3px;
+  margin: -2px 0 6px 24px;
+  padding: 3px 0 3px 13px;
+  border-left: 1px solid rgb(189 210 208 / 20%);
+}
+
+.nav-child {
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #9fb9b7;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nav-child:hover,
+.nav-child.active {
+  color: #fff;
+  background: rgb(255 255 255 / 8%);
+}
+
+.nav-child.active {
+  box-shadow: inset 2px 0 0 #82c4bb;
+}
+
+.nav-child-parent {
+  font-weight: 700;
+}
+
+.nav-subtree-third {
+  margin: 0 0 2px 10px;
+  padding-block: 1px;
+}
+
+.nav-subtree-third .nav-child {
+  font-size: 12px;
+  min-height: 31px;
+}
+
 .settings-drawer {
   border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 12px;
@@ -603,6 +658,57 @@ svg {
   pointer-events: auto;
   transform-origin: left top;
   animation: settingsDrawerIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.navigation-panel {
+  width: 360px;
+  padding: 14px;
+  gap: 14px;
+}
+
+.navigation-panel .settings-drawer-head {
+  padding: 2px 4px 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.navigation-panel-sections {
+  display: grid;
+  gap: 13px;
+}
+
+.navigation-panel-section {
+  display: grid;
+  gap: 5px;
+}
+
+.navigation-panel-section h3 {
+  margin: 0;
+  padding: 0 5px;
+  color: #789c99;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.navigation-panel .settings-drawer-grid {
+  gap: 3px;
+}
+
+.navigation-panel .settings-drawer-item {
+  min-height: 58px;
+  border-color: transparent;
+  background: transparent;
+  padding: 9px 10px;
+}
+
+.navigation-panel .settings-drawer-item:hover {
+  transform: none;
+  background: rgb(255 255 255 / 7%);
+}
+
+.navigation-panel .settings-drawer-item.active {
+  border-color: rgb(130 196 187 / 18%);
+  background: rgb(130 196 187 / 13%);
+  box-shadow: inset 2px 0 0 #82c4bb;
 }
 
 .settings-drawer-head {

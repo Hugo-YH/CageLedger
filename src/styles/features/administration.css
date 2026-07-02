@@ -199,6 +199,28 @@
   }
 }
 
+@media (width <= 1180px) {
+  .navigation-panel .settings-drawer-item {
+    border: 1px solid var(--line);
+    background: var(--panel-soft);
+  }
+
+  .navigation-panel .settings-drawer-item span {
+    color: var(--text);
+  }
+
+  .navigation-panel .settings-drawer-item small,
+  .navigation-panel-section h3 {
+    color: var(--muted);
+  }
+
+  .navigation-panel .settings-drawer-item.active {
+    border-color: var(--primary);
+    background: #e9f6f4;
+    box-shadow: inset 2px 0 0 var(--primary);
+  }
+}
+
 /* React administration workspaces */
 
 .workflow-filter-bar .command-bar-filters {
@@ -216,6 +238,18 @@
 
 .quantity-react-preview {
   --modal-width: 1060px;
+}
+
+.intake-edit-modal,
+.quantity-edit-modal {
+  --modal-width: 1180px;
+}
+
+.intake-edit-modal .intake-entry-panel,
+.quantity-edit-modal .quantity-entry-panel {
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .cage-slot-modal {

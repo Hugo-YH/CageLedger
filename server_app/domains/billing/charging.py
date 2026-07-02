@@ -16,7 +16,9 @@ def dates_in_month(month):
     return [f"{year:04d}-{month_no:02d}-{day:02d}" for day in range(1, day_count + 1)]
 
 
-def tiered_daily_charge(cage_count, free_cages):
+def tiered_daily_charge(
+    cage_count, free_cages, unit_price=BILLING_TIER_BASE_PRICE, overage_unit_price=BILLING_TIER_OVER_PRICE
+):
     cage_count = max(as_int(cage_count) or 0, 0)
     free_cages = min(max(as_int(free_cages) or 0, 0), cage_count)
     tier1_cages = min(cage_count, BILLING_TIER_LIMIT)
@@ -25,7 +27,7 @@ def tiered_daily_charge(cage_count, free_cages):
     tier2_free = min(max(free_cages - tier1_free, 0), tier2_cages)
     tier1_billable = max(tier1_cages - tier1_free, 0)
     tier2_billable = max(tier2_cages - tier2_free, 0)
-    amount = tier1_billable * BILLING_TIER_BASE_PRICE + tier2_billable * BILLING_TIER_OVER_PRICE
+    amount = tier1_billable * float(unit_price or 0) + tier2_billable * float(overage_unit_price or 0)
     return {
         "freeCages": free_cages,
         "billableCages": tier1_billable + tier2_billable,
@@ -33,8 +35,8 @@ def tiered_daily_charge(cage_count, free_cages):
         "tier2Cages": tier2_cages,
         "tier1BillableCages": tier1_billable,
         "tier2BillableCages": tier2_billable,
-        "unitPrice": BILLING_TIER_BASE_PRICE,
-        "overageUnitPrice": BILLING_TIER_OVER_PRICE,
+        "unitPrice": unit_price,
+        "overageUnitPrice": overage_unit_price,
         "discountPercent": 0,
         "amount": amount,
     }
@@ -109,7 +111,12 @@ def combined_daily_charge(groups, free_cages):
         count = group["count"]
         if profile.get("tiered"):
             allowance = remaining_free_cages if profile.get("freeAllowance") else 0
-            charges = tiered_daily_charge(count, allowance)
+            charges = tiered_daily_charge(
+                count,
+                allowance,
+                profile.get("unitPrice", BILLING_TIER_BASE_PRICE),
+                profile.get("overageUnitPrice", BILLING_TIER_OVER_PRICE),
+            )
             remaining_free_cages = max(remaining_free_cages - charges.get("freeCages", 0), 0)
         else:
             charges = flat_daily_charge(count, profile)

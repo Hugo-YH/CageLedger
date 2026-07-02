@@ -60,7 +60,7 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
             title="待接收批次"
             value={value("intakePendingCount")}
             note="接收笼卡后统一打印，已接收会进入待进驻。"
-            onClick={() => navigate("intake")}
+            onClick={() => navigate("intake-batches")}
           />
           <Overview
             title="待进驻任务"
