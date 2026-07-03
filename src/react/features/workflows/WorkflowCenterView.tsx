@@ -1,8 +1,10 @@
 import { useState } from "react";
 
 import type { ReimbursementStatus, SessionUser } from "../../api/contracts";
+import type { WorkspaceView } from "../../state/ui";
 import { useReimbursements } from "../../api/workflows";
 import { PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { breadcrumb, billingSwitchItems } from "../shell/workspaceNavigation";
 import { WorkflowDetail, WorkflowRow } from "./components/WorkflowDetails";
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -13,7 +15,7 @@ const statusOptions: Array<[ReimbursementStatus | "all", string]> = [
   ["all", "全部"],
 ];
 
-export function WorkflowCenterView({ user }: { user: SessionUser }) {
+export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [status, setStatus] = useState<ReimbursementStatus | "all">("pending_submission");
@@ -38,6 +40,7 @@ export function WorkflowCenterView({ user }: { user: SessionUser }) {
       <WorkspaceHeader
         kicker="结算与报销台账中心"
         title="结算与报销台账"
+        breadcrumbs={[breadcrumb("饲养费管理", () => navigate("billing-quantity-entry"))]}
         summary="按每月每项目负责人维护结算金额、报销登记和累计未缴，结算流程版本继续留在详情中追踪。"
         status={`当前筛选：${filterLabel}`}
         metrics={[
@@ -46,6 +49,8 @@ export function WorkflowCenterView({ user }: { user: SessionUser }) {
           { label: "报销中", value: reimbursingSummary.data?.page.total || 0, tone: "todo" },
           { label: "已完成", value: completedSummary.data?.page.total || 0, tone: "success" },
         ]}
+        switcherLabel="饲养费功能"
+        switcherItems={billingSwitchItems(navigate)}
       />
       <div className="workspace-body workflow-workspace-body">
         <section className="workflow-center-panel">

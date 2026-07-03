@@ -4,7 +4,7 @@ import { useBootstrap } from "../../api/bootstrap";
 import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
 import { useConfirmIntakeBatch, useDeleteIntakeBatch, useIntakeBatches, useSaveIntakeBatch } from "../../api/intake";
 import { useIacucIndex } from "../../api/iacuc";
-import { ModalShell } from "../../components/WorkspaceUi";
+import { ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
   missingIntakeRequiredFields,
@@ -13,14 +13,16 @@ import {
 } from "../../../domain/intake";
 import { openIntakeCardPrint } from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, intakeSwitchItems } from "../shell/workspaceNavigation";
 
 export function IntakeView({
   user,
-  navigateScanner,
+  navigate,
   mode,
 }: {
   user: SessionUser;
-  navigateScanner: () => void;
+  navigate: (view: WorkspaceView) => void;
   mode: "entry" | "batches";
 }) {
   const bootstrap = useBootstrap("summary");
@@ -170,37 +172,42 @@ export function IntakeView({
 
   return (
     <section className="workspace-view intake-workspace react-intake-view">
-      <header className="workspace-head">
-        <div className="workspace-head-main">
-          <span className="workspace-kicker">笼卡接收工作台</span>
-          <div className="workspace-title-line">
-            <h1>{mode === "entry" ? "接收与识别" : "待接收批次"}</h1>
-            <span className="workspace-status-badge">{mode === "entry" ? "预约信息录入" : `${total} 个批次`}</span>
-          </div>
-          <p>
-            {mode === "entry"
-              ? "识别预约消息或扫描笼卡，核对信息后保存为待接收批次。"
-              : "集中查询、打印和接收已保存批次，接收后自动进入待进驻任务。"}
-          </p>
-          <div className="workspace-meta-strip">
-            <div className="workspace-meta-card">
-              <span>待接收批次</span>
-              <strong>{total}</strong>
-            </div>
-            <div className="workspace-meta-card success">
-              <span>已选批次</span>
-              <strong>{selected.length}</strong>
-            </div>
-          </div>
-        </div>
-        {mode === "entry" ? (
-          <div className="workspace-head-actions">
-            <button className="primary" type="button" onClick={navigateScanner}>
-              扫码识别笼卡
+      <WorkspaceHeader
+        kicker="笼卡接收工作台"
+        title={mode === "entry" ? "预约消息识别" : "待接收批次"}
+        breadcrumbs={[breadcrumb("笼卡管理", () => navigate("intake-entry"))]}
+        summary={
+          mode === "entry"
+            ? "识别预约消息或扫描笼卡，核对信息后保存为待接收批次。"
+            : "集中查询、打印和接收已保存批次，接收后自动进入待进驻任务。"
+        }
+        status={mode === "entry" ? "预约信息录入" : `${total} 个批次`}
+        metrics={[
+          { label: "待接收批次", value: total },
+          { label: "已选批次", value: selected.length, tone: "success" },
+        ]}
+        actions={
+          mode === "entry" ? (
+            <button className="primary" type="button" onClick={() => navigate("cage-card-scanner")}>
+              二维码扫描
             </button>
-          </div>
-        ) : null}
-      </header>
+          ) : null
+        }
+        switcherLabel="笼卡功能"
+        switcherItems={intakeSwitchItems(navigate)}
+        toolbar={
+          mode === "entry" ? (
+            <>
+              <button className="secondary" type="button" onClick={startNew}>
+                新建批次
+              </button>
+              <button className="primary" type="submit" form="intake-entry-panel" disabled={save.isPending}>
+                {save.isPending ? "保存中..." : "保存待接收批次"}
+              </button>
+            </>
+          ) : null
+        }
+      />
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">
           {mode === "entry" ? (
@@ -211,7 +218,7 @@ export function IntakeView({
               notice={notice}
               saving={save.isPending}
               onSubmit={submit}
-              onNew={startNew}
+              headActions={null}
               onParse={parseMessage}
               onPrint={() => void printCurrentBatch()}
               onUpdate={update}
@@ -275,7 +282,11 @@ export function IntakeView({
               notice={notice}
               saving={save.isPending}
               onSubmit={submit}
-              onNew={startNew}
+              headActions={
+                <button className="primary" type="submit" disabled={save.isPending}>
+                  {save.isPending ? "保存中..." : "保存待接收批次"}
+                </button>
+              }
               onParse={parseMessage}
               onPrint={() => void printCurrentBatch()}
               onUpdate={update}

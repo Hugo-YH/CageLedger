@@ -178,227 +178,242 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     if (mode === "saved") setEditingDialog(true);
   }
 
-  const editor = (
-    <form className="panel large quantity-editor-panel quantity-entry-panel" onSubmit={requestSave}>
-      <div className="panel-head">
-        <div className="panel-title-line">
-          <h2>数量统计表（录入）</h2>
-        </div>
-        <div className="panel-head-actions quantity-sheet-head-actions">
-          <label
-            className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
-            title={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
-          >
-            <input
-              type="checkbox"
-              checked={animalDetails}
-              disabled={unit === "animal_day"}
-              onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
-            />
-            <span className="quantity-animal-toggle-track" aria-hidden="true">
-              <span />
-            </span>
-            <strong>动物数量</strong>
-          </label>
-          <button className="secondary info-button" type="button" onClick={startNew}>
-            新建
-          </button>
-          <button
-            className="primary"
-            type="submit"
-            disabled={save.isPending}
-            title={saveHint(editorRows, animalDetails)}
-          >
-            保存统计表
-          </button>
-        </div>
-      </div>
-      {notice ? (
-        <div className="react-inline-notice" role="status">
-          {notice}
-        </div>
-      ) : null}
-      <div className="quantity-sheet-fields">
-        <div className="field-cluster quantity-field-cluster">
-          <div className="field-cluster-head">
-            <strong>基础信息</strong>
-            <span>月份和房间决定计费口径</span>
-          </div>
-          <div className="field-cluster-body quantity-field-group quantity-field-group-basic">
-            <label className="field-required">
-              月份
-              <input
-                type="month"
-                max={todayMonth}
-                value={draft.month}
-                onChange={(event) => {
-                  const month = event.target.value;
-                  setField("month", month);
-                  setEditorRows((rows) =>
-                    rows.map((row, index) =>
-                      index === 0 ? { ...row, date: `${month}-01`, rawDateInput: `${month}-01` } : row,
-                    ),
-                  );
-                }}
-              />
-            </label>
-            <label className="field-required">
-              房间号
-              <select value={draft.roomId} onChange={(event) => chooseRoom(event.target.value)}>
-                <option value="">请选择房间号</option>
-                {rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Field label="管理员" value={draft.manager} onChange={(value) => setField("manager", value)} />
-          </div>
-        </div>
-        <div className="field-cluster quantity-field-cluster">
-          <div className="field-cluster-head">
-            <strong>项目与伦理</strong>
-            <span>IACUC 是保存和结算主键</span>
-          </div>
-          <div className="field-cluster-body quantity-field-group quantity-field-group-project">
-            <label className="field-required">
-              IACUC 编号
-              <input
-                list="quantity-iacuc-options"
-                value={draft.iacuc}
-                required
-                onChange={(event) => setField("iacuc", event.target.value.toUpperCase())}
-                onBlur={(event) => applyIacuc(event.target.value)}
-              />
-              <datalist id="quantity-iacuc-options">
-                {iacucOptions.map((item, index) => (
-                  <option key={`${item.iacuc}-${item.project}-${item.pi}-${index}`} value={item.iacuc}>
-                    {item.project || item.pi}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-            <Field label="项目名称" value={draft.project} onChange={(value) => setField("project", value)} />
-            <Field label="支撑经费" value={draft.funding} onChange={(value) => setField("funding", value)} />
-            <Field label="项目负责人" value={draft.pi} onChange={(value) => setField("pi", value)} />
-            <Field label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
-          </div>
-        </div>
-        <div className="quantity-billing-options">
-          <div className={`quantity-free-cage-module ${supportsFreeCages ? "" : "muted-field"}`}>
-            <div className="quantity-free-cage-head">
-              <div>
-                <strong>优先减免</strong>
-                <span>
-                  {draft.pi
-                    ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
-                    : "选择 IACUC 后显示项目负责人减免额度"}
-                </span>
-              </div>
-              <label
-                className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages ? "" : "locked"}`}
-                title={supportsFreeCages ? "打开后先按本伦理设置的笼数减免。" : "当前计费口径没有项目负责人减免额度。"}
-              >
-                <input
-                  type="checkbox"
-                  checked={freeCageEnabled}
-                  disabled={!supportsFreeCages}
-                  onChange={(event) => setFreeCageEnabled(event.target.checked)}
-                />
-                <span className="quantity-animal-toggle-track" aria-hidden="true">
-                  <span />
-                </span>
-                <span className="quantity-animal-toggle-label">优先减免</span>
-              </label>
-            </div>
-            {freeCageEnabled ? (
-              <label className="quantity-free-cage-field">
-                优先减免笼数/天
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={draft.preferredFreeCages ?? ""}
-                  placeholder="请输入笼数"
-                  onChange={(event) =>
-                    setField("preferredFreeCages", event.target.value === "" ? null : Number(event.target.value))
-                  }
-                />
-                <small>指定额度优先分配给当前伦理号，剩余额度继续自动分配。</small>
-              </label>
-            ) : null}
-          </div>
-          <div className="quantity-free-cage-module quantity-custom-billing-module">
-            <div className="quantity-free-cage-head">
-              <div>
-                <strong>自定义饲养费</strong>
-                <span>
-                  标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
-                </span>
-              </div>
-              <label
-                className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
-                title="打开后，当前伦理按输入的自定义标准计费。"
-              >
-                <input
-                  type="checkbox"
-                  checked={draft.customBillingEnabled}
-                  onChange={(event) => setCustomBillingEnabled(event.target.checked)}
-                />
-                <span className="quantity-animal-toggle-track" aria-hidden="true">
-                  <span />
-                </span>
-                <span className="quantity-animal-toggle-label">自定义收费</span>
-              </label>
-            </div>
-            {draft.customBillingEnabled ? (
-              <label className="quantity-free-cage-field">
-                自定义收费标准（元/{unit === "animal_day" ? "只/天" : "笼/天"}）
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  value={draft.customUnitPrice ?? ""}
-                  placeholder="请输入单价"
-                  onChange={(event) =>
-                    setField("customUnitPrice", event.target.value === "" ? null : Number(event.target.value))
-                  }
-                />
-                <small>该单价仅应用于当前统计表对应伦理，结算单会保留实际单价。</small>
-              </label>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <div className="quantity-page-toolbar compact">
-        <button
-          className="secondary info-button"
-          type="button"
-          onClick={() =>
-            setEditorRows((rows) => [
-              ...rows,
-              ...Array.from({ length: QUANTITY_ROWS_PER_PAGE }, () => createQuantityRow(draft.month)),
-            ])
-          }
+  const entryToolbar =
+    mode === "entry" ? (
+      <>
+        <label
+          className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
+          title={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
         >
-          新增统计表页
+          <input
+            type="checkbox"
+            checked={animalDetails}
+            disabled={unit === "animal_day"}
+            onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
+          />
+          <span className="quantity-animal-toggle-track" aria-hidden="true">
+            <span />
+          </span>
+          <strong>动物数量</strong>
+        </label>
+        <button className="secondary info-button" type="button" onClick={startNew}>
+          新建
         </button>
-      </div>
-      <QuantityEditorPages
-        rows={editorRows}
-        month={draft.month}
-        animalDetails={animalDetails}
-        rowRefs={rowRefs}
-        onChanged={recalculate}
-      />
-    </form>
-  );
+        <button
+          className="primary"
+          type="submit"
+          form="quantity-sheet-entry-form"
+          disabled={save.isPending}
+          title={saveHint(editorRows, animalDetails)}
+        >
+          保存统计表
+        </button>
+      </>
+    ) : null;
+
+  function renderEditor(headActions?: React.ReactNode) {
+    return (
+      <form
+        id="quantity-sheet-entry-form"
+        className="panel large quantity-editor-panel quantity-entry-panel"
+        onSubmit={requestSave}
+      >
+        <div className="panel-head">
+          <div className="panel-title-line">
+            <h2>数量统计表（录入）</h2>
+          </div>
+          {headActions ? <div className="panel-head-actions">{headActions}</div> : null}
+        </div>
+        {notice ? (
+          <div className="react-inline-notice" role="status">
+            {notice}
+          </div>
+        ) : null}
+        <div className="quantity-sheet-fields">
+          <div className="field-cluster quantity-field-cluster">
+            <div className="field-cluster-head">
+              <strong>基础信息</strong>
+              <span>月份和房间决定计费口径</span>
+            </div>
+            <div className="field-cluster-body quantity-field-group quantity-field-group-basic">
+              <label className="field-required">
+                月份
+                <input
+                  type="month"
+                  max={todayMonth}
+                  value={draft.month}
+                  onChange={(event) => {
+                    const month = event.target.value;
+                    setField("month", month);
+                    setEditorRows((rows) =>
+                      rows.map((row, index) =>
+                        index === 0 ? { ...row, date: `${month}-01`, rawDateInput: `${month}-01` } : row,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <label className="field-required">
+                房间号
+                <select value={draft.roomId} onChange={(event) => chooseRoom(event.target.value)}>
+                  <option value="">请选择房间号</option>
+                  {rooms.map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field label="管理员" value={draft.manager} onChange={(value) => setField("manager", value)} />
+            </div>
+          </div>
+          <div className="field-cluster quantity-field-cluster">
+            <div className="field-cluster-head">
+              <strong>项目与伦理</strong>
+              <span>IACUC 是保存和结算主键</span>
+            </div>
+            <div className="field-cluster-body quantity-field-group quantity-field-group-project">
+              <label className="field-required">
+                IACUC 编号
+                <input
+                  list="quantity-iacuc-options"
+                  value={draft.iacuc}
+                  required
+                  onChange={(event) => setField("iacuc", event.target.value.toUpperCase())}
+                  onBlur={(event) => applyIacuc(event.target.value)}
+                />
+                <datalist id="quantity-iacuc-options">
+                  {iacucOptions.map((item, index) => (
+                    <option key={`${item.iacuc}-${item.project}-${item.pi}-${index}`} value={item.iacuc}>
+                      {item.project || item.pi}
+                    </option>
+                  ))}
+                </datalist>
+              </label>
+              <Field label="项目名称" value={draft.project} onChange={(value) => setField("project", value)} />
+              <Field label="支撑经费" value={draft.funding} onChange={(value) => setField("funding", value)} />
+              <Field label="项目负责人" value={draft.pi} onChange={(value) => setField("pi", value)} />
+              <Field label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
+            </div>
+          </div>
+          <div className="quantity-billing-options">
+            <div className={`quantity-free-cage-module ${supportsFreeCages ? "" : "muted-field"}`}>
+              <div className="quantity-free-cage-head">
+                <div>
+                  <strong>优先减免</strong>
+                  <span>
+                    {draft.pi
+                      ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
+                      : "选择 IACUC 后显示项目负责人减免额度"}
+                  </span>
+                </div>
+                <label
+                  className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages ? "" : "locked"}`}
+                  title={
+                    supportsFreeCages ? "打开后先按本伦理设置的笼数减免。" : "当前计费口径没有项目负责人减免额度。"
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    checked={freeCageEnabled}
+                    disabled={!supportsFreeCages}
+                    onChange={(event) => setFreeCageEnabled(event.target.checked)}
+                  />
+                  <span className="quantity-animal-toggle-track" aria-hidden="true">
+                    <span />
+                  </span>
+                  <span className="quantity-animal-toggle-label">优先减免</span>
+                </label>
+              </div>
+              {freeCageEnabled ? (
+                <label className="quantity-free-cage-field">
+                  优先减免笼数/天
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={draft.preferredFreeCages ?? ""}
+                    placeholder="请输入笼数"
+                    onChange={(event) =>
+                      setField("preferredFreeCages", event.target.value === "" ? null : Number(event.target.value))
+                    }
+                  />
+                  <small>指定额度优先分配给当前伦理号，剩余额度继续自动分配。</small>
+                </label>
+              ) : null}
+            </div>
+            <div className="quantity-free-cage-module quantity-custom-billing-module">
+              <div className="quantity-free-cage-head">
+                <div>
+                  <strong>自定义饲养费</strong>
+                  <span>
+                    标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
+                  </span>
+                </div>
+                <label
+                  className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
+                  title="打开后，当前伦理按输入的自定义标准计费。"
+                >
+                  <input
+                    type="checkbox"
+                    checked={draft.customBillingEnabled}
+                    onChange={(event) => setCustomBillingEnabled(event.target.checked)}
+                  />
+                  <span className="quantity-animal-toggle-track" aria-hidden="true">
+                    <span />
+                  </span>
+                  <span className="quantity-animal-toggle-label">自定义收费</span>
+                </label>
+              </div>
+              {draft.customBillingEnabled ? (
+                <label className="quantity-free-cage-field">
+                  自定义收费标准（元/{unit === "animal_day" ? "只/天" : "笼/天"}）
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    value={draft.customUnitPrice ?? ""}
+                    placeholder="请输入单价"
+                    onChange={(event) =>
+                      setField("customUnitPrice", event.target.value === "" ? null : Number(event.target.value))
+                    }
+                  />
+                  <small>该单价仅应用于当前统计表对应伦理，结算单会保留实际单价。</small>
+                </label>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <div className="quantity-page-toolbar compact">
+          <button
+            className="secondary info-button"
+            type="button"
+            onClick={() =>
+              setEditorRows((rows) => [
+                ...rows,
+                ...Array.from({ length: QUANTITY_ROWS_PER_PAGE }, () => createQuantityRow(draft.month)),
+              ])
+            }
+          >
+            新增统计表页
+          </button>
+        </div>
+        <QuantityEditorPages
+          rows={editorRows}
+          month={draft.month}
+          animalDetails={animalDetails}
+          rowRefs={rowRefs}
+          onChanged={recalculate}
+        />
+      </form>
+    );
+  }
 
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">
-      {mode === "entry" ? editor : <SavedQuantitySheets onEdit={loadForEdit} />}
+      {mode === "entry" ? <div className="workspace-toolbar quantity-entry-toolbar">{entryToolbar}</div> : null}
+      {mode === "entry" ? renderEditor() : <SavedQuantitySheets onEdit={loadForEdit} />}
       {mode === "saved" && editingDialog ? (
         <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={() => setEditingDialog(false)}>
           <div className="modal-shell-head">
@@ -412,7 +427,19 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               关闭
             </button>
           </div>
-          <div className="modal-shell-body">{editor}</div>
+          <div className="modal-shell-body">
+            {renderEditor(
+              <button
+                className="primary"
+                type="submit"
+                form="quantity-sheet-entry-form"
+                disabled={save.isPending}
+                title={saveHint(editorRows, animalDetails)}
+              >
+                {save.isPending ? "保存中..." : "保存统计表"}
+              </button>,
+            )}
+          </div>
         </ModalShell>
       ) : null}
       {confirmSave ? (

@@ -230,6 +230,30 @@
     min-width: 0;
   }
 
+  .workspace-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-toolbar-actions,
+  .workspace-toolbar-main {
+    justify-content: stretch;
+  }
+
+  .workspace-toolbar-field {
+    min-width: 0;
+  }
+
+  .workspace-switcher,
+  .workspace-switcher > summary,
+  .workspace-switcher-menu {
+    width: 100%;
+  }
+
+  .workspace-switcher-menu {
+    right: 0;
+    left: 0;
+  }
+
   .metrics,
   .dashboard-metrics,
   .statement-summary {

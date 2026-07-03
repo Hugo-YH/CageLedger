@@ -2,36 +2,40 @@ import { useState } from "react";
 
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, billingSwitchItems } from "../shell/workspaceNavigation";
+import { WorkspaceHeader } from "../../components/WorkspaceUi";
 import { SettlementCandidateList } from "./components/SettlementCandidateList";
 
 const currentMonth = new Date().toISOString().slice(0, 7);
 type BillingMode = "cage-map" | "quantity-entry" | "quantity-saved" | "settlement";
 
-export function BillingView({ user, mode }: { user: SessionUser; mode: BillingMode }) {
+export function BillingView({
+  user,
+  mode,
+  navigate,
+}: {
+  user: SessionUser;
+  mode: BillingMode;
+  navigate: (view: WorkspaceView) => void;
+}) {
   const [source, setSource] = useState<"quantity_sheet" | "cage_map">("quantity_sheet");
   const title = billingTitle(mode);
   return (
     <section className="workspace-view billing-workspace react-billing-view">
-      <header className="workspace-head">
-        <div className="workspace-head-main">
-          <span className="workspace-kicker">饲养费核算工作台</span>
-          <div className="workspace-title-line">
-            <h1>{title}</h1>
-            <span className="workspace-status-badge">{billingBadge(mode, source)}</span>
-          </div>
-          <p>{billingDescription(mode)}</p>
-          <div className="workspace-meta-strip">
-            <div className="workspace-meta-card">
-              <span>结算月份</span>
-              <strong>{currentMonth.replace("-", "年")}月</strong>
-            </div>
-            <div className="workspace-meta-card success">
-              <span>当前任务</span>
-              <strong>{title}</strong>
-            </div>
-          </div>
-        </div>
-      </header>
+      <WorkspaceHeader
+        kicker="饲养费核算工作台"
+        title={title}
+        breadcrumbs={[breadcrumb("饲养费管理", () => navigate("billing-quantity-entry"))]}
+        summary={billingDescription(mode)}
+        status={billingBadge(mode, source)}
+        metrics={[
+          { label: "结算月份", value: currentMonth.replace("-", "年") + "月" },
+          { label: "当前任务", value: title, tone: "success" },
+        ]}
+        switcherLabel="饲养费功能"
+        switcherItems={billingSwitchItems(navigate)}
+      />
       <div className="workspace-body billing-workspace-body">
         {mode === "quantity-entry" ? <QuantitySheetView user={user} mode="entry" /> : null}
         {mode === "quantity-saved" ? <QuantitySheetView user={user} mode="saved" /> : null}

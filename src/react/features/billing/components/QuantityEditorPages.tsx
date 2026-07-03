@@ -5,6 +5,17 @@ import type { QuantitySheetRow } from "../../../api/contracts";
 const QUANTITY_ROWS_PER_PAGE = 31;
 const QUANTITY_LEFT_ROWS = 15;
 const QUANTITY_VISIBLE_ROWS = 16;
+const QUANTITY_FIELD_ORDER: Record<string, number> = {
+  date: 0,
+  addedCount: 1,
+  addedType: 2,
+  addedTransferIn: 3,
+  removedCount: 4,
+  removedType: 5,
+  removedTransferOut: 6,
+  animalCount: 7,
+  cageCount: 8,
+};
 export type QuantityRowHandle = {
   getRow: () => QuantitySheetRow;
   setCalculated: (animals: number, cages: number) => void;
@@ -161,6 +172,30 @@ const QuantityEntryCells = memo(
       const count = (value: string) => (value === "" ? null : Math.max(Number(value), 0));
       const setDate = (rawDateInput: string, date = normalizeEditorDate(rawDateInput, month)) =>
         setRow((current) => ({ ...current, rawDateInput, date }));
+      const handleTab = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key !== "Tab") return;
+        const scope = event.currentTarget.closest(".quantity-entry-wrap");
+        if (!(scope instanceof HTMLElement)) return;
+        const focusables = Array.from(scope.querySelectorAll<HTMLElement>('[data-quantity-focusable="true"]'))
+          .filter((element) => element.getClientRects().length > 0 && !element.hasAttribute("disabled"))
+          .sort((left, right) => {
+            const leftPage = Number(left.dataset.quantityPage || 0);
+            const rightPage = Number(right.dataset.quantityPage || 0);
+            if (leftPage !== rightPage) return leftPage - rightPage;
+            const leftRow = Number(left.dataset.quantityRow || 0);
+            const rightRow = Number(right.dataset.quantityRow || 0);
+            if (leftRow !== rightRow) return leftRow - rightRow;
+            const leftOrder = QUANTITY_FIELD_ORDER[left.dataset.quantityField || ""] ?? 99;
+            const rightOrder = QUANTITY_FIELD_ORDER[right.dataset.quantityField || ""] ?? 99;
+            return leftOrder - rightOrder;
+          });
+        const currentIndex = focusables.indexOf(event.currentTarget);
+        if (currentIndex < 0) return;
+        const next = focusables[currentIndex + (event.shiftKey ? -1 : 1)];
+        if (!next) return;
+        event.preventDefault();
+        next.focus();
+      };
       return (
         <>
           <td className="quantity-date-cell">
@@ -174,6 +209,11 @@ const QuantityEntryCells = memo(
                 placeholder=""
                 value={row.rawDateInput || row.date}
                 onChange={(event) => setDate(event.target.value)}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="date"
                 onBlur={(event) => {
                   const normalized = normalizeEditorDate(event.currentTarget.value, month);
                   if (normalized) setDate(normalized, normalized);
@@ -183,6 +223,7 @@ const QuantityEntryCells = memo(
                 className="quantity-date-picker-button"
                 type="button"
                 aria-label={`选择第 ${index + 1} 行日期`}
+                tabIndex={-1}
                 onClick={() => pickerRef.current?.showPicker()}
               >
                 <CalendarIcon />
@@ -208,11 +249,21 @@ const QuantityEntryCells = memo(
                 min="0"
                 value={row.addedCount ?? ""}
                 onChange={(event) => update("addedCount", count(event.target.value))}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="addedCount"
               />
               <select
                 aria-label={`第 ${index + 1} 行增加类型`}
                 value={row.addedType}
                 onChange={(event) => update("addedType", event.target.value)}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="addedType"
               >
                 <option value="">类型</option>
                 <option>购入</option>
@@ -225,6 +276,11 @@ const QuantityEntryCells = memo(
                   aria-label={`第 ${index + 1} 行转入伦理号`}
                   value={row.transferInFromIacuc}
                   onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
+                  onKeyDown={handleTab}
+                  data-quantity-focusable="true"
+                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                  data-quantity-row={index}
+                  data-quantity-field="addedTransferIn"
                 />
               ) : null}
             </div>
@@ -237,11 +293,21 @@ const QuantityEntryCells = memo(
                 min="0"
                 value={row.removedCount ?? ""}
                 onChange={(event) => update("removedCount", count(event.target.value))}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="removedCount"
               />
               <select
                 aria-label={`第 ${index + 1} 行减少类型`}
                 value={row.removedType}
                 onChange={(event) => update("removedType", event.target.value)}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="removedType"
               >
                 <option value="">类型</option>
                 <option>取材</option>
@@ -254,6 +320,11 @@ const QuantityEntryCells = memo(
                   aria-label={`第 ${index + 1} 行转出伦理号`}
                   value={row.transferOutToIacuc}
                   onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
+                  onKeyDown={handleTab}
+                  data-quantity-focusable="true"
+                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                  data-quantity-row={index}
+                  data-quantity-field="removedTransferOut"
                 />
               ) : null}
             </div>
@@ -267,6 +338,11 @@ const QuantityEntryCells = memo(
               placeholder={calculated.animals > 0 ? String(calculated.animals) : ""}
               value={row.animalCount ?? ""}
               onChange={(event) => update("animalCount", count(event.target.value))}
+              onKeyDown={handleTab}
+              data-quantity-focusable="true"
+              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+              data-quantity-row={index}
+              data-quantity-field="animalCount"
             />
           </td>
           <td>
@@ -278,6 +354,11 @@ const QuantityEntryCells = memo(
               placeholder={calculated.cages > 0 ? String(calculated.cages) : ""}
               value={row.cageCount ?? ""}
               onChange={(event) => update("cageCount", count(event.target.value))}
+              onKeyDown={handleTab}
+              data-quantity-focusable="true"
+              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+              data-quantity-row={index}
+              data-quantity-field="cageCount"
             />
           </td>
         </>

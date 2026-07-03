@@ -11,8 +11,11 @@ import {
   VirtualRack,
 } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb } from "../shell/workspaceNavigation";
+import { WorkspaceHeader } from "../../components/WorkspaceUi";
 
-export function CagesView() {
+export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
   const summary = useBootstrap("summary");
   const rooms = (summary.data?.rooms || []) as unknown as CageRoom[];
   const [roomId, setRoomId] = useState("");
@@ -54,37 +57,54 @@ export function CagesView() {
 
   return (
     <section className="workspace-view cage-workspace react-cage-view">
-      <header className="workspace-head">
-        <div className="workspace-head-main">
-          <span className="workspace-kicker">笼位运营工作台</span>
-          <div className="workspace-title-line">
-            <h1>笼位管理</h1>
-            <span className="workspace-status-badge">
-              {selectedRoom?.name || "选择房间"} · {selectedRack?.name || "加载笼架"}
-            </span>
-          </div>
-          <p>按房间和笼架查看占用、预约与饲养周期状态，选中笼位后集中维护。</p>
-          <div className="workspace-meta-strip">
-            <div className="workspace-meta-card">
-              <span>当前笼架</span>
-              <strong>{slots.length} 笼</strong>
-            </div>
-            <div className="workspace-meta-card warning">
-              <span>待进驻</span>
-              <strong>{tasks.length}</strong>
-            </div>
-            <div className="workspace-meta-card">
-              <span>已选笼位</span>
-              <strong>{selectedSlotIds.length || (selectedSlot ? 1 : 0)}</strong>
-            </div>
-          </div>
-        </div>
-        <div className="workspace-head-actions">
+      <WorkspaceHeader
+        kicker="笼位运营工作台"
+        title="动态笼位图"
+        breadcrumbs={[breadcrumb("笼位管理", () => navigate("cages"))]}
+        summary="按房间和笼架查看占用、预约与饲养周期状态，选中笼位后集中维护。"
+        status={`${selectedRoom?.name || "选择房间"} · ${selectedRack?.name || "加载笼架"}`}
+        metrics={[
+          { label: "当前笼架", value: `${slots.length} 笼` },
+          { label: "待进驻", value: tasks.length, tone: "warning" },
+          { label: "已选笼位", value: selectedSlotIds.length || (selectedSlot ? 1 : 0) },
+        ]}
+        actions={
           <button className="secondary" type="button" onClick={() => setTasksOpen(true)}>
             待进驻 {tasks.length}
           </button>
-        </div>
-      </header>
+        }
+        toolbar={
+          <>
+            <label className="workspace-toolbar-field">
+              <span>饲养间</span>
+              <select aria-label="房间" value={selectedRoomId} onChange={(event) => setRoomId(event.target.value)}>
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="workspace-toolbar-field">
+              <span>笼架</span>
+              <select
+                aria-label="笼架"
+                value={selectedRack?.id || ""}
+                onChange={(event) => {
+                  setRackId(event.target.value);
+                  setSelectedSlotId("");
+                }}
+              >
+                {racks.map((rack) => (
+                  <option key={rack.id} value={rack.id}>
+                    {rack.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        }
+      />
       <div className="workspace-body cage-workspace-body">
         <section className="cage-layout">
           <div className="panel large cage-preview">
@@ -92,29 +112,6 @@ export function CagesView() {
               <div className="panel-title-line">
                 <h2>动态笼位图</h2>
                 <p>{visibleSlots.length} 个笼位</p>
-              </div>
-              <div className="panel-head-actions">
-                <select aria-label="房间" value={selectedRoomId} onChange={(event) => setRoomId(event.target.value)}>
-                  {rooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label="笼架"
-                  value={selectedRack?.id || ""}
-                  onChange={(event) => {
-                    setRackId(event.target.value);
-                    setSelectedSlotId("");
-                  }}
-                >
-                  {racks.map((rack) => (
-                    <option key={rack.id} value={rack.id}>
-                      {rack.name}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
             <div className="legend">

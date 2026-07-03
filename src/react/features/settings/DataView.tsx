@@ -5,8 +5,10 @@ import { uploadFile, useIacucStatus, usePrincipalIdentities, useSavePrincipalIde
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
 import { formatDateTime, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
-export function DataView({ user }: { user: SessionUser }) {
+export function DataView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const status = useIacucStatus();
   const identities = usePrincipalIdentities();
   const saveIdentity = useSavePrincipalIdentity();
@@ -39,8 +41,11 @@ export function DataView({ user }: { user: SessionUser }) {
       <WorkspaceHeader
         kicker="数据治理工作台"
         title="数据管理"
+        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
         summary="维护 IACUC 索引、负责人身份和历史报销台账，保障录入与结算自动匹配。"
         status={`${status.data?.count || 0} 条 IACUC`}
+        switcherLabel="系统功能"
+        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body settings-workspace-body">
         {notice ? (

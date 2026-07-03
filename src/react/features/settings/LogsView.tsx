@@ -1,9 +1,12 @@
 import { useState } from "react";
 
 import { useAuditEvents } from "../../api/administration";
+import type { SessionUser } from "../../api/contracts";
 import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
-export function LogsView() {
+export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) => void; user: SessionUser }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const query = useAuditEvents(pageSize, (page - 1) * pageSize);
@@ -14,8 +17,11 @@ export function LogsView() {
       <WorkspaceHeader
         kicker="审计工作台"
         title="操作日志"
+        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
         summary="查看系统写入操作、操作者和对象变更，追踪数据维护来源。"
         status={`${total} 条记录`}
+        switcherLabel="系统功能"
+        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body settings-workspace-body">
         <section className="panel large">

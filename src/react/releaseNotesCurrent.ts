@@ -2,6 +2,12 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.7a",
+    releasedAt: "2026-07-03 12:08",
+    title: "结算汇总导出文件名优化",
+    items: ["饲养费结算汇总表导出 PDF 的文件名改为“XXX课题组实验动物饲养费核算汇总表 xxxx年xx月”格式"],
+  },
+  {
     version: "0.6.7",
     releasedAt: "2026-07-03 06:52",
     title: "项目负责人结算列表与工作区交互优化",

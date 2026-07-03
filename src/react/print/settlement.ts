@@ -87,7 +87,8 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
 }
 
 export function settlementStatementHtml(result: BillingStatementResponse, autoPrint = true) {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>饲养费结算单</title><style>${styles()}</style></head><body>${settlementStatementMarkup(result)}${autoPrint ? "<script>window.onload=()=>window.print()</script>" : ""}</body></html>`;
+  const title = settlementStatementDocumentTitle(result);
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title><style>${styles()}</style></head><body>${settlementStatementMarkup(result)}${autoPrint ? "<script>window.onload=()=>window.print()</script>" : ""}</body></html>`;
 }
 
 export function openSettlementPrint(result: BillingStatementResponse) {
@@ -187,6 +188,12 @@ function documentNumberFor(statement: BillingStatement) {
   return `CL-${source}-${statement.month.replace(/\D/g, "")}-${String(statement.id || "PREVIEW")
     .replace(/[^a-z0-9-]/gi, "")
     .toUpperCase()}`;
+}
+function settlementStatementDocumentTitle(result: BillingStatementResponse) {
+  const pi = String(result.statement.pi || "未命名课题组").trim();
+  const month = String(result.statement.month || "").trim();
+  const monthLabel = month ? `${month.slice(0, 4)}年${month.slice(5, 7)}月` : "";
+  return `${pi}课题组实验动物饲养费核算汇总表${monthLabel ? ` ${monthLabel}` : ""}`;
 }
 function numberText(value: unknown) {
   const number = Number(value || 0);

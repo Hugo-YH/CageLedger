@@ -1,6 +1,17 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
+export interface WorkspaceBreadcrumbItem {
+  label: string;
+  onClick?: () => void;
+}
+
+export interface WorkspaceSwitcherItem {
+  label: string;
+  description?: string;
+  onClick: () => void;
+}
+
 export function WorkspaceHeader({
   kicker,
   title,
@@ -8,6 +19,10 @@ export function WorkspaceHeader({
   status,
   metrics,
   actions,
+  toolbar,
+  breadcrumbs,
+  switcherLabel = "快速跳转",
+  switcherItems,
 }: {
   kicker: string;
   title: string;
@@ -15,29 +30,87 @@ export function WorkspaceHeader({
   status?: string;
   metrics?: Array<{ label: string; value: ReactNode; tone?: "success" | "warning" | "todo" }>;
   actions?: ReactNode;
+  toolbar?: ReactNode;
+  breadcrumbs?: WorkspaceBreadcrumbItem[];
+  switcherLabel?: string;
+  switcherItems?: WorkspaceSwitcherItem[];
 }) {
+  const hasBreadcrumbs = Boolean(breadcrumbs?.length);
+  const switcherEnabled = Boolean(switcherItems?.length);
   return (
-    <header className="workspace-head">
-      <div className="workspace-head-main">
-        <span className="workspace-kicker">{kicker}</span>
-        <div className="workspace-title-line">
-          <h1>{title}</h1>
-          {status ? <span className="workspace-status-badge">{status}</span> : null}
+    <>
+      <header className={`workspace-head ${hasBreadcrumbs ? "workspace-head-breadcrumb" : ""}`}>
+        <div className="workspace-head-main">
+          <span className="workspace-kicker">{kicker}</span>
+          {hasBreadcrumbs ? (
+            <nav className="workspace-breadcrumbs" aria-label="页面目录">
+              {breadcrumbs!.map((crumb, index) => (
+                <span className="workspace-breadcrumb-group" key={crumb.label}>
+                  {index > 0 ? (
+                    <span className="workspace-breadcrumb-separator" aria-hidden="true">
+                      ›
+                    </span>
+                  ) : null}
+                  {crumb.onClick ? (
+                    <button className="workspace-breadcrumb-link" type="button" onClick={crumb.onClick}>
+                      {crumb.label}
+                    </button>
+                  ) : (
+                    <span className="workspace-breadcrumb-link workspace-breadcrumb-current">{crumb.label}</span>
+                  )}
+                </span>
+              ))}
+              <span className="workspace-breadcrumb-separator" aria-hidden="true">
+                ›
+              </span>
+              <h1>{title}</h1>
+              {status ? <span className="workspace-status-badge">{status}</span> : null}
+            </nav>
+          ) : (
+            <div className="workspace-title-line">
+              <h1>{title}</h1>
+              {status ? <span className="workspace-status-badge">{status}</span> : null}
+            </div>
+          )}
+          <p className="workspace-summary">{summary}</p>
+          {metrics?.length ? (
+            <div className="workspace-meta-strip">
+              {metrics.map((metric) => (
+                <div className={`workspace-meta-card ${metric.tone || ""}`} key={metric.label}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
-        <p className="workspace-summary">{summary}</p>
-        {metrics?.length ? (
-          <div className="workspace-meta-strip">
-            {metrics.map((metric) => (
-              <div className={`workspace-meta-card ${metric.tone || ""}`} key={metric.label}>
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-              </div>
-            ))}
+      </header>
+      {toolbar || switcherEnabled || actions ? (
+        <div className="workspace-toolbar" aria-label="工作区操作">
+          {toolbar ? (
+            <div className="workspace-toolbar-main">{toolbar}</div>
+          ) : (
+            <span className="workspace-toolbar-spacer" />
+          )}
+          <div className="workspace-toolbar-actions">
+            {switcherEnabled ? (
+              <details className="workspace-switcher">
+                <summary>{switcherLabel}</summary>
+                <div className="workspace-switcher-menu" role="menu" aria-label={switcherLabel}>
+                  {switcherItems!.map((item) => (
+                    <button key={item.label} className="workspace-switcher-item" type="button" onClick={item.onClick}>
+                      <strong>{item.label}</strong>
+                      {item.description ? <span>{item.description}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+            {actions ? <div className="workspace-toolbar-action-group">{actions}</div> : null}
           </div>
-        ) : null}
-      </div>
-      {actions ? <div className="workspace-head-actions">{actions}</div> : null}
-    </header>
+        </div>
+      ) : null}
+    </>
   );
 }
 

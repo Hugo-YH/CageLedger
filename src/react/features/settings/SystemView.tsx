@@ -4,8 +4,10 @@ import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
 import { Pager, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { SYSTEM_RELEASE_NOTES, type ReleaseNote } from "../../releaseNotes";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
-export function SystemView({ user }: { user: SessionUser }) {
+export function SystemView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const info = useSystemInfo();
   const [checkEnabled, setCheckEnabled] = useState(false);
   const [releasePage, setReleasePage] = useState(1);
@@ -34,8 +36,11 @@ export function SystemView({ user }: { user: SessionUser }) {
       <WorkspaceHeader
         kicker="系统与文档工作台"
         title="关于系统"
+        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
         summary="集中查看当前版本、正式文档、发布记录和反馈入口。"
         status={`当前版本 v${data.version}`}
+        switcherLabel="系统功能"
+        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body system-workspace-body">
         <div className="system-layout">

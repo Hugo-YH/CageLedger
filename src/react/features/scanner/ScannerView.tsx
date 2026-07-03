@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { requestJson } from "../../api/client";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, intakeSwitchItems } from "../shell/workspaceNavigation";
+import { WorkspaceHeader } from "../../components/WorkspaceUi";
 
 type CageCardDetails = Record<string, string | number | null | undefined>;
 
-export function ScannerView({ back }: { back: () => void }) {
+export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
   const [input, setInput] = useState("");
   const [qrId, setQrId] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
@@ -60,18 +63,20 @@ export function ScannerView({ back }: { back: () => void }) {
 
   return (
     <section className="workspace-view scanner-workspace">
-      <header className="workspace-head">
-        <div className="workspace-head-main">
-          <span className="workspace-kicker">笼卡快速识别</span>
-          <h1>笼卡识别</h1>
-          <p>扫描二维码或输入笼卡识别码，查询当前笼位、项目和接收状态。</p>
-        </div>
-        <div className="workspace-head-actions">
-          <button className="secondary" type="button" onClick={back}>
+      <WorkspaceHeader
+        kicker="笼卡快速识别"
+        title="二维码扫描"
+        breadcrumbs={[breadcrumb("笼卡管理", () => navigate("intake-entry"))]}
+        summary="扫描二维码或输入笼卡识别码，查询当前笼位、项目和接收状态。"
+        status={cameraActive ? "摄像头开启" : "只读查询"}
+        actions={
+          <button className="secondary" type="button" onClick={() => navigate("intake-entry")}>
             返回笼卡管理
           </button>
-        </div>
-      </header>
+        }
+        switcherLabel="笼卡功能"
+        switcherItems={intakeSwitchItems(navigate)}
+      />
       <div className="workspace-body">
         <section className="panel scanner-panel">
           <div className="panel-head">

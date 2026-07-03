@@ -6,8 +6,10 @@ import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
 import { ConfirmDialog, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
+import type { WorkspaceView } from "../../state/ui";
+import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
-export function RoomsView({ user }: { user: SessionUser }) {
+export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const query = useBootstrap("full");
   const save = useSaveInfrastructure();
   const removeRoom = useDeleteRoom();
@@ -79,8 +81,11 @@ export function RoomsView({ user }: { user: SessionUser }) {
       <WorkspaceHeader
         kicker="基础设施工作台"
         title="房间管理"
+        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
         summary="维护饲养间、笼架和笼位规模，供笼位录入与饲养费核算共同使用。"
         status={canManageRooms ? "系统管理员可维护" : "当前账号可维护授权笼架"}
+        switcherLabel="系统功能"
+        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
         actions={
           <div className="workspace-head-button-row">
             {canManageRooms ? (

@@ -55,22 +55,22 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
 
   return (
     <section className="panel quantity-saved-panel">
+      <div className="workspace-toolbar quantity-saved-toolbar">
+        <span className="panel-summary-chip">
+          {total} 条 · 已选 {selected.length}
+        </span>
+        <button
+          className="secondary info-button"
+          type="button"
+          disabled={!selected.length}
+          onClick={() => void exportSelected()}
+        >
+          导出数量统计表 PDF
+        </button>
+      </div>
       <div className="panel-head">
         <div className="panel-title-line">
           <h2>已保存数量统计表</h2>
-        </div>
-        <div className="panel-head-actions">
-          <span className="panel-summary-chip">
-            {total} 条 · 已选 {selected.length}
-          </span>
-          <button
-            className="secondary info-button"
-            type="button"
-            disabled={!selected.length}
-            onClick={() => void exportSelected()}
-          >
-            导出数量统计表 PDF
-          </button>
         </div>
       </div>
       <div className="list-meta">

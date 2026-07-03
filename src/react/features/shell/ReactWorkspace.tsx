@@ -186,22 +186,20 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
 }
 
 function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (view: WorkspaceView) => void) {
-  if (view === "intake-entry")
-    return <IntakeView mode="entry" user={user} navigateScanner={() => navigate("cage-card-scanner")} />;
-  if (view === "intake-batches")
-    return <IntakeView mode="batches" user={user} navigateScanner={() => navigate("cage-card-scanner")} />;
-  if (view === "cage-card-scanner") return <ScannerView back={() => navigate("intake-entry")} />;
-  if (view === "cages") return <CagesView />;
-  if (view === "billing-cage-map") return <BillingView mode="cage-map" user={user} />;
-  if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} />;
-  if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} />;
-  if (view === "billing-settlement") return <BillingView mode="settlement" user={user} />;
-  if (view === "workflow-center") return <WorkflowCenterView user={user} />;
-  if (view === "rooms") return <RoomsView user={user} />;
-  if (view === "users") return <UsersView currentUser={user} />;
-  if (view === "data") return <DataView user={user} />;
-  if (view === "logs") return <LogsView />;
-  if (view === "system") return <SystemView user={user} />;
+  if (view === "intake-entry") return <IntakeView mode="entry" user={user} navigate={navigate} />;
+  if (view === "intake-batches") return <IntakeView mode="batches" user={user} navigate={navigate} />;
+  if (view === "cage-card-scanner") return <ScannerView navigate={navigate} />;
+  if (view === "cages") return <CagesView navigate={navigate} />;
+  if (view === "billing-cage-map") return <BillingView mode="cage-map" user={user} navigate={navigate} />;
+  if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} navigate={navigate} />;
+  if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} navigate={navigate} />;
+  if (view === "billing-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
+  if (view === "workflow-center") return <WorkflowCenterView user={user} navigate={navigate} />;
+  if (view === "rooms") return <RoomsView user={user} navigate={navigate} />;
+  if (view === "users") return <UsersView currentUser={user} navigate={navigate} />;
+  if (view === "data") return <DataView user={user} navigate={navigate} />;
+  if (view === "logs") return <LogsView user={user} navigate={navigate} />;
+  if (view === "system") return <SystemView user={user} navigate={navigate} />;
   return <DashboardView navigate={navigate} />;
 }
 
@@ -298,7 +296,7 @@ function NavigationSubmenu({
         <>
           <NavigationPanelItem
             view="intake-entry"
-            label="接收与识别"
+            label="预约消息识别"
             description="预约信息录入与笼卡扫码查询"
             icon="tag"
             activeView={activeView}
@@ -312,6 +310,14 @@ function NavigationSubmenu({
             activeView={activeView}
             onNavigate={onNavigate}
           />
+          <NavigationPanelItem
+            view="cage-card-scanner"
+            label="二维码扫描"
+            description="扫描笼卡二维码查询当前信息"
+            icon="grid"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
         </>
       ) : null}
       {drawer === "billing" ? (
@@ -319,7 +325,7 @@ function NavigationSubmenu({
           <span className="nav-submenu-label">核算数据</span>
           <NavigationPanelItem
             view="billing-cage-map"
-            label="动态笼位图结算"
+            label="动态笼位图（自动）"
             description="按真实占用时间线自动核算"
             icon="grid"
             activeView={activeView}
@@ -328,7 +334,7 @@ function NavigationSubmenu({
           <span className="nav-submenu-label">数量统计表</span>
           <NavigationPanelItem
             view="billing-quantity-entry"
-            label="数量统计表录入"
+            label="数量统计表（录入）"
             description="按伦理号和房间录入月度变化"
             icon="calculator"
             activeView={activeView}

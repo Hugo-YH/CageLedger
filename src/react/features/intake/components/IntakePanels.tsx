@@ -20,7 +20,7 @@ export function IntakeEntryPanel({
   notice,
   saving,
   onSubmit,
-  onNew,
+  headActions,
   onParse,
   onPrint,
   onUpdate,
@@ -31,7 +31,7 @@ export function IntakeEntryPanel({
   notice: string;
   saving: boolean;
   onSubmit: React.FormEventHandler<HTMLFormElement>;
-  onNew: () => void;
+  headActions?: React.ReactNode;
   onParse: () => void;
   onPrint: () => void;
   onUpdate: <K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) => void;
@@ -42,14 +42,7 @@ export function IntakeEntryPanel({
         <div className="panel-title-line">
           <h2>{editing ? "编辑接收笼卡" : "接收笼卡"}</h2>
         </div>
-        <div className="panel-head-actions">
-          <button className="secondary" type="button" onClick={onNew}>
-            新建批次
-          </button>
-          <button className="primary" type="submit" disabled={saving}>
-            {saving ? "保存中..." : "保存待接收批次"}
-          </button>
-        </div>
+        {headActions ? <div className="panel-head-actions">{headActions}</div> : null}
       </div>
       <div className="intake-entry-layout">
         <div className="intake-message-field">
