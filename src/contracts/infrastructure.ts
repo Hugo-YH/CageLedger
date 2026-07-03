@@ -22,6 +22,7 @@ export interface CageRoom {
   id: string;
   name: string;
   area?: string;
+  roomManager?: string;
   facility?: string;
   defaultSpecies?: string;
   defaultBillingItem?: string;

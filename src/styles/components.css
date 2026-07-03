@@ -248,7 +248,14 @@
 }
 
 .quantity-field-group-basic {
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.quantity-field-group .readonly-field {
+  color: var(--text);
+  background: var(--surface-soft);
+  border-style: dashed;
+  cursor: default;
 }
 
 .quantity-field-group-project {
@@ -328,6 +335,32 @@
 
 .quantity-free-cage-toggle {
   flex: 0 0 auto;
+}
+
+.quantity-full-exemption-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.quantity-full-exemption-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.quantity-full-exemption-row small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.quantity-full-exemption-row.enabled {
+  padding: 12px;
+  border: 1px solid var(--success-line);
+  border-radius: var(--radius-md);
+  background: var(--success-soft);
 }
 
 .room-billing-hint {
@@ -836,6 +869,7 @@
 }
 
 .quantity-animal-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -853,7 +887,22 @@
 
 .quantity-animal-toggle input {
   position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
+  cursor: inherit;
+}
+
+.quantity-animal-toggle:has(input:focus-visible) {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.quantity-animal-toggle-track,
+.quantity-animal-toggle-label {
   pointer-events: none;
 }
 

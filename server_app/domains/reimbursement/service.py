@@ -133,8 +133,10 @@ def summarize_statement(statement, lines, detail_context_by_iacuc, tier_limit):
                     support = free * group["unitPrice"]
                     payable = tier1 * group["unitPrice"] + tier2 * (group["overageUnitPrice"] or group["unitPrice"])
                 else:
-                    support = 0
-                    payable = count * group["unitPrice"]
+                    explicit_free = numeric(group.get("freeByIacuc", {}).get(iacuc))
+                    free = min(explicit_free, count) if group.get("hasExplicitFree") else 0
+                    support = free * group["unitPrice"]
+                    payable = max(count - free, 0) * group["unitPrice"]
                 current["supportAmount"] += support
                 current["payableAmount"] += payable
                 current["amount"] += support + payable

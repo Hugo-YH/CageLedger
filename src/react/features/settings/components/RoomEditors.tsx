@@ -56,6 +56,7 @@ export function RoomEditor({
       <div className="modal-shell-body form">
         <Field label="饲养间名称" value={draft.name} onChange={(value) => update("name", value)} />
         <Field label="区域" value={draft.area || ""} onChange={(value) => update("area", value)} />
+        <Field label="房间管理员" value={draft.roomManager || ""} onChange={(value) => update("roomManager", value)} />
         <div className="compact-form-row half">
           <Select
             label="所属设施"

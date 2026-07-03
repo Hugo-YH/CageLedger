@@ -12,6 +12,11 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await iacucInput.fill("Z202506");
   await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
   await page.getByRole("combobox", { name: "房间号", exact: true }).selectOption({ label: "8014" });
+  await expect(page.getByLabel("登记人员", { exact: true })).toHaveValue("系统管理员");
+  await expect(page.getByLabel("登记人员", { exact: true })).toHaveAttribute("readonly", "");
+  await expect(page.getByLabel("房间管理员", { exact: true })).toHaveValue("E2E 房间管理员");
+  await expect(page.getByLabel("房间管理员", { exact: true })).toHaveAttribute("readonly", "");
+  await page.getByRole("checkbox", { name: "全额减免", exact: true }).check();
   await iacucInput.fill("E2E-IACUC-001");
   await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E负责人");
   await page.getByLabel("第 1 行结余笼数", { exact: true }).fill("2");
@@ -27,6 +32,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(page.getByRole("heading", { level: 1, name: "已保存数量统计表", exact: true })).toBeVisible();
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
   await expect(savedRow).toBeVisible();
+  await expect(savedRow).toContainText("系统管理员");
   await savedRow.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(savedRow).toHaveCount(0);

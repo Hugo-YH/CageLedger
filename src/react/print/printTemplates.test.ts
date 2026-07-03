@@ -55,7 +55,8 @@ describe("print templates", () => {
     const sheet = {
       month: "2026-05",
       roomName: "8014",
-      manager: "管理员",
+      manager: "登记人员",
+      roomManager: "房间管理员",
       iacuc: "Z1",
       pi: "张教授",
       owner: "陈老师",
@@ -93,6 +94,8 @@ describe("print templates", () => {
     expect(html.match(/经手人/g)).toHaveLength(2);
     expect(html.match(/2026\.5\./g)).toHaveLength(31);
     expect(html).toContain("2026.5.31");
+    expect(html).toContain("房间管理员：房间管理员");
+    expect(html).not.toContain("房间管理员：登记人员");
   });
 
   it("renders merged IACUC columns from the server breakdown", () => {
@@ -125,7 +128,7 @@ describe("print templates", () => {
           amount: 9,
           cumulative: 9,
           iacucBreakdown: [
-            { iacuc: "Z1", cageCount: 6, freeCages: 6, unitPrice: 4.5 },
+            { iacuc: "Z1", cageCount: 6, freeCages: 6, unitPrice: 4.5, fullExemption: true },
             { iacuc: "Z2", cageCount: 6, freeCages: 4, unitPrice: 4.5 },
           ],
         },
@@ -135,11 +138,12 @@ describe("print templates", () => {
     expect(html).toContain("Z1");
     expect(html).toContain("Z2");
     expect(html).toContain("9.00");
-    expect(html).toContain('<th colspan="3">Z1</th>');
+    expect(html).toContain('<th colspan="3">Z1（全额减免）</th>');
     expect(html).toContain('<th colspan="3">Z2</th>');
     expect(html).toContain('<td class="money">0.00</td>');
     expect(html).not.toContain("梯度笼数");
     expect(html).toContain('class="meta-table"');
+    expect(html).toContain("全额减免：Z1");
     expect(html).toContain('class="sign-table"');
     expect(html).toContain("@page{size:A4;margin:10mm}");
   });
@@ -211,7 +215,8 @@ describe("print templates", () => {
         month: "2026-06",
         roomId: "room-1",
         roomName: "8014",
-        manager: "管理员",
+        manager: "登记人员",
+        roomManager: "房间管理员",
         iacuc: "Z1",
         pi: "张教授",
         owner: "陈老师",
@@ -220,6 +225,7 @@ describe("print templates", () => {
         funding: "",
         preferredFreeCages: null,
         freeCagePriority: null,
+        fullExemption: false,
         customBillingEnabled: false,
         customUnitPrice: null,
         billingUnit: "cage_day",

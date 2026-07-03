@@ -105,7 +105,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                 ["month", "月份"],
                 ["iacuc", "IACUC"],
                 ["roomName", "房间"],
-                ["manager", "管理员"],
+                ["manager", "登记人员"],
                 ["pi", "负责人"],
                 ["updatedAt", "更新时间"],
               ].map(([key, label]) => (

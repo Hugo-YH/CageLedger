@@ -52,10 +52,10 @@ function renderPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | null>, 
   const right = rows.slice(LEFT_COLUMN_DAYS, DAYS_PER_PAGE);
   return `<section class="sheet-page"><div class="sheet-topline">中山大学中山眼科中心 实验动物中心</div><table class="sheet-table"><colgroup><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:6%"><col style="width:6%"><col style="width:10%"></colgroup>
 <tr><th class="title" colspan="12">实验动物数量统计表</th></tr>
-<tr><td class="note" colspan="8">备注：饲养费计算以此表动物数量为准，请如实填写。填写说明：购：购入　转：转移　分：分笼　取：取材或处理　死：死亡</td><td class="meta" colspan="2">房间号：${escapeHtml(sheet.roomName)}</td><td class="meta" colspan="2">管理员：${escapeHtml(sheet.manager)}</td></tr>
+<tr><td class="note" colspan="8">备注：饲养费计算以此表动物数量为准，请如实填写。填写说明：购：购入　转：转移　分：分笼　取：取材或处理　死：死亡</td><td class="meta" colspan="2">房间号：${escapeHtml(sheet.roomName)}</td><td class="meta" colspan="2">房间管理员：${escapeHtml(sheet.roomManager || sheet.manager)}</td></tr>
 <tr><td class="label" colspan="2">IACUC编号</td><td colspan="2">${escapeHtml(sheet.iacuc)}</td><td class="label" colspan="2">项目负责人</td><td colspan="2">${escapeHtml(sheet.pi)}</td><td class="label" colspan="2">实验负责人及电话</td><td colspan="2">${escapeHtml(sheet.owner)}</td></tr>
 <tr>${headers()}${headers()}</tr>${Array.from({ length: PRINT_ROWS }, (_, index) => `<tr>${dayCells(left[index] || null)}${dayCells(right[index] || null)}</tr>`).join("")}
-<tr><td class="footer-row" colspan="12">项目名称：${escapeHtml(sheet.project)}${sheet.customBillingEnabled && sheet.customUnitPrice ? `　计费标准：自定义 ¥${sheet.customUnitPrice.toFixed(2)} / ${sheet.billingUnit === "animal_day" ? "只/天" : "笼/天"}` : ""}${sheet.pageCount > 1 ? `　（第 ${pageIndex + 1} 页）` : ""}</td></tr></table></section>`;
+<tr><td class="footer-row" colspan="12">项目名称：${escapeHtml(sheet.project)}${sheet.fullExemption ? "　减免方式：全额减免" : ""}${sheet.customBillingEnabled && sheet.customUnitPrice ? `　计费标准：自定义 ¥${sheet.customUnitPrice.toFixed(2)} / ${sheet.billingUnit === "animal_day" ? "只/天" : "笼/天"}` : ""}${sheet.pageCount > 1 ? `　（第 ${pageIndex + 1} 页）` : ""}</td></tr></table></section>`;
 }
 
 function fillCalendarPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | null>) {

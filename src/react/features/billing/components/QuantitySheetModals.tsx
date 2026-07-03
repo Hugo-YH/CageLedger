@@ -54,6 +54,16 @@ export function ConfirmSave({
             <dt>有效明细</dt>
             <dd>{filled} 行</dd>
           </div>
+          <div>
+            <dt>减免方式</dt>
+            <dd>
+              {sheet.fullExemption
+                ? "全额减免"
+                : sheet.preferredFreeCages
+                  ? `优先减免 ${sheet.preferredFreeCages} 笼/天`
+                  : "自动分配"}
+            </dd>
+          </div>
         </dl>
       </div>
       <div className="modal-shell-actions">

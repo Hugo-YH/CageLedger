@@ -16,6 +16,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await ensureTestInfrastructure(page);
 
   for (const [index, id] of sheetIds.entries()) {
+    const cageCount = index === 0 ? 6 : 12;
     await page.request.post("/api/quantity-sheets", {
       data: {
         sheet: {
@@ -29,12 +30,13 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
           pi: "E2E 合表负责人",
           owner: "E2E 实验负责人",
           funding: `E2E-FUND-${index + 1}`,
+          fullExemption: index === 0,
           billingUnit: "cage_day",
           animalDetailEnabled: false,
           initialAnimalCount: 0,
-          initialCageCount: 6,
+          initialCageCount: cageCount,
           pageCount: 1,
-          rows: [{ id: `${id}-row-1`, date: `${month}-01`, cageCount: 6 }],
+          rows: [{ id: `${id}-row-1`, date: `${month}-01`, cageCount }],
         },
       },
     });
@@ -50,5 +52,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(row).toContainText("¥");
   await row.getByRole("button", { name: "预览结算单", exact: true }).click();
   await expect(page.getByRole("dialog", { name: /E2E 合表负责人/ })).toBeVisible();
+  await expect(page.frameLocator('iframe[title="结算单预览"]').locator("body")).toContainText(
+    "E2E-SETTLEMENT-001（全额减免）",
+  );
   await expect(page.getByRole("button", { name: "发起结算流程", exact: true })).toBeVisible();
 });

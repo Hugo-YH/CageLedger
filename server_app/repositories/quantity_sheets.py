@@ -52,6 +52,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
             funding,
             updated_at,
             json_extract(payload, '$.contact') AS contact,
+            json_extract(payload, '$.roomManager') AS room_manager,
             json_extract(payload, '$.initialCageCount') AS initial_cage_count,
             json_extract(payload, '$.initialAnimalCount') AS initial_animal_count,
             json_extract(payload, '$.billingUnit') AS billing_unit
@@ -138,6 +139,7 @@ def quantity_sheet_list_row(row):
         "roomId": row["room_id"] or "",
         "roomName": row["room_name"] or "",
         "manager": row["manager"] or "",
+        "roomManager": row["room_manager"] or "",
         "project": row["project"] or "",
         "pi": row["pi"] or "",
         "owner": row["owner"] or "",
@@ -158,6 +160,7 @@ def quantity_sheet_list_item(sheet):
         "roomId": sheet.get("roomId", ""),
         "roomName": sheet.get("roomName", ""),
         "manager": sheet.get("manager", ""),
+        "roomManager": sheet.get("roomManager", ""),
         "project": sheet.get("project", ""),
         "pi": sheet.get("pi", ""),
         "owner": sheet.get("owner", ""),

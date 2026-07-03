@@ -42,29 +42,31 @@ def tiered_daily_charge(
     }
 
 
-def flat_daily_charge(count, profile):
+def flat_daily_charge(count, profile, free_count=0):
     count = max(as_int(count) or 0, 0)
-    amount = count * float(profile.get("unitPrice") or 0)
+    free_count = min(max(as_int(free_count) or 0, 0), count)
+    billable_count = max(count - free_count, 0)
+    amount = billable_count * float(profile.get("unitPrice") or 0)
     if profile.get("unit") == "animal_day":
         return {
-            "freeCages": 0,
+            "freeCages": free_count,
             "billableCages": 0,
             "tier1Cages": 0,
             "tier2Cages": 0,
             "tier1BillableCages": 0,
             "tier2BillableCages": 0,
-            "billableAnimals": count,
+            "billableAnimals": billable_count,
             "unitPrice": profile.get("unitPrice") or 0,
             "overageUnitPrice": 0,
             "discountPercent": 0,
             "amount": amount,
         }
     return {
-        "freeCages": 0,
-        "billableCages": count,
+        "freeCages": free_count,
+        "billableCages": billable_count,
         "tier1Cages": count,
         "tier2Cages": 0,
-        "tier1BillableCages": count,
+        "tier1BillableCages": billable_count,
         "tier2BillableCages": 0,
         "billableAnimals": 0,
         "unitPrice": profile.get("unitPrice") or 0,
@@ -74,21 +76,33 @@ def flat_daily_charge(count, profile):
     }
 
 
+def charge_group_key(profile):
+    return "|".join(
+        [
+            profile.get("billingItem", ""),
+            profile.get("customerType", ""),
+            profile.get("unit", profile.get("billingUnit", "")),
+            str(profile.get("unitPrice") or 0),
+        ]
+    )
+
+
 def add_charge_group(groups, profile, count):
     count = max(as_int(count) or 0, 0)
     if count <= 0:
         return
-    key = "|".join(
-        [
-            profile.get("billingItem", ""),
-            profile.get("customerType", ""),
-            profile.get("unit", ""),
-            str(profile.get("unitPrice") or 0),
-        ]
-    )
+    key = charge_group_key(profile)
     if key not in groups:
-        groups[key] = {"profile": profile, "count": 0}
+        groups[key] = {"profile": profile, "count": 0, "freeCount": 0}
     groups[key]["count"] += count
+
+
+def add_free_count_to_charge_group(groups, profile, count):
+    count = max(as_int(count) or 0, 0)
+    key = charge_group_key(profile)
+    if count <= 0 or key not in groups:
+        return
+    groups[key]["freeCount"] = groups[key].get("freeCount", 0) + count
 
 
 def combined_daily_charge(groups, free_cages):
@@ -109,17 +123,19 @@ def combined_daily_charge(groups, free_cages):
     for group in groups.values():
         profile = group["profile"]
         count = group["count"]
+        explicit_free_count = min(max(as_int(group.get("freeCount")) or 0, 0), count)
         if profile.get("tiered"):
-            allowance = remaining_free_cages if profile.get("freeAllowance") else 0
+            allowance = explicit_free_count + (remaining_free_cages if profile.get("freeAllowance") else 0)
             charges = tiered_daily_charge(
                 count,
                 allowance,
                 profile.get("unitPrice", BILLING_TIER_BASE_PRICE),
                 profile.get("overageUnitPrice", BILLING_TIER_OVER_PRICE),
             )
-            remaining_free_cages = max(remaining_free_cages - charges.get("freeCages", 0), 0)
+            applied_from_allowance = max(charges.get("freeCages", 0) - explicit_free_count, 0)
+            remaining_free_cages = max(remaining_free_cages - applied_from_allowance, 0)
         else:
-            charges = flat_daily_charge(count, profile)
+            charges = flat_daily_charge(count, profile, explicit_free_count)
         for key in (
             "freeCages",
             "billableCages",

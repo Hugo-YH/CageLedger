@@ -28,6 +28,7 @@ export async function ensureTestInfrastructure(page: Page) {
         id: "room-e2e-8014",
         name: "8014",
         area: "E2E",
+        roomManager: "E2E 房间管理员",
         facility: "zhujiang",
         defaultSpecies: "mouse",
         defaultBillingItem: "mouse_standard",
@@ -64,21 +65,21 @@ function escapeRegExp(value: string) {
 }
 
 export async function openIntakeEntry(page: Page) {
-  await page.getByRole("button", { name: "笼卡管理", exact: true }).click();
+  await page.locator("nav.nav").getByRole("button", { name: "笼卡管理", exact: true }).click();
   await page.getByRole("button", { name: /接收与识别/ }).click();
 }
 
 export async function openQuantityEntry(page: Page) {
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await page.getByRole("button", { name: /数量统计表录入/ }).click();
+  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
+  await page.getByRole("button", { name: /数量统计表（录入）/ }).click();
 }
 
 export async function openSavedQuantitySheets(page: Page) {
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
+  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
   await page.getByRole("button", { name: /已保存数量统计表/ }).click();
 }
 
 export async function openWorkflowCenter(page: Page) {
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
+  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
   await page.getByRole("button", { name: /结算与报销台账/ }).click();
 }

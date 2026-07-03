@@ -25,7 +25,10 @@ export interface QuantitySheet {
   month: string;
   roomId: string;
   roomName: string;
+  /** 最后保存统计表的登录用户显示姓名。 */
   manager: string;
+  /** 保存时对应房间配置的房间管理员快照。 */
+  roomManager: string;
   iacuc: string;
   project: string;
   pi: string;
@@ -34,6 +37,7 @@ export interface QuantitySheet {
   funding: string;
   preferredFreeCages: number | null;
   freeCagePriority: number | null;
+  fullExemption: boolean;
   customBillingEnabled: boolean;
   customUnitPrice: number | null;
   billingUnit: BillingUnit;

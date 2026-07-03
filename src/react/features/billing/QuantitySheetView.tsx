@@ -81,6 +81,15 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     }));
   }
 
+  function setFullExemption(enabled: boolean) {
+    setDraft((current) => ({
+      ...current,
+      fullExemption: enabled,
+      preferredFreeCages: enabled ? null : current.preferredFreeCages,
+      freeCagePriority: enabled ? null : current.freeCagePriority,
+    }));
+  }
+
   function setCustomBillingEnabled(enabled: boolean) {
     setDraft((current) => ({
       ...current,
@@ -96,6 +105,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       ...current,
       roomId,
       roomName: room?.name || "",
+      manager: user.displayName,
+      roomManager: room?.roomManager || "",
       billingUnit,
       animalDetailEnabled: billingUnit === "animal_day" ? true : current.animalDetailEnabled,
     }));
@@ -121,6 +132,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     const rows = snapshot.filter(hasRowContent);
     return normalizeQuantitySheet({
       ...draft,
+      manager: user.displayName,
+      roomManager: selectedRoom?.roomManager || "",
       rows,
       pageCount: Math.max(Math.ceil(snapshot.length / QUANTITY_ROWS_PER_PAGE), 1),
       billingUnit: unit,
@@ -264,7 +277,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   ))}
                 </select>
               </label>
-              <Field label="管理员" value={draft.manager} onChange={(value) => setField("manager", value)} />
+              <ReadOnlyField label="登记人员" value={user.displayName} />
+              <ReadOnlyField label="房间管理员" value={selectedRoom?.roomManager || ""} placeholder="当前房间未设置" />
             </div>
           </div>
           <div className="field-cluster quantity-field-cluster">
@@ -297,26 +311,32 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             </div>
           </div>
           <div className="quantity-billing-options">
-            <div className={`quantity-free-cage-module ${supportsFreeCages ? "" : "muted-field"}`}>
+            <div className="quantity-free-cage-module">
               <div className="quantity-free-cage-head">
                 <div>
                   <strong>优先减免</strong>
                   <span>
-                    {draft.pi
-                      ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
-                      : "选择 IACUC 后显示项目负责人减免额度"}
+                    {draft.fullExemption
+                      ? "当前伦理在有效期内产生的饲养费全部减免"
+                      : draft.pi
+                        ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
+                        : "选择 IACUC 后显示项目负责人减免额度"}
                   </span>
                 </div>
                 <label
-                  className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages ? "" : "locked"}`}
+                  className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages && !draft.fullExemption ? "" : "locked"}`}
                   title={
-                    supportsFreeCages ? "打开后先按本伦理设置的笼数减免。" : "当前计费口径没有项目负责人减免额度。"
+                    draft.fullExemption
+                      ? "全额减免已开启，普通优先减免暂停使用。"
+                      : supportsFreeCages
+                        ? "打开后先按本伦理设置的笼数减免。"
+                        : "当前计费口径没有项目负责人减免额度。"
                   }
                 >
                   <input
                     type="checkbox"
                     checked={freeCageEnabled}
-                    disabled={!supportsFreeCages}
+                    disabled={!supportsFreeCages || draft.fullExemption}
                     onChange={(event) => setFreeCageEnabled(event.target.checked)}
                   />
                   <span className="quantity-animal-toggle-track" aria-hidden="true">
@@ -341,6 +361,27 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   <small>指定额度优先分配给当前伦理号，剩余额度继续自动分配。</small>
                 </label>
               ) : null}
+              <div className={`quantity-full-exemption-row ${draft.fullExemption ? "enabled" : ""}`}>
+                <div>
+                  <strong>全额减免</strong>
+                  <small>有效期内每日实际饲养量全部减免，且不占用项目负责人普通减免额度。</small>
+                </div>
+                <label
+                  className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.fullExemption ? "enabled" : ""}`}
+                  title="打开后，当前伦理在有效期内产生的饲养费全部减免。"
+                >
+                  <input
+                    type="checkbox"
+                    aria-label="全额减免"
+                    checked={draft.fullExemption}
+                    onChange={(event) => setFullExemption(event.target.checked)}
+                  />
+                  <span className="quantity-animal-toggle-track" aria-hidden="true">
+                    <span />
+                  </span>
+                  <span className="quantity-animal-toggle-label">全额减免</span>
+                </label>
+              </div>
             </div>
             <div className="quantity-free-cage-module quantity-custom-billing-module">
               <div className="quantity-free-cage-head">
@@ -470,6 +511,15 @@ function Field({
     <label className={required ? "field-required" : undefined}>
       {label}
       <input value={value} required={required} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function ReadOnlyField({ label, value, placeholder }: { label: string; value: string; placeholder?: string }) {
+  return (
+    <label>
+      {label}
+      <input className="readonly-field" value={value} placeholder={placeholder} readOnly aria-readonly="true" />
     </label>
   );
 }

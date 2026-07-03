@@ -1,9 +1,46 @@
+import json
+import sqlite3
 import unittest
 
 import server
+from server_app.persistence.backfills import backfill_quantity_sheet_staff
 
 
 class BusinessRuleParityTests(unittest.TestCase):
+    def test_quantity_sheet_staff_backfill_uses_audit_and_room_configuration(self):
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            conn.executescript(
+                """
+                CREATE TABLE rooms (id TEXT PRIMARY KEY, name TEXT, payload TEXT NOT NULL);
+                CREATE TABLE quantity_sheets (
+                    id TEXT PRIMARY KEY, room_id TEXT, room_name TEXT, manager TEXT, payload TEXT NOT NULL
+                );
+                CREATE TABLE audit_events (
+                    entity_type TEXT, entity_id TEXT, actor_display_name TEXT, at TEXT
+                );
+                """
+            )
+            conn.execute(
+                "INSERT INTO rooms (id, name, payload) VALUES (?, ?, ?)",
+                ("room-1", "8101", json.dumps({"id": "room-1", "name": "8101", "roomManager": "邹志成"})),
+            )
+            conn.execute(
+                "INSERT INTO quantity_sheets (id, room_id, room_name, manager, payload) VALUES (?, ?, ?, ?, ?)",
+                ("sheet-1", "room-1", "8101", "", json.dumps({"id": "sheet-1", "roomId": "room-1"})),
+            )
+            conn.execute(
+                "INSERT INTO audit_events (entity_type, entity_id, actor_display_name, at) VALUES (?, ?, ?, ?)",
+                ("quantity_sheet", "sheet-1", "李志权", "2026-06-01T10:00:00Z"),
+            )
+            self.assertEqual(backfill_quantity_sheet_staff(conn), 1)
+            row = conn.execute("SELECT manager, payload FROM quantity_sheets WHERE id = 'sheet-1'").fetchone()
+            payload = json.loads(row["payload"])
+            self.assertEqual(row["manager"], "李志权")
+            self.assertEqual(payload["manager"], "李志权")
+            self.assertEqual(payload["roomManager"], "邹志成")
+            self.assertEqual(backfill_quantity_sheet_staff(conn), 0)
+
     def test_intake_batch_required_fields_and_print_quantities(self):
         item = {
             "id": "batch-1",
@@ -57,6 +94,28 @@ class BusinessRuleParityTests(unittest.TestCase):
             },
         ]
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z1": 8, "Z2": 2})
+        breakdown[0]["freeEligible"] = False
+        self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z2": 8})
+
+    def test_full_exemption_does_not_consume_pi_allowance(self):
+        breakdown = [
+            {
+                "iacuc": "Z1",
+                "cageCount": 8,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "fullExemption": True,
+            },
+            {
+                "iacuc": "Z2",
+                "cageCount": 8,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+            },
+        ]
+        self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z1": 8, "Z2": 8})
         breakdown[0]["freeEligible"] = False
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z2": 8})
 
@@ -160,6 +219,87 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(lines[0]["unitPrice"], 3.5)
         self.assertEqual(lines[0]["amount"], 14)
         self.assertEqual(lines[0]["iacucBreakdown"][0]["unitPrice"], 3.5)
+
+    def test_quantity_sheet_full_exemption_zeroes_only_the_target_iacuc(self):
+        sheets = [
+            {
+                "id": "exempt",
+                "month": "2026-06",
+                "iacuc": "Z1",
+                "roomId": "r1",
+                "fullExemption": True,
+                "initialCageCount": 4,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+            {
+                "id": "regular",
+                "month": "2026-06",
+                "iacuc": "Z2",
+                "roomId": "r1",
+                "initialCageCount": 3,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+            {
+                "id": "exempt-second-room",
+                "month": "2026-06",
+                "iacuc": "Z1",
+                "roomId": "r1",
+                "initialCageCount": 2,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+        ]
+        rooms = [
+            {
+                "id": "r1",
+                "defaultBillingItem": "mouse_standard",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 0, rooms, {})
+        self.assertEqual(lines[0]["freeCages"], 6)
+        self.assertEqual(lines[0]["billableCages"], 3)
+        self.assertEqual(lines[0]["amount"], 13.5)
+        self.assertTrue(lines[0]["iacucBreakdown"][0]["fullExemption"])
+
+    def test_quantity_sheet_full_exemption_supports_animal_day_billing(self):
+        sheets = [
+            {
+                "id": "rabbit-exempt",
+                "month": "2026-06",
+                "iacuc": "Z-RABBIT",
+                "roomId": "rabbit-room",
+                "fullExemption": True,
+                "initialCageCount": 1,
+                "initialAnimalCount": 5,
+                "rows": [],
+            }
+        ]
+        rooms = [
+            {
+                "id": "rabbit-room",
+                "defaultBillingItem": "rabbit",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 0, rooms, {})
+        self.assertEqual(lines[0]["freeCages"], 5)
+        self.assertEqual(lines[0]["billableAnimals"], 0)
+        self.assertEqual(lines[0]["amount"], 0)
+        summary = server.summarize_statement(
+            {"billingUnit": "animal_day", "iacucs": ["Z-RABBIT"], "freeCageAllowance": 0},
+            lines,
+            {"Z-RABBIT": {}},
+            160,
+        )
+        self.assertEqual(summary["supportAmount"], 750)
+        self.assertEqual(summary["payableAmount"], 0)
 
     def test_workflow_scope_and_document_number_are_stable(self):
         statement = {

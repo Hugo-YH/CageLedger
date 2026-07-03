@@ -13,6 +13,7 @@ type Breakdown = {
   overageUnitPrice?: number;
   tiered?: boolean;
   freeAllowance?: boolean;
+  fullExemption?: boolean;
 };
 
 export function settlementStatementMarkup(result: BillingStatementResponse) {
@@ -20,6 +21,14 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   const lines = result.lines.filter((line) => line.animalCount || line.cageCount || line.amount);
   const unit = resolveUnit(statement, lines);
   const iacucs = collectIacucs(statement, lines);
+  const fullExemptionIacucs = new Set(
+    lines.flatMap((line) =>
+      (line.iacucBreakdown || [])
+        .map((item) => item as Breakdown)
+        .filter((item) => item.fullExemption)
+        .map((item) => normalizeIacuc(item.iacuc)),
+    ),
+  );
   const model = lines.map((line) => modelLine(line, iacucs, unit));
   const totals = iacucs.map((iacuc) =>
     model.reduce(
@@ -52,7 +61,9 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   const columns = iacucColumns
     .map(
       ({ iacuc, span }, index) =>
-        `<th colspan="${span}">${escapeHtml(index === 0 && hasTieredCharges ? `${iacuc}（梯度收费）` : iacuc)}</th>`,
+        `<th colspan="${span}">${escapeHtml(
+          `${iacuc}${index === 0 && hasTieredCharges ? "（梯度收费）" : ""}${fullExemptionIacucs.has(iacuc) ? "（全额减免）" : ""}`,
+        )}</th>`,
     )
     .join("");
   const subColumns = iacucColumns
@@ -81,7 +92,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
     .join("");
   const totalCount = unit === "animal_day" ? statement.totalAnimalDays : statement.totalCageDays;
   return `<main class="document"><section class="header"><div class="header-grid"><div><h1>${title}</h1><p class="subtitle">实验动物中心</p><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div><div class="qr-box">${qrCodeSvg(lookupUrl, "结算单二维码")}<span>扫码访问在线单据</span></div></div></section>
-<table class="meta-table"><tbody><tr><td>出具科室：实验动物中心</td><td>计费单位：${unit === "animal_day" ? "只/天" : "笼/天"}</td><td>实验负责人：${escapeHtml(statement.owner || "-")}</td><td>支撑经费：${escapeHtml(statement.funding || "-")}</td></tr><tr><td colspan="4">IACUC 编号：${escapeHtml(iacucs.join("、") || "-")}</td></tr></tbody></table>
+<table class="meta-table"><tbody><tr><td>出具科室：实验动物中心</td><td>计费单位：${unit === "animal_day" ? "只/天" : "笼/天"}</td><td>实验负责人：${escapeHtml(statement.owner || "-")}</td><td>支撑经费：${escapeHtml(statement.funding || "-")}</td></tr><tr><td colspan="4">IACUC 编号：${escapeHtml(iacucs.join("、") || "-")}${fullExemptionIacucs.size ? `　全额减免：${escapeHtml([...fullExemptionIacucs].join("、"))}` : ""}</td></tr></tbody></table>
 <table class="summary-table"><thead><tr><th class="date-column" rowspan="2">日期</th><th rowspan="2">${unit === "animal_day" ? "总数量" : "总笼数"}</th><th rowspan="2">减免总${unit === "animal_day" ? "数量" : "笼数"}</th>${hasTieredCharges ? `<th rowspan="2">梯度${unit === "animal_day" ? "数量" : "笼数"}</th>` : ""}${columns}</tr><tr>${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td><td class="num">${numberText(totalCount)}</td><td class="num">${numberText(statement.totalFreeCageDays)}</td>${hasTieredCharges ? `<td class="num">${numberText(statement.totalTier2CageDays)}</td>` : ""}${detailTotals}</tr><tr><td class="row-label">本月待缴纳饲养费总计（元）</td><td colspan="${leadingColumnCount - 1}" class="money">${money(statement.totalAmount)}</td>${totals.map((item, index) => `<td colspan="${iacucColumns[index].span}" class="meta-summary">单位支持 ${money(item.free * 4.5)} ／ 实际待缴纳 ${money(item.amount)}</td>`).join("")}</tr><tr><td class="row-label">未缴纳月份</td><td colspan="${tableColumnCount - 1}">　　　　　　　　　　　　　　未缴纳饲养费总计（元）：　　　　　　　　　　　　　　</td></tr></tfoot></table>
 <div class="note-line">说明：</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><footer class="footer"><span>CageLedger · Apache-2.0</span><span>${escapeHtml(documentNumber)}</span></footer></main>`;
 }

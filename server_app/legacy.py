@@ -59,6 +59,7 @@ from server_app.domains.billing import (
     BILLING_TIER_OVER_PRICE,
     add_charge_group,
     allocate_daily_free_cages_by_iacuc,
+    apply_free_cage_allocations,
     billing_free_cages_for_pi,
     billing_profile_for_occupancy,
     billing_profile_for_room,
@@ -101,6 +102,7 @@ from server_app.domains.reimbursement.importer import (
     next_imported_record_id,
 )
 from server_app.persistence import SchemaRegistry, SchemaStep
+from server_app.persistence.backfills import backfill_quantity_sheet_staff
 from server_app.persistence.base_schema import initialize_base_schema
 from server_app.persistence.indexes import create_performance_indexes
 from server_app.repositories.billing import (
@@ -407,6 +409,7 @@ def migrate_schema(conn):
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
     migrate_reimbursement_record_schema(conn)
+    backfill_quantity_sheet_staff(conn)
 
 
 def ensure_experiment_applications_duplicate_schema(conn):
@@ -2006,6 +2009,7 @@ def write_infrastructure_state(payload, actor):
             insert_room_record(conn, room)
         for room in updated_rooms:
             update_room_record(conn, room)
+        backfill_quantity_sheet_staff(conn, [room["id"] for room in created_rooms + updated_rooms])
         for rack in created_racks:
             insert_rack_record(conn, rack)
         for rack in updated_racks:
@@ -2021,7 +2025,7 @@ def write_infrastructure_state(payload, actor):
         conn.commit()
 
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::")
+    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "quantity_sheets::")
     return {
         "rooms": created_rooms,
         "roomUpdates": updated_rooms,
@@ -3263,6 +3267,9 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     started_at = time.perf_counter()
     now = now_iso()
     sheet = normalize_quantity_sheet(payload, sheet_id, now)
+    room = read_room_payload(conn, sheet.get("roomId", "")) or {}
+    sheet["manager"] = clean_text(actor.get("displayName", ""))
+    sheet["roomManager"] = clean_text(room.get("roomManager", ""))
     validate_quantity_sheet_permission(actor, sheet)
     validate_quantity_sheet_animal_requirements(conn, sheet)
     validate_quantity_sheet_free_cage_settings(conn, sheet)
@@ -3362,6 +3369,7 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "roomId": clean_text(source.get("roomId", "")),
         "roomName": clean_text(source.get("roomName", "")),
         "manager": clean_text(source.get("manager", "")),
+        "roomManager": clean_text(source.get("roomManager", "")),
         "iacuc": iacuc,
         "project": clean_text(source.get("project", "")),
         "pi": clean_text(source.get("pi", "")),
@@ -3374,6 +3382,7 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "freeCagePriority": max(as_int(source.get("freeCagePriority")) or 0, 0)
         if source.get("freeCagePriority") not in (None, "")
         else None,
+        "fullExemption": parse_bool(source.get("fullExemption")),
         "customBillingEnabled": parse_bool(source.get("customBillingEnabled")),
         "customUnitPrice": max(as_float(source.get("customUnitPrice")) or 0, 0)
         if source.get("customUnitPrice") not in (None, "")
@@ -3386,6 +3395,9 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "rows": [normalize_quantity_sheet_row(row, month) for row in rows],
         "updatedAt": updated_at,
     }
+    if sheet["fullExemption"]:
+        sheet["preferredFreeCages"] = None
+        sheet["freeCagePriority"] = None
     sheet["rows"] = sorted(sheet["rows"], key=lambda item: (item["date"], item["id"]))
     return sheet
 
@@ -3861,8 +3873,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
                 else:
                     found["cageCount"] += 1
             free_allocations = allocate_daily_free_cages_by_iacuc(breakdown, free_cages)
-            for item in breakdown:
-                item["freeCages"] = free_allocations.get(normalize_iacuc_number(item.get("iacuc", "")), 0)
+            apply_free_cage_allocations(breakdown, free_allocations)
             charges = combined_daily_charge(charge_groups, sum(free_allocations.values()))
             cumulative += charges["amount"]
             lines.append(

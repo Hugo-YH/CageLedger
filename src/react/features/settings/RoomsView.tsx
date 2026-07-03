@@ -125,7 +125,8 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
                     <div>
                       <strong>{room.name}</strong>
                       <span>
-                        {room.area || "未设置区域"} · {facilityLabel(room.facility)}
+                        {room.area || "未设置区域"} · {facilityLabel(room.facility)} · 房间管理员：
+                        {room.roomManager || "未设置"}
                       </span>
                     </div>
                     <div className="table-actions">

@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.7b",
+    releasedAt: "2026-07-03 17:01",
+    title: "数量统计表全额减免联动",
+    items: [
+      "数量统计表在优先减免下新增全额减免开关，支持单个 IACUC 按有效期整月全额减免且不占用项目负责人普通减免额度",
+      "按项目负责人结算、结算单导出和报销台账统一识别全额减免伦理，并在明细中保留减免方式与 0 元缴费结果",
+      "数量统计表打印预览同步展示全额减免说明，便于工作人员核对特殊伦理的减免口径",
+    ],
+  },
+  {
     version: "0.6.7a",
     releasedAt: "2026-07-03 12:08",
     title: "结算汇总导出文件名优化",

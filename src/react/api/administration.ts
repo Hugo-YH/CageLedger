@@ -61,6 +61,7 @@ export function useSaveInfrastructure() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["bootstrap"] });
       void client.invalidateQueries({ queryKey: queryKeys.infrastructure });
+      void client.invalidateQueries({ queryKey: queryKeys.quantitySheetRooms });
     },
   });
 }
@@ -69,7 +70,10 @@ export function useDeleteRoom() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => requestJson<{ ok: true }>(`/api/rooms/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["bootstrap"] }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["bootstrap"] });
+      void client.invalidateQueries({ queryKey: queryKeys.quantitySheetRooms });
+    },
   });
 }
 

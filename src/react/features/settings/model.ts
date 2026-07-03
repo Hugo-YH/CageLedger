@@ -11,6 +11,7 @@ export function newRoomDraft(): RoomDraft {
     id: `room-${crypto.randomUUID()}`,
     name: "",
     area: "",
+    roomManager: "",
     facility: "zhujiang",
     defaultSpecies: "mouse",
     defaultBillingItem: "mouse_standard",

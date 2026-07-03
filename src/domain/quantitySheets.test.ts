@@ -9,6 +9,7 @@ import {
 describe("quantity sheet domain", () => {
   it("calculates animal balances from changes", () => {
     const sheet = createQuantitySheet("2026-06");
+    expect(sheet.fullExemption).toBe(false);
     sheet.rows[0] = { ...sheet.rows[0], addedCount: 10, addedType: "购入", cageCount: 2 };
     expect(calculateQuantityBalances(sheet.rows, true)[0].calculatedAnimalCount).toBe(10);
   });

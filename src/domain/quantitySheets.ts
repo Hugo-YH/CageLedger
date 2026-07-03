@@ -95,6 +95,7 @@ export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantityS
     roomId: sheet.roomId || "",
     roomName: sheet.roomName || "",
     manager: sheet.manager || "",
+    roomManager: sheet.roomManager || "",
     iacuc: String(sheet.iacuc || "")
       .trim()
       .toUpperCase(),
@@ -105,6 +106,7 @@ export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantityS
     funding: sheet.funding || "",
     preferredFreeCages: numberOrNull(sheet.preferredFreeCages),
     freeCagePriority: numberOrNull(sheet.freeCagePriority),
+    fullExemption: Boolean(sheet.fullExemption),
     customBillingEnabled: Boolean(sheet.customBillingEnabled),
     customUnitPrice: numberOrNull(sheet.customUnitPrice),
     billingUnit: sheet.billingUnit === "animal_day" ? "animal_day" : "cage_day",

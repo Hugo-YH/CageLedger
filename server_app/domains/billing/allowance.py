@@ -33,11 +33,17 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
     allocations = {}
     eligible = []
     for item in breakdown or []:
-        if not item.get("freeAllowance") or item.get("freeEligible") is False or item.get("billingUnit") != "cage_day":
+        if item.get("freeEligible") is False:
             continue
-        count = max(as_int(item.get("cageCount")) or 0, 0)
+        count_source = item.get("animalCount") if item.get("billingUnit") == "animal_day" else item.get("cageCount")
+        count = max(as_int(count_source) or 0, 0)
         iacuc = normalize_iacuc_number(item.get("iacuc", ""))
         if not count or not iacuc:
+            continue
+        if item.get("fullExemption"):
+            allocations[iacuc] = allocations.get(iacuc, 0) + count
+            continue
+        if not item.get("freeAllowance") or item.get("billingUnit") != "cage_day":
             continue
         entry = {
             "iacuc": iacuc,
@@ -86,6 +92,18 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
         remaining = 0
 
     return allocations
+
+
+def apply_free_cage_allocations(breakdown, allocations):
+    remaining = dict(allocations or {})
+    for item in breakdown or []:
+        iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+        count_source = item.get("animalCount") if item.get("billingUnit") == "animal_day" else item.get("cageCount")
+        count = max(as_int(count_source) or 0, 0)
+        applied = min(max(as_int(remaining.get(iacuc)) or 0, 0), count)
+        item["freeCages"] = applied
+        remaining[iacuc] = max((as_int(remaining.get(iacuc)) or 0) - applied, 0)
+    return breakdown
 
 
 def billing_free_cages_for(adjustments, pi_name):
