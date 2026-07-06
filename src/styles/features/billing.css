@@ -237,10 +237,8 @@ table {
 }
 
 .table-filter-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 260;
   width: min(280px, 72vw);
   max-height: 360px;
   padding: 12px;
@@ -817,7 +815,7 @@ th {
 }
 
 .settlement-col-actions {
-  width: 150px;
+  width: 170px;
 }
 
 .settlement-candidate-table td:nth-child(3) {
