@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.9a",
+    releasedAt: "2026-07-07 00:03",
+    title: "梯度集中分配与开发访问放行",
+    items: [
+      "梯度收费默认改为优先把非梯度额度分配给可覆盖的小伦理，让梯度笼数尽量集中落在单个大伦理内",
+      "优先梯度开关继续保留最高优先级，开启后指定伦理优先承接当月全部梯度收费",
+      "同步补齐数量统计表与后端业务规则测试，覆盖 A101 B100 C40 等集中承接场景",
+      "Vite 开发服务器新增 clt.cellnucle.us 允许访问，便于通过穿透域名直接联调本地 5173 页面",
+    ],
+  },
+  {
     version: "0.6.9",
     releasedAt: "2026-07-06 21:08",
     title: "数量统计表录入与结算汇总版式优化",

@@ -24,8 +24,8 @@ def tier_cage_priority_sort_key(item):
     count = max(as_int(count_source) or 0, 0)
     iacuc = normalize_iacuc_number(item.get("iacuc", ""))
     if priority is None:
-        return (0, 0, -count, iacuc)
-    return (1, -max(priority, 0), -count, iacuc)
+        return (0, count, iacuc)
+    return (1, max(priority, 0), count, iacuc)
 
 
 def iacuc_free_allowance_eligible(application, target_date):
