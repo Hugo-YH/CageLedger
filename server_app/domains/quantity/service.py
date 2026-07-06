@@ -116,6 +116,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
                 "contact": "",
                 "funding": deps["clean_text"](app.get("funding", "")),
                 "billingUnit": "cage_day",
+                "tierCagePriority": None,
                 "fullExemption": False,
                 "initialAnimalCount": 0,
                 "initialCageCount": 0,

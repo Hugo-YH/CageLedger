@@ -155,7 +155,7 @@ describe("print templates", () => {
     expect(html).toContain("Z1（猴）");
     expect(html).toContain("Z2");
     expect(html).toContain("48.00");
-    expect(html).toContain('<td class="money">0.00</td>');
+    expect(html).toContain('<td colspan="4" class="money">0.00</td>');
     expect(html).toContain("计费单位：混合");
     expect(html).toContain('class="meta-table"');
     expect(html).toContain("全额减免：Z1");
@@ -163,8 +163,65 @@ describe("print templates", () => {
     expect(html).toContain("支撑经费：-");
     expect(html).not.toContain("结算单二维码");
     expect(html).toContain("第 1 / 1 页");
-    expect(html).toContain(".summary-table .col-date{width:20mm;min-width:20mm;max-width:20mm}");
+    expect(html).toContain(".summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}");
+    expect(html).toContain(".summary-table .col-group{width:1.526667%}");
     expect(html).toContain("@page{size:A4;margin:10mm}");
+  });
+
+  it("renders tiered iacuc columns with a dedicated tier column", () => {
+    const result = {
+      statement: {
+        id: "s-tiered",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["Z2026001"],
+        project: "项目",
+        pi: "张教授",
+        owner: "陈老师",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 5,
+        totalCageDays: 170,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 5,
+        totalBillableCageDays: 165,
+        totalTier2CageDays: 10,
+        totalAmount: 770,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 0,
+          cageCount: 170,
+          freeCages: 5,
+          billableCages: 165,
+          amount: 770,
+          cumulative: 770,
+          iacucBreakdown: [
+            {
+              iacuc: "Z2026001",
+              cageCount: 170,
+              freeCages: 5,
+              billingItem: "小鼠饲养费",
+              billingUnit: "cage_day",
+              unitPrice: 4.5,
+              overageUnitPrice: 7.25,
+              tiered: true,
+            },
+          ],
+        },
+      ],
+    } as BillingStatementResponse;
+    const html = settlementStatementHtml(result, false);
+    expect(html).toContain('<th colspan="12">汇总</th>');
+    expect(html).toContain('<th colspan="4">总笼数</th><th colspan="4">减免总笼数</th><th colspan="4">阶梯总笼数</th>');
+    expect(html).toContain('<th colspan="12">Z2026001（梯度收费）</th>');
+    expect(html).toContain(
+      '<th colspan="3">笼数</th><th colspan="3">减免</th><th colspan="3">梯度</th><th colspan="3">缴纳（元）</th>',
+    );
+    expect(html).toContain('<td colspan="3" class="num">10</td><td colspan="3" class="money">770.00</td>');
+    expect(html).not.toContain("梯度笼数");
   });
 
   it("hides unused allowance columns and keeps paid amounts explicit", () => {
@@ -215,15 +272,14 @@ describe("print templates", () => {
       ],
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
-    expect(html).toContain('<th colspan="3">Z1</th>');
-    expect(html).toContain('<th colspan="2">Z2</th>');
-    expect(html.match(/<th>减免<\/th>/g)).toHaveLength(1);
-    expect(html).toContain('<td class="money">0.00</td>');
-    expect(html).toContain('<td class="money">27.00</td>');
+    expect(html).toContain('<th colspan="12">Z1</th>');
+    expect(html).toContain('<th colspan="12">Z2</th>');
+    expect(html).toContain('<th colspan="4">笼数</th><th colspan="4">减免</th><th colspan="4">缴纳（元）</th>');
+    expect(html).toContain('<td colspan="4" class="money">0.00</td>');
+    expect(html).toContain('<td colspan="6" class="money">27.00</td>');
     expect(html).toContain(
-      '2026-06-02</td><td class="num">6</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="money"></td>',
+      '2026-06-02</td><td colspan="6" class="num">6</td><td colspan="6" class="num group-empty-cell"></td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="money group-empty-cell"></td><td colspan="6" class="num">6</td><td colspan="6" class="money">27.00</td>',
     );
-    expect(html).not.toContain("梯度笼数");
     expect(html).not.toContain("未缴纳月份");
     expect(html).not.toContain("CageLedger · Apache-2.0");
     expect(html).toContain('class="date-column"');
@@ -282,10 +338,55 @@ describe("print templates", () => {
     expect(html.match(/单位支持/g)).toHaveLength(6);
     expect(html.match(/项目负责人<\/td><td>实验负责人\/经办人<\/td><td>日期<\/td>/g)).toHaveLength(2);
     expect(pages[1]).toContain("总笼数");
-    expect(pages[1]).toContain("减免总笼数");
-    expect(pages[2]).not.toContain("总笼数");
-    expect(pages[2]).not.toContain("减免总笼数");
+    expect(pages[1]).toContain("汇总");
+    expect(pages[2]).not.toContain('<th colspan="12">汇总</th>');
     expect(pages[2]).toContain("本页汇总");
+    expect((pages[1].match(/col-group/g) || []).length).toBe(60);
+    expect((pages[2].match(/col-group/g) || []).length).toBe(60);
+  });
+
+  it("pads missing iacuc columns with empty groups to keep fixed page width", () => {
+    const result = {
+      statement: {
+        id: "s4",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["Z1", "Z2", "Z3"],
+        project: "项目",
+        pi: "张教授",
+        owner: "",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 0,
+        totalCageDays: 6,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 0,
+        totalBillableCageDays: 6,
+        totalAmount: 27,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 0,
+          cageCount: 6,
+          freeCages: 0,
+          billableCages: 6,
+          amount: 27,
+          cumulative: 27,
+          iacucBreakdown: ["Z1", "Z2", "Z3"].map((iacuc, index) => ({
+            iacuc,
+            cageCount: index + 1,
+            freeCages: 0,
+            billingItem: "小鼠饲养费",
+            billingUnit: "cage_day",
+            unitPrice: 4.5,
+          })),
+        },
+      ],
+    } as BillingStatementResponse;
+    const html = settlementStatementHtml(result, false);
+    expect(html.match(/class="column-empty"/g)).toHaveLength(1);
   });
 
   it("keeps the official quantity document title and two-column page structure", () => {
@@ -305,6 +406,7 @@ describe("print templates", () => {
         funding: "",
         preferredFreeCages: null,
         freeCagePriority: null,
+        tierCagePriority: null,
         fullExemption: false,
         customBillingEnabled: false,
         customUnitPrice: null,

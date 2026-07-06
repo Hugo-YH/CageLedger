@@ -636,6 +636,34 @@ th {
   color: var(--text-soft);
 }
 
+.react-quantity-layout .quantity-entry-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  padding: 10px 14px;
+}
+
+.react-quantity-layout .quantity-entry-toolbar-main {
+  min-width: 0;
+}
+
+.react-quantity-layout .quantity-entry-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.react-quantity-layout .quantity-entry-toolbar-button {
+  min-height: 38px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.react-quantity-layout .quantity-entry-save-button {
+  min-width: 132px;
+}
+
 .react-quantity-layout .quantity-animal-toggle {
   display: inline-flex;
   align-items: center;
@@ -655,6 +683,76 @@ th {
 
 .react-quantity-layout .quantity-animal-toggle span {
   pointer-events: none;
+}
+
+.react-quantity-layout .quantity-options-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.react-quantity-layout .quantity-options-toggle {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid rgb(47 122 114 / 18%);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgb(248 252 251 / 98%), rgb(241 248 246 / 96%));
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  text-align: left;
+}
+
+.react-quantity-layout .quantity-options-toggle-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.react-quantity-layout .quantity-options-toggle-copy strong {
+  font-size: 14px;
+}
+
+.react-quantity-layout .quantity-options-toggle-copy small {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.react-quantity-layout .quantity-options-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.react-quantity-layout .quantity-options-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid rgb(13 118 104 / 18%);
+  border-radius: 999px;
+  background: rgb(232 247 244 / 96%);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.react-quantity-layout .quantity-options-toggle-icon {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.react-quantity-layout .quantity-options-toggle:hover {
+  border-color: rgb(13 118 104 / 26%);
+  background: linear-gradient(180deg, rgb(250 253 252 / 99%), rgb(236 247 244 / 98%));
 }
 
 .filterable-table-header {

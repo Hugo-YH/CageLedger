@@ -97,6 +97,55 @@ class BusinessRuleParityTests(unittest.TestCase):
         breakdown[0]["freeEligible"] = False
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z2": 8})
 
+    def test_tiered_allocation_prefers_smallest_coverable_iacuc_and_priority_target(self):
+        automatic = [
+            {
+                "iacuc": "A",
+                "cageCount": 100,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "B",
+                "cageCount": 100,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "C",
+                "cageCount": 40,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+        ]
+        server.apply_tiered_breakdown_charges(automatic)
+        automatic_by_iacuc = {item["iacuc"]: item for item in automatic}
+        self.assertEqual(automatic_by_iacuc["C"]["tier2BillableCages"], 40)
+        self.assertEqual(automatic_by_iacuc["B"]["tier2BillableCages"], 40)
+        self.assertEqual(automatic_by_iacuc["A"]["tier2BillableCages"], 0)
+
+        preferred = [dict(item) for item in automatic]
+        preferred[1]["tierCagePriority"] = 1
+        server.apply_tiered_breakdown_charges(preferred)
+        preferred_by_iacuc = {item["iacuc"]: item for item in preferred}
+        self.assertEqual(preferred_by_iacuc["B"]["tier2BillableCages"], 80)
+        self.assertEqual(preferred_by_iacuc["C"]["tier2BillableCages"], 0)
+
     def test_full_exemption_does_not_consume_pi_allowance(self):
         breakdown = [
             {
@@ -219,6 +268,54 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(lines[0]["unitPrice"], 3.5)
         self.assertEqual(lines[0]["amount"], 14)
         self.assertEqual(lines[0]["iacucBreakdown"][0]["unitPrice"], 3.5)
+
+    def test_quantity_sheet_priority_tier_marks_target_iacuc(self):
+        sheets = [
+            {
+                "id": "a",
+                "month": "2026-06",
+                "iacuc": "A",
+                "pi": "张教授",
+                "roomId": "r1",
+                "initialCageCount": 100,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+            {
+                "id": "b",
+                "month": "2026-06",
+                "iacuc": "B",
+                "pi": "张教授",
+                "roomId": "r1",
+                "tierCagePriority": 1,
+                "initialCageCount": 100,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+            {
+                "id": "c",
+                "month": "2026-06",
+                "iacuc": "C",
+                "pi": "张教授",
+                "roomId": "r1",
+                "initialCageCount": 40,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+        ]
+        rooms = [
+            {
+                "id": "r1",
+                "defaultBillingItem": "mouse_standard",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 0, rooms, {})
+        first_day = {item["iacuc"]: item for item in lines[0]["iacucBreakdown"]}
+        self.assertEqual(first_day["B"]["tier2BillableCages"], 80)
+        self.assertEqual(first_day["C"]["tier2BillableCages"], 0)
 
     def test_quantity_sheet_full_exemption_zeroes_only_the_target_iacuc(self):
         sheets = [

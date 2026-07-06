@@ -3273,6 +3273,7 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     validate_quantity_sheet_permission(actor, sheet)
     validate_quantity_sheet_animal_requirements(conn, sheet)
     validate_quantity_sheet_free_cage_settings(conn, sheet)
+    validate_quantity_sheet_tier_priority(conn, sheet)
     validate_quantity_sheet_custom_billing(sheet)
     exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
     db_values = quantity_sheet_db_values(sheet)
@@ -3382,6 +3383,9 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "freeCagePriority": max(as_int(source.get("freeCagePriority")) or 0, 0)
         if source.get("freeCagePriority") not in (None, "")
         else None,
+        "tierCagePriority": max(as_int(source.get("tierCagePriority")) or 0, 0)
+        if source.get("tierCagePriority") not in (None, "")
+        else None,
         "fullExemption": parse_bool(source.get("fullExemption")),
         "customBillingEnabled": parse_bool(source.get("customBillingEnabled")),
         "customUnitPrice": max(as_float(source.get("customUnitPrice")) or 0, 0)
@@ -3398,6 +3402,7 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
     if sheet["fullExemption"]:
         sheet["preferredFreeCages"] = None
         sheet["freeCagePriority"] = None
+        sheet["tierCagePriority"] = None
     sheet["rows"] = sorted(sheet["rows"], key=lambda item: (item["date"], item["id"]))
     return sheet
 
@@ -3463,6 +3468,27 @@ def validate_quantity_sheet_free_cage_settings(conn, sheet):
         total += max(as_int(item.get("preferredFreeCages")) or 0, 0)
     if total > allowance:
         raise ValueError(f"{pi_name} 本月已指定优先减免 {total} 笼/天，超过总额度 {allowance} 笼/天")
+
+
+def validate_quantity_sheet_tier_priority(conn, sheet):
+    priority = as_int(sheet.get("tierCagePriority"))
+    if priority is None:
+        return
+    room = read_room_payload(conn, sheet.get("roomId"))
+    profile = billing_profile_for_room(room, sheet.get("billingUnit"))
+    if profile["unit"] != "cage_day" or not profile.get("tiered"):
+        raise ValueError("当前房间计费口径不支持优先梯度")
+    pi_name = clean_text(sheet.get("pi", ""))
+    if not pi_name:
+        raise ValueError("设置优先梯度前，请先填写项目负责人")
+    enabled_count = 1
+    for item in list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name):
+        if item.get("id") == sheet.get("id"):
+            continue
+        if as_int(item.get("tierCagePriority")) is not None:
+            enabled_count += 1
+    if enabled_count > 1:
+        raise ValueError(f"{pi_name} 在 {sheet.get('month')} 仅能指定一个优先梯度伦理")
 
 
 def validate_quantity_sheet_custom_billing(sheet):

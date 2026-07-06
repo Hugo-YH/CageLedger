@@ -36,7 +36,8 @@ export function WorkspaceHeader({
   switcherItems?: WorkspaceSwitcherItem[];
 }) {
   const hasBreadcrumbs = Boolean(breadcrumbs?.length);
-  const switcherEnabled = Boolean(switcherItems?.length);
+  void switcherLabel;
+  void switcherItems;
   return (
     <>
       <header className={`workspace-head ${hasBreadcrumbs ? "workspace-head-breadcrumb" : ""}`}>
@@ -85,7 +86,7 @@ export function WorkspaceHeader({
           ) : null}
         </div>
       </header>
-      {toolbar || switcherEnabled || actions ? (
+      {toolbar || actions ? (
         <div className="workspace-toolbar" aria-label="工作区操作">
           {toolbar ? (
             <div className="workspace-toolbar-main">{toolbar}</div>
@@ -93,19 +94,6 @@ export function WorkspaceHeader({
             <span className="workspace-toolbar-spacer" />
           )}
           <div className="workspace-toolbar-actions">
-            {switcherEnabled ? (
-              <details className="workspace-switcher">
-                <summary>{switcherLabel}</summary>
-                <div className="workspace-switcher-menu" role="menu" aria-label={switcherLabel}>
-                  {switcherItems!.map((item) => (
-                    <button key={item.label} className="workspace-switcher-item" type="button" onClick={item.onClick}>
-                      <strong>{item.label}</strong>
-                      {item.description ? <span>{item.description}</span> : null}
-                    </button>
-                  ))}
-                </div>
-              </details>
-            ) : null}
             {actions ? <div className="workspace-toolbar-action-group">{actions}</div> : null}
           </div>
         </div>

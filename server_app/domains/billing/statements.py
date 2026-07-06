@@ -1,13 +1,15 @@
 from server_app.domains.iacuc import normalize_iacuc_number
 from server_app.shared import as_int, clean_text, new_id
 
-from .allowance import allocate_daily_free_cages_by_iacuc, apply_free_cage_allocations, iacuc_free_allowance_eligible
+from .allowance import (
+    allocate_daily_free_cages_by_iacuc,
+    apply_free_cage_allocations,
+    iacuc_free_allowance_eligible,
+    summarize_breakdown_charges,
+)
 from .charging import (
     BILLING_TIER_BASE_PRICE,
     BILLING_TIER_OVER_PRICE,
-    add_charge_group,
-    add_free_count_to_charge_group,
-    combined_daily_charge,
     dates_in_month,
 )
 from .profiles import billing_profile_for_room
@@ -51,7 +53,6 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         breakdown = []
         animal_count = 0
         cage_count = 0
-        charge_groups = {}
         quantity_row_ids = []
         for state in sheet_states:
             day_rows = state["rowsByDate"].get(line_date, [])
@@ -98,8 +99,6 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             profile = state["profile"]
             animal_count += state["animalCount"]
             cage_count += state["cageCount"]
-            charge_count = state["animalCount"] if profile["unit"] == "animal_day" else state["cageCount"]
-            add_charge_group(charge_groups, profile, charge_count)
             if state["cageCount"] or state["animalCount"]:
                 sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
                 application = applications_by_iacuc.get(sheet_iacuc, {})
@@ -122,15 +121,14 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                         "fullExemption": sheet_iacuc in full_exemption_iacucs,
                         "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0),
                         "freeCagePriority": as_int(sheet.get("freeCagePriority")),
+                        "tierCagePriority": as_int(sheet.get("tierCagePriority")),
                         "freeCages": 0,
                     }
                 )
 
         free_allocations = allocate_daily_free_cages_by_iacuc(breakdown, free_cages)
         apply_free_cage_allocations(breakdown, free_allocations)
-        for item in breakdown:
-            add_free_count_to_charge_group(charge_groups, item, item["freeCages"])
-        charges = combined_daily_charge(charge_groups, 0)
+        charges = summarize_breakdown_charges(breakdown)
         cumulative += charges["amount"]
         lines.append(
             {

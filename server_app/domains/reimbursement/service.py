@@ -54,15 +54,21 @@ def statement_breakdown_count(item, billing_unit):
 
 def statement_column_iacucs(statement, lines, billing_unit, tier_limit):
     totals = {}
+    tiered_totals = {}
     for row in lines:
         for item in row.get("iacucBreakdown", []) or []:
             iacuc = str(item.get("iacuc") or "").strip()
             if not iacuc:
                 continue
             totals[iacuc] = totals.get(iacuc, 0) + statement_breakdown_count(item, billing_unit)
+            tiered_totals[iacuc] = tiered_totals.get(iacuc, 0) + numeric(item.get("tier2BillableCages"))
     ordered = [str(value).strip() for value in (statement.get("iacucs") or []) if str(value or "").strip()]
     if billing_unit == "cage_day" and numeric(statement.get("totalTier2CageDays")) > 0 and len(ordered) > 1:
-        tiered_target = sorted(totals.items(), key=lambda item: item[1], reverse=True)[0][0] if totals else ""
+        tiered_target = (
+            sorted(tiered_totals.items(), key=lambda item: (-item[1], -totals.get(item[0], 0), item[0]))[0][0]
+            if tiered_totals
+            else ""
+        )
         if tiered_target:
             return [tiered_target] + [iacuc for iacuc in ordered if iacuc != tiered_target]
     return ordered
@@ -113,6 +119,23 @@ def summarize_statement(statement, lines, detail_context_by_iacuc, tier_limit):
     per_iacuc = {iacuc: {"count": 0, "supportAmount": 0, "payableAmount": 0, "amount": 0} for iacuc in iacucs}
     free_allowance = numeric(statement.get("freeCageAllowance"))
     for row in lines:
+        explicit_breakdown = row.get("iacucBreakdown", []) or []
+        if explicit_breakdown and any(
+            item.get("supportAmount") is not None or item.get("payableAmount") is not None
+            for item in explicit_breakdown
+        ):
+            for item in explicit_breakdown:
+                iacuc = str(item.get("iacuc") or "").strip()
+                if not iacuc or iacuc not in per_iacuc:
+                    continue
+                current = per_iacuc[iacuc]
+                current["count"] += statement_breakdown_count(item, billing_unit)
+                current["supportAmount"] += numeric(item.get("supportAmount"))
+                current["payableAmount"] += numeric(item.get("payableAmount"))
+                current["amount"] += numeric(item.get("amount")) or (
+                    numeric(item.get("supportAmount")) + numeric(item.get("payableAmount"))
+                )
+            continue
         for group in billing_breakdown_groups(row, billing_unit):
             remaining_free = free_allowance if group.get("freeAllowance") and billing_unit == "cage_day" else 0
             remaining_tier1 = tier_limit if group.get("tiered") else 0

@@ -31,6 +31,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const [notice, setNotice] = useState("");
   const [confirmSave, setConfirmSave] = useState<QuantitySheet | null>(null);
   const [editingDialog, setEditingDialog] = useState(false);
+  const [optionsExpanded, setOptionsExpanded] = useState(false);
   const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
   const selectedRoom = rooms.find((room) => room.id === draft.roomId);
   const unit = roomBillingUnit(selectedRoom);
@@ -38,13 +39,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const animalDetails = unit === "animal_day" || draft.animalDetailEnabled;
   const principalIdentity = identitiesQuery.data?.items.find((item) => item.pi.trim() === draft.pi.trim());
   const freeCageAllowance = Number(principalIdentity?.freeCageAllowance ?? 10);
-  const supportsFreeCages =
-    billingProfile.item === "小鼠饲养费" &&
-    billingProfile.customerType === "internal" &&
-    unit === "cage_day" &&
-    freeCageAllowance > 0;
+  const supportsFreeCages = billingProfile.freeAllowance && unit === "cage_day" && freeCageAllowance > 0;
+  const supportsTierPriority = billingProfile.tiered && unit === "cage_day";
   const freeCageEnabled =
     supportsFreeCages && (Number(draft.preferredFreeCages || 0) > 0 || draft.freeCagePriority !== null);
+  const tierPriorityEnabled = supportsTierPriority && draft.tierCagePriority !== null;
   const iacucOptions = useMemo(() => {
     const query = draft.iacuc.trim().toUpperCase();
     const items = iacucQuery.data?.items || [];
@@ -69,6 +68,12 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     recalculate();
   }, [recalculate, editorRows]);
 
+  useEffect(() => {
+    if (freeCageEnabled || draft.fullExemption || tierPriorityEnabled || draft.customBillingEnabled) {
+      setOptionsExpanded(true);
+    }
+  }, [draft.customBillingEnabled, draft.fullExemption, freeCageEnabled, tierPriorityEnabled]);
+
   function setField<K extends keyof QuantitySheet>(key: K, value: QuantitySheet[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -87,6 +92,14 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       fullExemption: enabled,
       preferredFreeCages: enabled ? null : current.preferredFreeCages,
       freeCagePriority: enabled ? null : current.freeCagePriority,
+      tierCagePriority: enabled ? null : current.tierCagePriority,
+    }));
+  }
+
+  function setTierPriorityEnabled(enabled: boolean) {
+    setDraft((current) => ({
+      ...current,
+      tierCagePriority: enabled ? 1 : null,
     }));
   }
 
@@ -101,6 +114,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   function chooseRoom(roomId: string) {
     const room = rooms.find((item) => item.id === roomId);
     const billingUnit = roomBillingUnit(room);
+    const nextBillingProfile = roomBillingProfile(room);
     setDraft((current) => ({
       ...current,
       roomId,
@@ -109,6 +123,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       roomManager: room?.roomManager || "",
       billingUnit,
       animalDetailEnabled: billingUnit === "animal_day" ? true : current.animalDetailEnabled,
+      tierCagePriority: nextBillingProfile.tiered && billingUnit === "cage_day" ? current.tierCagePriority : null,
     }));
   }
 
@@ -181,6 +196,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     setEditorRows(makeEditorRows(next));
     setExists(false);
     setNotice("");
+    setOptionsExpanded(false);
   }
 
   function loadForEdit(sheet: QuantitySheet) {
@@ -188,39 +204,44 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     setDraft(next);
     setEditorRows(makeEditorRows(next));
     setExists(true);
+    setOptionsExpanded(hasExpandedBillingOptions(next));
     if (mode === "saved") setEditingDialog(true);
   }
 
   const entryToolbar =
     mode === "entry" ? (
       <>
-        <label
-          className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
-          title={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
-        >
-          <input
-            type="checkbox"
-            checked={animalDetails}
-            disabled={unit === "animal_day"}
-            onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
-          />
-          <span className="quantity-animal-toggle-track" aria-hidden="true">
-            <span />
-          </span>
-          <strong>动物数量</strong>
-        </label>
-        <button className="secondary info-button" type="button" onClick={startNew}>
-          新建
-        </button>
-        <button
-          className="primary"
-          type="submit"
-          form="quantity-sheet-entry-form"
-          disabled={save.isPending}
-          title={saveHint(editorRows, animalDetails)}
-        >
-          保存统计表
-        </button>
+        <div className="workspace-toolbar-main quantity-entry-toolbar-main">
+          <label
+            className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
+            title={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
+          >
+            <input
+              type="checkbox"
+              checked={animalDetails}
+              disabled={unit === "animal_day"}
+              onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
+            />
+            <span className="quantity-animal-toggle-track" aria-hidden="true">
+              <span />
+            </span>
+            <strong>动物数量</strong>
+          </label>
+        </div>
+        <div className="workspace-toolbar-actions quantity-entry-toolbar-actions">
+          <button className="secondary info-button quantity-entry-toolbar-button" type="button" onClick={startNew}>
+            新建
+          </button>
+          <button
+            className="primary quantity-entry-toolbar-button quantity-entry-save-button"
+            type="submit"
+            form="quantity-sheet-entry-form"
+            disabled={save.isPending}
+            title={saveHint(editorRows, animalDetails)}
+          >
+            保存统计表
+          </button>
+        </div>
       </>
     ) : null;
 
@@ -310,120 +331,198 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               <Field label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
             </div>
           </div>
-          <div className="quantity-billing-options">
-            <div className="quantity-free-cage-module">
-              <div className="quantity-free-cage-head">
-                <div>
-                  <strong>优先减免</strong>
-                  <span>
-                    {draft.fullExemption
-                      ? "当前伦理在有效期内产生的饲养费全部减免"
-                      : draft.pi
-                        ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
-                        : "选择 IACUC 后显示项目负责人减免额度"}
+          <div className={`quantity-options-panel ${optionsExpanded ? "expanded" : "collapsed"}`}>
+            <button
+              className="quantity-options-toggle"
+              type="button"
+              aria-expanded={optionsExpanded}
+              aria-controls="quantity-billing-options-panel"
+              onClick={() => setOptionsExpanded((current) => !current)}
+            >
+              <span className="quantity-options-toggle-copy">
+                <strong>计费扩展选项</strong>
+                {billingOptionsBadges({
+                  freeCageEnabled,
+                  fullExemption: draft.fullExemption,
+                  tierPriorityEnabled,
+                  customBillingEnabled: draft.customBillingEnabled,
+                }).length ? (
+                  <span className="quantity-options-badges" aria-label="已启用计费扩展选项">
+                    {billingOptionsBadges({
+                      freeCageEnabled,
+                      fullExemption: draft.fullExemption,
+                      tierPriorityEnabled,
+                      customBillingEnabled: draft.customBillingEnabled,
+                    }).map((label) => (
+                      <span key={label} className="quantity-options-badge">
+                        {label}
+                      </span>
+                    ))}
                   </span>
+                ) : (
+                  <small>
+                    {billingOptionsSummary({
+                      freeCageEnabled,
+                      fullExemption: draft.fullExemption,
+                      tierPriorityEnabled,
+                      customBillingEnabled: draft.customBillingEnabled,
+                    })}
+                  </small>
+                )}
+              </span>
+              <span className="quantity-options-toggle-icon" aria-hidden="true">
+                {optionsExpanded ? "收起" : "展开"}
+              </span>
+            </button>
+            {optionsExpanded ? (
+              <div id="quantity-billing-options-panel" className="quantity-billing-options">
+                <div className="quantity-free-cage-module">
+                  <div className="quantity-free-cage-head">
+                    <div>
+                      <strong>优先减免</strong>
+                      <span>
+                        {draft.fullExemption
+                          ? "当前伦理在有效期内产生的饲养费全部减免"
+                          : draft.pi
+                            ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
+                            : "选择 IACUC 后显示项目负责人减免额度"}
+                      </span>
+                    </div>
+                    <label
+                      className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages && !draft.fullExemption ? "" : "locked"}`}
+                      title={
+                        draft.fullExemption
+                          ? "全额减免已开启，普通优先减免暂停使用。"
+                          : supportsFreeCages
+                            ? "打开后先按本伦理设置的笼数减免。"
+                            : "当前计费口径没有项目负责人减免额度。"
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={freeCageEnabled}
+                        disabled={!supportsFreeCages || draft.fullExemption}
+                        onChange={(event) => setFreeCageEnabled(event.target.checked)}
+                      />
+                      <span className="quantity-animal-toggle-track" aria-hidden="true">
+                        <span />
+                      </span>
+                      <span className="quantity-animal-toggle-label">优先减免</span>
+                    </label>
+                  </div>
+                  {freeCageEnabled ? (
+                    <label className="quantity-free-cage-field">
+                      优先减免笼数/天
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={draft.preferredFreeCages ?? ""}
+                        placeholder="请输入笼数"
+                        onChange={(event) =>
+                          setField("preferredFreeCages", event.target.value === "" ? null : Number(event.target.value))
+                        }
+                      />
+                      <small>指定额度优先分配给当前伦理号，剩余额度继续自动分配。</small>
+                    </label>
+                  ) : null}
+                  <div className={`quantity-full-exemption-row ${draft.fullExemption ? "enabled" : ""}`}>
+                    <div>
+                      <strong>全额减免</strong>
+                      <small>有效期内每日实际饲养量全部减免，且不占用项目负责人普通减免额度。</small>
+                    </div>
+                    <label
+                      className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.fullExemption ? "enabled" : ""}`}
+                      title="打开后，当前伦理在有效期内产生的饲养费全部减免。"
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label="全额减免"
+                        checked={draft.fullExemption}
+                        onChange={(event) => setFullExemption(event.target.checked)}
+                      />
+                      <span className="quantity-animal-toggle-track" aria-hidden="true">
+                        <span />
+                      </span>
+                      <span className="quantity-animal-toggle-label">全额减免</span>
+                    </label>
+                  </div>
+                  <div className={`quantity-full-exemption-row ${tierPriorityEnabled ? "enabled" : ""}`}>
+                    <div>
+                      <strong>优先梯度</strong>
+                      <small>
+                        {supportsTierPriority
+                          ? "打开后，当前伦理优先承接本项目负责人在本月超出 160 笼/天后的梯度收费。"
+                          : "当前房间计费口径没有梯度收费。"}
+                      </small>
+                    </div>
+                    <label
+                      className={`quantity-animal-toggle quantity-free-cage-toggle ${tierPriorityEnabled ? "enabled" : ""} ${supportsTierPriority && !draft.fullExemption ? "" : "locked"}`}
+                      title={
+                        draft.fullExemption
+                          ? "全额减免已开启，优先梯度暂停使用。"
+                          : supportsTierPriority
+                            ? "打开后，当前伦理优先承接梯度收费。"
+                            : "当前计费口径没有梯度收费。"
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label="优先梯度"
+                        checked={tierPriorityEnabled}
+                        disabled={!supportsTierPriority || draft.fullExemption}
+                        onChange={(event) => setTierPriorityEnabled(event.target.checked)}
+                      />
+                      <span className="quantity-animal-toggle-track" aria-hidden="true">
+                        <span />
+                      </span>
+                      <span className="quantity-animal-toggle-label">优先梯度</span>
+                    </label>
+                  </div>
                 </div>
-                <label
-                  className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages && !draft.fullExemption ? "" : "locked"}`}
-                  title={
-                    draft.fullExemption
-                      ? "全额减免已开启，普通优先减免暂停使用。"
-                      : supportsFreeCages
-                        ? "打开后先按本伦理设置的笼数减免。"
-                        : "当前计费口径没有项目负责人减免额度。"
-                  }
-                >
-                  <input
-                    type="checkbox"
-                    checked={freeCageEnabled}
-                    disabled={!supportsFreeCages || draft.fullExemption}
-                    onChange={(event) => setFreeCageEnabled(event.target.checked)}
-                  />
-                  <span className="quantity-animal-toggle-track" aria-hidden="true">
-                    <span />
-                  </span>
-                  <span className="quantity-animal-toggle-label">优先减免</span>
-                </label>
-              </div>
-              {freeCageEnabled ? (
-                <label className="quantity-free-cage-field">
-                  优先减免笼数/天
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={draft.preferredFreeCages ?? ""}
-                    placeholder="请输入笼数"
-                    onChange={(event) =>
-                      setField("preferredFreeCages", event.target.value === "" ? null : Number(event.target.value))
-                    }
-                  />
-                  <small>指定额度优先分配给当前伦理号，剩余额度继续自动分配。</small>
-                </label>
-              ) : null}
-              <div className={`quantity-full-exemption-row ${draft.fullExemption ? "enabled" : ""}`}>
-                <div>
-                  <strong>全额减免</strong>
-                  <small>有效期内每日实际饲养量全部减免，且不占用项目负责人普通减免额度。</small>
+                <div className="quantity-free-cage-module quantity-custom-billing-module">
+                  <div className="quantity-free-cage-head">
+                    <div>
+                      <strong>自定义饲养费</strong>
+                      <span>
+                        标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
+                      </span>
+                    </div>
+                    <label
+                      className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
+                      title="打开后，当前伦理按输入的自定义标准计费。"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={draft.customBillingEnabled}
+                        onChange={(event) => setCustomBillingEnabled(event.target.checked)}
+                      />
+                      <span className="quantity-animal-toggle-track" aria-hidden="true">
+                        <span />
+                      </span>
+                      <span className="quantity-animal-toggle-label">自定义收费</span>
+                    </label>
+                  </div>
+                  {draft.customBillingEnabled ? (
+                    <label className="quantity-free-cage-field">
+                      自定义收费标准（元/{unit === "animal_day" ? "只/天" : "笼/天"}）
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        required
+                        value={draft.customUnitPrice ?? ""}
+                        placeholder="请输入单价"
+                        onChange={(event) =>
+                          setField("customUnitPrice", event.target.value === "" ? null : Number(event.target.value))
+                        }
+                      />
+                      <small>该单价仅应用于当前统计表对应伦理，结算单会保留实际单价。</small>
+                    </label>
+                  ) : null}
                 </div>
-                <label
-                  className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.fullExemption ? "enabled" : ""}`}
-                  title="打开后，当前伦理在有效期内产生的饲养费全部减免。"
-                >
-                  <input
-                    type="checkbox"
-                    aria-label="全额减免"
-                    checked={draft.fullExemption}
-                    onChange={(event) => setFullExemption(event.target.checked)}
-                  />
-                  <span className="quantity-animal-toggle-track" aria-hidden="true">
-                    <span />
-                  </span>
-                  <span className="quantity-animal-toggle-label">全额减免</span>
-                </label>
               </div>
-            </div>
-            <div className="quantity-free-cage-module quantity-custom-billing-module">
-              <div className="quantity-free-cage-head">
-                <div>
-                  <strong>自定义饲养费</strong>
-                  <span>
-                    标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
-                  </span>
-                </div>
-                <label
-                  className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
-                  title="打开后，当前伦理按输入的自定义标准计费。"
-                >
-                  <input
-                    type="checkbox"
-                    checked={draft.customBillingEnabled}
-                    onChange={(event) => setCustomBillingEnabled(event.target.checked)}
-                  />
-                  <span className="quantity-animal-toggle-track" aria-hidden="true">
-                    <span />
-                  </span>
-                  <span className="quantity-animal-toggle-label">自定义收费</span>
-                </label>
-              </div>
-              {draft.customBillingEnabled ? (
-                <label className="quantity-free-cage-field">
-                  自定义收费标准（元/{unit === "animal_day" ? "只/天" : "笼/天"}）
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    value={draft.customUnitPrice ?? ""}
-                    placeholder="请输入单价"
-                    onChange={(event) =>
-                      setField("customUnitPrice", event.target.value === "" ? null : Number(event.target.value))
-                    }
-                  />
-                  <small>该单价仅应用于当前统计表对应伦理，结算单会保留实际单价。</small>
-                </label>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
         <div className="quantity-page-toolbar compact">
@@ -532,4 +631,53 @@ function hasRowContent(row: QuantitySheetRow) {
 }
 function saveHint(rows: QuantitySheetRow[], animalDetails: boolean) {
   return `${Math.max(rows.length / QUANTITY_ROWS_PER_PAGE, 1)} 页 · ${rows.filter(hasRowContent).length} 行 · ${animalDetails ? "记录动物数量" : "仅记录笼数"}`;
+}
+
+function hasExpandedBillingOptions(sheet: QuantitySheet) {
+  return Boolean(
+    sheet.fullExemption ||
+    sheet.customBillingEnabled ||
+    sheet.tierCagePriority !== null ||
+    Number(sheet.preferredFreeCages || 0) > 0 ||
+    sheet.freeCagePriority !== null,
+  );
+}
+
+function billingOptionsSummary({
+  freeCageEnabled,
+  fullExemption,
+  tierPriorityEnabled,
+  customBillingEnabled,
+}: {
+  freeCageEnabled: boolean;
+  fullExemption: boolean;
+  tierPriorityEnabled: boolean;
+  customBillingEnabled: boolean;
+}) {
+  const active = billingOptionsBadges({
+    freeCageEnabled,
+    fullExemption,
+    tierPriorityEnabled,
+    customBillingEnabled,
+  });
+  return active.length ? `已启用：${active.join("、")}` : "默认收起，按需展开设置优先减免、梯度和自定义收费";
+}
+
+function billingOptionsBadges({
+  freeCageEnabled,
+  fullExemption,
+  tierPriorityEnabled,
+  customBillingEnabled,
+}: {
+  freeCageEnabled: boolean;
+  fullExemption: boolean;
+  tierPriorityEnabled: boolean;
+  customBillingEnabled: boolean;
+}) {
+  return [
+    freeCageEnabled ? "优先减免" : "",
+    fullExemption ? "全额减免" : "",
+    tierPriorityEnabled ? "优先梯度" : "",
+    customBillingEnabled ? "自定义收费" : "",
+  ].filter(Boolean);
 }

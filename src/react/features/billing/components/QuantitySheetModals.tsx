@@ -64,6 +64,10 @@ export function ConfirmSave({
                   : "自动分配"}
             </dd>
           </div>
+          <div>
+            <dt>梯度策略</dt>
+            <dd>{sheet.tierCagePriority !== null ? "当前伦理优先承接" : "自动分配"}</dd>
+          </div>
         </dl>
       </div>
       <div className="modal-shell-actions">

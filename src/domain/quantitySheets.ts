@@ -32,12 +32,16 @@ export function roomBillingProfile(room?: CageRoom) {
   const key = String(room?.defaultBillingItem || "mouse_standard");
   const profile = billingProfiles[key] || billingProfiles.mouse_standard;
   const customerType = room?.defaultCustomerType === "external" ? "external" : "internal";
+  const tiered = key === "mouse_standard" && customerType === "internal";
+  const freeAllowance = tiered;
   return {
     ...profile,
     customerType,
     customerLabel: customerType === "external" ? "院外" : "院内",
     facilityLabel: room?.facility === "bioisland" ? "生物岛设施" : "珠江新城设施",
     price: customerType === "external" ? profile.external : profile.internal,
+    tiered,
+    freeAllowance,
   };
 }
 
@@ -106,6 +110,7 @@ export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantityS
     funding: sheet.funding || "",
     preferredFreeCages: numberOrNull(sheet.preferredFreeCages),
     freeCagePriority: numberOrNull(sheet.freeCagePriority),
+    tierCagePriority: numberOrNull(sheet.tierCagePriority),
     fullExemption: Boolean(sheet.fullExemption),
     customBillingEnabled: Boolean(sheet.customBillingEnabled),
     customUnitPrice: numberOrNull(sheet.customUnitPrice),

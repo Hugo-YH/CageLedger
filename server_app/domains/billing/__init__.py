@@ -6,6 +6,7 @@ from .allowance import (
     FREE_CAGES_PI,
     allocate_daily_free_cages_by_iacuc,
     apply_free_cage_allocations,
+    apply_tiered_breakdown_charges,
     billing_free_cages_for,
     billing_free_cages_for_pi,
     free_cage_allocation_sort_key,
@@ -13,6 +14,8 @@ from .allowance import (
     iacuc_free_allowance_eligible,
     normalize_principal_type,
     principal_type_label,
+    summarize_breakdown_charges,
+    tier_cage_priority_sort_key,
 )
 from .charging import (
     BILLING_TIER_BASE_PRICE,
@@ -61,6 +64,7 @@ __all__ = [
     "add_charge_group",
     "add_free_count_to_charge_group",
     "allocate_daily_free_cages_by_iacuc",
+    "apply_tiered_breakdown_charges",
     "apply_free_cage_allocations",
     "billing_discount_for",
     "billing_free_cages_for",
@@ -86,8 +90,10 @@ __all__ = [
     "principal_type_label",
     "quantity_sheet_statement_lines",
     "room_has_manual_billing_profile",
+    "summarize_breakdown_charges",
     "statement_application_snapshot",
     "statement_billing_unit_from_lines",
     "statement_pi_snapshot",
+    "tier_cage_priority_sort_key",
     "tiered_daily_charge",
 ]

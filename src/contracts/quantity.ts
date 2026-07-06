@@ -37,6 +37,7 @@ export interface QuantitySheet {
   funding: string;
   preferredFreeCages: number | null;
   freeCagePriority: number | null;
+  tierCagePriority: number | null;
   fullExemption: boolean;
   customBillingEnabled: boolean;
   customUnitPrice: number | null;
