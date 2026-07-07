@@ -147,6 +147,129 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(preferred_by_iacuc["C"]["tier2BillableCages"], 0)
         self.assertEqual(preferred_by_iacuc["A"]["tier2BillableCages"], 0)
 
+    def test_tiered_allocation_uses_billable_capacity_after_free_and_aggregates_same_iacuc(self):
+        breakdown = [
+            {
+                "iacuc": "Z2024060",
+                "cageCount": 166,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 20,
+            },
+            {
+                "iacuc": "Z2025001",
+                "cageCount": 69,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2025001",
+                "cageCount": 7,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2025168",
+                "cageCount": 38,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2025069",
+                "cageCount": 41,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2024114",
+                "cageCount": 11,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2024075",
+                "cageCount": 3,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2023064",
+                "cageCount": 29,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2025165",
+                "cageCount": 4,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2025070",
+                "cageCount": 9,
+                "billingUnit": "cage_day",
+                "billingItem": "mouse_standard",
+                "customerType": "internal",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "freeCages": 0,
+            },
+        ]
+        charges = server.summarize_breakdown_charges(breakdown)
+        grouped_by_iacuc = {}
+        for item in breakdown:
+            grouped_by_iacuc.setdefault(item["iacuc"], 0)
+            grouped_by_iacuc[item["iacuc"]] += item["tier2BillableCages"]
+        self.assertEqual(charges["tier2Cages"], 217)
+        self.assertEqual(charges["tier2BillableCages"], 217)
+        self.assertEqual(grouped_by_iacuc["Z2024060"], 146)
+        self.assertEqual(grouped_by_iacuc["Z2025001"], 71)
+
     def test_full_exemption_does_not_consume_pi_allowance(self):
         breakdown = [
             {
@@ -317,6 +440,44 @@ class BusinessRuleParityTests(unittest.TestCase):
         first_day = {item["iacuc"]: item for item in lines[0]["iacucBreakdown"]}
         self.assertEqual(first_day["B"]["tier2BillableCages"], 81)
         self.assertEqual(first_day["C"]["tier2BillableCages"], 0)
+
+    def test_quantity_sheet_tier_summary_uses_billable_capacity_after_free_allowance(self):
+        sheets = [
+            {
+                "id": "a",
+                "month": "2026-06",
+                "iacuc": "A",
+                "pi": "张峰",
+                "roomId": "r1",
+                "initialCageCount": 200,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+            {
+                "id": "b",
+                "month": "2026-06",
+                "iacuc": "B",
+                "pi": "张峰",
+                "roomId": "r1",
+                "initialCageCount": 177,
+                "initialAnimalCount": 0,
+                "rows": [],
+            },
+        ]
+        rooms = [
+            {
+                "id": "r1",
+                "defaultBillingItem": "mouse_standard",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 20, rooms, {})
+        self.assertEqual(lines[0]["cageCount"], 377)
+        self.assertEqual(lines[0]["freeCages"], 20)
+        self.assertEqual(lines[0]["tier2Cages"], 217)
+        self.assertEqual(lines[0]["tier2BillableCages"], 217)
 
     def test_quantity_sheet_full_exemption_zeroes_only_the_target_iacuc(self):
         sheets = [

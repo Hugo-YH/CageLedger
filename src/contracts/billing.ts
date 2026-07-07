@@ -9,6 +9,7 @@ export interface BillingStatementLine {
   billableCages: number;
   amount: number;
   cumulative: number;
+  tier2Cages?: number;
   tier2BillableCages?: number;
   iacucBreakdown?: Record<string, unknown>[];
 }

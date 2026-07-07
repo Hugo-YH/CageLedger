@@ -28,6 +28,7 @@ type Breakdown = {
   supportAmount?: number;
   payableAmount?: number;
   amount?: number;
+  tier2Cages?: number;
   tier1BillableCages?: number;
   tier2BillableCages?: number;
 };
@@ -413,6 +414,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
     return (
       item.supportAmount !== undefined ||
       item.payableAmount !== undefined ||
+      item.tier2Cages !== undefined ||
       item.tier1BillableCages !== undefined ||
       item.tier2BillableCages !== undefined
     );
@@ -483,10 +485,11 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
       const current = perColumn.get(column.key) || emptySummary();
       let support = 0;
       let amount = 0;
+      let tier2Count = 0;
       let tier2Billable = 0;
       if (group.tiered) {
         const tier1Count = Math.min(remainingTier1Slots, count);
-        const tier2Count = Math.max(count - tier1Count, 0);
+        tier2Count = Math.max(count - tier1Count, 0);
         const tier1Free = Math.min(free, tier1Count);
         const tier2Free = Math.min(Math.max(free - tier1Free, 0), tier2Count);
         const tier1Billable = Math.max(tier1Count - tier1Free, 0);
@@ -502,7 +505,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
       current.free += free;
       current.support += support;
       current.amount += amount;
-      current.tier2Billable += tier2Billable;
+      current.tier2Billable += tier2Count;
       perColumn.set(column.key, current);
     }
   }

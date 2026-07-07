@@ -186,7 +186,7 @@ describe("print templates", () => {
         totalAnimalDays: 0,
         totalFreeCageDays: 5,
         totalBillableCageDays: 165,
-        totalTier2CageDays: 10,
+        totalTier2CageDays: 5,
         totalAmount: 770,
       },
       lines: [
@@ -196,6 +196,7 @@ describe("print templates", () => {
           cageCount: 170,
           freeCages: 5,
           billableCages: 165,
+          tier2Cages: 10,
           amount: 770,
           cumulative: 770,
           iacucBreakdown: [
@@ -203,6 +204,9 @@ describe("print templates", () => {
               iacuc: "Z2026001",
               cageCount: 170,
               freeCages: 5,
+              tier2Cages: 10,
+              tier2BillableCages: 5,
+              payableAmount: 770,
               billingItem: "小鼠饲养费",
               billingUnit: "cage_day",
               unitPrice: 4.5,
@@ -220,8 +224,79 @@ describe("print templates", () => {
     expect(html).toContain(
       '<th colspan="3">笼数</th><th colspan="3">减免</th><th colspan="3">梯度</th><th colspan="3">缴纳（元）</th>',
     );
-    expect(html).toContain('<td colspan="3" class="num">10</td><td colspan="3" class="money">770.00</td>');
+    expect(html).toContain('<td colspan="3" class="num">5</td><td colspan="3" class="money">770.00</td>');
     expect(html).not.toContain("梯度笼数");
+  });
+
+  it("shows billable tier cages in the summary column and iacuc columns", () => {
+    const result = {
+      statement: {
+        id: "s-tiered-raw",
+        month: "2026-06",
+        iacuc: "pi::张峰",
+        iacucs: ["A", "B"],
+        project: "项目",
+        pi: "张峰",
+        owner: "陈老师",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 20,
+        totalCageDays: 377,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 20,
+        totalBillableCageDays: 357,
+        totalTier2CageDays: 197,
+        totalAmount: 2000.5,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 0,
+          cageCount: 377,
+          freeCages: 20,
+          billableCages: 357,
+          tier2Cages: 217,
+          tier2BillableCages: 197,
+          amount: 2000.5,
+          cumulative: 2000.5,
+          iacucBreakdown: [
+            {
+              iacuc: "A",
+              cageCount: 166,
+              freeCages: 20,
+              tier2Cages: 166,
+              tier2BillableCages: 146,
+              supportAmount: 130,
+              payableAmount: 949,
+              billingItem: "小鼠饲养费",
+              billingUnit: "cage_day",
+              unitPrice: 4.5,
+              overageUnitPrice: 6.5,
+              tiered: true,
+            },
+            {
+              iacuc: "B",
+              cageCount: 211,
+              freeCages: 0,
+              tier2Cages: 51,
+              tier2BillableCages: 51,
+              supportAmount: 0,
+              payableAmount: 1051.5,
+              billingItem: "小鼠饲养费",
+              billingUnit: "cage_day",
+              unitPrice: 4.5,
+              overageUnitPrice: 6.5,
+              tiered: true,
+            },
+          ],
+        },
+      ],
+    } as BillingStatementResponse;
+    const html = settlementStatementHtml(result, false);
+    expect(html).toContain('<td colspan="4" class="num">197</td>');
+    expect(html).toContain('<td colspan="3" class="num">146</td><td colspan="3" class="money">949.00</td>');
+    expect(html).toContain('<td colspan="4" class="num">51</td><td colspan="4" class="money">1051.50</td>');
   });
 
   it("hides unused allowance columns and keeps paid amounts explicit", () => {

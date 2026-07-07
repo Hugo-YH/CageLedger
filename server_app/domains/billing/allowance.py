@@ -20,12 +20,12 @@ def free_cage_allocation_sort_key(item):
 
 def tier_cage_priority_sort_key(item):
     priority = as_int(item.get("tierCagePriority"))
-    count_source = item.get("animalCount") if item.get("billingUnit") == "animal_day" else item.get("cageCount")
-    count = max(as_int(count_source) or 0, 0)
+    billable_capacity = max(as_int(item.get("billableCapacity")) or 0, 0)
+    count = max(as_int(item.get("cageCount")) or 0, 0)
     iacuc = normalize_iacuc_number(item.get("iacuc", ""))
     if priority is None:
-        return (0, count, iacuc)
-    return (1, max(priority, 0), count, iacuc)
+        return (1, -billable_capacity, -count, iacuc)
+    return (0, max(priority, 0), -billable_capacity, -count, iacuc)
 
 
 def iacuc_free_allowance_eligible(application, target_date):
@@ -158,32 +158,68 @@ def apply_tiered_breakdown_charges(breakdown, tier_limit=160):
         groups.setdefault(key, []).append(item)
 
     for entries in groups.values():
-        remaining_tier1 = max(as_int(tier_limit) or 0, 0)
-        for item in sorted(entries, key=tier_cage_priority_sort_key):
+        group_count = 0
+        group_tier2_cages = 0
+        aggregated_by_iacuc = {}
+        for item in entries:
+            iacuc = normalize_iacuc_number(item.get("iacuc", "")) or f"__item__{id(item)}"
             count = max(as_int(item.get("cageCount")) or 0, 0)
             free = min(max(as_int(item.get("freeCages")) or 0, 0), count)
-            unit_price = float(item.get("unitPrice") or 0)
-            overage_unit_price = float(item.get("overageUnitPrice") or unit_price or 0)
-            tier1_count = min(remaining_tier1, count)
-            tier2_count = max(count - tier1_count, 0)
-            tier1_free = min(free, tier1_count)
-            tier2_free = min(max(free - tier1_free, 0), tier2_count)
-            tier1_billable = max(tier1_count - tier1_free, 0)
-            tier2_billable = max(tier2_count - tier2_free, 0)
-            item["tier1Cages"] = tier1_count
-            item["tier2Cages"] = tier2_count
-            item["tier1BillableCages"] = tier1_billable
-            item["tier2BillableCages"] = tier2_billable
-            item["billableCages"] = tier1_billable + tier2_billable
-            item["supportAmount"] = tier1_free * unit_price + tier2_free * overage_unit_price
-            item["payableAmount"] = tier1_billable * unit_price + tier2_billable * overage_unit_price
-            item["amount"] = item["supportAmount"] + item["payableAmount"]
-            remaining_tier1 = max(remaining_tier1 - tier1_count, 0)
+            state = aggregated_by_iacuc.setdefault(
+                iacuc,
+                {
+                    "iacuc": iacuc,
+                    "items": [],
+                    "cageCount": 0,
+                    "freeCages": 0,
+                    "billableCapacity": 0,
+                    "tierCagePriority": as_int(item.get("tierCagePriority")),
+                },
+            )
+            state["items"].append(item)
+            state["cageCount"] += count
+            state["freeCages"] += free
+            state["billableCapacity"] += max(count - free, 0)
+            if state.get("tierCagePriority") is None:
+                state["tierCagePriority"] = as_int(item.get("tierCagePriority"))
+            group_count += count
+        ordered_iacucs = sorted(aggregated_by_iacuc.values(), key=tier_cage_priority_sort_key)
+        remaining_raw_tier = max(group_count - (as_int(tier_limit) or 0), 0)
+        remaining_billable_tier = remaining_raw_tier
+        for state in ordered_iacucs:
+            state["rawTierAllocation"] = min(remaining_raw_tier, state["cageCount"])
+            state["billableTierAllocation"] = min(remaining_billable_tier, state["billableCapacity"])
+            remaining_raw_tier = max(remaining_raw_tier - state["rawTierAllocation"], 0)
+            remaining_billable_tier = max(remaining_billable_tier - state["billableTierAllocation"], 0)
+            group_tier2_cages += state["rawTierAllocation"]
+        for state in ordered_iacucs:
+            remaining_item_tier_billable = state["billableTierAllocation"]
+            for item in sorted(state["items"], key=lambda current: -max(as_int(current.get("cageCount")) or 0, 0)):
+                count = max(as_int(item.get("cageCount")) or 0, 0)
+                free = min(max(as_int(item.get("freeCages")) or 0, 0), count)
+                unit_price = float(item.get("unitPrice") or 0)
+                overage_unit_price = float(item.get("overageUnitPrice") or unit_price or 0)
+                billable_capacity = max(count - free, 0)
+                tier2_billable = min(remaining_item_tier_billable, billable_capacity)
+                remaining_item_tier_billable = max(remaining_item_tier_billable - tier2_billable, 0)
+                tier1_count = max(count - tier2_billable, 0)
+                tier1_free = min(free, tier1_count)
+                tier1_billable = max(tier1_count - tier1_free, 0)
+                item["tier1Cages"] = tier1_count
+                item["tier2Cages"] = tier2_billable
+                item["tier1BillableCages"] = tier1_billable
+                item["tier2BillableCages"] = tier2_billable
+                item["billableCages"] = tier1_billable + tier2_billable
+                item["supportAmount"] = tier1_free * unit_price
+                item["payableAmount"] = tier1_billable * unit_price + tier2_billable * overage_unit_price
+                item["amount"] = item["supportAmount"] + item["payableAmount"]
     return breakdown
 
 
 def summarize_breakdown_charges(breakdown, tier_limit=160):
     apply_tiered_breakdown_charges(breakdown, tier_limit)
+    grouped_counts = {}
+    non_tiered_tier1_cages = 0
     total = {
         "freeCages": 0,
         "billableCages": 0,
@@ -198,18 +234,35 @@ def summarize_breakdown_charges(breakdown, tier_limit=160):
         "amount": 0.0,
     }
     for item in breakdown or []:
+        if item.get("billingUnit") == "cage_day" and item.get("tiered"):
+            key = "|".join(
+                [
+                    str(item.get("billingItem") or ""),
+                    str(item.get("customerType") or ""),
+                    str(item.get("billingUnit") or ""),
+                    str(item.get("unitPrice") or ""),
+                    str(item.get("overageUnitPrice") or ""),
+                    "1" if item.get("tiered") else "0",
+                    "1" if item.get("freeAllowance") else "0",
+                ]
+            )
+            grouped_counts[key] = grouped_counts.get(key, 0) + max(as_int(item.get("cageCount")) or 0, 0)
         total["freeCages"] += max(as_int(item.get("freeCages")) or 0, 0)
         total["billableCages"] += max(as_int(item.get("billableCages")) or 0, 0)
-        total["tier1Cages"] += max(as_int(item.get("tier1Cages")) or 0, 0)
-        total["tier2Cages"] += max(as_int(item.get("tier2Cages")) or 0, 0)
         total["tier1BillableCages"] += max(as_int(item.get("tier1BillableCages")) or 0, 0)
         total["tier2BillableCages"] += max(as_int(item.get("tier2BillableCages")) or 0, 0)
         total["billableAnimals"] += max(as_int(item.get("billableAnimals")) or 0, 0)
+        if not (item.get("billingUnit") == "cage_day" and item.get("tiered")):
+            non_tiered_tier1_cages += max(as_int(item.get("tier1Cages")) or 0, 0)
         total["amount"] += float(item.get("payableAmount") or 0)
         if item.get("unitPrice") not in (None, ""):
             total["unitPrice"] = float(item.get("unitPrice") or 0)
         if item.get("overageUnitPrice") not in (None, ""):
             total["overageUnitPrice"] = float(item.get("overageUnitPrice") or 0)
+    total["tier2Cages"] = sum(max(count - (as_int(tier_limit) or 0), 0) for count in grouped_counts.values())
+    total["tier1Cages"] = non_tiered_tier1_cages + sum(
+        min(count, as_int(tier_limit) or 0) for count in grouped_counts.values()
+    )
     return total
 
 
