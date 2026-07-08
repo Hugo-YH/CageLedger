@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.10",
+    releasedAt: "2026-07-08 12:02",
+    title: "项目负责人结算候选快照化提速",
+    items: [
+      "按项目负责人结算列表改为后端结算候选快照驱动，月份、负责人、IACUC 和金额筛选排序直接走 SQLite 分页查询",
+      "数量统计表保存、删除、IACUC 导入和项目负责人身份变更会精准标记受影响候选项，列表页只补算当前页或当前筛选命中的脏快照",
+      "结算预览和发起流程生成前会同步刷新对应候选快照，保证候选列表金额、预览金额和流程金额保持一致",
+      "补齐快照建表、分页刷新、金额排序和接口兼容测试，减轻多人同时访问项目负责人结算列表时的卡顿",
+    ],
+  },
+  {
     version: "0.6.9b",
     releasedAt: "2026-07-07 17:48",
     title: "数量统计表梯度分配规则修正",

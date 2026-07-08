@@ -234,6 +234,23 @@ def initialize_base_schema(
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS billing_candidate_snapshots (
+            source_type TEXT NOT NULL,
+            month TEXT NOT NULL,
+            pi TEXT NOT NULL,
+            iacucs_json TEXT NOT NULL,
+            iacucs_text TEXT NOT NULL,
+            total_amount REAL,
+            error_message TEXT NOT NULL,
+            is_stale INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            PRIMARY KEY (source_type, month, pi)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS billing_workflows (
             id TEXT PRIMARY KEY,
             business_key TEXT NOT NULL UNIQUE,

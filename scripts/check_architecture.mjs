@@ -24,7 +24,10 @@ const sizePolicies = [
   { label: "stylesheet", extensions: new Set([".css"]), budget: 1500 },
 ];
 const baselineHotspots = new Map([
-  ["server_app/legacy.py", { ceiling: 6100, reason: "legacy HTTP compatibility" }],
+  [
+    "server_app/legacy.py",
+    { ceiling: 6200, reason: "legacy HTTP compatibility and settlement candidate snapshot rollout" },
+  ],
   [
     "src/react/features/cages/components/CageWorkspaceComponents.tsx",
     { ceiling: 477, reason: "existing cage workspace composition" },

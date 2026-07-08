@@ -1,95 +1,137 @@
-from collections import Counter
+from server_app.cache import cache_get, cache_key, cache_set
+from server_app.repositories.billing_candidates import (
+    get_billing_candidate_snapshot,
+    get_quantity_settlement_group,
+    list_billing_candidate_filter_options,
+    list_billing_candidate_snapshot_keys,
+    list_billing_candidate_snapshots_page,
+    sync_billing_candidate_snapshot_registry,
+    upsert_billing_candidate_snapshot,
+)
 
-SETTLEMENT_CANDIDATE_COLUMNS = {"month", "pi", "iacuc", "amount"}
+SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS = 15
 
 
-def list_settlement_candidates(groups, filters, calculate):
-    candidates = []
-    for group in groups:
-        try:
-            statement = calculate(group["month"], group["pi"])
-            candidates.append(
-                {
-                    "id": f"{group['month']}::{group['pi']}",
-                    "month": group["month"],
-                    "pi": group["pi"],
-                    "iacucs": statement.get("iacucs", []),
-                    "totalAmount": float(statement.get("totalAmount", 0) or 0),
-                    "error": "",
-                }
-            )
-        except ValueError as exc:
-            candidates.append(
-                {
-                    "id": f"{group['month']}::{group['pi']}",
-                    "month": group["month"],
-                    "pi": group["pi"],
-                    "iacucs": [],
-                    "totalAmount": None,
-                    "error": str(exc),
-                }
-            )
+def list_settlement_candidates(conn, filters, calculate, source_type="quantity_sheet", now=None):
+    response_cache_key = cache_key(
+        "quantity_sheets::settlement_candidates::list",
+        source_type=source_type,
+        limit=filters["limit"],
+        offset=filters["offset"],
+        sort_key=filters.get("sortKey", ""),
+        sort_dir=filters.get("sortDir", ""),
+        column_filters=filters.get("columnFilters", {}),
+    )
+    cached = cache_get(response_cache_key)
+    if cached is not None:
+        return cached
 
+    sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
+    sort_key = filters.get("sortKey")
     column_filters = filters.get("columnFilters") or {}
-    filtered = _apply_filters(candidates, column_filters)
-    filtered.sort(key=lambda item: _sort_value(item, filters.get("sortKey")), reverse=filters.get("sortDir") != "asc")
-    filtered.sort(key=lambda item: item["totalAmount"] is None)
-    offset = filters["offset"]
-    limit = filters["limit"]
-    return {
-        "items": filtered[offset : offset + limit],
-        "page": {
-            "limit": limit,
-            "offset": offset,
-            "total": len(filtered),
-            "hasMore": offset + limit < len(filtered),
-        },
-        "filterOptions": {
-            column: _filter_options(_apply_filters(candidates, column_filters, exclude=column), column)
-            for column in SETTLEMENT_CANDIDATE_COLUMNS
-        },
+    if sort_key == "amount" or bool(column_filters.get("amount")):
+        _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now)
+
+    payload = list_billing_candidate_snapshots_page(conn, source_type, filters)
+    stale_page_keys = [(item["month"], item["pi"]) for item in payload["items"] if item.get("isStale")]
+    if stale_page_keys:
+        _refresh_snapshot_keys(conn, stale_page_keys, calculate, source_type, now)
+        payload = list_billing_candidate_snapshots_page(conn, source_type, filters)
+
+    payload["items"] = [_public_candidate(item) for item in payload["items"]]
+    payload["filterOptions"] = list_billing_candidate_filter_options(conn, source_type, filters)
+    return cache_set(response_cache_key, payload, ttl_seconds=SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS)
+
+
+def refresh_settlement_candidate_snapshot(conn, month, pi_name, calculate, source_type="quantity_sheet", now=None):
+    group = get_quantity_settlement_group(conn, month, pi_name)
+    if not group:
+        return None
+    return _refresh_snapshot(conn, group, calculate, source_type, now)
+
+
+def update_settlement_candidate_snapshot_from_statement(
+    conn, month, pi_name, statement, source_type="quantity_sheet", now=None
+):
+    group = get_quantity_settlement_group(conn, month, pi_name)
+    if not group:
+        return None
+    payload = {
+        "month": month,
+        "pi": pi_name,
+        "sourceType": source_type,
+        "iacucs": group.get("iacucs", []),
+        "totalAmount": float(statement.get("totalAmount", 0) or 0),
+        "error": "",
+        "stale": False,
+        "updatedAt": now or statement.get("generatedAt", "") or "",
+        "sourceFingerprint": group.get("sourceFingerprint", ""),
     }
+    upsert_billing_candidate_snapshot(conn, payload)
+    snapshot = get_billing_candidate_snapshot(conn, month, pi_name, source_type)
+    return _public_candidate(snapshot) if snapshot else None
 
 
-def _apply_filters(candidates, column_filters, exclude=""):
-    output = candidates
-    for column, values in column_filters.items():
-        selected = {str(value).strip() for value in values if str(value).strip()}
-        if column == exclude or column not in SETTLEMENT_CANDIDATE_COLUMNS or not selected:
-            continue
-        if column == "iacuc":
-            output = [item for item in output if selected.intersection(item["iacucs"])]
-        else:
-            output = [item for item in output if _column_value(item, column) in selected]
-    return output
-
-
-def _filter_options(candidates, column):
-    counts = Counter()
-    for item in candidates:
-        values = item["iacucs"] if column == "iacuc" else [_column_value(item, column)]
-        counts.update(value for value in values if value != "")
-    return [
-        {
-            "value": value,
-            "label": f"¥{value}" if column == "amount" else value or "空白",
-            "count": count,
-        }
-        for value, count in sorted(counts.items(), key=lambda entry: entry[0].lower())
+def _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now):
+    stale_keys = [
+        (item["month"], item["pi"])
+        for item in list_billing_candidate_snapshot_keys(
+            conn,
+            source_type=source_type,
+            filters=filters,
+            stale_only=True,
+            exclude_amount=True,
+        )
     ]
+    _refresh_snapshot_keys(conn, stale_keys, calculate, source_type, now)
 
 
-def _column_value(item, column):
-    if column == "amount":
-        return "" if item["totalAmount"] is None else f"{item['totalAmount']:.2f}"
-    return str(item.get(column, "") or "")
+def _refresh_snapshot_keys(conn, keys, calculate, source_type, now):
+    for month, pi_name in sorted({(month, pi_name) for month, pi_name in keys if month and pi_name}):
+        group = get_quantity_settlement_group(conn, month, pi_name)
+        if not group:
+            continue
+        _refresh_snapshot(conn, group, calculate, source_type, now)
 
 
-def _sort_value(item, column):
-    if column == "amount":
-        return (item["totalAmount"] is not None, item["totalAmount"] or 0, item["month"], item["pi"].lower())
-    if column == "pi":
-        return (item["pi"].lower(), item["month"])
-    if column == "iacuc":
-        return ("、".join(item["iacucs"]).lower(), item["month"], item["pi"].lower())
-    return (item["month"], item["pi"].lower())
+def _refresh_snapshot(conn, group, calculate, source_type, now):
+    month = group["month"]
+    pi_name = group["pi"]
+    try:
+        statement = calculate(month, pi_name)
+        payload = {
+            "month": month,
+            "pi": pi_name,
+            "sourceType": source_type,
+            "iacucs": group.get("iacucs", []),
+            "totalAmount": float(statement.get("totalAmount", 0) or 0),
+            "error": "",
+            "stale": False,
+            "updatedAt": now or statement.get("generatedAt", "") or "",
+            "sourceFingerprint": group.get("sourceFingerprint", ""),
+        }
+    except ValueError as exc:
+        payload = {
+            "month": month,
+            "pi": pi_name,
+            "sourceType": source_type,
+            "iacucs": group.get("iacucs", []),
+            "totalAmount": None,
+            "error": str(exc),
+            "stale": False,
+            "updatedAt": now or "",
+            "sourceFingerprint": group.get("sourceFingerprint", ""),
+        }
+    upsert_billing_candidate_snapshot(conn, payload)
+    return get_billing_candidate_snapshot(conn, month, pi_name, source_type)
+
+
+def _public_candidate(item):
+    return {
+        "id": item["id"],
+        "month": item["month"],
+        "pi": item["pi"],
+        "iacucs": list(item.get("iacucs") or []),
+        "totalAmount": item.get("totalAmount"),
+        "error": item.get("error", ""),
+    }

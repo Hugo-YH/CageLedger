@@ -77,7 +77,10 @@ from server_app.domains.billing import (
     statement_billing_unit_from_lines,
     statement_pi_snapshot,
 )
-from server_app.domains.billing.candidates import list_settlement_candidates
+from server_app.domains.billing.candidates import (
+    list_settlement_candidates,
+    update_settlement_candidate_snapshot_from_statement,
+)
 from server_app.domains.iacuc import (
     normalize_application_amount,
     normalize_application_date,
@@ -195,7 +198,11 @@ from server_app.repositories.billing import (
 from server_app.repositories.billing import (
     update_quantity_sheet as update_quantity_sheet_repository,
 )
-from server_app.repositories.billing_candidates import list_quantity_settlement_groups
+from server_app.repositories.billing_candidates import (
+    mark_all_billing_candidate_snapshots_stale,
+    mark_billing_candidate_snapshots_stale,
+    mark_billing_candidate_snapshots_stale_by_pi,
+)
 from server_app.repositories.entities import (
     delete_intake_batch as delete_intake_batch_repository,
 )
@@ -3175,6 +3182,29 @@ def save_principal_identity(conn, payload, actor, pi_name):
     return item, merge_audit_logs([], [event])
 
 
+def invalidate_quantity_sheet_candidate_snapshots(conn, sheets_or_keys):
+    keys = []
+    for item in sheets_or_keys:
+        if isinstance(item, dict):
+            month = clean_text(item.get("month", ""))
+            pi_name = clean_text(item.get("pi", ""))
+        else:
+            month, pi_name = item
+            month = clean_text(month)
+            pi_name = clean_text(pi_name)
+        if month and pi_name:
+            keys.append((month, pi_name))
+    mark_billing_candidate_snapshots_stale(conn, "quantity_sheet", keys, now_iso())
+
+
+def invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name):
+    mark_billing_candidate_snapshots_stale_by_pi(conn, "quantity_sheet", clean_text(pi_name), now_iso())
+
+
+def invalidate_all_quantity_sheet_candidate_snapshots(conn):
+    mark_all_billing_candidate_snapshots_stale(conn, "quantity_sheet", now_iso())
+
+
 def application_payload(item, imported_at):
     raw_iacuc = clean_text(item.get("rawIacuc", "") or item.get("iacuc", ""))
     normalized = {
@@ -3275,7 +3305,8 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     validate_quantity_sheet_free_cage_settings(conn, sheet)
     validate_quantity_sheet_tier_priority(conn, sheet)
     validate_quantity_sheet_custom_billing(sheet)
-    exists = conn.execute("SELECT 1 FROM quantity_sheets WHERE id = ?", (sheet["id"],)).fetchone()
+    previous_sheet = get_quantity_sheet(conn, sheet["id"])
+    exists = previous_sheet is not None
     db_values = quantity_sheet_db_values(sheet)
     if exists:
         update_quantity_sheet_repository(conn, sheet, db_values)
@@ -3305,7 +3336,7 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         affected=len(affected_sheets),
         rows=len(sheet.get("rows", [])),
     )
-    return sheet, affected_sheets, merge_audit_logs([], events), status, perf
+    return sheet, previous_sheet, affected_sheets, merge_audit_logs([], events), status, perf
 
 
 def delete_quantity_sheet(conn, actor, sheet_id):
@@ -3325,7 +3356,7 @@ def delete_quantity_sheet(conn, actor, sheet_id):
         None,
     )
     write_audit_events(conn, [event])
-    return merge_audit_logs([], [event])
+    return sheet, merge_audit_logs([], [event])
 
 
 def quantity_sheet_db_values(sheet):
@@ -5079,13 +5110,12 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             filters = self.list_filters(default_limit=10, max_limit=100)
             with connect_db() as conn:
-                groups = list_quantity_settlement_groups(conn)
 
                 def calculate(month, pi):
                     payload = {"month": month, "pi": pi, "sourceType": "quantity_sheet"}
                     return generate_billing_statement_by_pi(conn, payload, user)[0]
 
-                self.send_json(list_settlement_candidates(groups, filters, calculate))
+                self.send_json(list_settlement_candidates(conn, filters, calculate, "quantity_sheet", now_iso()))
             return
         if path == "/api/intake-batches/filter-options":
             if not self.require_user():
@@ -5399,6 +5429,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 old_items = read_current_applications(conn)
                 write_experiment_applications(conn, parsed["items"], now)
                 sync_summary = sync_project_derived_fields_after_iacuc_upload(conn, old_items, file_items, user, now)
+                invalidate_all_quantity_sheet_candidate_snapshots(conn)
                 write_audit_events(conn, [event])
                 conn.commit()
             invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities")
@@ -5459,8 +5490,18 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         try:
+            refresh_candidate_cache = clean_text(body.get("sourceType", "cage_map")) == "quantity_sheet"
             with connect_db() as conn:
                 statement, lines, audit_logs = generate_billing_statement_by_pi(conn, body, user)
+                if refresh_candidate_cache:
+                    update_settlement_candidate_snapshot_from_statement(
+                        conn,
+                        clean_text(body.get("month", "")),
+                        clean_text(body.get("pi", "")),
+                        statement,
+                        "quantity_sheet",
+                        statement.get("generatedAt", "") or now_iso(),
+                    )
                 workflow = (
                     get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
                 )
@@ -5470,6 +5511,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                     else None
                 )
                 conn.commit()
+            if refresh_candidate_cache:
+                invalidate_data_cache_prefixes("quantity_sheets::settlement_candidates::")
             self.send_json(
                 {
                     "statement": statement,
@@ -5943,7 +5986,12 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         try:
             body = self.read_json_body()
             with connect_db() as conn:
-                sheet, affected_sheets, audit_logs, status, perf = save_quantity_sheet(conn, body, user, sheet_id)
+                sheet, previous_sheet, affected_sheets, audit_logs, status, perf = save_quantity_sheet(
+                    conn, body, user, sheet_id
+                )
+                invalidate_quantity_sheet_candidate_snapshots(
+                    conn, [item for item in (previous_sheet, sheet, *affected_sheets) if item]
+                )
                 conn.commit()
             invalidate_data_cache("principal_identities")
             invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
@@ -5968,6 +6016,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             body = self.read_json_body()
             with connect_db() as conn:
                 item, audit_logs = save_principal_identity(conn, body, user, pi_name)
+                invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name)
                 conn.commit()
             self.send_json({"item": item, "auditLogs": audit_logs})
         except ValueError as exc:
@@ -5979,7 +6028,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             return
         try:
             with connect_db() as conn:
-                audit_logs = delete_quantity_sheet(conn, user, sheet_id)
+                sheet, audit_logs = delete_quantity_sheet(conn, user, sheet_id)
+                invalidate_quantity_sheet_candidate_snapshots(conn, [sheet])
                 conn.commit()
             invalidate_data_cache("principal_identities")
             invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
