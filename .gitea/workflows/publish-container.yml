@@ -78,23 +78,32 @@ jobs:
           REGISTRY_USERNAME: ${{ vars.PACKAGE_USERNAME }}
         run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${REGISTRY_USERNAME}" --password-stdin
 
-      - name: Verify AMD64 base images
+      - name: Prepare multi-arch builder
+        run: |
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+          docker buildx create --use --name cageledger-multiarch-builder
+          docker buildx inspect --bootstrap
+
+      - name: Verify multi-arch base images
         run: |
           REGISTRY="${GITHUB_SERVER_URL#https://}"
           OWNER="${GITHUB_REPOSITORY%%/*}"
           BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
           for IMAGE in \
-            "${BASE_REPO}:node-22-bookworm-slim-amd64" \
-            "${BASE_REPO}:python-3.13-slim-amd64"; do
-            docker pull "${IMAGE}"
-            ARCHITECTURE="$(docker image inspect "${IMAGE}" --format '{{.Architecture}}')"
-            if [ "${ARCHITECTURE}" != "amd64" ]; then
-              echo "Base image ${IMAGE} uses ${ARCHITECTURE}; expected amd64" >&2
+            "${BASE_REPO}:node-22-bookworm-slim" \
+            "${BASE_REPO}:python-3.13-slim"; do
+            RAW_MANIFEST="$(docker buildx imagetools inspect --raw "${IMAGE}")"
+            if ! printf '%s' "${RAW_MANIFEST}" | grep -Fq '"architecture":"amd64"'; then
+              echo "Base image ${IMAGE} is missing amd64 support" >&2
+              exit 1
+            fi
+            if ! printf '%s' "${RAW_MANIFEST}" | grep -Fq '"architecture":"arm64"'; then
+              echo "Base image ${IMAGE} is missing arm64 support" >&2
               exit 1
             fi
           done
 
-      - name: Build and publish image
+      - name: Build and publish AMD64 image
         env:
           IMAGE_TAG: ${{ gitea.ref_name }}
         run: |
@@ -106,10 +115,43 @@ jobs:
           BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
           docker buildx build \
             --platform linux/amd64 \
-            --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim-amd64" \
-            --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim-amd64" \
+            --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
+            --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
             --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
             --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
             -t "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
             --push \
             .
+
+      - name: Build and publish ARM64 image
+        env:
+          IMAGE_TAG: ${{ gitea.ref_name }}
+        run: |
+          IMAGE_TAG="${IMAGE_TAG#v}"
+          REGISTRY="${GITHUB_SERVER_URL#https://}"
+          REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          OWNER="${REPOSITORY%%/*}"
+          IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
+          BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
+          docker buildx build \
+            --platform linux/arm64 \
+            --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
+            --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
+            --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
+            --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
+            -t "${IMAGE_REPO}:${IMAGE_TAG}-arm64" \
+            --push \
+            .
+
+      - name: Publish multi-arch manifest
+        env:
+          IMAGE_TAG: ${{ gitea.ref_name }}
+        run: |
+          IMAGE_TAG="${IMAGE_TAG#v}"
+          REGISTRY="${GITHUB_SERVER_URL#https://}"
+          REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
+          docker buildx imagetools create \
+            -t "${IMAGE_REPO}:${IMAGE_TAG}" \
+            "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
+            "${IMAGE_REPO}:${IMAGE_TAG}-arm64"
