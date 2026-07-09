@@ -78,80 +78,46 @@ jobs:
           REGISTRY_USERNAME: ${{ vars.PACKAGE_USERNAME }}
         run: echo "${REGISTRY_TOKEN}" | docker login "${GITHUB_SERVER_URL#https://}" -u "${REGISTRY_USERNAME}" --password-stdin
 
-      - name: Prepare multi-arch builder
-        run: |
-          docker run --privileged --rm tonistiigi/binfmt --install arm64
-          docker buildx create --use --name cageledger-multiarch-builder
-          docker buildx inspect --bootstrap
-
-      - name: Verify multi-arch base images
+      - name: Wait for Mac mini multi-arch publish
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.value }}
         run: |
           REGISTRY="${GITHUB_SERVER_URL#https://}"
-          OWNER="${GITHUB_REPOSITORY%%/*}"
-          BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
+          REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
+          IMAGE_TAG="v${IMAGE_TAG}"
           for IMAGE in \
-            "${BASE_REPO}:node-22-bookworm-slim" \
-            "${BASE_REPO}:python-3.13-slim"; do
-            RAW_MANIFEST="$(docker buildx imagetools inspect --raw "${IMAGE}")"
-            if ! printf '%s' "${RAW_MANIFEST}" | grep -Fq '"architecture":"amd64"'; then
-              echo "Base image ${IMAGE} is missing amd64 support" >&2
-              exit 1
-            fi
-            if ! printf '%s' "${RAW_MANIFEST}" | grep -Fq '"architecture":"arm64"'; then
-              echo "Base image ${IMAGE} is missing arm64 support" >&2
+            "${IMAGE_REPO}:${IMAGE_TAG}" \
+            "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
+            "${IMAGE_REPO}:${IMAGE_TAG}-arm64"; do
+            FOUND=0
+            for ATTEMPT in $(seq 1 40); do
+              if docker manifest inspect "${IMAGE}" >/dev/null 2>&1; then
+                FOUND=1
+                break
+              fi
+              sleep 15
+            done
+            if [ "${FOUND}" -ne 1 ]; then
+              echo "Published image ${IMAGE} is missing" >&2
               exit 1
             fi
           done
 
-      - name: Build and publish AMD64 image
+      - name: Verify multi-arch manifest
         env:
-          IMAGE_TAG: ${{ gitea.ref_name }}
+          IMAGE_TAG: ${{ steps.version.outputs.value }}
         run: |
-          IMAGE_TAG="${IMAGE_TAG#v}"
-          REGISTRY="${GITHUB_SERVER_URL#https://}"
-          REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          OWNER="${REPOSITORY%%/*}"
-          IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
-          BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
-          docker buildx build \
-            --platform linux/amd64 \
-            --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
-            --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
-            --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
-            --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
-            -t "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
-            --push \
-            .
-
-      - name: Build and publish ARM64 image
-        env:
-          IMAGE_TAG: ${{ gitea.ref_name }}
-        run: |
-          IMAGE_TAG="${IMAGE_TAG#v}"
-          REGISTRY="${GITHUB_SERVER_URL#https://}"
-          REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          OWNER="${REPOSITORY%%/*}"
-          IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
-          BASE_REPO="${REGISTRY}/${OWNER}/cageledger-base"
-          docker buildx build \
-            --platform linux/arm64 \
-            --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
-            --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
-            --build-arg CAGELEDGER_APP_VERSION="${{ steps.version.outputs.value }}" \
-            --build-arg CAGELEDGER_REVISION="${{ steps.revision.outputs.sha }}" \
-            -t "${IMAGE_REPO}:${IMAGE_TAG}-arm64" \
-            --push \
-            .
-
-      - name: Publish multi-arch manifest
-        env:
-          IMAGE_TAG: ${{ gitea.ref_name }}
-        run: |
-          IMAGE_TAG="${IMAGE_TAG#v}"
           REGISTRY="${GITHUB_SERVER_URL#https://}"
           REPOSITORY="$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           IMAGE_REPO="${REGISTRY}/${REPOSITORY}"
-          docker buildx imagetools create \
-            -t "${IMAGE_REPO}:${IMAGE_TAG}" \
-            "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
-            "${IMAGE_REPO}:${IMAGE_TAG}-arm64"
+          IMAGE_TAG="v${IMAGE_TAG}"
+          RAW_MANIFEST="$(docker manifest inspect "${IMAGE_REPO}:${IMAGE_TAG}")"
+          if ! printf '%s' "${RAW_MANIFEST}" | grep -Eq '"architecture"[[:space:]]*:[[:space:]]*"amd64"'; then
+            echo "Image ${IMAGE_REPO}:${IMAGE_TAG} is missing amd64 support" >&2
+            exit 1
+          fi
+          if ! printf '%s' "${RAW_MANIFEST}" | grep -Eq '"architecture"[[:space:]]*:[[:space:]]*"arm64"'; then
+            echo "Image ${IMAGE_REPO}:${IMAGE_TAG} is missing arm64 support" >&2
+            exit 1
+          fi

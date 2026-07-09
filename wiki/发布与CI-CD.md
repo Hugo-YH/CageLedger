@@ -8,6 +8,7 @@
 release notes
 -> check
 -> offline package
+-> local multi-arch container publish
 -> commit
 -> v<version> tag
 -> push main and tag
@@ -37,13 +38,27 @@ npm run release:local -- --version X.Y.Z --push
 4. `npm run package:offline`
 5. Git commit
 6. annotated tag
-7. 推送 `main` 和新 tag
+7. Mac mini 本地执行多架构镜像发布并导出离线镜像包
+8. 推送 `main` 和新 tag
 
 本地演练：
 
 ```bash
 npm run release:local -- --version X.Y.Z --dry-run
 ```
+
+如需只发布容器镜像：
+
+```bash
+npm run publish:container:local -- --version X.Y.Z --export-offline-images
+```
+
+这条命令会：
+
+1. 同步 `cageledger-base` 的多架构 tag
+2. 从干净的 tag 或 HEAD worktree 构建 `amd64` 和 `arm64`
+3. 推送 `git.cellnucle.us/hugo/cageledger:vX.Y.Z`
+4. 导出 `dist/` 下的离线镜像 tar.gz
 
 完整浏览器回归在发布前单独执行：
 
@@ -58,7 +73,7 @@ npm run smoke:api
 | ---------------------------------------- | --------------------------------- |
 | `.gitea/workflows/ci.yml`                | PR 和 main 的质量、测试、构建门禁 |
 | `.gitea/workflows/release-package.yml`   | 创建 Release、上传离线包          |
-| `.gitea/workflows/publish-container.yml` | 多阶段构建并推送容器镜像          |
+| `.gitea/workflows/publish-container.yml` | 校验本地已发布的多架构容器镜像    |
 | `.gitea/workflows/sync-wiki.yml`         | 将 `wiki/` 同步到 Gitea Wiki      |
 
 ## 凭据
@@ -69,7 +84,7 @@ npm run smoke:api
 | `PACKAGE_USERNAME` | Variable | 容器仓库用户名          |
 | `PACKAGE_PAT`      | Secret   | 容器仓库令牌            |
 
-runner 可能位于内网。工作流脚本需要兼容 `/bin/sh`，并确认 job 容器能够访问 Gitea、容器仓库和依赖源。
+Mac mini 本地发布是容器镜像的权威出口。Gitea 工作流负责校验 tag 对应镜像已经入库，并验证统一 tag 包含 `amd64` 与 `arm64`。
 
 ## 持续集成门禁
 

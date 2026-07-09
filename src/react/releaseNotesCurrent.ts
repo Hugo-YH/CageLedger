@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.0",
+    releasedAt: "2026-07-10 00:00",
+    title: "本地多架构镜像发布与离线交付",
+    items: [
+      "Mac mini 本地发布链路统一构建并推送 amd64、arm64 和多架构 manifest 镜像，Gitea 工作流负责等待并校验已发布镜像",
+      "新增容器镜像离线导出命令，按版本生成 amd64、arm64 镜像压缩包、校验文件和 NAS 导入说明",
+      "本地发布脚本支持联动容器发布和离线镜像导出，部署与发布文档同步补充执行流程和回滚要点",
+    ],
+  },
+  {
     version: "0.6.11",
     releasedAt: "2026-07-09 14:24",
     title: "容器发布与 ARM 镜像链路修复",

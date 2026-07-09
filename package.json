@@ -1,7 +1,7 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "0.6.11",
+  "version": "0.7.0",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
@@ -31,6 +31,8 @@
     "verify:full": "npm run check && npm run build && npm run test:e2e",
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
+    "package:offline:image": "bash scripts/package_offline_image.sh",
+    "publish:container:local": "bash scripts/publish_container_local.sh",
     "release:local": "bash scripts/release_local.sh"
   },
   "dependencies": {

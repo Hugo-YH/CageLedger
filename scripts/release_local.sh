@@ -6,19 +6,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/release_local.sh --version 0.4.1 [--push] [--dry-run]
-  bash scripts/release_local.sh 0.4.1 [--push] [--dry-run]
+  bash scripts/release_local.sh --version 0.4.1 [--push] [--dry-run] [--skip-container-publish] [--skip-offline-image]
+  bash scripts/release_local.sh 0.4.1 [--push] [--dry-run] [--skip-container-publish] [--skip-offline-image]
 
 Options:
   --version <ver>  Release version, for example 0.4.1 or 0.4.0a
   --push           Push main and the new v<version> tag after commit/tag
   --dry-run        Print steps without executing them
+  --skip-container-publish  Skip Mac mini local multi-arch image publish before push
+  --skip-offline-image      Skip dist/ image tar.gz export during local container publish
 EOF
 }
 
 VERSION=""
 PUSH=0
 DRY_RUN=0
+PUBLISH_CONTAINER=1
+EXPORT_OFFLINE_IMAGE=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -32,6 +36,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=1
+      shift
+      ;;
+    --skip-container-publish)
+      PUBLISH_CONTAINER=0
+      shift
+      ;;
+    --skip-offline-image)
+      EXPORT_OFFLINE_IMAGE=0
       shift
       ;;
     -h|--help)
@@ -91,6 +103,13 @@ run git commit -m "Release v${VERSION}"
 run git tag -a "v${VERSION}" -m "v${VERSION}"
 
 if [[ "$PUSH" -eq 1 ]]; then
+  if [[ "$PUBLISH_CONTAINER" -eq 1 ]]; then
+    if [[ "$EXPORT_OFFLINE_IMAGE" -eq 1 ]]; then
+      run bash scripts/publish_container_local.sh --version "$VERSION" --export-offline-images
+    else
+      run bash scripts/publish_container_local.sh --version "$VERSION"
+    fi
+  fi
   run git push origin main
   run git push origin "v${VERSION}"
 fi
