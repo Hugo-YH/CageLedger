@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.11",
+    releasedAt: "2026-07-09 14:24",
+    title: "容器发布与 ARM 镜像链路修复",
+    items: [
+      "Gitea 容器发布工作流补齐 Buildx 多架构构建，统一生成 amd64、arm64 和 manifest 三类镜像标签",
+      "发布前新增基础镜像多架构校验，明确要求 cageledger-base 同时提供 Node 与 Python 的 amd64 和 arm64 变体",
+      "版本入口同步升级到 0.6.11，保持 package、前端版本展示和发布记录一致，便于后续按正式 tag 发布",
+    ],
+  },
+  {
     version: "0.6.10",
     releasedAt: "2026-07-08 12:02",
     title: "项目负责人结算候选快照化提速",
