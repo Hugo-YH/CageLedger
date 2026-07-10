@@ -121,7 +121,7 @@ if [[ "${SYNC_BASE_IMAGES}" -eq 1 ]]; then
     docker.io/library/python:3.13-slim >/dev/null
 fi
 
-WORKTREE_DIR="$(mktemp -d /tmp/cageledger-release-${VERSION}-XXXXXX)"
+WORKTREE_DIR="$(mktemp -d /tmp/cageledger-release-"${VERSION}"-XXXXXX)"
 cleanup() {
   git worktree remove --force "${WORKTREE_DIR}" >/dev/null 2>&1 || true
 }

@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.1",
+    releasedAt: "2026-07-10 00:00",
+    title: "工作区刷新恢复",
+    items: [
+      "业务工作区的懒加载资源遇到发布后缓存缺失或网络波动时，会自动刷新一次以加载当前版本资源",
+      "连续加载失败时提供重新加载和返回首页操作，避免笼卡、笼位、饲养费和系统设置工作区出现白屏",
+      "新增浏览器刷新回归，验证用户刷新页面后会恢复到上次打开的数量统计表录入工作区",
+    ],
+  },
+  {
     version: "0.7.0",
     releasedAt: "2026-07-10 00:00",
     title: "本地多架构镜像发布与离线交付",
