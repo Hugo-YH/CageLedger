@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.1a",
+    releasedAt: "2026-07-10 00:00",
+    title: "结算汇总总计金额显示修复",
+    items: [
+      "按项目负责人导出的饲养费核算汇总表在无减免、无梯度收费时，首页“本月待缴纳饲养费总计”会持续显示应缴金额",
+      "总计标签与金额固定平分汇总区宽度，保持与各伦理列的版式关系一致",
+      "补齐无减免、无梯度场景的打印模板回归，覆盖总计金额渲染",
+    ],
+  },
+  {
     version: "0.7.1",
     releasedAt: "2026-07-10 00:00",
     title: "工作区刷新恢复",

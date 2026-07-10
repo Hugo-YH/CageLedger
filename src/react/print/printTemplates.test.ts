@@ -414,6 +414,9 @@ describe("print templates", () => {
     expect(html.match(/项目负责人<\/td><td>实验负责人\/经办人<\/td><td>日期<\/td>/g)).toHaveLength(2);
     expect(pages[1]).toContain("总笼数");
     expect(pages[1]).toContain("汇总");
+    expect(pages[1]).toContain(
+      '<td colspan="7" class="row-label row-label-summary row-label-summary-wide">本月待缴纳饲养费<br />总计（元）</td><td colspan="6" class="money summary-total-money">94.50</td>',
+    );
     expect(pages[2]).not.toContain('<th colspan="12">汇总</th>');
     expect(pages[2]).toContain("本页汇总");
     expect((pages[1].match(/col-group/g) || []).length).toBe(60);
