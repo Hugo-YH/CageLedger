@@ -33,7 +33,7 @@ test("core workspaces and dialogs retain accessible semantics", async ({ page })
   await login(page);
 
   await openIntakeEntry(page);
-  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "预约消息识别", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
 
   await openQuantityEntry(page);

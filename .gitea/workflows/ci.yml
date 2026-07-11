@@ -62,7 +62,8 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git
+          apt-get install -y --no-install-recommends \
+            ca-certificates git chromium fonts-noto-cjk
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
@@ -90,16 +91,19 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git python3
+          apt-get install -y --no-install-recommends \
+            ca-certificates git python3 python3-pip chromium fonts-noto-cjk
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
       - name: Install application dependencies
-        run: >-
-          bash scripts/retry_command.sh npm ci --prefer-offline --no-audit
-          --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
+        run: |
+          bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
+            --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
+          bash scripts/retry_command.sh python3 -m pip install --no-cache-dir --retries 5 --timeout 60 \
+            -r requirements.txt
 
       - name: Run Playwright
         env:

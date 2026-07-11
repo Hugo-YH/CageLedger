@@ -75,7 +75,9 @@ type SettlementRow = {
 
 export function settlementStatementMarkup(result: BillingStatementResponse) {
   const { statement } = result;
-  const lines = result.lines.filter((line) => line.animalCount || line.cageCount || line.amount);
+  const lines = result.lines.filter(
+    (line) => line.animalCount || line.cageCount || line.amount || Boolean(line.quantitySheetRowIds?.length),
+  );
   const unit = resolveUnit(statement, lines);
   const rawColumns = collectColumns(statement, lines);
   const model = lines.map((line) => modelLine(line, rawColumns, unit));
@@ -189,7 +191,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             : `<td colspan="${GROUP_GRID_UNITS}" class="meta-summary meta-summary-empty"></td>`,
         )
         .join("")}</tr>`;
-      const footerBlock = `<div class="note-line">说明：</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table>`;
+      const footerBlock = `<div class="note-line">说明：${escapeHtml(statement.notes || "")}</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table>`;
       const pageFooter = `<div class="page-footer">第 ${pageIndex + 1} / ${totalPages} 页</div>`;
       const leadingColMarkup = page.showLeadingTotals
         ? Array.from({ length: GROUP_GRID_UNITS }, () => '<col class="col-group" />').join("")

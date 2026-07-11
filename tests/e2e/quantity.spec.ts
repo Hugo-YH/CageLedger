@@ -16,6 +16,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(page.getByLabel("登记人员", { exact: true })).toHaveAttribute("readonly", "");
   await expect(page.getByLabel("房间管理员", { exact: true })).toHaveValue("E2E 房间管理员");
   await expect(page.getByLabel("房间管理员", { exact: true })).toHaveAttribute("readonly", "");
+  await page.getByRole("button", { name: /计费扩展选项/ }).click();
   await page.getByRole("checkbox", { name: "全额减免", exact: true }).check();
   await iacucInput.fill("E2E-IACUC-001");
   await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E负责人");
@@ -33,6 +34,11 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
   await expect(savedRow).toBeVisible();
   await expect(savedRow).toContainText("系统管理员");
+  await savedRow.getByRole("checkbox", { name: "选择 E2E-IACUC-001" }).check();
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator(".quantity-saved-panel").getByRole("button", { name: "导出 PDF", exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("实验动物数量统计表 2026年07月 E2E-IACUC-001.pdf");
   await savedRow.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(savedRow).toHaveCount(0);

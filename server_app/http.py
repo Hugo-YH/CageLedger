@@ -2,7 +2,7 @@ import gzip
 import json
 import time
 from http import HTTPStatus
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 def add_default_headers(handler):
@@ -31,5 +31,24 @@ def send_json(handler, payload, status=HTTPStatus.OK):
     handler.send_header("Vary", "Accept-Encoding")
     if compressed:
         handler.send_header("Content-Encoding", "gzip")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def send_download(handler, body, filename, content_type, status=HTTPStatus.OK):
+    """Return a private attachment with a standards-compliant UTF-8 filename."""
+    safe_filename = str(filename or "download").replace('"', "")
+    ascii_filename = safe_filename.encode("ascii", "ignore").decode("ascii").strip()
+    extension = "." + safe_filename.rsplit(".", 1)[1] if "." in safe_filename else ""
+    if not any(character.isalnum() for character in ascii_filename):
+        ascii_filename = f"CageLedger-download{extension}"
+    handler.send_response(status)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header(
+        "Content-Disposition",
+        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(safe_filename)}",
+    )
+    handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
     handler.wfile.write(body)

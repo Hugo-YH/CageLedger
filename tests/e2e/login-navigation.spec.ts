@@ -19,7 +19,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   if (!process.env.CI) expect(Date.now() - loginStartedAt).toBeLessThan(1_500);
   await ensureTestInfrastructure(page);
   await openIntakeEntry(page);
-  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "预约消息识别", exact: true })).toBeVisible();
   await page
     .getByLabel("预约消息")
     .fill(
@@ -29,13 +29,13 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByLabel("批次号", { exact: true })).toHaveValue("（Z2025050）2026042903");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("70");
   await expect(page.getByRole("combobox", { name: "房间", exact: true })).toHaveValue("8014");
-  await page.getByRole("button", { name: "扫码识别笼卡", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "笼卡识别", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "二维码扫描", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "二维码扫描", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole("button", { name: "启动摄像头", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "返回笼卡管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "接收与识别", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "笼位管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "笼位管理", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "预约消息识别", exact: true })).toBeVisible();
+  await page.locator("nav.nav").getByRole("button", { name: "笼位管理", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "动态笼位图", exact: true, level: 1 })).toBeVisible();
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
   await expect(page.getByRole("heading", { name: /编辑笼位 8014-01-A1/ })).toBeVisible();
   await expect(page.locator("body > .modal-backdrop")).toBeVisible();

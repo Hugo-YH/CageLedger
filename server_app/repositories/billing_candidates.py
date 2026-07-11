@@ -10,6 +10,9 @@ SETTLEMENT_CANDIDATE_LIST_COLUMNS = {
     },
 }
 
+# Bump when quantity-sheet settlement rules change so persisted list snapshots are recalculated after deployment.
+QUANTITY_SETTLEMENT_CALCULATION_VERSION = "2026-07-10-iacuc-date-normalization"
+
 
 def list_quantity_settlement_groups(conn):
     rows = conn.execute(
@@ -29,7 +32,7 @@ def list_quantity_settlement_groups(conn):
         iacuc = row["iacuc"] or ""
         if not current or current["month"] != month or current["pi"] != pi:
             if current:
-                current["sourceFingerprint"] = "|".join(fingerprint_parts)
+                current["sourceFingerprint"] = "|".join([*fingerprint_parts, QUANTITY_SETTLEMENT_CALCULATION_VERSION])
             current = {"month": month, "pi": pi, "iacucs": []}
             groups.append(current)
             fingerprint_parts = []
@@ -37,8 +40,33 @@ def list_quantity_settlement_groups(conn):
             current["iacucs"].append(iacuc)
         fingerprint_parts.append(f"{row['id'] or ''}:{row['updated_at'] or ''}")
     if current:
-        current["sourceFingerprint"] = "|".join(fingerprint_parts)
+        current["sourceFingerprint"] = "|".join([*fingerprint_parts, QUANTITY_SETTLEMENT_CALCULATION_VERSION])
     return groups
+
+
+def get_quantity_settlement_group(conn, month, pi):
+    rows = conn.execute(
+        """
+        SELECT iacuc, id, updated_at
+        FROM quantity_sheets
+        WHERE month = ? AND pi = ?
+        ORDER BY iacuc COLLATE NOCASE, id COLLATE NOCASE
+        """,
+        (month, pi),
+    ).fetchall()
+    if not rows:
+        return None
+    return quantity_settlement_group_from_rows(month, pi, rows)
+
+
+def quantity_settlement_group_from_rows(month, pi, rows):
+    fingerprint_parts = [f"{row['id'] or ''}:{row['updated_at'] or ''}" for row in rows]
+    return {
+        "month": month,
+        "pi": pi,
+        "iacucs": [row["iacuc"] or "" for row in rows if row["iacuc"]],
+        "sourceFingerprint": "|".join([*fingerprint_parts, QUANTITY_SETTLEMENT_CALCULATION_VERSION]),
+    }
 
 
 def sync_billing_candidate_snapshot_registry(conn, source_type, now):
@@ -214,13 +242,6 @@ def get_billing_candidate_snapshot(conn, month, pi, source_type):
     return billing_candidate_snapshot_row(row) if row else None
 
 
-def get_quantity_settlement_group(conn, month, pi):
-    for group in list_quantity_settlement_groups(conn):
-        if group["month"] == month and group["pi"] == pi:
-            return group
-    return None
-
-
 def upsert_billing_candidate_snapshot(conn, snapshot):
     iacucs = sorted({str(item).strip() for item in snapshot.get("iacucs", []) if str(item).strip()})
     conn.execute(
@@ -259,6 +280,36 @@ def upsert_billing_candidate_snapshot(conn, snapshot):
             snapshot["updatedAt"],
             snapshot.get("sourceFingerprint", ""),
         ),
+    )
+
+
+def delete_billing_candidate_snapshot(conn, month, pi, source_type):
+    conn.execute(
+        "DELETE FROM billing_candidate_snapshots WHERE month = ? AND pi = ? AND source_type = ?",
+        (month, pi, source_type),
+    )
+
+
+def billing_candidate_snapshot_registry_needs_sync(conn, source_type, fingerprint_fragment=""):
+    row = conn.execute(
+        "SELECT source_fingerprint FROM billing_candidate_snapshots WHERE source_type = ? LIMIT 1",
+        (source_type,),
+    ).fetchone()
+    if row is None:
+        return True
+    if not fingerprint_fragment:
+        return False
+    return (
+        conn.execute(
+            """
+            SELECT 1
+            FROM billing_candidate_snapshots
+            WHERE source_type = ? AND source_fingerprint NOT LIKE ?
+            LIMIT 1
+            """,
+            (source_type, f"%{fingerprint_fragment}%"),
+        ).fetchone()
+        is not None
     )
 
 

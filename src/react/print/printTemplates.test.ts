@@ -94,8 +94,61 @@ describe("print templates", () => {
     expect(html.match(/经手人/g)).toHaveLength(2);
     expect(html.match(/2026\.5\./g)).toHaveLength(31);
     expect(html).toContain("2026.5.31");
+    expect(html).not.toContain("登记人员</td>");
+    expect(html).toContain('2026.5.2</td><td></td><td></td><td class="num"></td><td class="num">1</td>');
     expect(html).toContain("房间管理员：房间管理员");
     expect(html).not.toContain("房间管理员：登记人员");
+  });
+
+  it("leaves animal balances blank for cage-only quantity sheets", () => {
+    const html = quantitySheetPagesMarkup([
+      {
+        id: "cage-only-sheet",
+        month: "2026-06",
+        roomId: "room-1",
+        roomName: "8101",
+        manager: "登记人员",
+        roomManager: "房间管理员",
+        iacuc: "Z1",
+        pi: "张教授",
+        owner: "陈老师",
+        project: "项目",
+        contact: "",
+        funding: "",
+        preferredFreeCages: null,
+        freeCagePriority: null,
+        tierCagePriority: null,
+        fullExemption: false,
+        customBillingEnabled: false,
+        customUnitPrice: null,
+        billingUnit: "cage_day",
+        animalDetailEnabled: false,
+        initialAnimalCount: 0,
+        initialCageCount: 0,
+        pageCount: 1,
+        rows: [
+          {
+            id: "qrow-1",
+            date: "2026-06-01",
+            rawDateInput: "2026-06-01",
+            addedCount: null,
+            addedType: "",
+            transferInFromIacuc: "",
+            removedCount: null,
+            removedType: "",
+            transferOutToIacuc: "",
+            animalCount: null,
+            cageCount: 7,
+            handler: "",
+            balanceSource: "manual",
+            notes: "",
+          },
+        ],
+        updatedAt: "2026-06-01T00:00:00Z",
+      },
+    ]);
+    expect(html).toContain('2026.6.2</td><td></td><td></td><td class="num"></td><td class="num">7</td>');
+    expect(html).not.toContain('2026.6.2</td><td></td><td></td><td class="num">0</td>');
   });
 
   it("renders settlement columns by iacuc and species with explicit zero amounts", () => {
@@ -297,6 +350,91 @@ describe("print templates", () => {
     expect(html).toContain('<td colspan="4" class="num">197</td>');
     expect(html).toContain('<td colspan="3" class="num">146</td><td colspan="3" class="money">949.00</td>');
     expect(html).toContain('<td colspan="4" class="num">51</td><td colspan="4" class="money">1051.50</td>');
+  });
+
+  it("keeps a recorded zero-balance collection date in the settlement printout", () => {
+    const result = {
+      statement: {
+        id: "s-zero-balance",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["Z1"],
+        project: "项目",
+        pi: "张教授",
+        owner: "",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 0,
+        totalCageDays: 1,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 0,
+        totalBillableCageDays: 1,
+        totalAmount: 4.5,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 0,
+          cageCount: 1,
+          freeCages: 0,
+          billableCages: 1,
+          amount: 4.5,
+          cumulative: 4.5,
+          iacucBreakdown: [{ iacuc: "Z1", cageCount: 1, billingUnit: "cage_day", unitPrice: 4.5 }],
+        },
+        {
+          date: "2026-06-02",
+          animalCount: 0,
+          cageCount: 0,
+          freeCages: 0,
+          billableCages: 0,
+          amount: 0,
+          cumulative: 4.5,
+          iacucBreakdown: [],
+          quantitySheetRowIds: ["qrow-collection"],
+        },
+      ],
+    } as BillingStatementResponse;
+    const html = settlementStatementHtml(result, false);
+    expect(html).toContain("2026-06-02");
+  });
+
+  it("renders an expiry note from the settlement statement", () => {
+    const result = {
+      statement: {
+        id: "s-expiry-note",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["Z1"],
+        project: "项目",
+        pi: "张教授",
+        owner: "",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "cage_day",
+        freeCageAllowance: 20,
+        totalCageDays: 1,
+        totalAnimalDays: 0,
+        totalFreeCageDays: 0,
+        totalBillableCageDays: 1,
+        totalAmount: 4.5,
+        notes: "Z1 于 2026-06-15 到期，自 2026-06-16 起不参与减免",
+      },
+      lines: [
+        {
+          date: "2026-06-16",
+          animalCount: 0,
+          cageCount: 1,
+          freeCages: 0,
+          billableCages: 1,
+          amount: 4.5,
+          cumulative: 4.5,
+          iacucBreakdown: [{ iacuc: "Z1", cageCount: 1, billingUnit: "cage_day", unitPrice: 4.5 }],
+        },
+      ],
+    } as BillingStatementResponse;
+    expect(settlementStatementHtml(result, false)).toContain("Z1 于 2026-06-15 到期，自 2026-06-16 起不参与减免");
   });
 
   it("hides unused allowance columns and keeps paid amounts explicit", () => {

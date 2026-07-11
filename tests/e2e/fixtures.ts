@@ -54,10 +54,10 @@ export async function ensureTestInfrastructure(page: Page) {
 }
 
 export async function openSettingsView(page: Page, name: string) {
-  await page.getByRole("button", { name: "系统设置", exact: true }).click();
+  await page.locator("nav.nav").getByRole("button", { name: "系统设置", exact: true }).click();
   const navigation = page.locator("#nav-settings");
   await expect(navigation).toBeVisible();
-  await navigation.getByRole("button", { name: new RegExp(`^${escapeRegExp(name)}(?:\\s|$)`) }).click();
+  await navigation.getByRole("button", { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
 }
 
 function escapeRegExp(value: string) {
@@ -66,20 +66,28 @@ function escapeRegExp(value: string) {
 
 export async function openIntakeEntry(page: Page) {
   await page.locator("nav.nav").getByRole("button", { name: "笼卡管理", exact: true }).click();
-  await page.getByRole("button", { name: /接收与识别/ }).click();
+  const navigation = page.locator("#nav-intake");
+  await expect(navigation).toBeVisible();
+  await navigation.getByRole("button", { name: /^预约消息识别/ }).click();
 }
 
 export async function openQuantityEntry(page: Page) {
   await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await page.getByRole("button", { name: /数量统计表（录入）/ }).click();
+  const navigation = page.locator("#nav-billing");
+  await expect(navigation).toBeVisible();
+  await navigation.getByRole("button", { name: /^数量统计表（录入）/ }).click();
 }
 
 export async function openSavedQuantitySheets(page: Page) {
   await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await page.getByRole("button", { name: /已保存数量统计表/ }).click();
+  const navigation = page.locator("#nav-billing");
+  await expect(navigation).toBeVisible();
+  await navigation.getByRole("button", { name: /^已保存数量统计表/ }).click();
 }
 
 export async function openWorkflowCenter(page: Page) {
   await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await page.getByRole("button", { name: /结算与报销台账/ }).click();
+  const navigation = page.locator("#nav-billing");
+  await expect(navigation).toBeVisible();
+  await navigation.getByRole("button", { name: /^结算与报销台账/ }).click();
 }

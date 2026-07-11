@@ -6,6 +6,7 @@ import type {
   SettlementCandidateListParams,
 } from "../../../api/contracts";
 import { useSettlementCandidates } from "../../../api/billing";
+import { downloadFromUrl, requestDownload } from "../../../api/client";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { ModalShell, Pager } from "../../../components/WorkspaceUi";
@@ -19,6 +20,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     dir: "asc" | "desc";
   }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [selectedCandidates, setSelectedCandidates] = useState<SettlementCandidate[]>([]);
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
   const [result, setResult] = useState<BillingStatementResponse | null>(null);
   const [notice, setNotice] = useState("");
@@ -51,6 +53,33 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     }
   }
 
+  async function exportCandidates(candidates: SettlementCandidate[]) {
+    if (candidates.length === 1) {
+      const candidate = candidates[0];
+      const search = new URLSearchParams({
+        month: candidate.month,
+        pi: candidate.pi,
+        sourceType: source,
+      });
+      downloadFromUrl(`/api/billing-settlements/pdf?${search.toString()}`);
+      return;
+    }
+    await requestDownload("/api/billing-settlements/pdf-export", {
+      method: "POST",
+      body: JSON.stringify({
+        items: candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
+      }),
+    });
+  }
+
+  function toggleCandidate(candidate: SettlementCandidate, checked: boolean) {
+    setSelectedCandidates((current) =>
+      checked
+        ? [...current.filter((item) => item.id !== candidate.id), candidate]
+        : current.filter((item) => item.id !== candidate.id),
+    );
+  }
+
   if (source === "cage_map") {
     return (
       <section className="panel settlement-workbench">
@@ -76,6 +105,17 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           {notice}
         </div>
       ) : null}
+      <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
+        <span className="panel-summary-chip">已选 {selectedCandidates.length} 项</span>
+        <button
+          className="secondary info-button"
+          type="button"
+          disabled={!selectedCandidates.length}
+          onClick={() => void exportCandidates(selectedCandidates)}
+        >
+          {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+        </button>
+      </div>
       <div className="list-meta">
         <span>{list.isFetching ? "正在计算结算候选项" : `当前加载 ${items.length} 项`}</span>
         <span>
@@ -85,6 +125,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       <div className="table-wrap settlement-candidate-list" role="region" tabIndex={0} aria-label="项目负责人结算列表">
         <table className="dense-table settlement-candidate-table">
           <colgroup>
+            <col className="settlement-col-select" />
             <col className="settlement-col-month" />
             <col className="settlement-col-pi" />
             <col className="settlement-col-iacuc" />
@@ -93,6 +134,23 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           </colgroup>
           <thead>
             <tr>
+              <th>
+                <input
+                  aria-label="全选当前页结算项"
+                  type="checkbox"
+                  checked={
+                    items.length > 0 &&
+                    items.every((item) => selectedCandidates.some((selectedItem) => selectedItem.id === item.id))
+                  }
+                  onChange={(event) =>
+                    setSelectedCandidates((current) =>
+                      event.target.checked
+                        ? [...current.filter((candidate) => !items.some((item) => item.id === candidate.id)), ...items]
+                        : current.filter((candidate) => !items.some((item) => item.id === candidate.id)),
+                    )
+                  }
+                />
+              </th>
               {[
                 ["month", "结算月份"],
                 ["pi", "项目负责人姓名"],
@@ -125,6 +183,15 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             {items.length ? (
               items.map((candidate) => (
                 <tr key={candidate.id}>
+                  <td>
+                    <input
+                      aria-label={`选择 ${candidate.pi} ${candidate.month} 结算项`}
+                      type="checkbox"
+                      disabled={candidate.totalAmount == null}
+                      checked={selectedCandidates.some((item) => item.id === candidate.id)}
+                      onChange={(event) => toggleCandidate(candidate, event.target.checked)}
+                    />
+                  </td>
                   <td>{candidate.month}</td>
                   <td>{candidate.pi}</td>
                   <td title={candidate.iacucs.join("、") || candidate.error || "-"}>
@@ -148,7 +215,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               ))
             ) : (
               <tr>
-                <td colSpan={5}>{list.isPending ? "正在加载..." : "当前筛选条件下没有可结算项目。"}</td>
+                <td colSpan={6}>{list.isPending ? "正在加载..." : "当前筛选条件下没有可结算项目。"}</td>
               </tr>
             )}
           </tbody>
@@ -180,7 +247,10 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             </div>
             <div className="modal-shell-actions">
               <button className="secondary info-button" type="button" onClick={() => openSettlementPrint(result)}>
-                导出结算单 PDF
+                打印结算单
+              </button>
+              <button className="secondary info-button" type="button" onClick={() => void exportCandidates([selected])}>
+                导出 PDF
               </button>
               <button
                 className="primary flow-button"

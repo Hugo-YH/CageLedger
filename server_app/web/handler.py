@@ -4,7 +4,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
 
 from server_app.config import MAX_BODY_BYTES, frontend_root
-from server_app.http import add_default_headers
+from server_app.http import add_default_headers, send_download
 from server_app.http import send_json as send_json_response
 
 
@@ -56,6 +56,9 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
 
     def send_json(self, payload, status=HTTPStatus.OK):
         send_json_response(self, payload, status)
+
+    def send_download(self, body, filename, content_type, status=HTTPStatus.OK):
+        send_download(self, body, filename, content_type, status)
 
     def send_spa_index(self):
         body = (frontend_root() / "index.html").read_text(encoding="utf-8")

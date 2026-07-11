@@ -17,6 +17,7 @@ from .allowance import (
     summarize_breakdown_charges,
     tier_cage_priority_sort_key,
 )
+from .candidates import invalidate_settlement_candidate_snapshots
 from .charging import (
     BILLING_TIER_BASE_PRICE,
     BILLING_TIER_LIMIT,
@@ -46,6 +47,7 @@ from .profiles import (
 )
 from .statements import (
     pi_for_iacuc,
+    quantity_sheet_free_allowance_notes,
     quantity_sheet_statement_lines,
     statement_application_snapshot,
     statement_pi_snapshot,
@@ -80,6 +82,7 @@ __all__ = [
     "free_cages_for_principal_type",
     "iacuc_free_allowance_eligible",
     "infer_billing_item_from_room",
+    "invalidate_settlement_candidate_snapshots",
     "normalize_billing_item",
     "normalize_billing_unit",
     "normalize_customer_type",
@@ -88,6 +91,7 @@ __all__ = [
     "occupancy_animal_count",
     "pi_for_iacuc",
     "principal_type_label",
+    "quantity_sheet_free_allowance_notes",
     "quantity_sheet_statement_lines",
     "room_has_manual_billing_profile",
     "summarize_breakdown_charges",

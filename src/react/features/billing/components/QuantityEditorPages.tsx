@@ -25,12 +25,14 @@ export function QuantityEditorPages({
   rows,
   month,
   animalDetails,
+  showCalculatedPlaceholders,
   rowRefs,
   onChanged,
 }: {
   rows: QuantitySheetRow[];
   month: string;
   animalDetails: boolean;
+  showCalculatedPlaceholders: boolean;
   rowRefs: React.MutableRefObject<Array<QuantityRowHandle | null>>;
   onChanged: () => void;
 }) {
@@ -74,6 +76,7 @@ export function QuantityEditorPages({
                             row={rows[leftIndex]}
                             index={leftIndex}
                             month={month}
+                            showCalculatedPlaceholders={showCalculatedPlaceholders}
                             onChanged={onChanged}
                           />
                         )}
@@ -85,6 +88,7 @@ export function QuantityEditorPages({
                           row={rows[rightIndex]}
                           index={rightIndex}
                           month={month}
+                          showCalculatedPlaceholders={showCalculatedPlaceholders}
                           onChanged={onChanged}
                         />
                       </tr>
@@ -141,230 +145,237 @@ function QuantityEmptyCells() {
 }
 
 const QuantityEntryCells = memo(
-  forwardRef<QuantityRowHandle, { row: QuantitySheetRow; index: number; month: string; onChanged: () => void }>(
-    function QuantityEntryCells({ row: initial, index, month, onChanged }, ref) {
-      const [row, setRow] = useState(initial);
-      const [calculated, setCalculated] = useState({
-        animals: Number(initial.animalCount || 0),
-        cages: Number(initial.cageCount || 0),
-      });
-      const pickerRef = useRef<HTMLInputElement>(null);
-      useImperativeHandle(
-        ref,
-        () => ({
-          getRow: () => row,
-          setCalculated: (animals, cages) =>
-            setCalculated((current) =>
-              current.animals === animals && current.cages === cages ? current : { animals, cages },
-            ),
-        }),
-        [row],
-      );
-      useEffect(() => {
-        onChanged();
-      }, [row, onChanged]);
-      const update = (key: keyof QuantitySheetRow, value: string | number | null) =>
-        setRow((current) => ({
-          ...current,
-          [key]: value,
-          balanceSource: key === "animalCount" || key === "cageCount" ? "manual" : current.balanceSource,
-        }));
-      const count = (value: string) => (value === "" ? null : Math.max(Number(value), 0));
-      const setDate = (rawDateInput: string, date = normalizeEditorDate(rawDateInput, month)) =>
-        setRow((current) => ({ ...current, rawDateInput, date }));
-      const handleTab = (event: React.KeyboardEvent<HTMLElement>) => {
-        if (event.key !== "Tab") return;
-        const scope = event.currentTarget.closest(".quantity-entry-wrap");
-        if (!(scope instanceof HTMLElement)) return;
-        const focusables = Array.from(scope.querySelectorAll<HTMLElement>('[data-quantity-focusable="true"]'))
-          .filter((element) => element.getClientRects().length > 0 && !element.hasAttribute("disabled"))
-          .sort((left, right) => {
-            const leftPage = Number(left.dataset.quantityPage || 0);
-            const rightPage = Number(right.dataset.quantityPage || 0);
-            if (leftPage !== rightPage) return leftPage - rightPage;
-            const leftRow = Number(left.dataset.quantityRow || 0);
-            const rightRow = Number(right.dataset.quantityRow || 0);
-            if (leftRow !== rightRow) return leftRow - rightRow;
-            const leftOrder = QUANTITY_FIELD_ORDER[left.dataset.quantityField || ""] ?? 99;
-            const rightOrder = QUANTITY_FIELD_ORDER[right.dataset.quantityField || ""] ?? 99;
-            return leftOrder - rightOrder;
-          });
-        const currentIndex = focusables.indexOf(event.currentTarget);
-        if (currentIndex < 0) return;
-        const next = focusables[currentIndex + (event.shiftKey ? -1 : 1)];
-        if (!next) return;
-        event.preventDefault();
-        next.focus();
-      };
-      return (
-        <>
-          <td className="quantity-date-cell">
-            <div className="quantity-date-field">
-              <input
-                name="rowDate"
-                aria-label={`第 ${index + 1} 行日期`}
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder=""
-                value={row.rawDateInput || row.date}
-                onChange={(event) => setDate(event.target.value)}
-                onKeyDown={handleTab}
-                data-quantity-focusable="true"
-                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                data-quantity-row={index}
-                data-quantity-field="date"
-                onBlur={(event) => {
-                  const normalized = normalizeEditorDate(event.currentTarget.value, month);
-                  if (normalized) setDate(normalized, normalized);
-                }}
-              />
-              <button
-                className="quantity-date-picker-button"
-                type="button"
-                aria-label={`选择第 ${index + 1} 行日期`}
-                tabIndex={-1}
-                onClick={() => pickerRef.current?.showPicker()}
-              >
-                <CalendarIcon />
-              </button>
-              <input
-                ref={pickerRef}
-                className="quantity-date-picker-native"
-                type="date"
-                tabIndex={-1}
-                aria-hidden="true"
-                min={`${month}-01`}
-                max={monthEnd(month)}
-                value={row.date}
-                onChange={(event) => setDate(event.target.value, event.target.value)}
-              />
-            </div>
-          </td>
-          <td className="quantity-change-cell animal-detail-col">
-            <div className="quantity-change-editor">
-              <input
-                aria-label={`第 ${index + 1} 行增加`}
-                type="number"
-                min="0"
-                value={row.addedCount ?? ""}
-                onChange={(event) => update("addedCount", count(event.target.value))}
-                onKeyDown={handleTab}
-                data-quantity-focusable="true"
-                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                data-quantity-row={index}
-                data-quantity-field="addedCount"
-              />
-              <select
-                aria-label={`第 ${index + 1} 行增加类型`}
-                value={row.addedType}
-                onChange={(event) => update("addedType", event.target.value)}
-                onKeyDown={handleTab}
-                data-quantity-focusable="true"
-                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                data-quantity-row={index}
-                data-quantity-field="addedType"
-              >
-                <option value="">类型</option>
-                <option>购入</option>
-                <option>转入</option>
-                <option>分笼</option>
-              </select>
-              {row.addedType === "转入" ? (
-                <input
-                  className="iacuc-lookup"
-                  aria-label={`第 ${index + 1} 行转入伦理号`}
-                  value={row.transferInFromIacuc}
-                  onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
-                  onKeyDown={handleTab}
-                  data-quantity-focusable="true"
-                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                  data-quantity-row={index}
-                  data-quantity-field="addedTransferIn"
-                />
-              ) : null}
-            </div>
-          </td>
-          <td className="quantity-change-cell animal-detail-col">
-            <div className="quantity-change-editor">
-              <input
-                aria-label={`第 ${index + 1} 行减少`}
-                type="number"
-                min="0"
-                value={row.removedCount ?? ""}
-                onChange={(event) => update("removedCount", count(event.target.value))}
-                onKeyDown={handleTab}
-                data-quantity-focusable="true"
-                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                data-quantity-row={index}
-                data-quantity-field="removedCount"
-              />
-              <select
-                aria-label={`第 ${index + 1} 行减少类型`}
-                value={row.removedType}
-                onChange={(event) => update("removedType", event.target.value)}
-                onKeyDown={handleTab}
-                data-quantity-focusable="true"
-                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                data-quantity-row={index}
-                data-quantity-field="removedType"
-              >
-                <option value="">类型</option>
-                <option>取材</option>
-                <option>死亡</option>
-                <option>转出</option>
-              </select>
-              {row.removedType === "转出" ? (
-                <input
-                  className="iacuc-lookup"
-                  aria-label={`第 ${index + 1} 行转出伦理号`}
-                  value={row.transferOutToIacuc}
-                  onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
-                  onKeyDown={handleTab}
-                  data-quantity-focusable="true"
-                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                  data-quantity-row={index}
-                  data-quantity-field="removedTransferOut"
-                />
-              ) : null}
-            </div>
-          </td>
-          <td className="animal-detail-col">
+  forwardRef<
+    QuantityRowHandle,
+    {
+      row: QuantitySheetRow;
+      index: number;
+      month: string;
+      showCalculatedPlaceholders: boolean;
+      onChanged: () => void;
+    }
+  >(function QuantityEntryCells({ row: initial, index, month, showCalculatedPlaceholders, onChanged }, ref) {
+    const [row, setRow] = useState(initial);
+    const [calculated, setCalculated] = useState({
+      animals: Number(initial.animalCount || 0),
+      cages: Number(initial.cageCount || 0),
+    });
+    const pickerRef = useRef<HTMLInputElement>(null);
+    useImperativeHandle(
+      ref,
+      () => ({
+        getRow: () => row,
+        setCalculated: (animals, cages) =>
+          setCalculated((current) =>
+            current.animals === animals && current.cages === cages ? current : { animals, cages },
+          ),
+      }),
+      [row],
+    );
+    useEffect(() => {
+      onChanged();
+    }, [row, onChanged]);
+    const update = (key: keyof QuantitySheetRow, value: string | number | null) =>
+      setRow((current) => ({
+        ...current,
+        [key]: value,
+        balanceSource: key === "animalCount" || key === "cageCount" ? "manual" : current.balanceSource,
+      }));
+    const count = (value: string) => (value === "" ? null : Math.max(Number(value), 0));
+    const setDate = (rawDateInput: string, date = normalizeEditorDate(rawDateInput, month)) =>
+      setRow((current) => ({ ...current, rawDateInput, date }));
+    const handleTab = (event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key !== "Tab") return;
+      const scope = event.currentTarget.closest(".quantity-entry-wrap");
+      if (!(scope instanceof HTMLElement)) return;
+      const focusables = Array.from(scope.querySelectorAll<HTMLElement>('[data-quantity-focusable="true"]'))
+        .filter((element) => element.getClientRects().length > 0 && !element.hasAttribute("disabled"))
+        .sort((left, right) => {
+          const leftPage = Number(left.dataset.quantityPage || 0);
+          const rightPage = Number(right.dataset.quantityPage || 0);
+          if (leftPage !== rightPage) return leftPage - rightPage;
+          const leftRow = Number(left.dataset.quantityRow || 0);
+          const rightRow = Number(right.dataset.quantityRow || 0);
+          if (leftRow !== rightRow) return leftRow - rightRow;
+          const leftOrder = QUANTITY_FIELD_ORDER[left.dataset.quantityField || ""] ?? 99;
+          const rightOrder = QUANTITY_FIELD_ORDER[right.dataset.quantityField || ""] ?? 99;
+          return leftOrder - rightOrder;
+        });
+      const currentIndex = focusables.indexOf(event.currentTarget);
+      if (currentIndex < 0) return;
+      const next = focusables[currentIndex + (event.shiftKey ? -1 : 1)];
+      if (!next) return;
+      event.preventDefault();
+      next.focus();
+    };
+    return (
+      <>
+        <td className="quantity-date-cell">
+          <div className="quantity-date-field">
             <input
-              className="quantity-balance-input"
-              aria-label={`第 ${index + 1} 行结余总数`}
-              type="number"
-              min="0"
-              placeholder={calculated.animals > 0 ? String(calculated.animals) : ""}
-              value={row.animalCount ?? ""}
-              onChange={(event) => update("animalCount", count(event.target.value))}
+              name="rowDate"
+              aria-label={`第 ${index + 1} 行日期`}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder=""
+              value={row.rawDateInput || row.date}
+              onChange={(event) => setDate(event.target.value)}
               onKeyDown={handleTab}
               data-quantity-focusable="true"
               data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
               data-quantity-row={index}
-              data-quantity-field="animalCount"
+              data-quantity-field="date"
+              onBlur={(event) => {
+                const normalized = normalizeEditorDate(event.currentTarget.value, month);
+                if (normalized) setDate(normalized, normalized);
+              }}
             />
-          </td>
-          <td>
+            <button
+              className="quantity-date-picker-button"
+              type="button"
+              aria-label={`选择第 ${index + 1} 行日期`}
+              tabIndex={-1}
+              onClick={() => pickerRef.current?.showPicker()}
+            >
+              <CalendarIcon />
+            </button>
             <input
-              className="quantity-balance-input"
-              aria-label={`第 ${index + 1} 行结余笼数`}
+              ref={pickerRef}
+              className="quantity-date-picker-native"
+              type="date"
+              tabIndex={-1}
+              aria-hidden="true"
+              min={`${month}-01`}
+              max={monthEnd(month)}
+              value={row.date}
+              onChange={(event) => setDate(event.target.value, event.target.value)}
+            />
+          </div>
+        </td>
+        <td className="quantity-change-cell animal-detail-col">
+          <div className="quantity-change-editor">
+            <input
+              aria-label={`第 ${index + 1} 行增加`}
               type="number"
               min="0"
-              placeholder={calculated.cages > 0 ? String(calculated.cages) : ""}
-              value={row.cageCount ?? ""}
-              onChange={(event) => update("cageCount", count(event.target.value))}
+              value={row.addedCount ?? ""}
+              onChange={(event) => update("addedCount", count(event.target.value))}
               onKeyDown={handleTab}
               data-quantity-focusable="true"
               data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
               data-quantity-row={index}
-              data-quantity-field="cageCount"
+              data-quantity-field="addedCount"
             />
-          </td>
-        </>
-      );
-    },
-  ),
+            <select
+              aria-label={`第 ${index + 1} 行增加类型`}
+              value={row.addedType}
+              onChange={(event) => update("addedType", event.target.value)}
+              onKeyDown={handleTab}
+              data-quantity-focusable="true"
+              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+              data-quantity-row={index}
+              data-quantity-field="addedType"
+            >
+              <option value="">类型</option>
+              <option>购入</option>
+              <option>转入</option>
+              <option>分笼</option>
+            </select>
+            {row.addedType === "转入" ? (
+              <input
+                className="iacuc-lookup"
+                aria-label={`第 ${index + 1} 行转入伦理号`}
+                value={row.transferInFromIacuc}
+                onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="addedTransferIn"
+              />
+            ) : null}
+          </div>
+        </td>
+        <td className="quantity-change-cell animal-detail-col">
+          <div className="quantity-change-editor">
+            <input
+              aria-label={`第 ${index + 1} 行减少`}
+              type="number"
+              min="0"
+              value={row.removedCount ?? ""}
+              onChange={(event) => update("removedCount", count(event.target.value))}
+              onKeyDown={handleTab}
+              data-quantity-focusable="true"
+              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+              data-quantity-row={index}
+              data-quantity-field="removedCount"
+            />
+            <select
+              aria-label={`第 ${index + 1} 行减少类型`}
+              value={row.removedType}
+              onChange={(event) => update("removedType", event.target.value)}
+              onKeyDown={handleTab}
+              data-quantity-focusable="true"
+              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+              data-quantity-row={index}
+              data-quantity-field="removedType"
+            >
+              <option value="">类型</option>
+              <option>取材</option>
+              <option>死亡</option>
+              <option>转出</option>
+            </select>
+            {row.removedType === "转出" ? (
+              <input
+                className="iacuc-lookup"
+                aria-label={`第 ${index + 1} 行转出伦理号`}
+                value={row.transferOutToIacuc}
+                onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="removedTransferOut"
+              />
+            ) : null}
+          </div>
+        </td>
+        <td className="animal-detail-col">
+          <input
+            className="quantity-balance-input"
+            aria-label={`第 ${index + 1} 行结余总数`}
+            type="number"
+            min="0"
+            placeholder={showCalculatedPlaceholders && calculated.animals > 0 ? String(calculated.animals) : ""}
+            value={row.animalCount ?? ""}
+            onChange={(event) => update("animalCount", count(event.target.value))}
+            onKeyDown={handleTab}
+            data-quantity-focusable="true"
+            data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+            data-quantity-row={index}
+            data-quantity-field="animalCount"
+          />
+        </td>
+        <td>
+          <input
+            className="quantity-balance-input"
+            aria-label={`第 ${index + 1} 行结余笼数`}
+            type="number"
+            min="0"
+            placeholder={showCalculatedPlaceholders && calculated.cages > 0 ? String(calculated.cages) : ""}
+            value={row.cageCount ?? ""}
+            onChange={(event) => update("cageCount", count(event.target.value))}
+            onKeyDown={handleTab}
+            data-quantity-focusable="true"
+            data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+            data-quantity-row={index}
+            data-quantity-field="cageCount"
+          />
+        </td>
+      </>
+    );
+  }),
 );
 function monthEnd(month: string) {
   const [year, value] = month.split("-").map(Number);

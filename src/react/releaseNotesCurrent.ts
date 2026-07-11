@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.2",
+    releasedAt: "2026-07-11 12:00",
+    title: "服务端 PDF 导出与结算性能优化",
+    items: [
+      "数量统计表和饲养费核算汇总表的导出 PDF 改由服务端 Chromium 生成，复用浏览器打印的 A4、表格、字体与分页规则",
+      "已保存数量统计表和项目负责人结算支持多选批量导出，服务端按单据生成 PDF 并打包为 ZIP 下载",
+      "项目负责人结算候选列表使用 SQLite 快照分页读取，筛选、排序和多人访问时的加载响应更加稳定",
+      "数量统计表预览和打印会补齐当月空白日期的结余数量，编辑已保存统计表继续保留实际录入数据",
+    ],
+  },
+  {
     version: "0.7.1a",
     releasedAt: "2026-07-10 00:00",
     title: "结算汇总总计金额显示修复",

@@ -67,11 +67,13 @@ from server_app.domains.billing import (
     dates_in_month,
     free_cages_for_principal_type,
     iacuc_free_allowance_eligible,
+    invalidate_settlement_candidate_snapshots,
     normalize_principal_type,
     occupancy_active_on_date,
     occupancy_animal_count,
     pi_for_iacuc,
     principal_type_label,
+    quantity_sheet_free_allowance_notes,
     quantity_sheet_statement_lines,
     statement_application_snapshot,
     statement_billing_unit_from_lines,
@@ -200,7 +202,6 @@ from server_app.repositories.billing import (
 )
 from server_app.repositories.billing_candidates import (
     mark_all_billing_candidate_snapshots_stale,
-    mark_billing_candidate_snapshots_stale,
     mark_billing_candidate_snapshots_stale_by_pi,
 )
 from server_app.repositories.entities import (
@@ -325,6 +326,13 @@ from server_app.services.reimbursement import (
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
 from server_app.static import send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
+from server_app.web.pdf_exports import (
+    download_billing_statement_pdf,
+    download_quantity_sheet_pdf,
+    export_billing_statement_pdfs,
+    export_quantity_sheet_pdfs,
+    quantity_sheet_pdf_route,
+)
 
 WORKFLOW_STATUS_IN_FEEDING = "in_feeding"
 WORKFLOW_STATUS_GENERATED = "statement_generated"
@@ -3194,7 +3202,7 @@ def invalidate_quantity_sheet_candidate_snapshots(conn, sheets_or_keys):
             pi_name = clean_text(pi_name)
         if month and pi_name:
             keys.append((month, pi_name))
-    mark_billing_candidate_snapshots_stale(conn, "quantity_sheet", keys, now_iso())
+    invalidate_settlement_candidate_snapshots(conn, keys, "quantity_sheet", now_iso())
 
 
 def invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name):
@@ -3305,7 +3313,7 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     validate_quantity_sheet_free_cage_settings(conn, sheet)
     validate_quantity_sheet_tier_priority(conn, sheet)
     validate_quantity_sheet_custom_billing(sheet)
-    previous_sheet = get_quantity_sheet(conn, sheet["id"])
+    previous_sheet = get_quantity_sheet_repository(conn, sheet["id"])
     exists = previous_sheet is not None
     db_values = quantity_sheet_db_values(sheet)
     if exists:
@@ -3617,6 +3625,7 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     rooms = read_rooms_for_quantity_sheets(conn, sheets)
     applications_by_iacuc = read_applications_by_iacuc(conn)
     lines = quantity_sheet_statement_lines(sheets, free_cages, rooms, applications_by_iacuc)
+    notes = quantity_sheet_free_allowance_notes(lines)
     generated_at = now_iso()
     iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
     statement_iacuc = iacucs[0] if iacucs else sheet_iacuc
@@ -3648,6 +3657,7 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
         "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
         "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
         "totalAmount": lines[-1]["cumulative"] if lines else 0,
+        "notes": notes,
         "status": status,
         "generatedAt": generated_at,
         "lockedAt": generated_at if status == "locked" else "",
@@ -3986,6 +3996,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         rooms = read_rooms_for_quantity_sheets(conn, sheets)
         applications_by_iacuc = read_applications_by_iacuc(conn)
         lines = quantity_sheet_statement_lines(sheets, free_cages, rooms, applications_by_iacuc)
+        notes = quantity_sheet_free_allowance_notes(lines)
         statement = {
             "id": new_id("stmt"),
             "iacuc": f"pi::{pi_name}",
@@ -4013,6 +4024,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
             "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
             "totalAmount": lines[-1]["cumulative"] if lines else 0,
+            "notes": notes,
             "status": status,
             "generatedAt": generated_at,
             "lockedAt": generated_at if status == "locked" else "",
@@ -5003,6 +5015,16 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 rooms = read_payloads(conn, "rooms", "rowid")
             self.send_json({"items": rooms})
             return
+        sheet_id = quantity_sheet_pdf_route(path, unquote)
+        if sheet_id:
+            download_quantity_sheet_pdf(
+                self,
+                sheet_id,
+                connect_db=connect_db,
+                get_quantity_sheet=get_quantity_sheet,
+                validate_permission=validate_quantity_sheet_permission,
+            )
+            return
         sheet_id = self.quantity_sheet_route(path)
         if sheet_id:
             user = self.require_user()
@@ -5117,6 +5139,14 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
                 self.send_json(list_settlement_candidates(conn, filters, calculate, "quantity_sheet", now_iso()))
             return
+        if path == "/api/billing-settlements/pdf":
+            download_billing_statement_pdf(
+                self,
+                connect_db=connect_db,
+                generate_statement=generate_billing_statement_by_pi,
+                clean_text=clean_text,
+            )
+            return
         if path == "/api/intake-batches/filter-options":
             if not self.require_user():
                 return
@@ -5183,6 +5213,23 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             return
         if path == "/api/billing-statements/generate-by-pi":
             self.handle_billing_statement_generate_by_pi()
+            return
+        if path == "/api/quantity-sheets/pdf-export":
+            export_quantity_sheet_pdfs(
+                self,
+                connect_db=connect_db,
+                get_quantity_sheet=get_quantity_sheet,
+                validate_permission=validate_quantity_sheet_permission,
+                clean_text=clean_text,
+            )
+            return
+        if path == "/api/billing-settlements/pdf-export":
+            export_billing_statement_pdfs(
+                self,
+                connect_db=connect_db,
+                generate_statement=generate_billing_statement_by_pi,
+                clean_text=clean_text,
+            )
             return
         if path == "/api/billing-workflows/advance":
             self.handle_billing_workflow_advance()

@@ -12,6 +12,7 @@ export interface BillingStatementLine {
   tier2Cages?: number;
   tier2BillableCages?: number;
   iacucBreakdown?: Record<string, unknown>[];
+  quantitySheetRowIds?: string[];
 }
 
 export interface BillingStatement {
@@ -36,6 +37,7 @@ export interface BillingStatement {
   totalFreeCageDays: number;
   totalBillableCageDays: number;
   totalAmount: number;
+  notes?: string;
 }
 
 export interface BillingStatementResponse {

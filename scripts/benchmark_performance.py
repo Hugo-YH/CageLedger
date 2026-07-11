@@ -49,6 +49,13 @@ def create_schema(conn: sqlite3.Connection) -> None:
             pi TEXT, owner TEXT, quantity INTEGER, card_count INTEGER, room_name TEXT,
             intake_date TEXT, status TEXT NOT NULL, updated_at TEXT NOT NULL, payload TEXT NOT NULL
         );
+        CREATE TABLE billing_candidate_snapshots (
+            source_type TEXT NOT NULL, month TEXT NOT NULL, pi TEXT NOT NULL,
+            iacucs_json TEXT NOT NULL, iacucs_text TEXT NOT NULL, total_amount REAL,
+            error_message TEXT NOT NULL, is_stale INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL, source_fingerprint TEXT NOT NULL,
+            PRIMARY KEY (source_type, month, pi)
+        );
         CREATE INDEX idx_quantity_sheets_month_updated ON quantity_sheets(month DESC, updated_at DESC);
         CREATE INDEX idx_quantity_sheets_iacuc_month ON quantity_sheets(iacuc, month DESC);
         CREATE INDEX idx_quantity_sheets_pi_month ON quantity_sheets(pi, month DESC);
@@ -58,6 +65,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_intake_batches_owner_date ON intake_batches(owner, intake_date DESC);
         CREATE INDEX idx_intake_batches_room_date ON intake_batches(room_name, intake_date DESC);
         CREATE INDEX idx_intake_batches_updated ON intake_batches(updated_at DESC);
+        CREATE INDEX idx_billing_candidate_snapshots_source_month_pi
+            ON billing_candidate_snapshots(source_type, month DESC, pi COLLATE NOCASE);
+        CREATE INDEX idx_billing_candidate_snapshots_source_amount
+            ON billing_candidate_snapshots(source_type, total_amount DESC, month DESC, pi COLLATE NOCASE);
         """
     )
 
@@ -76,6 +87,29 @@ def populate(conn: sqlite3.Connection, slots: int, records: int) -> None:
                 "{}",
             )
             for index in range(slots)
+        ),
+    )
+    candidate_count = max(records // 20, 1)
+    conn.executemany(
+        """
+        INSERT INTO billing_candidate_snapshots
+        (source_type, month, pi, iacucs_json, iacucs_text, total_amount, error_message, is_stale, updated_at, source_fingerprint)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (
+                "quantity_sheet",
+                f"2026-{index % 12 + 1:02d}",
+                f"负责人 {index:05d}",
+                json.dumps([f"IACUC-2026-{index % 4000:04d}", f"IACUC-2026-{(index + 1) % 4000:04d}"]),
+                f"IACUC-2026-{index % 4000:04d}、IACUC-2026-{(index + 1) % 4000:04d}",
+                float(index % 8000) + 0.5,
+                "",
+                0,
+                f"2026-{index % 12 + 1:02d}-{index % 28 + 1:02d}T12:{index % 60:02d}:00",
+                f"candidate-{index}",
+            )
+            for index in range(candidate_count)
         ),
     )
     quantity_count = records // 2
@@ -150,6 +184,40 @@ QUERIES = {
         "SELECT id FROM intake_batches WHERE owner = ? ORDER BY intake_date DESC LIMIT 20",
         ("实验员 0042",),
     ),
+    "settlement_candidates_default": (
+        """
+        SELECT month, pi, iacucs_json, total_amount
+        FROM billing_candidate_snapshots
+        WHERE source_type = ?
+        ORDER BY month DESC, pi COLLATE NOCASE
+        LIMIT 20
+        """,
+        ("quantity_sheet",),
+    ),
+    "settlement_candidates_amount": (
+        """
+        SELECT month, pi, iacucs_json, total_amount
+        FROM billing_candidate_snapshots
+        WHERE source_type = ?
+        ORDER BY total_amount DESC, month DESC, pi COLLATE NOCASE
+        LIMIT 20 OFFSET 1000
+        """,
+        ("quantity_sheet",),
+    ),
+    "settlement_candidates_iacuc": (
+        """
+        SELECT month, pi, iacucs_json, total_amount
+        FROM billing_candidate_snapshots
+        WHERE source_type = ?
+          AND EXISTS (
+            SELECT 1 FROM json_each(billing_candidate_snapshots.iacucs_json)
+            WHERE json_each.value = ?
+          )
+        ORDER BY month DESC, pi COLLATE NOCASE
+        LIMIT 20
+        """,
+        ("quantity_sheet", "IACUC-2026-0042"),
+    ),
 }
 
 
@@ -175,6 +243,14 @@ def benchmark(path: Path, iterations: int) -> dict[str, dict[str, float]]:
     with ThreadPoolExecutor(max_workers=20) as pool:
         samples = list(pool.map(lambda _: run_query(path, sql, params), range(max(iterations, 20))))
     results["intake_status_20_concurrent"] = {
+        "p50_ms": round(statistics.median(samples), 2),
+        "p95_ms": round(percentile(samples, 0.95), 2),
+        "max_ms": round(max(samples), 2),
+    }
+    sql, params = QUERIES["settlement_candidates_default"]
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        samples = list(pool.map(lambda _: run_query(path, sql, params), range(max(iterations, 20))))
+    results["settlement_candidates_20_concurrent"] = {
         "p50_ms": round(statistics.median(samples), 2),
         "p95_ms": round(percentile(samples, 0.95), 2),
         "max_ms": round(max(samples), 2),

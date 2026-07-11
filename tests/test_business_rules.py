@@ -7,6 +7,27 @@ from server_app.persistence.backfills import backfill_quantity_sheet_staff
 
 
 class BusinessRuleParityTests(unittest.TestCase):
+    def test_quantity_sheet_save_creates_a_new_sheet_when_its_id_is_absent(self):
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            server.initialize_schema(conn)
+            sheet, previous, _, _, status, _ = server.save_quantity_sheet(
+                conn,
+                {
+                    "sheet": {
+                        "id": "new-sheet",
+                        "month": "2026-06",
+                        "iacuc": "Z2026001",
+                        "pi": "张教授",
+                        "rows": [],
+                    }
+                },
+                {"id": "u1", "username": "admin", "displayName": "测试管理员", "role": "admin", "roomIds": []},
+            )
+            self.assertEqual(sheet["id"], "new-sheet")
+            self.assertIsNone(previous)
+            self.assertEqual(status, 201)
+
     def test_quantity_sheet_staff_backfill_uses_audit_and_room_configuration(self):
         with sqlite3.connect(":memory:") as conn:
             conn.row_factory = sqlite3.Row
@@ -96,6 +117,40 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z1": 8, "Z2": 2})
         breakdown[0]["freeEligible"] = False
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z2": 8})
+
+    def test_quantity_sheet_expiry_note_identifies_iacuc_and_first_ineligible_date(self):
+        sheets = [
+            {
+                "id": "expired-sheet",
+                "month": "2026-06",
+                "iacuc": "Z2026001",
+                "roomId": "r1",
+                "initialCageCount": 4,
+                "initialAnimalCount": 0,
+                "rows": [],
+            }
+        ]
+        rooms = [
+            {
+                "id": "r1",
+                "defaultBillingItem": "mouse_standard",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(
+            sheets,
+            20,
+            rooms,
+            {"Z2026001": {"projectEndDate": "2026-06-15"}},
+        )
+        self.assertEqual(lines[14]["iacucBreakdown"][0]["freeCages"], 4)
+        self.assertEqual(lines[15]["iacucBreakdown"][0]["freeCages"], 0)
+        self.assertEqual(
+            server.quantity_sheet_free_allowance_notes(lines),
+            "Z2026001 于 2026-06-15 到期，自 2026-06-16 起不参与减免",
+        )
 
     def test_tiered_allocation_concentrates_tier_on_largest_iacuc_and_priority_target(self):
         automatic = [

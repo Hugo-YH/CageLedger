@@ -19,6 +19,13 @@ FROM ${PYTHON_IMAGE}
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        chromium \
+        fontconfig \
+        fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 COPY scripts/retry_command.sh ./scripts/retry_command.sh
 RUN bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
@@ -38,6 +45,7 @@ ENV CAGELEDGER_REVISION=${CAGELEDGER_REVISION}
 ENV CAGELEDGER_REPOSITORY_URL=https://git.cellnucle.us/hugo/cageledger
 ENV CAGELEDGER_BRANCH=main
 ENV CAGELEDGER_UPDATE_CHECK_ENABLED=false
+ENV CAGELEDGER_CHROMIUM_BIN=/usr/bin/chromium
 
 EXPOSE 5173
 

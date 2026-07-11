@@ -40,6 +40,8 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshots_amount ON billing_candidate_snapshots(total_amount DESC)",
     "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshots_updated ON billing_candidate_snapshots(updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshots_source_stale ON billing_candidate_snapshots(source_type, is_stale)",
+    "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshots_source_month_pi ON billing_candidate_snapshots(source_type, month DESC, pi COLLATE NOCASE)",
+    "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshots_source_amount ON billing_candidate_snapshots(source_type, total_amount DESC, month DESC, pi COLLATE NOCASE)",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_month ON billing_workflows(month)",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_status ON billing_workflows(workflow_status)",
     "CREATE INDEX IF NOT EXISTS idx_billing_versions_workflow_id ON billing_statement_versions(workflow_id)",

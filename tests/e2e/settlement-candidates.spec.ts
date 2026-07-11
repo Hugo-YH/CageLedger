@@ -50,6 +50,13 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
   await expect(row).toContainText("¥");
+  await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByLabel("结算导出操作").getByRole("button", { name: "导出 PDF", exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(
+    `E2E 合表负责人课题组实验动物饲养费核算汇总表 ${month.replace("-", "年")}月.pdf`,
+  );
   await row.getByRole("button", { name: "预览结算单", exact: true }).click();
   await expect(page.getByRole("dialog", { name: /E2E 合表负责人/ })).toBeVisible();
   await expect(page.frameLocator('iframe[title="结算单预览"]').locator("body")).toContainText(

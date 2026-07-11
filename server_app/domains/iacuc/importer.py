@@ -167,6 +167,7 @@ def normalize_application_date(value):
         return ""
     text = text.replace("年", "-").replace("月", "-").replace("日", "")
     text = re.sub(r"[./]", "-", text)
+    text = re.sub(r"\s*-\s*", "-", text)
     text = re.sub(r"\s*00:00:00$", "", text)
     match = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", text)
     if not match:

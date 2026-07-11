@@ -23,7 +23,8 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates curl python3 python3-venv shellcheck
+          apt-get install -y --no-install-recommends \
+            git ca-certificates curl python3 python3-venv shellcheck chromium fonts-noto-cjk
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_REF_NAME}"

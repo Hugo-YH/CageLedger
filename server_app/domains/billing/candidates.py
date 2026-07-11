@@ -1,10 +1,14 @@
 from server_app.cache import cache_get, cache_key, cache_set
 from server_app.repositories.billing_candidates import (
+    QUANTITY_SETTLEMENT_CALCULATION_VERSION,
+    billing_candidate_snapshot_registry_needs_sync,
+    delete_billing_candidate_snapshot,
     get_billing_candidate_snapshot,
     get_quantity_settlement_group,
     list_billing_candidate_filter_options,
     list_billing_candidate_snapshot_keys,
     list_billing_candidate_snapshots_page,
+    mark_billing_candidate_snapshots_stale,
     sync_billing_candidate_snapshot_registry,
     upsert_billing_candidate_snapshot,
 )
@@ -26,7 +30,12 @@ def list_settlement_candidates(conn, filters, calculate, source_type="quantity_s
     if cached is not None:
         return cached
 
-    sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
+    if billing_candidate_snapshot_registry_needs_sync(
+        conn,
+        source_type,
+        QUANTITY_SETTLEMENT_CALCULATION_VERSION if source_type == "quantity_sheet" else "",
+    ):
+        sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
     sort_key = filters.get("sortKey")
     column_filters = filters.get("columnFilters") or {}
     if sort_key == "amount" or bool(column_filters.get("amount")):
@@ -48,6 +57,36 @@ def refresh_settlement_candidate_snapshot(conn, month, pi_name, calculate, sourc
     if not group:
         return None
     return _refresh_snapshot(conn, group, calculate, source_type, now)
+
+
+def invalidate_settlement_candidate_snapshots(conn, keys, source_type="quantity_sheet", now=None):
+    timestamp = now or ""
+    resolved = set()
+    for month, pi_name in keys:
+        if not month or not pi_name:
+            continue
+        group = get_quantity_settlement_group(conn, month, pi_name) if source_type == "quantity_sheet" else None
+        if group is None:
+            delete_billing_candidate_snapshot(conn, month, pi_name, source_type)
+            continue
+        snapshot = get_billing_candidate_snapshot(conn, month, pi_name, source_type)
+        if snapshot is None or snapshot.get("sourceFingerprint", "") != group.get("sourceFingerprint", ""):
+            upsert_billing_candidate_snapshot(
+                conn,
+                {
+                    "month": month,
+                    "pi": pi_name,
+                    "sourceType": source_type,
+                    "iacucs": group.get("iacucs", []),
+                    "totalAmount": None,
+                    "error": "",
+                    "stale": True,
+                    "updatedAt": timestamp,
+                    "sourceFingerprint": group.get("sourceFingerprint", ""),
+                },
+            )
+        resolved.add((month, pi_name))
+    mark_billing_candidate_snapshots_stale(conn, source_type, resolved, timestamp)
 
 
 def update_settlement_candidate_snapshot_from_statement(

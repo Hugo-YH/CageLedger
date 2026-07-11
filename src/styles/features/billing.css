@@ -892,8 +892,12 @@ th {
 }
 
 .settlement-candidate-table {
-  min-width: 860px;
+  min-width: 910px;
   table-layout: fixed;
+}
+
+.settlement-col-select {
+  width: 52px;
 }
 
 .settlement-col-month {

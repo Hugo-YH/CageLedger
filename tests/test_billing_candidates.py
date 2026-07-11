@@ -1,14 +1,23 @@
 import json
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 import server
 from server_app.cache import invalidate_data_cache_prefixes
 from server_app.domains.billing.candidates import (
+    invalidate_settlement_candidate_snapshots,
     list_settlement_candidates,
     update_settlement_candidate_snapshot_from_statement,
 )
-from server_app.repositories.billing_candidates import get_billing_candidate_snapshot
+from server_app.repositories.billing_candidates import (
+    QUANTITY_SETTLEMENT_CALCULATION_VERSION,
+    billing_candidate_snapshot_registry_needs_sync,
+    get_billing_candidate_snapshot,
+    list_quantity_settlement_groups,
+    sync_billing_candidate_snapshot_registry,
+    upsert_billing_candidate_snapshot,
+)
 
 
 class SettlementCandidateSnapshotTests(unittest.TestCase):
@@ -126,6 +135,82 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
             self.assertEqual(snapshot["totalAmount"], 456.5)
             self.assertEqual(snapshot["error"], "")
             self.assertFalse(snapshot["isStale"])
+
+    def test_calculation_version_marks_existing_snapshot_stale(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-06", "梁教授", "Z2025154")
+            upsert_billing_candidate_snapshot(
+                conn,
+                {
+                    "month": "2026-06",
+                    "pi": "梁教授",
+                    "sourceType": "quantity_sheet",
+                    "iacucs": ["Z2025154"],
+                    "totalAmount": 1471.5,
+                    "error": "",
+                    "stale": False,
+                    "updatedAt": "2026-07-10T00:00:00Z",
+                    "sourceFingerprint": "sheet-1:sheet-1-updated",
+                },
+            )
+
+            sync_billing_candidate_snapshot_registry(conn, "quantity_sheet", "2026-07-10T00:00:00Z")
+
+            snapshot = get_billing_candidate_snapshot(conn, "2026-06", "梁教授", "quantity_sheet")
+            self.assertTrue(snapshot["isStale"])
+            self.assertIn(QUANTITY_SETTLEMENT_CALCULATION_VERSION, snapshot["sourceFingerprint"])
+
+    def test_every_group_fingerprint_carries_the_calculation_version(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-06", "李教授", "Z1")
+            seed_quantity_sheet(conn, "sheet-2", "2026-06", "张教授", "Z2")
+            groups = list_quantity_settlement_groups(conn)
+            self.assertEqual(len(groups), 2)
+            self.assertTrue(
+                all(QUANTITY_SETTLEMENT_CALCULATION_VERSION in group["sourceFingerprint"] for group in groups)
+            )
+            sync_billing_candidate_snapshot_registry(conn, "quantity_sheet", "2026-07-10T00:00:00Z")
+            self.assertFalse(
+                billing_candidate_snapshot_registry_needs_sync(
+                    conn,
+                    "quantity_sheet",
+                    QUANTITY_SETTLEMENT_CALCULATION_VERSION,
+                )
+            )
+
+    def test_warm_candidate_list_skips_registry_scan(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-06", "张教授", "Z1")
+            sync_billing_candidate_snapshot_registry(conn, "quantity_sheet", "2026-07-10T00:00:00Z")
+            with patch("server_app.domains.billing.candidates.sync_billing_candidate_snapshot_registry") as sync:
+                list_settlement_candidates(
+                    conn,
+                    {"limit": 10, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+                    lambda month, pi_name: {"iacucs": ["Z1"], "totalAmount": 10},
+                    "quantity_sheet",
+                    "2026-07-10T00:00:00Z",
+                )
+            sync.assert_not_called()
+
+    def test_invalidation_updates_or_removes_only_the_affected_snapshot(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-06", "张教授", "Z1")
+            sync_billing_candidate_snapshot_registry(conn, "quantity_sheet", "2026-07-10T00:00:00Z")
+            invalidate_settlement_candidate_snapshots(
+                conn,
+                [("2026-06", "张教授")],
+                "quantity_sheet",
+                "2026-07-10T00:00:01Z",
+            )
+            self.assertTrue(get_billing_candidate_snapshot(conn, "2026-06", "张教授", "quantity_sheet")["isStale"])
+            conn.execute("DELETE FROM quantity_sheets WHERE id = 'sheet-1'")
+            invalidate_settlement_candidate_snapshots(
+                conn,
+                [("2026-06", "张教授")],
+                "quantity_sheet",
+                "2026-07-10T00:00:02Z",
+            )
+            self.assertIsNone(get_billing_candidate_snapshot(conn, "2026-06", "张教授", "quantity_sheet"))
 
 
 def build_candidate_conn():

@@ -1,4 +1,4 @@
-from server_app.domains.iacuc import normalize_iacuc_number
+from server_app.domains.iacuc import normalize_application_date, normalize_iacuc_number
 from server_app.shared import as_int, clean_text, new_id
 
 from .allowance import (
@@ -102,6 +102,8 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             if state["cageCount"] or state["animalCount"]:
                 sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
                 application = applications_by_iacuc.get(sheet_iacuc, {})
+                free_eligible = iacuc_free_allowance_eligible(application or sheet, line_date)
+                expiry_date = normalize_application_date((application or sheet).get("projectEndDate", ""))
                 breakdown.append(
                     {
                         "iacuc": sheet.get("iacuc", ""),
@@ -117,7 +119,8 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                         ),
                         "tiered": bool(profile["tiered"]),
                         "freeAllowance": bool(profile["freeAllowance"]),
-                        "freeEligible": iacuc_free_allowance_eligible(application or sheet, line_date),
+                        "freeEligible": free_eligible,
+                        "freeAllowanceExpiryDate": expiry_date if expiry_date and line_date > expiry_date else "",
                         "fullExemption": sheet_iacuc in full_exemption_iacucs,
                         "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0),
                         "freeCagePriority": as_int(sheet.get("freeCagePriority")),
@@ -144,6 +147,21 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             }
         )
     return lines
+
+
+def quantity_sheet_free_allowance_notes(lines):
+    expired = {}
+    for line in lines or []:
+        for item in line.get("iacucBreakdown", []):
+            expiry_date = item.get("freeAllowanceExpiryDate", "")
+            iacuc = normalize_iacuc_number(item.get("iacuc", ""))
+            if not expiry_date or not iacuc or not (item.get("freeAllowance") or item.get("fullExemption")):
+                continue
+            expired.setdefault(iacuc, (expiry_date, line.get("date", "")))
+    return "；".join(
+        f"{iacuc} 于 {expiry_date} 到期，自 {ineligible_date} 起不参与减免"
+        for iacuc, (expiry_date, ineligible_date) in sorted(expired.items())
+    )
 
 
 def quantity_sheet_billing_profile(profile, sheet):

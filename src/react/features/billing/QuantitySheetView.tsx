@@ -543,6 +543,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           rows={editorRows}
           month={draft.month}
           animalDetails={animalDetails}
+          showCalculatedPlaceholders={mode === "entry"}
           rowRefs={rowRefs}
           onChanged={recalculate}
         />
@@ -568,17 +569,19 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             </button>
           </div>
           <div className="modal-shell-body">
-            {renderEditor(
-              <button
-                className="primary"
-                type="submit"
-                form="quantity-sheet-entry-form"
-                disabled={save.isPending}
-                title={saveHint(editorRows, animalDetails)}
-              >
-                {save.isPending ? "保存中..." : "保存统计表"}
-              </button>,
-            )}
+            <div className="react-quantity-layout quantity-edit-context">
+              {renderEditor(
+                <button
+                  className="primary"
+                  type="submit"
+                  form="quantity-sheet-entry-form"
+                  disabled={save.isPending}
+                  title={saveHint(editorRows, animalDetails)}
+                >
+                  {save.isPending ? "保存中..." : "保存统计表"}
+                </button>,
+              )}
+            </div>
           </div>
         </ModalShell>
       ) : null}

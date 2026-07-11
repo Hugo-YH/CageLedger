@@ -60,6 +60,7 @@ function renderPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | null>, 
 
 function fillCalendarPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | null>) {
   const days = daysInMonth(sheet.month);
+  const showAnimalBalances = sheet.billingUnit === "animal_day" || sheet.animalDetailEnabled;
   let animalCount = Number(sheet.initialAnimalCount || 0);
   let cageCount = Number(sheet.initialCageCount || 0);
   let balanceStarted = animalCount > 0 || cageCount > 0;
@@ -79,9 +80,10 @@ function fillCalendarPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | n
       ...(row || emptyPrintRow()),
       date: `${sheet.month}-${String(dayIndex + 1).padStart(2, "0")}`,
       rawDateInput: `${sheet.month}-${String(dayIndex + 1).padStart(2, "0")}`,
-      animalCount: balanceStarted ? animalCount : null,
+      // Printouts are a complete monthly ledger, so blank dates carry forward the latest balance.
+      animalCount: showAnimalBalances && balanceStarted ? animalCount : null,
       cageCount: balanceStarted ? cageCount : null,
-      handler: row?.handler || (balanceStarted ? sheet.manager : ""),
+      handler: "",
     };
   });
 }

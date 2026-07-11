@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
-import { requestJson } from "../../../api/client";
+import { downloadFromUrl, requestDownload, requestJson } from "../../../api/client";
 import {
   useDeleteQuantitySheet,
   useQuantityFilterOptions,
@@ -42,7 +42,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     }
   }, [detail.data, editId, onEdit]);
 
-  async function exportSelected() {
+  async function printSelected() {
     const sheets = await Promise.all(
       selected.map((id) =>
         requestJson<{ item: QuantitySheet }>(`/api/quantity-sheets/${encodeURIComponent(id)}`).then(
@@ -51,6 +51,17 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       ),
     );
     openQuantitySheetsPrint(sheets);
+  }
+
+  async function exportSelected() {
+    if (selected.length === 1) {
+      downloadFromUrl(`/api/quantity-sheets/${encodeURIComponent(selected[0])}/pdf`);
+      return;
+    }
+    await requestDownload("/api/quantity-sheets/pdf-export", {
+      method: "POST",
+      body: JSON.stringify({ ids: selected }),
+    });
   }
 
   return (
@@ -63,9 +74,17 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           className="secondary info-button"
           type="button"
           disabled={!selected.length}
+          onClick={() => void printSelected()}
+        >
+          打印数量统计表
+        </button>
+        <button
+          className="secondary info-button"
+          type="button"
+          disabled={!selected.length}
           onClick={() => void exportSelected()}
         >
-          导出数量统计表 PDF
+          {selected.length > 1 ? "批量导出 PDF" : "导出 PDF"}
         </button>
       </div>
       <div className="panel-head">
@@ -273,9 +292,27 @@ function QuantityPreviewModal({
           <h2>预览数量统计表</h2>
           <p>{sheet ? `${sheet.month} · ${sheet.iacuc}` : "正在加载"}</p>
         </div>
-        <button className="secondary" type="button" onClick={onClose}>
-          关闭
-        </button>
+        <div className="modal-shell-actions">
+          <button
+            className="secondary info-button"
+            type="button"
+            disabled={!sheet}
+            onClick={() => sheet && openQuantitySheetsPrint([sheet])}
+          >
+            打印
+          </button>
+          <button
+            className="secondary info-button"
+            type="button"
+            disabled={!sheet}
+            onClick={() => sheet && downloadFromUrl(`/api/quantity-sheets/${encodeURIComponent(sheet.id)}/pdf`)}
+          >
+            导出 PDF
+          </button>
+          <button className="secondary" type="button" onClick={onClose}>
+            关闭
+          </button>
+        </div>
       </div>
       <div className="modal-shell-body">
         {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
