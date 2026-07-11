@@ -1589,6 +1589,11 @@ h3 {
   transform: translateY(-50%);
 }
 
+.mobile-account-actions,
+.mobile-navigation-backdrop {
+  display: none;
+}
+
 .nav-submenu-label {
   margin: 7px 8px 2px;
   color: #759a96;

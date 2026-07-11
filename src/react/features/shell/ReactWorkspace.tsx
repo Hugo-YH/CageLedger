@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useLogout } from "../../api/session";
@@ -53,6 +53,15 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
     ["logs", "操作日志", "book", "查看系统写入操作和审计记录。"],
   ];
 
+  useEffect(() => {
+    if (!activeDrawer) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActiveDrawer(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [activeDrawer]);
+
   function navigate(view: WorkspaceView) {
     setActiveDrawer(null);
     persistActiveView(view);
@@ -61,7 +70,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   }
 
   function toggleDrawer(drawer: NavigationDrawer, fallback: WorkspaceView) {
-    if (ui.sidebarCollapsed) {
+    if (ui.sidebarCollapsed && !usesCompactNavigation()) {
       navigate(fallback);
       return;
     }
@@ -74,7 +83,17 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   }
 
   return (
-    <div className={`shell ${ui.sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div
+      className={`shell ${ui.sidebarCollapsed ? "sidebar-collapsed" : ""} ${activeDrawer ? "mobile-navigation-open" : ""}`}
+    >
+      {activeDrawer ? (
+        <button
+          className="mobile-navigation-backdrop"
+          type="button"
+          aria-label="关闭导航菜单"
+          onClick={() => setActiveDrawer(null)}
+        />
+      ) : null}
       <aside className="sidebar">
         <div className="sidebar-head">
           <div className="brand">
@@ -106,6 +125,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               showCurrent={activeDrawer === null}
               activeView={ui.activeView}
               settingsViews={settingsViews}
+              user={user}
+              logoutPending={logout.isPending}
+              onClearCache={clearLocalCache}
+              onSignOut={signOut}
               onNavigate={navigate}
             />
             <NavItem view="cages" label="笼位管理" icon="grid" activeView={ui.activeView} onNavigate={navigate} />
@@ -124,6 +147,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               showCurrent={activeDrawer === null}
               activeView={ui.activeView}
               settingsViews={settingsViews}
+              user={user}
+              logoutPending={logout.isPending}
+              onClearCache={clearLocalCache}
+              onSignOut={signOut}
               onNavigate={navigate}
             />
             <button
@@ -147,6 +174,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               showCurrent={activeDrawer === null}
               activeView={ui.activeView}
               settingsViews={settingsViews}
+              user={user}
+              logoutPending={logout.isPending}
+              onClearCache={clearLocalCache}
+              onSignOut={signOut}
               onNavigate={navigate}
             />
           </div>
@@ -272,6 +303,10 @@ function NavigationSubmenu({
   showCurrent,
   activeView,
   settingsViews,
+  user,
+  logoutPending,
+  onClearCache,
+  onSignOut,
   onNavigate,
 }: {
   id: string;
@@ -280,6 +315,10 @@ function NavigationSubmenu({
   showCurrent: boolean;
   activeView: WorkspaceView;
   settingsViews: Array<[WorkspaceView, string, IconName, string]>;
+  user: SessionUser;
+  logoutPending: boolean;
+  onClearCache: () => void;
+  onSignOut: () => Promise<void>;
   onNavigate: (view: WorkspaceView) => void;
 }) {
   const groupIsActive =
@@ -382,6 +421,17 @@ function NavigationSubmenu({
               onNavigate={onNavigate}
             />
           ))}
+          <div className="mobile-account-actions" aria-label="账户操作">
+            <span>{user.displayName}</span>
+            <button className="secondary" type="button" onClick={onClearCache}>
+              <Icon name="refresh" />
+              刷新页面
+            </button>
+            <button className="secondary logout-button" type="button" disabled={logoutPending} onClick={onSignOut}>
+              <Icon name="logout" />
+              退出登录
+            </button>
+          </div>
         </>
       ) : null}
     </div>
@@ -433,6 +483,10 @@ function isBillingView(view: WorkspaceView) {
 
 function isSettingsView(view: WorkspaceView) {
   return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
+}
+
+function usesCompactNavigation() {
+  return window.matchMedia("(max-width: 760px), (max-height: 560px)").matches;
 }
 
 function WorkspaceLoading() {

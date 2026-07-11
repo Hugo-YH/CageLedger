@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.2a",
+    releasedAt: "2026-07-11 13:00",
+    title: "移动端与平板导航修复",
+    items: [
+      "手机竖屏改为固定五入口底部导航，二级菜单通过视窗内弹层展开，支持遮罩点击和 Escape 收起",
+      "平板与手机横屏统一使用紧凑导航，桌面端已折叠导航栏也可继续打开二级菜单",
+      "刷新页面与退出登录收进系统设置菜单，移除平板顶部导航中脱离布局的账户按钮",
+      "补齐 390px、430px、1024px 和 844×390 横屏导航回归，覆盖二级菜单和账户操作链路",
+    ],
+  },
+  {
     version: "0.7.2",
     releasedAt: "2026-07-11 12:00",
     title: "服务端 PDF 导出与结算性能优化",
