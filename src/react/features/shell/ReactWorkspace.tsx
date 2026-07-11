@@ -64,13 +64,13 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
 
   function navigate(view: WorkspaceView) {
     setActiveDrawer(null);
-    persistActiveView(view);
+    persistWorkspaceView(view);
     dispatch({ type: "navigate", view });
     dispatch({ type: "set-settings", expanded: false });
   }
 
   function toggleDrawer(drawer: NavigationDrawer, fallback: WorkspaceView) {
-    if (ui.sidebarCollapsed && !usesCompactNavigation()) {
+    if (ui.sidebarCollapsed && !window.matchMedia("(max-width: 760px), (max-height: 560px)").matches) {
       navigate(fallback);
       return;
     }
@@ -485,10 +485,6 @@ function isSettingsView(view: WorkspaceView) {
   return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
 }
 
-function usesCompactNavigation() {
-  return window.matchMedia("(max-width: 760px), (max-height: 560px)").matches;
-}
-
 function WorkspaceLoading() {
   return (
     <section className="workspace-view">
@@ -568,10 +564,6 @@ function VersionMeta({ className }: { className: string }) {
       <small>© 2026 中山大学中山眼科中心 实验动物中心. Licensed under Apache-2.0.</small>
     </div>
   );
-}
-
-function persistActiveView(view: WorkspaceView) {
-  persistWorkspaceView(view);
 }
 
 function clearLocalCache() {
