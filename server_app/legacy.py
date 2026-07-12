@@ -106,6 +106,7 @@ from server_app.domains.reimbursement.importer import (
     ensure_excel_import_supported,
     next_imported_record_id,
 )
+from server_app.pdf.renderer import prewarm_pdf_renderer
 from server_app.persistence import SchemaRegistry, SchemaStep
 from server_app.persistence.backfills import backfill_quantity_sheet_staff
 from server_app.persistence.base_schema import initialize_base_schema
@@ -328,10 +329,17 @@ from server_app.static import send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
+    download_pdf_export_job,
     download_quantity_sheet_pdf,
     export_billing_statement_pdfs,
     export_quantity_sheet_pdfs,
+    invalidate_all_pdf_cache,
+    invalidate_pdf_cache_for_sheets,
+    pdf_export_job_route,
     quantity_sheet_pdf_route,
+    read_pdf_export_job,
+    schedule_pdf_cache_refresh,
+    start_pdf_export,
 )
 
 WORKFLOW_STATUS_IN_FEEDING = "in_feeding"
@@ -4932,6 +4940,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        pdf_job_id, pdf_job_download = pdf_export_job_route(path)
+        if pdf_job_id:
+            (download_pdf_export_job if pdf_job_download else read_pdf_export_job)(self, pdf_job_id)
+            return
         routed = API_ROUTER.dispatch("GET", path, self)
         if routed:
             self.send_json(routed.payload, routed.status)
@@ -5143,6 +5155,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             download_billing_statement_pdf(
                 self,
                 connect_db=connect_db,
+                list_quantity_sheets_by_month_pi=list_quantity_sheets_by_month_pi,
+                validate_permission=validate_quantity_sheet_permission,
                 generate_statement=generate_billing_statement_by_pi,
                 clean_text=clean_text,
             )
@@ -5219,7 +5233,9 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 self,
                 connect_db=connect_db,
                 get_quantity_sheet=get_quantity_sheet,
+                list_quantity_sheets_by_month_pi=list_quantity_sheets_by_month_pi,
                 validate_permission=validate_quantity_sheet_permission,
+                generate_statement=generate_billing_statement_by_pi,
                 clean_text=clean_text,
             )
             return
@@ -5227,6 +5243,20 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             export_billing_statement_pdfs(
                 self,
                 connect_db=connect_db,
+                get_quantity_sheet=get_quantity_sheet,
+                list_quantity_sheets_by_month_pi=list_quantity_sheets_by_month_pi,
+                validate_permission=validate_quantity_sheet_permission,
+                generate_statement=generate_billing_statement_by_pi,
+                clean_text=clean_text,
+            )
+            return
+        if path == "/api/pdf-exports":
+            start_pdf_export(
+                self,
+                connect_db=connect_db,
+                get_quantity_sheet=get_quantity_sheet,
+                list_quantity_sheets_by_month_pi=list_quantity_sheets_by_month_pi,
+                validate_permission=validate_quantity_sheet_permission,
                 generate_statement=generate_billing_statement_by_pi,
                 clean_text=clean_text,
             )
@@ -5490,6 +5520,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 "intake_batches::",
                 "placement_tasks::",
             )
+            invalidate_all_pdf_cache()
             self.send_json(
                 {
                     "ok": True,
@@ -6042,6 +6073,14 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 conn.commit()
             invalidate_data_cache("principal_identities")
             invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
+            changed_sheets = [item for item in (previous_sheet, sheet, *affected_sheets) if item]
+            invalidate_pdf_cache_for_sheets(changed_sheets)
+            schedule_pdf_cache_refresh(
+                [sheet, *affected_sheets],
+                connect_db=connect_db,
+                generate_statement=generate_billing_statement_by_pi,
+                billing_scopes={(item.get("month", ""), item.get("pi", "")) for item in changed_sheets},
+            )
             self.send_json(
                 {"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs, "perf": perf}, status
             )
@@ -6065,6 +6104,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 item, audit_logs = save_principal_identity(conn, body, user, pi_name)
                 invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name)
                 conn.commit()
+            invalidate_all_pdf_cache()
             self.send_json({"item": item, "auditLogs": audit_logs})
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -6080,6 +6120,13 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 conn.commit()
             invalidate_data_cache("principal_identities")
             invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
+            invalidate_pdf_cache_for_sheets([sheet])
+            schedule_pdf_cache_refresh(
+                [],
+                connect_db=connect_db,
+                generate_statement=generate_billing_statement_by_pi,
+                billing_scopes={(sheet.get("month", ""), sheet.get("pi", ""))},
+            )
             self.send_json({"ok": True, "auditLogs": audit_logs})
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
@@ -6181,6 +6228,7 @@ configure_database(initialize_schema)
 
 def main():
     ensure_database_ready()
+    prewarm_pdf_renderer()
     server = ThreadingHTTPServer((HOST, PORT), CageLedgerHandler)
     print(f"CageLedger server listening on http://{HOST}:{PORT}")
     print(f"SQLite database: {DB_PATH}")

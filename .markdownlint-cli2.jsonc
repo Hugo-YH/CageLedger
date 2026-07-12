@@ -14,5 +14,6 @@
     "!web-dist/**",
     "!playwright-report/**",
     "!test-results/**",
+    "!.venv/**",
   ],
 }

@@ -6,11 +6,11 @@ import type {
   SettlementCandidateListParams,
 } from "../../../api/contracts";
 import { useSettlementCandidates } from "../../../api/billing";
-import { downloadFromUrl, requestDownload } from "../../../api/client";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
+import { usePdfExport } from "../hooks/usePdfExport";
 
 export function SettlementCandidateList({ source }: { source: "quantity_sheet" | "cage_map" }) {
   const [page, setPage] = useState(1);
@@ -24,6 +24,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
   const [result, setResult] = useState<BillingStatementResponse | null>(null);
   const [notice, setNotice] = useState("");
+  const pdfExport = usePdfExport();
   const params: SettlementCandidateListParams = {
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -54,22 +55,15 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   }
 
   async function exportCandidates(candidates: SettlementCandidate[]) {
-    if (candidates.length === 1) {
-      const candidate = candidates[0];
-      const search = new URLSearchParams({
-        month: candidate.month,
-        pi: candidate.pi,
-        sourceType: source,
-      });
-      downloadFromUrl(`/api/billing-settlements/pdf?${search.toString()}`);
-      return;
-    }
-    await requestDownload("/api/billing-settlements/pdf-export", {
-      method: "POST",
-      body: JSON.stringify({
+    setNotice("");
+    try {
+      await pdfExport.exportPdf({
+        kind: "billing_statement",
         items: candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
-      }),
-    });
+      });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "PDF 导出失败");
+    }
   }
 
   function toggleCandidate(candidate: SettlementCandidate, checked: boolean) {
@@ -100,9 +94,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         </div>
         <span className="panel-summary-chip">共 {total} 项</span>
       </div>
-      {notice ? (
-        <div className="react-inline-notice" role="status">
-          {notice}
+      {notice || pdfExport.isExporting ? (
+        <div className="react-inline-notice" role="status" aria-live="polite">
+          {notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
         </div>
       ) : null}
       <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
@@ -110,10 +104,14 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         <button
           className="secondary info-button"
           type="button"
-          disabled={!selectedCandidates.length}
+          disabled={!selectedCandidates.length || pdfExport.isExporting}
           onClick={() => void exportCandidates(selectedCandidates)}
         >
-          {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+          {pdfExport.isExporting
+            ? settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)
+            : selectedCandidates.length > 1
+              ? "批量导出 PDF"
+              : "导出 PDF"}
         </button>
       </div>
       <div className="list-meta">
@@ -249,8 +247,13 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               <button className="secondary info-button" type="button" onClick={() => openSettlementPrint(result)}>
                 打印结算单
               </button>
-              <button className="secondary info-button" type="button" onClick={() => void exportCandidates([selected])}>
-                导出 PDF
+              <button
+                className="secondary info-button"
+                type="button"
+                disabled={pdfExport.isExporting}
+                onClick={() => void exportCandidates([selected])}
+              >
+                {pdfExport.isExporting ? "正在生成…" : "导出 PDF"}
               </button>
               <button
                 className="primary flow-button"
@@ -277,4 +280,8 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       ) : null}
     </section>
   );
+}
+
+function settlementExportProgress(completed = 0, total = 0) {
+  return total > 1 ? `正在导出 ${completed}/${total}` : "PDF 正在生成，完成后自动下载。";
 }

@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST_PATH = ROOT / "web-dist"
 DB_PATH = Path(os.environ.get("CAGELEDGER_DB", ROOT / "data" / "cageledger.sqlite"))
+PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DB_PATH.parent / "pdf-cache"))
 IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DB_PATH.parent / "iacuc-index.json"))
 LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
 HOST = os.environ.get("CAGELEDGER_HOST", "0.0.0.0")

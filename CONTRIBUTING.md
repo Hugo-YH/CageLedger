@@ -82,7 +82,7 @@ npm run check
 npm run verify:full
 ```
 
-Gitea Pull Request 会运行前端质量、Python 质量和 Playwright 三个 job。格式、lint、类型、测试、构建或 axe 严重问题会阻止合并。
+Gitea Pull Request 运行轻量质量门禁：格式、lint、类型、Vitest、构建和架构检查。Mac mini 在发布前运行 Python 全量测试、Playwright、API 冒烟与 PDF 验收。
 
 ## 可访问性
 

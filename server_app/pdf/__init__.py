@@ -5,6 +5,7 @@ from .documents import (
     render_quantity_sheet_pdf,
 )
 from .packages import build_pdf_zip
+from .renderer import prewarm_pdf_renderer
 
 __all__ = [
     "billing_statement_filename",
@@ -12,4 +13,5 @@ __all__ = [
     "quantity_sheet_filename",
     "render_billing_statement_pdf",
     "render_quantity_sheet_pdf",
+    "prewarm_pdf_renderer",
 ]

@@ -26,7 +26,7 @@ const sizePolicies = [
 const baselineHotspots = new Map([
   [
     "server_app/legacy.py",
-    { ceiling: 6200, reason: "legacy HTTP compatibility and settlement candidate snapshot rollout" },
+    { ceiling: 6300, reason: "legacy HTTP compatibility, settlement candidate snapshots, and PDF export routes" },
   ],
   [
     "src/react/features/cages/components/CageWorkspaceComponents.tsx",

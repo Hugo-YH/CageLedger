@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   quality:
-    name: Frontend and documentation quality
+    name: Lightweight quality gate
     runs-on: ubuntu-latest
     container: node:22-bookworm
     steps:
@@ -27,112 +27,23 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git shellcheck
+          apt-get install -y --no-install-recommends ca-certificates git python3 python3-pip shellcheck
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
-      - name: Install dependencies
-        run: >-
-          bash scripts/retry_command.sh npm ci --prefer-offline --no-audit
-          --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
-
-      - name: Check formatting and lint
-        run: |
-          npx prettier --check .
-          npm run lint:ts
-          npm run lint:css
-          npm run lint:md
-          npm run lint:shell
-
-      - name: Typecheck and test
-        run: |
-          npm run typecheck
-          npm run test
-          npm run build
-
-  python:
-    name: Python quality
-    runs-on: ubuntu-latest
-    container: python:3.13-slim
-    steps:
-      - name: Check out source
-        env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates git chromium fonts-noto-cjk
-          git init .
-          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
-          git checkout --detach FETCH_HEAD
-
-      - name: Install dependencies
-        run: bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 -r requirements-dev.txt
-
-      - name: Lint and test
-        run: |
-          python -m ruff format --check .
-          python -m ruff check .
-          python -m unittest discover -s tests -p 'test_*.py'
-          python -m py_compile server.py scripts/*.py server_app/*.py server_app/repositories/*.py server_app/services/*.py
-
-  e2e:
-    name: Browser regression
-    needs: [quality, python]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    container: mcr.microsoft.com/playwright:v1.61.1-noble
-    steps:
-      - name: Check out source
-        env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates git python3 python3-pip chromium fonts-noto-cjk
-          git init .
-          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
-          git checkout --detach FETCH_HEAD
-
-      - name: Install application dependencies
+      - name: Install quality dependencies
         run: |
           bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
             --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
-          bash scripts/retry_command.sh python3 -m pip install --no-cache-dir --retries 5 --timeout 60 \
-            -r requirements.txt
+          python3 -m pip install --no-cache-dir ruff
 
-      - name: Run Playwright
-        env:
-          CI: "true"
-          CAGELEDGER_IACUC_INDEX: /tmp/cageledger-e2e-iacuc-index.json
+      - name: Run lightweight quality gate
         run: |
-          python3 - <<'PY'
-          import json
-
-          items = [
-              {
-                  "id": f"e2e-{index:04d}",
-                  "iacuc": f"E2E{index:04d}",
-                  "project": f"测试项目{index}",
-                  "pi": "测试负责人",
-                  "owner": "测试经办人",
-              }
-              for index in range(1, 501)
-          ]
-          items.append(
-              {
-                  "id": "e2e-complete-index",
-                  "iacuc": "Z2025063",
-                  "project": "完整索引回归项目",
-                  "pi": "完整索引负责人",
-                  "owner": "完整索引经办人",
-              }
-          )
-          with open("/tmp/cageledger-e2e-iacuc-index.json", "w", encoding="utf-8") as handle:
-              json.dump(items, handle, ensure_ascii=False)
-          PY
-          npm run test:e2e
+          npm run format:check
+          npm run lint
+          npm run typecheck
+          npm run test
+          npm run build
+          node scripts/check_architecture.mjs --enforce

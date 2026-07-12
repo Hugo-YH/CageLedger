@@ -36,6 +36,6 @@ npm run check
 - 流程中心：台账筛选、报销登记、部分缴纳、完成和删除。
 - 权限：管理员与房间管理员分别验证前端入口和 API 状态码。
 
-## CI 产物
+## CI 分工
 
-Gitea CI 的 E2E job 在失败时上传 `playwright-report/` 和 `test-results/`，保留 trace、截图和错误上下文 14 天。性能 benchmark 作为本地或手动任务运行。
+Gitea CI 执行格式、lint、类型、Vitest、生产构建和架构门禁。Mac mini 执行 Python 全量测试、Playwright、PDF/打印验收、API 冒烟和性能 benchmark；浏览器报告与测试结果保留在本地发布验证记录中。

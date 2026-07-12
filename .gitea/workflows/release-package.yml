@@ -23,8 +23,7 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends \
-            git ca-certificates curl python3 python3-venv shellcheck chromium fonts-noto-cjk
+          apt-get install -y --no-install-recommends git ca-certificates curl python3
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_REF_NAME}"
@@ -41,18 +40,18 @@ jobs:
           grep -Fq "APP_VERSION = \"${TAG_VERSION}\"" src/react/version.ts
           grep -Fq "version: \"${TAG_VERSION}\"" src/react/releaseNotes*.ts
 
-      - name: Install frontend dependencies
+      - name: Install release packaging dependencies
         run: |
           bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
             --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
-          python3 -m venv .venv
-          bash scripts/retry_command.sh .venv/bin/pip install --no-cache-dir --retries 5 --timeout 60 \
-            -r requirements-dev.txt
 
-      - name: Run release quality checks
-        run: PATH="$PWD/.venv/bin:$PATH" npm run check
+      - name: Verify release source
+        run: |
+          npm run typecheck
+          npm run test
+          npm run build
 
-      - name: Build offline package
+      - name: Build and upload offline package
         id: package
         run: |
           PACKAGE_PATH="$(npm run --silent package:offline)"

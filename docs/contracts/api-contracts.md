@@ -66,26 +66,29 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 ## 数量统计表与结算
 
-| 方法     | 路径                                           | 请求或参数                               | 响应                                                           |
-| -------- | ---------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
-| `GET`    | `/api/quantity-sheet-rooms`                    | 空                                       | `{ items }`，跨房间录入候选                                    |
-| `GET`    | `/api/quantity-sheets`                         | 分页、排序、`columnFilters`              | 分页统计表                                                     |
-| `GET`    | `/api/quantity-sheets/filter-options`          | `column` + 当前筛选                      | 筛选候选值                                                     |
-| `GET`    | `/api/quantity-sheets/{id}`                    | 空                                       | `{ item }`                                                     |
-| `GET`    | `/api/quantity-sheets/{id}/pdf`                | 空                                       | 单份数量统计表 PDF 下载                                        |
-| `POST`   | `/api/quantity-sheets/pdf-export`              | `{ ids }`                                | 单份 PDF 或多份 PDF ZIP 下载                                   |
-| `POST`   | `/api/quantity-sheets`                         | `{ sheet }`                              | `{ item, affectedItems? }`；服务端写入登记人员和房间管理员快照 |
-| `PUT`    | `/api/quantity-sheets/{id}`                    | `{ sheet }`                              | `{ item, affectedItems? }`；服务端更新登记人员和房间管理员快照 |
-| `DELETE` | `/api/quantity-sheets/{id}`                    | 空                                       | 删除结果、镜像变更和审计                                       |
-| `GET`    | `/api/billing-settlement-candidates`           | 分页、排序、`columnFilters`              | 按月份和负责人聚合的结算候选列表                               |
-| `POST`   | `/api/quantity-sheets/{id}/generate-statement` | 结算选项                                 | statement、lines、workflow                                     |
-| `POST`   | `/api/billing-statements/generate`             | month/IACUC 等筛选                       | 动态笼位图结算                                                 |
-| `POST`   | `/api/billing-statements/generate-by-pi`       | `{ pi, month, sourceType, persist }`     | `{ statement, lines, workflow? }`                              |
-| `GET`    | `/api/billing-settlements/pdf`                 | `month`、`pi`、`sourceType`              | 单份项目负责人结算汇总表 PDF 下载                              |
-| `POST`   | `/api/billing-settlements/pdf-export`          | `{ items: [{ month, pi, sourceType }] }` | 单份 PDF 或多份 PDF ZIP 下载                                   |
-| `GET`    | `/api/billing-statements[/{id}]`               | 空                                       | 当前结算单列表或单条                                           |
+| 方法     | 路径                                           | 请求或参数                               | 响应                                                                   |
+| -------- | ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
+| `GET`    | `/api/quantity-sheet-rooms`                    | 空                                       | `{ items }`，跨房间录入候选                                            |
+| `GET`    | `/api/quantity-sheets`                         | 分页、排序、`columnFilters`              | 分页统计表                                                             |
+| `GET`    | `/api/quantity-sheets/filter-options`          | `column` + 当前筛选                      | 筛选候选值                                                             |
+| `GET`    | `/api/quantity-sheets/{id}`                    | 空                                       | `{ item }`                                                             |
+| `GET`    | `/api/quantity-sheets/{id}/pdf`                | 空                                       | 单份数量统计表 PDF 下载                                                |
+| `POST`   | `/api/quantity-sheets/pdf-export`              | `{ ids }`                                | 单份 PDF 或多份 PDF ZIP 下载                                           |
+| `POST`   | `/api/quantity-sheets`                         | `{ sheet }`                              | `{ item, affectedItems? }`；服务端写入登记人员和房间管理员快照         |
+| `PUT`    | `/api/quantity-sheets/{id}`                    | `{ sheet }`                              | `{ item, affectedItems? }`；服务端更新登记人员和房间管理员快照         |
+| `DELETE` | `/api/quantity-sheets/{id}`                    | 空                                       | 删除结果、镜像变更和审计                                               |
+| `GET`    | `/api/billing-settlement-candidates`           | 分页、排序、`columnFilters`              | 按月份和负责人聚合的结算候选列表                                       |
+| `POST`   | `/api/quantity-sheets/{id}/generate-statement` | 结算选项                                 | statement、lines、workflow                                             |
+| `POST`   | `/api/billing-statements/generate`             | month/IACUC 等筛选                       | 动态笼位图结算                                                         |
+| `POST`   | `/api/billing-statements/generate-by-pi`       | `{ pi, month, sourceType, persist }`     | `{ statement, lines, workflow? }`                                      |
+| `GET`    | `/api/billing-settlements/pdf`                 | `month`、`pi`、`sourceType`              | 单份项目负责人结算汇总表 PDF 下载                                      |
+| `POST`   | `/api/billing-settlements/pdf-export`          | `{ items: [{ month, pi, sourceType }] }` | 单份 PDF 或多份 PDF ZIP 下载                                           |
+| `POST`   | `/api/pdf-exports`                             | `kind` + 数量统计表或结算项数组          | PDF 后台任务；缓存命中时返回 `ready`，其余返回 `queued` 或 `rendering` |
+| `GET`    | `/api/pdf-export-jobs/{id}`                    | 空                                       | `{ status, completed, total, downloadUrl?, error? }`                   |
+| `GET`    | `/api/pdf-export-jobs/{id}/download`           | 空                                       | 已完成后台任务的 PDF 或 ZIP 下载                                       |
+| `GET`    | `/api/billing-statements[/{id}]`               | 空                                       | 当前结算单列表或单条                                                   |
 
-数量统计表保存会同步转入转出镜像。按 PI 结算自动纳入同月同负责人的全部有效 IACUC 和统计表。
+数量统计表保存会同步转入转出镜像，并使受影响的单表 PDF 与按 PI 汇总 PDF 失效后后台预热。按 PI 结算自动纳入同月同负责人的全部有效 IACUC 和统计表。
 `fullExemption=true` 表示当前 IACUC 在项目有效期内按每日实际饲养量全额减免；该减免独立于 PI 普通减免额度，并保留在结算明细、PDF 和报销台账中。
 
 ## 流程与报销台账

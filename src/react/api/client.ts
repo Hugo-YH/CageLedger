@@ -54,6 +54,31 @@ export async function requestDownload(url: string, init: RequestInit = {}): Prom
   return filename;
 }
 
+export type PdfExportRequest =
+  | { kind: "quantity_sheet"; ids: string[] }
+  | { kind: "billing_statement"; items: Array<{ month: string; pi: string; sourceType: string }> };
+
+export type PdfExportJob = {
+  id: string;
+  status: "queued" | "rendering" | "ready" | "failed";
+  completed: number;
+  total: number;
+  filename: string;
+  error: string;
+  downloadUrl: string;
+};
+
+export function startPdfExport(payload: PdfExportRequest) {
+  return requestJson<PdfExportJob>("/api/pdf-exports", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getPdfExportJob(jobId: string) {
+  return requestJson<PdfExportJob>(`/api/pdf-export-jobs/${encodeURIComponent(jobId)}`);
+}
+
 export function downloadFromUrl(url: string) {
   const anchor = document.createElement("a");
   anchor.href = url;

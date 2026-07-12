@@ -78,6 +78,20 @@ run() {
 
 cd "$ROOT"
 
+if [[ -n "${CAGELEDGER_PYTHON_BIN:-}" ]]; then
+  PYTHON_BIN_DIR="$(dirname "$CAGELEDGER_PYTHON_BIN")"
+  export PATH="$PYTHON_BIN_DIR:$PATH"
+elif [[ -x "$ROOT/.venv/bin/python3" ]]; then
+  export PATH="$ROOT/.venv/bin:$PATH"
+fi
+
+python3 - <<'PY'
+import sys
+
+if sys.version_info < (3, 13):
+    raise SystemExit("CageLedger release requires Python 3.13. Activate .venv or set CAGELEDGER_PYTHON_BIN.")
+PY
+
 if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
   echo "Local tag v${VERSION} already exists." >&2
   exit 1

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
-import { downloadFromUrl, requestDownload, requestJson } from "../../../api/client";
+import { requestJson } from "../../../api/client";
 import {
   useDeleteQuantitySheet,
   useQuantityFilterOptions,
@@ -11,6 +11,7 @@ import {
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
+import { usePdfExport } from "../hooks/usePdfExport";
 
 export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet) => void }) {
   const [page, setPage] = useState(1);
@@ -21,6 +22,8 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const [viewId, setViewId] = useState("");
   const [editId, setEditId] = useState("");
   const [deleteId, setDeleteId] = useState("");
+  const [exportError, setExportError] = useState("");
+  const pdfExport = usePdfExport();
   const params: QuantitySheetListParams = {
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -54,14 +57,12 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   }
 
   async function exportSelected() {
-    if (selected.length === 1) {
-      downloadFromUrl(`/api/quantity-sheets/${encodeURIComponent(selected[0])}/pdf`);
-      return;
+    setExportError("");
+    try {
+      await pdfExport.exportPdf({ kind: "quantity_sheet", ids: selected });
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "PDF 导出失败");
     }
-    await requestDownload("/api/quantity-sheets/pdf-export", {
-      method: "POST",
-      body: JSON.stringify({ ids: selected }),
-    });
   }
 
   return (
@@ -81,12 +82,21 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         <button
           className="secondary info-button"
           type="button"
-          disabled={!selected.length}
+          disabled={!selected.length || pdfExport.isExporting}
           onClick={() => void exportSelected()}
         >
-          {selected.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+          {pdfExport.isExporting
+            ? exportProgress(pdfExport.job?.completed, pdfExport.job?.total)
+            : selected.length > 1
+              ? "批量导出 PDF"
+              : "导出 PDF"}
         </button>
       </div>
+      {pdfExport.isExporting || exportError ? (
+        <div className="react-inline-notice" role="status" aria-live="polite">
+          {exportError || "PDF 正在后台生成，完成后会自动下载。"}
+        </div>
+      ) : null}
       <div className="panel-head">
         <div className="panel-title-line">
           <h2>已保存数量统计表</h2>
@@ -285,6 +295,19 @@ function QuantityPreviewModal({
   loading: boolean;
   onClose: () => void;
 }) {
+  const [exportError, setExportError] = useState("");
+  const pdfExport = usePdfExport();
+
+  async function exportSheet() {
+    if (!sheet) return;
+    setExportError("");
+    try {
+      await pdfExport.exportPdf({ kind: "quantity_sheet", ids: [sheet.id] });
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "PDF 导出失败");
+    }
+  }
+
   return (
     <ModalShell ariaLabel="预览数量统计表" className="quantity-react-preview" onClose={onClose}>
       <div className="modal-shell-head">
@@ -304,16 +327,21 @@ function QuantityPreviewModal({
           <button
             className="secondary info-button"
             type="button"
-            disabled={!sheet}
-            onClick={() => sheet && downloadFromUrl(`/api/quantity-sheets/${encodeURIComponent(sheet.id)}/pdf`)}
+            disabled={!sheet || pdfExport.isExporting}
+            onClick={() => void exportSheet()}
           >
-            导出 PDF
+            {pdfExport.isExporting ? "正在生成…" : "导出 PDF"}
           </button>
           <button className="secondary" type="button" onClick={onClose}>
             关闭
           </button>
         </div>
       </div>
+      {pdfExport.isExporting || exportError ? (
+        <div className="react-inline-notice" role="status" aria-live="polite">
+          {exportError || "PDF 正在后台生成，完成后会自动下载。"}
+        </div>
+      ) : null}
       <div className="modal-shell-body">
         {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
       </div>
@@ -328,4 +356,8 @@ function QuantityPreview({ sheet }: { sheet: QuantitySheet }) {
 }
 function formatTime(value: string) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-";
+}
+
+function exportProgress(completed = 0, total = 0) {
+  return total > 1 ? `正在导出 ${completed}/${total}` : "正在生成…";
 }

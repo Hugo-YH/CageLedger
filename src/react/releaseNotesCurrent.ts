@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.3",
+    releasedAt: "2026-07-12 10:56",
+    title: "PDF 后台缓存与轻量发布门禁",
+    items: [
+      "数量统计表保存、更新和删除会使关联 PDF 缓存失效，并在后台预热单表与按项目负责人汇总 PDF",
+      "数量统计表和项目负责人结算导出显示生成进度，缓存命中后直接下载，批量导出复用已生成 PDF 后打包 ZIP",
+      "Gitea CI 收敛为轻量格式、lint、类型、Vitest、构建和架构门禁，Mac mini 执行完整浏览器、PDF 和多架构镜像验证",
+      "离线包与容器镜像工作流移除 Chromium 安装和云端镜像构建，降低 Runner 内存压力并保留发布制品校验",
+    ],
+  },
+  {
     version: "0.7.2a",
     releasedAt: "2026-07-11 13:00",
     title: "移动端与平板导航修复",
