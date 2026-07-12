@@ -27,7 +27,7 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git python3 python3-pip shellcheck
+          apt-get install -y --no-install-recommends ca-certificates git python3 python3-venv shellcheck
           git init .
           git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" fetch --depth 1 origin "${GITHUB_SHA}"
@@ -37,10 +37,12 @@ jobs:
         run: |
           bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
             --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
-          python3 -m pip install --no-cache-dir ruff
+          python3 -m venv .venv
+          .venv/bin/pip install --no-cache-dir ruff
 
       - name: Run lightweight quality gate
         run: |
+          export PATH="$PWD/.venv/bin:$PATH"
           npm run format:check
           npm run lint
           npm run typecheck
