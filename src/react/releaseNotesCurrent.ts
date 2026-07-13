@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.4",
+    releasedAt: "2026-07-13 08:30",
+    title: "NAS 工作区加载稳定性修复",
+    items: [
+      "生产构建改用 Vite 自动依赖分包，消除筛选表头共享模块与应用入口之间的循环加载链路",
+      "预约消息识别、待接收批次和数量统计表录入在 ARM NAS 上可稳定加载，二维码扫描、笼位和系统设置入口继续保持现有行为",
+      "补齐生产构建页面回归，验证共享资源、业务模块和对应 API 可按正确顺序加载",
+    ],
+  },
+  {
     version: "0.7.3",
     releasedAt: "2026-07-12 10:56",
     title: "PDF 后台缓存与轻量发布门禁",
