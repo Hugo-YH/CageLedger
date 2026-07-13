@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.4a",
+    releasedAt: "2026-07-13 12:38",
+    title: "ARM NAS 内网访问兼容修复",
+    items: [
+      "前端草稿 ID 生成兼容内网 HTTP 访问环境，预约消息识别、待接收批次、数量统计表录入和已保存数量统计表可稳定加载",
+      "房间、笼架和笼位草稿同步使用兼容 ID，覆盖后续基础信息维护路径",
+      "补齐 HTTP 环境缺少浏览器 randomUUID 时的回归测试，保持 HTTPS 环境继续使用平台 UUID",
+    ],
+  },
+  {
     version: "0.7.4",
     releasedAt: "2026-07-13 08:30",
     title: "NAS 工作区加载稳定性修复",

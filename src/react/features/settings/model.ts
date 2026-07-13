@@ -1,4 +1,5 @@
 import type { CageRack, CageRoom, CageSlot } from "../../api/contracts";
+import { createClientId } from "../../../domain/id";
 
 export type RoomDraft = CageRoom & {
   billingProfileConfigured?: boolean;
@@ -8,7 +9,7 @@ export type RoomDraft = CageRoom & {
 
 export function newRoomDraft(): RoomDraft {
   return {
-    id: `room-${crypto.randomUUID()}`,
+    id: `room-${createClientId()}`,
     name: "",
     area: "",
     roomManager: "",
@@ -26,7 +27,7 @@ export function newRoomDraft(): RoomDraft {
 export function newRackDraft(room: CageRoom, racks: CageRack[]): CageRack {
   const indexes = racks.filter((rack) => rack.roomId === room.id).map((rack) => rack.index);
   return {
-    id: `rack-${crypto.randomUUID()}`,
+    id: `rack-${createClientId()}`,
     roomId: room.id,
     name: "",
     index: indexes.length ? Math.max(...indexes) + 1 : 1,

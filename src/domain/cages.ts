@@ -1,4 +1,5 @@
 import type { CageSlot, Occupancy } from "../contracts/infrastructure";
+import { createClientId } from "./id";
 
 export function currentOccupancy(slotId: string, occupancies: Occupancy[]) {
   return (
@@ -69,7 +70,7 @@ function parseDateParts(value: string) {
 
 export function emptyOccupancy(slotId: string, code: string, today: string): Occupancy {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     slotId,
     cageCode: code,
     status: "active",

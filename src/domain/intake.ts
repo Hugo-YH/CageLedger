@@ -1,4 +1,5 @@
 import type { IntakeBatch, IntakeBatchStatus } from "../contracts/intake";
+import { createClientId } from "./id";
 
 const validStatuses = new Set<IntakeBatchStatus>(["draft", "pending_print", "printed", "received"]);
 
@@ -58,7 +59,7 @@ export function defaultAnimalsPerCage(species: string) {
 }
 
 export function createIntakeDraft(receiverName = ""): IntakeBatch {
-  return normalizeIntakeBatch({ id: crypto.randomUUID(), receiverName, status: "pending_print" });
+  return normalizeIntakeBatch({ id: createClientId(), receiverName, status: "pending_print" });
 }
 
 export function missingIntakeRequiredFields(item: IntakeBatch) {
@@ -92,7 +93,7 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
   const intakeDate = normalizedDate(String(item.intakeDate || ""));
   const endDate = normalizedDate(String(item.endDate || "")) || addDays(intakeDate, husbandryDays);
   return {
-    id: String(item.id || crypto.randomUUID()),
+    id: String(item.id || createClientId()),
     rawMessage: String(item.rawMessage || ""),
     purchaseOrderNo: String(item.purchaseOrderNo || "").trim(),
     batchNo: String(item.batchNo || "")

@@ -1,5 +1,6 @@
 import type { CageRoom } from "../contracts/infrastructure";
 import type { BillingUnit, QuantitySheet, QuantitySheetRow } from "../contracts/quantity";
+import { createClientId } from "./id";
 
 const animalDayItems = new Set(["guinea_pig", "rabbit", "monkey", "pig", "dog"]);
 
@@ -47,7 +48,7 @@ export function roomBillingProfile(room?: CageRoom) {
 
 export function createQuantityRow(month: string, first = false): QuantitySheetRow {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     date: first ? `${month}-01` : "",
     rawDateInput: first ? `${month}-01` : "",
     addedCount: null,
@@ -68,7 +69,7 @@ export function normalizeQuantityRow(row: Partial<QuantitySheetRow>, month: stri
   return {
     ...createQuantityRow(month),
     ...row,
-    id: row.id || crypto.randomUUID(),
+    id: row.id || createClientId(),
     date: String(row.date || ""),
     rawDateInput: String(row.rawDateInput ?? row.date ?? ""),
     addedCount: numberOrNull(row.addedCount),
@@ -88,13 +89,13 @@ export function normalizeQuantityRow(row: Partial<QuantitySheetRow>, month: stri
 }
 
 export function createQuantitySheet(month: string, manager = ""): QuantitySheet {
-  return normalizeQuantitySheet({ id: crypto.randomUUID(), month, manager, rows: [createQuantityRow(month, true)] });
+  return normalizeQuantitySheet({ id: createClientId(), month, manager, rows: [createQuantityRow(month, true)] });
 }
 
 export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantitySheet {
   const month = sheet.month || new Date().toISOString().slice(0, 7);
   return {
-    id: sheet.id || crypto.randomUUID(),
+    id: sheet.id || createClientId(),
     month,
     roomId: sheet.roomId || "",
     roomName: sheet.roomName || "",
