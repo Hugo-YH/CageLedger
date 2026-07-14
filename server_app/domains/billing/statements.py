@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from server_app.domains.iacuc import normalize_application_date, normalize_iacuc_number
 from server_app.shared import as_int, clean_text, new_id
 
@@ -31,11 +33,11 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         rows_by_date = {}
         for row in sheet.get("rows", []):
             rows_by_date.setdefault(row["date"], []).append(row)
-        profile = quantity_sheet_billing_profile(
-            billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit")), sheet
-        )
+        room = room_by_id.get(sheet.get("roomId"), {})
+        profile = quantity_sheet_billing_profile(billing_profile_for_room(room, sheet.get("billingUnit")), sheet)
         state = {
             "sheet": sheet,
+            "room": room,
             "rowsByDate": rows_by_date,
             "profile": profile,
             "animalCount": sheet.get("initialAnimalCount") or 0,
@@ -108,6 +110,10 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                     {
                         "iacuc": sheet.get("iacuc", ""),
                         "project": sheet.get("project", ""),
+                        "roomId": sheet.get("roomId", ""),
+                        "roomName": sheet.get("roomName", ""),
+                        "facility": profile.get("facility", ""),
+                        "species": state["room"].get("defaultSpecies", "") or profile.get("species", ""),
                         "animalCount": state["animalCount"],
                         "cageCount": state["cageCount"],
                         "billingItem": profile["billingItem"],
@@ -159,9 +165,25 @@ def quantity_sheet_free_allowance_notes(lines):
                 continue
             expired.setdefault(iacuc, (expiry_date, line.get("date", "")))
     return "；".join(
-        f"{iacuc} 于 {expiry_date} 到期，自 {ineligible_date} 起不参与减免"
+        _free_allowance_expiry_note(iacuc, expiry_date, ineligible_date)
         for iacuc, (expiry_date, ineligible_date) in sorted(expired.items())
     )
+
+
+def _free_allowance_expiry_note(iacuc, expiry_date, first_ineligible_date):
+    expiry = _parse_iso_date(expiry_date)
+    first_ineligible = _parse_iso_date(first_ineligible_date)
+    if expiry and first_ineligible and expiry + timedelta(days=1) < first_ineligible:
+        return f"{iacuc} 已于 {expiry_date} 到期，本月不参与减免"
+    next_day = (expiry + timedelta(days=1)).isoformat() if expiry else first_ineligible_date
+    return f"{iacuc} 于 {expiry_date} 到期，自 {next_day} 起不参与减免"
+
+
+def _parse_iso_date(value):
+    try:
+        return date.fromisoformat(str(value or ""))
+    except ValueError:
+        return None
 
 
 def quantity_sheet_billing_profile(profile, sheet):

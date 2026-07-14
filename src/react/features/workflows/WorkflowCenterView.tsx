@@ -50,7 +50,7 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
           { label: "已完成", value: completedSummary.data?.page.total || 0, tone: "success" },
         ]}
         switcherLabel="饲养费功能"
-        switcherItems={billingSwitchItems(navigate)}
+        switcherItems={billingSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body workflow-workspace-body">
         <section className="workflow-center-panel">

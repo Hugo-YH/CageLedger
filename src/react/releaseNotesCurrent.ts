@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.5",
+    releasedAt: "2026-07-14 21:45",
+    title: "月度饲养费汇总 Excel 导出",
+    items: [
+      "饲养费管理新增管理员专用月度饲养费汇总，按 IACUC 和设施导出当月 Excel，保留金额为 0 的有效记录",
+      "月度金额复用项目负责人合表的计费、减免、全额减免和梯度收费规则；经费和实验日期读取 IACUC 索引，报销本号与单号读取已登记台账",
+      "导出工作簿补齐样表字段、金额公式、筛选和冻结表头，并记录导出月份、金额合计、行数和操作人审计日志",
+      "数量统计表月度汇总与按项目负责人合表统一 IACUC 到期备注：本月前到期标记为本月不参与减免，本月内到期标记为次日起不参与减免",
+    ],
+  },
+  {
     version: "0.7.4a",
     releasedAt: "2026-07-13 12:38",
     title: "ARM NAS 内网访问兼容修复",

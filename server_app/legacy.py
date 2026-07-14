@@ -178,6 +178,9 @@ from server_app.repositories.billing import (
     list_quantity_sheets as list_quantity_sheets_repository,
 )
 from server_app.repositories.billing import (
+    list_quantity_sheets_by_month as list_quantity_sheets_by_month_repository,
+)
+from server_app.repositories.billing import (
     list_quantity_sheets_by_month_iacuc as list_quantity_sheets_by_month_iacuc_repository,
 )
 from server_app.repositories.billing import (
@@ -328,6 +331,7 @@ from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, tod
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
+from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
     download_pdf_export_job,
@@ -3303,6 +3307,10 @@ def list_quantity_sheets_by_month_iacuc(conn, month, iacuc):
     return list_quantity_sheets_by_month_iacuc_repository(conn, month, iacuc)
 
 
+def list_quantity_sheets_by_month(conn, month):
+    return list_quantity_sheets_by_month_repository(conn, month)
+
+
 def list_quantity_sheets_by_month_pi(conn, month, pi):
     return list_quantity_sheets_by_month_pi_repository(conn, month, pi)
 
@@ -5266,6 +5274,22 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 list_quantity_sheets_by_month_pi=list_quantity_sheets_by_month_pi,
                 validate_permission=validate_quantity_sheet_permission,
                 generate_statement=generate_billing_statement_by_pi,
+                clean_text=clean_text,
+            )
+            return
+        if path == "/api/billing-monthly-summary/export":
+            export_monthly_billing_summary(
+                self,
+                connect_db=connect_db,
+                list_quantity_sheets_by_month=list_quantity_sheets_by_month,
+                read_rooms_for_quantity_sheets=read_rooms_for_quantity_sheets,
+                read_principal_type_by_pi=read_principal_type_by_pi,
+                get_reimbursement_record_by_key=get_reimbursement_record_by_key,
+                reimbursement_business_key=reimbursement_business_key,
+                read_applications_by_iacuc=read_applications_by_iacuc,
+                audit_event=audit_event,
+                write_audit_events=write_audit_events,
+                now_iso=now_iso,
                 clean_text=clean_text,
             )
             return

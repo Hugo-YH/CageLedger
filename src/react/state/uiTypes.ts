@@ -8,6 +8,7 @@ export type WorkspaceView =
   | "billing-quantity-entry"
   | "billing-quantity-saved"
   | "billing-settlement"
+  | "billing-monthly-summary"
   | "workflow-center"
   | "rooms"
   | "data"

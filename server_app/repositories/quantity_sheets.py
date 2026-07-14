@@ -17,6 +17,19 @@ def list_quantity_sheets(conn):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def list_quantity_sheets_by_month(conn, month):
+    rows = conn.execute(
+        """
+        SELECT payload
+        FROM quantity_sheets
+        WHERE month = ?
+        ORDER BY pi, iacuc, room_name, updated_at DESC, rowid DESC
+        """,
+        (month,),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
 def list_quantity_sheets_page(conn, filters, filtered_where):
     where, params = quantity_sheet_where(filters, filtered_where)
     order_by = quantity_sheet_order_by(filters)

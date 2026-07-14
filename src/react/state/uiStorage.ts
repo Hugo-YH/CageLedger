@@ -12,6 +12,7 @@ const WORKSPACE_VIEWS = new Set<WorkspaceView>([
   "billing-quantity-entry",
   "billing-quantity-saved",
   "billing-settlement",
+  "billing-monthly-summary",
   "workflow-center",
   "rooms",
   "data",

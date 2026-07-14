@@ -3,6 +3,14 @@ import type { WorkspaceBreadcrumbItem, WorkspaceSwitcherItem } from "../../compo
 
 type Navigator = (view: WorkspaceView) => void;
 
+export type BillingSidebarItem = {
+  section?: string;
+  view?: WorkspaceView;
+  label?: string;
+  description?: string;
+  icon?: "grid" | "calculator" | "book" | "refresh";
+};
+
 export function breadcrumb(label: string, onClick?: () => void): WorkspaceBreadcrumbItem {
   return { label, onClick };
 }
@@ -15,8 +23,8 @@ export function intakeSwitchItems(navigate: Navigator): WorkspaceSwitcherItem[] 
   ];
 }
 
-export function billingSwitchItems(navigate: Navigator): WorkspaceSwitcherItem[] {
-  return [
+export function billingSwitchItems(navigate: Navigator, canExportMonthlySummary = false): WorkspaceSwitcherItem[] {
+  const items: WorkspaceSwitcherItem[] = [
     {
       label: "动态笼位图（自动）",
       description: "按真实占用时间线自动核算",
@@ -43,6 +51,51 @@ export function billingSwitchItems(navigate: Navigator): WorkspaceSwitcherItem[]
       onClick: () => navigate("workflow-center"),
     },
   ];
+  if (canExportMonthlySummary) {
+    items.push({
+      label: "月度饲养费汇总",
+      description: "导出 IACUC 和设施维度的月度 Excel",
+      onClick: () => navigate("billing-monthly-summary"),
+    });
+  }
+  return items;
+}
+
+export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSidebarItem[] {
+  const items: BillingSidebarItem[] = [
+    { section: "核算数据" },
+    { view: "billing-cage-map", label: "动态笼位图（自动）", description: "按真实占用时间线自动核算", icon: "grid" },
+    { section: "数量统计表" },
+    {
+      view: "billing-quantity-entry",
+      label: "数量统计表（录入）",
+      description: "按伦理号和房间录入月度变化",
+      icon: "calculator",
+    },
+    {
+      view: "billing-quantity-saved",
+      label: "已保存数量统计表",
+      description: "检索、预览和维护历史统计表",
+      icon: "book",
+    },
+    { section: "结算管理" },
+    {
+      view: "billing-settlement",
+      label: "按项目负责人结算",
+      description: "自动合并负责人名下伦理并出单",
+      icon: "calculator",
+    },
+    { view: "workflow-center", label: "结算与报销台账", description: "跟踪结算流程、报销和累计未缴", icon: "refresh" },
+  ];
+  if (canExportMonthlySummary) {
+    items.push({
+      view: "billing-monthly-summary",
+      label: "月度饲养费汇总",
+      description: "导出 IACUC 和设施维度的月度 Excel",
+      icon: "book",
+    });
+  }
+  return items;
 }
 
 export function coreSwitchItems(navigate: Navigator): WorkspaceSwitcherItem[] {

@@ -355,6 +355,71 @@ th {
   white-space: nowrap;
 }
 
+.monthly-billing-summary-panel {
+  max-width: 920px;
+}
+
+.monthly-billing-summary-body {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) minmax(172px, 210px) auto;
+  align-items: end;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--surface-strong), var(--surface));
+}
+
+.monthly-summary-intro {
+  display: grid;
+  gap: 4px;
+}
+
+.monthly-summary-intro strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.monthly-summary-intro span,
+.monthly-summary-hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.monthly-summary-month-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.monthly-summary-month-field input {
+  min-height: 42px;
+  font-variant-numeric: tabular-nums;
+}
+
+.monthly-summary-export {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.monthly-summary-hint {
+  margin: 14px 0 0;
+}
+
+@media (width <= 760px) {
+  .monthly-billing-summary-body {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .monthly-summary-export {
+    width: 100%;
+  }
+}
+
 .billing-unavailable-panel {
   position: relative;
   min-height: 430px;

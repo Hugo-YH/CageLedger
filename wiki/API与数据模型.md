@@ -65,14 +65,15 @@ graph LR
 
 ### 数量统计表和结算
 
-| 方法                     | 路径                                     | 用途                 |
-| ------------------------ | ---------------------------------------- | -------------------- |
-| `GET`                    | `/api/quantity-sheet-rooms`              | 统计表跨房间录入候选 |
-| `GET` / `POST`           | `/api/quantity-sheets`                   | 分页查询或新建统计表 |
-| `GET` / `PUT` / `DELETE` | `/api/quantity-sheets/{id}`              | 详情、编辑和删除     |
-| `POST`                   | `/api/billing-statements/generate`       | 动态笼位图结算       |
-| `POST`                   | `/api/billing-statements/generate-by-pi` | 按 PI 汇总结算       |
-| `GET`                    | `/api/billing-statements/{id}`           | 单张结算单           |
+| 方法                     | 路径                                     | 用途                           |
+| ------------------------ | ---------------------------------------- | ------------------------------ |
+| `GET`                    | `/api/quantity-sheet-rooms`              | 统计表跨房间录入候选           |
+| `GET` / `POST`           | `/api/quantity-sheets`                   | 分页查询或新建统计表           |
+| `GET` / `PUT` / `DELETE` | `/api/quantity-sheets/{id}`              | 详情、编辑和删除               |
+| `POST`                   | `/api/billing-statements/generate`       | 动态笼位图结算                 |
+| `POST`                   | `/api/billing-statements/generate-by-pi` | 按 PI 汇总结算                 |
+| `POST`                   | `/api/billing-monthly-summary/export`    | 管理员导出月度饲养费汇总 Excel |
+| `GET`                    | `/api/billing-statements/{id}`           | 单张结算单                     |
 
 ### 流程和报销
 

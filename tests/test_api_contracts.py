@@ -86,6 +86,36 @@ class ApiContractTests(unittest.TestCase):
                 self.assertEqual(response_status, 200)
                 self.assertTrue(keys.issubset(payload.keys()))
 
+    def test_monthly_billing_summary_requires_available_quantity_sheets(self):
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.opener,
+        )
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/api/billing-monthly-summary/export",
+                method="POST",
+                body={"month": "2026-06"},
+                opener=self.opener,
+            )
+        self.assertEqual(context.exception.code, 400)
+        self.assertEqual(json.load(context.exception), {"error": "该月份没有已保存的数量统计表"})
+
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/api/billing-monthly-summary/export",
+                method="POST",
+                body={"month": "2026/06"},
+                opener=self.opener,
+            )
+        self.assertEqual(context.exception.code, 400)
+        self.assertEqual(json.load(context.exception), {"error": "结算月份格式应为 YYYY-MM"})
+
 
 def available_port():
     with socket.socket() as candidate:

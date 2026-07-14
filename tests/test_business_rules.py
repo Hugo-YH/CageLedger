@@ -152,6 +152,24 @@ class BusinessRuleParityTests(unittest.TestCase):
             "Z2026001 于 2026-06-15 到期，自 2026-06-16 起不参与减免",
         )
 
+    def test_quantity_sheet_expiry_note_marks_full_month_ineligible(self):
+        lines = [
+            {
+                "date": "2026-06-01",
+                "iacucBreakdown": [
+                    {
+                        "iacuc": "Z2026002",
+                        "freeAllowance": True,
+                        "freeAllowanceExpiryDate": "2025-12-31",
+                    }
+                ],
+            }
+        ]
+        self.assertEqual(
+            server.quantity_sheet_free_allowance_notes(lines),
+            "Z2026002 已于 2025-12-31 到期，本月不参与减免",
+        )
+
     def test_tiered_allocation_concentrates_tier_on_largest_iacuc_and_priority_target(self):
         automatic = [
             {

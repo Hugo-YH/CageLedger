@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { SettlementCandidateListParams, SettlementCandidateListResponse } from "./contracts";
-import { requestJson } from "./client";
+import { requestDownload, requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export function useSettlementCandidates(params: SettlementCandidateListParams, enabled = true) {
@@ -20,5 +20,12 @@ export function useSettlementCandidates(params: SettlementCandidateListParams, e
       requestJson<SettlementCandidateListResponse>(`/api/billing-settlement-candidates?${search.toString()}`),
     placeholderData: (previous) => previous,
     enabled,
+  });
+}
+
+export function exportMonthlyBillingSummary(month: string) {
+  return requestDownload("/api/billing-monthly-summary/export", {
+    method: "POST",
+    body: JSON.stringify({ month }),
   });
 }

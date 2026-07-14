@@ -6,6 +6,7 @@ import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { clearUiStorage, persistWorkspaceView } from "../../state/uiStorage";
 import { APP_VERSION } from "../../version";
 import { DashboardView } from "../dashboard/DashboardView";
+import { billingSidebarItems } from "./workspaceNavigation";
 
 const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({ default: module.IntakeView })));
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
@@ -227,6 +228,9 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} navigate={navigate} />;
   if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} navigate={navigate} />;
   if (view === "billing-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
+  if (view === "billing-monthly-summary" && user.role === "admin") {
+    return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
+  }
   if (view === "workflow-center") return <WorkflowCenterView user={user} navigate={navigate} />;
   if (view === "rooms") return <RoomsView user={user} navigate={navigate} />;
   if (view === "users") return <UsersView currentUser={user} navigate={navigate} />;
@@ -363,49 +367,23 @@ function NavigationSubmenu({
       ) : null}
       {drawer === "billing" ? (
         <>
-          <span className="nav-submenu-label">核算数据</span>
-          <NavigationPanelItem
-            view="billing-cage-map"
-            label="动态笼位图（自动）"
-            description="按真实占用时间线自动核算"
-            icon="grid"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <span className="nav-submenu-label">数量统计表</span>
-          <NavigationPanelItem
-            view="billing-quantity-entry"
-            label="数量统计表（录入）"
-            description="按伦理号和房间录入月度变化"
-            icon="calculator"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="billing-quantity-saved"
-            label="已保存数量统计表"
-            description="检索、预览和维护历史统计表"
-            icon="book"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <span className="nav-submenu-label">结算管理</span>
-          <NavigationPanelItem
-            view="billing-settlement"
-            label="按项目负责人结算"
-            description="自动合并负责人名下伦理并出单"
-            icon="calculator"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="workflow-center"
-            label="结算与报销台账"
-            description="跟踪结算流程、报销和累计未缴"
-            icon="refresh"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
+          {billingSidebarItems(user.role === "admin").map((item) =>
+            item.section ? (
+              <span className="nav-submenu-label" key={item.section}>
+                {item.section}
+              </span>
+            ) : (
+              <NavigationPanelItem
+                key={item.view}
+                view={item.view!}
+                label={item.label!}
+                description={item.description!}
+                icon={item.icon!}
+                activeView={activeView}
+                onNavigate={onNavigate}
+              />
+            ),
+          )}
         </>
       ) : null}
       {drawer === "settings" ? (
@@ -470,15 +448,8 @@ function NavigationPanelItem({
 function isIntakeView(view: WorkspaceView) {
   return view === "intake-entry" || view === "intake-batches" || view === "cage-card-scanner";
 }
-
-function isQuantityView(view: WorkspaceView) {
-  return view === "billing-quantity-entry" || view === "billing-quantity-saved";
-}
-
 function isBillingView(view: WorkspaceView) {
-  return (
-    view === "billing-cage-map" || isQuantityView(view) || view === "billing-settlement" || view === "workflow-center"
-  );
+  return view.startsWith("billing-") || view === "workflow-center";
 }
 
 function isSettingsView(view: WorkspaceView) {

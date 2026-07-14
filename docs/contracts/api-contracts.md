@@ -83,6 +83,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `POST`   | `/api/billing-statements/generate-by-pi`       | `{ pi, month, sourceType, persist }`     | `{ statement, lines, workflow? }`                                      |
 | `GET`    | `/api/billing-settlements/pdf`                 | `month`、`pi`、`sourceType`              | 单份项目负责人结算汇总表 PDF 下载                                      |
 | `POST`   | `/api/billing-settlements/pdf-export`          | `{ items: [{ month, pi, sourceType }] }` | 单份 PDF 或多份 PDF ZIP 下载                                           |
+| `POST`   | `/api/billing-monthly-summary/export`          | `{ month }`                              | 管理员下载按 IACUC 与设施汇总的月度饲养费 Excel                        |
 | `POST`   | `/api/pdf-exports`                             | `kind` + 数量统计表或结算项数组          | PDF 后台任务；缓存命中时返回 `ready`，其余返回 `queued` 或 `rendering` |
 | `GET`    | `/api/pdf-export-jobs/{id}`                    | 空                                       | `{ status, completed, total, downloadUrl?, error? }`                   |
 | `GET`    | `/api/pdf-export-jobs/{id}/download`           | 空                                       | 已完成后台任务的 PDF 或 ZIP 下载                                       |
@@ -90,6 +91,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 数量统计表保存会同步转入转出镜像，并使受影响的单表 PDF 与按 PI 汇总 PDF 失效后后台预热。按 PI 结算自动纳入同月同负责人的全部有效 IACUC 和统计表。
 `fullExemption=true` 表示当前 IACUC 在项目有效期内按每日实际饲养量全额减免；该减免独立于 PI 普通减免额度，并保留在结算明细、PDF 和报销台账中。
+月度饲养费汇总仅覆盖数量统计表来源，实时复用按 PI 合表的计费、减免和梯度规则。工作簿按 `IACUC + 设施` 分行，IACUC 索引提供经费和实验日期，报销台账提供经费本号与报销单号；每次导出写入审计日志。
 
 ## 流程与报销台账
 
