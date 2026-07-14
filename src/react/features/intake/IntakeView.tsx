@@ -63,12 +63,14 @@ export function IntakeView({
     const match = iacucQuery.data?.items.find(
       (item) => item.iacuc.trim().toUpperCase() === parsed.iacuc.trim().toUpperCase(),
     );
+    // Only an explicit edit from the saved-batch list retains the persisted batch ID.
+    const isEditingSavedBatch = mode === "batches" && editing;
     setDraft(
       normalizeIntakeBatch(
         {
           ...draft,
           ...parsed,
-          id: editing ? draft.id : parsed.id,
+          id: isEditingSavedBatch ? draft.id : parsed.id,
           project: match?.project || parsed.project,
           pi: match?.pi || parsed.pi,
           owner: match?.owner || parsed.owner,
@@ -88,10 +90,16 @@ export function IntakeView({
       return;
     }
     try {
-      const response = await save.mutateAsync({ item, exists: editing });
-      setDraft(normalizeIntakeBatch(response.item, roomNames));
-      setEditing(true);
-      setNotice("待接收批次已保存。");
+      const isEditingSavedBatch = mode === "batches" && editing;
+      const response = await save.mutateAsync({ item, exists: isEditingSavedBatch });
+      if (isEditingSavedBatch) {
+        setDraft(normalizeIntakeBatch(response.item, roomNames));
+        setNotice("待接收批次已更新。");
+        return;
+      }
+      setDraft(createIntakeDraft(user.displayName));
+      setEditing(false);
+      setNotice(`待接收批次 ${response.item.batchNo} 已保存，可继续录入下一批。`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "保存失败");
     }
