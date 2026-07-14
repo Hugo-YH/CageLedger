@@ -40,10 +40,18 @@ export function useReimbursement(id: string) {
 export function useUpdateReimbursement() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<ReimbursementRecord> }) =>
+    mutationFn: ({
+      id,
+      patch,
+      expectedUpdatedAt,
+    }: {
+      id: string;
+      patch: Partial<ReimbursementRecord>;
+      expectedUpdatedAt: string;
+    }) =>
       requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`, {
         method: "PUT",
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ ...patch, expectedUpdatedAt }),
       }),
     onSuccess: (data) => {
       client.setQueryData(queryKeys.reimbursement(data.item.id), data);

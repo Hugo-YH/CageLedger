@@ -102,6 +102,7 @@ def sanitize_user(row):
         "role": row["role"],
         "roomIds": json.loads(row["room_ids"] or "[]"),
         "active": bool(row["active"]),
+        "updatedAt": row["updated_at"],
     }
 
 

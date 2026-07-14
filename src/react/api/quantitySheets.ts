@@ -63,7 +63,10 @@ export function useSaveQuantitySheet() {
     mutationFn: ({ sheet, exists }: { sheet: QuantitySheet; exists: boolean }) =>
       requestJson<QuantitySheetWriteResponse>(
         exists ? `/api/quantity-sheets/${encodeURIComponent(sheet.id)}` : "/api/quantity-sheets",
-        { method: exists ? "PUT" : "POST", body: JSON.stringify({ sheet }) },
+        {
+          method: exists ? "PUT" : "POST",
+          body: JSON.stringify({ sheet, expectedUpdatedAt: exists ? sheet.updatedAt : "" }),
+        },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });

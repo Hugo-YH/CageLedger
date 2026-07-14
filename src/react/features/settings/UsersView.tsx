@@ -104,7 +104,7 @@ export function UsersView({
                   current={item.id === currentUser.id}
                   rooms={rooms}
                   pending={save.isPending}
-                  onSave={(user) => save.mutateAsync({ id: item.id, user })}
+                  onSave={(user) => save.mutateAsync({ id: item.id, user, expectedUpdatedAt: item.updatedAt })}
                   onDelete={() => setDeleteTarget(item)}
                 />
               ))}

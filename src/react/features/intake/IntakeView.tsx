@@ -83,7 +83,7 @@ export function IntakeView({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    const item = normalizeIntakeBatch({ ...draft, updatedAt: new Date().toISOString() }, roomNames);
+    const item = normalizeIntakeBatch(draft, roomNames);
     const missingFields = missingIntakeRequiredFields(item);
     if (missingFields.length) {
       setNotice(`请填写必填项目：${missingFields.join("、")}。`);
@@ -129,7 +129,7 @@ export function IntakeView({
   }
 
   async function printCurrentBatch() {
-    const item = normalizeIntakeBatch({ ...draft, updatedAt: new Date().toISOString() }, roomNames);
+    const item = normalizeIntakeBatch(draft, roomNames);
     const missingFields = missingIntakeRequiredFields(item);
     if (missingFields.length) {
       setNotice(`打印前请填写必填项目：${missingFields.join("、")}。`);

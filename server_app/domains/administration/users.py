@@ -10,6 +10,7 @@ from server_app.repositories.users import (
     update_user_without_password,
 )
 from server_app.shared import new_id, now_iso
+from server_app.shared.concurrency import require_current_version
 
 from .auth import hash_password, sanitize_user
 
@@ -55,6 +56,7 @@ def update_user(conn, actor, user_id, payload):
     row = get_user_by_id(conn, user_id)
     if not row:
         raise LookupError("账号不存在")
+    require_current_version(row, payload.get("expectedUpdatedAt"), "账号")
 
     username = str(payload.get("username", row["username"])).strip()
     display_name = str(payload.get("displayName", row["display_name"])).strip() or username

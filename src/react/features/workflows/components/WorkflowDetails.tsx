@@ -57,7 +57,7 @@ export function WorkflowDetail({ id, user, onClose }: { id: string; user: Sessio
   const item = detail.data?.item;
   async function persist() {
     if (!item) return;
-    await save.mutateAsync({ id, patch: draft });
+    await save.mutateAsync({ id, patch: draft, expectedUpdatedAt: item.updatedAt });
   }
   async function advanceTo(toStatus: string) {
     if (!item?.workflowId) return;

@@ -153,7 +153,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       pageCount: Math.max(Math.ceil(snapshot.length / QUANTITY_ROWS_PER_PAGE), 1),
       billingUnit: unit,
       animalDetailEnabled: animalDetails,
-      updatedAt: new Date().toISOString(),
+      updatedAt: draft.updatedAt,
     });
   }
 

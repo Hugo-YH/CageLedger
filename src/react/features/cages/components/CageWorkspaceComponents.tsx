@@ -105,7 +105,7 @@ export function SlotEditor({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await save.mutateAsync({ item: { ...draft, slotId: slot.id, updatedAt: today }, exists: Boolean(occupancy) });
+      await save.mutateAsync({ item: { ...draft, slotId: slot.id }, exists: Boolean(occupancy) });
       onNotice(`笼位 ${cageCode(slot, rack.index, roomName)} 已保存。`);
       onClose();
     } catch (error) {
@@ -118,7 +118,7 @@ export function SlotEditor({
       return;
     }
     await save.mutateAsync({
-      item: { ...occupancy, status: "ended", endDate: today, updatedAt: today },
+      item: { ...occupancy, status: "ended", endDate: today },
       exists: true,
     });
     onNotice(`笼位 ${cageCode(slot, rack.index, roomName)} 已设为空。`);

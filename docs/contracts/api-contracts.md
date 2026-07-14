@@ -54,7 +54,7 @@
 | `GET`    | `/api/intake-batches`                      | `limit`、`offset`、`sortKey`、`sortDir`、`columnFilters` | 分页批次                                |
 | `GET`    | `/api/intake-batches/filter-options`       | `column` + 当前筛选                                      | 筛选候选值                              |
 | `POST`   | `/api/intake-batches`                      | `{ item }`                                               | `{ item, placementTasks?, auditLogs? }` |
-| `PUT`    | `/api/intake-batches/{id}`                 | `{ item }`                                               | `{ item, placementTasks?, auditLogs? }` |
+| `PUT`    | `/api/intake-batches/{id}`                 | `{ item, expectedUpdatedAt }`                            | `{ item, placementTasks?, auditLogs? }` |
 | `DELETE` | `/api/intake-batches/{id}`                 | 空                                                       | 删除结果与受影响任务                    |
 | `POST`   | `/api/intake-batches/{id}/confirm-receipt` | `{ actualReceiptDate, cardCount }`                       | 批次、接收记录、任务和审计              |
 | `GET`    | `/api/placement-tasks`                     | 分页和状态筛选                                           | 分页任务                                |
@@ -75,7 +75,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `GET`    | `/api/quantity-sheets/{id}/pdf`                | 空                                       | 单份数量统计表 PDF 下载                                                |
 | `POST`   | `/api/quantity-sheets/pdf-export`              | `{ ids }`                                | 单份 PDF 或多份 PDF ZIP 下载                                           |
 | `POST`   | `/api/quantity-sheets`                         | `{ sheet }`                              | `{ item, affectedItems? }`；服务端写入登记人员和房间管理员快照         |
-| `PUT`    | `/api/quantity-sheets/{id}`                    | `{ sheet }`                              | `{ item, affectedItems? }`；服务端更新登记人员和房间管理员快照         |
+| `PUT`    | `/api/quantity-sheets/{id}`                    | `{ sheet, expectedUpdatedAt }`           | `{ item, affectedItems? }`；服务端更新登记人员和房间管理员快照         |
 | `DELETE` | `/api/quantity-sheets/{id}`                    | 空                                       | 删除结果、镜像变更和审计                                               |
 | `GET`    | `/api/billing-settlement-candidates`           | 分页、排序、`columnFilters`              | 按月份和负责人聚合的结算候选列表                                       |
 | `POST`   | `/api/quantity-sheets/{id}/generate-statement` | 结算选项                                 | statement、lines、workflow                                             |

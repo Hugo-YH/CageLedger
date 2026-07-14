@@ -325,6 +325,7 @@ from server_app.services.reimbursement import (
     coerce_money as coerce_reimbursement_money,
 )
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
+from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
 from server_app.web.pdf_exports import (
@@ -1570,9 +1571,13 @@ def write_entity_state(endpoint, method, item_id, payload, actor):
     item = normalize_entity_payload(collection, payload, item_id, method, spec["id_prefix"])
     status = HTTPStatus.OK
     if method == "POST":
+        item["updatedAt"] = now_iso()
         insert_entity(state, collection, item)
         status = HTTPStatus.CREATED
     elif method == "PUT":
+        existing = next((entry for entry in state.get(collection, []) if entry.get("id") == item_id), None)
+        require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "该记录")
+        item["updatedAt"] = now_iso()
         replace_entity(state, collection, item_id, item)
     elif method == "DELETE":
         item = delete_entity(state, collection, item_id)
@@ -1656,10 +1661,13 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         item = normalize_entity_payload("intakeBatches", payload, item_id, method, spec["id_prefix"])
+        item["updatedAt"] = updated_at
         if method == "POST":
             insert_entity(state, "intakeBatches", item)
             status = HTTPStatus.CREATED
         elif method == "PUT":
+            existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
+            require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "待接收批次")
             replace_entity(state, "intakeBatches", item_id, item)
         elif method == "DELETE":
             item = delete_entity(state, "intakeBatches", item_id)
@@ -1724,12 +1732,14 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec):
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         item = normalize_entity_payload("placementTasks", payload, item_id, method, spec["id_prefix"])
+        item["updatedAt"] = updated_at
         old_item = next((entry for entry in old_state.get("placementTasks", []) if entry.get("id") == item_id), None)
         removed_occupancy_id = ""
         if method == "POST":
             insert_entity(state, "placementTasks", item)
             status = HTTPStatus.CREATED
         elif method == "PUT":
+            require_current_version(old_item or {}, payload.get("expectedUpdatedAt"), "待进驻任务")
             replace_entity(state, "placementTasks", item_id, item)
         elif method == "DELETE":
             item = delete_entity(state, "placementTasks", item_id)
@@ -1863,10 +1873,12 @@ def write_occupancy_entity_state(method, item_id, payload, actor, spec):
         state = json.loads(json.dumps(old_state))
         old_item = next((item for item in old_state.get("occupancies", []) if item.get("id") == item_id), None)
         item = normalize_entity_payload("occupancies", payload, item_id, method, spec["id_prefix"])
+        item["updatedAt"] = updated_at
         if method == "POST":
             insert_entity(state, "occupancies", item)
             status = HTTPStatus.CREATED
         elif method == "PUT":
+            require_current_version(old_item or {}, payload.get("expectedUpdatedAt"), "笼位占用记录")
             replace_entity(state, "occupancies", item_id, item)
         elif method == "DELETE":
             item = delete_entity(state, "occupancies", item_id)
@@ -3173,6 +3185,11 @@ def save_principal_identity(conn, payload, actor, pi_name):
     if not pi_name:
         raise ValueError("项目负责人不能为空")
     principal_type = normalize_principal_type(payload.get("principalType", ""))
+    existing = next(
+        (item for item in read_principal_identity_payloads(conn) if clean_text(item.get("pi", "")) == pi_name),
+        None,
+    )
+    require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "项目负责人配置")
     now = now_iso()
     item = {
         "pi": pi_name,
@@ -3323,6 +3340,8 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     validate_quantity_sheet_custom_billing(sheet)
     previous_sheet = get_quantity_sheet_repository(conn, sheet["id"])
     exists = previous_sheet is not None
+    if exists:
+        require_current_version(previous_sheet, payload.get("expectedUpdatedAt"), "数量统计表")
     db_values = quantity_sheet_db_values(sheet)
     if exists:
         update_quantity_sheet_repository(conn, sheet, db_values)
@@ -5351,6 +5370,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 with connect_db() as conn:
                     updated = update_user(conn, user, user_id, body)
                 self.send_json({"user": updated})
+            except StaleWriteError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
             except sqlite3.IntegrityError:
                 self.send_json({"error": "用户名已存在"}, HTTPStatus.CONFLICT)
             except LookupError as exc:
@@ -5754,6 +5775,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 existing = get_reimbursement_record(conn, record_id)
                 if not existing:
                     raise LookupError("报销台账不存在")
+                require_current_version(existing, patch.get("expectedUpdatedAt"), "报销台账")
                 updated = merge_reimbursement_edit(existing, patch)
                 updated["latestEventAt"] = now_iso()
                 updated["updatedAt"] = now_iso()
@@ -5777,6 +5799,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             with connect_db() as conn:
                 detail = reimbursement_detail_payload(conn, get_reimbursement_record(conn, record_id) or refreshed)
             self.send_json({**detail, "auditLogs": merge_audit_logs([], [audit])})
+        except StaleWriteError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -6031,6 +6055,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             body = self.read_optional_json_body() if method == "DELETE" else self.read_json_body()
             payload, status = write_entity_state(endpoint, method, item_id, body, user)
             self.send_json(payload, status)
+        except StaleWriteError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except sqlite3.IntegrityError:
             self.send_json({"error": "实体 id 已存在"}, HTTPStatus.CONFLICT)
         except LookupError as exc:
@@ -6084,6 +6110,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json(
                 {"item": sheet, "affectedItems": affected_sheets, "auditLogs": audit_logs, "perf": perf}, status
             )
+        except StaleWriteError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except sqlite3.IntegrityError:
             self.send_json({"error": "数量统计表 id 已存在"}, HTTPStatus.CONFLICT)
         except PermissionError as exc:
@@ -6106,6 +6134,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 conn.commit()
             invalidate_all_pdf_cache()
             self.send_json({"item": item, "auditLogs": audit_logs})
+        except StaleWriteError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

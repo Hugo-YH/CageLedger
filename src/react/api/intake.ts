@@ -43,7 +43,10 @@ export function useSaveIntakeBatch() {
     mutationFn: ({ item, exists }: { item: IntakeBatch; exists: boolean }) =>
       requestJson<IntakeWriteResponse>(
         exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
-        { method: exists ? "PUT" : "POST", body: JSON.stringify({ item }) },
+        {
+          method: exists ? "PUT" : "POST",
+          body: JSON.stringify({ item, expectedUpdatedAt: exists ? item.updatedAt : "" }),
+        },
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
   });

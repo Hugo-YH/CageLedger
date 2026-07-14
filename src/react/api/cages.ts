@@ -10,7 +10,10 @@ export function useSaveOccupancy(roomId: string) {
     mutationFn: ({ item, exists }: { item: Occupancy; exists: boolean }) =>
       requestJson<OccupancyWriteResponse>(
         exists ? `/api/occupancies/${encodeURIComponent(item.id)}` : "/api/occupancies",
-        { method: exists ? "PUT" : "POST", body: JSON.stringify({ item }) },
+        {
+          method: exists ? "PUT" : "POST",
+          body: JSON.stringify({ item, expectedUpdatedAt: exists ? item.updatedAt : "" }),
+        },
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
   });

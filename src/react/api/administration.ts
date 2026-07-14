@@ -26,10 +26,18 @@ export function useUsers(enabled = true) {
 export function useSaveUser() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, user }: { id?: string; user: Partial<ManagedUser> & { password?: string } }) =>
+    mutationFn: ({
+      id,
+      user,
+      expectedUpdatedAt,
+    }: {
+      id?: string;
+      user: Partial<ManagedUser> & { password?: string };
+      expectedUpdatedAt?: string;
+    }) =>
       requestJson<{ user: ManagedUser }>(id ? `/api/users/${encodeURIComponent(id)}` : "/api/users", {
         method: id ? "PUT" : "POST",
-        body: JSON.stringify(user),
+        body: JSON.stringify({ ...user, expectedUpdatedAt: id ? expectedUpdatedAt : "" }),
       }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.users }),
   });
@@ -90,7 +98,7 @@ export function useSavePrincipalIdentity() {
     mutationFn: (item: PrincipalIdentity) =>
       requestJson<{ item: PrincipalIdentity }>(`/api/principal-identities/${encodeURIComponent(item.pi)}`, {
         method: "PUT",
-        body: JSON.stringify(item),
+        body: JSON.stringify({ ...item, expectedUpdatedAt: item.updatedAt }),
       }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.principalIdentities }),
   });

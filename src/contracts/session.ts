@@ -7,6 +7,7 @@ export interface SessionUser {
   role: UserRole;
   roomIds: string[];
   active: boolean;
+  updatedAt: string;
 }
 
 export interface SessionResponse {
