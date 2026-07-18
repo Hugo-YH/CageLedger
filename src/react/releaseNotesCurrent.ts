@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.6a",
+    releasedAt: "2026-07-18 22:50",
+    title: "Mac mini 本地发布与验证",
+    items: [
+      "发布链路统一由 Mac mini 执行完整质量检查、生产构建、浏览器回归、离线包和多架构镜像构建",
+      "Gitea Release 由本地脚本创建或更新，并上传离线包；本地 wiki/ 会同步到 Gitea Wiki",
+      "移除 Gitea Actions 工作流，Gitea 保留代码、Wiki、Release 资产和容器镜像分发职责",
+      "Playwright 改用独立端口与临时 SQLite，完整发布验证可与日常 5173 开发服务并行运行",
+    ],
+  },
+  {
     version: "0.7.6",
     releasedAt: "2026-07-18 21:21",
     title: "动物巡检与统一浮层交互",

@@ -36,6 +36,6 @@ npm run check
 - 流程中心：台账筛选、报销登记、部分缴纳、完成和删除。
 - 权限：管理员与房间管理员分别验证前端入口和 API 状态码。
 
-## CI 分工
+## 发布验证分工
 
-Gitea CI 执行格式、lint、类型、Vitest、生产构建和架构门禁。Mac mini 执行 Python 全量测试、Playwright、PDF/打印验收、API 冒烟和性能 benchmark；浏览器报告与测试结果保留在本地发布验证记录中。
+Mac mini 执行格式、lint、类型、Vitest、Python 全量测试、生产构建、Playwright、PDF/打印验收、API 冒烟和性能 benchmark。浏览器报告与测试结果保留在本地发布验证记录中。Gitea 保存 Git 代码、Wiki、Release 资产和容器镜像。

@@ -1,4 +1,4 @@
-import { expect, test as base, type Page } from "@playwright/test";
+import { expect, test as base, type Locator, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -54,9 +54,7 @@ export async function ensureTestInfrastructure(page: Page) {
 }
 
 export async function openSettingsView(page: Page, name: string) {
-  await page.locator("nav.nav").getByRole("button", { name: "系统设置", exact: true }).click();
-  const navigation = page.locator("#nav-settings");
-  await expect(navigation).toBeVisible();
+  const navigation = await openSettingsNavigation(page);
   await navigation.getByRole("button", { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
 }
 
@@ -72,22 +70,41 @@ export async function openIntakeEntry(page: Page) {
 }
 
 export async function openQuantityEntry(page: Page) {
-  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  const navigation = page.locator("#nav-billing");
-  await expect(navigation).toBeVisible();
+  const navigation = await openBillingNavigation(page);
   await navigation.getByRole("button", { name: /^数量统计表（录入）/ }).click();
 }
 
 export async function openSavedQuantitySheets(page: Page) {
-  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  const navigation = page.locator("#nav-billing");
-  await expect(navigation).toBeVisible();
+  const navigation = await openBillingNavigation(page);
   await navigation.getByRole("button", { name: /^已保存数量统计表/ }).click();
 }
 
 export async function openWorkflowCenter(page: Page) {
-  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  const navigation = page.locator("#nav-billing");
-  await expect(navigation).toBeVisible();
+  const navigation = await openBillingNavigation(page);
   await navigation.getByRole("button", { name: /^结算与报销台账/ }).click();
+}
+
+export async function openBillingNavigation(page: Page) {
+  return openNavigationGroup(page, "饲养费管理", "#nav-billing");
+}
+
+export async function openSettingsNavigation(page: Page) {
+  return openNavigationGroup(page, "系统设置", "#nav-settings");
+}
+
+async function openNavigationGroup(page: Page, label: string, desktopSelector: string): Promise<Locator> {
+  const desktopGroup = page.getByRole("button", { name: label, exact: true }).first();
+  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(width <= 760px)").matches);
+  if (!useMobileNavigation) {
+    if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
+    const desktopNavigation = page.locator(desktopSelector);
+    await expect(desktopNavigation).toBeVisible();
+    return desktopNavigation;
+  }
+
+  const moreButton = page.getByRole("button", { name: "更多功能", exact: true }).first();
+  if ((await moreButton.getAttribute("aria-expanded")) !== "true") await moreButton.click();
+  const mobileNavigation = page.locator("#nav-more");
+  await expect(mobileNavigation).toBeVisible();
+  return mobileNavigation;
 }

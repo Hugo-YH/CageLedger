@@ -1,4 +1,4 @@
-import { ensureTestInfrastructure, expect, test } from "./fixtures";
+import { ensureTestInfrastructure, expect, openBillingNavigation, test } from "./fixtures";
 
 const month = new Date().toISOString().slice(0, 7);
 const sheetIds = ["sheet-e2e-settlement-1", "sheet-e2e-settlement-2"];
@@ -43,8 +43,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   }
 
   await page.reload();
-  await page.getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await page.getByRole("button", { name: /按项目负责人结算/ }).click();
+  const billingMenu = await openBillingNavigation(page);
+  await billingMenu.getByRole("button", { name: /按项目负责人结算/ }).click();
   await expect(page.getByRole("heading", { name: "项目负责人结算列表", exact: true })).toBeVisible();
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
   await expect(row).toContainText("E2E-SETTLEMENT-001");

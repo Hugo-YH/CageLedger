@@ -1,6 +1,7 @@
 import {
   ensureTestInfrastructure,
   expect,
+  openBillingNavigation,
   openIntakeEntry,
   openQuantityEntry,
   openSettingsView,
@@ -52,9 +53,9 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByLabel("第 1 行结余总数", { exact: true })).toHaveAttribute("placeholder", "10");
   await openWorkflowCenter(page);
   await expect(page.getByRole("heading", { name: "结算与报销台账", exact: true })).toBeVisible();
-  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await page.locator("#nav-billing").getByRole("button", { name: "月度饲养费汇总", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "月度饲养费汇总", exact: true })).toBeVisible();
+  const billingMenu = await openBillingNavigation(page);
+  await billingMenu.getByRole("button", { name: /^月度饲养费汇总/ }).click();
+  await expect(page.getByRole("heading", { name: "月度饲养费汇总", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByLabel("结算月份", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "导出月度汇总 Excel", exact: true })).toBeVisible();
   await openSettingsView(page, "房间管理");

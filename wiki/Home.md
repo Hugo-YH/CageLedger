@@ -1,6 +1,6 @@
 # CageLedger Wiki
 
-CageLedger 是实验动物中心的笼卡、笼位、饲养费结算和报销台账系统。`wiki/` 是正式文档源，`main` 分支中的变更会同步到 Gitea Wiki。
+CageLedger 是实验动物中心的笼卡、笼位、饲养费结算和报销台账系统。`wiki/` 是正式文档源，Mac mini 发布脚本会将其同步到 Gitea Wiki。
 
 ![系统总览](assets/system-overview.svg)
 

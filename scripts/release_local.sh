@@ -6,13 +6,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/release_local.sh --version 0.4.1 [--push] [--dry-run] [--skip-container-publish] [--skip-offline-image]
-  bash scripts/release_local.sh 0.4.1 [--push] [--dry-run] [--skip-container-publish] [--skip-offline-image]
+  bash scripts/release_local.sh --version 0.4.1 [--push] [--dry-run] [--skip-full-verify] [--skip-container-publish] [--skip-offline-image]
+  bash scripts/release_local.sh 0.4.1 [--push] [--dry-run] [--skip-full-verify] [--skip-container-publish] [--skip-offline-image]
 
 Options:
   --version <ver>  Release version, for example 0.4.1 or 0.4.0a
   --push           Push main and the new v<version> tag after commit/tag
   --dry-run        Print steps without executing them
+  --skip-full-verify  Skip the Mac mini production build and Playwright release verification
   --skip-container-publish  Skip Mac mini local multi-arch image publish before push
   --skip-offline-image      Skip dist/ image tar.gz export during local container publish
 EOF
@@ -23,6 +24,7 @@ PUSH=0
 DRY_RUN=0
 PUBLISH_CONTAINER=1
 EXPORT_OFFLINE_IMAGE=1
+FULL_VERIFY=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +38,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=1
+      shift
+      ;;
+    --skip-full-verify)
+      FULL_VERIFY=0
       shift
       ;;
     --skip-container-publish)
@@ -110,9 +116,23 @@ if [[ "${MATCH_COUNT:-0}" -lt 1 ]]; then
   exit 1
 fi
 
-run npm run check
-run npm run package:offline
-run git add -A
+if [[ "$FULL_VERIFY" -eq 1 ]]; then
+  run npm run verify:full
+else
+  run npm run check
+fi
+OFFLINE_PACKAGE_PATH="${ROOT}/dist/CageLedger-offline-v${VERSION}.tar.gz"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "+ npm run package:offline"
+else
+  echo "+ npm run package:offline"
+  OFFLINE_PACKAGE_PATH="$(npm run --silent package:offline)"
+  if [[ ! -f "$OFFLINE_PACKAGE_PATH" ]]; then
+    echo "Offline package was not created: $OFFLINE_PACKAGE_PATH" >&2
+    exit 1
+  fi
+fi
+run git add -A -- . ':(exclude)data.zip'
 run git commit -m "Release v${VERSION}"
 run git tag -a "v${VERSION}" -m "v${VERSION}"
 
@@ -126,4 +146,6 @@ if [[ "$PUSH" -eq 1 ]]; then
   fi
   run git push origin main
   run git push origin "v${VERSION}"
+  run bash scripts/upload_release_package_local.sh --version "$VERSION" --package "$OFFLINE_PACKAGE_PATH"
+  run bash scripts/sync_wiki_local.sh
 fi

@@ -1,4 +1,12 @@
-import { ensureTestInfrastructure, expect, openIntakeEntry, openQuantityEntry, test } from "./fixtures";
+import {
+  ensureTestInfrastructure,
+  expect,
+  openBillingNavigation,
+  openIntakeEntry,
+  openQuantityEntry,
+  openSettingsNavigation,
+  test,
+} from "./fixtures";
 
 test("intake workspace remains operable at the mobile breakpoint", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 });
@@ -38,8 +46,8 @@ test("mobile navigation keeps submenus and account actions reachable", async ({ 
     await page.keyboard.press("Escape");
     await expect(page.locator("#nav-intake")).toBeHidden();
 
-    await page.locator("nav.nav").getByRole("button", { name: "系统设置", exact: true }).click();
-    await expect(page.locator("#nav-settings")).toBeVisible();
+    const settingsMenu = await openSettingsNavigation(page);
+    await expect(settingsMenu).toBeVisible();
     await expect(page.getByRole("button", { name: "刷新页面", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
 
@@ -55,9 +63,7 @@ test("tablet navigation keeps account actions inside the settings menu", async (
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
 
-  await page.locator("nav.nav").getByRole("button", { name: "系统设置", exact: true }).click();
-  const settingsMenu = page.locator("#nav-settings");
-  await expect(settingsMenu).toBeVisible();
+  const settingsMenu = await openSettingsNavigation(page);
   await expect(page.locator(".sidebar-account")).toBeHidden();
   await expect(page.getByRole("button", { name: "刷新页面", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
@@ -78,7 +84,7 @@ test("landscape phone opens submenus after a desktop navigation collapse", async
   await page.getByRole("button", { name: "隐藏导航栏", exact: true }).click();
 
   await page.setViewportSize({ width: 844, height: 390 });
-  await page.locator("nav.nav").getByRole("button", { name: "饲养费管理", exact: true }).click();
-  await expect(page.locator("#nav-billing")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^数量统计表（录入）/ })).toBeVisible();
+  const billingMenu = await openBillingNavigation(page);
+  await expect(billingMenu).toBeVisible();
+  await expect(billingMenu.getByRole("button", { name: /^数量统计表（录入）/ })).toBeVisible();
 });

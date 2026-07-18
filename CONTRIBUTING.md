@@ -55,7 +55,7 @@ npm run typecheck
 - Stylelint 检查 CSS 标准语法、未知值和重复声明。
 - Markdownlint 检查活动文档。
 - Ruff 处理 Python 格式、import 和 lint。
-- `bash -n` 和 ShellCheck 同时进入本地与 Gitea CI 的基础质量检查。
+- `bash -n` 和 ShellCheck 进入 Mac mini 本地基础质量检查。
 
 `docs/archives/`、`src/vendor/`、`web-dist/`、`dist/` 和 `data/` 保持在批量格式化范围外。
 
