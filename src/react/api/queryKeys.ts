@@ -20,4 +20,10 @@ export const queryKeys = {
   auditEvents: (filters: Record<string, unknown>) => ["audit-events", filters] as const,
   systemInfo: ["system", "info"] as const,
   systemUpdate: ["system", "update"] as const,
+  animalInspectionCatalog: ["animal-inspection-catalog"] as const,
+  animalInspectionsRoot: ["animal-inspections"] as const,
+  animalInspections: (filters: Record<string, unknown>) => ["animal-inspections", filters] as const,
+  animalInspection: (id: string) => ["animal-inspections", "detail", id] as const,
+  animalFindingsRoot: ["animal-inspection-findings"] as const,
+  animalFindings: (filters: Record<string, unknown>) => ["animal-inspection-findings", filters] as const,
 };

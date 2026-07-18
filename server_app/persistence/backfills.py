@@ -4,7 +4,20 @@ from server_app.repositories.payload import dump_json
 from server_app.shared import clean_text
 
 
+def ensure_animal_inspection_finding_location_schema(conn):
+    table_exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'animal_inspection_findings'"
+    ).fetchone()
+    if table_exists is None:
+        return
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(animal_inspection_findings)")}
+    for column, column_type in {"rack_hint": "TEXT", "cage_number": "TEXT"}.items():
+        if column not in columns:
+            conn.execute(f"ALTER TABLE animal_inspection_findings ADD COLUMN {column} {column_type}")
+
+
 def backfill_quantity_sheet_staff(conn, room_ids=None):
+    ensure_animal_inspection_finding_location_schema(conn)
     room_filter = {clean_text(item) for item in (room_ids or []) if clean_text(item)}
     room_rows = conn.execute("SELECT id, name, payload FROM rooms ORDER BY rowid").fetchall()
     rooms_by_id = {}

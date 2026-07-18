@@ -3,6 +3,7 @@ import calendar
 import hashlib
 import io
 import json
+import mimetypes
 import re
 import sqlite3
 import time
@@ -26,6 +27,7 @@ from server_app.cache import (
     log_perf,
 )
 from server_app.config import (
+    ANIMAL_INSPECTION_CATALOG_PATH,
     DB_PATH,
     HOST,
     IACUC_INDEX_PATH,
@@ -51,6 +53,42 @@ from server_app.domains.administration import (
     update_user,
     user_from_token,
     write_audit_events,
+)
+from server_app.domains.animal_management import (
+    add_attachment as add_animal_inspection_attachment,
+)
+from server_app.domains.animal_management import (
+    catalog_payload as animal_inspection_catalog_payload,
+)
+from server_app.domains.animal_management import (
+    create_or_update_inspection as save_animal_inspection,
+)
+from server_app.domains.animal_management import (
+    ensure_catalog as ensure_animal_inspection_catalog,
+)
+from server_app.domains.animal_management import (
+    export_inspection_pdf,
+)
+from server_app.domains.animal_management import (
+    get_attachment as get_animal_inspection_attachment,
+)
+from server_app.domains.animal_management import (
+    get_inspection as get_animal_inspection,
+)
+from server_app.domains.animal_management import (
+    list_findings as list_animal_inspection_findings,
+)
+from server_app.domains.animal_management import (
+    list_inspections as list_animal_inspections,
+)
+from server_app.domains.animal_management import (
+    resolve_finding as resolve_animal_inspection_finding,
+)
+from server_app.domains.animal_management import (
+    submit_inspection as submit_animal_inspection,
+)
+from server_app.domains.animal_management import (
+    update_finding as update_animal_inspection_finding,
 )
 from server_app.domains.billing import (
     BILLING_PRINCIPAL_INDEPENDENT,
@@ -107,8 +145,7 @@ from server_app.domains.reimbursement.importer import (
     next_imported_record_id,
 )
 from server_app.pdf.renderer import prewarm_pdf_renderer
-from server_app.persistence import SchemaRegistry, SchemaStep
-from server_app.persistence.backfills import backfill_quantity_sheet_staff
+from server_app.persistence import SchemaRegistry, SchemaStep, backfills
 from server_app.persistence.base_schema import initialize_base_schema
 from server_app.persistence.indexes import create_performance_indexes
 from server_app.repositories.billing import (
@@ -425,7 +462,12 @@ def initialize_legacy_schema(conn):
 
 
 def initialize_schema(conn):
-    registry = SchemaRegistry([SchemaStep("legacy-schema", initialize_legacy_schema)])
+    registry = SchemaRegistry(
+        [
+            SchemaStep("legacy-schema", initialize_legacy_schema),
+            SchemaStep("animal-inspection-catalog", ensure_animal_inspection_catalog),
+        ]
+    )
     registry.apply(conn)
 
 
@@ -437,7 +479,7 @@ def migrate_schema(conn):
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
     migrate_reimbursement_record_schema(conn)
-    backfill_quantity_sheet_staff(conn)
+    backfills.backfill_quantity_sheet_staff(conn)
 
 
 def ensure_experiment_applications_duplicate_schema(conn):
@@ -2048,7 +2090,7 @@ def write_infrastructure_state(payload, actor):
             insert_room_record(conn, room)
         for room in updated_rooms:
             update_room_record(conn, room)
-        backfill_quantity_sheet_staff(conn, [room["id"] for room in created_rooms + updated_rooms])
+        backfills.backfill_quantity_sheet_staff(conn, [room["id"] for room in created_rooms + updated_rooms])
         for rack in created_racks:
             insert_rack_record(conn, rack)
         for rack in updated_racks:
@@ -5000,6 +5042,92 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 room_id = clean_text(query.get("roomId", [""])[0])
                 self.send_json(read_bootstrap_state(conn, user, scope, room_id))
             return
+        if path == "/api/animal-inspection-catalog":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(animal_inspection_catalog_payload(conn, user))
+            return
+        if path == "/api/animal-inspections":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(list_animal_inspections(conn, user, self.animal_inspection_filters()))
+            return
+        if path == "/api/animal-inspection-findings":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(list_animal_inspection_findings(conn, user, self.animal_inspection_filters()))
+            return
+        attachment_id = self.animal_inspection_attachment_route(path)
+        if attachment_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    attachment, body = get_animal_inspection_attachment(conn, user, attachment_id)
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", attachment["mimeType"])
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "private, no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
+        reference_name = self.animal_inspection_reference_route(path)
+        if reference_name:
+            if not self.require_user():
+                return
+            target = (ANIMAL_INSPECTION_CATALOG_PATH / "images" / reference_name).resolve()
+            root = (ANIMAL_INSPECTION_CATALOG_PATH / "images").resolve()
+            if not target.is_file() or root not in target.parents:
+                self.send_json({"error": "参考图例不存在"}, HTTPStatus.NOT_FOUND)
+                return
+            body = target.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", mimetypes.guess_type(target.name)[0] or "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        inspection_id = self.animal_inspection_pdf_route(path)
+        if inspection_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    body, filename = export_inspection_pdf(conn, user, inspection_id)
+                self.send_download(body, filename, "application/pdf")
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            except RuntimeError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        inspection_id = self.animal_inspection_route(path)
+        if inspection_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    self.send_json(get_animal_inspection(conn, user, inspection_id))
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
         if path == "/api/iacuc-index":
             if not self.require_user():
                 return
@@ -5246,6 +5374,29 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if path == "/api/auth/logout":
             self.handle_logout()
             return
+        if path == "/api/animal-inspections":
+            self.handle_animal_inspection_save(None)
+            return
+        inspection_id = self.animal_inspection_submit_route(path)
+        if inspection_id:
+            self.handle_animal_inspection_submit(inspection_id)
+            return
+        inspection_id, finding_id = self.animal_inspection_attachment_upload_route(path)
+        if inspection_id and finding_id:
+            self.handle_animal_inspection_attachment(inspection_id, finding_id)
+            return
+        finding_id = self.animal_inspection_finding_action_route(path, "actions")
+        if finding_id:
+            self.handle_animal_inspection_finding_update(finding_id)
+            return
+        finding_id = self.animal_inspection_finding_action_route(path, "recheck")
+        if finding_id:
+            self.handle_animal_inspection_finding_recheck(finding_id)
+            return
+        finding_id = self.animal_inspection_finding_action_route(path, "resolve")
+        if finding_id:
+            self.handle_animal_inspection_finding_resolve(finding_id)
+            return
         if path == "/api/iacuc-index/upload":
             self.handle_iacuc_upload()
             return
@@ -5363,6 +5514,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
+        inspection_id = self.animal_inspection_route(path)
+        if inspection_id:
+            self.handle_animal_inspection_save(inspection_id)
+            return
         if path == "/api/state":
             user = self.require_user()
             if not user:
@@ -5863,6 +6018,98 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
 
+    def handle_animal_inspection_save(self, inspection_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                payload = save_animal_inspection(conn, user, inspection_id, body)
+            self.send_json(payload, HTTPStatus.OK if inspection_id else HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_submit(self, inspection_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                self.send_json(submit_animal_inspection(conn, user, inspection_id))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_attachment(self, inspection_id, finding_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            filename, body = parse_multipart_upload(self.headers.get("Content-Type", ""), self.read_raw_body())
+            with connect_db() as conn:
+                payload = add_animal_inspection_attachment(
+                    conn, user, inspection_id, finding_id, filename, body, self.headers.get("Content-Type", "")
+                )
+            self.send_json(payload, HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_finding_update(self, finding_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                self.send_json(update_animal_inspection_finding(conn, user, finding_id, self.read_json_body()))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_finding_recheck(self, finding_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            body["status"] = "pending_recheck"
+            with connect_db() as conn:
+                self.send_json(update_animal_inspection_finding(conn, user, finding_id, body))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_finding_resolve(self, finding_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                self.send_json(resolve_animal_inspection_finding(conn, user, finding_id, self.read_json_body()))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
     def current_user(self):
         with connect_db() as conn:
             return user_from_token(conn, self.session_token())
@@ -5975,6 +6222,76 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 item_id = unquote(path[len(prefix) :])
                 if "/" not in item_id and item_id:
                     return endpoint, item_id
+        return None, None
+
+    def animal_inspection_route(self, path):
+        prefix = "/api/animal-inspections/"
+        if not path.startswith(prefix):
+            return None
+        value = unquote(path[len(prefix) :])
+        return value if value and "/" not in value else None
+
+    def animal_inspection_submit_route(self, path):
+        prefix = "/api/animal-inspections/"
+        suffix = "/submit"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
+        return value if value and "/" not in value else None
+
+    def animal_inspection_pdf_route(self, path):
+        prefix = "/api/animal-inspections/"
+        suffix = "/export-pdf"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
+        return value if value and "/" not in value else None
+
+    def animal_inspection_attachment_upload_route(self, path):
+        prefix = "/api/animal-inspections/"
+        suffix = "/attachments"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None, None
+        inspection_id = unquote(path[len(prefix) : -len(suffix)])
+        query = parse_qs(urlparse(self.path).query)
+        finding_id = clean_text(query.get("findingId", [""])[0])
+        return (
+            (inspection_id, finding_id) if inspection_id and "/" not in inspection_id and finding_id else (None, None)
+        )
+
+    def animal_inspection_attachment_route(self, path):
+        prefix = "/api/animal-inspection-attachments/"
+        value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
+        return value if value and "/" not in value else None
+
+    def animal_inspection_reference_route(self, path):
+        prefix = "/api/animal-inspection-reference/"
+        value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
+        return value if value and "/" not in value else None
+
+    def animal_inspection_finding_action_route(self, path, action):
+        prefix = "/api/animal-inspection-findings/"
+        suffix = f"/{action}"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
+        return value if value and "/" not in value else None
+
+    def animal_inspection_filters(self):
+        query = parse_qs(urlparse(self.path).query)
+        return {
+            "limit": clean_text(query.get("limit", ["20"])[0]) or "20",
+            "offset": clean_text(query.get("offset", ["0"])[0]) or "0",
+            "sortKey": clean_text(query.get("sortKey", [""])[0]),
+            "sortDir": clean_text(query.get("sortDir", [""])[0]),
+            "room": clean_text(query.get("room", [""])[0]),
+            "status": clean_text(query.get("status", [""])[0]),
+            "module": clean_text(query.get("module", [""])[0]),
+            "creator": clean_text(query.get("creator", [""])[0]),
+            "severity": clean_text(query.get("severity", [""])[0]),
+            "dateFrom": clean_text(query.get("dateFrom", [""])[0]),
+            "dateTo": clean_text(query.get("dateTo", [""])[0]),
+        }
         return None, None
 
     def user_route(self, path):

@@ -1,16 +1,20 @@
-import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useLogout } from "../../api/session";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { clearUiStorage, persistWorkspaceView } from "../../state/uiStorage";
 import { APP_VERSION } from "../../version";
+import { WorkspaceErrorBoundary, WorkspaceLoading } from "./WorkspaceErrorBoundary";
 import { DashboardView } from "../dashboard/DashboardView";
 import { billingSidebarItems } from "./workspaceNavigation";
 
 const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({ default: module.IntakeView })));
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
 const CagesView = lazy(() => import("../cages/CagesView").then((module) => ({ default: module.CagesView })));
+const AnimalManagementView = lazy(() =>
+  import("../animal-management/AnimalManagementView").then((module) => ({ default: module.AnimalManagementView })),
+);
 const BillingView = lazy(() => import("../billing/BillingView").then((module) => ({ default: module.BillingView })));
 const WorkflowCenterView = lazy(() =>
   import("../workflows/WorkflowCenterView").then((module) => ({ default: module.WorkflowCenterView })),
@@ -33,9 +37,11 @@ type IconName =
   | "info"
   | "database"
   | "users"
-  | "book";
+  | "book"
+  | "clipboard"
+  | "more";
 
-type NavigationDrawer = "intake" | "billing" | "settings";
+type NavigationDrawer = "intake" | "animal" | "billing" | "settings" | "more";
 
 export function ReactWorkspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
@@ -134,11 +140,33 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
             />
             <NavItem view="cages" label="笼位管理" icon="grid" activeView={ui.activeView} onNavigate={navigate} />
             <NavGroupButton
+              label="动物管理"
+              icon="clipboard"
+              active={isAnimalManagementView(ui.activeView)}
+              expanded={activeDrawer === "animal"}
+              controls="nav-animal-management"
+              onClick={() => toggleDrawer("animal", "animal-inspection-entry")}
+            />
+            <NavigationSubmenu
+              id="nav-animal-management"
+              drawer="animal"
+              expanded={activeDrawer === "animal"}
+              showCurrent={activeDrawer === null}
+              activeView={ui.activeView}
+              settingsViews={settingsViews}
+              user={user}
+              logoutPending={logout.isPending}
+              onClearCache={clearLocalCache}
+              onSignOut={signOut}
+              onNavigate={navigate}
+            />
+            <NavGroupButton
               label="饲养费管理"
               icon="calculator"
               active={isBillingView(ui.activeView)}
               expanded={activeDrawer === "billing"}
               controls="nav-billing"
+              className="nav-item-billing-root"
               onClick={() => toggleDrawer("billing", "billing-quantity-entry")}
             />
             <NavigationSubmenu
@@ -172,6 +200,28 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               id="nav-settings"
               drawer="settings"
               expanded={activeDrawer === "settings"}
+              showCurrent={activeDrawer === null}
+              activeView={ui.activeView}
+              settingsViews={settingsViews}
+              user={user}
+              logoutPending={logout.isPending}
+              onClearCache={clearLocalCache}
+              onSignOut={signOut}
+              onNavigate={navigate}
+            />
+            <NavGroupButton
+              label="更多功能"
+              icon="more"
+              active={isMoreView(ui.activeView)}
+              expanded={activeDrawer === "more"}
+              controls="nav-more"
+              className="nav-item-more"
+              onClick={() => toggleDrawer("more", "billing-quantity-entry")}
+            />
+            <NavigationSubmenu
+              id="nav-more"
+              drawer="more"
+              expanded={activeDrawer === "more"}
               showCurrent={activeDrawer === null}
               activeView={ui.activeView}
               settingsViews={settingsViews}
@@ -224,6 +274,13 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "intake-batches") return <IntakeView mode="batches" user={user} navigate={navigate} />;
   if (view === "cage-card-scanner") return <ScannerView navigate={navigate} />;
   if (view === "cages") return <CagesView navigate={navigate} />;
+  if (view === "animal-inspection-entry") return <AnimalManagementView mode="entry" user={user} navigate={navigate} />;
+  if (view === "animal-inspection-findings")
+    return <AnimalManagementView mode="findings" user={user} navigate={navigate} />;
+  if (view === "animal-inspection-records")
+    return <AnimalManagementView mode="records" user={user} navigate={navigate} />;
+  if (view === "animal-inspection-standards")
+    return <AnimalManagementView mode="standards" user={user} navigate={navigate} />;
   if (view === "billing-cage-map") return <BillingView mode="cage-map" user={user} navigate={navigate} />;
   if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} navigate={navigate} />;
   if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} navigate={navigate} />;
@@ -273,6 +330,7 @@ function NavGroupButton({
   active,
   expanded,
   controls,
+  className,
   onClick,
 }: {
   label: string;
@@ -280,11 +338,12 @@ function NavGroupButton({
   active: boolean;
   expanded: boolean;
   controls: string;
+  className?: string;
   onClick: () => void;
 }) {
   return (
     <button
-      className={`nav-item nav-group-button ${active ? "active" : ""}`}
+      className={`nav-item nav-group-button ${className ?? ""} ${active ? "active" : ""}`}
       type="button"
       aria-label={label}
       aria-expanded={expanded}
@@ -330,12 +389,26 @@ function NavigationSubmenu({
       ? isIntakeView(activeView)
       : drawer === "billing"
         ? isBillingView(activeView)
-        : isSettingsView(activeView);
+        : drawer === "animal"
+          ? isAnimalManagementView(activeView)
+          : drawer === "more"
+            ? isMoreView(activeView)
+            : isSettingsView(activeView);
+  const drawerLabel =
+    drawer === "intake"
+      ? "笼卡管理"
+      : drawer === "animal"
+        ? "动物管理"
+        : drawer === "billing"
+          ? "饲养费管理"
+          : drawer === "more"
+            ? "更多功能"
+            : "系统设置";
   return (
     <div
       id={id}
       className={`nav-subtree navigation-submenu ${expanded ? "expanded" : ""} ${showCurrent && groupIsActive ? "current-group" : ""}`}
-      aria-label={`${drawer === "intake" ? "笼卡管理" : drawer === "billing" ? "饲养费管理" : "系统设置"}子菜单`}
+      aria-label={`${drawerLabel}子菜单`}
     >
       {drawer === "intake" ? (
         <>
@@ -365,8 +438,9 @@ function NavigationSubmenu({
           />
         </>
       ) : null}
-      {drawer === "billing" ? (
+      {drawer === "billing" || drawer === "more" ? (
         <>
+          {drawer === "more" ? <span className="nav-submenu-label">饲养费管理</span> : null}
           {billingSidebarItems(user.role === "admin").map((item) =>
             item.section ? (
               <span className="nav-submenu-label" key={item.section}>
@@ -386,8 +460,45 @@ function NavigationSubmenu({
           )}
         </>
       ) : null}
-      {drawer === "settings" ? (
+      {drawer === "animal" ? (
         <>
+          <NavigationPanelItem
+            view="animal-inspection-entry"
+            label="动物巡检"
+            description="按饲养间完成基础、进阶和异常动物巡检。"
+            icon="clipboard"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <NavigationPanelItem
+            view="animal-inspection-findings"
+            label="异常处置"
+            description="跟进异常项、复查日期和关闭结论。"
+            icon="refresh"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <NavigationPanelItem
+            view="animal-inspection-records"
+            label="巡检记录"
+            description="筛选、查看和导出已保存的巡检报告。"
+            icon="book"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+          <NavigationPanelItem
+            view="animal-inspection-standards"
+            label="巡检标准"
+            description="查看当前生效的评分标准与图例参考。"
+            icon="info"
+            activeView={activeView}
+            onNavigate={onNavigate}
+          />
+        </>
+      ) : null}
+      {drawer === "settings" || drawer === "more" ? (
+        <>
+          {drawer === "more" ? <span className="nav-submenu-label">系统设置</span> : null}
           {settingsViews.map(([view, label, icon, itemDescription]) => (
             <NavigationPanelItem
               key={view}
@@ -452,79 +563,16 @@ function isBillingView(view: WorkspaceView) {
   return view.startsWith("billing-") || view === "workflow-center";
 }
 
+function isAnimalManagementView(view: WorkspaceView) {
+  return view.startsWith("animal-inspection-");
+}
+
 function isSettingsView(view: WorkspaceView) {
   return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
 }
 
-function WorkspaceLoading() {
-  return (
-    <section className="workspace-view">
-      <div className="empty-state" aria-busy="true">
-        <strong>正在加载业务工作区...</strong>
-      </div>
-    </section>
-  );
-}
-
-const CHUNK_RECOVERY_KEY = "cageledger.workspace.chunk-recovery-at";
-const CHUNK_RECOVERY_WINDOW_MS = 30_000;
-
-class WorkspaceErrorBoundary extends Component<
-  { children: ReactNode; resetKey: WorkspaceView },
-  { error: Error | null }
-> {
-  state = { error: null };
-
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-
-  componentDidCatch(error: Error) {
-    if (!isChunkLoadFailure(error)) return;
-
-    const lastRecoveryAt = Number(sessionStorage.getItem(CHUNK_RECOVERY_KEY) || 0);
-    if (Date.now() - lastRecoveryAt < CHUNK_RECOVERY_WINDOW_MS) return;
-
-    sessionStorage.setItem(CHUNK_RECOVERY_KEY, String(Date.now()));
-    window.location.reload();
-  }
-
-  componentDidUpdate(previousProps: Readonly<{ children: ReactNode; resetKey: WorkspaceView }>) {
-    if (previousProps.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
-  }
-
-  render() {
-    if (!this.state.error) return this.props.children;
-
-    return (
-      <section className="workspace-view">
-        <div className="empty-state" role="alert">
-          <strong>当前工作区未能加载</strong>
-          <span>页面资源可能刚完成更新，请重新加载后继续操作。</span>
-          <div className="action-row">
-            <button className="secondary" type="button" onClick={() => window.location.reload()}>
-              重新加载
-            </button>
-            <button
-              className="primary"
-              type="button"
-              onClick={() => {
-                clearUiStorage();
-                sessionStorage.removeItem(CHUNK_RECOVERY_KEY);
-                window.location.assign("/");
-              }}
-            >
-              返回首页
-            </button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-}
-
-function isChunkLoadFailure(error: Error) {
-  return /chunkloaderror|loading chunk|dynamically imported module|module script/i.test(error.message);
+function isMoreView(view: WorkspaceView) {
+  return isBillingView(view) || isSettingsView(view);
 }
 
 function VersionMeta({ className }: { className: string }) {
@@ -561,6 +609,9 @@ function Icon({ name }: { name: IconName }) {
     users:
       "M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z",
     book: "M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5zm2.5-.5a.5.5 0 0 0-.5.5v13.1c.2-.1.3-.1.5-.1H18V4zM9 7h6v2H9zm0 4h6v2H9z",
+    clipboard:
+      "M9 3h6l1 2h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2zm1 2v2h4V5zm-1 6v2h6v-2zm0 4v2h6v-2z",
+    more: "M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   };
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">

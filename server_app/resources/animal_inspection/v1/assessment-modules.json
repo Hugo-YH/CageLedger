@@ -1,0 +1,46 @@
+{
+  "code": 0,
+  "msg": "",
+  "total": 3,
+  "modules": [
+    {
+      "id": 1000023,
+      "code": "basicAssessment",
+      "name": "基础评估",
+      "nameEn": "Basic Assessment",
+      "moduleGroup": "BASIC",
+      "version": 1,
+      "sortOrder": 1,
+      "status": 0,
+      "description": "对设施环境、营养、行为、健康、疼痛与压力管理、安乐死的基础评估",
+      "descriptionEn": "Basic assessment of facility environment, nutrition, behavior, health, pain and stress management, and euthanasia",
+      "createdAt": 1784018507608
+    },
+    {
+      "id": 1000022,
+      "code": "advancedAssessment",
+      "name": "进阶评估",
+      "nameEn": "Advanced Assessment",
+      "moduleGroup": "ADVANCED",
+      "version": 1,
+      "sortOrder": 2,
+      "status": 0,
+      "description": "对动物运输、实验设计与操作、人员投入、福利伦理规定的进阶评估",
+      "descriptionEn": "Advanced assessment of animal transportation, experimental design and operation, personnel, and welfare ethics regulations",
+      "createdAt": 1784018507605
+    },
+    {
+      "id": 1000021,
+      "code": "abnormalAnimalAssessment",
+      "name": "异常动物（小鼠）评估",
+      "nameEn": "Abnormal Animal (Mouse) Assessment",
+      "moduleGroup": "ABNORMAL",
+      "version": 1,
+      "sortOrder": 3,
+      "status": 0,
+      "description": "评分标准：1分为严重；2分为轻微；3分为未勾选此项默认为3分。",
+      "descriptionEn": "Scoring criteria: 1 = Severe; 2 = Mild; 3 = Normal (default if not checked).",
+      "createdAt": 1784018507601
+    }
+  ]
+}

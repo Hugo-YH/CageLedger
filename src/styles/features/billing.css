@@ -719,6 +719,10 @@ th {
   flex-wrap: nowrap;
 }
 
+.react-quantity-layout .quantity-entry-toolbar-actions > .tooltip-anchor {
+  display: flex;
+}
+
 .react-quantity-layout .quantity-entry-toolbar-button {
   min-height: 38px;
   padding: 8px 14px;

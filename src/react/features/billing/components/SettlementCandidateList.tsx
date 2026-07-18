@@ -8,6 +8,7 @@ import type {
 import { useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
+import { Tooltip } from "../../../components/Tooltip";
 import { ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
@@ -199,15 +200,27 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
                     {candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`}
                   </td>
                   <td>
-                    <button
-                      className="secondary info-button compact"
-                      type="button"
-                      disabled={generate.isPending || candidate.totalAmount == null}
-                      title={candidate.error || undefined}
-                      onClick={() => void generateFor(candidate, false)}
-                    >
-                      预览结算单
-                    </button>
+                    {candidate.error ? (
+                      <Tooltip content={candidate.error}>
+                        <button
+                          className="secondary info-button compact"
+                          type="button"
+                          disabled={generate.isPending || candidate.totalAmount == null}
+                          onClick={() => void generateFor(candidate, false)}
+                        >
+                          预览结算单
+                        </button>
+                      </Tooltip>
+                    ) : (
+                      <button
+                        className="secondary info-button compact"
+                        type="button"
+                        disabled={generate.isPending || candidate.totalAmount == null}
+                        onClick={() => void generateFor(candidate, false)}
+                      >
+                        预览结算单
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

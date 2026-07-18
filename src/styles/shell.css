@@ -1594,6 +1594,10 @@ h3 {
   display: none;
 }
 
+.nav-item-more {
+  display: none;
+}
+
 .nav-submenu-label {
   margin: 7px 8px 2px;
   color: #759a96;

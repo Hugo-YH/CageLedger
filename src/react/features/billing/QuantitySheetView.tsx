@@ -4,6 +4,7 @@ import type { QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/con
 import { usePrincipalIdentities } from "../../api/administration";
 import { useIacucIndex } from "../../api/iacuc";
 import { useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
+import { Tooltip } from "../../components/Tooltip";
 import { ModalShell } from "../../components/WorkspaceUi";
 import {
   createQuantityRow,
@@ -212,35 +213,39 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     mode === "entry" ? (
       <>
         <div className="workspace-toolbar-main quantity-entry-toolbar-main">
-          <label
-            className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
-            title={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
+          <Tooltip
+            content={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
           >
-            <input
-              type="checkbox"
-              checked={animalDetails}
-              disabled={unit === "animal_day"}
-              onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
-            />
-            <span className="quantity-animal-toggle-track" aria-hidden="true">
-              <span />
-            </span>
-            <strong>动物数量</strong>
-          </label>
+            <label
+              className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
+            >
+              <input
+                type="checkbox"
+                checked={animalDetails}
+                disabled={unit === "animal_day"}
+                onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
+              />
+              <span className="quantity-animal-toggle-track" aria-hidden="true">
+                <span />
+              </span>
+              <strong>动物数量</strong>
+            </label>
+          </Tooltip>
         </div>
         <div className="workspace-toolbar-actions quantity-entry-toolbar-actions">
           <button className="secondary info-button quantity-entry-toolbar-button" type="button" onClick={startNew}>
             新建
           </button>
-          <button
-            className="primary quantity-entry-toolbar-button quantity-entry-save-button"
-            type="submit"
-            form="quantity-sheet-entry-form"
-            disabled={save.isPending}
-            title={saveHint(editorRows, animalDetails)}
-          >
-            保存统计表
-          </button>
+          <Tooltip content={saveHint(editorRows, animalDetails)}>
+            <button
+              className="primary quantity-entry-toolbar-button quantity-entry-save-button"
+              type="submit"
+              form="quantity-sheet-entry-form"
+              disabled={save.isPending}
+            >
+              保存统计表
+            </button>
+          </Tooltip>
         </div>
       </>
     ) : null;
@@ -388,9 +393,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                             : "选择 IACUC 后显示项目负责人减免额度"}
                       </span>
                     </div>
-                    <label
-                      className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages && !draft.fullExemption ? "" : "locked"}`}
-                      title={
+                    <Tooltip
+                      content={
                         draft.fullExemption
                           ? "全额减免已开启，普通优先减免暂停使用。"
                           : supportsFreeCages
@@ -398,17 +402,21 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                             : "当前计费口径没有项目负责人减免额度。"
                       }
                     >
-                      <input
-                        type="checkbox"
-                        checked={freeCageEnabled}
-                        disabled={!supportsFreeCages || draft.fullExemption}
-                        onChange={(event) => setFreeCageEnabled(event.target.checked)}
-                      />
-                      <span className="quantity-animal-toggle-track" aria-hidden="true">
-                        <span />
-                      </span>
-                      <span className="quantity-animal-toggle-label">优先减免</span>
-                    </label>
+                      <label
+                        className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages && !draft.fullExemption ? "" : "locked"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={freeCageEnabled}
+                          disabled={!supportsFreeCages || draft.fullExemption}
+                          onChange={(event) => setFreeCageEnabled(event.target.checked)}
+                        />
+                        <span className="quantity-animal-toggle-track" aria-hidden="true">
+                          <span />
+                        </span>
+                        <span className="quantity-animal-toggle-label">优先减免</span>
+                      </label>
+                    </Tooltip>
                   </div>
                   {freeCageEnabled ? (
                     <label className="quantity-free-cage-field">
@@ -431,21 +439,22 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                       <strong>全额减免</strong>
                       <small>有效期内每日实际饲养量全部减免，且不占用项目负责人普通减免额度。</small>
                     </div>
-                    <label
-                      className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.fullExemption ? "enabled" : ""}`}
-                      title="打开后，当前伦理在有效期内产生的饲养费全部减免。"
-                    >
-                      <input
-                        type="checkbox"
-                        aria-label="全额减免"
-                        checked={draft.fullExemption}
-                        onChange={(event) => setFullExemption(event.target.checked)}
-                      />
-                      <span className="quantity-animal-toggle-track" aria-hidden="true">
-                        <span />
-                      </span>
-                      <span className="quantity-animal-toggle-label">全额减免</span>
-                    </label>
+                    <Tooltip content="打开后，当前伦理在有效期内产生的饲养费全部减免。">
+                      <label
+                        className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.fullExemption ? "enabled" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label="全额减免"
+                          checked={draft.fullExemption}
+                          onChange={(event) => setFullExemption(event.target.checked)}
+                        />
+                        <span className="quantity-animal-toggle-track" aria-hidden="true">
+                          <span />
+                        </span>
+                        <span className="quantity-animal-toggle-label">全额减免</span>
+                      </label>
+                    </Tooltip>
                   </div>
                   <div className={`quantity-full-exemption-row ${tierPriorityEnabled ? "enabled" : ""}`}>
                     <div>
@@ -456,9 +465,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                           : "当前房间计费口径没有梯度收费。"}
                       </small>
                     </div>
-                    <label
-                      className={`quantity-animal-toggle quantity-free-cage-toggle ${tierPriorityEnabled ? "enabled" : ""} ${supportsTierPriority && !draft.fullExemption ? "" : "locked"}`}
-                      title={
+                    <Tooltip
+                      content={
                         draft.fullExemption
                           ? "全额减免已开启，优先梯度暂停使用。"
                           : supportsTierPriority
@@ -466,18 +474,22 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                             : "当前计费口径没有梯度收费。"
                       }
                     >
-                      <input
-                        type="checkbox"
-                        aria-label="优先梯度"
-                        checked={tierPriorityEnabled}
-                        disabled={!supportsTierPriority || draft.fullExemption}
-                        onChange={(event) => setTierPriorityEnabled(event.target.checked)}
-                      />
-                      <span className="quantity-animal-toggle-track" aria-hidden="true">
-                        <span />
-                      </span>
-                      <span className="quantity-animal-toggle-label">优先梯度</span>
-                    </label>
+                      <label
+                        className={`quantity-animal-toggle quantity-free-cage-toggle ${tierPriorityEnabled ? "enabled" : ""} ${supportsTierPriority && !draft.fullExemption ? "" : "locked"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label="优先梯度"
+                          checked={tierPriorityEnabled}
+                          disabled={!supportsTierPriority || draft.fullExemption}
+                          onChange={(event) => setTierPriorityEnabled(event.target.checked)}
+                        />
+                        <span className="quantity-animal-toggle-track" aria-hidden="true">
+                          <span />
+                        </span>
+                        <span className="quantity-animal-toggle-label">优先梯度</span>
+                      </label>
+                    </Tooltip>
                   </div>
                 </div>
                 <div className="quantity-free-cage-module quantity-custom-billing-module">
@@ -488,20 +500,21 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                         标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
                       </span>
                     </div>
-                    <label
-                      className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
-                      title="打开后，当前伦理按输入的自定义标准计费。"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={draft.customBillingEnabled}
-                        onChange={(event) => setCustomBillingEnabled(event.target.checked)}
-                      />
-                      <span className="quantity-animal-toggle-track" aria-hidden="true">
-                        <span />
-                      </span>
-                      <span className="quantity-animal-toggle-label">自定义收费</span>
-                    </label>
+                    <Tooltip content="打开后，当前伦理按输入的自定义标准计费。">
+                      <label
+                        className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={draft.customBillingEnabled}
+                          onChange={(event) => setCustomBillingEnabled(event.target.checked)}
+                        />
+                        <span className="quantity-animal-toggle-track" aria-hidden="true">
+                          <span />
+                        </span>
+                        <span className="quantity-animal-toggle-label">自定义收费</span>
+                      </label>
+                    </Tooltip>
                   </div>
                   {draft.customBillingEnabled ? (
                     <label className="quantity-free-cage-field">
@@ -571,15 +584,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           <div className="modal-shell-body">
             <div className="react-quantity-layout quantity-edit-context">
               {renderEditor(
-                <button
-                  className="primary"
-                  type="submit"
-                  form="quantity-sheet-entry-form"
-                  disabled={save.isPending}
-                  title={saveHint(editorRows, animalDetails)}
-                >
-                  {save.isPending ? "保存中..." : "保存统计表"}
-                </button>,
+                <Tooltip content={saveHint(editorRows, animalDetails)}>
+                  <button className="primary" type="submit" form="quantity-sheet-entry-form" disabled={save.isPending}>
+                    {save.isPending ? "保存中..." : "保存统计表"}
+                  </button>
+                </Tooltip>,
               )}
             </div>
           </div>

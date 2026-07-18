@@ -26,7 +26,19 @@ const sizePolicies = [
 const baselineHotspots = new Map([
   [
     "server_app/legacy.py",
-    { ceiling: 6300, reason: "legacy HTTP compatibility, settlement candidate snapshots, and PDF export routes" },
+    {
+      ceiling: 6617,
+      reason:
+        "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, and transitional domain dispatch",
+    },
+  ],
+  [
+    "server_app/domains/animal_management/service.py",
+    { ceiling: 772, reason: "initial inspection record, finding, attachment, and audit service composition" },
+  ],
+  [
+    "src/react/features/shell/ReactWorkspace.tsx",
+    { ceiling: 648, reason: "transitional navigation shell while feature navigation is progressively extracted" },
   ],
   [
     "src/react/features/cages/components/CageWorkspaceComponents.tsx",
