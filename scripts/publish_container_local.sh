@@ -96,6 +96,7 @@ docker buildx version >/dev/null 2>&1 || {
 IMAGE_REPO="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}"
 BASE_REPO="${REGISTRY}/${NAMESPACE}/${BASE_IMAGE_NAME}"
 TAG="v${VERSION}"
+LATEST_TAG="latest"
 SOURCE_REF="HEAD"
 
 cd "${ROOT}"
@@ -155,7 +156,22 @@ docker buildx imagetools create \
   "${IMAGE_REPO}:${TAG}-amd64" \
   "${IMAGE_REPO}:${TAG}-arm64" >/dev/null
 
-docker buildx imagetools inspect "${IMAGE_REPO}:${TAG}" >/dev/null
+verify_multi_arch_manifest() {
+  local image_ref="$1"
+  local manifest
+  manifest="$(docker buildx imagetools inspect "${image_ref}")"
+  grep -q 'Platform:.*linux/amd64' <<<"${manifest}"
+  grep -q 'Platform:.*linux/arm64' <<<"${manifest}"
+}
+
+verify_multi_arch_manifest "${IMAGE_REPO}:${TAG}"
+
+# latest is a moving alias of the newest successfully verified release manifest.
+docker buildx imagetools create \
+  -t "${IMAGE_REPO}:${LATEST_TAG}" \
+  "${IMAGE_REPO}:${TAG}" >/dev/null
+
+verify_multi_arch_manifest "${IMAGE_REPO}:${LATEST_TAG}"
 
 if [[ "${EXPORT_OFFLINE_IMAGES}" -eq 1 ]]; then
   bash "${ROOT}/scripts/package_offline_image.sh" \
@@ -165,7 +181,8 @@ if [[ "${EXPORT_OFFLINE_IMAGES}" -eq 1 ]]; then
     --image-name "${IMAGE_NAME}" >/dev/null
 fi
 
-printf '%s\n%s\n%s\n' \
+printf '%s\n%s\n%s\n%s\n' \
   "${IMAGE_REPO}:${TAG}" \
   "${IMAGE_REPO}:${TAG}-amd64" \
-  "${IMAGE_REPO}:${TAG}-arm64"
+  "${IMAGE_REPO}:${TAG}-arm64" \
+  "${IMAGE_REPO}:${LATEST_TAG}"
