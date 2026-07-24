@@ -9,7 +9,7 @@ import { useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { Tooltip } from "../../../components/Tooltip";
-import { ModalShell, Pager } from "../../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
 
@@ -101,19 +101,23 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         </div>
       ) : null}
       <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
-        <span className="panel-summary-chip">已选 {selectedCandidates.length} 项</span>
-        <button
-          className="secondary info-button"
-          type="button"
-          disabled={!selectedCandidates.length || pdfExport.isExporting}
-          onClick={() => void exportCandidates(selectedCandidates)}
-        >
-          {pdfExport.isExporting
-            ? settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)
-            : selectedCandidates.length > 1
-              ? "批量导出 PDF"
-              : "导出 PDF"}
-        </button>
+        <div className="workspace-toolbar-main">
+          <span className="panel-summary-chip">已选 {selectedCandidates.length} 项</span>
+        </div>
+        <div className="workspace-toolbar-actions">
+          <div className="workspace-toolbar-action-group">
+            <AsyncActionButton
+              className="primary"
+              type="button"
+              pending={pdfExport.isExporting}
+              pendingLabel={settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+              disabled={!selectedCandidates.length}
+              onClick={() => void exportCandidates(selectedCandidates)}
+            >
+              {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+            </AsyncActionButton>
+          </div>
+        </div>
       </div>
       <div className="list-meta">
         <span>{list.isFetching ? "正在计算结算候选项" : `当前加载 ${items.length} 项`}</span>
@@ -202,24 +206,28 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
                   <td>
                     {candidate.error ? (
                       <Tooltip content={candidate.error}>
-                        <button
+                        <AsyncActionButton
                           className="secondary info-button compact"
                           type="button"
-                          disabled={generate.isPending || candidate.totalAmount == null}
+                          pending={generate.isPending}
+                          pendingLabel="生成中..."
+                          disabled={candidate.totalAmount == null}
                           onClick={() => void generateFor(candidate, false)}
                         >
                           预览结算单
-                        </button>
+                        </AsyncActionButton>
                       </Tooltip>
                     ) : (
-                      <button
+                      <AsyncActionButton
                         className="secondary info-button compact"
                         type="button"
-                        disabled={generate.isPending || candidate.totalAmount == null}
+                        pending={generate.isPending}
+                        pendingLabel="生成中..."
+                        disabled={candidate.totalAmount == null}
                         onClick={() => void generateFor(candidate, false)}
                       >
                         预览结算单
-                      </button>
+                      </AsyncActionButton>
                     )}
                   </td>
                 </tr>
@@ -260,22 +268,24 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               <button className="secondary info-button" type="button" onClick={() => openSettlementPrint(result)}>
                 打印结算单
               </button>
-              <button
+              <AsyncActionButton
                 className="secondary info-button"
                 type="button"
-                disabled={pdfExport.isExporting}
+                pending={pdfExport.isExporting}
+                pendingLabel="正在生成..."
                 onClick={() => void exportCandidates([selected])}
               >
-                {pdfExport.isExporting ? "正在生成…" : "导出 PDF"}
-              </button>
-              <button
+                导出 PDF
+              </AsyncActionButton>
+              <AsyncActionButton
                 className="primary flow-button"
                 type="button"
-                disabled={generate.isPending}
+                pending={generate.isPending}
+                pendingLabel="发起中..."
                 onClick={() => void generateFor(selected, true)}
               >
                 发起结算流程
-              </button>
+              </AsyncActionButton>
               <button className="secondary" type="button" onClick={() => setSelected(null)}>
                 关闭
               </button>

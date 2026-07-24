@@ -77,6 +77,9 @@ class ApiContractTests(unittest.TestCase):
             "/api/billing-settlement-candidates?limit=5&offset=0": {"items", "page", "filterOptions"},
             "/api/billing-workflows?limit=5&offset=0": {"items", "page"},
             "/api/reimbursement-records?limit=5&offset=0": {"items", "page"},
+            "/api/reimbursement-ledger/obligations?limit=5&offset=0": {"items", "page"},
+            "/api/reimbursement-ledger/claims?limit=5&offset=0": {"items", "page"},
+            "/api/reimbursement-ledger/legacy-records?limit=5&offset=0": {"items", "page"},
             "/api/principal-identities": {"items"},
             "/api/users": {"users"},
         }

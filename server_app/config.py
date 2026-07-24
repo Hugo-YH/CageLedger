@@ -8,13 +8,18 @@ PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DB_PATH.parent / "p
 ANIMAL_INSPECTION_ATTACHMENTS_PATH = Path(
     os.environ.get("CAGELEDGER_ANIMAL_INSPECTION_ATTACHMENTS", DB_PATH.parent / "animal-inspection-attachments")
 )
+REIMBURSEMENT_ATTACHMENTS_PATH = Path(
+    os.environ.get("CAGELEDGER_REIMBURSEMENT_ATTACHMENTS", DB_PATH.parent / "reimbursement-attachments")
+)
 ANIMAL_INSPECTION_CATALOG_PATH = ROOT / "server_app" / "resources" / "animal_inspection" / "v1"
 IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DB_PATH.parent / "iacuc-index.json"))
 LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
 HOST = os.environ.get("CAGELEDGER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))
 # File uploads reserve a small multipart envelope beyond the 10 MiB per-image limit.
-MAX_BODY_BYTES = 12 * 1024 * 1024
+# Multipart endpoints apply their own file-type and size limits. The largest current
+# upload is a 30 MiB reimbursement attachment plus its multipart envelope.
+MAX_BODY_BYTES = 32 * 1024 * 1024
 SESSION_COOKIE = "cageledger_session"
 SESSION_TTL_DAYS = 14
 

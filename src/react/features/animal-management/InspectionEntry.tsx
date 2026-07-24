@@ -9,7 +9,7 @@ import {
   useSubmitAnimalInspection,
 } from "../../api/animalManagement";
 import { useBootstrap } from "../../api/bootstrap";
-import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { AsyncActionButton, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { HelpTooltip, Tooltip } from "../../components/Tooltip";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
@@ -154,22 +154,26 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
         breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
         actions={
           <>
-            <button
+            <AsyncActionButton
               className="secondary inspection-save-draft"
               type="button"
-              disabled={save.isPending || submit.isPending}
+              pending={save.isPending}
+              pendingLabel="保存中..."
+              disabled={submit.isPending}
               onClick={() => void saveDraft()}
             >
               保存草稿
-            </button>
-            <button
+            </AsyncActionButton>
+            <AsyncActionButton
               className="primary inspection-submit"
               type="button"
-              disabled={save.isPending || submit.isPending}
+              pending={submit.isPending}
+              pendingLabel="提交中..."
+              disabled={save.isPending}
               onClick={() => void submitInspection()}
             >
               提交巡检
-            </button>
+            </AsyncActionButton>
           </>
         }
       />

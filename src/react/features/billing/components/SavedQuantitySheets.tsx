@@ -68,29 +68,35 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   return (
     <section className="panel quantity-saved-panel">
       <div className="workspace-toolbar quantity-saved-toolbar">
-        <span className="panel-summary-chip">
-          {total} 条 · 已选 {selected.length}
-        </span>
-        <button
-          className="secondary info-button"
-          type="button"
-          disabled={!selected.length}
-          onClick={() => void printSelected()}
-        >
-          打印数量统计表
-        </button>
-        <button
-          className="secondary info-button"
-          type="button"
-          disabled={!selected.length || pdfExport.isExporting}
-          onClick={() => void exportSelected()}
-        >
-          {pdfExport.isExporting
-            ? exportProgress(pdfExport.job?.completed, pdfExport.job?.total)
-            : selected.length > 1
-              ? "批量导出 PDF"
-              : "导出 PDF"}
-        </button>
+        <div className="workspace-toolbar-main">
+          <span className="panel-summary-chip">
+            {total} 条 · 已选 {selected.length}
+          </span>
+        </div>
+        <div className="workspace-toolbar-actions">
+          <div className="workspace-toolbar-action-group">
+            <button
+              className="secondary"
+              type="button"
+              disabled={!selected.length}
+              onClick={() => void printSelected()}
+            >
+              打印数量统计表
+            </button>
+            <button
+              className="primary"
+              type="button"
+              disabled={!selected.length || pdfExport.isExporting}
+              onClick={() => void exportSelected()}
+            >
+              {pdfExport.isExporting
+                ? exportProgress(pdfExport.job?.completed, pdfExport.job?.total)
+                : selected.length > 1
+                  ? "批量导出 PDF"
+                  : "导出 PDF"}
+            </button>
+          </div>
+        </div>
       </div>
       {pdfExport.isExporting || exportError ? (
         <div className="react-inline-notice" role="status" aria-live="polite">

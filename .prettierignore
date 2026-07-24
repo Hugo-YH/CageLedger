@@ -1,12 +1,8 @@
-docs/archives/
+.agents/
 .codex-run/
+data/
+docs/archives/
+dist/
+node_modules/
 src/vendor/
 web-dist/
-dist/
-data/
-node_modules/
-.venv/
-playwright-report/
-test-results/
-package-lock.json
-*.min.js

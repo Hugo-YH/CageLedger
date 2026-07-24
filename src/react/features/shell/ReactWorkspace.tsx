@@ -38,10 +38,9 @@ type IconName =
   | "database"
   | "users"
   | "book"
-  | "clipboard"
-  | "more";
+  | "clipboard";
 
-type NavigationDrawer = "intake" | "animal" | "billing" | "settings" | "more";
+type NavigationDrawer = "intake" | "animal" | "billing" | "settings";
 
 export function ReactWorkspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
@@ -136,6 +135,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               logoutPending={logout.isPending}
               onClearCache={clearLocalCache}
               onSignOut={signOut}
+              onClose={() => setActiveDrawer(null)}
               onNavigate={navigate}
             />
             <NavItem view="cages" label="笼位管理" icon="grid" activeView={ui.activeView} onNavigate={navigate} />
@@ -158,6 +158,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               logoutPending={logout.isPending}
               onClearCache={clearLocalCache}
               onSignOut={signOut}
+              onClose={() => setActiveDrawer(null)}
               onNavigate={navigate}
             />
             <NavGroupButton
@@ -180,6 +181,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               logoutPending={logout.isPending}
               onClearCache={clearLocalCache}
               onSignOut={signOut}
+              onClose={() => setActiveDrawer(null)}
               onNavigate={navigate}
             />
             <button
@@ -207,28 +209,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               logoutPending={logout.isPending}
               onClearCache={clearLocalCache}
               onSignOut={signOut}
-              onNavigate={navigate}
-            />
-            <NavGroupButton
-              label="更多功能"
-              icon="more"
-              active={isMoreView(ui.activeView)}
-              expanded={activeDrawer === "more"}
-              controls="nav-more"
-              className="nav-item-more"
-              onClick={() => toggleDrawer("more", "billing-quantity-entry")}
-            />
-            <NavigationSubmenu
-              id="nav-more"
-              drawer="more"
-              expanded={activeDrawer === "more"}
-              showCurrent={activeDrawer === null}
-              activeView={ui.activeView}
-              settingsViews={settingsViews}
-              user={user}
-              logoutPending={logout.isPending}
-              onClearCache={clearLocalCache}
-              onSignOut={signOut}
+              onClose={() => setActiveDrawer(null)}
               onNavigate={navigate}
             />
           </div>
@@ -239,10 +220,21 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
           <small>
             {user.role === "admin" ? "管理员 · 全部饲养间" : `房间管理员 · ${user.roomIds.length} 个饲养间`}
           </small>
-          <button className="secondary sidebar-cache-button" type="button" onClick={clearLocalCache}>
+          <button
+            aria-label="刷新页面"
+            className="secondary sidebar-cache-button"
+            type="button"
+            onClick={clearLocalCache}
+          >
             刷新
           </button>
-          <button className="secondary logout-button" type="button" disabled={logout.isPending} onClick={signOut}>
+          <button
+            aria-label="退出登录"
+            className="secondary logout-button"
+            type="button"
+            disabled={logout.isPending}
+            onClick={signOut}
+          >
             <Icon name="logout" />
             退出
           </button>
@@ -370,6 +362,7 @@ function NavigationSubmenu({
   logoutPending,
   onClearCache,
   onSignOut,
+  onClose,
   onNavigate,
 }: {
   id: string;
@@ -382,6 +375,7 @@ function NavigationSubmenu({
   logoutPending: boolean;
   onClearCache: () => void;
   onSignOut: () => Promise<void>;
+  onClose: () => void;
   onNavigate: (view: WorkspaceView) => void;
 }) {
   const groupIsActive =
@@ -391,9 +385,7 @@ function NavigationSubmenu({
         ? isBillingView(activeView)
         : drawer === "animal"
           ? isAnimalManagementView(activeView)
-          : drawer === "more"
-            ? isMoreView(activeView)
-            : isSettingsView(activeView);
+          : isSettingsView(activeView);
   const drawerLabel =
     drawer === "intake"
       ? "笼卡管理"
@@ -401,15 +393,22 @@ function NavigationSubmenu({
         ? "动物管理"
         : drawer === "billing"
           ? "饲养费管理"
-          : drawer === "more"
-            ? "更多功能"
-            : "系统设置";
+          : "系统设置";
   return (
     <div
       id={id}
       className={`nav-subtree navigation-submenu ${expanded ? "expanded" : ""} ${showCurrent && groupIsActive ? "current-group" : ""}`}
       aria-label={`${drawerLabel}子菜单`}
     >
+      <div className="navigation-submenu-head">
+        <div>
+          <span>业务导航</span>
+          <strong>{drawerLabel}</strong>
+        </div>
+        <button aria-label={`关闭${drawerLabel}菜单`} className="ghost compact" type="button" onClick={onClose}>
+          关闭
+        </button>
+      </div>
       {drawer === "intake" ? (
         <>
           <NavigationPanelItem
@@ -438,9 +437,8 @@ function NavigationSubmenu({
           />
         </>
       ) : null}
-      {drawer === "billing" || drawer === "more" ? (
+      {drawer === "billing" ? (
         <>
-          {drawer === "more" ? <span className="nav-submenu-label">饲养费管理</span> : null}
           {billingSidebarItems(user.role === "admin").map((item) =>
             item.section ? (
               <span className="nav-submenu-label" key={item.section}>
@@ -496,9 +494,8 @@ function NavigationSubmenu({
           />
         </>
       ) : null}
-      {drawer === "settings" || drawer === "more" ? (
+      {drawer === "settings" ? (
         <>
-          {drawer === "more" ? <span className="nav-submenu-label">系统设置</span> : null}
           {settingsViews.map(([view, label, icon, itemDescription]) => (
             <NavigationPanelItem
               key={view}
@@ -571,10 +568,6 @@ function isSettingsView(view: WorkspaceView) {
   return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
 }
 
-function isMoreView(view: WorkspaceView) {
-  return isBillingView(view) || isSettingsView(view);
-}
-
 function VersionMeta({ className }: { className: string }) {
   return (
     <div className={`version-meta ${className}`}>
@@ -611,7 +604,6 @@ function Icon({ name }: { name: IconName }) {
     book: "M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5zm2.5-.5a.5.5 0 0 0-.5.5v13.1c.2-.1.3-.1.5-.1H18V4zM9 7h6v2H9zm0 4h6v2H9z",
     clipboard:
       "M9 3h6l1 2h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2zm1 2v2h4V5zm-1 6v2h6v-2zm0 4v2h6v-2z",
-    more: "M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   };
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -4,7 +4,7 @@ import { useBootstrap } from "../../api/bootstrap";
 import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
 import { useConfirmIntakeBatch, useDeleteIntakeBatch, useIntakeBatches, useSaveIntakeBatch } from "../../api/intake";
 import { useIacucIndex } from "../../api/iacuc";
-import { ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
   missingIntakeRequiredFields,
@@ -196,25 +196,27 @@ export function IntakeView({
         ]}
         actions={
           mode === "entry" ? (
-            <button className="primary" type="button" onClick={() => navigate("cage-card-scanner")}>
-              二维码扫描
-            </button>
-          ) : null
-        }
-        switcherLabel="笼卡功能"
-        switcherItems={intakeSwitchItems(navigate)}
-        toolbar={
-          mode === "entry" ? (
             <>
               <button className="secondary" type="button" onClick={startNew}>
                 新建批次
               </button>
-              <button className="primary" type="submit" form="intake-entry-panel" disabled={save.isPending}>
-                {save.isPending ? "保存中..." : "保存待接收批次"}
+              <AsyncActionButton
+                className="primary"
+                type="submit"
+                form="intake-entry-panel"
+                pending={save.isPending}
+                pendingLabel="保存中..."
+              >
+                保存待接收批次
+              </AsyncActionButton>
+              <button className="secondary" type="button" onClick={() => navigate("cage-card-scanner")}>
+                二维码扫描
               </button>
             </>
           ) : null
         }
+        switcherLabel="笼卡功能"
+        switcherItems={intakeSwitchItems(navigate)}
       />
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ButtonHTMLAttributes, type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 export interface WorkspaceBreadcrumbItem {
@@ -104,7 +104,7 @@ export function WorkspaceHeader({
 
 export function PageState({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {
   return (
-    <div className="empty-state">
+    <div className="empty-state" role="status" aria-live="polite">
       <h3>{title}</h3>
       {detail ? <p>{detail}</p> : null}
       {retry ? (
@@ -113,6 +113,24 @@ export function PageState({ title, detail, retry }: { title: string; detail?: st
         </button>
       ) : null}
     </div>
+  );
+}
+
+export function AsyncActionButton({
+  pending,
+  pendingLabel = "正在处理...",
+  children,
+  disabled,
+  ...buttonProps
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  pending: boolean;
+  pendingLabel?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button {...buttonProps} aria-busy={pending || undefined} disabled={disabled || pending}>
+      {pending ? pendingLabel : children}
+    </button>
   );
 }
 

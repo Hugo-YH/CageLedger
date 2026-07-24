@@ -13,6 +13,12 @@ export const queryKeys = {
   reimbursementRoot: ["reimbursement-records"] as const,
   reimbursements: (filters: Record<string, unknown>) => ["reimbursement-records", filters] as const,
   reimbursement: (id: string) => ["reimbursement-records", "detail", id] as const,
+  reimbursementLedgerRoot: ["reimbursement-ledger"] as const,
+  reimbursementObligations: (filters: Record<string, unknown>) =>
+    ["reimbursement-ledger", "obligations", filters] as const,
+  reimbursementClaims: (filters: Record<string, unknown>) => ["reimbursement-ledger", "claims", filters] as const,
+  reimbursementClaim: (id: string) => ["reimbursement-ledger", "claim", id] as const,
+  reimbursementLegacy: (filters: Record<string, unknown>) => ["reimbursement-ledger", "legacy", filters] as const,
   users: ["users"] as const,
   infrastructure: ["infrastructure"] as const,
   principalIdentities: ["principal-identities"] as const,

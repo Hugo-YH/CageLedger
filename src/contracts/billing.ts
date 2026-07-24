@@ -117,3 +117,95 @@ export interface ReimbursementDetailResponse {
   workflowEvents: Array<Record<string, unknown>>;
   history: ReimbursementRecord[];
 }
+
+export type ReimbursementClaimStatus = "pending_submission" | "reimbursing" | "completed" | "void";
+export type ReimbursementAllocationStatus = "draft" | "confirmed" | "reversed";
+
+export interface SettlementObligation {
+  id: string;
+  workflowId: string;
+  statementVersionId: string;
+  statementVersionNo: number;
+  month: string;
+  sourcePi: string;
+  iacuc: string;
+  payableAmount: number;
+  allocatedAmount: number;
+  outstandingAmount: number;
+  claimCount: number;
+  obligationKind: "statement" | "adjustment";
+  status: "open" | "settled";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReimbursementAllocation {
+  id: string;
+  fundingLineId: string;
+  obligationId: string;
+  amount: number;
+  status: ReimbursementAllocationStatus;
+  confirmedBy: string;
+  confirmedAt: string;
+  reversedBy: string;
+  reversedAt: string;
+  reversalReason: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  sourcePi: string;
+  fundingOwner: string;
+  iacuc: string;
+  month: string;
+  fundBookNo: string;
+  documentNumber: string;
+}
+
+export interface ReimbursementFundingLine {
+  id: string;
+  claimId: string;
+  fundBookNo: string;
+  fundingOwner: string;
+  reimbursementAmount: number;
+  allocatedAmount: number;
+  unallocatedAmount: number;
+  sortOrder: number;
+  allocations?: ReimbursementAllocation[];
+}
+
+export interface ReimbursementAttachment {
+  id: string;
+  claimId: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  ocrStatus: "disabled" | "queued" | "running" | "completed" | "failed";
+  ocrResult: string;
+  ocrProvider: string;
+  ocrModelVersion: string;
+  ocrRequestedAt: string;
+  ocrCompletedAt: string;
+  ocrError: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ReimbursementClaim {
+  id: string;
+  documentNumber: string;
+  fundingOwner: string;
+  status: ReimbursementClaimStatus;
+  totalAmount: number;
+  allocatedAmount: number;
+  unallocatedAmount: number;
+  attachmentCount: number;
+  fundingLineCount?: number;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  fundingLines?: ReimbursementFundingLine[];
+  attachments?: ReimbursementAttachment[];
+}

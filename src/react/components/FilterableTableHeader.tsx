@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface TableFilterOption {
@@ -30,10 +30,13 @@ export function FilterableTableHeader({
   const rootRef = useRef<HTMLTableCellElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; width: number }>({
+  const searchRef = useRef<HTMLInputElement>(null);
+  const panelId = useId();
+  const [panelStyle, setPanelStyle] = useState<{ top: number; left: number; width: number; side: string }>({
     top: 0,
     left: 0,
     width: 280,
+    side: "bottom",
   });
 
   useEffect(() => {
@@ -47,6 +50,22 @@ export function FilterableTableHeader({
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [open]);
+
   useLayoutEffect(() => {
     if (!open) return;
     const update = () => {
@@ -54,17 +73,51 @@ export function FilterableTableHeader({
       if (!rect) return;
       const viewportPadding = 12;
       const width = Math.min(280, window.innerWidth - viewportPadding * 2);
-      const heightEstimate = 360;
-      const left = Math.min(Math.max(rect.left, viewportPadding), window.innerWidth - width - viewportPadding);
-      const openAbove =
-        rect.bottom + 8 + heightEstimate > window.innerHeight && rect.top - heightEstimate > viewportPadding;
-      const top = openAbove ? Math.max(rect.top - heightEstimate - 8, viewportPadding) : rect.bottom + 8;
-      setPanelStyle({ top, left, width });
+      const height = Math.min(
+        panelRef.current?.getBoundingClientRect().height || 360,
+        window.innerHeight - viewportPadding * 2,
+      );
+      const gap = 8;
+      const clamp = (value: number, minimum: number, maximum: number) => Math.min(Math.max(value, minimum), maximum);
+      const candidates = [
+        {
+          side: "bottom",
+          top: rect.bottom + gap,
+          left: rect.left,
+          fits: rect.bottom + gap + height <= window.innerHeight - viewportPadding,
+        },
+        {
+          side: "top",
+          top: rect.top - height - gap,
+          left: rect.left,
+          fits: rect.top - height - gap >= viewportPadding,
+        },
+        {
+          side: "left",
+          top: rect.top,
+          left: rect.left - width - gap,
+          fits: rect.left - width - gap >= viewportPadding,
+        },
+        {
+          side: "right",
+          top: rect.top,
+          left: rect.right + gap,
+          fits: rect.right + gap + width <= window.innerWidth - viewportPadding,
+        },
+      ];
+      const candidate = candidates.find((item) => item.fits) || candidates[0];
+      setPanelStyle({
+        top: clamp(candidate.top, viewportPadding, window.innerHeight - height - viewportPadding),
+        left: clamp(candidate.left, viewportPadding, window.innerWidth - width - viewportPadding),
+        width,
+        side: candidate.side,
+      });
     };
-    update();
+    const frame = window.requestAnimationFrame(update);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
@@ -100,6 +153,8 @@ export function FilterableTableHeader({
         onClick={toggle}
         aria-label={`筛选${label}`}
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        aria-haspopup="dialog"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 5h16l-6 7v5l-4 2v-7z" />
@@ -110,10 +165,15 @@ export function FilterableTableHeader({
             <div
               ref={panelRef}
               className="table-filter-panel"
+              id={panelId}
+              role="dialog"
+              aria-label={`${label}筛选`}
+              data-side={panelStyle.side}
               style={{ top: `${panelStyle.top}px`, left: `${panelStyle.left}px`, width: `${panelStyle.width}px` }}
             >
               <div className="table-filter-search">
                 <input
+                  ref={searchRef}
                   type="search"
                   value={search}
                   placeholder="搜索当前列"

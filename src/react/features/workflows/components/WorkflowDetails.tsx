@@ -7,7 +7,14 @@ import {
   useReimbursement,
   useUpdateReimbursement,
 } from "../../../api/workflows";
-import { ConfirmDialog, formatDateTime, formatMoney, ModalShell, PageState } from "../../../components/WorkspaceUi";
+import {
+  AsyncActionButton,
+  ConfirmDialog,
+  formatDateTime,
+  formatMoney,
+  ModalShell,
+  PageState,
+} from "../../../components/WorkspaceUi";
 
 const statusOptions: Array<[ReimbursementStatus | "all", string]> = [
   ["pending_submission", "待提交"],
@@ -158,9 +165,15 @@ export function WorkflowDetail({ id, user, onClose }: { id: string; user: Sessio
                     />
                   </label>
                   <div className="form-actions">
-                    <button className="primary" type="button" disabled={save.isPending} onClick={() => void persist()}>
+                    <AsyncActionButton
+                      className="primary"
+                      type="button"
+                      pending={save.isPending}
+                      pendingLabel="保存中..."
+                      onClick={() => void persist()}
+                    >
                       保存报销登记
-                    </button>
+                    </AsyncActionButton>
                   </div>
                 </div>
               ) : null}
@@ -173,15 +186,17 @@ export function WorkflowDetail({ id, user, onClose }: { id: string; user: Sessio
                   </div>
                   <div className="workflow-step-actions">
                     {nextWorkflowStatuses(item.workflowStatus).map(([value, label]) => (
-                      <button
+                      <AsyncActionButton
                         key={value}
                         className="secondary"
                         type="button"
-                        disabled={advance.isPending || user.role !== "admin"}
+                        pending={advance.isPending}
+                        pendingLabel="更新中..."
+                        disabled={user.role !== "admin"}
                         onClick={() => void advanceTo(value)}
                       >
                         {label}
-                      </button>
+                      </AsyncActionButton>
                     ))}
                   </div>
                 </div>

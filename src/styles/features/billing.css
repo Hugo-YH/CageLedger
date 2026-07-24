@@ -1268,3 +1268,218 @@ th {
 .reimbursement-toolbar .filter-row {
   flex-wrap: nowrap;
 }
+
+/* Reimbursement ledger: separate receivables, claims and allocations into focused work areas. */
+.reimbursement-ledger-panel {
+  min-width: 0;
+}
+
+.reimbursement-ledger-context {
+  position: relative;
+  top: auto;
+}
+
+.ledger-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-soft);
+}
+
+.ledger-tabs button {
+  flex: 1 1 0;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 750;
+}
+
+.ledger-tabs button.active {
+  color: var(--green-dark);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.ledger-section {
+  display: grid;
+  gap: 14px;
+}
+
+.ledger-section .command-bar {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ledger-section .command-bar-filters {
+  min-width: 0;
+}
+
+.list-summary,
+.ledger-guidance,
+.reconciliation-context {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.reimbursement-table {
+  min-width: 1020px;
+  table-layout: auto;
+}
+
+.reimbursement-table th,
+.reimbursement-table td {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.reimbursement-table td:nth-child(2) {
+  white-space: normal;
+  min-width: 130px;
+}
+
+.reimbursement-table .pill {
+  margin-left: 6px;
+}
+
+.table-empty {
+  padding: 28px !important;
+  color: var(--muted);
+  text-align: center;
+  white-space: normal !important;
+}
+
+.compact {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.reconciliation-picker {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(240px, 1.3fr) 120px max-content;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--panel-soft), var(--panel));
+}
+
+.reconciliation-picker label,
+.funding-line-editor label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reconciliation-picker select,
+.reconciliation-picker input {
+  min-width: 0;
+}
+
+.reconciliation-context {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 12px;
+  border-left: 3px solid var(--green);
+  background: var(--panel-soft);
+}
+
+.reconciliation-context strong {
+  color: var(--text);
+}
+
+.reconciliation-context .compact {
+  margin-left: auto;
+}
+
+.reimbursement-claim-modal {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.reimbursement-claim-body {
+  display: grid;
+  gap: 16px;
+}
+
+.funding-line-editor {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, 0.7fr) max-content;
+  gap: 10px;
+  align-items: end;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.attachment-list,
+.allocation-summary-list {
+  display: grid;
+  gap: 8px;
+}
+
+.attachment-list a,
+.allocation-summary-list > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--green-dark);
+  background: var(--panel-soft);
+}
+
+.attachment-list span,
+.allocation-summary-list span:not(.pill) {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.allocation-summary-list .pill {
+  margin-left: auto;
+}
+
+@media (width <= 760px) {
+  .ledger-tabs {
+    overflow-x: auto;
+  }
+
+  .ledger-tabs button {
+    min-width: 96px;
+  }
+
+  .ledger-section .command-bar,
+  .reconciliation-picker,
+  .funding-line-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .reconciliation-picker .primary {
+    width: 100%;
+  }
+
+  .reconciliation-context {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .reconciliation-context .compact {
+    margin-left: 0;
+  }
+
+  .reimbursement-claim-modal {
+    width: min(100vw - 16px, 920px);
+  }
+}

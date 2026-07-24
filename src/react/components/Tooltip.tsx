@@ -1,4 +1,15 @@
-import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 const VIEWPORT_PADDING = 16;
@@ -8,7 +19,13 @@ type TooltipPosition = {
   top: number;
   left: number;
   arrowLeft: number;
-  side: "top" | "bottom";
+  arrowTop: number;
+  side: "top" | "bottom" | "left" | "right";
+};
+
+type TooltipTriggerProps = {
+  onClick?: (event: ReactMouseEvent) => void;
+  "aria-expanded"?: boolean;
 };
 
 export function Tooltip({
@@ -16,11 +33,13 @@ export function Tooltip({
   content,
   id,
   className = "",
+  tapToToggle = false,
 }: {
   children: ReactNode;
   content: ReactNode;
   id?: string;
   className?: string;
+  tapToToggle?: boolean;
 }) {
   const generatedId = useId();
   const tooltipId = id || `tooltip-${generatedId}`;
@@ -40,15 +59,39 @@ export function Tooltip({
       if (!anchor || !tooltip) return;
       const width = Math.min(tooltip.width, window.innerWidth - VIEWPORT_PADDING * 2);
       const height = tooltip.height;
-      const canOpenBelow = anchor.bottom + TOOLTIP_GAP + height <= window.innerHeight - VIEWPORT_PADDING;
-      const side = canOpenBelow || anchor.top - TOOLTIP_GAP - height < VIEWPORT_PADDING ? "bottom" : "top";
-      const left = Math.min(
-        Math.max(anchor.left + anchor.width / 2 - width / 2, VIEWPORT_PADDING),
-        window.innerWidth - width - VIEWPORT_PADDING,
-      );
-      const top = side === "bottom" ? anchor.bottom + TOOLTIP_GAP : anchor.top - height - TOOLTIP_GAP;
-      const arrowLeft = Math.min(Math.max(anchor.left + anchor.width / 2 - left, 12), width - 12);
-      setPosition({ top, left, arrowLeft, side });
+      const clamp = (value: number, minimum: number, maximum: number) => Math.min(Math.max(value, minimum), maximum);
+      const candidates: Array<{ side: TooltipPosition["side"]; top: number; left: number; fits: boolean }> = [
+        {
+          side: "bottom",
+          top: anchor.bottom + TOOLTIP_GAP,
+          left: anchor.left + anchor.width / 2 - width / 2,
+          fits: anchor.bottom + TOOLTIP_GAP + height <= window.innerHeight - VIEWPORT_PADDING,
+        },
+        {
+          side: "top",
+          top: anchor.top - height - TOOLTIP_GAP,
+          left: anchor.left + anchor.width / 2 - width / 2,
+          fits: anchor.top - TOOLTIP_GAP - height >= VIEWPORT_PADDING,
+        },
+        {
+          side: "right",
+          top: anchor.top + anchor.height / 2 - height / 2,
+          left: anchor.right + TOOLTIP_GAP,
+          fits: anchor.right + TOOLTIP_GAP + width <= window.innerWidth - VIEWPORT_PADDING,
+        },
+        {
+          side: "left",
+          top: anchor.top + anchor.height / 2 - height / 2,
+          left: anchor.left - width - TOOLTIP_GAP,
+          fits: anchor.left - TOOLTIP_GAP - width >= VIEWPORT_PADDING,
+        },
+      ];
+      const candidate = candidates.find((item) => item.fits) || candidates[0];
+      const left = clamp(candidate.left, VIEWPORT_PADDING, window.innerWidth - width - VIEWPORT_PADDING);
+      const top = clamp(candidate.top, VIEWPORT_PADDING, window.innerHeight - height - VIEWPORT_PADDING);
+      const arrowLeft = clamp(anchor.left + anchor.width / 2 - left, 12, width - 12);
+      const arrowTop = clamp(anchor.top + anchor.height / 2 - top, 12, height - 12);
+      setPosition({ top, left, arrowLeft, arrowTop, side: candidate.side });
     };
 
     const frame = window.requestAnimationFrame(update);
@@ -65,8 +108,26 @@ export function Tooltip({
     if (!open) return;
     const close = () => setOpen(false);
     window.addEventListener("blur", close);
-    return () => window.removeEventListener("blur", close);
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!anchorRef.current?.contains(event.target as Node)) close();
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      window.removeEventListener("blur", close);
+      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
   }, [open]);
+
+  const trigger =
+    tapToToggle && isValidElement<TooltipTriggerProps>(children)
+      ? cloneElement(children, {
+          "aria-expanded": open,
+          onClick: (event: ReactMouseEvent) => {
+            children.props.onClick?.(event);
+            if (!event.defaultPrevented) setOpen((visible) => !visible);
+          },
+        })
+      : children;
 
   return (
     <span
@@ -79,7 +140,7 @@ export function Tooltip({
       onPointerEnter={() => setOpen(true)}
       onPointerLeave={() => setOpen(false)}
     >
-      {children}
+      {trigger}
       {open
         ? createPortal(
             <span
@@ -94,6 +155,7 @@ export function Tooltip({
                       top: `${position.top}px`,
                       left: `${position.left}px`,
                       "--tooltip-arrow-left": `${position.arrowLeft}px`,
+                      "--tooltip-arrow-top": `${position.arrowTop}px`,
                     } as CSSProperties)
                   : undefined
               }
@@ -110,7 +172,7 @@ export function Tooltip({
 export function HelpTooltip({ children, label }: { children: ReactNode; label: string }) {
   const id = useId();
   return (
-    <Tooltip content={children} id={id} className="help-tooltip-anchor">
+    <Tooltip content={children} id={id} className="help-tooltip-anchor" tapToToggle>
       <button aria-describedby={id} aria-label={label} className="inspection-help-trigger" type="button">
         ?
       </button>

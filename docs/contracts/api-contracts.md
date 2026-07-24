@@ -109,7 +109,25 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `POST`   | `/api/reimbursement-records/import-monthly` | Excel 文件                                  | 导入摘要                                  |
 | `POST`   | `/api/reimbursement-records/import-arrears` | Excel 文件                                  | 导入摘要                                  |
 
-报销台账业务键是 `month + pi`。结算版本负责金额来源，台账负责报销状态、已缴和累计未缴。
+### 多对多核销台账
+
+| 方法   | 路径                                                    | 请求或参数                        | 响应              |
+| ------ | ------------------------------------------------------- | --------------------------------- | ----------------- |
+| `GET`  | `/api/reimbursement-ledger/obligations`                 | 月份、费用产生负责人、IACUC、分页 | `{ items, page }` |
+| `GET`  | `/api/reimbursement-ledger/obligations/{id}`            | 空                                | `{ item }`        |
+| `GET`  | `/api/reimbursement-ledger/claims`                      | 单号、经费负责人、状态、分页      | `{ items, page }` |
+| `GET`  | `/api/reimbursement-ledger/claims/{id}`                 | 空                                | `{ item }`        |
+| `POST` | `/api/reimbursement-ledger/claims`                      | 报销单头与经费明细                | `{ item }`        |
+| `PUT`  | `/api/reimbursement-ledger/claims/{id}`                 | 报销单头与经费明细                | `{ item }`        |
+| `POST` | `/api/reimbursement-ledger/claims/{id}/attachments`     | PDF、JPEG 或 PNG 文件             | `{ item }`        |
+| `GET`  | `/api/reimbursement-ledger/attachments/{id}`            | 空                                | 受鉴权附件流      |
+| `POST` | `/api/reimbursement-ledger/claims/{id}/allocations`     | 经费明细、结算应收、本次金额      | `{ item }`        |
+| `POST` | `/api/reimbursement-ledger/allocations/{id}/confirm`    | 空                                | `{ item }`        |
+| `POST` | `/api/reimbursement-ledger/allocations/{id}/reverse`    | `{ reason }`                      | `{ item }`        |
+| `GET`  | `/api/reimbursement-ledger/legacy-records`              | 分页                              | `{ items, page }` |
+| `POST` | `/api/reimbursement-ledger/legacy-records/{id}/migrate` | 空                                | `{ item }`        |
+
+结算应收固化费用产生项目负责人、IACUC、结算版本和待核销金额。报销单以单号为业务键，经费明细保存经费本号、经费负责人和报销金额；同单明细使用同一位经费负责人。已确认核销同时受经费明细余额和结算应收余额约束。历史 `/api/reimbursement-records` 保持兼容和只读迁入入口。
 
 ## 数据与系统管理
 

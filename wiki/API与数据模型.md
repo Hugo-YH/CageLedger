@@ -77,16 +77,23 @@ graph LR
 
 ### 流程和报销
 
-| 方法                     | 路径                                        | 用途                 |
-| ------------------------ | ------------------------------------------- | -------------------- |
-| `GET`                    | `/api/billing-workflows`                    | 结算流程列表         |
-| `GET`                    | `/api/billing-workflows/{id}`               | 流程、版本和事件     |
-| `GET`                    | `/api/billing-workflows/{id}/lines`         | 指定版本逐日明细     |
-| `POST`                   | `/api/billing-workflows/advance`            | 推进流程             |
-| `GET`                    | `/api/reimbursement-records`                | 报销台账列表         |
-| `GET` / `PUT` / `DELETE` | `/api/reimbursement-records/{id}`           | 台账详情、登记和删除 |
-| `POST`                   | `/api/reimbursement-records/import-monthly` | 导入历史月汇总 Excel |
-| `POST`                   | `/api/reimbursement-records/import-arrears` | 导入历史欠缴 Excel   |
+| 方法                     | 路径                                                 | 用途                 |
+| ------------------------ | ---------------------------------------------------- | -------------------- |
+| `GET`                    | `/api/billing-workflows`                             | 结算流程列表         |
+| `GET`                    | `/api/billing-workflows/{id}`                        | 流程、版本和事件     |
+| `GET`                    | `/api/billing-workflows/{id}/lines`                  | 指定版本逐日明细     |
+| `POST`                   | `/api/billing-workflows/advance`                     | 推进流程             |
+| `GET`                    | `/api/reimbursement-records`                         | 报销台账列表         |
+| `GET` / `PUT` / `DELETE` | `/api/reimbursement-records/{id}`                    | 台账详情、登记和删除 |
+| `POST`                   | `/api/reimbursement-records/import-monthly`          | 导入历史月汇总 Excel |
+| `POST`                   | `/api/reimbursement-records/import-arrears`          | 导入历史欠缴 Excel   |
+| `GET`                    | `/api/reimbursement-ledger/obligations`              | 结算应收列表         |
+| `GET` / `POST`           | `/api/reimbursement-ledger/claims`                   | 报销单列表和新建     |
+| `GET` / `PUT`            | `/api/reimbursement-ledger/claims/{id}`              | 报销单详情和编辑     |
+| `POST`                   | `/api/reimbursement-ledger/claims/{id}/attachments`  | 上传报销单附件       |
+| `POST`                   | `/api/reimbursement-ledger/claims/{id}/allocations`  | 创建核销草稿         |
+| `POST`                   | `/api/reimbursement-ledger/allocations/{id}/confirm` | 确认核销             |
+| `POST`                   | `/api/reimbursement-ledger/allocations/{id}/reverse` | 撤销核销             |
 
 ### 管理
 

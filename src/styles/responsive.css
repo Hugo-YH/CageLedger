@@ -131,16 +131,12 @@
 
   .nav-group {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 3px;
   }
 
   .nav-group .nav-item-billing-root,
   .nav-group .nav-item-settings-root {
-    display: none;
-  }
-
-  .nav-group .nav-item-more {
     display: grid;
   }
 
@@ -794,16 +790,12 @@
 
   .nav-group {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 3px;
   }
 
   .nav-group .nav-item-billing-root,
   .nav-group .nav-item-settings-root {
-    display: none;
-  }
-
-  .nav-group .nav-item-more {
     display: grid;
   }
 

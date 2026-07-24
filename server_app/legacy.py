@@ -144,6 +144,42 @@ from server_app.domains.reimbursement.importer import (
     ensure_excel_import_supported,
     next_imported_record_id,
 )
+from server_app.domains.reimbursement_ledger import (
+    add_attachment as add_reimbursement_attachment,
+)
+from server_app.domains.reimbursement_ledger import (
+    confirm_allocation as confirm_reimbursement_allocation,
+)
+from server_app.domains.reimbursement_ledger import (
+    create_allocation as create_reimbursement_allocation,
+)
+from server_app.domains.reimbursement_ledger import (
+    get_attachment as get_reimbursement_attachment,
+)
+from server_app.domains.reimbursement_ledger import (
+    get_claim as get_reimbursement_claim,
+)
+from server_app.domains.reimbursement_ledger import (
+    get_obligation as get_reimbursement_obligation,
+)
+from server_app.domains.reimbursement_ledger import (
+    list_claims as list_reimbursement_claims,
+)
+from server_app.domains.reimbursement_ledger import (
+    list_legacy_records as list_reimbursement_legacy_records,
+)
+from server_app.domains.reimbursement_ledger import (
+    list_obligations as list_reimbursement_obligations,
+)
+from server_app.domains.reimbursement_ledger import (
+    migrate_legacy_record as migrate_reimbursement_legacy_record,
+)
+from server_app.domains.reimbursement_ledger import (
+    reverse_allocation as reverse_reimbursement_allocation,
+)
+from server_app.domains.reimbursement_ledger import (
+    save_claim as save_reimbursement_claim,
+)
 from server_app.pdf.renderer import prewarm_pdf_renderer
 from server_app.persistence import SchemaRegistry, SchemaStep, backfills
 from server_app.persistence.base_schema import initialize_base_schema
@@ -5063,6 +5099,76 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             with connect_db() as conn:
                 self.send_json(list_animal_inspection_findings(conn, user, self.animal_inspection_filters()))
             return
+        if path == "/api/reimbursement-ledger/obligations":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(
+                    list_reimbursement_obligations(conn, user, self.list_filters(default_limit=20, max_limit=100))
+                )
+            return
+        if path == "/api/reimbursement-ledger/claims":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(
+                    list_reimbursement_claims(conn, user, self.list_filters(default_limit=20, max_limit=100))
+                )
+            return
+        if path == "/api/reimbursement-ledger/legacy-records":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                self.send_json(
+                    list_reimbursement_legacy_records(conn, user, self.list_filters(default_limit=20, max_limit=100))
+                )
+            return
+        attachment_id = self.reimbursement_attachment_route(path)
+        if attachment_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    attachment, body = get_reimbursement_attachment(conn, user, attachment_id)
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", attachment["mimeType"])
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "private, no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
+        claim_id = self.reimbursement_claim_route(path)
+        if claim_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    self.send_json(get_reimbursement_claim(conn, user, claim_id))
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            except PermissionError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
+        obligation_id = self.reimbursement_obligation_route(path)
+        if obligation_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    self.send_json(get_reimbursement_obligation(conn, user, obligation_id))
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            return
         attachment_id = self.animal_inspection_attachment_route(path)
         if attachment_id:
             user = self.require_user()
@@ -5397,6 +5503,29 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if finding_id:
             self.handle_animal_inspection_finding_resolve(finding_id)
             return
+        if path == "/api/reimbursement-ledger/claims":
+            self.handle_reimbursement_claim_save(None)
+            return
+        claim_id = self.reimbursement_claim_attachment_upload_route(path)
+        if claim_id:
+            self.handle_reimbursement_claim_attachment(claim_id)
+            return
+        claim_id = self.reimbursement_claim_allocation_route(path)
+        if claim_id:
+            self.handle_reimbursement_allocation_create(claim_id)
+            return
+        allocation_id = self.reimbursement_allocation_action_route(path, "confirm")
+        if allocation_id:
+            self.handle_reimbursement_allocation_confirm(allocation_id)
+            return
+        allocation_id = self.reimbursement_allocation_action_route(path, "reverse")
+        if allocation_id:
+            self.handle_reimbursement_allocation_reverse(allocation_id)
+            return
+        legacy_id = self.reimbursement_legacy_migration_route(path)
+        if legacy_id:
+            self.handle_reimbursement_legacy_migration(legacy_id)
+            return
         if path == "/api/iacuc-index/upload":
             self.handle_iacuc_upload()
             return
@@ -5514,6 +5643,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
+        claim_id = self.reimbursement_claim_route(path)
+        if claim_id:
+            self.handle_reimbursement_claim_save(claim_id)
+            return
         inspection_id = self.animal_inspection_route(path)
         if inspection_id:
             self.handle_animal_inspection_save(inspection_id)
@@ -6034,6 +6167,101 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+    def handle_reimbursement_claim_save(self, claim_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                payload = save_reimbursement_claim(conn, user, claim_id, self.read_json_body())
+            self.send_json(payload, HTTPStatus.OK if claim_id else HTTPStatus.CREATED)
+        except sqlite3.IntegrityError:
+            self.send_json({"error": "报销单号已存在"}, HTTPStatus.CONFLICT)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_claim_attachment(self, claim_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            filename, body = parse_multipart_upload(self.headers.get("Content-Type", ""), self.read_raw_body())
+            with connect_db() as conn:
+                payload = add_reimbursement_attachment(
+                    conn, user, claim_id, filename, body, self.headers.get("Content-Type", "")
+                )
+            self.send_json(payload, HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_allocation_create(self, claim_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            body["claimId"] = claim_id
+            with connect_db() as conn:
+                payload = create_reimbursement_allocation(conn, user, body)
+            self.send_json(payload, HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_allocation_confirm(self, allocation_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                self.send_json(confirm_reimbursement_allocation(conn, user, allocation_id))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_allocation_reverse(self, allocation_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                self.send_json(reverse_reimbursement_allocation(conn, user, allocation_id, body.get("reason", "")))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_legacy_migration(self, record_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                self.send_json(migrate_reimbursement_legacy_record(conn, user, record_id))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
     def handle_animal_inspection_submit(self, inspection_id):
         user = self.require_user()
         if not user:
@@ -6162,6 +6390,9 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             "month": value("month"),
             "iacuc": value("iacuc"),
             "pi": value("pi"),
+            "sourcePi": value("sourcePi"),
+            "fundingOwner": value("fundingOwner"),
+            "keyword": value("keyword"),
             "roomId": value("roomId"),
             "roomName": value("roomName"),
             "sourceType": value("sourceType"),
@@ -6229,6 +6460,57 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if not path.startswith(prefix):
             return None
         value = unquote(path[len(prefix) :])
+        return value if value and "/" not in value else None
+
+    def reimbursement_claim_route(self, path):
+        prefix = "/api/reimbursement-ledger/claims/"
+        if not path.startswith(prefix):
+            return None
+        value = unquote(path[len(prefix) :])
+        return value if value and "/" not in value else None
+
+    def reimbursement_obligation_route(self, path):
+        prefix = "/api/reimbursement-ledger/obligations/"
+        if not path.startswith(prefix):
+            return None
+        value = unquote(path[len(prefix) :])
+        return value if value and "/" not in value else None
+
+    def reimbursement_attachment_route(self, path):
+        prefix = "/api/reimbursement-ledger/attachments/"
+        value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
+        return value if value and "/" not in value else None
+
+    def reimbursement_claim_attachment_upload_route(self, path):
+        prefix = "/api/reimbursement-ledger/claims/"
+        suffix = "/attachments"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
+        return value if value and "/" not in value else None
+
+    def reimbursement_claim_allocation_route(self, path):
+        prefix = "/api/reimbursement-ledger/claims/"
+        suffix = "/allocations"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
+        return value if value and "/" not in value else None
+
+    def reimbursement_allocation_action_route(self, path, action):
+        prefix = "/api/reimbursement-ledger/allocations/"
+        suffix = f"/{action}"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
+        return value if value and "/" not in value else None
+
+    def reimbursement_legacy_migration_route(self, path):
+        prefix = "/api/reimbursement-ledger/legacy-records/"
+        suffix = "/migrate"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
         return value if value and "/" not in value else None
 
     def animal_inspection_submit_route(self, path):

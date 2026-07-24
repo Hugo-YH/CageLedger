@@ -5,7 +5,7 @@ import { usePrincipalIdentities } from "../../api/administration";
 import { useIacucIndex } from "../../api/iacuc";
 import { useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
-import { ModalShell } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell } from "../../components/WorkspaceUi";
 import {
   createQuantityRow,
   createQuantitySheet,
@@ -233,19 +233,22 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           </Tooltip>
         </div>
         <div className="workspace-toolbar-actions quantity-entry-toolbar-actions">
-          <button className="secondary info-button quantity-entry-toolbar-button" type="button" onClick={startNew}>
-            新建
-          </button>
-          <Tooltip content={saveHint(editorRows, animalDetails)}>
-            <button
-              className="primary quantity-entry-toolbar-button quantity-entry-save-button"
-              type="submit"
-              form="quantity-sheet-entry-form"
-              disabled={save.isPending}
-            >
-              保存统计表
+          <div className="workspace-toolbar-action-group">
+            <button className="secondary quantity-entry-toolbar-button" type="button" onClick={startNew}>
+              新建
             </button>
-          </Tooltip>
+            <Tooltip content={saveHint(editorRows, animalDetails)}>
+              <AsyncActionButton
+                className="primary quantity-entry-toolbar-button quantity-entry-save-button"
+                type="submit"
+                form="quantity-sheet-entry-form"
+                pending={save.isPending}
+                pendingLabel="保存中..."
+              >
+                保存统计表
+              </AsyncActionButton>
+            </Tooltip>
+          </div>
         </div>
       </>
     ) : null;
