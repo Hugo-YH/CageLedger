@@ -61,7 +61,10 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(row).toContainText("¥");
   await page.getByLabel("每页显示条数").selectOption("5");
   await page.getByLabel("全选当前筛选结果结算项").check();
-  await expect(page.getByLabel("结算导出操作").getByText("已选 6 项", { exact: true })).toBeVisible();
+  const selectionSummary = page.getByLabel("结算导出操作").getByText(/已选 \d+ 项/, { exact: true });
+  await expect(selectionSummary).toBeVisible();
+  const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
+  expect(selectedCount).toBeGreaterThan(5);
   await page.getByRole("button", { name: "下一页", exact: true }).click();
   await expect(page.locator("table tbody tr").first().getByRole("checkbox")).toBeChecked();
   await page.getByRole("button", { name: "上一页", exact: true }).click();

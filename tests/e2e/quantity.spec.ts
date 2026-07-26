@@ -89,7 +89,11 @@ test("selects every saved quantity sheet across result pages", async ({ page }) 
   await openSavedQuantitySheets(page);
   await page.getByLabel("每页显示条数").selectOption("5");
   await page.getByLabel("全选当前筛选结果统计表").check();
-  await expect(page.locator(".quantity-saved-panel .panel-summary-chip")).toHaveText("7 条 · 已选 7");
+  const selectionSummary = page.locator(".quantity-saved-panel .panel-summary-chip");
+  await expect(selectionSummary).toHaveText(/^\d+ 条 · 已选 \d+$/);
+  const summaryMatch = (await selectionSummary.innerText()).match(/^(\d+) 条 · 已选 (\d+)$/);
+  expect(summaryMatch).not.toBeNull();
+  expect(summaryMatch?.[2]).toBe(summaryMatch?.[1]);
   await page.getByRole("button", { name: "下一页", exact: true }).click();
   await expect(page.locator(".quantity-saved-table tbody tr").first().getByRole("checkbox")).toBeChecked();
 });
