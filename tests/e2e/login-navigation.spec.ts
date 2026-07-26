@@ -37,6 +37,8 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "接收笼卡", exact: true, level: 2 })).toBeVisible();
   await page.locator("nav.nav").getByRole("button", { name: "笼位管理", exact: true }).click();
   await expect(page.getByRole("heading", { name: "动态笼位图", exact: true, level: 2 })).toBeVisible();
+  await page.getByRole("combobox", { name: "房间", exact: true }).selectOption({ label: "8014" });
+  await page.getByRole("combobox", { name: "笼架", exact: true }).selectOption({ label: "8014 01 号笼架" });
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
   await expect(page.getByRole("heading", { name: /编辑笼位 8014-01-A1/ })).toBeVisible();
   await expect(page.locator("body > .modal-backdrop")).toBeVisible();
