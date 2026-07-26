@@ -21,7 +21,7 @@ export function InspectionStandards({
       <WorkspaceHeader
         kicker="动物管理工作台"
         title="巡检标准"
-        summary="评分标准以受控目录版本发布，历史巡检记录持续保留提交时的评分语义。"
+        summary="巡检条目、图例和处置建议以受控目录版本发布，历史巡检记录持续保留提交时的结论语义。"
         breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
         status={catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
       />
@@ -47,10 +47,10 @@ export function InspectionStandards({
           <div className="inspection-standard-grid">
             {catalog.data.modules.map((module) => (
               <article key={module.code}>
-                <span>评分模块</span>
+                <span>巡检模块</span>
                 <h2>{module.name}</h2>
                 <p>{module.description}</p>
-                <strong>{catalogItems(catalog.data.nodes, module.code).length} 个评分条目</strong>
+                <strong>{catalogItems(catalog.data.nodes, module.code).length} 个巡检条目</strong>
               </article>
             ))}
           </div>

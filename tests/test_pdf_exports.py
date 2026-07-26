@@ -9,6 +9,7 @@ from server_app.pdf import (
     render_billing_statement_pdf,
     render_quantity_sheet_pdf,
 )
+from server_app.pdf.documents import billing_statement_html, quantity_sheet_html
 
 
 class PdfExportTests(unittest.TestCase):
@@ -87,3 +88,48 @@ class PdfExportTests(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
             self.assertEqual(archive.namelist(), ["张教授.pdf", "张教授 (2).pdf"])
             self.assertTrue(archive.read("张教授.pdf").startswith(b"%PDF"))
+
+    def test_custom_billing_details_are_rendered_in_quantity_and_settlement_documents(self):
+        sheet = {
+            "id": "custom-sheet",
+            "month": "2026-07",
+            "iacuc": "Z-RABBIT",
+            "pi": "张教授",
+            "billingUnit": "animal_day",
+            "customBillingSegments": [
+                {
+                    "id": "special-feed",
+                    "startDate": "2026-07-10",
+                    "endDate": "2026-07-20",
+                    "quantity": 5,
+                    "unitPrice": 12,
+                    "note": "特殊饲料",
+                }
+            ],
+            "rows": [],
+        }
+        statement = {"id": "statement", "month": "2026-07", "pi": "张教授", "sourceType": "quantity_sheet"}
+        lines = [
+            {
+                "date": "2026-07-10",
+                "iacucBreakdown": [
+                    {
+                        "iacuc": "Z-RABBIT",
+                        "animalCount": 5,
+                        "billingItem": "兔饲养费",
+                        "billingUnit": "animal_day",
+                        "unitPrice": 12,
+                        "customBilling": True,
+                        "customBillingSegmentId": "special-feed",
+                        "customBillingStartDate": "2026-07-10",
+                        "customBillingEndDate": "2026-07-20",
+                        "customBillingNote": "特殊饲料",
+                        "payableAmount": 60,
+                    }
+                ],
+            }
+        ]
+        self.assertIn("自定义收费明细", quantity_sheet_html(sheet))
+        statement_html = billing_statement_html(statement, lines)
+        self.assertIn("自定义收费明细", statement_html)
+        self.assertIn("特殊饲料", statement_html)

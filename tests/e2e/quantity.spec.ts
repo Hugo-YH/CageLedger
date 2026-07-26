@@ -30,7 +30,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(page.locator("form").getByLabel("项目负责人", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("");
   await openSavedQuantitySheets(page);
-  await expect(page.getByRole("heading", { level: 1, name: "已保存数量统计表", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
   await expect(savedRow).toBeVisible();
   await expect(savedRow).toContainText("系统管理员");

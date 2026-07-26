@@ -121,6 +121,7 @@ describe("print templates", () => {
         fullExemption: false,
         customBillingEnabled: false,
         customUnitPrice: null,
+        customBillingSegments: [],
         billingUnit: "cage_day",
         animalDetailEnabled: false,
         initialAnimalCount: 0,
@@ -149,6 +150,50 @@ describe("print templates", () => {
     ]);
     expect(html).toContain('2026.6.2</td><td></td><td></td><td class="num"></td><td class="num">7</td>');
     expect(html).not.toContain('2026.6.2</td><td></td><td></td><td class="num">0</td>');
+  });
+
+  it("adds custom-billing details as a dedicated quantity-sheet appendix", () => {
+    const sheet = {
+      id: "custom-sheet",
+      month: "2026-07",
+      roomId: "room-1",
+      roomName: "兔房",
+      manager: "登记人员",
+      roomManager: "房间管理员",
+      iacuc: "Z-RABBIT",
+      pi: "张教授",
+      owner: "陈老师",
+      project: "项目",
+      contact: "",
+      funding: "",
+      preferredFreeCages: null,
+      freeCagePriority: null,
+      tierCagePriority: null,
+      fullExemption: false,
+      customBillingEnabled: true,
+      customUnitPrice: null,
+      customBillingSegments: [
+        {
+          id: "special-feed",
+          startDate: "2026-07-10",
+          endDate: "2026-07-20",
+          quantity: 5,
+          unitPrice: 12,
+          note: "特殊饲料",
+        },
+      ],
+      billingUnit: "animal_day" as const,
+      animalDetailEnabled: true,
+      initialAnimalCount: 10,
+      initialCageCount: 10,
+      pageCount: 1,
+      rows: [],
+      updatedAt: "2026-07-01T00:00:00Z",
+    } satisfies QuantitySheet;
+    const html = quantitySheetPagesMarkup([sheet]);
+    expect(html).toContain("自定义收费明细");
+    expect(html).toContain("特殊饲料");
+    expect(html).toContain("¥12.00 / 只/天");
   });
 
   it("renders settlement columns by iacuc and species with explicit zero amounts", () => {
@@ -626,6 +671,7 @@ describe("print templates", () => {
         fullExemption: false,
         customBillingEnabled: false,
         customUnitPrice: null,
+        customBillingSegments: [],
         billingUnit: "cage_day",
         animalDetailEnabled: false,
         initialAnimalCount: 0,

@@ -19,7 +19,7 @@ import {
 import { ModalShell, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
-import { FINDING_STATUS_LABELS, MODULE_LABELS, setResumeInspectionId } from "./model";
+import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspectionId } from "./model";
 
 const pageSize = 20;
 
@@ -191,7 +191,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
       <WorkspaceHeader
         kicker="动物管理工作台"
         title="异常处置"
-        summary="评分 1 分和 2 分自动进入处置队列，按待处理、处理中、待复查和已关闭闭环跟进。"
+        summary="已登记异常自动进入处置队列，按待处理、处理中、待复查和已关闭闭环跟进。"
         breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
       />
       <div className="workspace-body animal-management-body">
@@ -222,7 +222,6 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
                 <tr>
                   <th>饲养间</th>
                   <th>异常项目</th>
-                  <th>严重程度</th>
                   <th>位置/动物</th>
                   <th>状态</th>
                   <th>复查日期</th>
@@ -235,11 +234,6 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
                     <tr key={item.id}>
                       <td>{item.roomName}</td>
                       <td>{item.nodeCode}</td>
-                      <td>
-                        <span className={`severity-chip severity-${item.severity}`}>
-                          {item.severity === 1 ? "严重 · 1 分" : "轻微 · 2 分"}
-                        </span>
-                      </td>
                       <td>
                         {[
                           item.rackHint && `笼架 ${item.rackHint}`,
@@ -264,7 +258,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       <div className="empty-state">
                         <strong>当前没有异常处置项</strong>
                       </div>
@@ -318,9 +312,7 @@ function FindingDialog({ finding, onClose }: { finding: InspectionFinding; onClo
         <div>
           <span className="workspace-kicker">异常处置</span>
           <h2>{finding.nodeCode}</h2>
-          <p>
-            {finding.roomName} · {finding.severity === 1 ? "严重异常" : "轻微异常"}
-          </p>
+          <p>{finding.roomName} · 已登记异常</p>
         </div>
         <button className="secondary" type="button" onClick={onClose}>
           关闭
@@ -374,8 +366,8 @@ function FindingDialog({ finding, onClose }: { finding: InspectionFinding; onClo
 
 function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const query = useAnimalInspection(id);
-  const scoreSummary = query.data ? summarizeInspectionScores(query.data.answers, query.data.catalog.nodes) : [];
-  const abnormalScores = scoreSummary.flatMap((module) => module.items.filter((item) => item.score < 3));
+  const outcomeSummary = query.data ? summarizeInspectionOutcomes(query.data.answers, query.data.catalog.nodes) : [];
+  const abnormalities = outcomeSummary.flatMap((module) => module.items.filter((item) => item.outcome === "abnormal"));
   return (
     <ModalShell
       ariaLabel="巡检记录详情"
@@ -397,7 +389,7 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
       </div>
       {query.isLoading ? (
         <div className="modal-body">
-          <p>正在加载评分与处置记录...</p>
+          <p>正在加载巡检结论与处置记录...</p>
         </div>
       ) : query.isError || !query.data ? (
         <div className="modal-body">
@@ -414,37 +406,39 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
           </section>
           <section className="inspection-detail-scores">
             <div className="inspection-detail-section-head">
-              <h3>评分概览</h3>
+              <h3>巡检结论概览</h3>
               <span>共 {query.data.answers.length} 项</span>
             </div>
             <div className="inspection-detail-score-grid">
-              {scoreSummary.map((module) => (
+              {outcomeSummary.map((module) => (
                 <article key={module.code}>
                   <strong>{MODULE_LABELS[module.code]}</strong>
                   <span>{module.items.length} 项标准</span>
-                  <div className="inspection-detail-score-counts" aria-label={`${MODULE_LABELS[module.code]}评分分布`}>
-                    <span className="score-3">3 分 {module.counts[3]}</span>
-                    <span className="score-2">2 分 {module.counts[2]}</span>
-                    <span className="score-1">1 分 {module.counts[1]}</span>
+                  <div
+                    className="inspection-detail-score-counts"
+                    aria-label={`${MODULE_LABELS[module.code]}巡检结论分布`}
+                  >
+                    <span className="outcome-normal">正常 {module.counts.normal}</span>
+                    <span className="outcome-abnormal">异常 {module.counts.abnormal}</span>
                   </div>
                 </article>
               ))}
             </div>
-            {abnormalScores.length ? (
+            {abnormalities.length ? (
               <details className="inspection-detail-exception-scores">
-                <summary>查看 {abnormalScores.length} 项异常评分</summary>
+                <summary>查看 {abnormalities.length} 项异常登记</summary>
                 <ul>
-                  {abnormalScores.map((item) => (
+                  {abnormalities.map((item) => (
                     <li key={`${item.moduleCode}-${item.nodeCode}`}>
                       <span>{MODULE_LABELS[item.moduleCode]}</span>
                       <strong>{item.name}</strong>
-                      <em className={item.score === 1 ? "score-1" : "score-2"}>{item.score} 分</em>
+                      <em className="outcome-abnormal">异常</em>
                     </li>
                   ))}
                 </ul>
               </details>
             ) : (
-              <p className="inspection-detail-all-normal">本次评分均为 3 分。</p>
+              <p className="inspection-detail-all-normal">本次巡检均已确认正常。</p>
             )}
           </section>
           <section>
@@ -476,13 +470,13 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
   );
 }
 
-function summarizeInspectionScores(
+function summarizeInspectionOutcomes(
   answers: AnimalInspectionDetail["answers"],
   nodes: InspectionCatalogNode[],
 ): Array<{
   code: InspectionModuleCode;
-  counts: Record<1 | 2 | 3, number>;
-  items: Array<{ moduleCode: InspectionModuleCode; nodeCode: string; name: string; score: 1 | 2 | 3 }>;
+  counts: Record<"normal" | "abnormal", number>;
+  items: Array<{ moduleCode: InspectionModuleCode; nodeCode: string; name: string; outcome: "normal" | "abnormal" }>;
 }> {
   const nodeByKey = new Map(nodes.map((node) => [`${node.moduleCode}:${node.code}`, node]));
   const records = answers.map((answer) => {
@@ -494,7 +488,7 @@ function summarizeInspectionScores(
       moduleCode,
       nodeCode,
       name: node?.name || nodeCode,
-      score: source.score || answer.score,
+      outcome: inspectionOutcome(source),
     };
   });
   return (Object.keys(MODULE_LABELS) as InspectionModuleCode[])
@@ -503,9 +497,8 @@ function summarizeInspectionScores(
       return {
         code,
         counts: {
-          1: items.filter((item) => item.score === 1).length,
-          2: items.filter((item) => item.score === 2).length,
-          3: items.filter((item) => item.score === 3).length,
+          normal: items.filter((item) => item.outcome === "normal").length,
+          abnormal: items.filter((item) => item.outcome === "abnormal").length,
         },
         items,
       };

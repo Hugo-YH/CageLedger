@@ -49,7 +49,7 @@ test("room administrator keeps the server-side permission boundary", async ({ pa
   });
   expect(createResponse.ok()).toBeTruthy();
   const created = (await createResponse.json()) as { user: { id: string } };
-  await page.getByRole("button", { name: "退出", exact: true }).click();
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await page.getByLabel("用户名", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill("e2e-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -58,7 +58,7 @@ test("room administrator keeps the server-side permission boundary", async ({ pa
   await expect(page.getByRole("button", { name: "新增饲养间", exact: true })).toHaveCount(0);
   const usersResponse = await page.request.get("/api/users");
   expect(usersResponse.status()).toBe(403);
-  await page.getByRole("button", { name: "退出", exact: true }).click();
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();

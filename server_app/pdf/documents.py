@@ -1,7 +1,9 @@
 import calendar
 from html import escape
 
+from server_app.domains.billing.custom_billing import normalize_custom_billing_segments
 from server_app.pdf.renderer import html_to_pdf
+from server_app.shared import clean_text
 
 GROUP_UNITS = 12
 LEFT_COLUMN_DAYS = 15
@@ -27,6 +29,7 @@ def billing_statement_filename(statement):
 def quantity_sheet_html(sheet):
     rows = quantity_sheet_pages(sheet)
     pages = "".join(quantity_page_markup(sheet, page, index) for index, page in enumerate(rows))
+    pages += quantity_custom_billing_details_markup(sheet)
     return document_html("实验动物数量统计表", quantity_styles(), pages)
 
 
@@ -93,13 +96,12 @@ def quantity_page_markup(sheet, rows, page_index):
         f"<tr>{quantity_day_cells(left[index] if index < len(left) else None)}{quantity_day_cells(right[index] if index < len(right) else None)}</tr>"
         for index in range(PRINT_ROWS)
     )
-    custom_price = as_number(sheet.get("customUnitPrice"))
+    custom_segments = sheet_custom_billing_segments(sheet)
     footer = f"项目名称：{h(sheet.get('project'))}"
     if sheet.get("fullExemption"):
         footer += "　减免方式：全额减免"
-    if sheet.get("customBillingEnabled") and custom_price:
-        unit = "只/天" if sheet.get("billingUnit") == "animal_day" else "笼/天"
-        footer += f"　计费标准：自定义 ¥{custom_price:.2f} / {unit}"
+    if custom_segments:
+        footer += f"　自定义收费 {len(custom_segments)} 条，详见附页"
     if int(sheet.get("pageCount") or 1) > 1:
         footer += f"　（第 {page_index + 1} 页）"
     return f"""<section class="sheet-page">
@@ -110,6 +112,29 @@ def quantity_page_markup(sheet, rows, page_index):
 <tr><td class="label" colspan="2">IACUC编号</td><td colspan="2">{h(sheet.get("iacuc"))}</td><td class="label" colspan="2">项目负责人</td><td colspan="2">{h(sheet.get("pi"))}</td><td class="label" colspan="2">实验负责人及电话</td><td colspan="2">{h(sheet.get("owner"))}</td></tr>
 <tr>{quantity_headers()}{quantity_headers()}</tr>{body_rows}
 <tr><td class="footer-row" colspan="12">{footer}</td></tr></table></section>"""
+
+
+def sheet_custom_billing_segments(sheet):
+    segments = sheet.get("customBillingSegments")
+    if isinstance(segments, list):
+        return segments
+    return normalize_custom_billing_segments(sheet, str(sheet.get("month") or ""))
+
+
+def quantity_custom_billing_details_markup(sheet):
+    segments = sheet_custom_billing_segments(sheet)
+    if not segments:
+        return ""
+    unit = "只/天" if sheet.get("billingUnit") == "animal_day" else "笼/天"
+    rows = "".join(
+        f'<tr><td>{index}</td><td>{h(format_date(segment.get("startDate")))}</td><td>{h(format_date(segment.get("endDate")))}</td><td class="num">{number_text_or_blank(segment.get("quantity")) if segment.get("quantity") is not None else "全部"}</td><td class="money">¥{as_number(segment.get("unitPrice")):.2f} / {unit}</td><td>{h(segment.get("note") or "-")}</td></tr>'
+        for index, segment in enumerate(segments, start=1)
+    )
+    return f"""<section class="sheet-page custom-billing-details">
+<div class="sheet-topline">中山大学中山眼科中心 实验动物中心</div>
+<h2>自定义收费明细</h2><p>IACUC：{h(sheet.get("iacuc"))}　项目负责人：{h(sheet.get("pi"))}</p>
+<table class="custom-billing-table"><thead><tr><th>序号</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>收费标准</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table>
+<p class="custom-billing-note">自定义收费数量按每日实际结余核算，独立于减免和梯度收费。</p></section>"""
 
 
 def quantity_headers():
@@ -168,7 +193,9 @@ def billing_statement_html(statement, lines):
             )
         )
     return document_html(
-        billing_statement_filename(statement).removesuffix(".pdf"), settlement_styles(), "".join(result)
+        billing_statement_filename(statement).removesuffix(".pdf"),
+        settlement_styles(),
+        "".join(result) + billing_statement_custom_billing_details_markup(lines),
     )
 
 
@@ -188,10 +215,10 @@ def statement_columns(statement, lines):
                 "iacuc": iacuc,
                 "species": species_label(item),
                 "unit": str(item.get("billingUnit") or ""),
-                "unitPrice": as_number(item.get("unitPrice")),
-                "overageUnitPrice": as_number(item.get("overageUnitPrice")),
-                "tiered": bool(item.get("tiered")),
-                "fullExemption": bool(item.get("fullExemption")),
+                "unitPrice": as_number(item.get("statementUnitPrice", item.get("unitPrice"))),
+                "overageUnitPrice": as_number(item.get("statementOverageUnitPrice", item.get("overageUnitPrice"))),
+                "tiered": bool(item.get("statementTiered", item.get("tiered"))),
+                "fullExemption": bool(item.get("statementFullExemption", item.get("fullExemption"))),
             }
     sorted_columns = sorted(
         columns.values(),
@@ -434,13 +461,53 @@ def breakdown_key(item):
             species_label(item),
             str(item.get("billingItem") or ""),
             str(item.get("billingUnit") or ""),
-            f"{as_number(item.get('unitPrice')):.2f}",
-            f"{as_number(item.get('overageUnitPrice')):.2f}",
-            "1" if item.get("tiered") else "0",
-            "1" if item.get("freeAllowance") else "0",
-            "1" if item.get("fullExemption") else "0",
+            f"{as_number(item.get('statementUnitPrice', item.get('unitPrice'))):.2f}",
+            f"{as_number(item.get('statementOverageUnitPrice', item.get('overageUnitPrice'))):.2f}",
+            "1" if item.get("statementTiered", item.get("tiered")) else "0",
+            "1" if item.get("statementFreeAllowance", item.get("freeAllowance")) else "0",
+            "1" if item.get("statementFullExemption", item.get("fullExemption")) else "0",
         ]
     )
+
+
+def billing_statement_custom_billing_details_markup(lines):
+    details = {}
+    for line in lines or []:
+        for item in line.get("iacucBreakdown") or []:
+            if not item.get("customBilling"):
+                continue
+            key = (
+                normalize_iacuc(item.get("iacuc")),
+                clean_text(item.get("customBillingSegmentId", "")),
+                clean_text(item.get("customBillingStartDate", "")),
+                clean_text(item.get("customBillingEndDate", "")),
+                as_number(item.get("unitPrice")),
+                clean_text(item.get("customBillingNote", "")),
+                clean_text(item.get("billingUnit", "")),
+            )
+            current = details.setdefault(
+                key,
+                {
+                    "iacuc": key[0],
+                    "startDate": key[2],
+                    "endDate": key[3],
+                    "quantity": as_number(
+                        item.get("animalCount") if item.get("billingUnit") == "animal_day" else item.get("cageCount")
+                    ),
+                    "unitPrice": key[4],
+                    "note": key[5],
+                    "billingUnit": key[6],
+                    "amount": 0,
+                },
+            )
+            current["amount"] += as_number(item.get("payableAmount", item.get("amount")))
+    if not details:
+        return ""
+    rows = "".join(
+        f'<tr><td>{h(item["iacuc"])}</td><td>{h(format_date(item["startDate"]))}</td><td>{h(format_date(item["endDate"]))}</td><td class="num">{number_text(item["quantity"])}</td><td class="money">{item["unitPrice"]:.2f} / {"只/天" if item["billingUnit"] == "animal_day" else "笼/天"}</td><td class="money">{item["amount"]:.2f}</td><td>{h(item["note"] or "-")}</td></tr>'
+        for item in sorted(details.values(), key=lambda value: (value["iacuc"], value["startDate"], value["endDate"]))
+    )
+    return f"""<main class=\"document custom-billing-details\"><h1>自定义收费明细</h1><p>以下收费区间独立于减免和梯度收费，已计入本结算单应缴金额。</p><table class=\"custom-billing-table\"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table></main>"""
 
 
 def species_label(item):
@@ -454,11 +521,11 @@ def species_label(item):
 
 
 def quantity_styles():
-    return """@page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#000;background:#fff;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:9px}.sheet-page{min-height:276mm;page-break-after:always}.sheet-page:last-child{page-break-after:auto}.sheet-topline{font-size:8px;margin-bottom:4px}.sheet-table{border-collapse:collapse;width:100%;table-layout:fixed}.sheet-table th,.sheet-table td{border:1px solid #000;padding:3px 4px;text-align:center;vertical-align:middle;word-break:break-all}.sheet-table .title{font-size:18px;padding:8px 0;font-weight:700}.sheet-table .note{color:#c80000;font-weight:700;text-align:left;line-height:1.35}.sheet-table .meta,.sheet-table .label,.sheet-table .footer-row{font-weight:700}.sheet-table .footer-row{text-align:left;height:26px}.sheet-table .num{font-variant-numeric:tabular-nums}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}"""
+    return """@page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#000;background:#fff;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:9px}.sheet-page{min-height:276mm;page-break-after:always}.sheet-page:last-child{page-break-after:auto}.sheet-topline{font-size:8px;margin-bottom:4px}.sheet-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed}.sheet-table th,.sheet-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;text-align:center;vertical-align:middle;word-break:break-all}.sheet-table .title{font-size:18px;padding:8px 0;font-weight:700}.sheet-table .note{color:#c80000;font-weight:700;text-align:left;line-height:1.35}.sheet-table .meta,.sheet-table .label,.sheet-table .footer-row{font-weight:700}.sheet-table .footer-row{text-align:left;height:26px}.sheet-table .num,.custom-billing-table .num{font-variant-numeric:tabular-nums}.custom-billing-details h2{font-size:18px;margin:8px 0}.custom-billing-details p{margin:5px 0}.custom-billing-table th{font-weight:700;background:#f1f5f4}.custom-billing-table td{height:9mm}.custom-billing-note{margin-top:8px!important;line-height:1.5}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}"""
 
 
 def settlement_styles():
-    return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;min-height:277mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(2) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td{padding:2px 3px}.summary-table thead tr:nth-child(2) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6.5mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
+    return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;min-height:277mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td,.custom-billing-table th,.custom-billing-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(2) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.custom-billing-details{page-break-before:always;padding-top:10mm}.custom-billing-details h1{justify-content:flex-start}.custom-billing-details p{margin:4px 0}.custom-billing-table th{background:#f1f5f4}.custom-billing-table td{height:8mm;word-break:break-word}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{padding:2px 3px}.summary-table thead tr:nth-child(2) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6.5mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
 
 
 def document_html(title, styles, body):

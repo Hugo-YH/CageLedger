@@ -14,6 +14,7 @@ from .charging import (
     BILLING_TIER_OVER_PRICE,
     dates_in_month,
 )
+from .custom_billing import custom_billing_segments_for_day, validate_custom_billing_segments
 from .profiles import billing_profile_for_room
 
 
@@ -23,6 +24,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
 
     applications_by_iacuc = applications_by_iacuc or {}
     room_by_id = {room.get("id"): room for room in rooms or []}
+    validate_custom_billing_segments(sheets, rooms or [])
     sheet_states = []
     sheet_state_by_iacuc = {}
     month = sheets[0]["month"]
@@ -34,7 +36,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         for row in sheet.get("rows", []):
             rows_by_date.setdefault(row["date"], []).append(row)
         room = room_by_id.get(sheet.get("roomId"), {})
-        profile = quantity_sheet_billing_profile(billing_profile_for_room(room, sheet.get("billingUnit")), sheet)
+        profile = billing_profile_for_room(room, sheet.get("billingUnit"))
         state = {
             "sheet": sheet,
             "room": room,
@@ -101,39 +103,40 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             profile = state["profile"]
             animal_count += state["animalCount"]
             cage_count += state["cageCount"]
-            if state["cageCount"] or state["animalCount"]:
+            available_count = state["animalCount"] if profile["unit"] == "animal_day" else state["cageCount"]
+            if available_count:
                 sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
                 application = applications_by_iacuc.get(sheet_iacuc, {})
                 free_eligible = iacuc_free_allowance_eligible(application or sheet, line_date)
                 expiry_date = normalize_application_date((application or sheet).get("projectEndDate", ""))
-                breakdown.append(
-                    {
-                        "iacuc": sheet.get("iacuc", ""),
-                        "project": sheet.get("project", ""),
-                        "roomId": sheet.get("roomId", ""),
-                        "roomName": sheet.get("roomName", ""),
-                        "facility": profile.get("facility", ""),
-                        "species": state["room"].get("defaultSpecies", "") or profile.get("species", ""),
-                        "animalCount": state["animalCount"],
-                        "cageCount": state["cageCount"],
-                        "billingItem": profile["billingItem"],
-                        "billingUnit": profile["unit"],
-                        "customerType": profile["customerType"],
-                        "unitPrice": profile["unitPrice"],
-                        "overageUnitPrice": (
-                            profile.get("overageUnitPrice", BILLING_TIER_OVER_PRICE) if profile["tiered"] else 0
-                        ),
-                        "tiered": bool(profile["tiered"]),
-                        "freeAllowance": bool(profile["freeAllowance"]),
-                        "freeEligible": free_eligible,
-                        "freeAllowanceExpiryDate": expiry_date if expiry_date and line_date > expiry_date else "",
-                        "fullExemption": sheet_iacuc in full_exemption_iacucs,
-                        "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0),
-                        "freeCagePriority": as_int(sheet.get("freeCagePriority")),
-                        "tierCagePriority": as_int(sheet.get("tierCagePriority")),
-                        "freeCages": 0,
-                    }
-                )
+                custom_segments = custom_billing_segments_for_day(sheet, line_date, available_count)
+                custom_count = sum(item["quantity"] for item in custom_segments)
+                standard_count = max(available_count - custom_count, 0)
+                if standard_count:
+                    breakdown.append(
+                        quantity_sheet_breakdown_item(
+                            sheet,
+                            state,
+                            profile,
+                            standard_count,
+                            free_eligible,
+                            expiry_date,
+                            sheet_iacuc in full_exemption_iacucs,
+                        )
+                    )
+                for segment in custom_segments:
+                    breakdown.append(
+                        quantity_sheet_breakdown_item(
+                            sheet,
+                            state,
+                            profile,
+                            segment["quantity"],
+                            False,
+                            "",
+                            False,
+                            custom_segment=segment,
+                        )
+                    )
 
         free_allocations = allocate_daily_free_cages_by_iacuc(breakdown, free_cages)
         apply_free_cage_allocations(breakdown, free_allocations)
@@ -153,6 +156,52 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             }
         )
     return lines
+
+
+def quantity_sheet_breakdown_item(
+    sheet, state, profile, count, free_eligible, expiry_date, full_exemption, custom_segment=None
+):
+    custom = custom_segment is not None
+    billing_unit = profile["unit"]
+    unit_price = float(custom_segment.get("unitPrice")) if custom else profile["unitPrice"]
+    return {
+        "iacuc": sheet.get("iacuc", ""),
+        "project": sheet.get("project", ""),
+        "roomId": sheet.get("roomId", ""),
+        "roomName": sheet.get("roomName", ""),
+        "facility": profile.get("facility", ""),
+        "species": state["room"].get("defaultSpecies", "") or profile.get("species", ""),
+        "animalCount": count if billing_unit == "animal_day" else 0,
+        "cageCount": count if billing_unit == "cage_day" else 0,
+        "billingItem": profile["billingItem"],
+        "billingUnit": billing_unit,
+        "customerType": profile["customerType"],
+        "unitPrice": unit_price,
+        # Keep custom charges in the existing IACUC column; their own rate is
+        # disclosed in the custom-billing appendix instead of creating a new column.
+        "statementUnitPrice": profile["unitPrice"],
+        "statementOverageUnitPrice": profile.get("overageUnitPrice", BILLING_TIER_OVER_PRICE),
+        "statementTiered": bool(profile["tiered"]),
+        "statementFreeAllowance": bool(profile["freeAllowance"]),
+        "statementFullExemption": bool(full_exemption and not custom),
+        "overageUnitPrice": (
+            profile.get("overageUnitPrice", BILLING_TIER_OVER_PRICE) if profile["tiered"] and not custom else 0
+        ),
+        "tiered": bool(profile["tiered"] and not custom),
+        "freeAllowance": bool(profile["freeAllowance"] and not custom),
+        "freeEligible": bool(free_eligible and not custom),
+        "freeAllowanceExpiryDate": expiry_date if expiry_date and not custom else "",
+        "fullExemption": bool(full_exemption and not custom),
+        "preferredFreeCages": max(as_int(sheet.get("preferredFreeCages")) or 0, 0) if not custom else 0,
+        "freeCagePriority": as_int(sheet.get("freeCagePriority")) if not custom else None,
+        "tierCagePriority": as_int(sheet.get("tierCagePriority")) if not custom else None,
+        "customBilling": custom,
+        "customBillingSegmentId": custom_segment.get("id", "") if custom else "",
+        "customBillingStartDate": custom_segment.get("startDate", "") if custom else "",
+        "customBillingEndDate": custom_segment.get("endDate", "") if custom else "",
+        "customBillingNote": custom_segment.get("note", "") if custom else "",
+        "freeCages": 0,
+    }
 
 
 def quantity_sheet_free_allowance_notes(lines):

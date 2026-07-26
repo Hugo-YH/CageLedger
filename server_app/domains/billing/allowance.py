@@ -107,6 +107,10 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
 def apply_free_cage_allocations(breakdown, allocations):
     remaining = dict(allocations or {})
     for item in breakdown or []:
+        # Custom-billing entries remain outside every exemption allocation.
+        if item.get("freeEligible") is False:
+            item["freeCages"] = 0
+            continue
         iacuc = normalize_iacuc_number(item.get("iacuc", ""))
         count_source = item.get("animalCount") if item.get("billingUnit") == "animal_day" else item.get("cageCount")
         count = max(as_int(count_source) or 0, 0)

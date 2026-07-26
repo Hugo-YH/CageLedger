@@ -1,4 +1,9 @@
-import type { InspectionAnswer, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
+import type {
+  InspectionAnswer,
+  InspectionCatalogNode,
+  InspectionModuleCode,
+  InspectionOutcome,
+} from "../../api/contracts";
 
 export const MODULE_LABELS: Record<InspectionModuleCode, string> = {
   basicAssessment: "基础评估",
@@ -49,7 +54,14 @@ export function groupedItems(nodes: InspectionCatalogNode[], moduleCode: Inspect
 }
 
 export function normalizeAnswer(answer: InspectionAnswer, moduleCode: InspectionModuleCode): InspectionAnswer {
-  return { ...answer, moduleCode, score: answer.score || 3 };
+  const outcome = inspectionOutcome(answer);
+  return { ...answer, moduleCode, outcome, score: outcome === "abnormal" ? 2 : 3 };
+}
+
+export function inspectionOutcome(answer?: Pick<InspectionAnswer, "outcome" | "score">): InspectionOutcome {
+  if (answer?.outcome === "abnormal") return "abnormal";
+  if (answer?.outcome === "normal") return "normal";
+  return Number(answer?.score || 3) < 3 ? "abnormal" : "normal";
 }
 
 export function inspectionAnswerKey(moduleCode: InspectionModuleCode, nodeCode: string) {

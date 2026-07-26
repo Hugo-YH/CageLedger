@@ -1,4 +1,5 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
+import { customBillingDetailsMarkup } from "./settlementCustomBilling";
 import {
   displayUnitLabel,
   documentNumberFor,
@@ -24,7 +25,11 @@ type Breakdown = {
   tiered?: boolean;
   freeAllowance?: boolean;
   fullExemption?: boolean;
-  tierCagePriority?: number;
+  statementUnitPrice?: number;
+  statementOverageUnitPrice?: number;
+  statementTiered?: boolean;
+  statementFreeAllowance?: boolean;
+  statementFullExemption?: boolean;
   supportAmount?: number;
   payableAmount?: number;
   amount?: number;
@@ -50,7 +55,6 @@ type SettlementColumn = {
 };
 
 type SettlementPageSlot = { column: SettlementColumn | null; summary: ColumnSummary };
-
 type SettlementPage = { slots: SettlementPageSlot[]; showLeadingTotals: boolean };
 
 const GROUP_GRID_UNITS = 12;
@@ -63,14 +67,12 @@ type ColumnSummary = {
   tier2Billable: number;
 };
 
-type ColumnLineValue = ColumnSummary;
-
 type SettlementRow = {
   date: string;
   totalCount: number;
   totalFree: number;
   totalTier2: number;
-  perColumn: Map<string, ColumnLineValue>;
+  perColumn: Map<string, ColumnSummary>;
 };
 
 export function settlementStatementMarkup(result: BillingStatementResponse) {
@@ -109,7 +111,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   ];
   const totalPages = Math.max(pagedColumns.length, 1);
 
-  return pagedColumns
+  const statementPages = pagedColumns
     .map((page, pageIndex) => {
       const resolvedSlots = page.slots.map((slot) => ({
         column: slot.column,
@@ -224,6 +226,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         )}</colgroup><thead><tr><th class="date-column" rowspan="2">日期</th>${leadingHeaderMarkup}${columnsMarkup}</tr><tr>${leadingSubHeaderMarkup}${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td>${leadingTotalsRowMarkup}${detailTotals}</tr>${summaryRow}</tfoot></table>${footerBlock}${pageFooter}</main>`;
     })
     .join("");
+  return `${statementPages}${customBillingDetailsMarkup(lines)}`;
 }
 
 export function settlementStatementHtml(result: BillingStatementResponse, autoPrint = true) {
@@ -282,11 +285,11 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
         iacuc,
         speciesLabel: speciesLabelFor(item),
         billingUnit: String(item.billingUnit || ""),
-        unitPrice: Number(item.unitPrice || 0),
-        overageUnitPrice: Number(item.overageUnitPrice || 0),
-        tiered: Boolean(item.tiered),
-        freeAllowance: Boolean(item.freeAllowance),
-        fullExemption: Boolean(item.fullExemption),
+        unitPrice: Number(item.statementUnitPrice ?? item.unitPrice ?? 0),
+        overageUnitPrice: Number(item.statementOverageUnitPrice ?? item.overageUnitPrice ?? 0),
+        tiered: Boolean(item.statementTiered ?? item.tiered),
+        freeAllowance: Boolean(item.statementFreeAllowance ?? item.freeAllowance),
+        fullExemption: Boolean(item.statementFullExemption ?? item.fullExemption),
       });
     }),
   );
@@ -525,11 +528,11 @@ function breakdownColumnKey(item: Breakdown) {
     speciesLabelFor(item),
     String(item.billingItem || ""),
     String(item.billingUnit || ""),
-    Number(item.unitPrice || 0).toFixed(2),
-    Number(item.overageUnitPrice || 0).toFixed(2),
-    item.tiered ? "1" : "0",
-    item.freeAllowance ? "1" : "0",
-    item.fullExemption ? "1" : "0",
+    Number(item.statementUnitPrice ?? item.unitPrice ?? 0).toFixed(2),
+    Number(item.statementOverageUnitPrice ?? item.overageUnitPrice ?? 0).toFixed(2),
+    (item.statementTiered ?? item.tiered) ? "1" : "0",
+    (item.statementFreeAllowance ?? item.freeAllowance) ? "1" : "0",
+    (item.statementFullExemption ?? item.fullExemption) ? "1" : "0",
   ].join("|");
 }
 

@@ -1,6 +1,7 @@
 export type InspectionModuleCode = "basicAssessment" | "advancedAssessment" | "abnormalAnimalAssessment";
 export type InspectionStatus = "draft" | "submitted";
 export type FindingStatus = "pending" | "in_progress" | "pending_recheck" | "resolved";
+export type InspectionOutcome = "normal" | "abnormal";
 
 export interface InspectionCatalogNode {
   id: string | number;
@@ -40,7 +41,9 @@ export interface InspectionCatalogResponse {
 export interface InspectionAnswer {
   nodeCode: string;
   moduleCode: InspectionModuleCode;
-  score: 1 | 2 | 3;
+  outcome?: InspectionOutcome;
+  /** Historical compatibility for records created before binary inspection outcomes. */
+  score?: 1 | 2 | 3;
   subOption?: string;
   note?: string;
   locationHint?: string;

@@ -11,14 +11,12 @@ export type ReferencePreview = {
 
 export function FindingCaptureDialog({
   node,
-  score,
   answer,
   onClose,
   onConfirm,
   onReference,
 }: {
   node: InspectionCatalogNode;
-  score: 1 | 2;
   answer?: InspectionAnswer;
   onClose: () => void;
   onConfirm: (result: { answer: Partial<InspectionAnswer>; files: File[] }) => void;
@@ -35,7 +33,7 @@ export function FindingCaptureDialog({
     <ModalShell ariaLabel="登记异常" className="inspection-finding-dialog" onClose={onClose}>
       <div className="modal-head">
         <div>
-          <span className="workspace-kicker">{score === 1 ? "严重异常 · 1 分" : "轻微异常 · 2 分"}</span>
+          <span className="workspace-kicker">异常登记</span>
           <h2>{node.name}</h2>
           <p>{node.description || "补充异常定位和现场说明。"}</p>
         </div>

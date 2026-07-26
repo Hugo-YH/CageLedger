@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { InspectionCatalogNode } from "../../api/contracts";
-import { groupedItems, inspectionAnswerKey, inspectionFacilityLabel } from "./model";
+import { groupedItems, inspectionAnswerKey, inspectionFacilityLabel, inspectionOutcome } from "./model";
 
 const nodes: InspectionCatalogNode[] = [
   { id: "category", code: "basic_01", moduleCode: "basicAssessment", name: "环境", nodeType: "CATEGORY" },
@@ -30,5 +30,12 @@ describe("animal inspection model", () => {
   it("shows facility names in Chinese", () => {
     expect(inspectionFacilityLabel("zhujiang")).toBe("珠江新城设施");
     expect(inspectionFacilityLabel("bioisland")).toBe("生物岛设施");
+  });
+
+  it("maps historical scores and new binary outcomes to a shared inspection conclusion", () => {
+    expect(inspectionOutcome({ score: 3 })).toBe("normal");
+    expect(inspectionOutcome({ score: 1 })).toBe("abnormal");
+    expect(inspectionOutcome({ outcome: "normal" })).toBe("normal");
+    expect(inspectionOutcome({ outcome: "abnormal" })).toBe("abnormal");
   });
 });

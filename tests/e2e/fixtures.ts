@@ -95,16 +95,9 @@ export async function openSettingsNavigation(page: Page) {
 async function openNavigationGroup(page: Page, label: string, desktopSelector: string): Promise<Locator> {
   const desktopGroup = page.getByRole("button", { name: label, exact: true }).first();
   const useMobileNavigation = await page.evaluate(() => window.matchMedia("(width <= 760px)").matches);
-  if (!useMobileNavigation) {
-    if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
-    const desktopNavigation = page.locator(desktopSelector);
-    await expect(desktopNavigation).toBeVisible();
-    return desktopNavigation;
-  }
-
-  const moreButton = page.getByRole("button", { name: "更多功能", exact: true }).first();
-  if ((await moreButton.getAttribute("aria-expanded")) !== "true") await moreButton.click();
-  const mobileNavigation = page.locator("#nav-more");
-  await expect(mobileNavigation).toBeVisible();
-  return mobileNavigation;
+  if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
+  const navigation = page.locator(desktopSelector);
+  await expect(navigation).toBeVisible();
+  if (useMobileNavigation) await expect(page.locator(".mobile-navigation-backdrop")).toBeVisible();
+  return navigation;
 }

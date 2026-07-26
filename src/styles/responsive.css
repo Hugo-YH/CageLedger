@@ -3,6 +3,14 @@
     grid-template-columns: 1fr;
   }
 
+  .custom-billing-segment-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .custom-billing-segment-note {
+    grid-column: span 2;
+  }
+
   .billing-settlement-actions,
   .billing-settlement-summary {
     grid-template-columns: 1fr;

@@ -1,5 +1,15 @@
 export type BillingUnit = "cage_day" | "animal_day";
 
+export interface CustomBillingSegment {
+  id: string;
+  startDate: string;
+  endDate: string;
+  /** `null` represents the legacy whole-sheet custom price and covers each day's full balance. */
+  quantity: number | null;
+  unitPrice: number | null;
+  note: string;
+}
+
 export interface QuantitySheetRow {
   id: string;
   date: string;
@@ -39,6 +49,8 @@ export interface QuantitySheet {
   freeCagePriority: number | null;
   tierCagePriority: number | null;
   fullExemption: boolean;
+  customBillingSegments: CustomBillingSegment[];
+  /** Legacy whole-sheet custom-price fields retained for existing payloads. */
   customBillingEnabled: boolean;
   customUnitPrice: number | null;
   billingUnit: BillingUnit;

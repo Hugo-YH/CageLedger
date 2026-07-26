@@ -106,6 +106,7 @@ from server_app.domains.billing import (
     free_cages_for_principal_type,
     iacuc_free_allowance_eligible,
     invalidate_settlement_candidate_snapshots,
+    normalize_custom_billing_segments,
     normalize_principal_type,
     occupancy_active_on_date,
     occupancy_animal_count,
@@ -116,6 +117,7 @@ from server_app.domains.billing import (
     statement_application_snapshot,
     statement_billing_unit_from_lines,
     statement_pi_snapshot,
+    validate_custom_billing_segments,
 )
 from server_app.domains.billing.candidates import (
     list_settlement_candidates,
@@ -3423,7 +3425,6 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     validate_quantity_sheet_animal_requirements(conn, sheet)
     validate_quantity_sheet_free_cage_settings(conn, sheet)
     validate_quantity_sheet_tier_priority(conn, sheet)
-    validate_quantity_sheet_custom_billing(sheet)
     previous_sheet = get_quantity_sheet_repository(conn, sheet["id"])
     exists = previous_sheet is not None
     if exists:
@@ -3441,6 +3442,8 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         status = HTTPStatus.CREATED
 
     transfer_events, affected_sheets = sync_quantity_sheet_transfer_rows(conn, sheet, actor, now)
+    validation_sheets = list_quantity_sheets_by_month(conn, sheet["month"])
+    validate_custom_billing_segments(validation_sheets, read_rooms_for_quantity_sheets(conn, validation_sheets))
     event = audit_event(actor, action, "quantity_sheet", sheet["id"], message, [], now, None, sheet)
     events = [event, *transfer_events]
     write_audit_events(conn, events)
@@ -3551,6 +3554,8 @@ def normalize_quantity_sheet(payload, sheet_id, updated_at):
         "rows": [normalize_quantity_sheet_row(row, month) for row in rows],
         "updatedAt": updated_at,
     }
+    sheet["customBillingSegments"] = normalize_custom_billing_segments(source, month)
+    sheet["customBillingEnabled"] = bool(sheet["customBillingSegments"])
     if sheet["fullExemption"]:
         sheet["preferredFreeCages"] = None
         sheet["freeCagePriority"] = None
@@ -3641,14 +3646,6 @@ def validate_quantity_sheet_tier_priority(conn, sheet):
             enabled_count += 1
     if enabled_count > 1:
         raise ValueError(f"{pi_name} 在 {sheet.get('month')} 仅能指定一个优先梯度伦理")
-
-
-def validate_quantity_sheet_custom_billing(sheet):
-    if not sheet.get("customBillingEnabled"):
-        return
-    unit_price = as_float(sheet.get("customUnitPrice"))
-    if unit_price is None or unit_price <= 0:
-        raise ValueError("启用自定义饲养费后，请填写大于 0 的收费标准")
 
 
 def read_rooms_for_quantity_sheets(conn, sheets):

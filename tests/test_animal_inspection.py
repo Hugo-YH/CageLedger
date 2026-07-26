@@ -80,7 +80,7 @@ class AnimalInspectionServiceTests(unittest.TestCase):
                     {
                         "moduleCode": "abnormalAnimalAssessment",
                         "nodeCode": "abnormal_07_02_01",
-                        "score": 2,
+                        "outcome": "abnormal",
                         "note": "测试异常",
                         "rackHint": "8101-01",
                         "cageNumber": "B12",
@@ -98,6 +98,29 @@ class AnimalInspectionServiceTests(unittest.TestCase):
             create_or_update_inspection(self.conn, ACTOR, saved["item"]["id"], {"roomId": "room-1"})
         listed = list_inspections(self.conn, ACTOR, {"limit": 20, "offset": 0})
         self.assertEqual(listed["page"]["total"], 1)
+
+    def test_legacy_scores_and_binary_outcomes_share_the_same_abnormal_path(self):
+        saved = create_or_update_inspection(
+            self.conn,
+            ACTOR,
+            None,
+            {
+                "roomId": "room-1",
+                "moduleCodes": ["abnormalAnimalAssessment"],
+                "answers": [
+                    {"moduleCode": "abnormalAnimalAssessment", "nodeCode": "abnormal_07_02_01", "score": 1},
+                    {"moduleCode": "abnormalAnimalAssessment", "nodeCode": "abnormal_07_02_02", "outcome": "normal"},
+                ],
+            },
+        )
+        submitted = submit_inspection(self.conn, ACTOR, saved["item"]["id"])
+        self.assertEqual(len(submitted["findings"]), 1)
+        detail = self.conn.execute(
+            "SELECT payload FROM animal_inspection_answers WHERE inspection_id = ? ORDER BY node_code",
+            (saved["item"]["id"],),
+        ).fetchall()
+        self.assertEqual(json.loads(detail[0]["payload"])["outcome"], "abnormal")
+        self.assertEqual(json.loads(detail[1]["payload"])["outcome"], "normal")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from server_app.shared import clean_text, new_id, now_iso
 from .catalog import CATALOG_VERSION, ensure_catalog_rows
 from .catalog import catalog_payload as read_catalog_payload
 from .catalog_payload import prepare_catalog_payload
+from .normalization import clean_answers, clean_modules
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
@@ -24,7 +25,7 @@ def ensure_catalog(conn):
 def catalog_payload(conn, actor):
     _require_actor(actor)
     payload = prepare_catalog_payload(read_catalog_payload(conn))
-    payload["reviewNotice"] = "评分标准、图例和建议处置为内部参考资料；医疗与安乐死建议需经兽医和伦理流程确认。"
+    payload["reviewNotice"] = "巡检标准、图例和建议处置为内部参考资料；医疗与安乐死建议需经兽医和伦理流程确认。"
     return payload
 
 
@@ -93,7 +94,7 @@ def get_inspection(conn, actor, inspection_id):
     findings = [
         _finding_payload(conn, row)
         for row in conn.execute(
-            "SELECT * FROM animal_inspection_findings WHERE inspection_id = ? ORDER BY severity, updated_at DESC",
+            "SELECT * FROM animal_inspection_findings WHERE inspection_id = ? ORDER BY updated_at DESC",
             (inspection_id,),
         )
     ]
@@ -103,8 +104,8 @@ def get_inspection(conn, actor, inspection_id):
 def create_or_update_inspection(conn, actor, inspection_id, body):
     _require_actor(actor)
     room_id = clean_text(body.get("roomId"))
-    modules = _clean_modules(body.get("moduleCodes"))
-    answers = _clean_answers(body.get("answers"))
+    modules = clean_modules(body.get("moduleCodes"))
+    answers = clean_answers(body.get("answers"))
     if inspection_id:
         current = _inspection_row(conn, inspection_id)
         _require_draft_write(actor, current)
@@ -185,16 +186,17 @@ def submit_inspection(conn, actor, inspection_id):
     conn.execute("DELETE FROM animal_inspection_findings WHERE inspection_id = ?", (inspection_id,))
     findings = []
     for answer in answers:
-        if int(answer["score"]) >= 3:
-            continue
         answer_payload = json.loads(answer["payload"])
+        if _answer_outcome(answer_payload, answer["score"]) != "abnormal":
+            continue
         finding = {
             "id": new_id("finding"),
             "inspectionId": inspection_id,
             "roomId": item["roomId"],
             "moduleCode": answer["module_code"],
             "nodeCode": answer["node_code"],
-            "severity": int(answer["score"]),
+            # The legacy column remains required by historical SQLite schemas.
+            "severity": 2,
             "status": "pending",
             "locationHint": clean_text(answer_payload.get("locationHint")),
             "rackHint": clean_text(answer_payload.get("rackHint")),
@@ -207,7 +209,7 @@ def submit_inspection(conn, actor, inspection_id):
             "updatedAt": now,
         }
         _upsert_finding(conn, finding)
-        _insert_finding_event(conn, finding["id"], "created", "评分异常，等待处置", actor, now)
+        _insert_finding_event(conn, finding["id"], "created", "已登记异常，等待处置", actor, now)
         findings.append(finding)
     audit = audit_event(
         actor,
@@ -234,16 +236,12 @@ def list_findings(conn, actor, filters):
     where, params = _finding_visibility_clause(actor)
     status = clean_text(filters.get("status"))
     room = clean_text(filters.get("room"))
-    severity = clean_text(filters.get("severity"))
     if status:
         where.append("f.status = ?")
         params.append(status)
     if room:
         where.append("i.room_name = ?")
         params.append(room)
-    if severity in {"1", "2"}:
-        where.append("f.severity = ?")
-        params.append(int(severity))
     clause = " AND ".join(where)
     limit = max(1, min(int(filters.get("limit") or 50), 100))
     offset = max(0, int(filters.get("offset") or 0))
@@ -251,7 +249,7 @@ def list_findings(conn, actor, filters):
         f"""SELECT f.* FROM animal_inspection_findings f
             JOIN animal_inspections i ON i.id = f.inspection_id
             WHERE {clause} ORDER BY CASE f.status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'pending_recheck' THEN 2 ELSE 3 END,
-            f.severity ASC, f.recheck_due_at ASC, f.updated_at DESC LIMIT ? OFFSET ?""",
+            f.recheck_due_at ASC, f.updated_at DESC LIMIT ? OFFSET ?""",
         (*params, limit, offset),
     ).fetchall()
     total = conn.execute(
@@ -495,41 +493,6 @@ def _room_snapshot(conn, room_id):
     return room, snapshot
 
 
-def _clean_modules(value):
-    allowed = {"basicAssessment", "advancedAssessment", "abnormalAnimalAssessment"}
-    return [item for item in dict.fromkeys(clean_text(entry) for entry in (value or [])) if item in allowed]
-
-
-def _clean_answers(value):
-    answers = []
-    for item in value or []:
-        code = clean_text(item.get("nodeCode"))
-        module = clean_text(item.get("moduleCode"))
-        score = item.get("score")
-        if not code or module not in {"basicAssessment", "advancedAssessment", "abnormalAnimalAssessment"}:
-            continue
-        try:
-            score = int(score)
-        except (TypeError, ValueError):
-            continue
-        if score not in {1, 2, 3}:
-            continue
-        answers.append(
-            {
-                "nodeCode": code,
-                "moduleCode": module,
-                "score": score,
-                "subOption": clean_text(item.get("subOption")),
-                "note": clean_text(item.get("note")),
-                "locationHint": clean_text(item.get("locationHint")),
-                "rackHint": clean_text(item.get("rackHint")),
-                "cageNumber": clean_text(item.get("cageNumber")),
-                "animalIdentifier": clean_text(item.get("animalIdentifier")),
-            }
-        )
-    return answers
-
-
 def _insert_answers(conn, inspection_id, answers):
     for answer in answers:
         payload = dict(answer)
@@ -564,7 +527,14 @@ def _validate_submission(conn, inspection, answers):
         and (row["module_code"], row["code"]) not in answered
     ]
     if missing:
-        raise ValueError(f"仍有 {len(missing)} 项基础或进阶评分未填写")
+        raise ValueError(f"仍有 {len(missing)} 项巡检结论未确认")
+
+
+def _answer_outcome(payload, legacy_score):
+    outcome = clean_text(payload.get("outcome"))
+    if outcome in {"normal", "abnormal"}:
+        return outcome
+    return "abnormal" if int(legacy_score or 3) < 3 else "normal"
 
 
 def _finding_row(conn, finding_id):

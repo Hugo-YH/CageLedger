@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
+import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
 import { useIacucIndex } from "../../api/iacuc";
 import { useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
@@ -9,6 +9,7 @@ import { AsyncActionButton, ModalShell } from "../../components/WorkspaceUi";
 import {
   createQuantityRow,
   createQuantitySheet,
+  createCustomBillingSegment,
   normalizeQuantitySheet,
   roomBillingProfile,
   roomBillingUnit,
@@ -69,11 +70,13 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     recalculate();
   }, [recalculate, editorRows]);
 
+  const customBillingSegmentCount = draft.customBillingSegments.length;
+
   useEffect(() => {
-    if (freeCageEnabled || draft.fullExemption || tierPriorityEnabled || draft.customBillingEnabled) {
+    if (freeCageEnabled || draft.fullExemption || tierPriorityEnabled || customBillingSegmentCount > 0) {
       setOptionsExpanded(true);
     }
-  }, [draft.customBillingEnabled, draft.fullExemption, freeCageEnabled, tierPriorityEnabled]);
+  }, [customBillingSegmentCount, draft.fullExemption, freeCageEnabled, tierPriorityEnabled]);
 
   function setField<K extends keyof QuantitySheet>(key: K, value: QuantitySheet[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -104,12 +107,37 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     }));
   }
 
-  function setCustomBillingEnabled(enabled: boolean) {
+  function addCustomBillingSegment() {
     setDraft((current) => ({
       ...current,
-      customBillingEnabled: enabled,
-      customUnitPrice: enabled ? (current.customUnitPrice ?? billingProfile.price) : null,
+      customBillingEnabled: true,
+      customUnitPrice: null,
+      customBillingSegments: [
+        ...current.customBillingSegments,
+        createCustomBillingSegment(current.month, billingProfile.price),
+      ],
     }));
+  }
+
+  function updateCustomBillingSegment(id: string, update: Partial<CustomBillingSegment>) {
+    setDraft((current) => ({
+      ...current,
+      customBillingSegments: current.customBillingSegments.map((segment) =>
+        segment.id === id ? { ...segment, ...update } : segment,
+      ),
+    }));
+  }
+
+  function removeCustomBillingSegment(id: string) {
+    setDraft((current) => {
+      const customBillingSegments = current.customBillingSegments.filter((segment) => segment.id !== id);
+      return {
+        ...current,
+        customBillingSegments,
+        customBillingEnabled: customBillingSegments.length > 0,
+        customUnitPrice: customBillingSegments.length ? current.customUnitPrice : null,
+      };
+    });
   }
 
   function chooseRoom(roomId: string) {
@@ -353,14 +381,14 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   freeCageEnabled,
                   fullExemption: draft.fullExemption,
                   tierPriorityEnabled,
-                  customBillingEnabled: draft.customBillingEnabled,
+                  customBillingSegmentCount,
                 }).length ? (
                   <span className="quantity-options-badges" aria-label="已启用计费扩展选项">
                     {billingOptionsBadges({
                       freeCageEnabled,
                       fullExemption: draft.fullExemption,
                       tierPriorityEnabled,
-                      customBillingEnabled: draft.customBillingEnabled,
+                      customBillingSegmentCount,
                     }).map((label) => (
                       <span key={label} className="quantity-options-badge">
                         {label}
@@ -373,7 +401,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                       freeCageEnabled,
                       fullExemption: draft.fullExemption,
                       tierPriorityEnabled,
-                      customBillingEnabled: draft.customBillingEnabled,
+                      customBillingSegmentCount,
                     })}
                   </small>
                 )}
@@ -498,44 +526,26 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                 <div className="quantity-free-cage-module quantity-custom-billing-module">
                   <div className="quantity-free-cage-head">
                     <div>
-                      <strong>自定义饲养费</strong>
-                      <span>
-                        标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
-                      </span>
+                      <strong>自定义收费区间</strong>
+                      <span>特殊饲养按日期、数量与单价独立计费，不参与减免和梯度累计。</span>
                     </div>
-                    <Tooltip content="打开后，当前伦理按输入的自定义标准计费。">
-                      <label
-                        className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.customBillingEnabled ? "enabled" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={draft.customBillingEnabled}
-                          onChange={(event) => setCustomBillingEnabled(event.target.checked)}
-                        />
-                        <span className="quantity-animal-toggle-track" aria-hidden="true">
-                          <span />
-                        </span>
-                        <span className="quantity-animal-toggle-label">自定义收费</span>
-                      </label>
-                    </Tooltip>
+                    <button className="secondary compact-action" type="button" onClick={addCustomBillingSegment}>
+                      新增区间
+                    </button>
                   </div>
-                  {draft.customBillingEnabled ? (
-                    <label className="quantity-free-cage-field">
-                      自定义收费标准（元/{unit === "animal_day" ? "只/天" : "笼/天"}）
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        required
-                        value={draft.customUnitPrice ?? ""}
-                        placeholder="请输入单价"
-                        onChange={(event) =>
-                          setField("customUnitPrice", event.target.value === "" ? null : Number(event.target.value))
-                        }
-                      />
-                      <small>该单价仅应用于当前统计表对应伦理，结算单会保留实际单价。</small>
-                    </label>
-                  ) : null}
+                  {customBillingSegmentCount ? (
+                    <CustomBillingSegmentsEditor
+                      segments={draft.customBillingSegments}
+                      unit={unit}
+                      onChanged={updateCustomBillingSegment}
+                      onRemoved={removeCustomBillingSegment}
+                    />
+                  ) : (
+                    <p className="quantity-custom-billing-empty">
+                      标准收费 ¥{billingProfile.price.toFixed(2)} / {unit === "animal_day" ? "只/天" : "笼/天"}
+                      ；按需新增特殊饲养收费区间。
+                    </p>
+                  )}
                 </div>
               </div>
             ) : null}
@@ -637,6 +647,98 @@ function ReadOnlyField({ label, value, placeholder }: { label: string; value: st
     </label>
   );
 }
+
+function CustomBillingSegmentsEditor({
+  segments,
+  unit,
+  onChanged,
+  onRemoved,
+}: {
+  segments: CustomBillingSegment[];
+  unit: "animal_day" | "cage_day";
+  onChanged: (id: string, update: Partial<CustomBillingSegment>) => void;
+  onRemoved: (id: string) => void;
+}) {
+  const quantityLabel = unit === "animal_day" ? "动物数/天" : "笼数/天";
+  const unitLabel = unit === "animal_day" ? "只/天" : "笼/天";
+  return (
+    <div className="custom-billing-segments" aria-label="自定义收费区间">
+      {segments.map((segment, index) => (
+        <section key={segment.id} className="custom-billing-segment">
+          <div className="custom-billing-segment-head">
+            <div>
+              <strong>区间 {index + 1}</strong>
+              <span>预估 ¥{estimateCustomBillingSegment(segment).toFixed(2)}</span>
+            </div>
+            <button className="danger-link" type="button" onClick={() => onRemoved(segment.id)}>
+              删除
+            </button>
+          </div>
+          <div className="custom-billing-segment-fields">
+            <label>
+              开始日期
+              <input
+                type="date"
+                value={segment.startDate}
+                onChange={(event) => onChanged(segment.id, { startDate: event.target.value })}
+              />
+            </label>
+            <label>
+              结束日期
+              <input
+                type="date"
+                value={segment.endDate}
+                onChange={(event) => onChanged(segment.id, { endDate: event.target.value })}
+              />
+            </label>
+            <label>
+              {quantityLabel}
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={segment.quantity ?? ""}
+                placeholder="每日数量"
+                onChange={(event) =>
+                  onChanged(segment.id, { quantity: event.target.value === "" ? null : Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              单价（元/{unitLabel}）
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={segment.unitPrice ?? ""}
+                placeholder="收费单价"
+                onChange={(event) =>
+                  onChanged(segment.id, { unitPrice: event.target.value === "" ? null : Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="custom-billing-segment-note">
+              收费说明
+              <input
+                value={segment.note}
+                placeholder="例如：特殊饲料"
+                onChange={(event) => onChanged(segment.id, { note: event.target.value })}
+              />
+            </label>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function estimateCustomBillingSegment(segment: CustomBillingSegment) {
+  if (!segment.quantity || !segment.unitPrice) return 0;
+  const start = new Date(`${segment.startDate}T00:00:00`);
+  const end = new Date(`${segment.endDate}T00:00:00`);
+  const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  return Math.max(days, 0) * segment.quantity * segment.unitPrice;
+}
 function makeEditorRows(sheet: QuantitySheet) {
   const count = Math.max(sheet.pageCount, 1) * QUANTITY_ROWS_PER_PAGE;
   return Array.from({ length: count }, (_, index) => sheet.rows[index] || createQuantityRow(sheet.month, index === 0));
@@ -651,7 +753,7 @@ function saveHint(rows: QuantitySheetRow[], animalDetails: boolean) {
 function hasExpandedBillingOptions(sheet: QuantitySheet) {
   return Boolean(
     sheet.fullExemption ||
-    sheet.customBillingEnabled ||
+    sheet.customBillingSegments.length > 0 ||
     sheet.tierCagePriority !== null ||
     Number(sheet.preferredFreeCages || 0) > 0 ||
     sheet.freeCagePriority !== null,
@@ -662,18 +764,18 @@ function billingOptionsSummary({
   freeCageEnabled,
   fullExemption,
   tierPriorityEnabled,
-  customBillingEnabled,
+  customBillingSegmentCount,
 }: {
   freeCageEnabled: boolean;
   fullExemption: boolean;
   tierPriorityEnabled: boolean;
-  customBillingEnabled: boolean;
+  customBillingSegmentCount: number;
 }) {
   const active = billingOptionsBadges({
     freeCageEnabled,
     fullExemption,
     tierPriorityEnabled,
-    customBillingEnabled,
+    customBillingSegmentCount,
   });
   return active.length ? `已启用：${active.join("、")}` : "默认收起，按需展开设置优先减免、梯度和自定义收费";
 }
@@ -682,17 +784,17 @@ function billingOptionsBadges({
   freeCageEnabled,
   fullExemption,
   tierPriorityEnabled,
-  customBillingEnabled,
+  customBillingSegmentCount,
 }: {
   freeCageEnabled: boolean;
   fullExemption: boolean;
   tierPriorityEnabled: boolean;
-  customBillingEnabled: boolean;
+  customBillingSegmentCount: number;
 }) {
   return [
     freeCageEnabled ? "优先减免" : "",
     fullExemption ? "全额减免" : "",
     tierPriorityEnabled ? "优先梯度" : "",
-    customBillingEnabled ? "自定义收费" : "",
+    customBillingSegmentCount ? `自定义收费 ${customBillingSegmentCount} 条` : "",
   ].filter(Boolean);
 }

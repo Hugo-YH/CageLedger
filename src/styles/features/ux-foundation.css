@@ -887,7 +887,8 @@ button:active:not(:disabled),
     grid-template-columns: 1fr;
   }
 
-  .inspection-score-options {
+  .inspection-score-options,
+  .inspection-outcome-options {
     grid-column: 1;
   }
 

@@ -33,6 +33,12 @@ from .charging import (
     statement_billing_unit_from_lines,
     tiered_daily_charge,
 )
+from .custom_billing import (
+    custom_billing_quantity_for_day,
+    custom_billing_segments_for_day,
+    normalize_custom_billing_segments,
+    validate_custom_billing_segments,
+)
 from .profiles import (
     BILLING_RULES,
     billing_item_for_species,
@@ -76,6 +82,8 @@ __all__ = [
     "billing_profile_for_room",
     "billing_unit_price_for",
     "combined_daily_charge",
+    "custom_billing_quantity_for_day",
+    "custom_billing_segments_for_day",
     "dates_in_month",
     "flat_daily_charge",
     "free_cage_allocation_sort_key",
@@ -84,6 +92,7 @@ __all__ = [
     "infer_billing_item_from_room",
     "invalidate_settlement_candidate_snapshots",
     "normalize_billing_item",
+    "normalize_custom_billing_segments",
     "normalize_billing_unit",
     "normalize_customer_type",
     "normalize_principal_type",
@@ -100,4 +109,5 @@ __all__ = [
     "statement_pi_snapshot",
     "tier_cage_priority_sort_key",
     "tiered_daily_charge",
+    "validate_custom_billing_segments",
 ]

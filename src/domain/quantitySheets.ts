@@ -1,5 +1,5 @@
 import type { CageRoom } from "../contracts/infrastructure";
-import type { BillingUnit, QuantitySheet, QuantitySheetRow } from "../contracts/quantity";
+import type { BillingUnit, CustomBillingSegment, QuantitySheet, QuantitySheetRow } from "../contracts/quantity";
 import { createClientId } from "./id";
 
 const animalDayItems = new Set(["guinea_pig", "rabbit", "monkey", "pig", "dog"]);
@@ -65,6 +65,42 @@ export function createQuantityRow(month: string, first = false): QuantitySheetRo
   };
 }
 
+export function createCustomBillingSegment(month: string, unitPrice: number | null = null): CustomBillingSegment {
+  return {
+    id: createClientId(),
+    startDate: `${month}-01`,
+    endDate: `${month}-${String(daysInMonth(month)).padStart(2, "0")}`,
+    quantity: null,
+    unitPrice,
+    note: "",
+  };
+}
+
+function normalizeCustomBillingSegment(segment: Partial<CustomBillingSegment>, month: string): CustomBillingSegment {
+  return {
+    id: String(segment.id || createClientId()),
+    startDate: String(segment.startDate || `${month}-01`),
+    endDate: String(segment.endDate || `${month}-${String(daysInMonth(month)).padStart(2, "0")}`),
+    quantity: numberOrNull(segment.quantity),
+    unitPrice: numberOrNull(segment.unitPrice),
+    note: String(segment.note || "").trim(),
+  };
+}
+
+function legacyCustomBillingSegment(sheet: Partial<QuantitySheet>, month: string): CustomBillingSegment[] {
+  if (!sheet.customBillingEnabled || !numberOrNull(sheet.customUnitPrice)) return [];
+  return [
+    {
+      id: `legacy-custom-${String(sheet.id || "sheet")}`,
+      startDate: `${month}-01`,
+      endDate: `${month}-${String(daysInMonth(month)).padStart(2, "0")}`,
+      quantity: null,
+      unitPrice: numberOrNull(sheet.customUnitPrice),
+      note: "历史整月自定义收费",
+    },
+  ];
+}
+
 export function normalizeQuantityRow(row: Partial<QuantitySheetRow>, month: string): QuantitySheetRow {
   return {
     ...createQuantityRow(month),
@@ -94,6 +130,9 @@ export function createQuantitySheet(month: string, manager = ""): QuantitySheet 
 
 export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantitySheet {
   const month = sheet.month || new Date().toISOString().slice(0, 7);
+  const customBillingSegments = Array.isArray(sheet.customBillingSegments)
+    ? sheet.customBillingSegments.map((segment) => normalizeCustomBillingSegment(segment, month))
+    : legacyCustomBillingSegment(sheet, month);
   return {
     id: sheet.id || createClientId(),
     month,
@@ -113,8 +152,9 @@ export function normalizeQuantitySheet(sheet: Partial<QuantitySheet>): QuantityS
     freeCagePriority: numberOrNull(sheet.freeCagePriority),
     tierCagePriority: numberOrNull(sheet.tierCagePriority),
     fullExemption: Boolean(sheet.fullExemption),
-    customBillingEnabled: Boolean(sheet.customBillingEnabled),
-    customUnitPrice: numberOrNull(sheet.customUnitPrice),
+    customBillingSegments,
+    customBillingEnabled: customBillingSegments.length > 0,
+    customUnitPrice: customBillingSegments.length ? numberOrNull(sheet.customUnitPrice) : null,
     billingUnit: sheet.billingUnit === "animal_day" ? "animal_day" : "cage_day",
     animalDetailEnabled: Boolean(sheet.animalDetailEnabled),
     initialAnimalCount: Number(sheet.initialAnimalCount || 0),
@@ -141,8 +181,13 @@ export function validateQuantitySheet(sheet: QuantitySheet) {
   if (!sheet.month) issues.push("请选择月份");
   if (!sheet.roomId) issues.push("请选择房间");
   if (!sheet.iacuc) issues.push("请填写 IACUC 编号");
-  if (sheet.customBillingEnabled && (!sheet.customUnitPrice || sheet.customUnitPrice <= 0))
-    issues.push("启用自定义饲养费后，请填写收费标准");
+  for (const segment of sheet.customBillingSegments) {
+    if (!isDateInMonth(segment.startDate, sheet.month) || !isDateInMonth(segment.endDate, sheet.month))
+      issues.push("自定义收费区间必须位于统计表月份内");
+    if (segment.startDate > segment.endDate) issues.push("自定义收费区间的结束日期应晚于开始日期");
+    if (segment.quantity == null || segment.quantity <= 0) issues.push("请填写自定义收费区间的每日适用数量");
+    if (segment.unitPrice == null || segment.unitPrice <= 0) issues.push("请填写大于 0 的自定义收费单价");
+  }
   for (const row of sheet.rows) {
     if (Number(row.addedCount || 0) > 0 && !row.addedType) issues.push(`${row.date || "未填日期"} 新增请选择类型`);
     if (Number(row.removedCount || 0) > 0 && !row.removedType) issues.push(`${row.date || "未填日期"} 减少请选择类型`);
@@ -153,4 +198,13 @@ export function validateQuantitySheet(sheet: QuantitySheet) {
   if (sheet.billingUnit === "animal_day" && !sheet.rows.some((row) => Number(row.animalCount || 0) > 0))
     issues.push("按只/天计费房间必须填写动物结余总数");
   return issues;
+}
+
+function isDateInMonth(value: string, month: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value.slice(0, 7) === month;
+}
+
+function daysInMonth(month: string) {
+  const [year, value] = month.split("-").map(Number);
+  return year && value ? new Date(year, value, 0).getDate() : 31;
 }

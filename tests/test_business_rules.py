@@ -3,6 +3,7 @@ import sqlite3
 import unittest
 
 import server
+from server_app.domains.billing.custom_billing import validate_custom_billing_segments
 from server_app.persistence.backfills import backfill_quantity_sheet_staff
 
 
@@ -465,6 +466,124 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(lines[0]["unitPrice"], 3.5)
         self.assertEqual(lines[0]["amount"], 14)
         self.assertEqual(lines[0]["iacucBreakdown"][0]["unitPrice"], 3.5)
+
+    def test_custom_billing_segment_charges_only_its_daily_animal_quantity(self):
+        sheets = [
+            {
+                "id": "rabbit-custom",
+                "month": "2026-07",
+                "iacuc": "Z-RABBIT",
+                "roomId": "rabbit-room",
+                "initialAnimalCount": 10,
+                "initialCageCount": 10,
+                "rows": [],
+                "customBillingSegments": [
+                    {
+                        "id": "special-feed",
+                        "startDate": "2026-07-10",
+                        "endDate": "2026-07-20",
+                        "quantity": 5,
+                        "unitPrice": 12,
+                        "note": "特殊饲料",
+                    }
+                ],
+            }
+        ]
+        rooms = [
+            {
+                "id": "rabbit-room",
+                "defaultBillingItem": "rabbit",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 0, rooms, {})
+        self.assertEqual(lines[8]["amount"], 50)
+        self.assertEqual(lines[9]["amount"], 85)
+        regular, custom = lines[9]["iacucBreakdown"]
+        self.assertEqual(regular["animalCount"], 5)
+        self.assertEqual(regular["payableAmount"], 25)
+        self.assertFalse(regular["customBilling"])
+        self.assertEqual(custom["animalCount"], 5)
+        self.assertEqual(custom["payableAmount"], 60)
+        self.assertTrue(custom["customBilling"])
+        self.assertEqual(custom["customBillingNote"], "特殊饲料")
+
+    def test_custom_billing_cages_do_not_consume_tier_or_free_allowance(self):
+        sheets = [
+            {
+                "id": "mouse-custom",
+                "month": "2026-07",
+                "iacuc": "Z-MOUSE",
+                "roomId": "mouse-room",
+                "initialAnimalCount": 0,
+                "initialCageCount": 170,
+                "rows": [],
+                "customBillingSegments": [
+                    {
+                        "id": "custom-ten",
+                        "startDate": "2026-07-01",
+                        "endDate": "2026-07-31",
+                        "quantity": 10,
+                        "unitPrice": 7,
+                        "note": "特殊垫料",
+                    }
+                ],
+            }
+        ]
+        rooms = [
+            {
+                "id": "mouse-room",
+                "defaultBillingItem": "mouse_standard",
+                "defaultCustomerType": "internal",
+                "billingProfileConfigured": True,
+                "billingProfileConfirmed": True,
+            }
+        ]
+        lines = server.quantity_sheet_statement_lines(sheets, 0, rooms, {})
+        self.assertEqual(lines[0]["tier2Cages"], 0)
+        self.assertEqual(lines[0]["amount"], 790)
+        regular, custom = lines[0]["iacucBreakdown"]
+        self.assertEqual(regular["cageCount"], 160)
+        self.assertEqual(regular["tier2BillableCages"], 0)
+        self.assertEqual(custom["cageCount"], 10)
+        self.assertEqual(custom["freeCages"], 0)
+        self.assertFalse(custom["tiered"])
+
+    def test_custom_billing_segments_reject_daily_quantity_above_balance(self):
+        sheets = [
+            {
+                "id": "over-limit",
+                "month": "2026-07",
+                "iacuc": "Z1",
+                "roomId": "r1",
+                "initialAnimalCount": 0,
+                "initialCageCount": 4,
+                "rows": [],
+                "customBillingSegments": [
+                    {
+                        "id": "first",
+                        "startDate": "2026-07-10",
+                        "endDate": "2026-07-10",
+                        "quantity": 3,
+                        "unitPrice": 5,
+                        "note": "",
+                    },
+                    {
+                        "id": "second",
+                        "startDate": "2026-07-10",
+                        "endDate": "2026-07-10",
+                        "quantity": 2,
+                        "unitPrice": 6,
+                        "note": "",
+                    },
+                ],
+            }
+        ]
+        rooms = [{"id": "r1", "defaultBillingItem": "mouse_standard", "defaultCustomerType": "internal"}]
+        with self.assertRaisesRegex(ValueError, "2026-07-10 自定义收费数量 5 笼，超过当天结余 4 笼"):
+            validate_custom_billing_segments(sheets, rooms)
 
     def test_quantity_sheet_priority_tier_marks_target_iacuc(self):
         sheets = [

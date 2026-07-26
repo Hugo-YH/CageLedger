@@ -24,24 +24,24 @@ def animal_inspection_html(detail):
             continue
         rows = "".join(
             f"<tr><td>{h(nodes.get(answer['node_code'], {}).get('name') or answer['node_code'])}</td>"
-            f'<td class="center">{h(answer["score"])}</td><td>{h(answer.get("sub_option") or "")}</td>'
+            f'<td class="center">{h(answer_outcome(answer))}</td><td>{h(answer.get("sub_option") or "")}</td>'
             f"<td>{h(answer.get('note') or '')}</td></tr>"
             for answer in answers
         )
         sections.append(
             f'<section class="module"><h2>{h(module.get("name"))}</h2>'
-            "<table><thead><tr><th>评估项目</th><th>评分</th><th>子选项</th><th>备注</th></tr></thead>"
+            "<table><thead><tr><th>巡检项目</th><th>结论</th><th>异常类型</th><th>现场说明</th></tr></thead>"
             f"<tbody>{rows}</tbody></table></section>"
         )
     finding_rows = (
         "".join(
             f"<tr><td>{h(nodes.get(finding['nodeCode'], {}).get('name') or finding['nodeCode'])}</td>"
-            f"<td>{'严重' if finding['severity'] == 1 else '轻微'}</td><td>{h(finding.get('status'))}</td>"
+            f"<td>{h(finding.get('status'))}</td>"
             f"<td>{h(finding.get('locationHint'))}</td><td>{h(finding.get('actionNote'))}</td>"
             f"<td>{h(finding.get('recheckDueAt'))}</td></tr>"
             for finding in detail.get("findings") or []
         )
-        or '<tr><td colspan="6" class="center">本次巡检未发现需要处置的评分异常</td></tr>'
+        or '<tr><td colspan="5" class="center">本次巡检已确认正常</td></tr>'
     )
     snapshot = item.get("snapshot") or {}
     body = f"""
@@ -53,8 +53,8 @@ def animal_inspection_html(detail):
 <tr><th>IACUC</th><td>{h("、".join(snapshot.get("iacucs") or []))}</td><th>项目负责人</th><td>{h("、".join(snapshot.get("pis") or []))}</td></tr>
 </tbody></table></section>
 {"".join(sections)}
-<section class=\"module\"><h2>异常处置与复查</h2><table><thead><tr><th>异常项目</th><th>等级</th><th>状态</th><th>定位</th><th>处置措施</th><th>复查日期</th></tr></thead><tbody>{finding_rows}</tbody></table></section>
-<p class=\"notice\">评分标准、图例和建议处置为内部参考资料；医疗与安乐死措施经兽医和伦理流程确认后执行。</p>"""
+<section class=\"module\"><h2>异常处置与复查</h2><table><thead><tr><th>异常项目</th><th>状态</th><th>定位</th><th>处置措施</th><th>复查日期</th></tr></thead><tbody>{finding_rows}</tbody></table></section>
+<p class=\"notice\">巡检标准、图例和建议处置为内部参考资料；医疗与安乐死措施经兽医和伦理流程确认后执行。</p>"""
     return document_html("实验动物巡检报告", styles(), body)
 
 
@@ -69,3 +69,11 @@ h1 { margin: 3mm 0 7mm; font-size: 22pt; text-align: center; } h2 { margin: 8mm 
 
 def h(value):
     return escape(str(value or ""))
+
+
+def answer_outcome(answer):
+    payload = answer.get("payload") or {}
+    outcome = payload.get("outcome") if isinstance(payload, dict) else ""
+    if outcome in {"normal", "abnormal"}:
+        return "正常" if outcome == "normal" else "异常"
+    return "异常" if int(answer.get("score") or 3) < 3 else "正常"

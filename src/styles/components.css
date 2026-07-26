@@ -282,9 +282,77 @@
   gap: 12px;
 }
 
+.quantity-billing-options > * {
+  min-width: 0;
+}
+
 .quantity-custom-billing-module {
+  min-width: 0;
   border-color: rgb(40 105 152 / 18%);
   background: rgb(244 248 251 / 78%);
+}
+
+.custom-billing-segments {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.custom-billing-segment {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgb(40 105 152 / 16%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 72%);
+}
+
+.custom-billing-segment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.custom-billing-segment-head strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.custom-billing-segment-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.custom-billing-segment-head span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.custom-billing-segment-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
+  gap: 10px;
+}
+
+.custom-billing-segment-fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.custom-billing-segment-fields input {
+  min-width: 0;
+}
+
+.custom-billing-segment-note {
+  grid-column: span 2;
 }
 
 .quantity-free-cage-head {

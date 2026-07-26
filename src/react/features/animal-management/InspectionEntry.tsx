@@ -10,7 +10,7 @@ import {
 } from "../../api/animalManagement";
 import { useBootstrap } from "../../api/bootstrap";
 import { AsyncActionButton, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
-import { HelpTooltip, Tooltip } from "../../components/Tooltip";
+import { HelpTooltip } from "../../components/Tooltip";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
 import { FindingCaptureDialog, ReferenceImageDialog, type ReferencePreview } from "./InspectionDialogs";
@@ -18,6 +18,7 @@ import {
   groupedItems,
   inspectionAnswerKey,
   inspectionFacilityLabel,
+  inspectionOutcome,
   MODULE_LABELS,
   resumeInspectionId,
   setResumeInspectionId,
@@ -33,7 +34,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   const [answers, setAnswers] = useState<Record<string, InspectionAnswer>>({});
   const [photos, setPhotos] = useState<Record<string, File[]>>({});
   const [notice, setNotice] = useState("");
-  const [findingDraft, setFindingDraft] = useState<{ node: InspectionCatalogNode; score: 1 | 2 } | null>(null);
+  const [findingDraft, setFindingDraft] = useState<InspectionCatalogNode | null>(null);
   const [referencePreview, setReferencePreview] = useState<ReferencePreview | null>(null);
   const catalog = useAnimalInspectionCatalog();
   const bootstrap = useBootstrap("summary");
@@ -60,6 +61,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
       next[inspectionAnswerKey(source.moduleCode || answer.module_code, source.nodeCode || answer.node_code)] = {
         nodeCode: source.nodeCode || answer.node_code,
         moduleCode: source.moduleCode || answer.module_code,
+        outcome: source.outcome,
         score: source.score,
         subOption: source.subOption,
         note: source.note,
@@ -87,7 +89,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
 
   function updateAnswer(node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) {
     const key = inspectionAnswerKey(node.moduleCode, node.code);
-    const current = answers[key] || { nodeCode: node.code, moduleCode: node.moduleCode, score: 3 };
+    const current = answers[key] || { nodeCode: node.code, moduleCode: node.moduleCode, outcome: "normal" };
     setAnswers((items) => ({ ...items, [key]: { ...current, ...patch } }));
   }
 
@@ -149,7 +151,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
       <WorkspaceHeader
         kicker="动物管理工作台"
         title="动物巡检"
-        summary="以饲养间为对象完成标准化评分、异常留证和提交锁定。"
+        summary="以饲养间为对象完成正常确认、异常留证和提交锁定。"
         status={draftId ? "草稿编辑中" : "新建巡检"}
         breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
         actions={
@@ -243,7 +245,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
                       <strong>{module?.name || MODULE_LABELS[code]}</strong>
                     </label>
                     <HelpTooltip label={`${module?.name || MODULE_LABELS[code]}说明`}>
-                      {module?.description || "按标准完成逐项评分"}
+                      {module?.description || "按标准完成逐项巡检"}
                     </HelpTooltip>
                   </div>
                 );
@@ -258,7 +260,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
             moduleCode={moduleCode}
             nodes={catalogNodes}
             onAnswer={updateAnswer}
-            onFinding={(node, score) => setFindingDraft({ node, score })}
+            onFinding={setFindingDraft}
             onReference={setReferencePreview}
           />
         ))}
@@ -269,16 +271,15 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
       </div>
       {findingDraft ? (
         <FindingCaptureDialog
-          node={findingDraft.node}
-          score={findingDraft.score}
-          answer={answers[inspectionAnswerKey(findingDraft.node.moduleCode, findingDraft.node.code)]}
+          node={findingDraft}
+          answer={answers[inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)]}
           onClose={() => setFindingDraft(null)}
           onReference={setReferencePreview}
           onConfirm={({ answer, files }) => {
-            updateAnswer(findingDraft.node, { score: findingDraft.score, ...answer });
+            updateAnswer(findingDraft, { outcome: "abnormal", ...answer });
             setPhotos((current) => ({
               ...current,
-              [inspectionAnswerKey(findingDraft.node.moduleCode, findingDraft.node.code)]: files,
+              [inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)]: files,
             }));
             setFindingDraft(null);
           }}
@@ -303,10 +304,9 @@ function InspectionModuleForm({
   nodes: InspectionCatalogNode[];
   answerMap: Record<string, InspectionAnswer>;
   onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
-  onFinding: (node: InspectionCatalogNode, score: 1 | 2) => void;
+  onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
-  const abnormal = moduleCode === "abnormalAnimalAssessment";
   return (
     <section
       className="panel inspection-module-panel"
@@ -316,10 +316,8 @@ function InspectionModuleForm({
       <div className="panel-head">
         <div className="panel-title-line">
           <h2 id={`inspection-module-${moduleCode}`}>{MODULE_LABELS[moduleCode]}</h2>
-          <HelpTooltip label={`${MODULE_LABELS[moduleCode]}评分说明`}>
-            {abnormal
-              ? "未勾选异常默认视为 3 分；发现异常后补充严重度、定位与照片。"
-              : "每个条目均需完成 1 至 3 分评分，1 分和 2 分将自动创建异常处置项。"}
+          <HelpTooltip label={`${MODULE_LABELS[moduleCode]}巡检说明`}>
+            每个条目选择正常或异常；确认异常后补充定位、图例对照和现场照片。
           </HelpTooltip>
         </div>
       </div>
@@ -353,12 +351,12 @@ function InspectionCategory({
   moduleCode: InspectionModuleCode;
   answerMap: Record<string, InspectionAnswer>;
   onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
-  onFinding: (node: InspectionCatalogNode, score: 1 | 2) => void;
+  onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
   const answered = items.filter((node) => Boolean(answerMap[inspectionAnswerKey(moduleCode, node.code)])).length;
   const findings = items.filter(
-    (node) => (answerMap[inspectionAnswerKey(moduleCode, node.code)]?.score || 3) < 3,
+    (node) => inspectionOutcome(answerMap[inspectionAnswerKey(moduleCode, node.code)]) === "abnormal",
   ).length;
   const stateLabel = findings
     ? `${findings} 项异常`
@@ -378,7 +376,7 @@ function InspectionCategory({
           <button
             className="secondary inspection-all-normal"
             type="button"
-            onClick={() => items.forEach((node) => onAnswer(node, { score: 3 }))}
+            onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
           >
             无异常
           </button>
@@ -393,11 +391,11 @@ function InspectionCategory({
           {items.map((node) => {
             const key = inspectionAnswerKey(moduleCode, node.code);
             const answer = answerMap[key];
-            const score = answer?.score || 3;
-            const criteria = node.config?.scoringCriteria || {};
+            // A missing answer remains visibly pending until the inspector confirms it.
+            const outcome = answer ? inspectionOutcome(answer) : undefined;
             const images = node.config?.referenceImages || [];
             return (
-              <article className={`inspection-node ${score < 3 ? "has-finding" : ""}`} key={node.code}>
+              <article className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`} key={node.code}>
                 <div className="inspection-node-main">
                   <div className="inspection-node-title">
                     <strong>{node.name}</strong>
@@ -411,39 +409,31 @@ function InspectionCategory({
                       </button>
                     ) : null}
                   </div>
-                  <div className="inspection-score-options" role="group" aria-label={`${node.name}评分`}>
-                    {[3, 2, 1].map((value) => {
-                      const description = criteria[String(value)]?.description;
-                      const tooltipId = `inspection-score-${moduleCode}-${node.code}-${value}`;
-                      return (
-                        <label key={value}>
-                          <input
-                            aria-describedby={description ? tooltipId : undefined}
-                            checked={score === value}
-                            name={key}
-                            type="radio"
-                            onChange={() =>
-                              value === 3 ? onAnswer(node, { score: 3 }) : onFinding(node, value as 1 | 2)
-                            }
-                          />
-                          {description ? (
-                            <Tooltip content={description} id={tooltipId}>
-                              <span className="inspection-score-label">{value} 分</span>
-                            </Tooltip>
-                          ) : (
-                            <span className="inspection-score-label">{value} 分</span>
-                          )}
-                        </label>
-                      );
-                    })}
+                  <div className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
+                    <button
+                      aria-pressed={outcome === "normal"}
+                      className={outcome === "normal" ? "selected normal" : "normal"}
+                      type="button"
+                      onClick={() => onAnswer(node, { outcome: "normal" })}
+                    >
+                      正常
+                    </button>
+                    <button
+                      aria-pressed={outcome === "abnormal"}
+                      className={outcome === "abnormal" ? "selected abnormal" : "abnormal"}
+                      type="button"
+                      onClick={() => onFinding(node)}
+                    >
+                      异常
+                    </button>
                   </div>
                   {node.description ? <p>{node.description}</p> : null}
                 </div>
-                {score < 3 ? (
+                {outcome === "abnormal" ? (
                   <div className="inspection-finding-summary">
-                    <strong>{score === 1 ? "严重异常" : "轻微异常"}</strong>
+                    <strong>已登记异常</strong>
                     <span>
-                      {answer?.locationHint || answer?.animalIdentifier || answer?.note || "已登记，可点击评分修改。"}
+                      {answer?.locationHint || answer?.animalIdentifier || answer?.note || "已登记，可点击异常修改。"}
                     </span>
                   </div>
                 ) : null}
