@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { resolveProjectPython } from "./python_runtime.mjs";
+
 const processes = new Set();
 const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
 const apiPort = process.env.CAGELEDGER_DEV_API_PORT || "5174";
@@ -30,7 +32,7 @@ function shutdown(code = 0) {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
-launch("python3", ["server.py"], {
+launch(resolveProjectPython(), ["server.py"], {
   CAGELEDGER_PORT: apiPort,
   CAGELEDGER_DEV_ASSETS: "1",
   ...(ephemeralDir ? { CAGELEDGER_DB: join(ephemeralDir, "cageledger.sqlite") } : {}),

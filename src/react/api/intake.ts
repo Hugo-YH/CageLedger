@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { IntakeBatch, IntakeListParams, IntakeWriteResponse, PagedResponse } from "./contracts";
 import { requestJson } from "./client";
+import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
 
 function intakeListUrl(params: IntakeListParams) {
@@ -14,12 +15,20 @@ function intakeListUrl(params: IntakeListParams) {
   return `/api/intake-batches?${search.toString()}`;
 }
 
+export function listIntakeBatches(params: IntakeListParams) {
+  return requestJson<PagedResponse<IntakeBatch>>(intakeListUrl(params));
+}
+
 export function useIntakeBatches(params: IntakeListParams) {
   return useQuery({
     queryKey: queryKeys.intake(params as unknown as Record<string, unknown>),
-    queryFn: () => requestJson<PagedResponse<IntakeBatch>>(intakeListUrl(params)),
+    queryFn: () => listIntakeBatches(params),
     placeholderData: (previous) => previous,
   });
+}
+
+export function listAllIntakeBatches(params: IntakeListParams) {
+  return loadAllPages((offset, limit) => listIntakeBatches({ ...params, offset, limit }));
 }
 
 export function useIntakeFilterOptions(params: IntakeListParams, column: string, enabled: boolean) {

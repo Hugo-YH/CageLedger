@@ -1019,7 +1019,7 @@ svg {
   gap: 4px;
   pointer-events: none;
   transform-origin: top right;
-  animation: flashNoticeIn 0.52s cubic-bezier(0.2, 1.15, 0.3, 1) both;
+  animation: flashNoticeIn var(--motion-popover) var(--ease-out) both;
   backdrop-filter: blur(6px);
   overflow: hidden;
 }

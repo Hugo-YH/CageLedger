@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.8",
+    releasedAt: "2026-07-26 20:20",
+    title: "跨页批量操作与统一界面系统",
+    items: [
+      "待接收批次、已保存数量统计表和按项目负责人结算列表支持基于当前筛选结果的跨页全选，批量导出、删除和结算操作覆盖完整命中集",
+      "本地质量检查和 Playwright 浏览器回归统一调用项目 .venv 的 Python 3.13，避免继承 macOS 自带 Python 版本",
+      "建立双主题界面 Token，统一表面、控件、按钮层级、列表摘要、浮层、工具栏、焦点环与 reduced-motion 反馈",
+      "侧栏导航统一父级上下文和当前叶子页选中状态，收起控制固定在侧栏边缘；Tooltip 根据可见视口自动避让地址栏、软键盘和容器边界",
+    ],
+  },
+  {
     version: "0.7.7",
     releasedAt: "2026-07-26 11:35",
     title: "区间化自定义收费与巡检结论优化",

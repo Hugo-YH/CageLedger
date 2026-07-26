@@ -1,5 +1,11 @@
 import { ensureTestInfrastructure, expect, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
 
+const bulkSheetIds = Array.from({ length: 7 }, (_, index) => `sheet-e2e-quantity-bulk-${index + 1}`);
+
+test.afterEach(async ({ page }) => {
+  for (const id of bulkSheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
+});
+
 test("save and delete a quantity sheet in the ephemeral database", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
@@ -29,6 +35,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");
   await expect(page.locator("form").getByLabel("项目负责人", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("");
+
   await openSavedQuantitySheets(page);
   await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
@@ -42,4 +49,47 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await savedRow.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(savedRow).toHaveCount(0);
+});
+
+test("selects every saved quantity sheet across result pages", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+  await ensureTestInfrastructure(page);
+
+  const month = new Date().toISOString().slice(0, 7);
+  for (const [index, id] of bulkSheetIds.entries()) {
+    await page.request.post("/api/quantity-sheets", {
+      data: {
+        sheet: {
+          id,
+          month,
+          roomId: "room-e2e-8014",
+          roomName: "8014",
+          manager: "系统管理员",
+          iacuc: `E2E-IACUC-BULK-${index + 1}`,
+          project: `批量选择统计表 ${index + 1}`,
+          pi: `E2E 批量负责人 ${index + 1}`,
+          owner: "E2E 实验负责人",
+          funding: `E2E-FUND-BULK-${index + 1}`,
+          billingUnit: "cage_day",
+          animalDetailEnabled: false,
+          initialAnimalCount: 0,
+          initialCageCount: 2,
+          pageCount: 1,
+          rows: [{ id: `${id}-row`, date: `${month}-01`, cageCount: 2 }],
+        },
+      },
+    });
+  }
+
+  await page.reload();
+  await openSavedQuantitySheets(page);
+  await page.getByLabel("每页显示条数").selectOption("5");
+  await page.getByLabel("全选当前筛选结果统计表").check();
+  await expect(page.locator(".quantity-saved-panel .panel-summary-chip")).toHaveText("7 条 · 已选 7");
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(page.locator(".quantity-saved-table tbody tr").first().getByRole("checkbox")).toBeChecked();
 });

@@ -1,18 +1,19 @@
 # CageLedger UI 颜色与交互语义
 
-本契约约束 React 工作台的颜色、状态、按钮、表格和浮层。颜色源位于 `src/styles/tokens.css :root`，页面代码使用语义类和 CSS 变量。
+本契约约束 React 工作台的颜色、状态、按钮、表格和浮层。颜色源位于 `src/styles/tokens.css`，页面代码使用语义类和 CSS 变量。`data-theme="light"` 和 `data-theme="dark"` 提供完整语义映射，系统偏好由应用解析为当前主题。
 
 ## 基础层
 
-| 语义       | 变量                                                             | 用途                           |
-| ---------- | ---------------------------------------------------------------- | ------------------------------ |
-| 页面与卡片 | `--bg`、`--panel`、`--panel-soft`、`--surface-*`                 | 页面背景、工作区、卡片、工具栏 |
-| 文字       | `--text`、`--muted`                                              | 正文、辅助信息                 |
-| 边界       | `--line`、`--line-strong`                                        | 卡片、输入、表格和分区         |
-| 品牌       | `--primary`、`--primary-dark`、`--primary-ink`、`--primary-soft` | 当前入口、主操作、焦点         |
-| 阴影       | `--shadow`、`--shadow-soft`、`--shadow-lift`、`--shadow-pop`     | 页面层、悬浮层、弹窗           |
-| 焦点       | `--focus-ring*`                                                  | 键盘焦点和危险/警示焦点        |
-| 动效       | `--motion-*`、`--ease-*`                                         | hover、展开、弹窗和页面切换    |
+| 语义       | 变量                                                               | 用途                             |
+| ---------- | ------------------------------------------------------------------ | -------------------------------- |
+| 页面与卡片 | `--bg`、`--panel`、`--panel-soft`、`--surface-*`                   | 页面背景、工作区、卡片、工具栏   |
+| 控件与浮层 | `--control-bg*`、`--toolbar-bg`、`--surface-overlay`、`--backdrop` | 输入控件、吸附工具栏、弹窗与遮罩 |
+| 文字       | `--text`、`--text-strong`、`--muted`、`--text-subtle`              | 正文、标题、辅助信息与次级说明   |
+| 边界       | `--line`、`--line-strong`                                          | 卡片、输入、表格和分区           |
+| 品牌       | `--primary`、`--primary-dark`、`--primary-ink`、`--primary-soft`   | 当前入口、主操作、焦点           |
+| 阴影       | `--shadow`、`--shadow-soft`、`--shadow-lift`、`--shadow-pop`       | 页面层、悬浮层、弹窗             |
+| 焦点       | `--focus-ring*`                                                    | 键盘焦点和危险/警示焦点          |
+| 动效       | `--motion-*`、`--ease-*`                                           | hover、展开、弹窗和页面切换      |
 
 ## 业务状态层
 
@@ -36,7 +37,7 @@
 | --------------------------------- | -------------------- | ------------------------ |
 | `.primary`                        | 当前操作区最重要动作 | 保存、确认、正式入驻     |
 | `.secondary`                      | 常规次操作           | 编辑、导出、展开         |
-| `.ghost`                          | 低权重动作           | 关闭、取消、辅助入口     |
+| `.tertiary` / `.ghost`            | 低权重动作           | 关闭、取消、辅助入口     |
 | `.flow-button`                    | 流程推进             | 发起结算、标记完成       |
 | `.info-button`                    | 查看和预览           | 查看、详情、预览         |
 | `.warning-button`                 | 修复和刷新           | 清理缓存、重试、异常处理 |
@@ -44,6 +45,8 @@
 | `.icon-button` / `.icon-danger`   | 紧凑图标操作         | 表格行内工具             |
 
 同一操作区保留一个最强主按钮。展开和收起使用不同状态：展开态使用浅主色底和强调边框，收起态使用普通次操作色；按钮文字和 `aria-expanded` 同步。
+
+`.flow-button` 用于推进流程，保留主按钮的对比度并采用独立流程色。`.info-button` 用于预览与详情，使用低权重蓝灰信息色。工具栏从左到右固定为范围摘要、辅助操作、主操作，避免主操作在页面间漂移。
 
 ## 交互状态
 
@@ -89,6 +92,7 @@
 
 - 业务说明、问号帮助和评分解释使用共享 `Tooltip`，通过 Portal 挂载到 `document.body`。
 - Tooltip 相对触发元素定位，至少保留 16px 视口安全边距，根据可用空间自动显示在触发元素上方或下方。
+- Tooltip 同时监听页面滚动、窗口缩放和移动浏览器 `visualViewport` 变化；页面缩放、地址栏收起和软键盘出现后保持在可见区域。
 - Tooltip 的层级高于工作区卡片、局部滚动容器和侧边导航；卡片、表格和弹窗正文不承载 Tooltip DOM。
 - 原生 `title` 用于截断的静态表格文本与 iframe 等语义标题；按钮、开关、输入和评分控件使用 Tooltip 或紧邻说明文本。
 
@@ -102,6 +106,15 @@
 - 帮助触发按钮通过 `aria-describedby` 关联 Tooltip；Tooltip 内容保持简短，避免遮挡主要操作。
 - 图标按钮提供 `aria-label`，展开控件提供 `aria-expanded`。
 - 文字颜色与背景保持可读对比度，颜色之外同时提供文字、图标或结构提示。
+
+## 设计尺度
+
+- 间距使用 4px 基线：`--space-1` 至 `--space-8`。
+- 控件默认高度为 `--control-height`（36px），紧凑操作为 `--control-height-compact`（30px）。
+- 面板使用 `--radius-panel`，控件使用 `--radius-control`，状态标签可使用 999px 圆角。
+- 层级使用 `--z-sticky`、`--z-nav`、`--z-popover`、`--z-modal`、`--z-toast`；业务页面使用这些语义层级。
+- 深色主题保持状态色含义、文本对比度与表格可读性；页面组件引用语义变量。
+- `prefers-reduced-transparency: reduce` 使用实色工具栏与弹窗表面；`prefers-contrast: more` 强化结构边界和控件边框。
 
 ## 新增颜色流程
 

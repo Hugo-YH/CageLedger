@@ -1,7 +1,15 @@
 import { ensureTestInfrastructure, expect, openBillingNavigation, test } from "./fixtures";
 
 const month = new Date().toISOString().slice(0, 7);
-const sheetIds = ["sheet-e2e-settlement-1", "sheet-e2e-settlement-2"];
+const sheetIds = [
+  "sheet-e2e-settlement-1",
+  "sheet-e2e-settlement-2",
+  "sheet-e2e-settlement-3",
+  "sheet-e2e-settlement-4",
+  "sheet-e2e-settlement-5",
+  "sheet-e2e-settlement-6",
+  "sheet-e2e-settlement-7",
+];
 
 test.afterEach(async ({ page }) => {
   for (const id of sheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
@@ -16,7 +24,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await ensureTestInfrastructure(page);
 
   for (const [index, id] of sheetIds.entries()) {
-    const cageCount = index === 0 ? 6 : 12;
+    const cageCount = index === 0 ? 6 : index === 1 ? 12 : 8;
+    const pi = index < 2 ? "E2E 合表负责人" : index === 2 ? "E2E 批量负责人" : `E2E 分页负责人 ${index - 2}`;
     await page.request.post("/api/quantity-sheets", {
       data: {
         sheet: {
@@ -27,7 +36,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
           manager: "系统管理员",
           iacuc: `E2E-SETTLEMENT-00${index + 1}`,
           project: `结算候选项目 ${index + 1}`,
-          pi: "E2E 合表负责人",
+          pi,
           owner: "E2E 实验负责人",
           funding: `E2E-FUND-${index + 1}`,
           fullExemption: index === 0,
@@ -50,6 +59,14 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
   await expect(row).toContainText("¥");
+  await page.getByLabel("每页显示条数").selectOption("5");
+  await page.getByLabel("全选当前筛选结果结算项").check();
+  await expect(page.getByLabel("结算导出操作").getByText("已选 6 项", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(page.locator("table tbody tr").first().getByRole("checkbox")).toBeChecked();
+  await page.getByRole("button", { name: "上一页", exact: true }).click();
+  await page.getByLabel("全选当前筛选结果结算项").uncheck();
+  await page.getByLabel("每页显示条数").selectOption("10");
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
   const downloadPromise = page.waitForEvent("download");
   await page.getByLabel("结算导出操作").getByRole("button", { name: "导出 PDF", exact: true }).click();
@@ -62,5 +79,17 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(page.frameLocator('iframe[title="结算单预览"]').locator("body")).toContainText(
     "E2E-SETTLEMENT-001（全额减免）",
   );
-  await expect(page.getByRole("button", { name: "发起结算流程", exact: true })).toBeVisible();
+  const previewDialog = page.getByRole("dialog", { name: /E2E 合表负责人/ });
+  await expect(previewDialog.getByRole("button", { name: "发起结算流程", exact: true })).toBeVisible();
+  const closePdfFeedback = page.getByRole("button", { name: /关闭正在生成 PDF提示/ });
+  if (await closePdfFeedback.isVisible()) await closePdfFeedback.click();
+  await previewDialog.getByRole("button", { name: "关闭", exact: true }).click();
+
+  const batchRow = page.getByRole("row", { name: /E2E 批量负责人/ });
+  await batchRow.getByRole("checkbox", { name: `选择 E2E 批量负责人 ${month} 结算项` }).check();
+  await page.getByLabel("结算导出操作").getByRole("button", { name: "批量发起结算", exact: true }).click();
+  const confirmDialog = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
+  await expect(confirmDialog).toContainText("2 个项目负责人结算项");
+  await confirmDialog.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "已发起 2 个结算流程" })).toBeVisible();
 });

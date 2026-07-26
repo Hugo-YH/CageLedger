@@ -2,7 +2,13 @@ import { useState } from "react";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
-import { useConfirmIntakeBatch, useDeleteIntakeBatch, useIntakeBatches, useSaveIntakeBatch } from "../../api/intake";
+import {
+  listAllIntakeBatches,
+  useConfirmIntakeBatch,
+  useDeleteIntakeBatch,
+  useIntakeBatches,
+  useSaveIntakeBatch,
+} from "../../api/intake";
 import { useIacucIndex } from "../../api/iacuc";
 import { AsyncActionButton, ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
 import {
@@ -32,7 +38,9 @@ export function IntakeView({
   const [pageSize, setPageSize] = useState(5);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName));
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
@@ -52,7 +60,6 @@ export function IntakeView({
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const totalPages = Math.max(Math.ceil(total / pageSize), 1);
-  const selectedItems = items.filter((item) => selected.includes(item.id));
 
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
     setDraft((current) => normalizeIntakeBatch({ ...current, [key]: value }, roomNames));
@@ -174,8 +181,22 @@ export function IntakeView({
     setPage(1);
   }
 
-  function togglePage(checked: boolean) {
-    setSelected(checked ? items.map((item) => item.id) : []);
+  async function toggleAllFiltered() {
+    if (allFilteredSelected) {
+      setSelectedItems([]);
+      setAllFilteredSelected(false);
+      return;
+    }
+    setSelectingAll(true);
+    setAllFilteredSelected(true);
+    try {
+      setSelectedItems(await listAllIntakeBatches(params));
+    } catch (error) {
+      setAllFilteredSelected(false);
+      setNotice(error instanceof Error ? error.message : "无法读取全部待接收批次");
+    } finally {
+      setSelectingAll(false);
+    }
   }
 
   return (
@@ -192,7 +213,7 @@ export function IntakeView({
         status={mode === "entry" ? "预约信息录入" : `${total} 个批次`}
         metrics={[
           { label: "待接收批次", value: total },
-          { label: "已选批次", value: selected.length, tone: "success" },
+          { label: "已选批次", value: selectedItems.length, tone: "success" },
         ]}
         actions={
           mode === "entry" ? (
@@ -236,24 +257,30 @@ export function IntakeView({
           ) : (
             <IntakeBatchList
               total={total}
-              selected={selected}
               selectedItems={selectedItems}
               items={items}
               loading={list.isFetching}
+              selectingAll={selectingAll}
+              allFilteredSelected={allFilteredSelected}
               page={page}
               totalPages={totalPages}
               pageSize={pageSize}
               params={params}
               filters={filters}
-              onTogglePage={togglePage}
-              onToggleItem={(id, checked) =>
-                setSelected((current) =>
-                  checked ? [...new Set([...current, id])] : current.filter((selectedId) => selectedId !== id),
-                )
-              }
+              onToggleAll={() => void toggleAllFiltered()}
+              onToggleItem={(item, checked) => {
+                setAllFilteredSelected(false);
+                setSelectedItems((current) =>
+                  checked
+                    ? [...current.filter((selectedItem) => selectedItem.id !== item.id), item]
+                    : current.filter((selectedItem) => selectedItem.id !== item.id),
+                );
+              }}
               onSort={toggleSort}
               onFilter={(key, values) => {
                 setFilters((current) => ({ ...current, [key]: values }));
+                setSelectedItems([]);
+                setAllFilteredSelected(false);
                 setPage(1);
               }}
               onPrint={(targets) => {
@@ -267,7 +294,6 @@ export function IntakeView({
               onPageSize={(value) => {
                 setPageSize(value);
                 setPage(1);
-                setSelected([]);
               }}
             />
           )}
@@ -325,7 +351,8 @@ export function IntakeView({
               disabled={remove.isPending}
               onClick={async () => {
                 await remove.mutateAsync(deleteTarget.id);
-                setSelected((current) => current.filter((id) => id !== deleteTarget.id));
+                setSelectedItems((current) => current.filter((item) => item.id !== deleteTarget.id));
+                setAllFilteredSelected(false);
                 setDeleteTarget(null);
               }}
             >

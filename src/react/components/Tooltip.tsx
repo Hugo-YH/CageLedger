@@ -57,7 +57,14 @@ export function Tooltip({
       const anchor = anchorRef.current?.getBoundingClientRect();
       const tooltip = tooltipRef.current?.getBoundingClientRect();
       if (!anchor || !tooltip) return;
-      const width = Math.min(tooltip.width, window.innerWidth - VIEWPORT_PADDING * 2);
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportWidth = viewport?.width ?? window.innerWidth;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const viewportRight = viewportLeft + viewportWidth;
+      const viewportBottom = viewportTop + viewportHeight;
+      const width = Math.min(tooltip.width, viewportWidth - VIEWPORT_PADDING * 2);
       const height = tooltip.height;
       const clamp = (value: number, minimum: number, maximum: number) => Math.min(Math.max(value, minimum), maximum);
       const candidates: Array<{ side: TooltipPosition["side"]; top: number; left: number; fits: boolean }> = [
@@ -65,30 +72,30 @@ export function Tooltip({
           side: "bottom",
           top: anchor.bottom + TOOLTIP_GAP,
           left: anchor.left + anchor.width / 2 - width / 2,
-          fits: anchor.bottom + TOOLTIP_GAP + height <= window.innerHeight - VIEWPORT_PADDING,
+          fits: anchor.bottom + TOOLTIP_GAP + height <= viewportBottom - VIEWPORT_PADDING,
         },
         {
           side: "top",
           top: anchor.top - height - TOOLTIP_GAP,
           left: anchor.left + anchor.width / 2 - width / 2,
-          fits: anchor.top - TOOLTIP_GAP - height >= VIEWPORT_PADDING,
+          fits: anchor.top - TOOLTIP_GAP - height >= viewportTop + VIEWPORT_PADDING,
         },
         {
           side: "right",
           top: anchor.top + anchor.height / 2 - height / 2,
           left: anchor.right + TOOLTIP_GAP,
-          fits: anchor.right + TOOLTIP_GAP + width <= window.innerWidth - VIEWPORT_PADDING,
+          fits: anchor.right + TOOLTIP_GAP + width <= viewportRight - VIEWPORT_PADDING,
         },
         {
           side: "left",
           top: anchor.top + anchor.height / 2 - height / 2,
           left: anchor.left - width - TOOLTIP_GAP,
-          fits: anchor.left - TOOLTIP_GAP - width >= VIEWPORT_PADDING,
+          fits: anchor.left - TOOLTIP_GAP - width >= viewportLeft + VIEWPORT_PADDING,
         },
       ];
       const candidate = candidates.find((item) => item.fits) || candidates[0];
-      const left = clamp(candidate.left, VIEWPORT_PADDING, window.innerWidth - width - VIEWPORT_PADDING);
-      const top = clamp(candidate.top, VIEWPORT_PADDING, window.innerHeight - height - VIEWPORT_PADDING);
+      const left = clamp(candidate.left, viewportLeft + VIEWPORT_PADDING, viewportRight - width - VIEWPORT_PADDING);
+      const top = clamp(candidate.top, viewportTop + VIEWPORT_PADDING, viewportBottom - height - VIEWPORT_PADDING);
       const arrowLeft = clamp(anchor.left + anchor.width / 2 - left, 12, width - 12);
       const arrowTop = clamp(anchor.top + anchor.height / 2 - top, 12, height - 12);
       setPosition({ top, left, arrowLeft, arrowTop, side: candidate.side });
@@ -97,10 +104,14 @@ export function Tooltip({
     const frame = window.requestAnimationFrame(update);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
     };
   }, [open]);
 
@@ -109,7 +120,8 @@ export function Tooltip({
     const close = () => setOpen(false);
     window.addEventListener("blur", close);
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!anchorRef.current?.contains(event.target as Node)) close();
+      const target = event.target as Node;
+      if (!anchorRef.current?.contains(target) && !tooltipRef.current?.contains(target)) close();
     };
     window.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => {
@@ -156,6 +168,14 @@ export function Tooltip({
                       left: `${position.left}px`,
                       "--tooltip-arrow-left": `${position.arrowLeft}px`,
                       "--tooltip-arrow-top": `${position.arrowTop}px`,
+                      "--tooltip-transform-origin":
+                        position.side === "top"
+                          ? "center bottom"
+                          : position.side === "bottom"
+                            ? "center top"
+                            : position.side === "left"
+                              ? "right center"
+                              : "left center",
                     } as CSSProperties)
                   : undefined
               }

@@ -4,10 +4,12 @@ import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
 import { Pager, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { SYSTEM_RELEASE_NOTES, type ReleaseNote } from "../../releaseNotes";
-import type { WorkspaceView } from "../../state/ui";
+import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
 export function SystemView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
+  const ui = useUiState();
+  const dispatch = useUiDispatch();
   const info = useSystemInfo();
   const [checkEnabled, setCheckEnabled] = useState(false);
   const [releasePage, setReleasePage] = useState(1);
@@ -97,6 +99,28 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
                   setReleasePage(1);
                 }}
               />
+            </section>
+            <section className="system-section appearance-settings" aria-labelledby="appearance-settings-title">
+              <div className="panel-head compact">
+                <div className="panel-title-line">
+                  <h2 id="appearance-settings-title">界面外观</h2>
+                </div>
+              </div>
+              <label className="appearance-theme-field">
+                <span>显示模式</span>
+                <select
+                  aria-label="显示模式"
+                  value={ui.theme}
+                  onChange={(event) =>
+                    dispatch({ type: "set-theme", theme: event.target.value as "system" | "light" | "dark" })
+                  }
+                >
+                  <option value="system">跟随系统</option>
+                  <option value="light">浅色</option>
+                  <option value="dark">深色</option>
+                </select>
+                <small>主题仅影响本设备界面，不影响业务数据与其他用户。</small>
+              </label>
             </section>
             <section className="system-section">
               <div className="panel-head compact">

@@ -674,18 +674,17 @@
 }
 
 .quantity-template-table td.quantity-cell-attention {
-  animation: quantity-cell-attention-pulse 1.3s ease-in-out 2;
+  animation: quantity-cell-attention-pulse var(--motion-drawer) var(--ease-out) both;
   box-shadow: inset 0 0 0 2px #d69e2e;
 }
 
 @keyframes quantity-cell-attention-pulse {
-  0%,
-  100% {
-    background: #fff8eb;
+  0% {
+    background: #ffe8b8;
   }
 
-  50% {
-    background: #ffe8b8;
+  100% {
+    background: #fff8eb;
   }
 }
 

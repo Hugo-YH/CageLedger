@@ -5,11 +5,11 @@ import type {
   SettlementCandidate,
   SettlementCandidateListParams,
 } from "../../../api/contracts";
-import { useSettlementCandidates } from "../../../api/billing";
+import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { Tooltip } from "../../../components/Tooltip";
-import { AsyncActionButton, ModalShell, Pager } from "../../../components/WorkspaceUi";
+import { AsyncActionButton, ConfirmDialog, ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
 
@@ -25,6 +25,10 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
   const [result, setResult] = useState<BillingStatementResponse | null>(null);
   const [notice, setNotice] = useState("");
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [batchStarting, setBatchStarting] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
   const params: SettlementCandidateListParams = {
     limit: pageSize,
@@ -67,7 +71,65 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     }
   }
 
+  async function startSelectedCandidates() {
+    const candidates = selectedCandidates.filter((candidate) => candidate.totalAmount != null);
+    if (!candidates.length) return;
+
+    setBatchStarting(true);
+    setNotice("");
+    const completedIds: string[] = [];
+    const failures: string[] = [];
+
+    // Ordered writes prevent competing settlement transactions on shared SQLite deployments.
+    for (const candidate of candidates) {
+      try {
+        await generate.mutateAsync({
+          month: candidate.month,
+          pi: candidate.pi,
+          sourceType: source,
+          persist: true,
+        });
+        completedIds.push(candidate.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "生成失败";
+        failures.push(`${candidate.pi}（${message}）`);
+      }
+    }
+
+    setSelectedCandidates((current) => current.filter((candidate) => !completedIds.includes(candidate.id)));
+    setAllFilteredSelected(false);
+    setBatchStarting(false);
+    setBatchConfirmOpen(false);
+    setNotice(
+      failures.length
+        ? `已发起 ${completedIds.length} 个结算流程；${failures.length} 个未完成：${failures.join("、")}`
+        : `已发起 ${completedIds.length} 个结算流程，可到结算与报销台账继续处理。`,
+    );
+  }
+
+  async function toggleAllFiltered() {
+    if (allFilteredSelected) {
+      setSelectedCandidates([]);
+      setAllFilteredSelected(false);
+      return;
+    }
+    setSelectingAll(true);
+    setAllFilteredSelected(true);
+    setNotice("");
+    try {
+      const candidates = await listAllSettlementCandidates(params);
+      setSelectedCandidates(candidates.filter((candidate) => candidate.totalAmount != null));
+      setAllFilteredSelected(true);
+    } catch (error) {
+      setAllFilteredSelected(false);
+      setNotice(error instanceof Error ? error.message : "无法读取全部结算项");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
   function toggleCandidate(candidate: SettlementCandidate, checked: boolean) {
+    setAllFilteredSelected(false);
     setSelectedCandidates((current) =>
       checked
         ? [...current.filter((item) => item.id !== candidate.id), candidate]
@@ -102,19 +164,31 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       ) : null}
       <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
         <div className="workspace-toolbar-main">
-          <span className="panel-summary-chip">已选 {selectedCandidates.length} 项</span>
+          <span className="panel-summary-chip">
+            {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
+          </span>
         </div>
         <div className="workspace-toolbar-actions">
           <div className="workspace-toolbar-action-group">
             <AsyncActionButton
-              className="primary"
+              className="secondary"
               type="button"
               pending={pdfExport.isExporting}
               pendingLabel={settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
-              disabled={!selectedCandidates.length}
+              disabled={!selectedCandidates.length || selectingAll}
               onClick={() => void exportCandidates(selectedCandidates)}
             >
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+            </AsyncActionButton>
+            <AsyncActionButton
+              className="primary flow-button"
+              type="button"
+              pending={batchStarting}
+              pendingLabel="正在发起..."
+              disabled={!selectedCandidates.length || selectingAll}
+              onClick={() => setBatchConfirmOpen(true)}
+            >
+              {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
             </AsyncActionButton>
           </div>
         </div>
@@ -139,19 +213,11 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             <tr>
               <th>
                 <input
-                  aria-label="全选当前页结算项"
+                  aria-label="全选当前筛选结果结算项"
                   type="checkbox"
-                  checked={
-                    items.length > 0 &&
-                    items.every((item) => selectedCandidates.some((selectedItem) => selectedItem.id === item.id))
-                  }
-                  onChange={(event) =>
-                    setSelectedCandidates((current) =>
-                      event.target.checked
-                        ? [...current.filter((candidate) => !items.some((item) => item.id === candidate.id)), ...items]
-                        : current.filter((candidate) => !items.some((item) => item.id === candidate.id)),
-                    )
-                  }
+                  disabled={selectingAll || !total}
+                  checked={total > 0 && allFilteredSelected}
+                  onChange={() => void toggleAllFiltered()}
                 />
               </th>
               {[
@@ -175,6 +241,8 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
                   }}
                   onFilter={(values) => {
                     setFilters((current) => ({ ...current, [column]: values }));
+                    setSelectedCandidates([]);
+                    setAllFilteredSelected(false);
                     setPage(1);
                   }}
                 />
@@ -251,6 +319,18 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           setPage(1);
         }}
       />
+      {batchConfirmOpen ? (
+        <ConfirmDialog
+          title="批量发起结算流程"
+          message={`将为已选的 ${selectedCandidates.length} 个项目负责人结算项创建结算流程。系统会按顺序处理，每项保留独立的结算版本和审计记录。`}
+          confirmLabel={`发起 ${selectedCandidates.length} 个流程`}
+          pending={batchStarting}
+          onCancel={() => {
+            if (!batchStarting) setBatchConfirmOpen(false);
+          }}
+          onConfirm={() => void startSelectedCandidates()}
+        />
+      ) : null}
       {selected && result ? (
         <ModalShell
           ariaLabel={`${selected.pi} ${selected.month} 结算预览`}

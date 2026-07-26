@@ -11,7 +11,8 @@
 
 ```bash
 npm ci
-python3 -m pip install -r requirements-dev.txt
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
 npm run dev
 ```
 
@@ -81,6 +82,8 @@ npm run check
 ```bash
 npm run verify:full
 ```
+
+`npm run dev`、`npm run check`、`npm run test:e2e` 和 Python 质量工具统一解析项目 `.venv`。`CAGELEDGER_PYTHON_BIN` 可覆盖为其他 Python 3.13 可执行文件。
 
 Gitea Pull Request 运行轻量质量门禁：格式、lint、类型、Vitest、构建和架构检查。Mac mini 在发布前运行 Python 全量测试、Playwright、API 冒烟与 PDF 验收。
 

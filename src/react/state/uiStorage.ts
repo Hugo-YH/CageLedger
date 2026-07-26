@@ -34,8 +34,29 @@ export function readStoredWorkspaceView(): WorkspaceView {
   return migrated || "dashboard";
 }
 
+export type ThemePreference = "system" | "light" | "dark";
+
+type StoredUiState = {
+  activeView?: unknown;
+  theme?: unknown;
+};
+
+export function readStoredThemePreference(): ThemePreference {
+  try {
+    const raw = localStorage.getItem(UI_STORAGE_KEY);
+    const value = raw ? (JSON.parse(raw) as StoredUiState).theme : "";
+    return value === "light" || value === "dark" || value === "system" ? value : "system";
+  } catch {
+    return "system";
+  }
+}
+
 export function persistWorkspaceView(activeView: WorkspaceView) {
-  localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({ activeView }));
+  persistUiState({ activeView });
+}
+
+export function persistThemePreference(theme: ThemePreference) {
+  persistUiState({ theme });
 }
 
 export function clearUiStorage() {
@@ -46,13 +67,23 @@ export function clearUiStorage() {
 function readView(key: string): WorkspaceView | null {
   try {
     const raw = localStorage.getItem(key);
-    const value = raw ? (JSON.parse(raw) as { activeView?: unknown }).activeView : "";
+    const value = raw ? (JSON.parse(raw) as StoredUiState).activeView : "";
     if (value === "intake") return "intake-entry";
     if (value === "billing") return "billing-quantity-entry";
     return typeof value === "string" && WORKSPACE_VIEWS.has(value as WorkspaceView) ? (value as WorkspaceView) : null;
   } catch {
     localStorage.removeItem(key);
     return null;
+  }
+}
+
+function persistUiState(update: Partial<{ activeView: WorkspaceView; theme: ThemePreference }>) {
+  try {
+    const raw = localStorage.getItem(UI_STORAGE_KEY);
+    const current = raw ? (JSON.parse(raw) as StoredUiState) : {};
+    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({ ...current, ...update }));
+  } catch {
+    // UI preferences remain optional when browser storage is unavailable.
   }
 }
 

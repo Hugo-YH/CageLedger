@@ -129,7 +129,7 @@ export function AsyncActionButton({
 }) {
   return (
     <button {...buttonProps} aria-busy={pending || undefined} disabled={disabled || pending}>
-      {pending ? pendingLabel : children}
+      {pending ? <span className="button-loading-label">{pendingLabel}</span> : children}
     </button>
   );
 }
@@ -238,6 +238,9 @@ export function ConfirmDialog({
     <ModalShell ariaLabel={title} className="confirm-dialog" onClose={onCancel}>
       <div className="modal-shell-head">
         <h2>{title}</h2>
+        <button aria-label="关闭" className="tertiary icon-button" type="button" onClick={onCancel}>
+          ×
+        </button>
       </div>
       <div className="modal-shell-body">
         <p>{message}</p>

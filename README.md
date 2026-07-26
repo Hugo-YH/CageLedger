@@ -24,7 +24,8 @@
 
 ```bash
 npm ci
-python3 -m pip install -r requirements-dev.txt
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
 npm run dev
 ```
 
@@ -49,6 +50,8 @@ npm run release:local -- --version X.Y.Z --push
 ```
 
 `npm start` 会构建 React 前端并由 Python 服务在 `5173` 提供生产页面。`npm run package:offline` 生成包含 `web-dist/` 的离线包。
+
+`npm run dev`、`npm run check` 和 `npm run test:e2e` 固定使用 `.venv` 中的 Python。可通过 `CAGELEDGER_PYTHON_BIN` 指定其他 Python 3.13 可执行文件。
 
 ## 文档
 

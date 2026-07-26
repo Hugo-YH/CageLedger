@@ -47,6 +47,14 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   const dispatch = useUiDispatch();
   const logout = useLogout();
   const [activeDrawer, setActiveDrawer] = useState<NavigationDrawer | null>(null);
+  const intakeExpanded =
+    !ui.sidebarCollapsed && (activeDrawer === "intake" || (!activeDrawer && isIntakeView(ui.activeView)));
+  const animalExpanded =
+    !ui.sidebarCollapsed && (activeDrawer === "animal" || (!activeDrawer && isAnimalManagementView(ui.activeView)));
+  const billingExpanded =
+    !ui.sidebarCollapsed && (activeDrawer === "billing" || (!activeDrawer && isBillingView(ui.activeView)));
+  const settingsExpanded =
+    !ui.sidebarCollapsed && (activeDrawer === "settings" || (!activeDrawer && isSettingsView(ui.activeView)));
   const settingsViews: Array<[WorkspaceView, string, IconName, string]> = [
     ["rooms", "房间管理", "building", "维护饲养间、笼架和笼位基础结构。"],
     ["system", "关于系统", "info", "查看系统版本、更新状态、更新记录和系统 Wiki。"],
@@ -120,7 +128,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               label="笼卡管理"
               icon="tag"
               active={isIntakeView(ui.activeView)}
-              expanded={activeDrawer === "intake"}
+              expanded={intakeExpanded}
               controls="nav-intake"
               onClick={() => toggleDrawer("intake", "intake-entry")}
             />
@@ -143,7 +151,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               label="动物管理"
               icon="clipboard"
               active={isAnimalManagementView(ui.activeView)}
-              expanded={activeDrawer === "animal"}
+              expanded={animalExpanded}
               controls="nav-animal-management"
               onClick={() => toggleDrawer("animal", "animal-inspection-entry")}
             />
@@ -165,7 +173,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               label="饲养费管理"
               icon="calculator"
               active={isBillingView(ui.activeView)}
-              expanded={activeDrawer === "billing"}
+              expanded={billingExpanded}
               controls="nav-billing"
               className="nav-item-billing-root"
               onClick={() => toggleDrawer("billing", "billing-quantity-entry")}
@@ -185,10 +193,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               onNavigate={navigate}
             />
             <button
-              className={`nav-item nav-item-settings-root ${isSettingsView(ui.activeView) ? "active" : ""}`}
+              className={`nav-item nav-group-button nav-item-settings-root ${isSettingsView(ui.activeView) ? "active" : ""}`}
               type="button"
               aria-label="系统设置"
-              aria-expanded={activeDrawer === "settings"}
+              aria-expanded={settingsExpanded}
               aria-controls="nav-settings"
               onClick={() => toggleDrawer("settings", "rooms")}
             >

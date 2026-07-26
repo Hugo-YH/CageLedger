@@ -169,16 +169,17 @@ export function IntakeEntryPanel({
 
 export function IntakeBatchList({
   total,
-  selected,
   selectedItems,
   items,
   loading,
+  selectingAll,
+  allFilteredSelected,
   page,
   totalPages,
   pageSize,
   params,
   filters,
-  onTogglePage,
+  onToggleAll,
   onToggleItem,
   onSort,
   onFilter,
@@ -191,17 +192,18 @@ export function IntakeBatchList({
   onPageSize,
 }: {
   total: number;
-  selected: string[];
   selectedItems: IntakeBatch[];
   items: IntakeBatch[];
   loading: boolean;
+  selectingAll: boolean;
+  allFilteredSelected: boolean;
   page: number;
   totalPages: number;
   pageSize: number;
   params: IntakeListParams;
   filters: Record<string, string[]>;
-  onTogglePage: (checked: boolean) => void;
-  onToggleItem: (id: string, checked: boolean) => void;
+  onToggleAll: () => void;
+  onToggleItem: (item: IntakeBatch, checked: boolean) => void;
   onSort: (key: string) => void;
   onFilter: (key: string, values: string[]) => void;
   onPrint: (items: IntakeBatch[]) => void;
@@ -220,7 +222,7 @@ export function IntakeBatchList({
         </div>
         <div className="panel-head-actions">
           <span className="panel-summary-chip">
-            {total} 条 · 已选 {selected.length}
+            {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selectedItems.length}`}
           </span>
         </div>
       </div>
@@ -253,9 +255,10 @@ export function IntakeBatchList({
               <th>
                 <input
                   type="checkbox"
-                  aria-label="全选当前页"
-                  checked={items.length > 0 && selectedItems.length === items.length}
-                  onChange={(event) => onTogglePage(event.target.checked)}
+                  aria-label="全选当前筛选结果"
+                  disabled={selectingAll || !total}
+                  checked={total > 0 && allFilteredSelected}
+                  onChange={onToggleAll}
                 />
               </th>
               {[
@@ -292,8 +295,8 @@ export function IntakeBatchList({
                     <input
                       type="checkbox"
                       aria-label={`选择 ${item.batchNo}`}
-                      checked={selected.includes(item.id)}
-                      onChange={(event) => onToggleItem(item.id, event.target.checked)}
+                      checked={selectedItems.some((selectedItem) => selectedItem.id === item.id)}
+                      onChange={(event) => onToggleItem(item, event.target.checked)}
                     />
                   </td>
                   <td>

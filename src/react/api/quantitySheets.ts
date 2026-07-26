@@ -9,6 +9,7 @@ import type {
   QuantitySheetWriteResponse,
 } from "./contracts";
 import { requestJson } from "./client";
+import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
 
 function listUrl(params: QuantitySheetListParams) {
@@ -20,12 +21,20 @@ function listUrl(params: QuantitySheetListParams) {
   return `/api/quantity-sheets?${search.toString()}`;
 }
 
+export function listQuantitySheets(params: QuantitySheetListParams) {
+  return requestJson<PagedResponse<QuantitySheet>>(listUrl(params));
+}
+
 export function useQuantitySheets(params: QuantitySheetListParams) {
   return useQuery({
     queryKey: queryKeys.quantitySheets(params as unknown as Record<string, unknown>),
-    queryFn: () => requestJson<PagedResponse<QuantitySheet>>(listUrl(params)),
+    queryFn: () => listQuantitySheets(params),
     placeholderData: (previous) => previous,
   });
+}
+
+export function listAllQuantitySheets(params: QuantitySheetListParams) {
+  return loadAllPages((offset, limit) => listQuantitySheets({ ...params, offset, limit }));
 }
 
 export function useQuantitySheetRooms() {

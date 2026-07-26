@@ -19,9 +19,12 @@
 
 ```bash
 npm ci
-python3 -m pip install -r requirements-dev.txt
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
 npm run check
 ```
+
+`npm run dev` 和 `npm run test:e2e` 使用项目 `.venv` 的 Python 启动 API，避免继承 macOS 系统 Python。`CAGELEDGER_PYTHON_BIN` 可指定其他 Python 3.13 可执行文件。
 
 ## 完整门禁
 

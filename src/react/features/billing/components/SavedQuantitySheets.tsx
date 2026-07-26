@@ -4,6 +4,7 @@ import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contra
 import { requestJson } from "../../../api/client";
 import {
   useDeleteQuantitySheet,
+  listAllQuantitySheets,
   useQuantityFilterOptions,
   useQuantitySheetDetail,
   useQuantitySheets,
@@ -19,10 +20,12 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selected, setSelected] = useState<string[]>([]);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [viewId, setViewId] = useState("");
   const [editId, setEditId] = useState("");
   const [deleteId, setDeleteId] = useState("");
   const [exportError, setExportError] = useState("");
+  const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
   const params: QuantitySheetListParams = {
     limit: pageSize,
@@ -65,12 +68,31 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     }
   }
 
+  async function toggleAllFiltered() {
+    if (allFilteredSelected) {
+      setSelected([]);
+      setAllFilteredSelected(false);
+      return;
+    }
+    setSelectingAll(true);
+    setAllFilteredSelected(true);
+    try {
+      const allItems = await listAllQuantitySheets(params);
+      setSelected(allItems.map((item) => item.id));
+    } catch (error) {
+      setAllFilteredSelected(false);
+      setExportError(error instanceof Error ? error.message : "无法读取全部统计表");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
   return (
     <section className="panel quantity-saved-panel">
       <div className="workspace-toolbar quantity-saved-toolbar">
         <div className="workspace-toolbar-main">
           <span className="panel-summary-chip">
-            {total} 条 · 已选 {selected.length}
+            {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}
           </span>
         </div>
         <div className="workspace-toolbar-actions">
@@ -78,7 +100,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
             <button
               className="secondary"
               type="button"
-              disabled={!selected.length}
+              disabled={!selected.length || selectingAll}
               onClick={() => void printSelected()}
             >
               打印数量统计表
@@ -86,7 +108,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
             <button
               className="primary"
               type="button"
-              disabled={!selected.length || pdfExport.isExporting}
+              disabled={!selected.length || pdfExport.isExporting || selectingAll}
               onClick={() => void exportSelected()}
             >
               {pdfExport.isExporting
@@ -130,10 +152,11 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
             <tr>
               <th>
                 <input
-                  aria-label="全选当前页统计表"
+                  aria-label="全选当前筛选结果统计表"
                   type="checkbox"
-                  checked={items.length > 0 && items.every((item) => selected.includes(item.id))}
-                  onChange={(event) => setSelected(event.target.checked ? items.map((item) => item.id) : [])}
+                  disabled={selectingAll || !total}
+                  checked={total > 0 && allFilteredSelected}
+                  onChange={() => void toggleAllFiltered()}
                 />
               </th>
               {[
@@ -156,6 +179,8 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                   }}
                   onFilter={(values) => {
                     setFilters((current) => ({ ...current, [key]: values }));
+                    setSelected([]);
+                    setAllFilteredSelected(false);
                     setPage(1);
                   }}
                 />
@@ -172,13 +197,14 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                       aria-label={`选择 ${item.iacuc}`}
                       type="checkbox"
                       checked={selected.includes(item.id)}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setAllFilteredSelected(false);
                         setSelected((current) =>
                           event.target.checked
                             ? [...new Set([...current, item.id])]
                             : current.filter((id) => id !== item.id),
-                        )
-                      }
+                        );
+                      }}
                     />
                   </td>
                   <td>{item.month}</td>
@@ -227,6 +253,8 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         onPageSize={(value) => {
           setPageSize(value);
           setPage(1);
+          setSelected([]);
+          setAllFilteredSelected(false);
         }}
       />
       {viewId ? (
