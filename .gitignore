@@ -16,6 +16,7 @@ dist-ssr
 web-dist
 docs-dist
 /.vitepress/
+wiki/.vitepress/cache/
 wiki/public/
 *.local
 .env
