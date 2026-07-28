@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta4",
+    releasedAt: "2026-07-28 00:00",
+    title: "发布构建修复",
+    items: [
+      "Docker 前端构建补齐发布脚本与 VitePress 文档上下文，生产镜像可同时构建运营页面和 `/docs/` 静态站点",
+      "生产镜像关闭依赖 Git 历史的文档更新时间字段，Gitea 与本地文档构建继续保留更新时间和贡献者信息",
+      "增加 VitePress 嵌套缓存忽略规则，发布工作区保持稳定",
+    ],
+  },
+  {
     version: "1.0.0-beta3",
     releasedAt: "2026-07-28 00:00",
     title: "发布制品修复",
