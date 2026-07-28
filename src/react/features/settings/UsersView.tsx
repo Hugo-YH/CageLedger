@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Checkbox, Form, Input, Select, Space, Tag } from "antd";
+import { Button, Card, Checkbox, Form, Input, Select, Space, Tag, Typography } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
@@ -87,7 +87,11 @@ export function UsersView({
         <section className="settings-split-layout">
           <Card
             className="settings-user-list-card"
-            title="账号列表"
+            title={
+              <Typography.Title level={2} className="ant-card-section-title">
+                账号列表
+              </Typography.Title>
+            }
             extra={
               <Tag>
                 管理员 {items.filter((item) => item.role === "admin").length} · 房间管理员{" "}
@@ -210,14 +214,30 @@ function UserFields({
   const update = <K extends keyof UserDraft>(key: K, value: UserDraft[K]) => onChange({ ...draft, [key]: value });
   return (
     <Form className="user-fields-react" layout="vertical" requiredMark={false}>
-      <Form.Item label="登录名" required={creating}>
-        <Input value={draft.username} onChange={(event) => update("username", event.target.value)} />
+      <Form.Item htmlFor="managed-user-username" label="登录名" required={creating}>
+        <Input
+          id="managed-user-username"
+          value={draft.username}
+          onChange={(event) => update("username", event.target.value)}
+        />
       </Form.Item>
-      <Form.Item label="显示姓名" required={creating}>
-        <Input value={draft.displayName} onChange={(event) => update("displayName", event.target.value)} />
+      <Form.Item htmlFor="managed-user-display-name" label="显示姓名" required={creating}>
+        <Input
+          id="managed-user-display-name"
+          value={draft.displayName}
+          onChange={(event) => update("displayName", event.target.value)}
+        />
       </Form.Item>
-      <Form.Item label={creating ? "初始密码" : "新密码（留空保持）"} required={creating}>
-        <Input.Password value={draft.password} onChange={(event) => update("password", event.target.value)} />
+      <Form.Item
+        htmlFor="managed-user-password"
+        label={creating ? "初始密码" : "新密码（留空保持）"}
+        required={creating}
+      >
+        <Input.Password
+          id="managed-user-password"
+          value={draft.password}
+          onChange={(event) => update("password", event.target.value)}
+        />
       </Form.Item>
       <Form.Item label="角色">
         <Select

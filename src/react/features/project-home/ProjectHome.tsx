@@ -211,7 +211,7 @@ function ProductScene() {
           <span className="project-eyebrow">运营闭环示意</span>
           <strong>接收、饲养到结算核销</strong>
         </div>
-        <Tag bordered={false} color="success" icon={<CheckCircleFilled />}>
+        <Tag color="success" icon={<CheckCircleFilled />} variant="filled">
           本地受控
         </Tag>
       </div>

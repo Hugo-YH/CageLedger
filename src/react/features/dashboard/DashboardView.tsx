@@ -75,7 +75,13 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
           <Col lg={10} xs={24}>
             <Card className="ant-dashboard-section" size="small" title="笼位状态分布">
               <div className="ant-dashboard-status">
-                <Progress percent={occupiedPct} size={132} strokeColor="#1677ff" type="circle" />
+                <Progress
+                  aria-label="笼位占用率"
+                  percent={occupiedPct}
+                  size={132}
+                  strokeColor="#1677ff"
+                  type="circle"
+                />
                 <Space orientation="vertical" size={8}>
                   <StatusLine label="在用" total={total} value={value("active")} />
                   <StatusLine label="已预约" total={total} value={value("reserved")} />
@@ -100,7 +106,12 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
                       已预约 {summary.reservedCount}
                     </Typography.Paragraph>
                   </div>
-                  <Progress percent={usage} size="small" style={{ minWidth: 144 }} />
+                  <Progress
+                    aria-label={`${String(room?.name || summary.roomName || summary.roomId)} 使用率`}
+                    percent={usage}
+                    size="small"
+                    style={{ minWidth: 144 }}
+                  />
                 </div>
               );
             })}

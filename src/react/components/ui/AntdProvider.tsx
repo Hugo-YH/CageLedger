@@ -19,6 +19,9 @@ export function AntdProvider({ children }: PropsWithChildren) {
         colorSuccess: "#389e0d",
         colorWarning: "#d48806",
         colorError: "#cf1322",
+        // Dashboard labels and descriptions remain readable on neutral surfaces.
+        colorTextSecondary: "#595959",
+        colorTextDescription: "#595959",
         borderRadius: 6,
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
@@ -31,7 +34,12 @@ export function AntdProvider({ children }: PropsWithChildren) {
         motionDurationSlow: "0.22s",
       },
       components: {
-        Button: { borderRadius: 6, fontWeight: 500 },
+        Button: {
+          borderRadius: 6,
+          defaultColor: "#262626",
+          defaultBorderColor: "#d9d9d9",
+          fontWeight: 500,
+        },
         Card: { borderRadiusLG: 8 },
         Drawer: { borderRadiusLG: 10 },
         Modal: { borderRadiusLG: 10 },

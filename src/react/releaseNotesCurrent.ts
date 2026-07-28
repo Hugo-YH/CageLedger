@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta1",
+    releasedAt: "2026-07-28 00:00",
+    title: "Ant Design 界面重构预发布",
+    items: [
+      "全系统工作区接入 Ant Design 与 antd-mobile 组件适配层，统一导航、命令栏、表单、表格、弹窗和反馈状态",
+      "新增公开项目门户、主题 Token、UI 组件契约和浏览器回归基线，保留既有业务接口、权限、结算和导出链路",
+      "发布脚本支持从当前发布分支创建标签、构建多架构镜像、上传离线包并同步 Gitea Release 资源",
+    ],
+  },
+  {
     version: "1.0.0",
     releasedAt: "2026-07-26 23:00",
     title: "Ant Design 全系统标准化界面",

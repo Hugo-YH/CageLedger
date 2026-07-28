@@ -374,6 +374,11 @@
   backdrop-filter: none;
 }
 
+.app-modal-root .modal-shell-head > .ant-btn {
+  color: var(--app-text) !important;
+  border-color: var(--app-border) !important;
+}
+
 .app-modal-root .modal-shell-actions {
   padding-top: 12px;
   border-top: 1px solid var(--app-border);
@@ -1192,6 +1197,13 @@
     padding: 16px;
   }
 
+  .ant-workspace .workspace-view {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
   .ant-workspace .workspace-head {
     padding-bottom: 12px;
   }
@@ -1237,6 +1249,12 @@
     min-height: 72px;
     border-inline-end: 0;
     border-bottom: 1px solid var(--app-border);
+  }
+
+  /* Ant Row offsets its gutters with negative margins. Keep mobile dashboard
+     grids inside the workspace padding while retaining the column spacing. */
+  .ant-dashboard-body > .ant-row {
+    margin-inline: 0 !important;
   }
 
   .ant-dashboard-status {

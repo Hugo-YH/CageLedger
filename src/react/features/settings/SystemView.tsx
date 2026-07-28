@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Card, Descriptions, List, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Descriptions, Pagination, Select, Space, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
@@ -58,7 +58,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
                 </Button>
               ) : null
             }
-            title="系统状态"
+            title={<CardTitle>系统状态</CardTitle>}
           >
             <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
               <Descriptions.Item label="当前版本">
@@ -76,55 +76,51 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
           <Card
             className="system-release-card"
             extra={<Tag>{SYSTEM_RELEASE_NOTES.length} 个版本</Tag>}
-            title="更新记录"
+            title={<CardTitle>更新记录</CardTitle>}
           >
-            <List
-              dataSource={SYSTEM_RELEASE_NOTES}
-              pagination={{
-                current: releasePage,
-                pageSize: releasePageSize,
-                pageSizeOptions: [5, 10, 20],
-                showSizeChanger: true,
-                total: SYSTEM_RELEASE_NOTES.length,
-                onChange: (page, pageSize) => {
-                  setReleasePage(page);
-                  setReleasePageSize(pageSize);
-                },
-                onShowSizeChange: (_current, pageSize) => {
-                  setReleasePage(1);
-                  setReleasePageSize(pageSize);
-                },
-              }}
-              renderItem={(note) => (
-                <List.Item>
-                  <List.Item.Meta
-                    description={
-                      <Space direction="vertical" size={4}>
-                        <Typography.Text>{note.title}</Typography.Text>
-                        <ul className="system-release-items">
-                          {note.items.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                        {note.note || note.notes ? (
-                          <Typography.Text type="secondary">备注：{note.note || note.notes}</Typography.Text>
-                        ) : null}
-                      </Space>
-                    }
-                    title={
-                      <Space size={8}>
-                        <Typography.Text strong>v{note.version}</Typography.Text>
-                        {note.releasedAt ? <Typography.Text type="secondary">{note.releasedAt}</Typography.Text> : null}
-                      </Space>
-                    }
-                  />
-                </List.Item>
+            <div className="system-release-list">
+              {SYSTEM_RELEASE_NOTES.slice((releasePage - 1) * releasePageSize, releasePage * releasePageSize).map(
+                (note) => (
+                  <article className="system-release-item" key={note.version}>
+                    <Space size={8}>
+                      <Typography.Text strong>v{note.version}</Typography.Text>
+                      {note.releasedAt ? <Typography.Text type="secondary">{note.releasedAt}</Typography.Text> : null}
+                    </Space>
+                    <Space orientation="vertical" size={4}>
+                      <Typography.Text>{note.title}</Typography.Text>
+                      <ul className="system-release-items">
+                        {note.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                      {note.note || note.notes ? (
+                        <Typography.Text type="secondary">备注：{note.note || note.notes}</Typography.Text>
+                      ) : null}
+                    </Space>
+                  </article>
+                ),
               )}
+            </div>
+            <Pagination
+              className="system-release-pagination"
+              current={releasePage}
+              pageSize={releasePageSize}
+              pageSizeOptions={[5, 10, 20]}
+              showSizeChanger
+              total={SYSTEM_RELEASE_NOTES.length}
+              onChange={(page, pageSize) => {
+                setReleasePage(page);
+                setReleasePageSize(pageSize);
+              }}
+              onShowSizeChange={(_current, pageSize) => {
+                setReleasePage(1);
+                setReleasePageSize(pageSize);
+              }}
             />
           </Card>
 
-          <Card title="界面外观">
-            <Space align="start" direction="vertical" size={8}>
+          <Card title={<CardTitle>界面外观</CardTitle>}>
+            <Space align="start" orientation="vertical" size={8}>
               <Typography.Text>显示模式</Typography.Text>
               <Select
                 aria-label="显示模式"
@@ -140,7 +136,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
             </Space>
           </Card>
 
-          <Card title="维护信息">
+          <Card title={<CardTitle>维护信息</CardTitle>}>
             <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} layout="vertical" size="small">
               <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
               <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
@@ -150,6 +146,14 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
         </div>
       </div>
     </section>
+  );
+}
+
+function CardTitle({ children }: { children: string }) {
+  return (
+    <Typography.Title level={2} className="ant-card-section-title">
+      {children}
+    </Typography.Title>
   );
 }
 
@@ -165,7 +169,7 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
     <Alert
       className="system-update-alert"
       description={
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Typography.Text>
             {update.data?.latestVersion ? `最新发布版 v${update.data.latestVersion}` : "尚未获取远端版本"}
           </Typography.Text>
@@ -178,7 +182,7 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
           ) : null}
         </Space>
       }
-      message={status}
+      title={status}
       showIcon
       type={update.isError ? "error" : update.data?.updateAvailable ? "warning" : "info"}
     />

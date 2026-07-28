@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, Segmented } from "antd";
+import { Button, Card, Segmented, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
@@ -37,7 +37,11 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
       <div className="workspace-body workflow-workspace-body">
         <Card
           className="reimbursement-ledger-panel"
-          title="核销工作台"
+          title={
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              核销工作台
+            </Typography.Title>
+          }
           extra={
             tab === "claims" ? (
               <Button type="primary" onClick={() => setCreatingClaim(true)}>

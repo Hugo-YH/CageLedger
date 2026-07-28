@@ -11,7 +11,7 @@ Usage:
 
 Options:
   --version <ver>  Release version, for example 0.4.1 or 0.4.0a
-  --push           Push main and the new v<version> tag after commit/tag
+  --push           Push the current release branch and the new v<version> tag after commit/tag
   --dry-run        Print steps without executing them
   --skip-full-verify  Skip the Mac mini production build and Playwright release verification
   --skip-container-publish  Skip Mac mini local multi-arch image publish before push
@@ -84,6 +84,12 @@ run() {
 
 cd "$ROOT"
 
+RELEASE_BRANCH="$(git branch --show-current)"
+if [[ -z "$RELEASE_BRANCH" ]]; then
+  echo "Release requires a checked-out branch." >&2
+  exit 1
+fi
+
 if [[ -n "${CAGELEDGER_PYTHON_BIN:-}" ]]; then
   PYTHON_BIN_DIR="$(dirname "$CAGELEDGER_PYTHON_BIN")"
   export PATH="$PYTHON_BIN_DIR:$PATH"
@@ -144,7 +150,7 @@ if [[ "$PUSH" -eq 1 ]]; then
       run bash scripts/publish_container_local.sh --version "$VERSION"
     fi
   fi
-  run git push origin main
+  run git push origin "$RELEASE_BRANCH"
   run git push origin "v${VERSION}"
   run bash scripts/upload_release_package_local.sh --version "$VERSION" --package "$OFFLINE_PACKAGE_PATH"
   run bash scripts/sync_wiki_local.sh

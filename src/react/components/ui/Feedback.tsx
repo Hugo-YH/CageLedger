@@ -20,12 +20,6 @@ export function Feedback({
     );
   if (kind === "empty") return <Result status="info" subTitle={detail} title={title} extra={action} />;
   return (
-    <Alert
-      action={action}
-      description={detail}
-      message={title}
-      showIcon
-      type={kind === "error" ? "error" : "success"}
-    />
+    <Alert action={action} description={detail} title={title} showIcon type={kind === "error" ? "error" : "success"} />
   );
 }

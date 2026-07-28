@@ -31,7 +31,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(page.getByLabel("房间管理员", { exact: true })).toHaveValue("E2E 房间管理员");
   await expect(page.getByLabel("房间管理员", { exact: true })).toHaveAttribute("readonly", "");
   await page.getByRole("button", { name: /计费扩展选项/ }).click();
-  await page.getByRole("checkbox", { name: "全额减免", exact: true }).check();
+  await page.getByRole("switch", { name: "全额减免", exact: true }).check();
   await iacucInput.fill("E2E-IACUC-001");
   await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E负责人");
   await page.getByLabel("第 1 行结余笼数", { exact: true }).fill("2");
