@@ -6,13 +6,14 @@ FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 WORKDIR /build
 
 COPY package.json package-lock.json ./
-COPY scripts/retry_command.sh ./scripts/retry_command.sh
+COPY scripts ./scripts
 RUN bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
     --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
 COPY index.html vite.config.ts tsconfig.json ./
 COPY assets ./assets
 COPY src ./src
+COPY wiki ./wiki
 RUN npm run build
 
 FROM ${PYTHON_IMAGE}
