@@ -1,6 +1,6 @@
 # CageLedger UI 颜色与交互语义
 
-本契约约束 React 工作台的颜色、状态、按钮、表格和浮层。颜色源位于 `src/styles/tokens.css`，页面代码使用语义类和 CSS 变量。`data-theme="light"` 和 `data-theme="dark"` 提供完整语义映射，系统偏好由应用解析为当前主题。
+本契约约束 React 工作台的颜色、状态、按钮、表格和浮层。颜色源位于 `src/styles/tokens.css`、`src/react/components/ui/AntdProvider.tsx` 和 `src/styles/features/antd-system.css`。页面通过 `src/react/components/ui/` 使用 Ant Design 组件与项目语义适配器。`data-theme="light"` 和 `data-theme="dark"` 映射 Ant 的浅色、深色算法，系统偏好由应用解析为当前主题。
 
 ## 基础层
 
@@ -10,7 +10,7 @@
 | 控件与浮层 | `--control-bg*`、`--toolbar-bg`、`--surface-overlay`、`--backdrop` | 输入控件、吸附工具栏、弹窗与遮罩 |
 | 文字       | `--text`、`--text-strong`、`--muted`、`--text-subtle`              | 正文、标题、辅助信息与次级说明   |
 | 边界       | `--line`、`--line-strong`                                          | 卡片、输入、表格和分区           |
-| 品牌       | `--primary`、`--primary-dark`、`--primary-ink`、`--primary-soft`   | 当前入口、主操作、焦点           |
+| 品牌       | `--ant-color-primary`、`--primary`、`--primary-soft`               | 当前入口、主操作、焦点           |
 | 阴影       | `--shadow`、`--shadow-soft`、`--shadow-lift`、`--shadow-pop`       | 页面层、悬浮层、弹窗             |
 | 焦点       | `--focus-ring*`                                                    | 键盘焦点和危险/警示焦点          |
 | 动效       | `--motion-*`、`--ease-*`                                           | hover、展开、弹窗和页面切换      |
@@ -31,22 +31,21 @@
 
 状态色表达业务含义。选中态使用连续行底色，单元格之间不增加彩色竖线；表格结构线继续使用 `--line`。
 
-## 按钮层级
+## 组件与按钮层级
 
-| 类                                | 语义                 | 示例                     |
-| --------------------------------- | -------------------- | ------------------------ |
-| `.primary`                        | 当前操作区最重要动作 | 保存、确认、正式入驻     |
-| `.secondary`                      | 常规次操作           | 编辑、导出、展开         |
-| `.tertiary` / `.ghost`            | 低权重动作           | 关闭、取消、辅助入口     |
-| `.flow-button`                    | 流程推进             | 发起结算、标记完成       |
-| `.info-button`                    | 查看和预览           | 查看、详情、预览         |
-| `.warning-button`                 | 修复和刷新           | 清理缓存、重试、异常处理 |
-| `.danger-button` / `.danger-text` | 破坏性动作           | 删除、撤回、退出         |
-| `.icon-button` / `.icon-danger`   | 紧凑图标操作         | 表格行内工具             |
+| 类                                 | 语义                 | 示例                     |
+| ---------------------------------- | -------------------- | ------------------------ |
+| Ant / 适配器                       | 语义                 | 示例                     |
+| ---------------------------------- | -------------------- | ------------------------ |
+| `ActionButton tone="primary"`      | 当前操作区唯一主操作 | 保存、确认、正式入驻     |
+| `ActionButton tone="secondary"`    | 常规次操作           | 编辑、导出、展开         |
+| `ActionButton tone="tertiary"`     | 低权重动作           | 关闭、取消、辅助入口     |
+| `ActionButton tone="destructive"`  | 破坏性动作           | 删除、撤回、退出         |
+| `ActionButton tone="icon"`         | 紧凑图标操作         | 表格行内工具             |
 
 同一操作区保留一个最强主按钮。展开和收起使用不同状态：展开态使用浅主色底和强调边框，收起态使用普通次操作色；按钮文字和 `aria-expanded` 同步。
 
-`.flow-button` 用于推进流程，保留主按钮的对比度并采用独立流程色。`.info-button` 用于预览与详情，使用低权重蓝灰信息色。工具栏从左到右固定为范围摘要、辅助操作、主操作，避免主操作在页面间漂移。
+流程推进采用 `primary`，预览与详情采用 `secondary` 或 `tertiary`。工具栏从左到右固定为范围摘要、辅助操作、唯一主操作，主操作通过 `CommandBar` 固定在右侧。
 
 ## 交互状态
 
@@ -80,20 +79,20 @@
 
 ## 浮层与通知
 
-| 层             | 视觉与定位                                       |
-| -------------- | ------------------------------------------------ |
-| 帮助气泡       | 使用共享 Portal Tooltip，避让 viewport 四周边界  |
-| 站内通知       | 固定在浏览器窗口内，成功/警示/失败使用对应语义色 |
-| 下拉与日期面板 | 高于页面卡片，保持输入锚点关系                   |
-| 业务弹窗       | `position: fixed` 相对 viewport，遮罩覆盖工作区  |
-| 确认弹层       | 高于普通业务弹窗，危险动作保持红色焦点           |
+| 层             | 视觉与定位                                             |
+| -------------- | ------------------------------------------------------ |
+| 帮助气泡       | `HelpPopover` 与 Ant `Tooltip`，避让 viewport 四周边界 |
+| 站内通知       | 固定在浏览器窗口内，成功/警示/失败使用对应语义色       |
+| 下拉与日期面板 | 高于页面卡片，保持输入锚点关系                         |
+| 业务弹窗       | `position: fixed` 相对 viewport，遮罩覆盖工作区        |
+| 确认弹层       | 高于普通业务弹窗，危险动作保持红色焦点                 |
 
 弹窗位置以浏览器窗口为基准。页面滚动不会改变弹窗的可见位置。
 
-- 业务说明、问号帮助和评分解释使用共享 `Tooltip`，通过 Portal 挂载到 `document.body`。
-- Tooltip 相对触发元素定位，至少保留 16px 视口安全边距，根据可用空间自动显示在触发元素上方或下方。
-- Tooltip 同时监听页面滚动、窗口缩放和移动浏览器 `visualViewport` 变化；页面缩放、地址栏收起和软键盘出现后保持在可见区域。
-- Tooltip 的层级高于工作区卡片、局部滚动容器和侧边导航；卡片、表格和弹窗正文不承载 Tooltip DOM。
+- 业务说明、问号帮助和评分解释使用 `HelpPopover` 或 Ant `Tooltip`，由 Ant Portal 挂载到 `document.body`。
+- Tooltip 相对触发元素定位，保留 12px 视口安全边距，根据可用空间选择上方、下方、左侧或右侧。
+- Tooltip 使用 `autoAdjustOverflow`，滚动与窗口变化时按 Ant 浮层机制重定位。
+- Tooltip 层级高于工作区卡片、局部滚动容器和侧边导航；卡片、表格和弹窗正文不承载 Tooltip DOM。
 - 原生 `title` 用于截断的静态表格文本与 iframe 等语义标题；按钮、开关、输入和评分控件使用 Tooltip 或紧邻说明文本。
 
 ## 动效与可访问性

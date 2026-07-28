@@ -169,16 +169,8 @@ table {
 .table-sort-button {
   width: 100%;
   min-height: 38px;
-  padding: 8px 34px 8px 10px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
+  padding: 8px 34px 8px 10px !important;
   gap: 6px;
-  font: inherit;
   font-weight: 800;
   text-align: left;
 }
@@ -203,15 +195,8 @@ table {
   width: 30px;
   min-width: 30px;
   min-height: 38px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
+  padding: 0 !important;
   vertical-align: top;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   opacity: 0;
   pointer-events: none;
   transform: translateX(4px);
@@ -237,23 +222,11 @@ table {
 }
 
 .table-filter-panel {
-  position: fixed;
-  z-index: 260;
-  width: min(280px, 72vw);
+  width: min(280px, calc(100vw - 32px));
   max-height: 360px;
-  padding: 12px;
-  border: 1px solid rgb(13 118 104 / 20%);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(242 250 248 / 96%));
-  box-shadow: 0 18px 45px rgb(16 42 47 / 18%);
-  color: var(--text);
+  display: grid;
+  gap: 10px;
   text-align: left;
-}
-
-.table-filter-search input {
-  min-height: 36px;
-  padding: 8px 10px;
-  font-size: 0.9rem;
 }
 
 .table-filter-options {
@@ -265,30 +238,23 @@ table {
   padding-right: 2px;
 }
 
-.table-filter-options label {
+.table-filter-options .ant-checkbox-wrapper {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 32px;
   padding: 5px 6px;
-  border-radius: 10px;
-  color: var(--text);
+  margin-inline-start: 0;
+  border-radius: var(--app-radius-sm);
   font-weight: 600;
 }
 
-.table-filter-options label:hover {
-  background: rgb(13 118 104 / 7%);
+.table-filter-options .ant-checkbox-wrapper:hover {
+  background: var(--app-fill-secondary);
 }
 
-.table-filter-options input {
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
-  min-height: 16px;
-}
-
-.table-filter-options span {
+.table-filter-options .ant-checkbox + span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -300,7 +266,7 @@ table {
 }
 
 .table-filter-actions {
-  display: flex;
+  display: flex !important;
   justify-content: flex-end;
   gap: 8px;
   padding-top: 8px;

@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Empty, Input } from "antd";
 
 import type { CageRack, CageSlot, CageSlotStatus, Occupancy, PlacementTask } from "../../../api/contracts";
 import { useMoveInPlacement, useReservePlacement, useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
+import { ActionButton } from "../../../components/ui";
 import { animalAgeText, cageCode, currentOccupancy, emptyOccupancy, slotPosition } from "../../../../domain/cages";
 import { CageSlotButton } from "./CageSlotButton";
 
@@ -135,9 +137,9 @@ export function SlotEditor({
           <h2 id="slot-editor-title">编辑笼位 {cageCode(slot, rack.index, roomName)}</h2>
           <p>{occupancy ? "维护当前占用记录" : "录入新的占用记录"}</p>
         </div>
-        <button className="secondary" type="button" onClick={onClose}>
+        <ActionButton aria-label="关闭" onClick={onClose}>
           关闭
-        </button>
+        </ActionButton>
       </div>
       <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
         <div className="compact-form-row third">
@@ -180,7 +182,7 @@ export function SlotEditor({
               />
               <div className="monkey-age-field">
                 <label htmlFor="monkey-age">年龄</label>
-                <input
+                <Input
                   id="monkey-age"
                   type="text"
                   value={ageText || "自动计算"}
@@ -220,16 +222,12 @@ export function SlotEditor({
           <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
         </label>
         <div className="modal-shell-actions">
-          <button
-            className="ghost danger-text"
-            type="button"
-            onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}
-          >
+          <ActionButton tone="destructive" onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}>
             {confirmClear ? "再次点击确认设为空" : "设为空"}
-          </button>
-          <button className="primary" type="submit" disabled={save.isPending}>
+          </ActionButton>
+          <ActionButton disabled={save.isPending} loading={save.isPending} tone="primary" type="submit">
             保存笼位
-          </button>
+          </ActionButton>
         </div>
       </form>
     </ModalShell>
@@ -257,9 +255,9 @@ export function PlacementDrawer({
           <h2>待进驻动物</h2>
           <p>{tasks.length} 个待处理笼位</p>
         </div>
-        <button className="secondary" type="button" onClick={onClose}>
+        <ActionButton aria-label="关闭" onClick={onClose}>
           关闭
-        </button>
+        </ActionButton>
       </div>
       <div className="modal-shell-body placement-react-list">
         {tasks.length ? (
@@ -273,25 +271,23 @@ export function PlacementDrawer({
                 </small>
               </div>
               {task.status === "pending" ? (
-                <button className="primary" type="button" onClick={() => onSelect(task)}>
+                <ActionButton tone="primary" onClick={() => onSelect(task)}>
                   选择空笼位
-                </button>
+                </ActionButton>
               ) : (
-                <button
-                  className="primary"
-                  type="button"
+                <ActionButton
                   disabled={moveIn.isPending}
+                  loading={moveIn.isPending}
+                  tone="primary"
                   onClick={() => void moveIn.mutateAsync({ taskId: task.id, actualMoveInDate: today })}
                 >
                   正式入驻
-                </button>
+                </ActionButton>
               )}
             </article>
           ))
         ) : (
-          <div className="empty-state">
-            <h3>当前房间没有待进驻任务</h3>
-          </div>
+          <Empty description="当前房间没有待进驻任务" />
         )}
       </div>
     </ModalShell>
@@ -360,9 +356,9 @@ export function BatchSlotEditor({
           <h2 id="batch-slot-title">批量编辑 {slots.length} 个笼位</h2>
           <p>{slots.map(slotPosition).join("、")}</p>
         </div>
-        <button className="secondary" type="button" onClick={onClose}>
+        <ActionButton aria-label="关闭" onClick={onClose}>
           关闭
-        </button>
+        </ActionButton>
       </div>
       <div className="modal-shell-body form compact-slot-form">
         <div className="compact-form-row third">
@@ -395,16 +391,12 @@ export function BatchSlotEditor({
         </label>
       </div>
       <div className="modal-shell-actions">
-        <button
-          className="ghost danger-text"
-          type="button"
-          onClick={() => (confirmClear ? void clearAll() : setConfirmClear(true))}
-        >
+        <ActionButton tone="destructive" onClick={() => (confirmClear ? void clearAll() : setConfirmClear(true))}>
           {confirmClear ? "再次点击确认批量设空" : "批量设为空"}
-        </button>
-        <button className="primary" type="button" disabled={save.isPending} onClick={() => void saveAll()}>
+        </ActionButton>
+        <ActionButton disabled={save.isPending} loading={save.isPending} tone="primary" onClick={() => void saveAll()}>
           批量保存
-        </button>
+        </ActionButton>
       </div>
     </ModalShell>
   );
@@ -433,17 +425,17 @@ export function ReserveBar({
         <strong>{task.batchNo}</strong>
         <span>预留到 {cageCode(slot, rack.index, roomName)}</span>
       </div>
-      <button
-        className="primary"
-        type="button"
+      <ActionButton
         disabled={reserve.isPending}
+        loading={reserve.isPending}
+        tone="primary"
         onClick={async () => {
           await reserve.mutateAsync({ taskId: task.id, slotId: slot.id });
           onDone(`已为 ${task.batchNo} 预留笼位 ${cageCode(slot, rack.index, roomName)}。`);
         }}
       >
         确认预留
-      </button>
+      </ActionButton>
     </div>
   );
 }

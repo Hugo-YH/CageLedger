@@ -14,7 +14,7 @@ async function expectNoSeriousViolations(page: Page) {
 }
 
 async function login(page: Page) {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -22,7 +22,7 @@ async function login(page: Page) {
 }
 
 test("login and dashboard have no serious accessibility violations", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.getByRole("button", { name: "登录", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
   await login(page);

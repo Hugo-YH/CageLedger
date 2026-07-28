@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, Card, Checkbox, Form, Input, Select, Space, Tag } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
@@ -84,18 +85,16 @@ export function UsersView({
       />
       <div className="workspace-body settings-workspace-body">
         <section className="settings-split-layout">
-          <div className="panel large">
-            <div className="panel-head">
-              <div className="panel-title-line">
-                <h2>账号列表</h2>
-              </div>
-              <div className="panel-head-actions">
-                <span className="panel-summary-chip">
-                  管理员 {items.filter((item) => item.role === "admin").length} · 房间管理员{" "}
-                  {items.filter((item) => item.role === "room_admin").length}
-                </span>
-              </div>
-            </div>
+          <Card
+            className="settings-user-list-card"
+            title="账号列表"
+            extra={
+              <Tag>
+                管理员 {items.filter((item) => item.role === "admin").length} · 房间管理员{" "}
+                {items.filter((item) => item.role === "room_admin").length}
+              </Tag>
+            }
+          >
             <div className="user-list react-user-list">
               {items.map((item) => (
                 <UserEditor
@@ -109,23 +108,19 @@ export function UsersView({
                 />
               ))}
             </div>
-          </div>
-          <section className="panel settings-side-panel">
-            <div className="panel-head compact">
-              <div className="panel-title-line">
-                <h2>创建账号</h2>
-              </div>
-            </div>
+          </Card>
+          <Card className="settings-side-panel" size="small" title="创建账号">
             <UserFields creating draft={createDraft} rooms={rooms} onChange={setCreateDraft} />
-            <button
-              className="primary"
-              type="button"
-              disabled={save.isPending || !createDraft.username || !createDraft.password}
+            <Button
+              block
+              type="primary"
+              loading={save.isPending}
+              disabled={!createDraft.username || !createDraft.password}
               onClick={() => void createUser()}
             >
               创建账号
-            </button>
-          </section>
+            </Button>
+          </Card>
         </section>
       </div>
       {deleteTarget ? (
@@ -172,24 +167,19 @@ function UserEditor({
             {user.username} · {user.role === "admin" ? "系统管理员" : `${user.roomIds.length} 个授权饲养间`}
           </span>
         </div>
-        {current ? <span className="pill active">当前账号</span> : null}
+        {current ? <Tag color="blue">当前账号</Tag> : null}
       </div>
       {current ? null : (
         <>
           <UserFields draft={draft} rooms={rooms} onChange={setDraft} />
-          <div className="form-actions">
-            <button className="ghost danger-text compact" type="button" onClick={onDelete}>
+          <Space className="form-actions">
+            <Button danger type="link" size="small" onClick={onDelete}>
               删除
-            </button>
-            <button
-              className="secondary info-button"
-              type="button"
-              disabled={pending}
-              onClick={() => void onSave(draft)}
-            >
+            </Button>
+            <Button type="primary" size="small" loading={pending} onClick={() => void onSave(draft)}>
               保存账号
-            </button>
-          </div>
+            </Button>
+          </Space>
         </>
       )}
     </article>
@@ -219,48 +209,47 @@ function UserFields({
 }) {
   const update = <K extends keyof UserDraft>(key: K, value: UserDraft[K]) => onChange({ ...draft, [key]: value });
   return (
-    <div className="form user-fields-react">
-      <label>
-        登录名
-        <input value={draft.username} onChange={(event) => update("username", event.target.value)} />
-      </label>
-      <label>
-        显示姓名
-        <input value={draft.displayName} onChange={(event) => update("displayName", event.target.value)} />
-      </label>
-      <label>
-        {creating ? "初始密码" : "新密码（留空保持）"}
-        <input type="password" value={draft.password} onChange={(event) => update("password", event.target.value)} />
-      </label>
-      <label>
-        角色
-        <select value={draft.role} onChange={(event) => update("role", event.target.value as UserRole)}>
-          <option value="room_admin">房间管理员</option>
-          <option value="admin">系统管理员</option>
-        </select>
-      </label>
+    <Form className="user-fields-react" layout="vertical" requiredMark={false}>
+      <Form.Item label="登录名" required={creating}>
+        <Input value={draft.username} onChange={(event) => update("username", event.target.value)} />
+      </Form.Item>
+      <Form.Item label="显示姓名" required={creating}>
+        <Input value={draft.displayName} onChange={(event) => update("displayName", event.target.value)} />
+      </Form.Item>
+      <Form.Item label={creating ? "初始密码" : "新密码（留空保持）"} required={creating}>
+        <Input.Password value={draft.password} onChange={(event) => update("password", event.target.value)} />
+      </Form.Item>
+      <Form.Item label="角色">
+        <Select
+          value={draft.role}
+          options={[
+            { value: "room_admin", label: "房间管理员" },
+            { value: "admin", label: "系统管理员" },
+          ]}
+          onChange={(value) => update("role", value)}
+        />
+      </Form.Item>
       {draft.role === "room_admin" ? (
-        <fieldset className="room-access-fieldset">
-          <legend>饲养间授权</legend>
+        <Form.Item className="room-access-fieldset" label="饲养间授权">
           {rooms.map((room) => (
-            <label className="check-row" key={room.id}>
-              <input
-                type="checkbox"
-                checked={draft.roomIds.includes(room.id)}
-                onChange={(event) =>
-                  update(
-                    "roomIds",
-                    event.target.checked ? [...draft.roomIds, room.id] : draft.roomIds.filter((id) => id !== room.id),
-                  )
-                }
-              />
-              <span>{room.name}</span>
-            </label>
+            <Checkbox
+              className="check-row"
+              key={room.id}
+              checked={draft.roomIds.includes(room.id)}
+              onChange={(event) =>
+                update(
+                  "roomIds",
+                  event.target.checked ? [...draft.roomIds, room.id] : draft.roomIds.filter((id) => id !== room.id),
+                )
+              }
+            >
+              {room.name}
+            </Checkbox>
           ))}
-        </fieldset>
+        </Form.Item>
       ) : (
         <p className="muted">系统管理员默认访问全部饲养间。</p>
       )}
-    </div>
+    </Form>
   );
 }

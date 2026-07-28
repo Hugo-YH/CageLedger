@@ -1,7 +1,7 @@
 import { ensureTestInfrastructure, expect, openSettingsView, test } from "./fixtures";
 
 test("admin can create infrastructure and manage a room account", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -11,8 +11,6 @@ test("admin can create infrastructure and manage a room account", async ({ page 
   const roomName = `E2E 测试饲养间 ${Date.now()}`;
   await page.getByRole("button", { name: "新增饲养间", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCSS("position", "relative");
-  await expect(page.locator(".modal-backdrop")).toHaveCSS("position", "fixed");
   await page.getByLabel("饲养间名称", { exact: true }).fill(roomName);
   await page.getByLabel("区域", { exact: true }).fill("E2E 区域");
   await page.getByRole("button", { name: "保存饲养间", exact: true }).click();
@@ -31,7 +29,7 @@ test("admin can create infrastructure and manage a room account", async ({ page 
 });
 
 test("room administrator keeps the server-side permission boundary", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();

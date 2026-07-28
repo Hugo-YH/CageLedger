@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, Form, Input, Select, Upload } from "antd";
 
 import { uploadFile, usePrincipalIdentities } from "../../../api/administration";
 import { useReimbursementClaim, useSaveReimbursementClaim } from "../../../api/reimbursementLedger";
@@ -67,38 +68,32 @@ export function ReimbursementClaimDialog({
           <span className="modal-kicker">报销单</span>
           <h2>{claimId ? draft.documentNumber || "报销单详情" : "新建报销单"}</h2>
         </div>
-        <button className="secondary compact" type="button" onClick={onClose}>
+        <Button size="small" onClick={onClose}>
           关闭
-        </button>
+        </Button>
       </div>
       <div className="modal-shell-body reimbursement-claim-body">
         {detail.isPending && effectiveClaimId ? <PageState title="正在加载报销单..." /> : null}
-        <div className="form-grid">
-          <label>
-            报销单号
-            <input
-              value={draft.documentNumber}
+        <Form className="form-grid" layout="vertical">
+          <Form.Item label="报销单号">
+            <Input
               disabled={!editable}
+              value={draft.documentNumber}
               onChange={(event) => setDraft((current) => ({ ...current, documentNumber: event.target.value }))}
             />
-          </label>
-          <label>
-            状态
-            <select
-              value={draft.status}
+          </Form.Item>
+          <Form.Item label="状态">
+            <Select<ReimbursementClaim["status"]>
               disabled={!editable}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, status: event.target.value as ReimbursementClaim["status"] }))
-              }
-            >
-              {Object.entries(claimStatusLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+              options={Object.entries(claimStatusLabels).map(([value, label]) => ({
+                label,
+                value: value as ReimbursementClaim["status"],
+              }))}
+              value={draft.status}
+              onChange={(value) => setDraft((current) => ({ ...current, status: value }))}
+            />
+          </Form.Item>
+        </Form>
         <section className="field-cluster">
           <div className="field-cluster-head">
             <strong>经费明细</strong>
@@ -111,38 +106,38 @@ export function ReimbursementClaimDialog({
           </datalist>
           {lines.map((line, index) => (
             <div className="funding-line-editor" key={line.id || index}>
-              <label>
-                经费本号
-                <input
-                  value={line.fundBookNo}
-                  disabled={!editable}
-                  onChange={(event) => updateLine(index, { fundBookNo: event.target.value })}
-                />
-              </label>
-              <label>
-                经费负责人
-                <input
-                  list="reimbursement-funding-owners"
-                  value={line.fundingOwner}
-                  disabled={!editable}
-                  onChange={(event) => updateLine(index, { fundingOwner: event.target.value })}
-                />
-              </label>
-              <label>
-                报销金额
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={line.reimbursementAmount}
-                  disabled={!editable}
-                  onChange={(event) => updateLine(index, { reimbursementAmount: Number(event.target.value) })}
-                />
-              </label>
+              <Form component={false} layout="vertical">
+                <Form.Item label="经费本号">
+                  <Input
+                    disabled={!editable}
+                    value={line.fundBookNo}
+                    onChange={(event) => updateLine(index, { fundBookNo: event.target.value })}
+                  />
+                </Form.Item>
+                <Form.Item label="经费负责人">
+                  <Input
+                    disabled={!editable}
+                    list="reimbursement-funding-owners"
+                    value={line.fundingOwner}
+                    onChange={(event) => updateLine(index, { fundingOwner: event.target.value })}
+                  />
+                </Form.Item>
+                <Form.Item label="报销金额">
+                  <Input
+                    disabled={!editable}
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={line.reimbursementAmount}
+                    onChange={(event) => updateLine(index, { reimbursementAmount: Number(event.target.value) })}
+                  />
+                </Form.Item>
+              </Form>
               {editable ? (
-                <button
-                  className="ghost danger-text compact"
-                  type="button"
+                <Button
+                  danger
+                  size="small"
+                  type="text"
                   disabled={lines.length === 1}
                   onClick={() =>
                     setDraft((current) => ({
@@ -152,20 +147,19 @@ export function ReimbursementClaimDialog({
                   }
                 >
                   删除
-                </button>
+                </Button>
               ) : null}
             </div>
           ))}
           {editable ? (
-            <button
-              className="secondary compact"
-              type="button"
+            <Button
+              size="small"
               onClick={() =>
                 setDraft((current) => ({ ...current, fundingLines: [...(current.fundingLines || []), emptyLine()] }))
               }
             >
               添加经费明细
-            </button>
+            </Button>
           ) : null}
         </section>
         {effectiveClaimId ? (
@@ -175,16 +169,18 @@ export function ReimbursementClaimDialog({
               <span>PDF、JPEG、PNG；单文件 30 MiB，最多 10 个</span>
             </div>
             {editable ? (
-              <input
-                aria-label="上传报销单附件"
-                type="file"
+              <Upload
                 accept="application/pdf,image/jpeg,image/png"
-                disabled={uploading}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void upload(file);
+                beforeUpload={(file) => {
+                  void upload(file);
+                  return false;
                 }}
-              />
+                disabled={uploading}
+                maxCount={1}
+                showUploadList={false}
+              >
+                <Button loading={uploading}>上传附件</Button>
+              </Upload>
             ) : null}
             <div className="attachment-list">
               {(detail.data?.item.attachments || []).map((item) => (
@@ -231,13 +227,11 @@ export function ReimbursementClaimDialog({
         ) : null}
       </div>
       <div className="modal-shell-actions">
-        <button className="secondary" type="button" onClick={onClose}>
-          取消
-        </button>
+        <Button onClick={onClose}>取消</Button>
         {editable ? (
-          <button className="primary" type="button" disabled={save.isPending} onClick={() => void persist()}>
+          <Button loading={save.isPending} type="primary" onClick={() => void persist()}>
             保存报销单
-          </button>
+          </Button>
         ) : null}
       </div>
     </ModalShell>

@@ -12,7 +12,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test("monkey rooms preserve sex, birth date, and calculated age", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -42,8 +42,10 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   });
   await page.reload();
 
-  await page.getByRole("button", { name: "笼位管理", exact: true }).click();
-  await page.getByRole("combobox", { name: "房间", exact: true }).selectOption({ label: "E2E 猴房" });
+  await page.getByRole("menuitem", { name: /笼位管理/ }).click();
+  await expect(
+    page.locator("#cages-room-select").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
+  ).toContainText("E2E 猴房");
   await page.getByRole("button", { name: /E2E 猴房-01-A1/ }).click();
   await expect(page.getByRole("group", { name: "猴个体信息", exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "性别", exact: true }).selectOption("female");

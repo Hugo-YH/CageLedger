@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, Segmented, Select } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, CageSlotStatus, RoomBootstrapResponse } from "../../api/contracts";
@@ -14,6 +15,7 @@ import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives"
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
 import { WorkspaceHeader } from "../../components/WorkspaceUi";
+import { ActionButton } from "../../components/ui";
 
 export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
   const summary = useBootstrap("summary");
@@ -68,39 +70,31 @@ export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => voi
           { label: "待进驻", value: tasks.length, tone: "warning" },
           { label: "已选笼位", value: selectedSlotIds.length || (selectedSlot ? 1 : 0) },
         ]}
-        actions={
-          <button className="secondary" type="button" onClick={() => setTasksOpen(true)}>
-            待进驻 {tasks.length}
-          </button>
-        }
+        actions={<ActionButton onClick={() => setTasksOpen(true)}>待进驻 {tasks.length}</ActionButton>}
         toolbar={
           <>
-            <label className="workspace-toolbar-field">
+            <label className="workspace-toolbar-field" htmlFor="cages-room-select">
               <span>饲养间</span>
-              <select aria-label="房间" value={selectedRoomId} onChange={(event) => setRoomId(event.target.value)}>
-                {rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                aria-label="房间"
+                id="cages-room-select"
+                options={rooms.map((room) => ({ label: room.name, value: room.id }))}
+                value={selectedRoomId}
+                onChange={setRoomId}
+              />
             </label>
-            <label className="workspace-toolbar-field">
+            <label className="workspace-toolbar-field" htmlFor="cages-rack-select">
               <span>笼架</span>
-              <select
+              <Select
                 aria-label="笼架"
+                id="cages-rack-select"
+                options={racks.map((rack) => ({ label: rack.name, value: rack.id }))}
                 value={selectedRack?.id || ""}
-                onChange={(event) => {
-                  setRackId(event.target.value);
+                onChange={(value) => {
+                  setRackId(value);
                   setSelectedSlotId("");
                 }}
-              >
-                {racks.map((rack) => (
-                  <option key={rack.id} value={rack.id}>
-                    {rack.name}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
           </>
         }
@@ -122,19 +116,16 @@ export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => voi
               <Legend tone="period-overdue" label="超期饲养" />
             </div>
             <div className="filter-row" role="group" aria-label="笼位状态筛选">
-              {(["all", "active", "reserved", "empty"] as const).map((value) => (
-                <button
-                  key={value}
-                  className={`segmented ${filter === value ? "active" : ""}`}
-                  type="button"
-                  onClick={() => setFilter(value)}
-                >
-                  {{ all: "全部", active: "在用", reserved: "已预约", empty: "空" }[value]}
-                </button>
-              ))}
-              <button
-                className={`segmented batch-toggle ${batchMode ? "active" : ""}`}
-                type="button"
+              <Segmented
+                options={(["all", "active", "reserved", "empty"] as const).map((value) => ({
+                  label: { all: "全部", active: "在用", reserved: "已预约", empty: "空" }[value],
+                  value,
+                }))}
+                value={filter}
+                onChange={setFilter}
+              />
+              <Button
+                type={batchMode ? "primary" : "default"}
                 onClick={() => {
                   setBatchMode((value) => !value);
                   setSelectedSlotIds([]);
@@ -142,19 +133,15 @@ export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => voi
                 }}
               >
                 多选录入{selectedSlotIds.length ? ` (${selectedSlotIds.length})` : ""}
-              </button>
+              </Button>
               {batchMode ? (
                 <>
-                  <button
-                    className="segmented"
-                    type="button"
-                    onClick={() => setSelectedSlotIds(visibleSlots.map((slot) => slot.id))}
-                  >
+                  <Button size="small" onClick={() => setSelectedSlotIds(visibleSlots.map((slot) => slot.id))}>
                     全选当前
-                  </button>
-                  <button className="segmented" type="button" onClick={() => setSelectedSlotIds([])}>
+                  </Button>
+                  <Button size="small" onClick={() => setSelectedSlotIds([])}>
                     清空选择
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>
@@ -207,9 +194,9 @@ export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => voi
                   <strong>已选择 {selectedSlotIds.length} 个笼位</strong>
                   <span>统一维护项目与饲养日期</span>
                 </div>
-                <button className="primary" type="button" onClick={() => setBatchEditorOpen(true)}>
+                <ActionButton tone="primary" onClick={() => setBatchEditorOpen(true)}>
                   批量编辑
-                </button>
+                </ActionButton>
               </div>
             ) : null}
           </div>

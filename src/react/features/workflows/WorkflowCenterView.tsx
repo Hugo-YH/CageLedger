@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button, Card, Segmented } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
@@ -34,37 +35,30 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
         switcherItems={billingSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body workflow-workspace-body">
-        <section className="panel large reimbursement-ledger-panel">
-          <div className="panel-head reimbursement-ledger-context">
-            <div className="panel-title-line">
-              <h2>核销工作台</h2>
-              <p>结算版本、报销单、经费明细与核销分摊均保留审计链路。</p>
-            </div>
-            {tab === "claims" ? (
-              <button className="primary" type="button" onClick={() => setCreatingClaim(true)}>
+        <Card
+          className="reimbursement-ledger-panel"
+          title="核销工作台"
+          extra={
+            tab === "claims" ? (
+              <Button type="primary" onClick={() => setCreatingClaim(true)}>
                 新建报销单
-              </button>
-            ) : null}
-          </div>
-          <div className="ledger-tabs" role="tablist" aria-label="结算与报销台账分区">
-            {tabs.map(([key, label]) => (
-              <button
-                className={tab === key ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                key={key}
-                onClick={() => setTab(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+              </Button>
+            ) : null
+          }
+        >
+          <p className="ant-form-extra">结算版本、报销单、经费明细与核销分摊均保留审计链路。</p>
+          <Segmented<LedgerTab>
+            block
+            className="ledger-tabs"
+            options={tabs.map(([value, label]) => ({ label, value }))}
+            value={tab}
+            onChange={setTab}
+          />
           {tab === "obligations" ? <ObligationsPanel /> : null}
           {tab === "claims" ? <ClaimsPanel user={user} onOpen={setClaimId} /> : null}
           {tab === "reconciliation" ? <ReconciliationPanel user={user} onOpenClaim={setClaimId} /> : null}
           {tab === "legacy" ? <LegacyPanel user={user} /> : null}
-        </section>
+        </Card>
       </div>
       {claimId || creatingClaim ? (
         <ReimbursementClaimDialog

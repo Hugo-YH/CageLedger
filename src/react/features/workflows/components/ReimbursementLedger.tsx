@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, Empty, Form, Input, Select, Space, Table, Tag } from "antd";
 
 import {
   useConfirmReimbursementAllocation,
@@ -11,7 +12,7 @@ import {
   useSettlementObligations,
 } from "../../../api/reimbursementLedger";
 import type { SessionUser } from "../../../api/contracts";
-import { AsyncActionButton, formatMoney, ModalShell, PageState } from "../../../components/WorkspaceUi";
+import { formatMoney, ModalShell, PageState } from "../../../components/WorkspaceUi";
 
 const PAGE = { limit: 20, offset: 0 };
 const claimStatusLabels: Record<string, string> = {
@@ -21,6 +22,15 @@ const claimStatusLabels: Record<string, string> = {
   void: "已作废",
 };
 
+function moneyColumn(title: string, dataIndex: string) {
+  return {
+    title,
+    dataIndex,
+    align: "right" as const,
+    render: (value: number) => formatMoney(value),
+  };
+}
+
 export function ObligationsPanel() {
   const [month, setMonth] = useState("");
   const [sourcePi, setSourcePi] = useState("");
@@ -29,60 +39,62 @@ export function ObligationsPanel() {
   return (
     <section className="ledger-section" aria-label="结算应收列表">
       <div className="command-bar">
-        <div className="command-bar-filters">
-          <input aria-label="结算月份" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-          <input
-            aria-label="费用产生项目负责人"
-            type="search"
-            value={sourcePi}
-            onChange={(event) => setSourcePi(event.target.value)}
-            placeholder="费用产生项目负责人"
-          />
-        </div>
-        <span className="list-summary">{query.data?.page.total || 0} 笔应收</span>
+        <Form component={false} layout="inline">
+          <Form.Item>
+            <Input
+              aria-label="结算月份"
+              type="month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Input.Search
+              aria-label="费用产生项目负责人"
+              value={sourcePi}
+              onChange={(event) => setSourcePi(event.target.value)}
+              placeholder="费用产生项目负责人"
+            />
+          </Form.Item>
+        </Form>
+        <Tag variant="filled">{query.data?.page.total || 0} 笔应收</Tag>
       </div>
       {query.isPending ? <PageState title="正在同步结算应收..." /> : null}
       {query.isError ? <PageState title="结算应收加载失败" retry={() => query.refetch()} /> : null}
       {!query.isPending && !query.isError ? (
-        <div className="table-wrap" role="region" tabIndex={0} aria-label="结算应收表">
-          <table className="dense-table reimbursement-table">
-            <thead>
-              <tr>
-                <th>结算月份</th>
-                <th>费用产生项目负责人</th>
-                <th>IACUC</th>
-                <th>应缴</th>
-                <th>已核销</th>
-                <th>待核销</th>
-                <th>关联报销单</th>
-                <th>状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length ? (
-                items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.month}</td>
-                    <td>{item.sourcePi}</td>
-                    <td>
-                      {item.iacuc}
-                      {item.obligationKind === "adjustment" ? <span className="pill warning">调整</span> : null}
-                    </td>
-                    <td>{formatMoney(item.payableAmount)}</td>
-                    <td>{formatMoney(item.allocatedAmount)}</td>
-                    <td>{formatMoney(item.outstandingAmount)}</td>
-                    <td>{item.claimCount}</td>
-                    <td>
-                      <span className={`pill ${item.status}`}>{item.status === "settled" ? "已核销" : "待核销"}</span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <EmptyRow colSpan={8} text="当前没有可结算应收。生成饲养费结算单后会自动同步到这里。" />
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          className="antd-data-table reimbursement-table"
+          columns={[
+            { title: "结算月份", dataIndex: "month" },
+            { title: "费用产生项目负责人", dataIndex: "sourcePi" },
+            {
+              title: "IACUC",
+              render: (_, item) => (
+                <Space size={4}>
+                  {item.iacuc}
+                  {item.obligationKind === "adjustment" ? <Tag color="gold">调整</Tag> : null}
+                </Space>
+              ),
+            },
+            moneyColumn("应缴", "payableAmount"),
+            moneyColumn("已核销", "allocatedAmount"),
+            moneyColumn("待核销", "outstandingAmount"),
+            { title: "关联报销单", dataIndex: "claimCount", align: "right" },
+            {
+              title: "状态",
+              render: (_, item) => (
+                <Tag color={item.status === "settled" ? "green" : "gold"}>
+                  {item.status === "settled" ? "已核销" : "待核销"}
+                </Tag>
+              ),
+            },
+          ]}
+          dataSource={items}
+          locale={{ emptyText: <Empty description="当前没有可结算应收" /> }}
+          pagination={false}
+          rowKey="id"
+          scroll={{ x: 960 }}
+        />
       ) : null}
     </section>
   );
@@ -96,70 +108,65 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   return (
     <section className="ledger-section" aria-label="报销单列表">
       <div className="command-bar">
-        <div className="command-bar-filters">
-          <input
-            aria-label="检索报销单"
-            type="search"
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="检索报销单号或经费负责人"
-          />
-          <select aria-label="报销单状态" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="all">全部状态</option>
-            {Object.entries(claimStatusLabels).map(([value, label]) => (
-              <option value={value} key={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <span className="list-summary">{query.data?.page.total || 0} 张报销单</span>
+        <Form component={false} layout="inline">
+          <Form.Item>
+            <Input.Search
+              aria-label="检索报销单"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="检索报销单号或经费负责人"
+            />
+          </Form.Item>
+          <Form.Item>
+            <Select
+              aria-label="报销单状态"
+              options={[
+                { label: "全部状态", value: "all" },
+                ...Object.entries(claimStatusLabels).map(([value, label]) => ({ label, value })),
+              ]}
+              value={status}
+              onChange={setStatus}
+            />
+          </Form.Item>
+        </Form>
+        <Tag variant="filled">{query.data?.page.total || 0} 张报销单</Tag>
       </div>
       {query.isPending ? <PageState title="正在加载报销单..." /> : null}
       {query.isError ? <PageState title="报销单加载失败" retry={() => query.refetch()} /> : null}
       {!query.isPending && !query.isError ? (
-        <div className="table-wrap" role="region" tabIndex={0} aria-label="报销单表">
-          <table className="dense-table reimbursement-table">
-            <thead>
-              <tr>
-                <th>报销单号</th>
-                <th>经费负责人</th>
-                <th>经费明细</th>
-                <th>报销总额</th>
-                <th>已分摊</th>
-                <th>未分摊</th>
-                <th>附件</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length ? (
-                items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.documentNumber}</td>
-                    <td>{item.fundingOwner}</td>
-                    <td>{item.fundingLineCount ?? item.fundingLines?.length ?? "-"}</td>
-                    <td>{formatMoney(item.totalAmount)}</td>
-                    <td>{formatMoney(item.allocatedAmount)}</td>
-                    <td>{formatMoney(item.unallocatedAmount)}</td>
-                    <td>{item.attachmentCount}</td>
-                    <td>
-                      <span className={`pill ${item.status}`}>{claimStatusLabels[item.status]}</span>
-                    </td>
-                    <td>
-                      <button className="secondary compact" type="button" onClick={() => onOpen(item.id)}>
-                        详情
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <EmptyRow colSpan={9} text={user.role === "admin" ? "尚未创建报销单。" : "尚未创建本人报销单。"} />
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          className="antd-data-table reimbursement-table"
+          columns={[
+            { title: "报销单号", dataIndex: "documentNumber" },
+            { title: "经费负责人", dataIndex: "fundingOwner" },
+            {
+              title: "经费明细",
+              render: (_, item) => item.fundingLineCount ?? item.fundingLines?.length ?? "-",
+              align: "right",
+            },
+            moneyColumn("报销总额", "totalAmount"),
+            moneyColumn("已分摊", "allocatedAmount"),
+            moneyColumn("未分摊", "unallocatedAmount"),
+            { title: "附件", dataIndex: "attachmentCount", align: "right" },
+            { title: "状态", render: (_, item) => <Tag>{claimStatusLabels[item.status]}</Tag> },
+            {
+              title: "操作",
+              fixed: "right",
+              render: (_, item) => (
+                <Button size="small" onClick={() => onOpen(item.id)}>
+                  详情
+                </Button>
+              ),
+            },
+          ]}
+          dataSource={items}
+          locale={{
+            emptyText: <Empty description={user.role === "admin" ? "尚未创建报销单" : "尚未创建本人报销单"} />,
+          }}
+          pagination={false}
+          rowKey="id"
+          scroll={{ x: 1050 }}
+        />
       ) : null}
     </section>
   );
@@ -185,138 +192,129 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
   useEffect(() => setLineId(""), [claimId]);
   return (
     <section className="ledger-section reconciliation-section" aria-label="核销中心">
-      <div className="reconciliation-picker">
-        <label>
-          报销单
-          <select value={claimId} onChange={(event) => setClaimId(event.target.value)}>
-            <option value="">请选择报销单</option>
-            {(claims.data?.items || []).map((claim) => (
-              <option value={claim.id} key={claim.id}>
-                {claim.documentNumber} · {claim.fundingOwner}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          经费明细
-          <select value={lineId} disabled={!selected} onChange={(event) => setLineId(event.target.value)}>
-            <option value="">请选择经费本号</option>
-            {lines.map((line) => (
-              <option value={line.id} key={line.id}>
-                {line.fundBookNo} · 可用 {formatMoney(line.unallocatedAmount)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          结算应收
-          <select value={obligationId} onChange={(event) => setObligationId(event.target.value)}>
-            <option value="">请选择结算应收</option>
-            {(obligations.data?.items || [])
+      <Form className="reconciliation-picker" layout="vertical">
+        <Form.Item label="报销单">
+          <Select
+            allowClear
+            options={(claims.data?.items || []).map((claim) => ({
+              label: `${claim.documentNumber} · ${claim.fundingOwner}`,
+              value: claim.id,
+            }))}
+            placeholder="请选择报销单"
+            value={claimId || undefined}
+            onChange={(value) => setClaimId(value || "")}
+          />
+        </Form.Item>
+        <Form.Item label="经费明细">
+          <Select
+            allowClear
+            disabled={!selected}
+            options={lines.map((line) => ({
+              label: `${line.fundBookNo} · 可用 ${formatMoney(line.unallocatedAmount)}`,
+              value: line.id,
+            }))}
+            placeholder="请选择经费本号"
+            value={lineId || undefined}
+            onChange={(value) => setLineId(value || "")}
+          />
+        </Form.Item>
+        <Form.Item label="结算应收">
+          <Select
+            allowClear
+            options={(obligations.data?.items || [])
               .filter((item) => item.outstandingAmount > 0)
-              .map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.month} · {item.sourcePi} · {item.iacuc} · 待核销 {formatMoney(item.outstandingAmount)}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          本次金额
-          <input
+              .map((item) => ({
+                label: `${item.month} · ${item.sourcePi} · ${item.iacuc} · 待核销 ${formatMoney(item.outstandingAmount)}`,
+                value: item.id,
+              }))}
+            placeholder="请选择结算应收"
+            value={obligationId || undefined}
+            onChange={(value) => setObligationId(value || "")}
+          />
+        </Form.Item>
+        <Form.Item label="本次金额">
+          <Input
             inputMode="decimal"
-            type="number"
             min="0"
             step="0.01"
+            type="number"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             placeholder={selectedLine ? String(selectedLine.unallocatedAmount) : "0.00"}
           />
-        </label>
-        <AsyncActionButton
-          className="primary"
-          type="button"
-          pending={create.isPending}
-          pendingLabel="创建中..."
-          disabled={!claimId || !lineId || !obligationId}
-          onClick={() =>
-            void create
-              .mutateAsync({ claimId, fundingLineId: lineId, obligationId, amount: Number(amount) })
-              .then(() => {
-                setAmount("");
-                void detail.refetch();
-              })
-          }
-        >
-          创建草稿
-        </AsyncActionButton>
-      </div>
+        </Form.Item>
+        <Form.Item>
+          <Button
+            disabled={!claimId || !lineId || !obligationId}
+            loading={create.isPending}
+            type="primary"
+            onClick={() =>
+              void create
+                .mutateAsync({ claimId, fundingLineId: lineId, obligationId, amount: Number(amount) })
+                .then(() => {
+                  setAmount("");
+                  void detail.refetch();
+                })
+            }
+          >
+            创建草稿
+          </Button>
+        </Form.Item>
+      </Form>
       {selected ? (
         <div className="reconciliation-context">
           <strong>费用产生项目负责人</strong>
           <span>将在每条分摊中显示</span>
-          <button className="secondary compact" type="button" onClick={() => onOpenClaim(selected.id)}>
+          <Button size="small" onClick={() => onOpenClaim(selected.id)}>
             编辑报销单
-          </button>
+          </Button>
         </div>
       ) : null}
-      <div className="table-wrap" role="region" tabIndex={0} aria-label="核销分摊表">
-        <table className="dense-table reimbursement-table">
-          <thead>
-            <tr>
-              <th>费用产生负责人</th>
-              <th>报销经费负责人</th>
-              <th>IACUC</th>
-              <th>经费本号</th>
-              <th>本次金额</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allocations.length ? (
-              allocations.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.sourcePi}</td>
-                  <td>{item.fundingOwner}</td>
-                  <td>{item.iacuc}</td>
-                  <td>{item.fundBookNo}</td>
-                  <td>{formatMoney(item.amount)}</td>
-                  <td>
-                    <span className={`pill ${item.status}`}>
-                      {item.status === "draft" ? "草稿" : item.status === "confirmed" ? "已确认" : "已撤销"}
-                    </span>
-                  </td>
-                  <td>
-                    {user.role === "admin" && item.status === "draft" ? (
-                      <AsyncActionButton
-                        className="secondary compact"
-                        type="button"
-                        pending={confirm.isPending}
-                        pendingLabel="确认中..."
-                        onClick={() => void confirm.mutateAsync(item.id).then(() => void detail.refetch())}
-                      >
-                        确认
-                      </AsyncActionButton>
-                    ) : null}
-                    {user.role === "admin" && item.status === "confirmed" ? (
-                      <button
-                        className="ghost danger-text compact"
-                        type="button"
-                        onClick={() => setReverseTarget(item.id)}
-                      >
-                        撤销
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <EmptyRow colSpan={7} text="选择报销单后可创建与查看核销分摊。" />
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        className="antd-data-table reimbursement-table"
+        columns={[
+          { title: "费用产生负责人", dataIndex: "sourcePi" },
+          { title: "报销经费负责人", dataIndex: "fundingOwner" },
+          { title: "IACUC", dataIndex: "iacuc" },
+          { title: "经费本号", dataIndex: "fundBookNo" },
+          moneyColumn("本次金额", "amount"),
+          {
+            title: "状态",
+            render: (_, item) => (
+              <Tag color={item.status === "confirmed" ? "green" : item.status === "draft" ? "gold" : "default"}>
+                {item.status === "draft" ? "草稿" : item.status === "confirmed" ? "已确认" : "已撤销"}
+              </Tag>
+            ),
+          },
+          {
+            title: "操作",
+            fixed: "right",
+            render: (_, item) => (
+              <Space size={4}>
+                {user.role === "admin" && item.status === "draft" ? (
+                  <Button
+                    size="small"
+                    loading={confirm.isPending}
+                    onClick={() => void confirm.mutateAsync(item.id).then(() => void detail.refetch())}
+                  >
+                    确认
+                  </Button>
+                ) : null}
+                {user.role === "admin" && item.status === "confirmed" ? (
+                  <Button danger size="small" type="text" onClick={() => setReverseTarget(item.id)}>
+                    撤销
+                  </Button>
+                ) : null}
+              </Space>
+            ),
+          },
+        ]}
+        dataSource={allocations}
+        locale={{ emptyText: <Empty description="选择报销单后可创建与查看核销分摊" /> }}
+        pagination={false}
+        rowKey="id"
+        scroll={{ x: 960 }}
+      />
       {reverseTarget ? (
         <ModalShell ariaLabel="撤销核销" className="reimbursement-reverse-dialog" onClose={() => setReverseTarget("")}>
           <div className="modal-shell-head">
@@ -324,20 +322,22 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
           </div>
           <div className="modal-shell-body">
             <p>撤销后会恢复经费明细与结算应收余额。</p>
-            <label>
-              撤销原因
-              <textarea rows={3} value={reverseReason} onChange={(event) => setReverseReason(event.target.value)} />
-            </label>
+            <Form layout="vertical">
+              <Form.Item label="撤销原因">
+                <Input.TextArea
+                  rows={3}
+                  value={reverseReason}
+                  onChange={(event) => setReverseReason(event.target.value)}
+                />
+              </Form.Item>
+            </Form>
           </div>
           <div className="modal-shell-actions">
-            <button className="secondary" type="button" onClick={() => setReverseTarget("")}>
-              取消
-            </button>
-            <AsyncActionButton
-              className="danger"
-              type="button"
-              pending={reverse.isPending}
-              pendingLabel="撤销中..."
+            <Button onClick={() => setReverseTarget("")}>取消</Button>
+            <Button
+              danger
+              loading={reverse.isPending}
+              type="primary"
               disabled={!reverseReason.trim()}
               onClick={() =>
                 void reverse.mutateAsync({ id: reverseTarget, reason: reverseReason }).then(() => {
@@ -348,7 +348,7 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
               }
             >
               确认撤销
-            </AsyncActionButton>
+            </Button>
           </div>
         </ModalShell>
       ) : null}
@@ -365,61 +365,38 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
       <p className="ledger-guidance">
         历史台账保留只读展示。具备报销单号、经费本号及匹配结算应收的记录可由管理员迁入新核销体系。
       </p>
-      <div className="table-wrap" role="region" tabIndex={0} aria-label="历史台账列表">
-        <table className="dense-table reimbursement-table">
-          <thead>
-            <tr>
-              <th>月份</th>
-              <th>费用产生负责人</th>
-              <th>报销单号</th>
-              <th>经费本号</th>
-              <th>应缴</th>
-              <th>已缴</th>
-              <th>迁入</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length ? (
-              items.map((item) => (
-                <tr key={String(item.id)}>
-                  <td>{String(item.month || "-")}</td>
-                  <td>{String(item.pi || "-")}</td>
-                  <td>{String(item.reimbursementFormNo || "-")}</td>
-                  <td>{String(item.fundBookNo || "-")}</td>
-                  <td>{formatMoney(Number(item.payableAmount || 0))}</td>
-                  <td>{formatMoney(Number(item.paidAmount || 0))}</td>
-                  <td>
-                    {user.role === "admin" && item.migrationEligible ? (
-                      <button
-                        className="secondary compact"
-                        type="button"
-                        disabled={migrate.isPending}
-                        onClick={() => void migrate.mutateAsync(String(item.id))}
-                      >
-                        迁入
-                      </button>
-                    ) : (
-                      <span className="muted">待核对</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <EmptyRow colSpan={7} text="当前没有历史台账记录。" />
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        className="antd-data-table reimbursement-table"
+        columns={[
+          { title: "月份", render: (_, item) => String(item.month || "-") },
+          { title: "费用产生负责人", render: (_, item) => String(item.pi || "-") },
+          { title: "报销单号", render: (_, item) => String(item.reimbursementFormNo || "-") },
+          { title: "经费本号", render: (_, item) => String(item.fundBookNo || "-") },
+          { title: "应缴", align: "right", render: (_, item) => formatMoney(Number(item.payableAmount || 0)) },
+          { title: "已缴", align: "right", render: (_, item) => formatMoney(Number(item.paidAmount || 0)) },
+          {
+            title: "迁入",
+            fixed: "right",
+            render: (_, item) =>
+              user.role === "admin" && item.migrationEligible ? (
+                <Button
+                  size="small"
+                  loading={migrate.isPending}
+                  onClick={() => void migrate.mutateAsync(String(item.id))}
+                >
+                  迁入
+                </Button>
+              ) : (
+                <Tag>待核对</Tag>
+              ),
+          },
+        ]}
+        dataSource={items}
+        locale={{ emptyText: <Empty description="当前没有历史台账记录" /> }}
+        pagination={false}
+        rowKey={(item) => String(item.id)}
+        scroll={{ x: 860 }}
+      />
     </section>
-  );
-}
-
-function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} className="table-empty">
-        {text}
-      </td>
-    </tr>
   );
 }

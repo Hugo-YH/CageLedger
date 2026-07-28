@@ -1,55 +1,61 @@
-import { type ReactNode, useRef, useState } from "react";
+import { App } from "antd";
+import { type ReactNode, useRef } from "react";
 
 import { TaskFeedbackContext, type TaskFeedbackApi, type TaskItem } from "./TaskFeedbackContext";
 
 export function TaskFeedbackProvider({ children }: { children: ReactNode }) {
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const { notification } = App.useApp();
   const sequence = useRef(0);
+  const tasks = useRef(new Map<string, TaskItem>());
+
+  const show = (task: TaskItem) => {
+    notification.open({
+      key: task.id,
+      title: task.title,
+      description: task.detail,
+      duration: task.status === "running" || task.status === "failed" ? 0 : 4.5,
+      placement: "bottomRight",
+      showProgress: task.status === "completed",
+      type: task.status === "failed" ? "error" : task.status === "completed" ? "success" : "info",
+    });
+  };
 
   const api: TaskFeedbackApi = {
     start(task) {
       const id = `task-${sequence.current++}`;
-      setTasks((current) => [...current, { ...task, id, status: "running" as const }].slice(-4));
+      const next = { ...task, id, status: "running" as const };
+      tasks.current.set(id, next);
+      show(next);
       return id;
     },
     update(id, task) {
-      setTasks((current) => current.map((item) => (item.id === id ? { ...item, ...task } : item)));
+      const previous = tasks.current.get(id);
+      const next = {
+        id,
+        title: task.title || previous?.title || "后台任务",
+        detail: task.detail || previous?.detail || "正在处理...",
+        status: "running" as const,
+      };
+      tasks.current.set(id, next);
+      show(next);
     },
     complete(id, detail) {
-      setTasks((current) => current.map((item) => (item.id === id ? { ...item, detail, status: "completed" } : item)));
+      const previous = tasks.current.get(id);
+      const next = { id, title: previous?.title || "任务完成", detail, status: "completed" as const };
+      tasks.current.set(id, next);
+      show(next);
     },
     fail(id, detail) {
-      setTasks((current) => current.map((item) => (item.id === id ? { ...item, detail, status: "failed" } : item)));
+      const previous = tasks.current.get(id);
+      const next = { id, title: previous?.title || "任务失败", detail, status: "failed" as const };
+      tasks.current.set(id, next);
+      show(next);
     },
     dismiss(id) {
-      setTasks((current) => current.filter((item) => item.id !== id));
+      tasks.current.delete(id);
+      notification.destroy(id);
     },
   };
 
-  return (
-    <TaskFeedbackContext.Provider value={api}>
-      {children}
-      <aside className="task-feedback-center" aria-label="后台任务状态" aria-live="polite">
-        {tasks.map((task) => (
-          <article className={`task-feedback ${task.status}`} key={task.id}>
-            <div>
-              <strong>{task.title}</strong>
-              <span>{task.detail}</span>
-            </div>
-            {task.status === "running" ? <span className="task-feedback-spinner" aria-label="正在处理" /> : null}
-            {task.status !== "running" ? (
-              <button
-                className="ghost compact"
-                type="button"
-                aria-label={`关闭${task.title}提示`}
-                onClick={() => api.dismiss(task.id)}
-              >
-                关闭
-              </button>
-            ) : null}
-          </article>
-        ))}
-      </aside>
-    </TaskFeedbackContext.Provider>
-  );
+  return <TaskFeedbackContext.Provider value={api}>{children}</TaskFeedbackContext.Provider>;
 }

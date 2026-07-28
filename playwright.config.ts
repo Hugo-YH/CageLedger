@@ -7,7 +7,9 @@ const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
-  workers: process.env.CI ? 1 : undefined,
+  // E2E uses one ephemeral SQLite database. A single worker keeps shared
+  // infrastructure fixtures deterministic across every local and CI run.
+  workers: 1,
   timeout: process.env.CI ? 60_000 : 30_000,
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,

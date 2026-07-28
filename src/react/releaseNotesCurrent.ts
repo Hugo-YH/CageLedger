@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0",
+    releasedAt: "2026-07-26 23:00",
+    title: "Ant Design 全系统标准化界面",
+    items: [
+      "桌面与平板工作区统一采用 Ant Design，移动端采用 antd-mobile；导航、命令栏、按钮、表单、表格、弹窗、提示和异步反馈通过项目适配层提供一致交互",
+      "新增浅色、深色和自动主题映射，集中管理字体、间距、圆角、表面、状态色、阴影、层级与动效 Token；业务区域保留专用领域布局与打印模板",
+      "新增 UI 组件契约与自动门禁，图标按钮、浮层、弹窗焦点、reduced-motion、跨页全选和移动端导航纳入浏览器回归",
+      "浏览器回归固定使用项目 .venv 的 Python 3.13，避免系统 Python 差异影响发布验证",
+    ],
+  },
+  {
     version: "0.7.8",
     releasedAt: "2026-07-26 20:20",
     title: "跨页批量操作与统一界面系统",

@@ -1,4 +1,5 @@
 import type { CageRoom, QuantitySheet, QuantitySheetRow } from "../../../api/contracts";
+import { Button } from "antd";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { roomBillingProfile } from "../../../../domain/quantitySheets";
 
@@ -71,12 +72,10 @@ export function ConfirmSave({
         </dl>
       </div>
       <div className="modal-shell-actions">
-        <button className="secondary" type="button" onClick={onCancel}>
-          取消
-        </button>
-        <button className="primary" type="button" disabled={pending} onClick={onConfirm}>
+        <Button onClick={onCancel}>取消</Button>
+        <Button type="primary" loading={pending} onClick={onConfirm}>
           确认保存
-        </button>
+        </Button>
       </div>
     </ModalShell>
   );

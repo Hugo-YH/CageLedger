@@ -1,13 +1,33 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  AppstoreOutlined,
+  AuditOutlined,
+  BookOutlined,
+  CalculatorOutlined,
+  DatabaseOutlined,
+  HomeOutlined,
+  InfoCircleOutlined,
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  QrcodeOutlined,
+  ReloadOutlined,
+  SettingOutlined,
+  ShopOutlined,
+  TagsOutlined,
+  TeamOutlined,
+} from "@ant-design/icons";
+import { Button, Layout, Menu, Space, Tooltip, Typography, type MenuProps } from "antd";
+import { List, Popup, TabBar } from "antd-mobile";
+import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useLogout } from "../../api/session";
-import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { clearUiStorage, persistWorkspaceView } from "../../state/uiStorage";
+import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 import { WorkspaceErrorBoundary, WorkspaceLoading } from "./WorkspaceErrorBoundary";
-import { DashboardView } from "../dashboard/DashboardView";
 import { billingSidebarItems } from "./workspaceNavigation";
+import { DashboardView } from "../dashboard/DashboardView";
 
 const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({ default: module.IntakeView })));
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
@@ -25,70 +45,45 @@ const DataView = lazy(() => import("../settings/DataView").then((module) => ({ d
 const LogsView = lazy(() => import("../settings/LogsView").then((module) => ({ default: module.LogsView })));
 const SystemView = lazy(() => import("../settings/SystemView").then((module) => ({ default: module.SystemView })));
 
-type IconName =
-  | "home"
-  | "tag"
-  | "grid"
-  | "calculator"
-  | "refresh"
-  | "settings"
-  | "logout"
-  | "building"
-  | "info"
-  | "database"
-  | "users"
-  | "book"
-  | "clipboard";
+type NavIcon =
+  "tag" | "grid" | "calculator" | "refresh" | "book" | "clipboard" | "building" | "info" | "database" | "users";
 
-type NavigationDrawer = "intake" | "animal" | "billing" | "settings";
+const iconFor: Record<NavIcon, ReactNode> = {
+  tag: <TagsOutlined />,
+  grid: <AppstoreOutlined />,
+  calculator: <CalculatorOutlined />,
+  refresh: <ReloadOutlined />,
+  book: <BookOutlined />,
+  clipboard: <AuditOutlined />,
+  building: <ShopOutlined />,
+  info: <InfoCircleOutlined />,
+  database: <DatabaseOutlined />,
+  users: <TeamOutlined />,
+};
 
 export function ReactWorkspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
   const dispatch = useUiDispatch();
   const logout = useLogout();
-  const [activeDrawer, setActiveDrawer] = useState<NavigationDrawer | null>(null);
-  const intakeExpanded =
-    !ui.sidebarCollapsed && (activeDrawer === "intake" || (!activeDrawer && isIntakeView(ui.activeView)));
-  const animalExpanded =
-    !ui.sidebarCollapsed && (activeDrawer === "animal" || (!activeDrawer && isAnimalManagementView(ui.activeView)));
-  const billingExpanded =
-    !ui.sidebarCollapsed && (activeDrawer === "billing" || (!activeDrawer && isBillingView(ui.activeView)));
-  const settingsExpanded =
-    !ui.sidebarCollapsed && (activeDrawer === "settings" || (!activeDrawer && isSettingsView(ui.activeView)));
-  const settingsViews: Array<[WorkspaceView, string, IconName, string]> = [
-    ["rooms", "房间管理", "building", "维护饲养间、笼架和笼位基础结构。"],
-    ["system", "关于系统", "info", "查看系统版本、更新状态、更新记录和系统 Wiki。"],
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+
+  const settingsViews: Array<[WorkspaceView, string, NavIcon]> = [
+    ["rooms", "房间管理", "building"],
+    ["system", "关于系统", "info"],
     ...(user.role === "admin"
       ? ([
-          ["data", "数据管理", "database", "维护 IACUC 索引和外部数据源。"],
-          ["users", "账号管理", "users", "维护系统管理员和房间管理员账号。"],
-        ] as Array<[WorkspaceView, string, IconName, string]>)
+          ["data", "数据管理", "database"],
+          ["users", "账号管理", "users"],
+        ] as Array<[WorkspaceView, string, NavIcon]>)
       : []),
-    ["logs", "操作日志", "book", "查看系统写入操作和审计记录。"],
+    ["logs", "操作日志", "book"],
   ];
 
-  useEffect(() => {
-    if (!activeDrawer) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActiveDrawer(null);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [activeDrawer]);
-
   function navigate(view: WorkspaceView) {
-    setActiveDrawer(null);
     persistWorkspaceView(view);
     dispatch({ type: "navigate", view });
     dispatch({ type: "set-settings", expanded: false });
-  }
-
-  function toggleDrawer(drawer: NavigationDrawer, fallback: WorkspaceView) {
-    if (ui.sidebarCollapsed && !window.matchMedia("(max-width: 760px), (max-height: 560px)").matches) {
-      navigate(fallback);
-      return;
-    }
-    setActiveDrawer((current) => (current === drawer ? null : drawer));
+    setMobileNavigationOpen(false);
   }
 
   async function signOut() {
@@ -96,177 +91,313 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
     window.dispatchEvent(new CustomEvent("cageledger:session-changed"));
   }
 
+  const items: MenuProps["items"] = [
+    item("dashboard", "主页", <HomeOutlined />),
+    {
+      key: "intake",
+      icon: <TagsOutlined />,
+      label: "笼卡管理",
+      children: [
+        item("intake-entry", "预约消息识别", <TagsOutlined />),
+        item("intake-batches", "待接收批次", <BookOutlined />),
+        item("cage-card-scanner", "二维码扫描", <QrcodeOutlined />),
+      ],
+    },
+    item("cages", "笼位管理", <AppstoreOutlined />),
+    {
+      key: "animal",
+      icon: <AuditOutlined />,
+      label: "动物管理",
+      children: [
+        item("animal-inspection-entry", "动物巡检", <AuditOutlined />),
+        item("animal-inspection-findings", "异常处置", <ReloadOutlined />),
+        item("animal-inspection-records", "巡检记录", <BookOutlined />),
+        item("animal-inspection-standards", "巡检标准", <InfoCircleOutlined />),
+      ],
+    },
+    {
+      key: "billing",
+      icon: <CalculatorOutlined />,
+      label: "饲养费管理",
+      children: billingSidebarItems(user.role === "admin").map((entry) =>
+        entry.section
+          ? { type: "group" as const, key: `billing-section-${entry.section}`, label: entry.section }
+          : item(entry.view!, entry.label!, iconFor[entry.icon!]),
+      ),
+    },
+    {
+      key: "settings",
+      icon: <SettingOutlined />,
+      label: "系统设置",
+      children: settingsViews.map(([view, label, icon]) => item(view, label, iconFor[icon])),
+    },
+  ];
+
   return (
-    <div
-      className={`shell ${ui.sidebarCollapsed ? "sidebar-collapsed" : ""} ${activeDrawer ? "mobile-navigation-open" : ""}`}
-    >
-      {activeDrawer ? (
-        <button
-          className="mobile-navigation-backdrop"
-          type="button"
-          aria-label="关闭导航菜单"
-          onClick={() => setActiveDrawer(null)}
-        />
-      ) : null}
-      <aside className="sidebar">
-        <div className="sidebar-head">
-          <div className="brand">
-            <div className="brand-mark">
-              <img src="/cageledger-icon.svg" alt="" />
-            </div>
-            <div>
-              <strong>CageLedger</strong>
-              <span>实验动物笼位管理与计费系统</span>
-            </div>
-          </div>
-        </div>
-        <nav className="nav">
-          <div className="nav-group">
-            <span className="nav-group-title">业务</span>
-            <NavItem view="dashboard" label="主页" icon="home" activeView={ui.activeView} onNavigate={navigate} />
-            <NavGroupButton
-              label="笼卡管理"
-              icon="tag"
-              active={isIntakeView(ui.activeView)}
-              expanded={intakeExpanded}
-              controls="nav-intake"
-              onClick={() => toggleDrawer("intake", "intake-entry")}
-            />
-            <NavigationSubmenu
-              id="nav-intake"
-              drawer="intake"
-              expanded={activeDrawer === "intake"}
-              showCurrent={activeDrawer === null}
-              activeView={ui.activeView}
-              settingsViews={settingsViews}
-              user={user}
-              logoutPending={logout.isPending}
-              onClearCache={clearLocalCache}
-              onSignOut={signOut}
-              onClose={() => setActiveDrawer(null)}
-              onNavigate={navigate}
-            />
-            <NavItem view="cages" label="笼位管理" icon="grid" activeView={ui.activeView} onNavigate={navigate} />
-            <NavGroupButton
-              label="动物管理"
-              icon="clipboard"
-              active={isAnimalManagementView(ui.activeView)}
-              expanded={animalExpanded}
-              controls="nav-animal-management"
-              onClick={() => toggleDrawer("animal", "animal-inspection-entry")}
-            />
-            <NavigationSubmenu
-              id="nav-animal-management"
-              drawer="animal"
-              expanded={activeDrawer === "animal"}
-              showCurrent={activeDrawer === null}
-              activeView={ui.activeView}
-              settingsViews={settingsViews}
-              user={user}
-              logoutPending={logout.isPending}
-              onClearCache={clearLocalCache}
-              onSignOut={signOut}
-              onClose={() => setActiveDrawer(null)}
-              onNavigate={navigate}
-            />
-            <NavGroupButton
-              label="饲养费管理"
-              icon="calculator"
-              active={isBillingView(ui.activeView)}
-              expanded={billingExpanded}
-              controls="nav-billing"
-              className="nav-item-billing-root"
-              onClick={() => toggleDrawer("billing", "billing-quantity-entry")}
-            />
-            <NavigationSubmenu
-              id="nav-billing"
-              drawer="billing"
-              expanded={activeDrawer === "billing"}
-              showCurrent={activeDrawer === null}
-              activeView={ui.activeView}
-              settingsViews={settingsViews}
-              user={user}
-              logoutPending={logout.isPending}
-              onClearCache={clearLocalCache}
-              onSignOut={signOut}
-              onClose={() => setActiveDrawer(null)}
-              onNavigate={navigate}
-            />
-            <button
-              className={`nav-item nav-group-button nav-item-settings-root ${isSettingsView(ui.activeView) ? "active" : ""}`}
-              type="button"
-              aria-label="系统设置"
-              aria-expanded={settingsExpanded}
-              aria-controls="nav-settings"
-              onClick={() => toggleDrawer("settings", "rooms")}
-            >
-              <Icon name="settings" />
-              <span>系统设置</span>
-              <span className="nav-disclosure" aria-hidden="true">
-                ›
-              </span>
-            </button>
-            <NavigationSubmenu
-              id="nav-settings"
-              drawer="settings"
-              expanded={activeDrawer === "settings"}
-              showCurrent={activeDrawer === null}
-              activeView={ui.activeView}
-              settingsViews={settingsViews}
-              user={user}
-              logoutPending={logout.isPending}
-              onClearCache={clearLocalCache}
-              onSignOut={signOut}
-              onClose={() => setActiveDrawer(null)}
-              onNavigate={navigate}
-            />
-          </div>
-        </nav>
-        <div className="sidebar-account">
-          <span>当前账号</span>
-          <strong>{user.displayName}</strong>
-          <small>
-            {user.role === "admin" ? "管理员 · 全部饲养间" : `房间管理员 · ${user.roomIds.length} 个饲养间`}
-          </small>
-          <button
-            aria-label="刷新页面"
-            className="secondary sidebar-cache-button"
-            type="button"
-            onClick={clearLocalCache}
-          >
-            刷新
-          </button>
-          <button
-            aria-label="退出登录"
-            className="secondary logout-button"
-            type="button"
-            disabled={logout.isPending}
-            onClick={signOut}
-          >
-            <Icon name="logout" />
-            退出
-          </button>
-          <VersionMeta className="sidebar-version" />
-        </div>
-      </aside>
-      <button
-        className="nav-toggle nav-toggle-rail"
-        type="button"
-        aria-label={ui.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}
-        onClick={() => dispatch({ type: "toggle-sidebar" })}
+    <Layout className={`ant-shell ${ui.sidebarCollapsed ? "ant-shell-collapsed" : ""}`} hasSider>
+      <Layout.Sider
+        aria-label="主导航"
+        breakpoint="lg"
+        className="ant-sidebar"
+        collapsed={ui.sidebarCollapsed}
+        collapsedWidth={64}
+        theme="dark"
+        trigger={null}
+        width={248}
       >
-        <span>{ui.sidebarCollapsed ? "展开" : "隐藏导航栏"}</span>
-      </button>
-      <main className="workspace">
-        <WorkspaceErrorBoundary resetKey={ui.activeView}>
-          <Suspense fallback={<WorkspaceLoading />}>{renderActiveView(ui.activeView, user, navigate)}</Suspense>
-        </WorkspaceErrorBoundary>
-        <footer className="workspace-footer">
-          <VersionMeta className="workspace-version" />
-        </footer>
-      </main>
-    </div>
+        <div className="ant-brand">
+          <img alt="" src="/cageledger-icon.svg" />
+          <div className="ant-brand-copy">
+            <strong>CageLedger</strong>
+            <span>实验动物笼位管理与计费系统</span>
+          </div>
+          <Tooltip title={ui.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}>
+            <Button
+              aria-label={ui.sidebarCollapsed ? "展开导航栏" : "隐藏导航栏"}
+              className="ant-sidebar-collapse"
+              icon={ui.sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              type="text"
+              onClick={() => dispatch({ type: "toggle-sidebar" })}
+            />
+          </Tooltip>
+        </div>
+        <Menu
+          className="ant-main-menu"
+          inlineCollapsed={ui.sidebarCollapsed}
+          items={items}
+          mode="inline"
+          selectedKeys={[ui.activeView]}
+          theme="dark"
+          onClick={({ key }) => {
+            if (isWorkspaceView(key)) navigate(key);
+          }}
+        />
+        <div className="ant-sidebar-account">
+          <Typography.Text type="secondary">当前账号</Typography.Text>
+          <Typography.Text strong>{user.displayName}</Typography.Text>
+          <Typography.Text type="secondary">
+            {user.role === "admin" ? "管理员 · 全部饲养间" : `房间管理员 · ${user.roomIds.length} 个饲养间`}
+          </Typography.Text>
+          <Space orientation="vertical" size={6}>
+            <Button aria-label="刷新页面" block icon={<ReloadOutlined />} size="small" onClick={clearLocalCache}>
+              刷新
+            </Button>
+            <Button
+              aria-label="退出登录"
+              block
+              danger
+              icon={<LogoutOutlined />}
+              loading={logout.isPending}
+              size="small"
+              onClick={() => void signOut()}
+            >
+              退出
+            </Button>
+          </Space>
+        </div>
+      </Layout.Sider>
+      <Layout className="ant-workspace-layout">
+        <Layout.Content className="workspace ant-workspace">
+          <WorkspaceErrorBoundary resetKey={ui.activeView}>
+            <Suspense fallback={<WorkspaceLoading />}>{renderActiveView(ui.activeView, user, navigate)}</Suspense>
+          </WorkspaceErrorBoundary>
+          <footer className="workspace-footer ant-workspace-footer">
+            <span>CageLedger v{APP_VERSION}</span>
+            <span>中山大学中山眼科中心 · 实验动物中心</span>
+          </footer>
+        </Layout.Content>
+      </Layout>
+      <MobileNavigation
+        activeView={ui.activeView}
+        open={mobileNavigationOpen}
+        settingsViews={settingsViews}
+        user={user}
+        onClose={() => setMobileNavigationOpen(false)}
+        onNavigate={navigate}
+        onOpen={() => setMobileNavigationOpen(true)}
+        onRefresh={clearLocalCache}
+        onSignOut={() => void signOut()}
+      />
+    </Layout>
   );
+}
+
+function MobileNavigation({
+  activeView,
+  open,
+  settingsViews,
+  user,
+  onClose,
+  onNavigate,
+  onOpen,
+  onRefresh,
+  onSignOut,
+}: {
+  activeView: WorkspaceView;
+  open: boolean;
+  settingsViews: Array<[WorkspaceView, string, NavIcon]>;
+  user: SessionUser;
+  onClose: () => void;
+  onNavigate: (view: WorkspaceView) => void;
+  onOpen: () => void;
+  onRefresh: () => void;
+  onSignOut: () => void;
+}) {
+  const activeKey = mobileKey(activeView);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, open]);
+
+  return (
+    <>
+      <div className="ant-mobile-tabbar" aria-label="移动端主导航" role="tablist">
+        <TabBar activeKey={activeKey} onChange={(key) => (isWorkspaceView(key) ? onNavigate(key) : onOpen())}>
+          <TabBar.Item
+            icon={<HomeOutlined />}
+            key="dashboard"
+            title={mobileTabTitle("主页", activeKey === "dashboard")}
+          />
+          <TabBar.Item icon={<TagsOutlined />} key="intake" title={mobileTabTitle("笼卡", activeKey === "intake")} />
+          <TabBar.Item icon={<AppstoreOutlined />} key="cages" title={mobileTabTitle("笼位", activeKey === "cages")} />
+          <TabBar.Item icon={<AuditOutlined />} key="animal" title={mobileTabTitle("动物", activeKey === "animal")} />
+          <TabBar.Item
+            icon={<CalculatorOutlined />}
+            key="billing"
+            title={mobileTabTitle("饲养费", activeKey === "billing")}
+          />
+          <TabBar.Item icon={<AppstoreOutlined />} key="more" title={mobileTabTitle("更多", activeKey === "more")} />
+        </TabBar>
+      </div>
+      <Popup
+        bodyStyle={{ borderRadius: "16px 16px 0 0" }}
+        destroyOnClose
+        position="bottom"
+        visible={open}
+        onClose={onClose}
+        onMaskClick={onClose}
+      >
+        <div className="ant-mobile-navigation-sheet">
+          <div className="ant-mobile-sheet-head">
+            <strong>全部功能</strong>
+            <Button size="small" type="text" onClick={onClose}>
+              关闭
+            </Button>
+          </div>
+          <List header="笼卡管理">
+            <MobileItem label="预约消息识别" view="intake-entry" onNavigate={onNavigate} />
+            <MobileItem label="待接收批次" view="intake-batches" onNavigate={onNavigate} />
+            <MobileItem label="二维码扫描" view="cage-card-scanner" onNavigate={onNavigate} />
+          </List>
+          <List header="动物管理">
+            <MobileItem label="动物巡检" view="animal-inspection-entry" onNavigate={onNavigate} />
+            <MobileItem label="异常处置" view="animal-inspection-findings" onNavigate={onNavigate} />
+            <MobileItem label="巡检记录" view="animal-inspection-records" onNavigate={onNavigate} />
+            <MobileItem label="巡检标准" view="animal-inspection-standards" onNavigate={onNavigate} />
+          </List>
+          <List header="饲养费管理">
+            {billingSidebarItems(user.role === "admin").flatMap((entry) =>
+              entry.view
+                ? [<MobileItem key={entry.view} label={entry.label!} view={entry.view} onNavigate={onNavigate} />]
+                : [],
+            )}
+          </List>
+          <List header="系统设置">
+            {settingsViews.map(([view, label]) => (
+              <MobileItem key={view} label={label} view={view} onNavigate={onNavigate} />
+            ))}
+          </List>
+          <div className="ant-mobile-sheet-actions">
+            <Button aria-label="刷新页面" block icon={<ReloadOutlined />} onClick={onRefresh}>
+              刷新页面
+            </Button>
+            <Button aria-label="退出登录" block danger icon={<LogoutOutlined />} onClick={onSignOut}>
+              退出登录
+            </Button>
+          </div>
+        </div>
+      </Popup>
+    </>
+  );
+}
+
+function MobileItem({
+  label,
+  view,
+  onNavigate,
+}: {
+  label: string;
+  view: WorkspaceView;
+  onNavigate: (view: WorkspaceView) => void;
+}) {
+  return (
+    <List.Item arrow onClick={() => onNavigate(view)}>
+      {label}
+    </List.Item>
+  );
+}
+
+function mobileTabTitle(label: string, active: boolean) {
+  return (
+    <span aria-label={label} aria-selected={active} role="tab">
+      {label}
+    </span>
+  );
+}
+
+function item(key: WorkspaceView, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {
+  return { key, label, icon };
+}
+
+function mobileKey(view: WorkspaceView) {
+  if (isIntakeView(view)) return "intake";
+  if (isAnimalManagementView(view)) return "animal";
+  if (isBillingView(view)) return "billing";
+  if (isSettingsView(view)) return "more";
+  return view;
+}
+
+function isWorkspaceView(value: string): value is WorkspaceView {
+  return [
+    "dashboard",
+    "cages",
+    "intake-entry",
+    "intake-batches",
+    "cage-card-scanner",
+    "animal-inspection-entry",
+    "animal-inspection-findings",
+    "animal-inspection-records",
+    "animal-inspection-standards",
+    "billing-cage-map",
+    "billing-quantity-entry",
+    "billing-quantity-saved",
+    "billing-settlement",
+    "billing-monthly-summary",
+    "workflow-center",
+    "rooms",
+    "data",
+    "system",
+    "users",
+    "logs",
+  ].includes(value);
+}
+
+function isIntakeView(view: WorkspaceView) {
+  return view === "intake-entry" || view === "intake-batches" || view === "cage-card-scanner";
+}
+function isBillingView(view: WorkspaceView) {
+  return view.startsWith("billing-") || view === "workflow-center";
+}
+function isAnimalManagementView(view: WorkspaceView) {
+  return view.startsWith("animal-inspection-");
+}
+function isSettingsView(view: WorkspaceView) {
+  return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
 }
 
 function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (view: WorkspaceView) => void) {
@@ -285,9 +416,8 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} navigate={navigate} />;
   if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} navigate={navigate} />;
   if (view === "billing-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
-  if (view === "billing-monthly-summary" && user.role === "admin") {
+  if (view === "billing-monthly-summary" && user.role === "admin")
     return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
-  }
   if (view === "workflow-center") return <WorkflowCenterView user={user} navigate={navigate} />;
   if (view === "rooms") return <RoomsView user={user} navigate={navigate} />;
   if (view === "users") return <UsersView currentUser={user} navigate={navigate} />;
@@ -297,325 +427,7 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   return <DashboardView navigate={navigate} />;
 }
 
-function NavItem({
-  view,
-  label,
-  icon,
-  activeView,
-  onNavigate,
-}: {
-  view: WorkspaceView;
-  label: string;
-  icon: IconName;
-  activeView: WorkspaceView;
-  onNavigate: (view: WorkspaceView) => void;
-}) {
-  return (
-    <button
-      className={`nav-item ${activeView === view ? "active" : ""}`}
-      type="button"
-      aria-label={label}
-      aria-current={activeView === view ? "page" : undefined}
-      onClick={() => onNavigate(view)}
-    >
-      <Icon name={icon} />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function NavGroupButton({
-  label,
-  icon,
-  active,
-  expanded,
-  controls,
-  className,
-  onClick,
-}: {
-  label: string;
-  icon: IconName;
-  active: boolean;
-  expanded: boolean;
-  controls: string;
-  className?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`nav-item nav-group-button ${className ?? ""} ${active ? "active" : ""}`}
-      type="button"
-      aria-label={label}
-      aria-expanded={expanded}
-      aria-controls={controls}
-      onClick={onClick}
-    >
-      <Icon name={icon} />
-      <span>{label}</span>
-      <span className="nav-disclosure" aria-hidden="true">
-        {expanded ? "‹" : "›"}
-      </span>
-    </button>
-  );
-}
-
-function NavigationSubmenu({
-  id,
-  drawer,
-  expanded,
-  showCurrent,
-  activeView,
-  settingsViews,
-  user,
-  logoutPending,
-  onClearCache,
-  onSignOut,
-  onClose,
-  onNavigate,
-}: {
-  id: string;
-  drawer: NavigationDrawer;
-  expanded: boolean;
-  showCurrent: boolean;
-  activeView: WorkspaceView;
-  settingsViews: Array<[WorkspaceView, string, IconName, string]>;
-  user: SessionUser;
-  logoutPending: boolean;
-  onClearCache: () => void;
-  onSignOut: () => Promise<void>;
-  onClose: () => void;
-  onNavigate: (view: WorkspaceView) => void;
-}) {
-  const groupIsActive =
-    drawer === "intake"
-      ? isIntakeView(activeView)
-      : drawer === "billing"
-        ? isBillingView(activeView)
-        : drawer === "animal"
-          ? isAnimalManagementView(activeView)
-          : isSettingsView(activeView);
-  const drawerLabel =
-    drawer === "intake"
-      ? "笼卡管理"
-      : drawer === "animal"
-        ? "动物管理"
-        : drawer === "billing"
-          ? "饲养费管理"
-          : "系统设置";
-  return (
-    <div
-      id={id}
-      className={`nav-subtree navigation-submenu ${expanded ? "expanded" : ""} ${showCurrent && groupIsActive ? "current-group" : ""}`}
-      aria-label={`${drawerLabel}子菜单`}
-    >
-      <div className="navigation-submenu-head">
-        <div>
-          <span>业务导航</span>
-          <strong>{drawerLabel}</strong>
-        </div>
-        <button aria-label={`关闭${drawerLabel}菜单`} className="ghost compact" type="button" onClick={onClose}>
-          关闭
-        </button>
-      </div>
-      {drawer === "intake" ? (
-        <>
-          <NavigationPanelItem
-            view="intake-entry"
-            label="预约消息识别"
-            description="预约信息录入与笼卡扫码查询"
-            icon="tag"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="intake-batches"
-            label="待接收批次"
-            description="打印、接收和维护已保存批次"
-            icon="book"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="cage-card-scanner"
-            label="二维码扫描"
-            description="扫描笼卡二维码查询当前信息"
-            icon="grid"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-        </>
-      ) : null}
-      {drawer === "billing" ? (
-        <>
-          {billingSidebarItems(user.role === "admin").map((item) =>
-            item.section ? (
-              <span className="nav-submenu-label" key={item.section}>
-                {item.section}
-              </span>
-            ) : (
-              <NavigationPanelItem
-                key={item.view}
-                view={item.view!}
-                label={item.label!}
-                description={item.description!}
-                icon={item.icon!}
-                activeView={activeView}
-                onNavigate={onNavigate}
-              />
-            ),
-          )}
-        </>
-      ) : null}
-      {drawer === "animal" ? (
-        <>
-          <NavigationPanelItem
-            view="animal-inspection-entry"
-            label="动物巡检"
-            description="按饲养间完成基础、进阶和异常动物巡检。"
-            icon="clipboard"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="animal-inspection-findings"
-            label="异常处置"
-            description="跟进异常项、复查日期和关闭结论。"
-            icon="refresh"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="animal-inspection-records"
-            label="巡检记录"
-            description="筛选、查看和导出已保存的巡检报告。"
-            icon="book"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-          <NavigationPanelItem
-            view="animal-inspection-standards"
-            label="巡检标准"
-            description="查看当前生效的评分标准与图例参考。"
-            icon="info"
-            activeView={activeView}
-            onNavigate={onNavigate}
-          />
-        </>
-      ) : null}
-      {drawer === "settings" ? (
-        <>
-          {settingsViews.map(([view, label, icon, itemDescription]) => (
-            <NavigationPanelItem
-              key={view}
-              view={view}
-              label={label}
-              description={itemDescription}
-              icon={icon}
-              activeView={activeView}
-              onNavigate={onNavigate}
-            />
-          ))}
-          <div className="mobile-account-actions" aria-label="账户操作">
-            <span>{user.displayName}</span>
-            <button className="secondary" type="button" onClick={onClearCache}>
-              <Icon name="refresh" />
-              刷新页面
-            </button>
-            <button className="secondary logout-button" type="button" disabled={logoutPending} onClick={onSignOut}>
-              <Icon name="logout" />
-              退出登录
-            </button>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function NavigationPanelItem({
-  view,
-  label,
-  description,
-  icon,
-  activeView,
-  onNavigate,
-}: {
-  view: WorkspaceView;
-  label: string;
-  description: string;
-  icon: IconName;
-  activeView: WorkspaceView;
-  onNavigate: (view: WorkspaceView) => void;
-}) {
-  return (
-    <button
-      className={`settings-drawer-item ${activeView === view ? "active" : ""}`}
-      type="button"
-      aria-current={activeView === view ? "page" : undefined}
-      onClick={() => onNavigate(view)}
-    >
-      <Icon name={icon} />
-      <span>{label}</span>
-      <small className="sr-only">{description}</small>
-    </button>
-  );
-}
-
-function isIntakeView(view: WorkspaceView) {
-  return view === "intake-entry" || view === "intake-batches" || view === "cage-card-scanner";
-}
-function isBillingView(view: WorkspaceView) {
-  return view.startsWith("billing-") || view === "workflow-center";
-}
-
-function isAnimalManagementView(view: WorkspaceView) {
-  return view.startsWith("animal-inspection-");
-}
-
-function isSettingsView(view: WorkspaceView) {
-  return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
-}
-
-function VersionMeta({ className }: { className: string }) {
-  return (
-    <div className={`version-meta ${className}`}>
-      <span>CageLedger v{APP_VERSION}</span>
-      <small>中山大学中山眼科中心 · 实验动物中心</small>
-      <small>© 2026 中山大学中山眼科中心 实验动物中心. Licensed under Apache-2.0.</small>
-    </div>
-  );
-}
-
 function clearLocalCache() {
   clearUiStorage();
   window.location.reload();
-}
-
-function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, string> = {
-    home: "M4 11 12 4l8 7v9h-5v-6H9v6H4z",
-    tag: "M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9zm5-5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z",
-    grid: "M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z",
-    calculator:
-      "M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 2v4h8V5zm0 7v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM8 16v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z",
-    refresh: "M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h8V3z",
-    settings:
-      "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 4-2.1-1.2.2-2.4-2.3-1.3-1.8 1.6-2.2-.9-.5-2.4H9.5L9 7.8l-2.2.9L5 7.1 2.7 8.4l.2 2.4L1 12l1.9 1.2-.2 2.4L5 16.9l1.8-1.6 2.2.9.5 2.4h2.6l.5-2.4 2.2-.9 1.8 1.6 2.3-1.3-.2-2.4z",
-    logout: "M10 4H4v16h6v-2H6V6h4zm5 3-1.4 1.4 2.6 2.6H9v2h7.2l-2.6 2.6L15 17l5-5z",
-    building:
-      "M4 21V5l8-3 8 3v16h-6v-5h-4v5zm3-3h2v-2H7zm0-4h2v-2H7zm0-4h2V8H7zm4 4h2v-2h-2zm0-4h2V8h-2zm4 4h2v-2h-2zm0-4h2V8h-2z",
-    info: "M11 10h2v8h-2zm0-4h2v2h-2zm1-4a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16z",
-    database:
-      "M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3zm0 2C8.2 5 6 6 6 6s2.2 1 6 1 6-1 6-1-2.2-1-6-1zM6 9v3c.8.5 2.9 1 6 1s5.2-.5 6-1V9c-1.4.6-3.5 1-6 1S7.4 9.6 6 9zm0 6v3c.8.5 2.9 1 6 1s5.2-.5 6-1v-3c-1.4.6-3.5 1-6 1s-4.6-.4-6-1z",
-    users:
-      "M9 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-3.3 0-6 1.8-6 4v2h12v-2c0-2.2-2.7-4-6-4zm7.5-9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c-.7 0-1.4.1-2 .3 1.6 1 2.5 2.6 2.5 4.7v2h4v-2c0-2.8-2-5-4.5-5z",
-    book: "M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5zm2.5-.5a.5.5 0 0 0-.5.5v13.1c.2-.1.3-.1.5-.1H18V4zM9 7h6v2H9zm0 4h6v2H9z",
-    clipboard:
-      "M9 3h6l1 2h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2zm1 2v2h4V5zm-1 6v2h6v-2zm0 4v2h6v-2z",
-  };
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d={paths[name]} />
-    </svg>
-  );
 }

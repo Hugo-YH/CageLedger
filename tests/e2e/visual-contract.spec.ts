@@ -4,7 +4,7 @@ import { expect, openQuantityEntry, test } from "./fixtures";
 
 test("quantity workspace keeps its desktop and mobile layout contract", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -37,7 +37,7 @@ test("quantity workspace keeps its desktop and mobile layout contract", async ({
 test("dashboard follows the system dark theme contract", async ({ page }, testInfo) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();

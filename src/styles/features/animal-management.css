@@ -81,30 +81,31 @@
 
 .inspection-module-picker > div {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  min-height: 48px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-soft);
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  transition:
+    border-color var(--app-duration-fast) var(--app-ease-out),
+    background-color var(--app-duration-fast) var(--app-ease-out),
+    box-shadow var(--app-duration-fast) var(--app-ease-out);
 }
 
-.inspection-module-picker > div[data-module="basicAssessment"],
 .inspection-module-panel[data-module="basicAssessment"] {
   --inspection-module-accent: #397db5;
   --inspection-module-border: #bdd7ed;
   --inspection-module-surface: #f0f7fd;
 }
 
-.inspection-module-picker > div[data-module="advancedAssessment"],
 .inspection-module-panel[data-module="advancedAssessment"] {
   --inspection-module-accent: #9a7420;
   --inspection-module-border: #ead79c;
   --inspection-module-surface: #fff9e9;
 }
 
-.inspection-module-picker > div[data-module="abnormalAnimalAssessment"],
 .inspection-module-panel[data-module="abnormalAnimalAssessment"] {
   --inspection-module-accent: #af5b51;
   --inspection-module-border: #efc7c2;
@@ -112,23 +113,22 @@
 }
 
 .inspection-module-picker > div.selected {
-  border-color: var(--inspection-module-accent);
-  box-shadow: inset 3px 0 0 var(--inspection-module-accent);
-  background: var(--inspection-module-surface);
+  border-color: var(--ant-color-primary);
+  box-shadow: inset 3px 0 0 var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
-.inspection-module-picker > div > label {
+.inspection-module-picker .ant-checkbox-wrapper {
   display: flex;
   flex: 1;
   min-width: 0;
-  gap: 10px;
-  align-items: flex-start;
+  gap: 8px;
+  align-items: center;
   cursor: pointer;
 }
 
-.inspection-module-picker input {
-  margin-top: 3px;
-  accent-color: var(--inspection-module-accent, var(--accent));
+.inspection-module-picker .ant-checkbox {
+  top: 0;
 }
 
 .inspection-module-picker strong {
@@ -1067,36 +1067,21 @@
 
   .inspection-module-picker > div {
     position: relative;
-    display: grid;
     min-height: 40px;
-    padding: 7px 36px;
-    place-items: center;
+    padding: 7px 10px;
   }
 
-  .inspection-module-picker > div > label {
-    justify-content: center;
-    align-items: center;
-    gap: 0;
-  }
-
-  .inspection-module-picker input {
-    position: absolute;
-    top: 50%;
-    left: 10px;
-    margin: 0;
-    transform: translateY(-50%);
+  .inspection-module-picker .ant-checkbox-wrapper {
+    justify-content: flex-start;
   }
 
   .inspection-module-picker strong {
     font-size: 13px;
-    text-align: center;
+    text-align: left;
   }
 
   .inspection-module-picker .help-tooltip-anchor {
-    position: absolute;
-    top: 50%;
-    right: 10px;
-    transform: translateY(-50%);
+    margin-left: auto;
   }
 
   .inspection-module-picker .inspection-help-trigger {

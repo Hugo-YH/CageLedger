@@ -1,0 +1,1251 @@
+:root {
+  --app-page-bg: #f5f5f5;
+  --app-surface: #fff;
+  --app-surface-subtle: #fafafa;
+  --app-border: #f0f0f0;
+  --app-text: #1f1f1f;
+  --app-text-secondary: #595959;
+  --app-primary: #1677ff;
+  --app-success: #389e0d;
+  --app-warning: #d48806;
+  --app-error: #cf1322;
+  --app-shadow: 0 1px 2px rgb(0 0 0 / 3%);
+  --app-shadow-overlay: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%);
+  --app-z-layout: 10;
+  --app-z-overlay: 1000;
+}
+
+:root[data-theme="dark"] {
+  --app-page-bg: #141414;
+  --app-surface: #1f1f1f;
+  --app-surface-subtle: #262626;
+  --app-border: #303030;
+  --app-text: rgb(255 255 255 / 88%);
+  --app-text-secondary: rgb(255 255 255 / 65%);
+  --app-primary: #69b1ff;
+  --app-success: #95de64;
+  --app-warning: #ffc53d;
+  --app-error: #ff7875;
+}
+
+.ant-app {
+  min-height: 100%;
+  color: var(--app-text);
+}
+
+.ant-empty-description {
+  color: #595959 !important;
+}
+
+.ant-shell {
+  min-height: 100dvh;
+  background: var(--app-page-bg);
+}
+
+.ant-sidebar {
+  position: sticky !important;
+  top: 0;
+  height: 100dvh;
+  overflow: hidden;
+  border-right: 1px solid rgb(255 255 255 / 10%);
+  background: #001529 !important;
+}
+
+.ant-sidebar .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.ant-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  gap: 10px;
+  padding: 12px 16px;
+  color: #fff;
+}
+
+.ant-brand img {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.ant-brand-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ant-brand-copy strong {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ant-brand-copy span {
+  overflow: hidden;
+  color: rgb(255 255 255 / 60%);
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ant-sidebar-collapse {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  z-index: 2;
+  color: rgb(255 255 255 / 85%) !important;
+}
+
+.ant-shell-collapsed .ant-brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.ant-shell-collapsed .ant-brand-copy,
+.ant-shell-collapsed .ant-sidebar-account {
+  display: none;
+}
+
+.ant-shell-collapsed .ant-sidebar-collapse {
+  top: 10px;
+  right: 6px;
+}
+
+.ant-main-menu {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 12px;
+  border-inline-end: 0 !important;
+  overflow: hidden auto;
+}
+
+.ant-main-menu.ant-menu-dark .ant-menu-item,
+.ant-main-menu.ant-menu-dark .ant-menu-submenu-title {
+  width: calc(100% - 16px);
+  margin-inline: 8px;
+  border-radius: 6px;
+}
+
+.ant-sidebar-account {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 6px;
+  margin: 0 12px 16px;
+  padding: 14px 12px 0;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+}
+
+.ant-sidebar-account .ant-typography {
+  color: rgb(255 255 255 / 88%);
+  font-size: 12px;
+}
+
+.ant-sidebar-account .ant-typography-secondary {
+  color: rgb(255 255 255 / 52%);
+}
+
+.ant-workspace-layout,
+.ant-workspace {
+  min-width: 0;
+  background: var(--app-page-bg);
+}
+
+.ant-workspace {
+  padding: 24px;
+}
+
+/* Compatibility layer: legacy views inherit the Ant surface hierarchy during migration. */
+.ant-workspace .workspace-head,
+.ant-workspace .panel,
+.ant-workspace .surface,
+.ant-workspace .workspace-toolbar {
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+}
+
+/* Ant Card compatibility: legacy workspace panels previously added floating,
+   translucent title shells. Keep card hierarchy flat and predictable. */
+.ant-workspace .panel::before,
+.ant-workspace .panel::after,
+.ant-workspace .panel > .panel-head::after {
+  display: none;
+}
+
+.ant-workspace .panel:hover,
+.ant-workspace .panel:focus-within {
+  border-color: var(--app-border);
+  box-shadow: var(--app-shadow);
+  transform: none;
+}
+
+.ant-workspace .panel > .panel-head {
+  position: relative;
+  top: auto;
+  z-index: auto;
+  align-items: center;
+  min-height: 48px;
+  margin: 0 0 16px;
+  padding: 0 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--app-border);
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.ant-workspace .panel > .panel-head h2 {
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0;
+}
+
+.ant-workspace .workspace-head {
+  display: block;
+  padding: 0 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ant-workspace .workspace-head::before,
+.ant-workspace .workspace-head::after {
+  display: none;
+}
+
+.ant-workspace .workspace-kicker {
+  color: var(--ant-color-primary);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.ant-workspace .workspace-title-line .ant-typography {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.ant-workspace .workspace-summary {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ant-workspace .workspace-status-badge,
+.ant-workspace .workspace-meta-card {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.ant-workspace .workspace-meta-card {
+  padding: 12px;
+  border-color: var(--app-border);
+  background: var(--app-surface);
+}
+
+.ant-workspace .workspace-meta-card:hover {
+  border-color: var(--ant-color-primary-border-hover);
+  box-shadow: var(--app-shadow);
+  transform: none;
+}
+
+.ant-workspace .workspace-toolbar {
+  position: sticky;
+  top: 12px;
+  z-index: calc(var(--app-z-layout) + 1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-overlay);
+}
+
+.ant-workspace .workspace-toolbar-actions,
+.ant-workspace .workspace-toolbar-action-group {
+  margin-left: auto;
+}
+
+.ant-workspace :is(input, select, textarea):not(.ant-input, .ant-select-selector) {
+  border-color: var(--app-border);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.ant-workspace :is(input, select, textarea):not(.ant-input, .ant-select-selector):focus {
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 12%);
+}
+
+/* Legacy global input rules add extra height and padding. Restore Ant's
+   standard control geometry so Input, Select and DatePicker align in grids. */
+.ant-workspace input.ant-input {
+  min-height: 32px;
+  padding: 4px 11px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--app-surface);
+}
+
+.ant-workspace textarea.ant-input {
+  padding: 4px 11px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--app-surface);
+}
+
+.ant-workspace .intake-form-grid > .intake-field-row > label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ant-workspace .intake-form-grid .ant-select {
+  width: 100%;
+}
+
+.ant-workspace button.primary,
+.ant-workspace button.secondary,
+.ant-workspace button.tertiary,
+.ant-workspace button.danger,
+.ant-workspace button.info-button,
+.ant-workspace button.flow-button {
+  min-height: 32px;
+  border-radius: 6px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.ant-workspace button.primary,
+.ant-workspace button.flow-button {
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary);
+  color: #fff;
+}
+
+.ant-workspace button.secondary,
+.ant-workspace button.tertiary,
+.ant-workspace button.info-button {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
+.ant-workspace button.danger {
+  border-color: var(--ant-color-error-border);
+  background: var(--ant-color-error-bg);
+  color: var(--ant-color-error);
+}
+
+.app-modal-root .ant-modal-content {
+  overflow: hidden;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.app-modal-root .modal-shell {
+  gap: 16px;
+  padding: 20px 24px;
+  border: 0;
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.app-modal-root .modal-shell-head {
+  top: 0;
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  backdrop-filter: none;
+}
+
+.app-modal-root .modal-shell-actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--app-border);
+}
+
+.inspection-finding-modal .ant-modal-content {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.inspection-finding-modal .ant-modal-header {
+  margin-bottom: 0;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.inspection-finding-modal-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.inspection-finding-modal-title > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.inspection-finding-modal-title span {
+  color: var(--ant-color-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.inspection-finding-modal-title strong {
+  color: var(--app-text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.inspection-finding-modal-title small {
+  color: var(--app-text-secondary);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.inspection-finding-modal .ant-modal-body {
+  max-height: min(620px, calc(100dvh - 240px));
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+.inspection-finding-modal .ant-modal-footer {
+  margin-top: 0;
+  padding: 12px 24px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.inspection-finding-modal-body {
+  display: grid;
+  gap: 16px;
+}
+
+.inspection-finding-modal .inspection-reference-strip {
+  gap: 8px;
+  padding: 12px;
+  border-color: var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface-subtle);
+}
+
+.inspection-finding-modal .inspection-reference-images {
+  padding-bottom: 2px;
+}
+
+.inspection-finding-modal .inspection-reference-button {
+  width: 108px;
+  height: 76px;
+  min-width: 108px;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--app-border);
+  border-radius: 6px;
+}
+
+.inspection-finding-modal .inspection-reference-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inspection-finding-modal .inspection-suggestion {
+  padding: 12px;
+  border: 1px solid var(--ant-color-warning-border);
+  border-radius: 6px;
+  background: var(--ant-color-warning-bg);
+}
+
+.app-data-table .ant-table-cell {
+  vertical-align: middle;
+}
+
+.app-status-tag {
+  border-radius: 4px;
+}
+
+.app-feedback-space {
+  min-height: 96px;
+}
+
+.app-sheet-title {
+  padding: 14px 16px 8px;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ant-workspace .workspace-footer {
+  margin-top: 24px;
+}
+
+.ant-workspace .pager {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.ant-workspace .pager .ant-pagination {
+  margin: 0;
+}
+
+.ant-dashboard-view {
+  gap: 20px;
+}
+
+.ant-dashboard-body {
+  display: grid;
+  gap: 16px;
+}
+
+.ant-dashboard-statistic,
+.ant-dashboard-section {
+  height: 100%;
+}
+
+.ant-dashboard-statistic .ant-card-body {
+  padding: 16px;
+}
+
+.ant-dashboard-statistic .ant-statistic-title,
+.ant-dashboard-section .ant-statistic-title {
+  font-size: 13px;
+}
+
+.ant-dashboard-statistic.is-success .ant-statistic-content {
+  color: var(--app-success);
+}
+
+.ant-dashboard-statistic.is-processing .ant-statistic-content {
+  color: var(--app-primary);
+}
+
+.ant-dashboard-statistic.is-warning .ant-statistic-content {
+  color: var(--app-warning);
+}
+
+.ant-dashboard-statistic.is-error .ant-statistic-content {
+  color: var(--app-error);
+}
+
+.ant-dashboard-task {
+  display: grid;
+  width: 100%;
+  min-height: 88px;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 0;
+  border-inline-end: 1px solid var(--app-border);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ant-dashboard-task .ant-typography-strong {
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.ant-dashboard-task:hover {
+  background: var(--app-surface-subtle);
+}
+
+.ant-dashboard-status {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 150px;
+}
+
+.ant-dashboard-room-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ant-dashboard-room-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.ant-dashboard-room-list-item:last-child {
+  border-bottom: 0;
+}
+
+.ant-dashboard-room-list-item .ant-typography {
+  margin-bottom: 0;
+}
+
+.ant-mobile-tabbar {
+  display: none;
+}
+
+.ant-mobile-navigation-sheet {
+  max-height: min(76dvh, 680px);
+  overflow: auto;
+  padding: 8px 0 calc(20px + env(safe-area-inset-bottom));
+}
+
+.ant-mobile-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px 8px;
+  font-size: 17px;
+}
+
+.ant-mobile-sheet-actions {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.app-command-bar {
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+}
+
+/* The shared command bar stays within its work area while long forms and
+   grids scroll. It follows Ant's compact Card surface and action hierarchy. */
+.ant-workspace .app-command-bar.workspace-toolbar {
+  scroll-margin-top: 12px;
+}
+
+.app-command-bar-context {
+  min-width: 0;
+}
+
+.app-command-bar-actions {
+  margin-left: auto;
+}
+
+.app-help-button {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ant-color-primary);
+  cursor: pointer;
+}
+
+.app-help-button:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+}
+
+.app-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ant-btn {
+  transition:
+    color 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ant-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+.ant-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Ant Table-style server filters: text sorts, the adjacent compact trigger filters. */
+.app-data-table .filterable-column-title {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 32px;
+  gap: 0;
+  vertical-align: middle;
+}
+
+.app-data-table .table-sort-button {
+  width: auto;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 !important;
+  color: inherit;
+  font-weight: 600;
+  line-height: 32px;
+  transform: none !important;
+}
+
+.app-data-table .table-filter-button {
+  display: inline-flex;
+  flex: 0 0 18px;
+  width: 18px;
+  min-width: 18px;
+  height: 22px;
+  min-height: 22px;
+  margin-inline-start: 4px;
+  padding: 0 2px !important;
+  color: var(--ant-color-text-quaternary);
+  border-radius: 4px;
+  opacity: 0.72;
+  pointer-events: auto;
+  transform: none !important;
+}
+
+.app-data-table .filterable-column-title:hover .table-filter-button,
+.app-data-table .filterable-column-title:focus-within .table-filter-button,
+.app-data-table .filterable-column-title.is-filtered .table-filter-button,
+.app-data-table .filterable-column-title.is-filter-open .table-filter-button {
+  color: var(--ant-color-primary);
+  opacity: 1;
+}
+
+.app-data-table .filterable-column-title.is-filtered .table-filter-button,
+.app-data-table .filterable-column-title.is-filter-open .table-filter-button {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-data-table .table-filter-button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--ant-color-primary-border-hover);
+}
+
+/* Inspection uses Ant Card, Tag and Collapse. Domain colors remain inside
+ * status tags so the form keeps a quiet, dense enterprise surface. */
+.ant-workspace .inspection-module-card.ant-card {
+  border-color: var(--app-border);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+}
+
+.ant-workspace .inspection-module-card .ant-card-head {
+  min-height: 48px;
+  padding-inline: 16px;
+  border-bottom-color: var(--app-border);
+}
+
+.inspection-module-card-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--ant-color-text-heading);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ant-workspace .inspection-module-card .inspection-category {
+  padding: 12px 16px;
+}
+
+.ant-workspace .inspection-module-card .inspection-category + .inspection-category {
+  border-top-color: var(--app-border);
+}
+
+.ant-workspace .inspection-module-card .inspection-category-head {
+  margin-bottom: 4px;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-head h3 {
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-title {
+  gap: 6px;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-title .ant-tag {
+  margin-inline-end: 0;
+}
+
+.ant-workspace .inspection-module-card .inspection-all-normal {
+  margin-left: auto;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-collapse {
+  border: 0;
+  background: transparent;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-collapse > .ant-collapse-item {
+  border-bottom: 0;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-collapse .ant-collapse-header {
+  min-height: 32px;
+  padding: 6px 0 !important;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+}
+
+.inspection-category-collapse-label {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ant-workspace .inspection-module-card .inspection-category-collapse .ant-collapse-content {
+  border-top-color: var(--app-border);
+}
+
+.ant-workspace .inspection-module-card .inspection-category-collapse .ant-collapse-content-box {
+  padding: 0 !important;
+}
+
+.inspection-image-modal .ant-modal-content {
+  padding: 20px 24px 24px;
+}
+
+.inspection-image-modal .ant-modal-header {
+  margin-bottom: 16px;
+}
+
+.inspection-image-modal .ant-modal-title > span {
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.inspection-image-modal .ant-modal-title small {
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.inspection-image-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.inspection-image-gallery figure {
+  min-width: 0;
+  margin: 0;
+}
+
+.inspection-image-gallery .ant-image {
+  display: block;
+  width: 100%;
+}
+
+.inspection-image-gallery .ant-image-img {
+  display: block;
+  width: 100%;
+  height: clamp(180px, 28vw, 300px);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  object-fit: cover;
+}
+
+.inspection-image-gallery figcaption {
+  overflow: hidden;
+  margin-top: 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Quantity-sheet billing controls use Ant's compact form density. */
+.ant-workspace .react-quantity-layout .quantity-animal-control,
+.ant-workspace .react-quantity-layout .quantity-animal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Base legacy button rules also match Ant Switch because it renders a button. */
+.ant-workspace .react-quantity-layout .ant-switch {
+  box-sizing: border-box;
+  min-width: 44px !important;
+  width: 44px !important;
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  border-radius: 100px !important;
+  font-size: 0 !important;
+  line-height: 22px !important;
+}
+
+.ant-workspace .react-quantity-layout .ant-switch .ant-switch-handle {
+  top: 2px !important;
+  inset-inline-start: 2px !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.ant-workspace .react-quantity-layout .ant-switch.ant-switch-checked .ant-switch-handle {
+  inset-inline-start: calc(100% - 20px) !important;
+}
+
+.ant-workspace .react-quantity-layout .ant-switch .ant-switch-handle::before {
+  border-radius: 50% !important;
+}
+
+.ant-workspace .react-quantity-layout .quantity-animal-control.required,
+.ant-workspace .react-quantity-layout .quantity-animal-toggle.required {
+  background: transparent;
+  border-color: transparent;
+}
+
+.ant-workspace .react-quantity-layout .quantity-animal-control.locked,
+.ant-workspace .react-quantity-layout .quantity-animal-toggle.locked {
+  color: var(--ant-color-text-tertiary);
+}
+
+.ant-workspace .react-quantity-layout .quantity-animal-toggle-label {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-toggle {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--app-surface);
+  color: var(--ant-color-text);
+  box-shadow: none;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-toggle:hover {
+  border-color: var(--ant-color-primary-border-hover);
+  background: var(--app-surface);
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-toggle-copy {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-toggle-copy strong {
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-toggle-copy small {
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-badges {
+  gap: 4px;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-badge {
+  min-height: 20px;
+  margin-inline-end: 0;
+  padding-inline: 6px;
+  border-radius: var(--ant-border-radius-sm, 4px);
+  color: var(--ant-color-primary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.ant-workspace .react-quantity-layout .quantity-options-toggle-icon {
+  color: var(--ant-color-primary);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.ant-workspace .quantity-billing-options {
+  gap: 16px;
+}
+
+.ant-workspace .quantity-free-cage-module,
+.ant-workspace .quantity-custom-billing-module {
+  gap: 16px;
+  padding: 16px;
+  border-color: var(--app-border);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--app-surface);
+  box-shadow: none;
+}
+
+.ant-workspace .quantity-custom-billing-module {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+}
+
+.ant-workspace .quantity-free-cage-head strong {
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ant-workspace .quantity-free-cage-head span,
+.ant-workspace .quantity-full-exemption-row small,
+.ant-workspace .quantity-free-cage-field small,
+.ant-workspace .quantity-custom-billing-empty {
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+}
+
+.ant-workspace .quantity-full-exemption-row {
+  gap: 12px;
+  padding-top: 16px;
+  border-top-color: var(--app-border);
+}
+
+.ant-workspace .quantity-full-exemption-row.enabled {
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--app-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.ant-workspace .custom-billing-segment {
+  padding: 12px;
+  border-color: var(--app-border);
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--app-surface-subtle);
+}
+
+/* System settings uses standard Ant information hierarchy. Project resources
+   are intentionally kept on the public project portal rather than duplicated here. */
+.ant-workspace .system-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ant-workspace .system-status-card .ant-card-body,
+.ant-workspace .system-release-card .ant-card-body {
+  padding-block: 20px;
+}
+
+.ant-workspace .system-status-card .ant-descriptions-item-content,
+.ant-workspace .system-status-card .ant-descriptions-item-label {
+  overflow-wrap: anywhere;
+}
+
+.ant-workspace .system-update-alert {
+  margin-top: 20px;
+}
+
+.ant-workspace .system-release-card .ant-list-item {
+  align-items: flex-start;
+}
+
+.system-release-items {
+  margin: 0;
+  padding-inline-start: 20px;
+  color: var(--app-text-secondary);
+}
+
+.system-release-items li + li {
+  margin-top: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-data-table .table-filter-button:hover {
+    background: var(--ant-color-fill-tertiary) !important;
+  }
+
+  .app-data-table
+    .filterable-column-title:not(:hover, :focus-within, .is-filtered, .is-filter-open)
+    .table-filter-button {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ant-btn,
+  .ant-motion-collapse,
+  .ant-motion-collapse-legacy,
+  .ant-drawer,
+  .ant-modal {
+    transition-duration: 1ms !important;
+  }
+
+  .ant-btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (width <= 760px) {
+  .inspection-image-modal .ant-modal {
+    max-width: calc(100vw - 24px);
+    margin-inline: 12px;
+  }
+
+  .inspection-image-modal .ant-modal-content {
+    padding: 16px;
+  }
+
+  .inspection-image-gallery {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .inspection-image-gallery .ant-image-img {
+    height: min(58vw, 280px);
+  }
+
+  .inspection-finding-modal {
+    max-width: calc(100vw - 24px);
+    margin-inline: 12px;
+  }
+
+  .inspection-finding-modal .ant-modal-header {
+    padding: 16px 16px 12px;
+  }
+
+  .inspection-finding-modal-title strong {
+    font-size: 18px;
+    line-height: 26px;
+  }
+
+  .inspection-finding-modal .ant-modal-body {
+    max-height: calc(100dvh - 212px);
+    padding: 16px;
+  }
+
+  .inspection-finding-modal .ant-modal-footer {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .ant-shell {
+    display: block;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+
+  .ant-sidebar {
+    display: none;
+  }
+
+  .ant-workspace-layout {
+    width: 100%;
+    min-width: 100%;
+    flex: none;
+  }
+
+  .ant-workspace {
+    width: 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 16px;
+  }
+
+  .ant-workspace .workspace-head {
+    padding-bottom: 12px;
+  }
+
+  .ant-workspace .workspace-title-line .ant-typography {
+    font-size: 24px;
+  }
+
+  .ant-mobile-tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: var(--app-z-overlay);
+    display: block !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--app-border);
+    background: var(--app-surface);
+    box-shadow: 0 -4px 14px rgb(0 0 0 / 6%);
+  }
+
+  .app-command-bar {
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+
+  .ant-workspace .workspace-toolbar {
+    top: 8px;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .ant-workspace .workspace-toolbar .workspace-toolbar-action-group,
+  .ant-workspace .workspace-toolbar .app-command-bar-actions {
+    width: 100%;
+  }
+
+  .ant-workspace .pager {
+    justify-content: center;
+  }
+
+  .ant-dashboard-task {
+    min-height: 72px;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .ant-dashboard-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ant-workspace .system-status-card .ant-card-body,
+  .ant-workspace .system-release-card .ant-card-body {
+    padding-block: 16px;
+  }
+}

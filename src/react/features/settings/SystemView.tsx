@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { Alert, Button, Card, Descriptions, List, Select, Space, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
-import { Pager, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
-import { SYSTEM_RELEASE_NOTES, type ReleaseNote } from "../../releaseNotes";
+import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { SYSTEM_RELEASE_NOTES } from "../../releaseNotes";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -29,10 +30,6 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
     );
 
   const data = info.data;
-  const repository = data.repositoryUrl || "https://git.cellnucle.us/hugo/cageledger";
-  const releasePages = Math.max(Math.ceil(SYSTEM_RELEASE_NOTES.length / releasePageSize), 1);
-  const releaseItems = SYSTEM_RELEASE_NOTES.slice((releasePage - 1) * releasePageSize, releasePage * releasePageSize);
-
   return (
     <section className="workspace-view system-workspace">
       <WorkspaceHeader
@@ -46,136 +43,110 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
       />
       <div className="workspace-body system-workspace-body">
         <div className="system-layout">
-          <section className="panel large">
-            <div className="panel-head">
-              <div className="panel-title-line">
-                <h2>系统状态</h2>
-              </div>
-              {user.role === "admin" ? (
-                <div className="panel-head-actions">
-                  <button
-                    className="secondary info-button"
-                    type="button"
-                    disabled={update.isFetching}
-                    onClick={() => {
-                      setCheckEnabled(true);
-                      if (checkEnabled) void update.refetch();
-                    }}
-                  >
-                    检查更新
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            <div className="system-status-grid">
-              <Status label="当前版本" value={`v${data.version}`} />
-              <Status label="代码版本" value={data.revisionShort || "未设置"} />
-              <Status label="所属单位" value={`${data.organization} · ${data.department}`} />
-              <Status label="开源协议" value={data.license} />
-            </div>
-            {checkEnabled ? <UpdateCard update={update} /> : null}
-            <section className="system-section">
-              <div className="panel-head compact">
-                <div className="panel-title-line">
-                  <h2>更新记录</h2>
-                </div>
-                <div className="panel-head-actions">
-                  <span className="panel-summary-chip">{SYSTEM_RELEASE_NOTES.length} 个版本</span>
-                </div>
-              </div>
-              <div className="release-list">
-                {releaseItems.map((note) => (
-                  <ReleaseCard key={note.version} note={note} />
-                ))}
-              </div>
-              <Pager
-                page={releasePage}
-                pages={releasePages}
-                total={SYSTEM_RELEASE_NOTES.length}
-                pageSize={releasePageSize}
-                onPage={setReleasePage}
-                onPageSize={(value) => {
-                  setReleasePageSize(value);
-                  setReleasePage(1);
-                }}
-              />
-            </section>
-            <section className="system-section appearance-settings" aria-labelledby="appearance-settings-title">
-              <div className="panel-head compact">
-                <div className="panel-title-line">
-                  <h2 id="appearance-settings-title">界面外观</h2>
-                </div>
-              </div>
-              <label className="appearance-theme-field">
-                <span>显示模式</span>
-                <select
-                  aria-label="显示模式"
-                  value={ui.theme}
-                  onChange={(event) =>
-                    dispatch({ type: "set-theme", theme: event.target.value as "system" | "light" | "dark" })
-                  }
+          <Card
+            className="system-status-card"
+            extra={
+              user.role === "admin" ? (
+                <Button
+                  loading={update.isFetching}
+                  onClick={() => {
+                    setCheckEnabled(true);
+                    if (checkEnabled) void update.refetch();
+                  }}
                 >
-                  <option value="system">跟随系统</option>
-                  <option value="light">浅色</option>
-                  <option value="dark">深色</option>
-                </select>
-                <small>主题仅影响本设备界面，不影响业务数据与其他用户。</small>
-              </label>
-            </section>
-            <section className="system-section">
-              <div className="panel-head compact">
-                <div className="panel-title-line">
-                  <h2>维护信息</h2>
-                </div>
-              </div>
-              <dl className="system-definition-list">
-                <div>
-                  <dt>开发维护</dt>
-                  <dd>{data.developer}</dd>
-                </div>
-                <div>
-                  <dt>联系邮箱</dt>
-                  <dd>{data.contactEmail}</dd>
-                </div>
-                <div>
-                  <dt>版权</dt>
-                  <dd>{data.copyright}</dd>
-                </div>
-              </dl>
-            </section>
-          </section>
-          <aside className="system-side">
-            <section className="panel">
-              <div className="panel-head compact">
-                <div className="panel-title-line">
-                  <h2>系统百科</h2>
-                </div>
-              </div>
-              <p>使用、部署、权限、数据管理和开发规范统一维护在 Gitea Wiki。</p>
-              <a className="doc-link" href={`${repository}/wiki`} target="_blank" rel="noreferrer">
-                <strong>打开 CageLedger Wiki</strong>
-                <span>查看全部正式文档</span>
-              </a>
-            </section>
-            <section className="panel">
-              <div className="panel-head compact">
-                <div className="panel-title-line">
-                  <h2>协同入口</h2>
-                </div>
-              </div>
-              <div className="wiki-home-links">
-                <a href="https://v.wjx.cn/vm/Y1pspgE.aspx#" target="_blank" rel="noreferrer">
-                  提交问题与需求
-                </a>
-                <a href={`${repository}/projects`} target="_blank" rel="noreferrer">
-                  项目看板
-                </a>
-                <a href={repository} target="_blank" rel="noreferrer">
-                  代码仓库
-                </a>
-              </div>
-            </section>
-          </aside>
+                  检查更新
+                </Button>
+              ) : null
+            }
+            title="系统状态"
+          >
+            <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
+              <Descriptions.Item label="当前版本">
+                <Typography.Text strong>v{data.version}</Typography.Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="代码版本">
+                <Typography.Text code>{data.revisionShort || "未设置"}</Typography.Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="所属单位">{`${data.organization} · ${data.department}`}</Descriptions.Item>
+              <Descriptions.Item label="开源协议">{data.license}</Descriptions.Item>
+            </Descriptions>
+            {checkEnabled ? <UpdateCard update={update} /> : null}
+          </Card>
+
+          <Card
+            className="system-release-card"
+            extra={<Tag>{SYSTEM_RELEASE_NOTES.length} 个版本</Tag>}
+            title="更新记录"
+          >
+            <List
+              dataSource={SYSTEM_RELEASE_NOTES}
+              pagination={{
+                current: releasePage,
+                pageSize: releasePageSize,
+                pageSizeOptions: [5, 10, 20],
+                showSizeChanger: true,
+                total: SYSTEM_RELEASE_NOTES.length,
+                onChange: (page, pageSize) => {
+                  setReleasePage(page);
+                  setReleasePageSize(pageSize);
+                },
+                onShowSizeChange: (_current, pageSize) => {
+                  setReleasePage(1);
+                  setReleasePageSize(pageSize);
+                },
+              }}
+              renderItem={(note) => (
+                <List.Item>
+                  <List.Item.Meta
+                    description={
+                      <Space direction="vertical" size={4}>
+                        <Typography.Text>{note.title}</Typography.Text>
+                        <ul className="system-release-items">
+                          {note.items.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                        {note.note || note.notes ? (
+                          <Typography.Text type="secondary">备注：{note.note || note.notes}</Typography.Text>
+                        ) : null}
+                      </Space>
+                    }
+                    title={
+                      <Space size={8}>
+                        <Typography.Text strong>v{note.version}</Typography.Text>
+                        {note.releasedAt ? <Typography.Text type="secondary">{note.releasedAt}</Typography.Text> : null}
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </Card>
+
+          <Card title="界面外观">
+            <Space align="start" direction="vertical" size={8}>
+              <Typography.Text>显示模式</Typography.Text>
+              <Select
+                aria-label="显示模式"
+                onChange={(theme) => dispatch({ type: "set-theme", theme })}
+                options={[
+                  { label: "跟随系统", value: "system" },
+                  { label: "浅色", value: "light" },
+                  { label: "深色", value: "dark" },
+                ]}
+                value={ui.theme}
+              />
+              <Typography.Text type="secondary">主题仅影响本设备界面，不影响业务数据与其他用户。</Typography.Text>
+            </Space>
+          </Card>
+
+          <Card title="维护信息">
+            <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} layout="vertical" size="small">
+              <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
+              <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
+              <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
+            </Descriptions>
+          </Card>
         </div>
       </div>
     </section>
@@ -191,43 +162,25 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
         ? "更新检查已关闭"
         : "当前已是最新版本";
   return (
-    <div className="rule-card update-card">
-      <strong>{status}</strong>
-      <span>{update.data?.latestVersion ? `最新发布版 v${update.data.latestVersion}` : "尚未获取远端版本"}</span>
-      {update.data?.latestMessage ? <p>{update.data.latestMessage}</p> : null}
-      {update.isError ? <p className="error-text">{update.error.message}</p> : null}
-      {update.data?.latestUrl ? (
-        <a href={update.data.latestUrl} target="_blank" rel="noreferrer">
-          查看发布页
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
-function ReleaseCard({ note }: { note: ReleaseNote }) {
-  return (
-    <article className="release-card">
-      <div className="release-card-head">
-        <strong>v{note.version}</strong>
-        {note.releasedAt ? <time>{note.releasedAt}</time> : null}
-      </div>
-      <span>{note.title}</span>
-      <ul>
-        {note.items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-      {note.note || note.notes ? <p className="release-note-meta">备注：{note.note || note.notes}</p> : null}
-    </article>
-  );
-}
-
-function Status({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="summary-tile">
-      <span>{label}</span>
-      <strong>{value || "-"}</strong>
-    </div>
+    <Alert
+      className="system-update-alert"
+      description={
+        <Space direction="vertical" size={4}>
+          <Typography.Text>
+            {update.data?.latestVersion ? `最新发布版 v${update.data.latestVersion}` : "尚未获取远端版本"}
+          </Typography.Text>
+          {update.data?.latestMessage ? <Typography.Text>{update.data.latestMessage}</Typography.Text> : null}
+          {update.isError ? <Typography.Text type="danger">{update.error.message}</Typography.Text> : null}
+          {update.data?.latestUrl ? (
+            <a href={update.data.latestUrl} rel="noreferrer" target="_blank">
+              查看发布页
+            </a>
+          ) : null}
+        </Space>
+      }
+      message={status}
+      showIcon
+      type={update.isError ? "error" : update.data?.updateAvailable ? "warning" : "info"}
+    />
   );
 }

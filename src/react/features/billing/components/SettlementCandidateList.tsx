@@ -1,3 +1,4 @@
+import { Checkbox, Space, type TableProps } from "antd";
 import { useState } from "react";
 
 import type {
@@ -7,8 +8,9 @@ import type {
 } from "../../../api/contracts";
 import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
-import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
+import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { Tooltip } from "../../../components/Tooltip";
+import { ActionButton, DataTable } from "../../../components/ui";
 import { AsyncActionButton, ConfirmDialog, ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
@@ -42,6 +44,94 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const columns: TableProps<SettlementCandidate>["columns"] = [
+    {
+      key: "selection",
+      title: (
+        <Checkbox
+          aria-label="全选当前筛选结果结算项"
+          disabled={selectingAll || !total}
+          checked={total > 0 && allFilteredSelected}
+          onChange={() => void toggleAllFiltered()}
+        />
+      ),
+      width: 52,
+      render: (_, candidate) => (
+        <Checkbox
+          aria-label={`选择 ${candidate.pi} ${candidate.month} 结算项`}
+          disabled={candidate.totalAmount == null}
+          checked={selectedCandidates.some((item) => item.id === candidate.id)}
+          onChange={(event) => toggleCandidate(candidate, event.target.checked)}
+        />
+      ),
+    },
+    ...(
+      [
+        { key: "month", label: "结算月份", width: 120 },
+        { key: "pi", label: "项目负责人姓名", width: 160 },
+        { key: "iacuc", label: "IACUC", width: 300 },
+        { key: "amount", label: "金额", width: 150 },
+      ] as const
+    ).map(({ key, label, width }) => ({
+      key,
+      dataIndex: key === "amount" ? "totalAmount" : key,
+      width,
+      align: key === "amount" ? ("right" as const) : undefined,
+      title: (
+        <FilterableColumnTitle
+          label={label}
+          values={filters[key] || []}
+          options={list.data?.filterOptions[key] || []}
+          loading={list.isFetching}
+          onSort={() => {
+            setSort((current) => ({
+              key,
+              dir: current.key === key && current.dir === "asc" ? "desc" : "asc",
+            }));
+            setPage(1);
+          }}
+          onFilter={(values) => {
+            setFilters((current) => ({ ...current, [key]: values }));
+            setSelectedCandidates([]);
+            setAllFilteredSelected(false);
+            setPage(1);
+          }}
+        />
+      ),
+      render: (_: unknown, candidate: SettlementCandidate) => {
+        if (key === "iacuc") {
+          const text = candidate.iacucs.join("、") || candidate.error || "待检查";
+          return <span title={text}>{candidate.iacucs.join("、") || "待检查"}</span>;
+        }
+        if (key === "amount") {
+          return candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`;
+        }
+        return candidate[key];
+      },
+    })),
+    {
+      key: "actions",
+      title: "操作",
+      width: 150,
+      render: (_, candidate) => {
+        const action = (
+          <AsyncActionButton
+            className="secondary info-button compact"
+            type="button"
+            pending={generate.isPending}
+            pendingLabel="生成中..."
+            disabled={candidate.totalAmount == null}
+            onClick={() => void generateFor(candidate, false)}
+          >
+            预览结算单
+          </AsyncActionButton>
+        );
+        return (
+          <Space size={0}>{candidate.error ? <Tooltip content={candidate.error}>{action}</Tooltip> : action}</Space>
+        );
+      },
+    },
+  ];
 
   async function generateFor(candidate: SettlementCandidate, persist: boolean) {
     try {
@@ -171,8 +261,8 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         <div className="workspace-toolbar-actions">
           <div className="workspace-toolbar-action-group">
             <AsyncActionButton
-              className="secondary"
               type="button"
+              tone="secondary"
               pending={pdfExport.isExporting}
               pendingLabel={settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
               disabled={!selectedCandidates.length || selectingAll}
@@ -181,8 +271,8 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
             </AsyncActionButton>
             <AsyncActionButton
-              className="primary flow-button"
               type="button"
+              tone="primary"
               pending={batchStarting}
               pendingLabel="正在发起..."
               disabled={!selectedCandidates.length || selectingAll}
@@ -200,113 +290,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         </span>
       </div>
       <div className="table-wrap settlement-candidate-list" role="region" tabIndex={0} aria-label="项目负责人结算列表">
-        <table className="dense-table settlement-candidate-table">
-          <colgroup>
-            <col className="settlement-col-select" />
-            <col className="settlement-col-month" />
-            <col className="settlement-col-pi" />
-            <col className="settlement-col-iacuc" />
-            <col className="settlement-col-amount" />
-            <col className="settlement-col-actions" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>
-                <input
-                  aria-label="全选当前筛选结果结算项"
-                  type="checkbox"
-                  disabled={selectingAll || !total}
-                  checked={total > 0 && allFilteredSelected}
-                  onChange={() => void toggleAllFiltered()}
-                />
-              </th>
-              {[
-                ["month", "结算月份"],
-                ["pi", "项目负责人姓名"],
-                ["iacuc", "IACUC"],
-                ["amount", "金额"],
-              ].map(([column, label]) => (
-                <FilterableTableHeader
-                  key={column}
-                  label={label}
-                  values={filters[column] || []}
-                  options={list.data?.filterOptions[column] || []}
-                  loading={list.isFetching}
-                  onSort={() => {
-                    setSort((current) => ({
-                      key: column as SettlementCandidateListParams["sortKey"],
-                      dir: current.key === column && current.dir === "asc" ? "desc" : "asc",
-                    }));
-                    setPage(1);
-                  }}
-                  onFilter={(values) => {
-                    setFilters((current) => ({ ...current, [column]: values }));
-                    setSelectedCandidates([]);
-                    setAllFilteredSelected(false);
-                    setPage(1);
-                  }}
-                />
-              ))}
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length ? (
-              items.map((candidate) => (
-                <tr key={candidate.id}>
-                  <td>
-                    <input
-                      aria-label={`选择 ${candidate.pi} ${candidate.month} 结算项`}
-                      type="checkbox"
-                      disabled={candidate.totalAmount == null}
-                      checked={selectedCandidates.some((item) => item.id === candidate.id)}
-                      onChange={(event) => toggleCandidate(candidate, event.target.checked)}
-                    />
-                  </td>
-                  <td>{candidate.month}</td>
-                  <td>{candidate.pi}</td>
-                  <td title={candidate.iacucs.join("、") || candidate.error || "-"}>
-                    {candidate.iacucs.join("、") || "待检查"}
-                  </td>
-                  <td className="money-cell">
-                    {candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`}
-                  </td>
-                  <td>
-                    {candidate.error ? (
-                      <Tooltip content={candidate.error}>
-                        <AsyncActionButton
-                          className="secondary info-button compact"
-                          type="button"
-                          pending={generate.isPending}
-                          pendingLabel="生成中..."
-                          disabled={candidate.totalAmount == null}
-                          onClick={() => void generateFor(candidate, false)}
-                        >
-                          预览结算单
-                        </AsyncActionButton>
-                      </Tooltip>
-                    ) : (
-                      <AsyncActionButton
-                        className="secondary info-button compact"
-                        type="button"
-                        pending={generate.isPending}
-                        pendingLabel="生成中..."
-                        disabled={candidate.totalAmount == null}
-                        onClick={() => void generateFor(candidate, false)}
-                      >
-                        预览结算单
-                      </AsyncActionButton>
-                    )}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6}>{list.isPending ? "正在加载..." : "当前筛选条件下没有可结算项目。"}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable columns={columns} dataSource={items} loading={list.isPending} pagination={false} rowKey="id" />
       </div>
       <Pager
         page={page}
@@ -345,12 +329,10 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               <p>{selected.iacucs.join("、")}</p>
             </div>
             <div className="modal-shell-actions">
-              <button className="secondary info-button" type="button" onClick={() => openSettlementPrint(result)}>
-                打印结算单
-              </button>
+              <ActionButton onClick={() => openSettlementPrint(result)}>打印结算单</ActionButton>
               <AsyncActionButton
-                className="secondary info-button"
                 type="button"
+                tone="secondary"
                 pending={pdfExport.isExporting}
                 pendingLabel="正在生成..."
                 onClick={() => void exportCandidates([selected])}
@@ -358,17 +340,15 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
                 导出 PDF
               </AsyncActionButton>
               <AsyncActionButton
-                className="primary flow-button"
                 type="button"
+                tone="primary"
                 pending={generate.isPending}
                 pendingLabel="发起中..."
                 onClick={() => void generateFor(selected, true)}
               >
                 发起结算流程
               </AsyncActionButton>
-              <button className="secondary" type="button" onClick={() => setSelected(null)}>
-                关闭
-              </button>
+              <ActionButton onClick={() => setSelected(null)}>关闭</ActionButton>
             </div>
           </div>
           {notice ? (

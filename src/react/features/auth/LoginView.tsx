@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { Alert, Button, Form, Input, type InputRef } from "antd";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../api/client";
 import { useLogin } from "../../api/session";
@@ -7,20 +8,18 @@ import { APP_VERSION } from "../../version";
 export function LoginView() {
   const login = useLogin();
   const [message, setMessage] = useState("");
-  const usernameRef = useRef<HTMLInputElement>(null);
+  const usernameRef = useRef<InputRef>(null);
 
   useEffect(() => {
     usernameRef.current?.focus();
   }, []);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(values: { username: string; password: string }) {
     setMessage("");
-    const form = new FormData(event.currentTarget);
     try {
       await login.mutateAsync({
-        username: formValue(form, "username").trim(),
-        password: formValue(form, "password"),
+        username: values.username.trim(),
+        password: values.password,
       });
     } catch (error) {
       setMessage(error instanceof ApiError ? error.message : "无法连接后端服务");
@@ -39,22 +38,18 @@ export function LoginView() {
             <span>实验动物笼位管理与计费系统</span>
           </div>
         </div>
-        <form className="form" onSubmit={submit}>
-          <label>
-            用户名
-            <input ref={usernameRef} name="username" autoComplete="username" placeholder="请输入用户名" required />
-          </label>
-          <label>
-            密码
-            <input name="password" type="password" autoComplete="current-password" placeholder="请输入密码" required />
-          </label>
-          <p className="login-error" role="alert">
-            {message}
-          </p>
-          <button className="primary" type="submit" disabled={login.isPending}>
-            {login.isPending ? "登录中..." : "登录"}
-          </button>
-        </form>
+        <Form className="form" layout="vertical" onFinish={submit} requiredMark="optional">
+          <Form.Item label="用户名" name="username" rules={[{ required: true, message: "请输入用户名" }]}>
+            <Input ref={usernameRef} autoComplete="username" placeholder="请输入用户名" />
+          </Form.Item>
+          <Form.Item label="密码" name="password" rules={[{ required: true, message: "请输入密码" }]}>
+            <Input.Password autoComplete="current-password" placeholder="请输入密码" />
+          </Form.Item>
+          {message ? <Alert className="login-error" showIcon title={message} type="error" /> : null}
+          <Button aria-label="登录" block htmlType="submit" loading={login.isPending} type="primary">
+            登录
+          </Button>
+        </Form>
         <div className="version-meta login-version">
           <span>CageLedger v{APP_VERSION}</span>
           <small>中山大学中山眼科中心 · 实验动物中心</small>
@@ -63,9 +58,4 @@ export function LoginView() {
       </section>
     </main>
   );
-}
-
-function formValue(form: FormData, key: string) {
-  const value = form.get(key);
-  return typeof value === "string" ? value : "";
 }

@@ -1,8 +1,10 @@
+import { Button, Checkbox, Input, Select, Space, Tag, type TableProps } from "antd";
 import { useState } from "react";
 
 import type { IntakeBatch, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
 import { useIntakeFilterOptions } from "../../../api/intake";
-import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
+import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
+import { DataTable } from "../../../components/ui";
 import { Pager } from "../../../components/WorkspaceUi";
 import { intakeStatusLabel } from "../../../../domain/intake";
 
@@ -48,11 +50,11 @@ export function IntakeEntryPanel({
         <div className="intake-message-field">
           <div className="intake-message-head">
             <span>预约消息识别</span>
-            <button className="secondary compact-action" type="button" onClick={onParse}>
+            <Button className="compact-action" size="small" onClick={onParse}>
               识别文本
-            </button>
+            </Button>
           </div>
-          <textarea
+          <Input.TextArea
             aria-label="预约消息"
             rows={6}
             value={draft.rawMessage}
@@ -63,14 +65,9 @@ export function IntakeEntryPanel({
         <div className="intake-action-panel">
           <strong>{draft.finalCardCount || 0} 张笼卡</strong>
           <span>{draft.batchNo || "尚未识别批次"}</span>
-          <button
-            className="secondary info-button"
-            type="button"
-            disabled={!draft.finalCardCount || saving}
-            onClick={onPrint}
-          >
+          <Button className="info-button" disabled={!draft.finalCardCount || saving} onClick={onPrint}>
             打印当前笼卡
-          </button>
+          </Button>
         </div>
       </div>
       {notice ? (
@@ -89,17 +86,23 @@ export function IntakeEntryPanel({
           <Field label="实验负责人" required value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
         </div>
         <div className="intake-field-row four">
-          <label>
+          <label htmlFor="intake-species">
             物种
-            <select value={draft.species} onChange={(event) => onUpdate("species", event.target.value)}>
-              <option value="mouse">小鼠</option>
-              <option value="rat">大鼠</option>
-              <option value="guinea_pig">豚鼠</option>
-              <option value="rabbit">兔</option>
-              <option value="monkey">猴</option>
-              <option value="pig">猪</option>
-              <option value="dog">犬</option>
-            </select>
+            <Select
+              aria-label="物种"
+              id="intake-species"
+              options={[
+                ["mouse", "小鼠"],
+                ["rat", "大鼠"],
+                ["guinea_pig", "豚鼠"],
+                ["rabbit", "兔"],
+                ["monkey", "猴"],
+                ["pig", "猪"],
+                ["dog", "犬"],
+              ].map(([value, label]) => ({ value, label }))}
+              value={draft.species}
+              onChange={(value) => onUpdate("species", value)}
+            />
           </label>
           <Field label="品系" value={draft.strainStandard} onChange={(value) => onUpdate("strainStandard", value)} />
           <Field
@@ -108,16 +111,18 @@ export function IntakeEntryPanel({
             value={draft.quantity ?? ""}
             onChange={(value) => onUpdate("quantity", value ? Number(value) : null)}
           />
-          <label className="field-required">
+          <label className="field-required" htmlFor="intake-room">
             房间
-            <select required value={draft.roomName} onChange={(event) => onUpdate("roomName", event.target.value)}>
-              <option value="">请选择系统房间</option>
-              {roomNames.map((room) => (
-                <option key={room} value={room}>
-                  {room}
-                </option>
-              ))}
-            </select>
+            <Select
+              aria-label="房间"
+              id="intake-room"
+              options={[
+                { value: "", label: "请选择系统房间" },
+                ...roomNames.map((room) => ({ value: room, label: room })),
+              ]}
+              value={draft.roomName}
+              onChange={(value) => onUpdate("roomName", value)}
+            />
           </label>
         </div>
         <div className="intake-field-row three">
@@ -148,18 +153,15 @@ export function IntakeEntryPanel({
             value={draft.finalCardCount}
             onChange={(value) => onUpdate("finalCardCount", Number(value) || 0)}
           />
-          <label>
+          <label htmlFor="intake-status">
             状态
-            <select
+            <Select<IntakeBatchStatus>
+              aria-label="状态"
+              id="intake-status"
               value={draft.status}
-              onChange={(event) => onUpdate("status", event.target.value as IntakeBatchStatus)}
-            >
-              {statuses.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              options={statuses.map(([value, label]) => ({ value, label }))}
+              onChange={(value) => onUpdate("status", value)}
+            />
           </label>
         </div>
       </div>
@@ -214,6 +216,81 @@ export function IntakeBatchList({
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
 }) {
+  const columns: TableProps<IntakeBatch>["columns"] = [
+    {
+      key: "selection",
+      width: 52,
+      title: (
+        <Checkbox
+          aria-label="全选当前筛选结果"
+          disabled={selectingAll || !total}
+          checked={total > 0 && allFilteredSelected}
+          onChange={() => onToggleAll()}
+        />
+      ),
+      render: (_, item) => (
+        <Checkbox
+          aria-label={`选择 ${item.batchNo}`}
+          checked={selectedItems.some((selectedItem) => selectedItem.id === item.id)}
+          onChange={(event) => onToggleItem(item, event.target.checked)}
+        />
+      ),
+    },
+    ...(
+      [
+        { key: "status", label: "状态", width: 100 },
+        { key: "batchNo", label: "批次号", width: 160 },
+        { key: "supplier", label: "购买单位", width: 190 },
+        { key: "pi", label: "项目负责人", width: 140 },
+        { key: "owner", label: "实验负责人", width: 140 },
+        { key: "quantity", label: "数量", width: 90 },
+        { key: "roomName", label: "房间", width: 100 },
+        { key: "intakeDate", label: "接收日期", width: 130 },
+        { key: "cardCount", label: "笼卡", width: 90 },
+      ] as const
+    ).map(({ key, label, width }) => ({
+      key,
+      dataIndex: key === "cardCount" ? "finalCardCount" : key,
+      width,
+      align: key === "quantity" || key === "cardCount" ? ("right" as const) : undefined,
+      title: (
+        <IntakeColumnTitle
+          column={key}
+          label={label}
+          params={params}
+          values={filters[key] || []}
+          onSort={() => onSort(key)}
+          onFilter={(values) => onFilter(key, values)}
+        />
+      ),
+      render: (_: unknown, item: IntakeBatch) => {
+        if (key === "status") return <Tag color={intakeStatusColor(item.status)}>{intakeStatusLabel(item.status)}</Tag>;
+        if (key === "cardCount") return item.finalCardCount;
+        const value = item[key];
+        const text = value == null || value === "" ? "-" : String(value);
+        return (
+          <span className="table-cell-text" title={text}>
+            {text}
+          </span>
+        );
+      },
+    })),
+    {
+      key: "actions",
+      title: "操作",
+      width: 126,
+      render: (_, item) => (
+        <Space size={0} className="table-actions">
+          <Button className="info-button compact" size="small" type="text" onClick={() => onEdit(item)}>
+            编辑
+          </Button>
+          <Button danger className="danger-text compact" size="small" type="text" onClick={() => onDelete(item)}>
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
   return (
     <section className="panel intake-batch-list-panel">
       <div className="panel-head">
@@ -221,25 +298,21 @@ export function IntakeBatchList({
           <h2>待接收批次列表</h2>
         </div>
         <div className="panel-head-actions">
-          <span className="panel-summary-chip">
+          <Tag className="panel-summary-chip">
             {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selectedItems.length}`}
-          </span>
+          </Tag>
         </div>
       </div>
       {selectedItems.length ? (
         <div className="bulk-action-bar">
           <strong>已选 {selectedItems.length} 项</strong>
-          <div>
-            <button className="primary" type="button" onClick={() => onPrint(selectedItems)}>
+          <Space>
+            <Button type="primary" onClick={() => onPrint(selectedItems)}>
               打印笼卡
-            </button>
-            <button className="secondary" type="button" onClick={() => onMarkPrinted(selectedItems)}>
-              标记已打印
-            </button>
-            <button className="secondary" type="button" onClick={() => onReceive(selectedItems)}>
-              确认接收
-            </button>
-          </div>
+            </Button>
+            <Button onClick={() => onMarkPrinted(selectedItems)}>标记已打印</Button>
+            <Button onClick={() => onReceive(selectedItems)}>确认接收</Button>
+          </Space>
         </div>
       ) : null}
       <div className="list-meta">
@@ -249,114 +322,14 @@ export function IntakeBatchList({
         </span>
       </div>
       <div className="table-wrap" role="region" tabIndex={0} aria-label="待接收批次列表">
-        <table className="workflow-table intake-batch-table dense-table">
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  aria-label="全选当前筛选结果"
-                  disabled={selectingAll || !total}
-                  checked={total > 0 && allFilteredSelected}
-                  onChange={onToggleAll}
-                />
-              </th>
-              {[
-                ["status", "状态"],
-                ["batchNo", "批次号"],
-                ["supplier", "购买单位"],
-                ["pi", "项目负责人"],
-                ["owner", "实验负责人"],
-                ["quantity", "数量"],
-                ["roomName", "房间"],
-                ["intakeDate", "接收日期"],
-                ["cardCount", "笼卡"],
-              ].map(([key, label]) => (
-                <IntakeHeader
-                  key={key}
-                  column={key}
-                  label={label}
-                  params={params}
-                  values={filters[key] || []}
-                  onSort={() => onSort(key)}
-                  onFilter={(values) => {
-                    onFilter(key, values);
-                  }}
-                />
-              ))}
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length ? (
-              items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      aria-label={`选择 ${item.batchNo}`}
-                      checked={selectedItems.some((selectedItem) => selectedItem.id === item.id)}
-                      onChange={(event) => onToggleItem(item, event.target.checked)}
-                    />
-                  </td>
-                  <td>
-                    <span className={`pill ${item.status}`}>{intakeStatusLabel(item.status)}</span>
-                  </td>
-                  <td>
-                    <span className="table-cell-text" title={item.batchNo}>
-                      {item.batchNo}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="table-cell-text" title={item.supplier}>
-                      {item.supplier}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="table-cell-text" title={item.pi || "-"}>
-                      {item.pi || "-"}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="table-cell-text" title={item.owner || "-"}>
-                      {item.owner || "-"}
-                    </span>
-                  </td>
-                  <td>{item.quantity ?? "-"}</td>
-                  <td>{item.roomName || "-"}</td>
-                  <td>{item.intakeDate || "-"}</td>
-                  <td>{item.finalCardCount}</td>
-                  <td>
-                    <div className="table-actions">
-                      <button className="ghost info-button compact" type="button" onClick={() => onEdit(item)}>
-                        编辑
-                      </button>
-                      <button className="ghost danger-text compact" type="button" onClick={() => onDelete(item)}>
-                        删除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={11}>
-                  <div className="empty-state">
-                    <h3>暂无待接收批次</h3>
-                    <p>在上方识别预约消息并保存后，批次会显示在这里。</p>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable columns={columns} dataSource={items} loading={loading} pagination={false} rowKey="id" />
       </div>
       <Pager page={page} pages={totalPages} total={total} pageSize={pageSize} onPage={onPage} onPageSize={onPageSize} />
     </section>
   );
 }
 
-function IntakeHeader({
+function IntakeColumnTitle({
   column,
   label,
   params,
@@ -374,7 +347,7 @@ function IntakeHeader({
   const [open, setOpen] = useState(false);
   const options = useIntakeFilterOptions(params, column, open);
   return (
-    <FilterableTableHeader
+    <FilterableColumnTitle
       label={label}
       values={values}
       options={options.data?.items || []}
@@ -384,6 +357,13 @@ function IntakeHeader({
       onFilter={onFilter}
     />
   );
+}
+
+function intakeStatusColor(status: IntakeBatchStatus) {
+  if (status === "received") return "green";
+  if (status === "printed") return "blue";
+  if (status === "pending_print") return "gold";
+  return "default";
 }
 
 function Field({
@@ -402,7 +382,7 @@ function Field({
   return (
     <label className={required ? "field-required" : undefined}>
       {label}
-      <input
+      <Input
         type={type}
         value={value}
         min={type === "number" ? 0 : undefined}

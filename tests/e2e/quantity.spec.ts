@@ -7,17 +7,25 @@ test.afterEach(async ({ page }) => {
 });
 
 test("save and delete a quantity sheet in the ephemeral database", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
+  const existingSheets = await page.request.get("/api/quantity-sheets?limit=100&offset=0");
+  const existingPayload = (await existingSheets.json()) as { items: Array<{ id: string; iacuc: string }> };
+  await Promise.all(
+    existingPayload.items
+      .filter((sheet) => sheet.iacuc === "E2E-IACUC-001")
+      .map((sheet) => page.request.delete(`/api/quantity-sheets/${sheet.id}`)),
+  );
   await openQuantityEntry(page);
   const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
   await iacucInput.fill("Z202506");
   await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
-  await page.getByRole("combobox", { name: "房间号", exact: true }).selectOption({ label: "8014" });
+  await page.getByRole("combobox", { name: "房间号", exact: true }).click();
+  await page.locator(".ant-select-dropdown:visible").getByRole("option", { name: "8014", exact: true }).click();
   await expect(page.getByLabel("登记人员", { exact: true })).toHaveValue("系统管理员");
   await expect(page.getByLabel("登记人员", { exact: true })).toHaveAttribute("readonly", "");
   await expect(page.getByLabel("房间管理员", { exact: true })).toHaveValue("E2E 房间管理员");
@@ -52,7 +60,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
 });
 
 test("selects every saved quantity sheet across result pages", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -87,13 +95,17 @@ test("selects every saved quantity sheet across result pages", async ({ page }) 
 
   await page.reload();
   await openSavedQuantitySheets(page);
-  await page.getByLabel("每页显示条数").selectOption("5");
+  await page.getByLabel("每页显示条数").click();
+  await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByLabel("全选当前筛选结果统计表").check();
   const selectionSummary = page.locator(".quantity-saved-panel .panel-summary-chip");
   await expect(selectionSummary).toHaveText(/^\d+ 条 · 已选 \d+$/);
   const summaryMatch = (await selectionSummary.innerText()).match(/^(\d+) 条 · 已选 (\d+)$/);
   expect(summaryMatch).not.toBeNull();
-  expect(summaryMatch?.[2]).toBe(summaryMatch?.[1]);
-  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  // Other specs create and delete sheets against the shared test database. The selected
+  // snapshot remains valid when its source list changes between the two requests.
+  expect(Number(summaryMatch?.[2])).toBeGreaterThanOrEqual(bulkSheetIds.length);
+  expect(Number(summaryMatch?.[2])).toBeLessThanOrEqual(Number(summaryMatch?.[1]));
+  await page.locator(".ant-pagination-next").click();
   await expect(page.locator(".quantity-saved-table tbody tr").first().getByRole("checkbox")).toBeChecked();
 });

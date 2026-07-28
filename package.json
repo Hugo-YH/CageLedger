@@ -1,7 +1,7 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "0.7.8",
+  "version": "1.0.0",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
@@ -16,9 +16,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:python": "node scripts/run_python.mjs -m unittest discover -s tests -p 'test_*.py'",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/check_python_runtime.mjs && playwright test",
     "benchmark": "node scripts/run_python.mjs scripts/benchmark_performance.py",
     "check:architecture": "node scripts/check_architecture.mjs",
+    "check:ui-contract": "node scripts/check_ui_contract.mjs",
     "format": "prettier --write . && node scripts/run_python.mjs -m ruff format .",
     "format:check": "prettier --check . && node scripts/run_python.mjs -m ruff format --check .",
     "lint": "npm run lint:ts && npm run lint:css && npm run lint:md && npm run lint:python && npm run lint:shell",
@@ -27,7 +28,7 @@
     "lint:md": "markdownlint-cli2",
     "lint:python": "node scripts/run_python.mjs -m ruff check .",
     "lint:shell": "bash -n scripts/*.sh && shellcheck scripts/*.sh",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:python && npm run check:architecture -- --enforce",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:python && npm run check:architecture -- --enforce && npm run check:ui-contract",
     "verify:full": "npm run check && npm run build && npm run test:e2e",
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
@@ -36,8 +37,11 @@
     "release:local": "bash scripts/release_local.sh"
   },
   "dependencies": {
+    "@ant-design/icons": "6.3.2",
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-virtual": "^3.14.4",
+    "antd": "6.5.2",
+    "antd-mobile": "5.42.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

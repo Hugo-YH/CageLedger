@@ -1,3 +1,4 @@
+import { Button, Checkbox, Space, Tag, type TableProps } from "antd";
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -9,7 +10,8 @@ import {
   useQuantitySheetDetail,
   useQuantitySheets,
 } from "../../../api/quantitySheets";
-import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
+import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
+import { ActionButton, DataTable } from "../../../components/ui";
 import { ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
@@ -40,6 +42,105 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const toggleAllFiltered = async () => {
+    if (allFilteredSelected) {
+      setSelected([]);
+      setAllFilteredSelected(false);
+      return;
+    }
+    setSelectingAll(true);
+    setAllFilteredSelected(true);
+    try {
+      const allItems = await listAllQuantitySheets(params);
+      setSelected(allItems.map((item) => item.id));
+    } catch (error) {
+      setAllFilteredSelected(false);
+      setExportError(error instanceof Error ? error.message : "无法读取全部统计表");
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+  const columns: TableProps<QuantitySheet>["columns"] = [
+    {
+      key: "selection",
+      width: 52,
+      title: (
+        <Checkbox
+          aria-label="全选当前筛选结果统计表"
+          disabled={selectingAll || !total}
+          checked={total > 0 && allFilteredSelected}
+          onChange={() => void toggleAllFiltered()}
+        />
+      ),
+      render: (_, item) => (
+        <Checkbox
+          aria-label={`选择 ${item.iacuc}`}
+          checked={selected.includes(item.id)}
+          onChange={(event) => {
+            setAllFilteredSelected(false);
+            setSelected((current) =>
+              event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id),
+            );
+          }}
+        />
+      ),
+    },
+    ...(
+      [
+        { key: "month", label: "月份", width: 110 },
+        { key: "iacuc", label: "IACUC", width: 150 },
+        { key: "roomName", label: "房间", width: 140 },
+        { key: "manager", label: "登记人员", width: 130 },
+        { key: "pi", label: "负责人", width: 140 },
+        { key: "updatedAt", label: "更新时间", width: 190 },
+      ] as const
+    ).map(({ key, label, width }) => ({
+      key,
+      dataIndex: key,
+      width,
+      title: (
+        <QuantityColumnTitle
+          column={key}
+          label={label}
+          params={params}
+          values={filters[key] || []}
+          onSort={() => {
+            setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
+            setPage(1);
+          }}
+          onFilter={(values) => {
+            setFilters((current) => ({ ...current, [key]: values }));
+            setSelected([]);
+            setAllFilteredSelected(false);
+            setPage(1);
+          }}
+        />
+      ),
+      render: (value: string, item: QuantitySheet) => {
+        if (key === "updatedAt") return formatTime(item.updatedAt);
+        const text = value || "-";
+        return <span title={text}>{text}</span>;
+      },
+    })),
+    {
+      key: "actions",
+      title: "操作",
+      width: 170,
+      render: (_, item) => (
+        <Space size={0} className="table-actions">
+          <Button className="info-button compact" size="small" type="text" onClick={() => setViewId(item.id)}>
+            预览
+          </Button>
+          <Button className="info-button compact" size="small" type="text" onClick={() => setEditId(item.id)}>
+            编辑
+          </Button>
+          <Button danger className="danger-text compact" size="small" type="text" onClick={() => setDeleteId(item.id)}>
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
 
   useEffect(() => {
     if (editId && detail.data?.item) {
@@ -68,47 +169,23 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     }
   }
 
-  async function toggleAllFiltered() {
-    if (allFilteredSelected) {
-      setSelected([]);
-      setAllFilteredSelected(false);
-      return;
-    }
-    setSelectingAll(true);
-    setAllFilteredSelected(true);
-    try {
-      const allItems = await listAllQuantitySheets(params);
-      setSelected(allItems.map((item) => item.id));
-    } catch (error) {
-      setAllFilteredSelected(false);
-      setExportError(error instanceof Error ? error.message : "无法读取全部统计表");
-    } finally {
-      setSelectingAll(false);
-    }
-  }
-
   return (
     <section className="panel quantity-saved-panel">
       <div className="workspace-toolbar quantity-saved-toolbar">
         <div className="workspace-toolbar-main">
-          <span className="panel-summary-chip">
+          <Tag className="panel-summary-chip">
             {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}
-          </span>
+          </Tag>
         </div>
         <div className="workspace-toolbar-actions">
-          <div className="workspace-toolbar-action-group">
-            <button
-              className="secondary"
-              type="button"
-              disabled={!selected.length || selectingAll}
-              onClick={() => void printSelected()}
-            >
+          <Space className="workspace-toolbar-action-group">
+            <ActionButton disabled={!selected.length || selectingAll} onClick={() => void printSelected()}>
               打印数量统计表
-            </button>
-            <button
-              className="primary"
-              type="button"
+            </ActionButton>
+            <ActionButton
               disabled={!selected.length || pdfExport.isExporting || selectingAll}
+              loading={pdfExport.isExporting}
+              tone="primary"
               onClick={() => void exportSelected()}
             >
               {pdfExport.isExporting
@@ -116,8 +193,8 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                 : selected.length > 1
                   ? "批量导出 PDF"
                   : "导出 PDF"}
-            </button>
-          </div>
+            </ActionButton>
+          </Space>
         </div>
       </div>
       {pdfExport.isExporting || exportError ? (
@@ -137,112 +214,14 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         </span>
       </div>
       <div className="table-wrap quantity-saved-list" role="region" tabIndex={0} aria-label="已保存数量统计表">
-        <table className="dense-table quantity-saved-table">
-          <colgroup>
-            <col className="quantity-col-select" />
-            <col className="quantity-col-month" />
-            <col className="quantity-col-iacuc" />
-            <col className="quantity-col-room" />
-            <col className="quantity-col-manager" />
-            <col className="quantity-col-pi" />
-            <col className="quantity-col-updated" />
-            <col className="quantity-col-actions" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>
-                <input
-                  aria-label="全选当前筛选结果统计表"
-                  type="checkbox"
-                  disabled={selectingAll || !total}
-                  checked={total > 0 && allFilteredSelected}
-                  onChange={() => void toggleAllFiltered()}
-                />
-              </th>
-              {[
-                ["month", "月份"],
-                ["iacuc", "IACUC"],
-                ["roomName", "房间"],
-                ["manager", "登记人员"],
-                ["pi", "负责人"],
-                ["updatedAt", "更新时间"],
-              ].map(([key, label]) => (
-                <QuantityHeader
-                  key={key}
-                  column={key}
-                  label={label}
-                  params={params}
-                  values={filters[key] || []}
-                  onSort={() => {
-                    setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
-                    setPage(1);
-                  }}
-                  onFilter={(values) => {
-                    setFilters((current) => ({ ...current, [key]: values }));
-                    setSelected([]);
-                    setAllFilteredSelected(false);
-                    setPage(1);
-                  }}
-                />
-              ))}
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length ? (
-              items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <input
-                      aria-label={`选择 ${item.iacuc}`}
-                      type="checkbox"
-                      checked={selected.includes(item.id)}
-                      onChange={(event) => {
-                        setAllFilteredSelected(false);
-                        setSelected((current) =>
-                          event.target.checked
-                            ? [...new Set([...current, item.id])]
-                            : current.filter((id) => id !== item.id),
-                        );
-                      }}
-                    />
-                  </td>
-                  <td>{item.month}</td>
-                  <td>{item.iacuc}</td>
-                  <td title={item.roomName || "-"}>{item.roomName || "-"}</td>
-                  <td>{item.manager || "-"}</td>
-                  <td title={item.pi || "-"}>{item.pi || "-"}</td>
-                  <td>{formatTime(item.updatedAt)}</td>
-                  <td>
-                    <div className="table-actions">
-                      <button
-                        className="secondary info-button compact"
-                        type="button"
-                        onClick={() => setViewId(item.id)}
-                      >
-                        预览
-                      </button>
-                      <button
-                        className="secondary info-button compact"
-                        type="button"
-                        onClick={() => setEditId(item.id)}
-                      >
-                        编辑
-                      </button>
-                      <button className="ghost danger-text compact" type="button" onClick={() => setDeleteId(item.id)}>
-                        删除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={8}>当前没有已保存数量统计表。</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          className="quantity-saved-table"
+          columns={columns}
+          dataSource={items}
+          loading={list.isFetching}
+          pagination={false}
+          rowKey="id"
+        />
       </div>
       <Pager
         page={page}
@@ -269,12 +248,10 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
             <p>删除后，该统计表将退出结算合表范围。</p>
           </div>
           <div className="modal-shell-actions">
-            <button className="secondary" type="button" onClick={() => setDeleteId("")}>
-              取消
-            </button>
-            <button
-              className="danger"
-              type="button"
+            <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
+            <ActionButton
+              loading={remove.isPending}
+              tone="destructive"
               onClick={async () => {
                 await remove.mutateAsync(deleteId);
                 setSelected((current) => current.filter((id) => id !== deleteId));
@@ -282,7 +259,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
               }}
             >
               确认删除
-            </button>
+            </ActionButton>
           </div>
         </ModalShell>
       ) : null}
@@ -290,7 +267,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   );
 }
 
-function QuantityHeader({
+function QuantityColumnTitle({
   column,
   label,
   params,
@@ -308,7 +285,7 @@ function QuantityHeader({
   const [open, setOpen] = useState(false);
   const options = useQuantityFilterOptions(params, column, open);
   return (
-    <FilterableTableHeader
+    <FilterableColumnTitle
       label={label}
       values={values}
       options={options.data?.items || []}
@@ -350,25 +327,22 @@ function QuantityPreviewModal({
           <p>{sheet ? `${sheet.month} · ${sheet.iacuc}` : "正在加载"}</p>
         </div>
         <div className="modal-shell-actions">
-          <button
-            className="secondary info-button"
-            type="button"
+          <ActionButton
+            className="info-button"
             disabled={!sheet}
             onClick={() => sheet && openQuantitySheetsPrint([sheet])}
           >
             打印
-          </button>
-          <button
-            className="secondary info-button"
-            type="button"
+          </ActionButton>
+          <ActionButton
+            className="info-button"
             disabled={!sheet || pdfExport.isExporting}
+            loading={pdfExport.isExporting}
             onClick={() => void exportSheet()}
           >
             {pdfExport.isExporting ? "正在生成…" : "导出 PDF"}
-          </button>
-          <button className="secondary" type="button" onClick={onClose}>
-            关闭
-          </button>
+          </ActionButton>
+          <ActionButton onClick={onClose}>关闭</ActionButton>
         </div>
       </div>
       {pdfExport.isExporting || exportError ? (

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button, Input, InputNumber, Select, Switch, Tag } from "antd";
 
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
 import { useIacucIndex } from "../../api/iacuc";
 import { useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
+import { ActionButton } from "../../components/ui";
 import { AsyncActionButton, ModalShell } from "../../components/WorkspaceUi";
 import {
   createQuantityRow,
@@ -244,27 +246,24 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           <Tooltip
             content={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
           >
-            <label
-              className={`quantity-animal-toggle ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
+            <div
+              className={`quantity-animal-control ${animalDetails ? "enabled" : ""} ${unit === "animal_day" ? "required locked" : ""}`}
             >
-              <input
-                type="checkbox"
+              <Switch
+                aria-label="动物数量"
                 checked={animalDetails}
                 disabled={unit === "animal_day"}
-                onChange={(event) => setField("animalDetailEnabled", event.target.checked)}
+                onChange={(checked) => setField("animalDetailEnabled", checked)}
               />
-              <span className="quantity-animal-toggle-track" aria-hidden="true">
-                <span />
-              </span>
-              <strong>动物数量</strong>
-            </label>
+              <span>动物数量</span>
+            </div>
           </Tooltip>
         </div>
         <div className="workspace-toolbar-actions quantity-entry-toolbar-actions">
           <div className="workspace-toolbar-action-group">
-            <button className="secondary quantity-entry-toolbar-button" type="button" onClick={startNew}>
+            <ActionButton className="quantity-entry-toolbar-button" onClick={startNew}>
               新建
-            </button>
+            </ActionButton>
             <Tooltip content={saveHint(editorRows, animalDetails)}>
               <AsyncActionButton
                 className="primary quantity-entry-toolbar-button quantity-entry-save-button"
@@ -306,10 +305,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               <span>月份和房间决定计费口径</span>
             </div>
             <div className="field-cluster-body quantity-field-group quantity-field-group-basic">
-              <label className="field-required">
+              <label className="field-required" htmlFor="quantity-sheet-month">
                 月份
-                <input
+                <Input
                   type="month"
+                  id="quantity-sheet-month"
                   max={todayMonth}
                   value={draft.month}
                   onChange={(event) => {
@@ -323,17 +323,20 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   }}
                 />
               </label>
-              <label className="field-required">
-                房间号
-                <select value={draft.roomId} onChange={(event) => chooseRoom(event.target.value)}>
-                  <option value="">请选择房间号</option>
-                  {rooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="field-required">
+                <span>房间号</span>
+                <Select
+                  aria-label="房间号"
+                  id="quantity-sheet-room"
+                  options={[
+                    { value: "", label: "请选择房间号" },
+                    ...rooms.map((room) => ({ value: room.id, label: room.name })),
+                  ]}
+                  value={draft.roomId}
+                  virtual={false}
+                  onChange={chooseRoom}
+                />
+              </div>
               <ReadOnlyField label="登记人员" value={user.displayName} />
               <ReadOnlyField label="房间管理员" value={selectedRoom?.roomManager || ""} placeholder="当前房间未设置" />
             </div>
@@ -346,7 +349,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             <div className="field-cluster-body quantity-field-group quantity-field-group-project">
               <label className="field-required">
                 IACUC 编号
-                <input
+                <Input
                   list="quantity-iacuc-options"
                   value={draft.iacuc}
                   required
@@ -368,11 +371,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             </div>
           </div>
           <div className={`quantity-options-panel ${optionsExpanded ? "expanded" : "collapsed"}`}>
-            <button
+            <Button
               className="quantity-options-toggle"
-              type="button"
               aria-expanded={optionsExpanded}
               aria-controls="quantity-billing-options-panel"
+              type="text"
               onClick={() => setOptionsExpanded((current) => !current)}
             >
               <span className="quantity-options-toggle-copy">
@@ -390,9 +393,9 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                       tierPriorityEnabled,
                       customBillingSegmentCount,
                     }).map((label) => (
-                      <span key={label} className="quantity-options-badge">
+                      <Tag key={label} className="quantity-options-badge">
                         {label}
-                      </span>
+                      </Tag>
                     ))}
                   </span>
                 ) : (
@@ -409,7 +412,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               <span className="quantity-options-toggle-icon" aria-hidden="true">
                 {optionsExpanded ? "收起" : "展开"}
               </span>
-            </button>
+            </Button>
             {optionsExpanded ? (
               <div id="quantity-billing-options-panel" className="quantity-billing-options">
                 <div className="quantity-free-cage-module">
@@ -433,27 +436,25 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                             : "当前计费口径没有项目负责人减免额度。"
                       }
                     >
-                      <label
+                      <div
                         className={`quantity-animal-toggle quantity-free-cage-toggle ${freeCageEnabled ? "enabled" : ""} ${supportsFreeCages && !draft.fullExemption ? "" : "locked"}`}
                       >
-                        <input
-                          type="checkbox"
+                        <Switch
+                          aria-label="优先减免"
                           checked={freeCageEnabled}
                           disabled={!supportsFreeCages || draft.fullExemption}
-                          onChange={(event) => setFreeCageEnabled(event.target.checked)}
+                          onChange={setFreeCageEnabled}
                         />
-                        <span className="quantity-animal-toggle-track" aria-hidden="true">
-                          <span />
-                        </span>
                         <span className="quantity-animal-toggle-label">优先减免</span>
-                      </label>
+                      </div>
                     </Tooltip>
                   </div>
                   {freeCageEnabled ? (
-                    <label className="quantity-free-cage-field">
+                    <label className="quantity-free-cage-field" htmlFor="quantity-preferred-free-cages">
                       优先减免笼数/天
-                      <input
+                      <Input
                         type="number"
+                        id="quantity-preferred-free-cages"
                         min="0"
                         step="1"
                         value={draft.preferredFreeCages ?? ""}
@@ -471,20 +472,12 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                       <small>有效期内每日实际饲养量全部减免，且不占用项目负责人普通减免额度。</small>
                     </div>
                     <Tooltip content="打开后，当前伦理在有效期内产生的饲养费全部减免。">
-                      <label
+                      <div
                         className={`quantity-animal-toggle quantity-free-cage-toggle ${draft.fullExemption ? "enabled" : ""}`}
                       >
-                        <input
-                          type="checkbox"
-                          aria-label="全额减免"
-                          checked={draft.fullExemption}
-                          onChange={(event) => setFullExemption(event.target.checked)}
-                        />
-                        <span className="quantity-animal-toggle-track" aria-hidden="true">
-                          <span />
-                        </span>
+                        <Switch aria-label="全额减免" checked={draft.fullExemption} onChange={setFullExemption} />
                         <span className="quantity-animal-toggle-label">全额减免</span>
-                      </label>
+                      </div>
                     </Tooltip>
                   </div>
                   <div className={`quantity-full-exemption-row ${tierPriorityEnabled ? "enabled" : ""}`}>
@@ -505,21 +498,17 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                             : "当前计费口径没有梯度收费。"
                       }
                     >
-                      <label
+                      <div
                         className={`quantity-animal-toggle quantity-free-cage-toggle ${tierPriorityEnabled ? "enabled" : ""} ${supportsTierPriority && !draft.fullExemption ? "" : "locked"}`}
                       >
-                        <input
-                          type="checkbox"
+                        <Switch
                           aria-label="优先梯度"
                           checked={tierPriorityEnabled}
                           disabled={!supportsTierPriority || draft.fullExemption}
-                          onChange={(event) => setTierPriorityEnabled(event.target.checked)}
+                          onChange={setTierPriorityEnabled}
                         />
-                        <span className="quantity-animal-toggle-track" aria-hidden="true">
-                          <span />
-                        </span>
                         <span className="quantity-animal-toggle-label">优先梯度</span>
-                      </label>
+                      </div>
                     </Tooltip>
                   </div>
                 </div>
@@ -529,9 +518,9 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                       <strong>自定义收费区间</strong>
                       <span>特殊饲养按日期、数量与单价独立计费，不参与减免和梯度累计。</span>
                     </div>
-                    <button className="secondary compact-action" type="button" onClick={addCustomBillingSegment}>
+                    <ActionButton className="compact-action" onClick={addCustomBillingSegment}>
                       新增区间
-                    </button>
+                    </ActionButton>
                   </div>
                   {customBillingSegmentCount ? (
                     <CustomBillingSegmentsEditor
@@ -552,9 +541,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           </div>
         </div>
         <div className="quantity-page-toolbar compact">
-          <button
-            className="secondary info-button"
-            type="button"
+          <ActionButton
+            className="info-button"
             onClick={() =>
               setEditorRows((rows) => [
                 ...rows,
@@ -563,7 +551,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             }
           >
             新增统计表页
-          </button>
+          </ActionButton>
         </div>
         <QuantityEditorPages
           rows={editorRows}
@@ -590,17 +578,15 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                 {draft.month} · {draft.iacuc}
               </p>
             </div>
-            <button className="secondary" type="button" onClick={() => setEditingDialog(false)}>
-              关闭
-            </button>
+            <ActionButton onClick={() => setEditingDialog(false)}>关闭</ActionButton>
           </div>
           <div className="modal-shell-body">
             <div className="react-quantity-layout quantity-edit-context">
               {renderEditor(
                 <Tooltip content={saveHint(editorRows, animalDetails)}>
-                  <button className="primary" type="submit" form="quantity-sheet-entry-form" disabled={save.isPending}>
-                    {save.isPending ? "保存中..." : "保存统计表"}
-                  </button>
+                  <ActionButton form="quantity-sheet-entry-form" loading={save.isPending} tone="primary" type="submit">
+                    保存统计表
+                  </ActionButton>
                 </Tooltip>,
               )}
             </div>
@@ -634,7 +620,7 @@ function Field({
   return (
     <label className={required ? "field-required" : undefined}>
       {label}
-      <input value={value} required={required} onChange={(event) => onChange(event.target.value)} />
+      <Input value={value} required={required} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -643,7 +629,7 @@ function ReadOnlyField({ label, value, placeholder }: { label: string; value: st
   return (
     <label>
       {label}
-      <input className="readonly-field" value={value} placeholder={placeholder} readOnly aria-readonly="true" />
+      <Input className="readonly-field" value={value} placeholder={placeholder} readOnly aria-readonly="true" />
     </label>
   );
 }
@@ -670,61 +656,58 @@ function CustomBillingSegmentsEditor({
               <strong>区间 {index + 1}</strong>
               <span>预估 ¥{estimateCustomBillingSegment(segment).toFixed(2)}</span>
             </div>
-            <button className="danger-link" type="button" onClick={() => onRemoved(segment.id)}>
+            <Button danger size="small" type="link" onClick={() => onRemoved(segment.id)}>
               删除
-            </button>
+            </Button>
           </div>
           <div className="custom-billing-segment-fields">
-            <label>
-              开始日期
-              <input
+            <div className="custom-billing-field">
+              <span>开始日期</span>
+              <Input
                 type="date"
+                aria-label="开始日期"
                 value={segment.startDate}
                 onChange={(event) => onChanged(segment.id, { startDate: event.target.value })}
               />
-            </label>
-            <label>
-              结束日期
-              <input
+            </div>
+            <div className="custom-billing-field">
+              <span>结束日期</span>
+              <Input
                 type="date"
+                aria-label="结束日期"
                 value={segment.endDate}
                 onChange={(event) => onChanged(segment.id, { endDate: event.target.value })}
               />
-            </label>
+            </div>
             <label>
               {quantityLabel}
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={segment.quantity ?? ""}
+              <InputNumber<number>
+                min={1}
+                step={1}
+                value={segment.quantity ?? null}
                 placeholder="每日数量"
-                onChange={(event) =>
-                  onChanged(segment.id, { quantity: event.target.value === "" ? null : Number(event.target.value) })
-                }
+                onChange={(event) => onChanged(segment.id, { quantity: event == null ? null : Number(event) })}
               />
             </label>
             <label>
               单价（元/{unitLabel}）
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={segment.unitPrice ?? ""}
+              <InputNumber<number>
+                min={0.01}
+                step={0.01}
+                value={segment.unitPrice ?? null}
                 placeholder="收费单价"
-                onChange={(event) =>
-                  onChanged(segment.id, { unitPrice: event.target.value === "" ? null : Number(event.target.value) })
-                }
+                onChange={(event) => onChanged(segment.id, { unitPrice: event == null ? null : Number(event) })}
               />
             </label>
-            <label className="custom-billing-segment-note">
-              收费说明
-              <input
+            <div className="custom-billing-segment-note custom-billing-field">
+              <span>收费说明</span>
+              <Input
+                aria-label="收费说明"
                 value={segment.note}
                 placeholder="例如：特殊饲料"
                 onChange={(event) => onChanged(segment.id, { note: event.target.value })}
               />
-            </label>
+            </div>
           </div>
         </section>
       ))}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Button, Card, Checkbox, Collapse, Select, Tag } from "antd";
 
 import type { InspectionAnswer, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
 import {
@@ -196,38 +197,37 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
           </div>
           <div className="inspection-context-grid">
             <div className="inspection-room-picker">
-              <label>
+              <label htmlFor="inspection-facility">
                 设施
-                <select
+                <Select
+                  aria-label="设施"
+                  className="inspection-room-select"
+                  id="inspection-facility"
+                  options={[
+                    { label: "请选择设施", value: "" },
+                    ...facilities.map((value) => ({ label: inspectionFacilityLabel(value), value })),
+                  ]}
                   value={facility}
-                  onChange={(event) => {
-                    setFacility(event.target.value);
+                  onChange={(value) => {
+                    setFacility(value);
                     setRoomId("");
                   }}
-                >
-                  <option value="">请选择设施</option>
-                  {facilities.map((value) => (
-                    <option key={value} value={value}>
-                      {inspectionFacilityLabel(value)}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
-              <label>
+              <label htmlFor="inspection-room">
                 饲养间
-                <select
+                <Select
+                  aria-label="饲养间"
                   disabled={!facility}
-                  required
+                  className="inspection-room-select"
+                  id="inspection-room"
+                  options={[
+                    { label: facility ? "请选择饲养间" : "请先选择设施", value: "" },
+                    ...facilityRooms.map((room) => ({ label: room.name, value: room.id })),
+                  ]}
                   value={roomId}
-                  onChange={(event) => setRoomId(event.target.value)}
-                >
-                  <option value="">{facility ? "请选择饲养间" : "请先选择设施"}</option>
-                  {facilityRooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setRoomId}
+                />
               </label>
             </div>
             <div className="inspection-module-picker" role="group" aria-label="评估模块">
@@ -235,15 +235,12 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
                 const module = catalog.data?.modules.find((item) => item.code === code);
                 return (
                   <div className={modules.includes(code) ? "selected" : ""} data-module={code} key={code}>
-                    <label htmlFor={`inspection-module-${code}`}>
-                      <input
-                        checked={modules.includes(code)}
-                        id={`inspection-module-${code}`}
-                        type="checkbox"
-                        onChange={(event) => setModule(code, event.target.checked)}
-                      />
+                    <Checkbox
+                      checked={modules.includes(code)}
+                      onChange={(event) => setModule(code, event.target.checked)}
+                    >
                       <strong>{module?.name || MODULE_LABELS[code]}</strong>
-                    </label>
+                    </Checkbox>
                     <HelpTooltip label={`${module?.name || MODULE_LABELS[code]}说明`}>
                       {module?.description || "按标准完成逐项巡检"}
                     </HelpTooltip>
@@ -308,19 +305,21 @@ function InspectionModuleForm({
   onReference: (preview: ReferencePreview) => void;
 }) {
   return (
-    <section
-      className="panel inspection-module-panel"
+    <Card
+      className="inspection-module-card"
       data-module={moduleCode}
       aria-labelledby={`inspection-module-${moduleCode}`}
-    >
-      <div className="panel-head">
-        <div className="panel-title-line">
-          <h2 id={`inspection-module-${moduleCode}`}>{MODULE_LABELS[moduleCode]}</h2>
+      size="small"
+      styles={{ body: { padding: 0 } }}
+      title={
+        <span className="inspection-module-card-title">
+          <span id={`inspection-module-${moduleCode}`}>{MODULE_LABELS[moduleCode]}</span>
           <HelpTooltip label={`${MODULE_LABELS[moduleCode]}巡检说明`}>
             每个条目选择正常或异常；确认异常后补充定位、图例对照和现场照片。
           </HelpTooltip>
-        </div>
-      </div>
+        </span>
+      }
+    >
       {groupedItems(nodes, moduleCode).map(([category, items]) => (
         <InspectionCategory
           answerMap={answerMap}
@@ -333,7 +332,7 @@ function InspectionModuleForm({
           onReference={onReference}
         />
       ))}
-    </section>
+    </Card>
   );
 }
 
@@ -368,80 +367,97 @@ function InspectionCategory({
       <div className="inspection-category-head">
         <div className="inspection-category-title">
           <h3>{category}</h3>
-          <span
-            className={`inspection-category-state ${findings ? "has-findings" : answered === items.length ? "complete" : ""}`}
-          >
-            {stateLabel}
-          </span>
-          <button
-            className="secondary inspection-all-normal"
-            type="button"
+          <Tag color={findings ? "error" : answered === items.length ? "success" : "default"}>{stateLabel}</Tag>
+          <Button
+            className="inspection-all-normal"
+            size="small"
+            type="default"
             onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
           >
             无异常
-          </button>
+          </Button>
         </div>
       </div>
-      <details className="inspection-category-details">
-        <summary>
-          <span>展开检查</span>
-          <span>{items.length} 项</span>
-        </summary>
-        <div className="inspection-category-items">
-          {items.map((node) => {
-            const key = inspectionAnswerKey(moduleCode, node.code);
-            const answer = answerMap[key];
-            // A missing answer remains visibly pending until the inspector confirms it.
-            const outcome = answer ? inspectionOutcome(answer) : undefined;
-            const images = node.config?.referenceImages || [];
-            return (
-              <article className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`} key={node.code}>
-                <div className="inspection-node-main">
-                  <div className="inspection-node-title">
-                    <strong>{node.name}</strong>
-                    {images.length ? (
-                      <button
-                        className="inspection-reference-trigger"
-                        type="button"
-                        onClick={() => onReference({ images, initialIndex: 0, title: node.name })}
-                      >
-                        图例 {images.length}
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
-                    <button
-                      aria-pressed={outcome === "normal"}
-                      className={outcome === "normal" ? "selected normal" : "normal"}
-                      type="button"
-                      onClick={() => onAnswer(node, { outcome: "normal" })}
+      <Collapse
+        className="inspection-category-collapse"
+        expandIconPosition="start"
+        ghost
+        items={[
+          {
+            key: "items",
+            label: (
+              <span className="inspection-category-collapse-label">
+                <span>逐项检查</span>
+                <span>{items.length} 项</span>
+              </span>
+            ),
+            children: (
+              <div className="inspection-category-items">
+                {items.map((node) => {
+                  const key = inspectionAnswerKey(moduleCode, node.code);
+                  const answer = answerMap[key];
+                  // A missing answer remains visibly pending until the inspector confirms it.
+                  const outcome = answer ? inspectionOutcome(answer) : undefined;
+                  const images = node.config?.referenceImages || [];
+                  return (
+                    <article
+                      className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`}
+                      key={node.code}
                     >
-                      正常
-                    </button>
-                    <button
-                      aria-pressed={outcome === "abnormal"}
-                      className={outcome === "abnormal" ? "selected abnormal" : "abnormal"}
-                      type="button"
-                      onClick={() => onFinding(node)}
-                    >
-                      异常
-                    </button>
-                  </div>
-                  {node.description ? <p>{node.description}</p> : null}
-                </div>
-                {outcome === "abnormal" ? (
-                  <div className="inspection-finding-summary">
-                    <strong>已登记异常</strong>
-                    <span>
-                      {answer?.locationHint || answer?.animalIdentifier || answer?.note || "已登记，可点击异常修改。"}
-                    </span>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </details>
+                      <div className="inspection-node-main">
+                        <div className="inspection-node-title">
+                          <strong>{node.name}</strong>
+                          {images.length ? (
+                            <Button
+                              className="inspection-reference-trigger"
+                              size="small"
+                              type="link"
+                              onClick={() => onReference({ images, initialIndex: 0, title: node.name })}
+                            >
+                              图例 {images.length}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
+                          <Button
+                            aria-pressed={outcome === "normal"}
+                            className={outcome === "normal" ? "selected normal" : "normal"}
+                            size="small"
+                            onClick={() => onAnswer(node, { outcome: "normal" })}
+                          >
+                            正常
+                          </Button>
+                          <Button
+                            aria-pressed={outcome === "abnormal"}
+                            className={outcome === "abnormal" ? "selected abnormal" : "abnormal"}
+                            danger={outcome === "abnormal"}
+                            size="small"
+                            onClick={() => onFinding(node)}
+                          >
+                            异常
+                          </Button>
+                        </div>
+                        {node.description ? <p>{node.description}</p> : null}
+                      </div>
+                      {outcome === "abnormal" ? (
+                        <div className="inspection-finding-summary">
+                          <strong>已登记异常</strong>
+                          <span>
+                            {answer?.locationHint ||
+                              answer?.animalIdentifier ||
+                              answer?.note ||
+                              "已登记，可点击异常修改。"}
+                          </span>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            ),
+          },
+        ]}
+      />
     </section>
   );
 }

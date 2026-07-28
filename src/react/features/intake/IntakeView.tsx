@@ -10,6 +10,7 @@ import {
   useSaveIntakeBatch,
 } from "../../api/intake";
 import { useIacucIndex } from "../../api/iacuc";
+import { ActionButton } from "../../components/ui";
 import { AsyncActionButton, ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
@@ -218,9 +219,7 @@ export function IntakeView({
         actions={
           mode === "entry" ? (
             <>
-              <button className="secondary" type="button" onClick={startNew}>
-                新建批次
-              </button>
+              <ActionButton onClick={startNew}>新建批次</ActionButton>
               <AsyncActionButton
                 className="primary"
                 type="submit"
@@ -230,9 +229,7 @@ export function IntakeView({
               >
                 保存待接收批次
               </AsyncActionButton>
-              <button className="secondary" type="button" onClick={() => navigate("cage-card-scanner")}>
-                二维码扫描
-              </button>
+              <ActionButton onClick={() => navigate("cage-card-scanner")}>二维码扫描</ActionButton>
             </>
           ) : null
         }
@@ -306,9 +303,7 @@ export function IntakeView({
               <h2>编辑待接收批次</h2>
               <p>{draft.batchNo}</p>
             </div>
-            <button className="secondary" type="button" onClick={() => setEditingDialog(false)}>
-              关闭
-            </button>
+            <ActionButton onClick={() => setEditingDialog(false)}>关闭</ActionButton>
           </div>
           <div className="modal-shell-body">
             <IntakeEntryPanel
@@ -319,9 +314,9 @@ export function IntakeView({
               saving={save.isPending}
               onSubmit={submit}
               headActions={
-                <button className="primary" type="submit" disabled={save.isPending}>
-                  {save.isPending ? "保存中..." : "保存待接收批次"}
-                </button>
+                <ActionButton loading={save.isPending} tone="primary" type="submit">
+                  保存待接收批次
+                </ActionButton>
               }
               onParse={parseMessage}
               onPrint={() => void printCurrentBatch()}
@@ -342,13 +337,11 @@ export function IntakeView({
             <p>删除后，该批次及关联的待进驻任务会一并移除。</p>
           </div>
           <div className="modal-shell-actions">
-            <button className="secondary" type="button" onClick={() => setDeleteTarget(null)}>
-              取消
-            </button>
-            <button
-              className="danger"
-              type="button"
+            <ActionButton onClick={() => setDeleteTarget(null)}>取消</ActionButton>
+            <ActionButton
               disabled={remove.isPending}
+              loading={remove.isPending}
+              tone="destructive"
               onClick={async () => {
                 await remove.mutateAsync(deleteTarget.id);
                 setSelectedItems((current) => current.filter((item) => item.id !== deleteTarget.id));
@@ -357,7 +350,7 @@ export function IntakeView({
               }}
             >
               确认删除
-            </button>
+            </ActionButton>
           </div>
         </ModalShell>
       ) : null}

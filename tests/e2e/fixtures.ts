@@ -55,7 +55,7 @@ export async function ensureTestInfrastructure(page: Page) {
 
 export async function openSettingsView(page: Page, name: string) {
   const navigation = await openSettingsNavigation(page);
-  await navigation.getByRole("button", { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
+  await navigation.getByRole("menuitem", { name: new RegExp(escapeRegExp(name)) }).click();
 }
 
 function escapeRegExp(value: string) {
@@ -63,25 +63,19 @@ function escapeRegExp(value: string) {
 }
 
 export async function openIntakeEntry(page: Page) {
-  await page.locator("nav.nav").getByRole("button", { name: "笼卡管理", exact: true }).click();
-  const navigation = page.locator("#nav-intake");
-  await expect(navigation).toBeVisible();
-  await navigation.getByRole("button", { name: /^预约消息识别/ }).click();
+  await openNavigationEntry(page, "笼卡管理", "预约消息识别");
 }
 
 export async function openQuantityEntry(page: Page) {
-  const navigation = await openBillingNavigation(page);
-  await navigation.getByRole("button", { name: /^数量统计表（录入）/ }).click();
+  await openNavigationEntry(page, "饲养费管理", "数量统计表（录入）");
 }
 
 export async function openSavedQuantitySheets(page: Page) {
-  const navigation = await openBillingNavigation(page);
-  await navigation.getByRole("button", { name: /^已保存数量统计表/ }).click();
+  await openNavigationEntry(page, "饲养费管理", "已保存数量统计表");
 }
 
 export async function openWorkflowCenter(page: Page) {
-  const navigation = await openBillingNavigation(page);
-  await navigation.getByRole("button", { name: /^结算与报销台账/ }).click();
+  await openNavigationEntry(page, "饲养费管理", "结算与报销台账");
 }
 
 export async function openBillingNavigation(page: Page) {
@@ -93,11 +87,33 @@ export async function openSettingsNavigation(page: Page) {
 }
 
 async function openNavigationGroup(page: Page, label: string, desktopSelector: string): Promise<Locator> {
-  const desktopGroup = page.getByRole("button", { name: label, exact: true }).first();
-  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(width <= 760px)").matches);
+  void desktopSelector;
+  const desktopGroup = page.getByRole("menuitem", { name: new RegExp(escapeRegExp(label)) }).first();
+  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
+  if (useMobileNavigation) {
+    await page.getByRole("tab", { name: mobileTabLabel(label) }).click();
+    const navigation = page.locator(".ant-mobile-navigation-sheet");
+    await expect(navigation).toBeVisible();
+    return navigation;
+  }
   if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
-  const navigation = page.locator(desktopSelector);
-  await expect(navigation).toBeVisible();
-  if (useMobileNavigation) await expect(page.locator(".mobile-navigation-backdrop")).toBeVisible();
-  return navigation;
+  return page.locator(".ant-main-menu");
+}
+
+async function openNavigationEntry(page: Page, group: string, label: string) {
+  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
+  if (useMobileNavigation) {
+    await page.getByRole("tab", { name: mobileTabLabel(group) }).click();
+    await page.locator(".ant-mobile-navigation-sheet").getByText(label, { exact: true }).click();
+    return;
+  }
+  const menu = await openNavigationGroup(page, group, "");
+  await menu.getByRole("menuitem", { name: new RegExp(escapeRegExp(label)) }).click();
+}
+
+function mobileTabLabel(group: string) {
+  return (
+    ({ 笼卡管理: "笼卡", 动物管理: "动物", 饲养费管理: "饲养费", 系统设置: "更多" } as Record<string, string>)[group] ||
+    group
+  );
 }

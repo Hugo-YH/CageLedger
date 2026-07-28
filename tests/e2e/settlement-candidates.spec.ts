@@ -16,7 +16,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test("settlement candidates merge a principal investigator's IACUC sheets", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -52,24 +52,26 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   }
 
   await page.reload();
-  const billingMenu = await openBillingNavigation(page);
-  await billingMenu.getByRole("button", { name: /按项目负责人结算/ }).click();
+  await openBillingNavigation(page);
+  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
   await expect(page.getByRole("heading", { name: "项目负责人结算列表", exact: true })).toBeVisible();
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
   await expect(row).toContainText("¥");
-  await page.getByLabel("每页显示条数").selectOption("5");
+  await page.getByLabel("每页显示条数").click();
+  await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByLabel("全选当前筛选结果结算项").check();
   const selectionSummary = page.getByLabel("结算导出操作").getByText(/已选 \d+ 项/, { exact: true });
   await expect(selectionSummary).toBeVisible();
   const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
   expect(selectedCount).toBeGreaterThan(5);
-  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await page.locator(".ant-pagination-next").click();
   await expect(page.locator("table tbody tr").first().getByRole("checkbox")).toBeChecked();
-  await page.getByRole("button", { name: "上一页", exact: true }).click();
+  await page.locator(".ant-pagination-prev").click();
   await page.getByLabel("全选当前筛选结果结算项").uncheck();
-  await page.getByLabel("每页显示条数").selectOption("10");
+  await page.getByLabel("每页显示条数").click();
+  await page.getByRole("option", { name: "10 条/页", exact: true }).click();
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
   const downloadPromise = page.waitForEvent("download");
   await page.getByLabel("结算导出操作").getByRole("button", { name: "导出 PDF", exact: true }).click();

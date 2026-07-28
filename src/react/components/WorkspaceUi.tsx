@@ -1,5 +1,8 @@
-import { type ButtonHTMLAttributes, type ReactNode, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { Breadcrumb, Button, Card, Empty, Flex, Modal, Pagination, Space, Tag, Typography } from "antd";
+import { CloseOutlined } from "@ant-design/icons";
+import { type ReactNode, useEffect, useRef } from "react";
+
+import { ActionButton, CommandBar, type ActionButtonProps, type ActionTone } from "./ui";
 
 export interface WorkspaceBreadcrumbItem {
   label: string;
@@ -42,61 +45,53 @@ export function WorkspaceHeader({
     <>
       <header className={`workspace-head ${hasBreadcrumbs ? "workspace-head-breadcrumb" : ""}`}>
         <div className="workspace-head-main">
-          <span className="workspace-kicker">{kicker}</span>
+          <Typography.Text className="workspace-kicker" type="secondary">
+            {kicker}
+          </Typography.Text>
           {hasBreadcrumbs ? (
-            <nav className="workspace-breadcrumbs" aria-label="页面目录">
-              {breadcrumbs!.map((crumb, index) => (
-                <span className="workspace-breadcrumb-group" key={crumb.label}>
-                  {index > 0 ? (
-                    <span className="workspace-breadcrumb-separator" aria-hidden="true">
-                      ›
-                    </span>
-                  ) : null}
-                  {crumb.onClick ? (
-                    <button className="workspace-breadcrumb-link" type="button" onClick={crumb.onClick}>
-                      {crumb.label}
-                    </button>
-                  ) : (
-                    <span className="workspace-breadcrumb-link workspace-breadcrumb-current">{crumb.label}</span>
-                  )}
-                </span>
-              ))}
-              <span className="workspace-breadcrumb-separator" aria-hidden="true">
-                ›
-              </span>
-              <h1>{title}</h1>
-              {status ? <span className="workspace-status-badge">{status}</span> : null}
-            </nav>
-          ) : (
-            <div className="workspace-title-line">
-              <h1>{title}</h1>
-              {status ? <span className="workspace-status-badge">{status}</span> : null}
-            </div>
-          )}
-          <p className="workspace-summary">{summary}</p>
+            <Breadcrumb
+              items={breadcrumbs!.map((crumb) => ({
+                title: crumb.onClick ? (
+                  <Button type="link" onClick={crumb.onClick}>
+                    {crumb.label}
+                  </Button>
+                ) : (
+                  crumb.label
+                ),
+              }))}
+            />
+          ) : null}
+          <Flex align="center" className="workspace-title-line" gap={8} wrap>
+            <Typography.Title level={1}>{title}</Typography.Title>
+            {status ? (
+              <Tag className="workspace-status-badge" color="blue">
+                {status}
+              </Tag>
+            ) : null}
+          </Flex>
+          {summary ? (
+            <Typography.Paragraph className="workspace-summary" type="secondary">
+              {summary}
+            </Typography.Paragraph>
+          ) : null}
           {metrics?.length ? (
             <div className="workspace-meta-strip">
               {metrics.map((metric) => (
-                <div className={`workspace-meta-card ${metric.tone || ""}`} key={metric.label}>
+                <Card className={`workspace-meta-card ${metric.tone || ""}`} key={metric.label} size="small">
                   <span>{metric.label}</span>
                   <strong>{metric.value}</strong>
-                </div>
+                </Card>
               ))}
             </div>
           ) : null}
         </div>
       </header>
       {toolbar || actions ? (
-        <div className="workspace-toolbar" aria-label="工作区操作">
-          {toolbar ? (
-            <div className="workspace-toolbar-main">{toolbar}</div>
-          ) : (
-            <span className="workspace-toolbar-spacer" />
-          )}
-          <div className="workspace-toolbar-actions">
-            {actions ? <div className="workspace-toolbar-action-group">{actions}</div> : null}
-          </div>
-        </div>
+        <CommandBar
+          className="workspace-toolbar"
+          context={toolbar ? <div className="workspace-toolbar-main">{toolbar}</div> : undefined}
+          actions={actions ? <div className="workspace-toolbar-action-group">{actions}</div> : undefined}
+        />
       ) : null}
     </>
   );
@@ -105,13 +100,7 @@ export function WorkspaceHeader({
 export function PageState({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {
   return (
     <div className="empty-state" role="status" aria-live="polite">
-      <h3>{title}</h3>
-      {detail ? <p>{detail}</p> : null}
-      {retry ? (
-        <button className="secondary" type="button" onClick={retry}>
-          重新加载
-        </button>
-      ) : null}
+      <Empty description={detail || title}>{retry ? <Button onClick={retry}>重新加载</Button> : null}</Empty>
     </div>
   );
 }
@@ -121,16 +110,34 @@ export function AsyncActionButton({
   pendingLabel = "正在处理...",
   children,
   disabled,
+  tone,
   ...buttonProps
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: Omit<ActionButtonProps, "children" | "tone"> & {
   pending: boolean;
   pendingLabel?: string;
   children: ReactNode;
+  tone?: ActionTone;
 }) {
+  const { className, type = "button", ...nativeProps } = buttonProps;
+  const inferredTone = className?.includes("danger")
+    ? "destructive"
+    : className?.includes("tertiary") || className?.includes("ghost")
+      ? "tertiary"
+      : className?.includes("primary") || className?.includes("flow-button")
+        ? "primary"
+        : "secondary";
   return (
-    <button {...buttonProps} aria-busy={pending || undefined} disabled={disabled || pending}>
-      {pending ? <span className="button-loading-label">{pendingLabel}</span> : children}
-    </button>
+    <ActionButton
+      {...nativeProps}
+      aria-busy={pending || undefined}
+      disabled={disabled || pending}
+      loading={pending}
+      title={pending ? pendingLabel : nativeProps.title}
+      tone={tone ?? inferredTone}
+      type={type}
+    >
+      {pending ? pendingLabel : children}
+    </ActionButton>
   );
 }
 
@@ -145,75 +152,36 @@ export function ModalShell({
   children: ReactNode;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
+  const restoreTarget = useRef<HTMLElement | null>(null);
+  const shellRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    const dialog = dialogRef.current;
-    const focusableSelector =
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    const getFocusable = () =>
-      Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) || []).filter(
-        (element) => element.getClientRects().length > 0,
-      );
-
-    document.body.style.overflow = "hidden";
-    const focusable = getFocusable();
-    (focusable[0] || dialog)?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const currentFocusable = getFocusable();
-      if (!currentFocusable.length) {
-        event.preventDefault();
-        dialog?.focus();
-        return;
-      }
-      const first = currentFocusable[0];
-      const last = currentFocusable[currentFocusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    dialog?.addEventListener("keydown", handleKeyDown);
+    restoreTarget.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => {
+      shellRef.current?.querySelector<HTMLElement>("button[aria-label='关闭']")?.focus();
+    });
     return () => {
-      dialog?.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
+      cancelAnimationFrame(frame);
+      const target = restoreTarget.current;
+      requestAnimationFrame(() => target?.focus());
     };
   }, []);
 
-  return createPortal(
-    <div className="modal-backdrop">
-      <section
-        ref={dialogRef}
-        className={`modal-shell ${className}`.trim()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={ariaLabel}
-        tabIndex={-1}
-      >
+  return (
+    <Modal
+      centered
+      closable={false}
+      footer={null}
+      onCancel={onClose}
+      open
+      rootClassName={`app-modal-root ${className}`.trim()}
+      title={<span className="app-visually-hidden">{ariaLabel}</span>}
+      width="min(1120px, calc(100vw - 32px))"
+    >
+      <section aria-label={ariaLabel} className={`modal-shell ${className}`.trim()} ref={shellRef}>
         {children}
       </section>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -238,20 +206,18 @@ export function ConfirmDialog({
     <ModalShell ariaLabel={title} className="confirm-dialog" onClose={onCancel}>
       <div className="modal-shell-head">
         <h2>{title}</h2>
-        <button aria-label="关闭" className="tertiary icon-button" type="button" onClick={onCancel}>
-          ×
-        </button>
+        <Button aria-label="关闭" icon={<CloseOutlined />} type="text" onClick={onCancel} />
       </div>
       <div className="modal-shell-body">
         <p>{message}</p>
       </div>
       <div className="modal-shell-actions">
-        <button className="secondary" type="button" onClick={onCancel}>
-          取消
-        </button>
-        <button className={danger ? "danger" : "primary"} type="button" disabled={pending} onClick={onConfirm}>
-          {confirmLabel}
-        </button>
+        <Space>
+          <Button onClick={onCancel}>取消</Button>
+          <Button danger={danger} loading={pending} type="primary" onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </Space>
       </div>
     </ModalShell>
   );
@@ -273,35 +239,20 @@ export function Pager({
   onPageSize?: (pageSize: number) => void;
 }) {
   return (
-    <div className="pager">
-      {pageSize && onPageSize ? (
-        <label className="pager-size">
-          每页
-          <select
-            aria-label="每页显示条数"
-            value={pageSize}
-            onChange={(event) => onPageSize(Number(event.target.value))}
-          >
-            {[5, 10, 15, 20].map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          条
-        </label>
-      ) : null}
-      <span>
-        第 {page} / {pages} 页 · 共 {total} 条
-      </span>
-      <div>
-        <button className="secondary" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-          上一页
-        </button>
-        <button className="secondary" type="button" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-          下一页
-        </button>
-      </div>
+    <div className="pager" role="navigation" aria-label="列表分页">
+      <Pagination
+        current={page}
+        pageSize={pageSize || Math.max(1, Math.ceil(total / Math.max(pages, 1)))}
+        pageSizeOptions={[5, 10, 20, 50, 100]}
+        showQuickJumper={pages > 8}
+        showSizeChanger={pageSize && onPageSize ? { "aria-label": "每页显示条数" } : false}
+        showTotal={(count) => `共 ${count} 条`}
+        total={total}
+        onChange={(nextPage, nextPageSize) => {
+          if (nextPageSize !== pageSize && onPageSize) onPageSize(nextPageSize);
+          else onPage(nextPage);
+        }}
+      />
     </div>
   );
 }
