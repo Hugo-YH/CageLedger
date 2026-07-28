@@ -14,7 +14,7 @@ COPY index.html vite.config.ts tsconfig.json ./
 COPY assets ./assets
 COPY src ./src
 COPY wiki ./wiki
-RUN npm run build
+RUN CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
 
 FROM ${PYTHON_IMAGE}
 

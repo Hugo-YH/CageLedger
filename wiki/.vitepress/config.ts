@@ -74,7 +74,7 @@ export default defineConfig({
   description: "实验动物笼位管理与计费系统文档",
   base: "/docs/",
   cleanUrls: true,
-  lastUpdated: true,
+  lastUpdated: process.env.CAGELEDGER_DOCS_LAST_UPDATED !== "false",
   transformPageData(pageData) {
     return {
       frontmatter: {
