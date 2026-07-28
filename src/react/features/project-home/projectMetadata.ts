@@ -7,7 +7,7 @@ export const PROJECT_METADATA = {
   version: APP_VERSION,
   organization: "中山大学中山眼科中心 · 实验动物中心",
   repositoryUrl: "https://git.cellnucle.us/hugo/cageledger",
-  wikiUrl: "https://git.cellnucle.us/hugo/cageledger/wiki",
+  docsUrl: "/docs/",
   releasesUrl: "https://git.cellnucle.us/hugo/cageledger/releases",
 } as const;
 
@@ -15,7 +15,7 @@ export const PROJECT_RESOURCE_LINKS = [
   {
     title: "用户与部署文档",
     description: "查看使用流程、Docker/NAS 部署、离线包和升级说明。",
-    href: PROJECT_METADATA.wikiUrl,
+    href: PROJECT_METADATA.docsUrl,
   },
   {
     title: "版本与离线包",
@@ -24,7 +24,7 @@ export const PROJECT_RESOURCE_LINKS = [
   },
   {
     title: "源码与开发规范",
-    description: "访问 Gitea 仓库、Wiki、Issue 与项目开发资料。",
+    description: "访问 Gitea 仓库、Issue 与项目开发资料。",
     href: PROJECT_METADATA.repositoryUrl,
   },
 ] as const;

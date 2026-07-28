@@ -1,12 +1,6 @@
-import { ARCHIVED_RELEASE_NOTES } from "./releaseNotesArchive";
-import { CURRENT_RELEASE_NOTES } from "./releaseNotesCurrent";
-import { HISTORICAL_RELEASE_NOTES } from "./releaseNotesHistory";
+import { DOCUMENT_RELEASE_NOTES } from "./releaseNotesDocs";
 import type { ReleaseNote } from "./releaseNoteModel";
 
 export type { ReleaseNote } from "./releaseNoteModel";
 
-export const SYSTEM_RELEASE_NOTES: ReleaseNote[] = [
-  ...CURRENT_RELEASE_NOTES,
-  ...HISTORICAL_RELEASE_NOTES,
-  ...ARCHIVED_RELEASE_NOTES,
-];
+export const SYSTEM_RELEASE_NOTES: ReleaseNote[] = DOCUMENT_RELEASE_NOTES;

@@ -115,10 +115,15 @@ if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>
 fi
 
 run node scripts/set_version.mjs --version "$VERSION"
+run node scripts/sync_release_notes_from_docs.mjs
 
-MATCH_COUNT="$(rg -l -F "version: \"${VERSION}\"" src/react/releaseNotes*.ts | wc -l | tr -d ' ')"
-if [[ "${MATCH_COUNT:-0}" -lt 1 ]]; then
-  echo "src/react/releaseNotes*.ts is missing a dedicated ${VERSION} release note. Update release notes first." >&2
+if ! rg -q -F "version: \"${VERSION}\"" src/react/releaseNotesDocs.ts; then
+  echo "src/react/releaseNotesDocs.ts is missing a generated ${VERSION} release note. Update wiki/更新日志.md first." >&2
+  exit 1
+fi
+
+if ! rg -q -F "## v${VERSION}" wiki/更新日志.md; then
+  echo "wiki/更新日志.md is missing the v${VERSION} VitePress release entry." >&2
   exit 1
 fi
 

@@ -9,6 +9,7 @@ const processes = new Set();
 const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
 const apiPort = process.env.CAGELEDGER_DEV_API_PORT || "5174";
 const appPort = process.env.CAGELEDGER_DEV_PORT || "5173";
+const docsPort = process.env.CAGELEDGER_DOCS_PORT || "5175";
 
 function launch(command, args, env = {}) {
   const child = spawn(command, args, {
@@ -45,4 +46,15 @@ launch(process.platform === "win32" ? "npm.cmd" : "npm", [
   "0.0.0.0",
   "--port",
   appPort,
+]);
+launch(process.platform === "win32" ? "npm.cmd" : "npm", [
+  "exec",
+  "vitepress",
+  "--",
+  "dev",
+  "wiki",
+  "--host",
+  "127.0.0.1",
+  "--port",
+  docsPort,
 ]);

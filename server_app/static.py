@@ -9,19 +9,13 @@ STATIC_CACHE = {}
 STATIC_CACHE_LOCK = threading.Lock()
 
 
-def send_frontend_asset(handler, root: Path) -> bool:
-    request_path = unquote(urlparse(handler.path).path)
-    relative = request_path.lstrip("/")
-    if not relative or relative.endswith("/"):
-        return False
-    try:
-        target = (root / relative).resolve()
-        target.relative_to(root.resolve())
-    except (ValueError, OSError):
-        return False
+def _send_static_file(handler, target: Path) -> bool:
     if not target.is_file():
         return False
-
+    try:
+        target = target.resolve()
+    except OSError:
+        return False
     stat = target.stat()
     accepts_gzip = "gzip" in handler.headers.get("Accept-Encoding", "").lower()
     use_gzip = accepts_gzip and stat.st_size >= 1024
@@ -61,3 +55,44 @@ def send_frontend_asset(handler, root: Path) -> bool:
     handler.end_headers()
     handler.wfile.write(body)
     return True
+
+
+def send_frontend_asset(handler, root: Path) -> bool:
+    request_path = unquote(urlparse(handler.path).path)
+    relative = request_path.lstrip("/")
+    if not relative or relative.endswith("/"):
+        return False
+    try:
+        target = (root / relative).resolve()
+        target.relative_to(root.resolve())
+    except (ValueError, OSError):
+        return False
+    return _send_static_file(handler, target)
+
+
+def send_documentation_asset(handler, root: Path) -> bool:
+    """Serve VitePress output from the same origin under /docs/.
+
+    VitePress clean URLs map to generated HTML files. Resolving both explicit
+    assets and clean route paths keeps direct links, browser refreshes and
+    deployment behind a reverse proxy consistent.
+    """
+
+    request_path = unquote(urlparse(handler.path).path)
+    if request_path not in {"/docs", "/docs/"} and not request_path.startswith("/docs/"):
+        return False
+
+    docs_root = (root / "docs").resolve()
+    if not docs_root.is_dir():
+        return False
+    relative = request_path.removeprefix("/docs").lstrip("/")
+    candidates = ["index.html"] if not relative else [relative, f"{relative}.html", f"{relative}/index.html"]
+    for candidate in candidates:
+        try:
+            target = (docs_root / candidate).resolve()
+            target.relative_to(docs_root)
+        except (ValueError, OSError):
+            continue
+        if _send_static_file(handler, target):
+            return True
+    return False

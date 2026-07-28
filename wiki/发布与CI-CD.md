@@ -22,7 +22,7 @@ release notes
 ## 发布前准备
 
 1. 拉取远端并处理本地改动。
-2. 在 `src/react/releaseNotes.ts` 增加独立版本记录和更新时间。
+2. 在 `wiki/更新日志.md` 增加独立版本记录和更新时间，再执行 `npm run release:notes:sync` 生成系统内更新记录。
 3. 同步受影响的 `wiki/` 和 `docs/contracts/`。
 4. 确认 `package.json` 中仍是发布前版本，版本脚本统一修改。
 
@@ -35,7 +35,7 @@ npm run release:local -- --version X.Y.Z --push
 脚本会执行：
 
 1. `scripts/set_version.mjs`
-2. 校验 `src/react/releaseNotes.ts`
+2. 从 `wiki/更新日志.md` 生成并校验系统内更新记录
 3. `npm run verify:full`
 4. `npm run package:offline`
 5. Git commit
@@ -43,7 +43,7 @@ npm run release:local -- --version X.Y.Z --push
 7. Mac mini 本地执行多架构镜像发布并导出离线镜像包
 8. 推送 `main` 和新 tag
 9. 创建或更新 Gitea Release，并上传本地生成的离线包
-10. 将本地 `wiki/` 同步到 Gitea Wiki
+10. 将 Gitea Wiki 同步为 VitePress 文档迁移入口
 
 本地演练：
 
@@ -86,7 +86,7 @@ Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea �
 - `git.cellnucle.us/hugo/cageledger:latest` 与最新正式版本具有相同的 `amd64`、`arm64` manifest。
 - `/api/health` 返回对应版本和 revision。
 - 系统更新检查识别最新 Release。
-- Gitea Wiki 显示本次文档变更。
+- `/docs/` 显示本次文档变更，Gitea Wiki 显示迁移入口。
 
 ## 版本修复规则
 

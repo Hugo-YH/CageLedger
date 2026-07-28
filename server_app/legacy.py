@@ -404,7 +404,7 @@ from server_app.services.reimbursement import (
 )
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
 from server_app.shared.concurrency import StaleWriteError, require_current_version
-from server_app.static import send_frontend_asset
+from server_app.static import send_documentation_asset, send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
@@ -5461,6 +5461,13 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             return
         if path.startswith("/scan/cage-card/") or path.startswith("/c/"):
             self.send_spa_index()
+            return
+        if path in {"/docs/app", "/docs/app/"}:
+            self.send_response(302)
+            self.send_header("Location", "/app")
+            self.end_headers()
+            return
+        if send_documentation_asset(self, frontend_root()):
             return
         if send_frontend_asset(self, frontend_root()):
             return

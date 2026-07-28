@@ -13,7 +13,7 @@ graph LR
     Repo --> DB["SQLite"]
 ```
 
-开发模式由 Vite 将 `/api` 代理到 `5174`。生产模式由 Python 在 `5173` 同时提供 `web-dist/` 和 API。
+开发模式由 Vite 将 `/api` 代理到 `5174`。生产模式由 Python 在 `5173` 同时提供门户、运营系统、文档、`web-dist/` 和 API。
 
 ## 通用响应
 
@@ -63,6 +63,21 @@ graph LR
 | `POST`           | `/api/placement-tasks/{id}/move-in`        | 正式入驻                 |
 | `POST`           | `/api/placement-tasks/{id}/reassign-room`  | 变更目标房间             |
 
+### 动物巡检
+
+| 方法           | 路径                                           | 用途                         |
+| -------------- | ---------------------------------------------- | ---------------------------- |
+| `GET`          | `/api/animal-inspection-catalog`               | 当前启用的巡检标准与参考图例 |
+| `GET` / `POST` | `/api/animal-inspections`                      | 巡检列表和草稿创建           |
+| `GET` / `PUT`  | `/api/animal-inspections/{id}`                 | 巡检详情与草稿保存           |
+| `POST`         | `/api/animal-inspections/{id}/submit`          | 提交并锁定巡检               |
+| `POST`         | `/api/animal-inspections/{id}/attachments`     | 上传巡检照片                 |
+| `POST`         | `/api/animal-inspections/{id}/export-pdf`      | 生成巡检报告 PDF             |
+| `GET`          | `/api/animal-inspection-findings`              | 异常处置列表                 |
+| `POST`         | `/api/animal-inspection-findings/{id}/actions` | 登记处置措施                 |
+| `POST`         | `/api/animal-inspection-findings/{id}/recheck` | 新建复查记录                 |
+| `POST`         | `/api/animal-inspection-findings/{id}/resolve` | 关闭异常项                   |
+
 ### 数量统计表和结算
 
 | 方法                     | 路径                                     | 用途                           |
@@ -70,10 +85,14 @@ graph LR
 | `GET`                    | `/api/quantity-sheet-rooms`              | 统计表跨房间录入候选           |
 | `GET` / `POST`           | `/api/quantity-sheets`                   | 分页查询或新建统计表           |
 | `GET` / `PUT` / `DELETE` | `/api/quantity-sheets/{id}`              | 详情、编辑和删除               |
-| `POST`                   | `/api/billing-statements/generate`       | 动态笼位图结算                 |
+| `POST`                   | `/api/quantity-sheets/pdf-export`        | 创建统计表 PDF 导出任务        |
+| `GET`                    | `/api/billing-settlement-candidates`     | 按 PI 结算候选、筛选与排序     |
 | `POST`                   | `/api/billing-statements/generate-by-pi` | 按 PI 汇总结算                 |
+| `POST`                   | `/api/billing-settlements/pdf-export`    | 创建结算单 PDF 或批量 ZIP 任务 |
 | `POST`                   | `/api/billing-monthly-summary/export`    | 管理员导出月度饲养费汇总 Excel |
 | `GET`                    | `/api/billing-statements/{id}`           | 单张结算单                     |
+| `GET`                    | `/api/pdf-export-jobs/{id}`              | 查询 PDF 导出任务状态          |
+| `GET`                    | `/api/pdf-export-jobs/{id}/download`     | 下载已完成 PDF 或 ZIP          |
 
 ### 流程和报销
 
@@ -91,6 +110,7 @@ graph LR
 | `GET` / `POST`           | `/api/reimbursement-ledger/claims`                   | 报销单列表和新建     |
 | `GET` / `PUT`            | `/api/reimbursement-ledger/claims/{id}`              | 报销单详情和编辑     |
 | `POST`                   | `/api/reimbursement-ledger/claims/{id}/attachments`  | 上传报销单附件       |
+| `GET`                    | `/api/reimbursement-ledger/attachments/{id}`         | 鉴权下载报销单附件   |
 | `POST`                   | `/api/reimbursement-ledger/claims/{id}/allocations`  | 创建核销草稿         |
 | `POST`                   | `/api/reimbursement-ledger/allocations/{id}/confirm` | 确认核销             |
 | `POST`                   | `/api/reimbursement-ledger/allocations/{id}/reverse` | 撤销核销             |
@@ -110,18 +130,22 @@ graph LR
 
 ## 核心数据对象
 
-| 对象                      | 业务键                   | 说明                               |
-| ------------------------- | ------------------------ | ---------------------------------- |
-| `experiment_applications` | IACUC                    | 项目、PI、实验负责人、来源和有效期 |
-| `intake_batches`          | batch id                 | 接收批次和打印卡集合               |
-| `cards`                   | Animal Record ID         | 单张笼卡的持久唯一身份             |
-| `placement_tasks`         | task id                  | 接收后到正式入驻的任务             |
-| `occupancies`             | occupancy id + slot id   | 笼位占用历史                       |
-| `quantity_sheets`         | month + IACUC + sheet id | 月度人工数量记录                   |
-| `billing_statements`      | statement/version id     | 月度结算结果                       |
-| `billing_workflows`       | workflow id              | 结算单状态和版本链                 |
-| `reimbursement_records`   | month + PI               | 应缴、已缴、未缴和报销状态         |
-| `audit_events`            | event id                 | 关键写操作审计                     |
+| 对象                        | 业务键                   | 说明                               |
+| --------------------------- | ------------------------ | ---------------------------------- |
+| `experiment_applications`   | IACUC                    | 项目、PI、实验负责人、来源和有效期 |
+| `intake_batches`            | batch id                 | 接收批次和打印卡集合               |
+| `cards`                     | Animal Record ID         | 单张笼卡的持久唯一身份             |
+| `placement_tasks`           | task id                  | 接收后到正式入驻的任务             |
+| `occupancies`               | occupancy id + slot id   | 笼位占用历史                       |
+| `quantity_sheets`           | month + IACUC + sheet id | 月度人工数量记录                   |
+| `billing_statements`        | statement/version id     | 月度结算结果                       |
+| `billing_workflows`         | workflow id              | 结算单状态和版本链                 |
+| `animal_inspections`        | inspection id            | 饲养间巡检、快照和提交状态         |
+| `inspection_findings`       | finding id               | 异常发现、处置和复查链             |
+| `reimbursement_claims`      | claim number             | 报销单头和经费负责人               |
+| `reimbursement_allocations` | allocation id            | 经费明细与结算应收的核销分摊       |
+| `reimbursement_records`     | month + PI               | 应缴、已缴、未缴和报销状态         |
+| `audit_events`              | event id                 | 关键写操作审计                     |
 
 SQLite 同时保留结构化热字段和兼容 payload。启动迁移会补字段、索引和必要回填。
 
@@ -139,3 +163,4 @@ SQLite 同时保留结构化热字段和兼容 payload。启动迁移会补字�
 - [[数据管理与IACUC索引]]
 - [[饲养费核算]]
 - [[开发规范]]
+- 文档维护规则位于仓库 `docs/contracts/documentation-system.md`。

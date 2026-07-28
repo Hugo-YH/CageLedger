@@ -104,7 +104,7 @@ export function ProjectHome() {
               <Button href="/app" size="large" type="primary">
                 进入系统 <RightOutlined />
               </Button>
-              <Button href={PROJECT_METADATA.wikiUrl} size="large" target="_blank">
+              <Button href={PROJECT_METADATA.docsUrl} size="large">
                 查看文档
               </Button>
             </Space>
@@ -150,7 +150,7 @@ export function ProjectHome() {
           <SectionHeading
             eyebrow="项目资源"
             title="文档、版本与部署资源"
-            detail="Gitea 集中承载源码、Wiki、正式 Release、离线包与容器镜像分发。"
+            detail="项目文档随系统同域提供；Gitea 承载源码、正式 Release、离线包与容器镜像分发。"
           />
           <Row className="project-resource-grid" gutter={[16, 16]}>
             {PROJECT_RESOURCE_LINKS.map((item, index) => (
@@ -181,9 +181,7 @@ export function ProjectHome() {
           <a href={PROJECT_METADATA.repositoryUrl} target="_blank" rel="noreferrer">
             Gitea
           </a>
-          <a href={PROJECT_METADATA.wikiUrl} target="_blank" rel="noreferrer">
-            Wiki
-          </a>
+          <a href={PROJECT_METADATA.docsUrl}>文档</a>
           <a href={PROJECT_METADATA.releasesUrl} target="_blank" rel="noreferrer">
             Release
           </a>

@@ -14,6 +14,8 @@ export default tseslint.config(
       "docs/archives/**",
       "node_modules/**",
       ".venv/**",
+      ".vitepress/**",
+      "wiki/.vitepress/**",
       "playwright-report/**",
       "src/vendor/**",
       "test-results/**",

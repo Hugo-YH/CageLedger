@@ -28,7 +28,9 @@ npm run check
 
 ## 完整门禁
 
-`npm run verify:full` 在基础质量检查后执行生产构建和完整 Playwright。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
+`npm run verify:full` 在基础质量检查后执行 React 应用与 VitePress 文档站的生产构建，并执行完整 Playwright。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
+
+VitePress 文档使用 `wiki/` 作为唯一源目录。`npm run release:notes:sync` 从 `wiki/更新日志.md` 生成系统“关于”页使用的更新记录；发布脚本同时校验 Markdown 版本条目和生成结果。
 
 ## 业务回归
 
@@ -41,4 +43,4 @@ npm run check
 
 ## 发布验证分工
 
-Mac mini 执行格式、lint、类型、Vitest、Python 全量测试、生产构建、Playwright、PDF/打印验收、API 冒烟和性能 benchmark。浏览器报告与测试结果保留在本地发布验证记录中。Gitea 保存 Git 代码、Wiki、Release 资产和容器镜像。
+Mac mini 执行格式、lint、类型、Vitest、Python 全量测试、应用与文档生产构建、Playwright、PDF/打印验收、API 冒烟和性能 benchmark。浏览器报告与测试结果保留在本地发布验证记录中。Gitea 保存 Git 代码、Wiki 迁移页、Release 资产和容器镜像。
