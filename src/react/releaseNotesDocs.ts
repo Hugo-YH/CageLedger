@@ -3,6 +3,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta3",
+    releasedAt: "2026-07-28 00:00",
+    title: "发布制品修复",
+    items: [
+      "Docker 前端依赖安装固定使用兼容的对等依赖解析，确保 Ant Mobile 与 React 19 可稳定构建多架构镜像",
+      "同步 `package-lock.json` 的预发布版本信息，离线包、容器镜像与 Gitea Release 保持同一版本标识",
+    ],
+  },
+  {
     version: "1.0.0-beta2",
     releasedAt: "2026-07-28 00:00",
     title: "项目文档站完善",
