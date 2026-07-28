@@ -7,7 +7,7 @@ WORKDIR /build
 
 COPY package.json package-lock.json ./
 COPY scripts/retry_command.sh ./scripts/retry_command.sh
-RUN bash scripts/retry_command.sh npm ci --prefer-offline --no-audit \
+RUN bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
     --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
 COPY index.html vite.config.ts tsconfig.json ./
