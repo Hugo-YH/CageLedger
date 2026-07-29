@@ -22,6 +22,17 @@
   font-weight: 600;
 }
 
+/* The system entry is a persistent primary action. Keep it visible at every
+ * desktop width rather than competing with VitePress's overflow flyout. */
+.VPNavBarExtra {
+  display: none !important;
+}
+
+.cageledger-app-link {
+  flex: 0 0 auto;
+  margin-left: 12px;
+}
+
 .VPDoc .content-container {
   max-width: 900px;
 }

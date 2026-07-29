@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
 import { requestJson } from "../../../api/client";
+import { useIacucIndex } from "../../../api/iacuc";
 import {
   useDeleteQuantitySheet,
   listAllQuantitySheets,
@@ -37,11 +38,15 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     columnFilters: filters,
   };
   const list = useQuantitySheets(params);
+  const iacucIndex = useIacucIndex();
   const detail = useQuantitySheetDetail(viewId || editId);
   const remove = useDeleteQuantitySheet();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const iacucExpiryByCode = new Map(
+    (iacucIndex.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
+  );
   const toggleAllFiltered = async () => {
     if (allFilteredSelected) {
       setSelected([]);
@@ -88,7 +93,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     ...(
       [
         { key: "month", label: "月份", width: 110 },
-        { key: "iacuc", label: "IACUC", width: 150 },
+        { key: "iacuc", label: "IACUC", width: 250 },
         { key: "roomName", label: "房间", width: 140 },
         { key: "manager", label: "登记人员", width: 130 },
         { key: "pi", label: "负责人", width: 140 },
@@ -119,22 +124,32 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       render: (value: string, item: QuantitySheet) => {
         if (key === "updatedAt") return formatTime(item.updatedAt);
         const text = value || "-";
+        if (key === "iacuc") {
+          const projectEndDate = iacucExpiryByCode.get(item.iacuc.trim().toUpperCase());
+          return (
+            <Space size={4} wrap className="quantity-iacuc-cell">
+              <span title={text}>{text}</span>
+              {projectEndDate ? <IacucExpiryTag endDate={projectEndDate} /> : null}
+            </Space>
+          );
+        }
         return <span title={text}>{text}</span>;
       },
     })),
     {
       key: "actions",
       title: "操作",
-      width: 170,
+      width: 152,
+      align: "right",
       render: (_, item) => (
-        <Space size={0} className="table-actions">
-          <Button className="info-button compact" size="small" type="text" onClick={() => setViewId(item.id)}>
+        <Space size={4} className="table-actions">
+          <Button size="small" type="link" onClick={() => setViewId(item.id)}>
             预览
           </Button>
-          <Button className="info-button compact" size="small" type="text" onClick={() => setEditId(item.id)}>
+          <Button size="small" type="link" onClick={() => setEditId(item.id)}>
             编辑
           </Button>
-          <Button danger className="danger-text compact" size="small" type="text" onClick={() => setDeleteId(item.id)}>
+          <Button danger size="small" type="link" onClick={() => setDeleteId(item.id)}>
             删除
           </Button>
         </Space>
@@ -362,6 +377,18 @@ function QuantityPreview({ sheet }: { sheet: QuantitySheet }) {
     <div className="quantity-stat-preview" dangerouslySetInnerHTML={{ __html: quantitySheetPagesMarkup([sheet]) }} />
   );
 }
+
+function IacucExpiryTag({ endDate }: { endDate: string }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const remainingDays = Math.ceil(
+    (new Date(`${endDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000,
+  );
+  const color = remainingDays < 0 ? "error" : remainingDays <= 30 ? "warning" : "blue";
+  const event = remainingDays < 0 ? "已到期" : remainingDays <= 30 ? "即将到期" : "到期";
+  const label = `${endDate} ${event}`;
+  return <Tag color={color}>{label}</Tag>;
+}
+
 function formatTime(value: string) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-";
 }

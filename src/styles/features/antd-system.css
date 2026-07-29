@@ -310,14 +310,108 @@
   background: var(--app-surface);
 }
 
-.ant-workspace .intake-form-grid > .intake-field-row > label {
+.ant-workspace .intake-ant-field {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.ant-workspace .intake-ant-field > span {
+  display: block;
+}
+
+.ant-workspace .intake-ant-field-required > span::before {
+  margin-inline-end: 4px;
+  color: var(--ant-color-error);
+  content: "*";
+}
+
+.ant-workspace .intake-ant-field :is(.ant-input, .ant-select) {
+  width: 100%;
+}
+
+.ant-workspace .intake-ant-field .ant-select-single {
+  height: 32px;
+}
+
+.ant-workspace .intake-ant-field .ant-select-single .ant-select-selector {
+  height: 32px;
+  padding-block: 0;
+}
+
+.ant-workspace .intake-ant-field .ant-select-single :is(.ant-select-selection-item, .ant-select-selection-placeholder) {
+  line-height: 30px;
+}
+
+/* Quantity-sheet fields still use the legacy grid, while their controls are
+   Ant components. Keep labels above full-width controls like Form.Item. */
+.ant-workspace .quantity-ant-field {
   display: grid;
   min-width: 0;
   gap: 8px;
 }
 
-.ant-workspace .intake-form-grid .ant-select {
+.ant-workspace .quantity-ant-field > span {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  gap: 6px;
+  color: var(--ant-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.ant-workspace .quantity-ant-field-required > span::before {
+  margin-inline-end: -2px;
+  color: var(--ant-color-error);
+  content: "*";
+}
+
+.ant-workspace .quantity-field-source.ant-tag {
+  margin: 0;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.ant-workspace .quantity-auto-field .ant-input {
+  background: var(--ant-color-fill-alter);
+}
+
+.ant-workspace .quantity-readonly-field .ant-input,
+.ant-workspace .quantity-readonly-field .readonly-field {
+  border-style: dashed;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
+  cursor: default;
+}
+
+.ant-workspace .quantity-ant-field .ant-select {
   width: 100%;
+}
+
+.ant-workspace .quantity-ant-field .ant-select-single {
+  height: 32px;
+}
+
+.ant-workspace .quantity-ant-field .ant-select-single .ant-select-selector {
+  height: 32px;
+  padding-block: 0;
+}
+
+.ant-workspace .quantity-ant-field .ant-select-single .ant-select-selection-item,
+.ant-workspace .quantity-ant-field .ant-select-single .ant-select-selection-placeholder {
+  line-height: 30px;
 }
 
 .ant-workspace button.primary,
@@ -486,6 +580,42 @@
 
 .app-data-table .ant-table-cell {
   vertical-align: middle;
+}
+
+/* Service-side tables use Ant Table directly. Keep horizontal overflow at the
+ * region boundary so columns retain their declared widths instead of inheriting
+ * the legacy template-table frame. */
+.ant-workspace .ant-table-region {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--app-surface);
+  scrollbar-gutter: stable both-edges;
+}
+
+.ant-workspace .ant-table-region:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--ant-color-primary-border-hover);
+}
+
+.ant-workspace .ant-table-region .ant-table-wrapper {
+  min-width: max-content;
+}
+
+.ant-workspace .ant-table-region .ant-table {
+  border-radius: inherit;
+}
+
+.ant-workspace .ant-table-region .ant-table-thead > tr > th {
+  white-space: nowrap;
+}
+
+.ant-workspace .intake-batch-table .table-cell-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-status-tag {
@@ -707,26 +837,39 @@
 .app-data-table .filterable-column-title {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  width: 100%;
   max-width: 100%;
   min-height: 32px;
-  gap: 0;
+  gap: 4px;
   vertical-align: middle;
 }
 
 .app-data-table .table-sort-button {
+  position: static;
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
   width: auto;
   min-width: 0;
+  height: 32px;
   min-height: 32px;
   padding: 0 !important;
+  overflow: visible;
+  clip-path: none;
   color: inherit;
   font-weight: 600;
   line-height: 32px;
+  text-align: inherit;
+  white-space: nowrap;
   transform: none !important;
 }
 
 .app-data-table .table-filter-button {
+  position: static;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 18px;
   width: 18px;
   min-width: 18px;

@@ -119,7 +119,6 @@ export default defineConfig({
       { text: "运维", link: "/operations/deployment" },
       { text: "开发", link: "/development/local-development" },
       { text: "更新日志", link: "/releases/" },
-      { text: "进入系统", link: "/../app" },
     ],
     sidebar: {
       "/guide/": [

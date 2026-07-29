@@ -86,8 +86,8 @@ export function IntakeEntryPanel({
           <Field label="实验负责人" required value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
         </div>
         <div className="intake-field-row four">
-          <label htmlFor="intake-species">
-            物种
+          <label className="intake-ant-field" htmlFor="intake-species">
+            <span>物种</span>
             <Select
               aria-label="物种"
               id="intake-species"
@@ -111,8 +111,8 @@ export function IntakeEntryPanel({
             value={draft.quantity ?? ""}
             onChange={(value) => onUpdate("quantity", value ? Number(value) : null)}
           />
-          <label className="field-required" htmlFor="intake-room">
-            房间
+          <label className="intake-ant-field intake-ant-field-required" htmlFor="intake-room">
+            <span>房间</span>
             <Select
               aria-label="房间"
               id="intake-room"
@@ -153,8 +153,8 @@ export function IntakeEntryPanel({
             value={draft.finalCardCount}
             onChange={(value) => onUpdate("finalCardCount", Number(value) || 0)}
           />
-          <label htmlFor="intake-status">
-            状态
+          <label className="intake-ant-field" htmlFor="intake-status">
+            <span>状态</span>
             <Select<IntakeBatchStatus>
               aria-label="状态"
               id="intake-status"
@@ -219,7 +219,8 @@ export function IntakeBatchList({
   const columns: TableProps<IntakeBatch>["columns"] = [
     {
       key: "selection",
-      width: 52,
+      width: 44,
+      fixed: "left",
       title: (
         <Checkbox
           aria-label="全选当前筛选结果"
@@ -238,15 +239,15 @@ export function IntakeBatchList({
     },
     ...(
       [
-        { key: "status", label: "状态", width: 100 },
-        { key: "batchNo", label: "批次号", width: 160 },
-        { key: "supplier", label: "购买单位", width: 190 },
-        { key: "pi", label: "项目负责人", width: 140 },
-        { key: "owner", label: "实验负责人", width: 140 },
-        { key: "quantity", label: "数量", width: 90 },
-        { key: "roomName", label: "房间", width: 100 },
-        { key: "intakeDate", label: "接收日期", width: 130 },
-        { key: "cardCount", label: "笼卡", width: 90 },
+        { key: "status", label: "状态", width: 82 },
+        { key: "batchNo", label: "批次号", width: 140 },
+        { key: "supplier", label: "购买单位", width: 128 },
+        { key: "pi", label: "项目负责人", width: 110 },
+        { key: "owner", label: "实验负责人", width: 110 },
+        { key: "quantity", label: "数量", width: 64 },
+        { key: "roomName", label: "房间", width: 64 },
+        { key: "intakeDate", label: "接收日期", width: 108 },
+        { key: "cardCount", label: "笼卡", width: 56 },
       ] as const
     ).map(({ key, label, width }) => ({
       key,
@@ -278,13 +279,15 @@ export function IntakeBatchList({
     {
       key: "actions",
       title: "操作",
-      width: 126,
+      width: 92,
+      align: "right",
+      fixed: "right",
       render: (_, item) => (
-        <Space size={0} className="table-actions">
-          <Button className="info-button compact" size="small" type="text" onClick={() => onEdit(item)}>
+        <Space size={4} className="table-actions">
+          <Button size="small" type="link" onClick={() => onEdit(item)}>
             编辑
           </Button>
-          <Button danger className="danger-text compact" size="small" type="text" onClick={() => onDelete(item)}>
+          <Button danger size="small" type="link" onClick={() => onDelete(item)}>
             删除
           </Button>
         </Space>
@@ -321,8 +324,16 @@ export function IntakeBatchList({
           第 {page} / {totalPages} 页
         </span>
       </div>
-      <div className="table-wrap" role="region" tabIndex={0} aria-label="待接收批次列表">
-        <DataTable columns={columns} dataSource={items} loading={loading} pagination={false} rowKey="id" />
+      <div className="ant-table-region" role="region" tabIndex={0} aria-label="待接收批次列表">
+        <DataTable
+          className="intake-batch-table"
+          columns={columns}
+          dataSource={items}
+          loading={loading}
+          pagination={false}
+          rowKey="id"
+          scroll={{ x: 998 }}
+        />
       </div>
       <Pager page={page} pages={totalPages} total={total} pageSize={pageSize} onPage={onPage} onPageSize={onPageSize} />
     </section>
@@ -380,8 +391,8 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <label className={required ? "field-required" : undefined}>
-      {label}
+    <label className={`intake-ant-field${required ? " intake-ant-field-required" : ""}`}>
+      <span>{label}</span>
       <Input
         type={type}
         value={value}

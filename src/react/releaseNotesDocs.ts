@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta4.1",
+    releasedAt: "2026-07-29 00:00",
+    title: "Ant Design 表单与列表细节修复",
+    items: [
+      "数量统计表录入区明确区分必填字段、系统自动带入字段和只读信息，补齐 IACUC 与房间选择的表单语义",
+      "已保存数量统计表的 IACUC 列增加到期日期标签，统一使用“YYYY-MM-DD 到期”“YYYY-MM-DD 即将到期”和“YYYY-MM-DD 已到期”文案与 Ant 状态色",
+      "收敛笼卡录入、数量统计表、已保存列表和 VitePress 文档站的 Ant Design 视觉细节与可访问性样式",
+    ],
+  },
+  {
     version: "1.0.0-beta4",
     releasedAt: "2026-07-28 00:00",
     title: "发布构建修复",

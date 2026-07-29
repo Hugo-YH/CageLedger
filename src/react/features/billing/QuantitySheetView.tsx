@@ -323,10 +323,14 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   }}
                 />
               </label>
-              <div className="field-required">
+              <label
+                className="field-required quantity-ant-field quantity-ant-field-required"
+                htmlFor="quantity-sheet-room"
+              >
                 <span>房间号</span>
                 <Select
                   aria-label="房间号"
+                  className="quantity-room-select"
                   id="quantity-sheet-room"
                   options={[
                     { value: "", label: "请选择房间号" },
@@ -336,7 +340,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   virtual={false}
                   onChange={chooseRoom}
                 />
-              </div>
+              </label>
               <ReadOnlyField label="登记人员" value={user.displayName} />
               <ReadOnlyField label="房间管理员" value={selectedRoom?.roomManager || ""} placeholder="当前房间未设置" />
             </div>
@@ -347,9 +351,10 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               <span>IACUC 是保存和结算主键</span>
             </div>
             <div className="field-cluster-body quantity-field-group quantity-field-group-project">
-              <label className="field-required">
-                IACUC 编号
+              <label className="field-required quantity-ant-field quantity-ant-field-required quantity-iacuc-field">
+                <span>IACUC 编号</span>
                 <Input
+                  aria-label="IACUC 编号"
                   list="quantity-iacuc-options"
                   value={draft.iacuc}
                   required
@@ -364,10 +369,18 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   ))}
                 </datalist>
               </label>
-              <Field label="项目名称" value={draft.project} onChange={(value) => setField("project", value)} />
-              <Field label="支撑经费" value={draft.funding} onChange={(value) => setField("funding", value)} />
-              <Field label="项目负责人" value={draft.pi} onChange={(value) => setField("pi", value)} />
-              <Field label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
+              <AutoFilledField
+                label="项目名称"
+                value={draft.project}
+                onChange={(value) => setField("project", value)}
+              />
+              <AutoFilledField
+                label="支撑经费"
+                value={draft.funding}
+                onChange={(value) => setField("funding", value)}
+              />
+              <AutoFilledField label="项目负责人" value={draft.pi} onChange={(value) => setField("pi", value)} />
+              <AutoFilledField label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
             </div>
           </div>
           <div className={`quantity-options-panel ${optionsExpanded ? "expanded" : "collapsed"}`}>
@@ -606,30 +619,45 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   );
 }
 
-function Field({
+function AutoFilledField({
   label,
   value,
   onChange,
-  required = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  required?: boolean;
 }) {
   return (
-    <label className={required ? "field-required" : undefined}>
-      {label}
-      <Input value={value} required={required} onChange={(event) => onChange(event.target.value)} />
+    <label className="quantity-ant-field quantity-auto-field">
+      <span>
+        {label}
+        <Tag variant="filled" className="quantity-field-source" title="选择 IACUC 后自动带入，可按实际情况修订">
+          自动带入
+        </Tag>
+      </span>
+      <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
 
 function ReadOnlyField({ label, value, placeholder }: { label: string; value: string; placeholder?: string }) {
   return (
-    <label>
-      {label}
-      <Input className="readonly-field" value={value} placeholder={placeholder} readOnly aria-readonly="true" />
+    <label className="quantity-ant-field quantity-readonly-field">
+      <span>
+        {label}
+        <Tag variant="filled" className="quantity-field-source">
+          系统带入
+        </Tag>
+      </span>
+      <Input
+        aria-label={label}
+        className="readonly-field"
+        value={value}
+        placeholder={placeholder}
+        readOnly
+        aria-readonly="true"
+      />
     </label>
   );
 }
