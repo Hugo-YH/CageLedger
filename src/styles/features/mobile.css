@@ -40,3 +40,11 @@
 .ant-mobile-page .scanner-card > .ant-card-head-title {
   display: none;
 }
+
+.ant-mobile-page > .ant-mobile-page-body > .billing-layout,
+.ant-mobile-page > .ant-mobile-page-body > .panel,
+.ant-mobile-page > .ant-mobile-page-body > .workspace-view,
+.ant-mobile-page > .ant-mobile-page-body > .ant-card {
+  width: 100%;
+  min-width: 0;
+}
