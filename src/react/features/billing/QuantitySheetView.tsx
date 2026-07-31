@@ -17,6 +17,7 @@ import {
   roomBillingUnit,
   validateQuantitySheet,
 } from "../../../domain/quantitySheets";
+import { matchIacucOptions } from "../../../domain/iacuc";
 import { QuantityEditorPages, type QuantityRowHandle } from "./components/QuantityEditorPages";
 import { ConfirmSave } from "./components/QuantitySheetModals";
 import { SavedQuantitySheets } from "./components/SavedQuantitySheets";
@@ -48,11 +49,10 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const freeCageEnabled =
     supportsFreeCages && (Number(draft.preferredFreeCages || 0) > 0 || draft.freeCagePriority !== null);
   const tierPriorityEnabled = supportsTierPriority && draft.tierCagePriority !== null;
-  const iacucOptions = useMemo(() => {
-    const query = draft.iacuc.trim().toUpperCase();
-    const items = iacucQuery.data?.items || [];
-    return query ? items.filter((item) => item.iacuc.trim().toUpperCase().includes(query)) : items;
-  }, [draft.iacuc, iacucQuery.data?.items]);
+  const iacucOptions = useMemo(
+    () => matchIacucOptions(iacucQuery.data?.items || [], draft.iacuc),
+    [draft.iacuc, iacucQuery.data?.items],
+  );
   const save = useSaveQuantitySheet();
 
   const recalculate = useCallback(() => {

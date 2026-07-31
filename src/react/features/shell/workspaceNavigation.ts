@@ -11,6 +11,31 @@ export type BillingSidebarItem = {
   icon?: "grid" | "calculator" | "book" | "refresh";
 };
 
+export function isWorkspaceView(value: string): value is WorkspaceView {
+  return [
+    "dashboard",
+    "cages",
+    "intake-entry",
+    "intake-batches",
+    "cage-card-scanner",
+    "animal-inspection-entry",
+    "animal-inspection-findings",
+    "animal-inspection-records",
+    "animal-inspection-standards",
+    "billing-cage-map",
+    "billing-quantity-entry",
+    "billing-quantity-saved",
+    "billing-settlement",
+    "billing-monthly-summary",
+    "workflow-center",
+    "rooms",
+    "data",
+    "system",
+    "users",
+    "logs",
+  ].includes(value);
+}
+
 export function breadcrumb(label: string, onClick?: () => void): WorkspaceBreadcrumbItem {
   return { label, onClick };
 }

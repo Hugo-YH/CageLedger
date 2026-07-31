@@ -1,4 +1,4 @@
-import { Popup } from "antd-mobile";
+import { Drawer } from "antd";
 import { type ReactNode } from "react";
 
 export function Sheet({
@@ -13,9 +13,9 @@ export function Sheet({
   onClose: () => void;
 }) {
   return (
-    <Popup bodyStyle={{ borderRadius: "12px 12px 0 0" }} position="bottom" visible={open} onMaskClick={onClose}>
+    <Drawer closable={false} height="auto" onClose={onClose} open={open} placement="bottom">
       {title ? <div className="app-sheet-title">{title}</div> : null}
       {children}
-    </Popup>
+    </Drawer>
   );
 }

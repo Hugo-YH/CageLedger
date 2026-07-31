@@ -1,6 +1,5 @@
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
-import "antd-mobile/es/global";
 
 import { App } from "./react/App";
 import { queryClient } from "./react/api/queryClient";

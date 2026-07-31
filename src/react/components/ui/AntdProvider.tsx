@@ -1,5 +1,4 @@
 import { App as AntApp, ConfigProvider, theme as antTheme } from "antd";
-import { ConfigProvider as MobileConfigProvider } from "antd-mobile";
 import zhCN from "antd/locale/zh_CN";
 import { type PropsWithChildren, useMemo } from "react";
 
@@ -51,9 +50,7 @@ export function AntdProvider({ children }: PropsWithChildren) {
 
   return (
     <ConfigProvider button={{ autoInsertSpace: false }} componentSize="middle" locale={zhCN} theme={config}>
-      <MobileConfigProvider>
-        <AntApp>{children}</AntApp>
-      </MobileConfigProvider>
+      <AntApp>{children}</AntApp>
     </ConfigProvider>
   );
 }

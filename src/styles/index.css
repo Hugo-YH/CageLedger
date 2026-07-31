@@ -1,6 +1,7 @@
 /* Import order preserves the established cascade during modularization. */
 @import url("./tokens.css");
 @import url("antd/dist/reset.css");
+@import url("antd-mobile/es/global/global.css");
 @import url("./base.css");
 @import url("./shell.css");
 @import url("./components.css");
