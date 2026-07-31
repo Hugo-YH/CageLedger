@@ -13,6 +13,9 @@
   --app-shadow-overlay: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%);
   --app-z-layout: 10;
   --app-z-overlay: 1000;
+  --app-dashboard-active: var(--app-primary);
+  --app-dashboard-reserved: #722ed1;
+  --app-dashboard-empty: var(--app-border);
 }
 
 :root[data-theme="dark"] {
@@ -26,6 +29,7 @@
   --app-success: #95de64;
   --app-warning: #ffc53d;
   --app-error: #ff7875;
+  --app-dashboard-reserved: #b37feb;
 }
 
 .ant-app {

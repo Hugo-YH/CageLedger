@@ -203,9 +203,9 @@ function CageStatusDistribution({
   usedPercent: number;
 }) {
   const segments = [
-    { label: "在用", value: active, color: "#1677ff" },
-    { label: "已预约", value: reserved, color: "#722ed1" },
-    { label: "空笼位", value: empty, color: "#d9d9d9" },
+    { label: "在用", value: active, color: "var(--app-dashboard-active)" },
+    { label: "已预约", value: reserved, color: "var(--app-dashboard-reserved)" },
+    { label: "空笼位", value: empty, color: "var(--app-dashboard-empty)" },
   ];
 
   return (

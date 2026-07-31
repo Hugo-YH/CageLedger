@@ -1,4 +1,4 @@
-import { Button, Checkbox, Space, Tag, Typography, type TableProps } from "antd";
+import { Button, Checkbox, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -13,7 +13,6 @@ import {
 } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { ActionButton, DataTable } from "../../../components/ui";
-import { ModalShell, Pager } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
 
@@ -238,45 +237,52 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           rowKey="id"
         />
       </div>
-      <Pager
-        page={page}
-        pages={pages}
-        total={total}
-        pageSize={pageSize}
-        onPage={setPage}
-        onPageSize={(value) => {
-          setPageSize(value);
-          setPage(1);
-          setSelected([]);
-          setAllFilteredSelected(false);
+      <Pagination
+        current={page}
+        onChange={(nextPage, nextPageSize) => {
+          if (nextPageSize !== pageSize) {
+            setPageSize(nextPageSize);
+            setPage(1);
+            setSelected([]);
+            setAllFilteredSelected(false);
+            return;
+          }
+          setPage(nextPage);
         }}
+        pageSize={pageSize}
+        pageSizeOptions={[5, 10, 20, 50]}
+        showQuickJumper
+        showSizeChanger={{ "aria-label": "每页显示条数" }}
+        showTotal={(count) => `共 ${count} 条`}
+        total={total}
       />
       {viewId ? (
         <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
       ) : null}
       {deleteId ? (
-        <ModalShell ariaLabel="删除数量统计表" onClose={() => setDeleteId("")}>
-          <div className="modal-shell-head">
-            <h2>删除数量统计表</h2>
-          </div>
-          <div className="modal-shell-body">
-            <p>删除后，该统计表将退出结算合表范围。</p>
-          </div>
-          <div className="modal-shell-actions">
-            <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
-            <ActionButton
-              loading={remove.isPending}
-              tone="destructive"
-              onClick={async () => {
-                await remove.mutateAsync(deleteId);
-                setSelected((current) => current.filter((id) => id !== deleteId));
-                setDeleteId("");
-              }}
-            >
-              确认删除
-            </ActionButton>
-          </div>
-        </ModalShell>
+        <Modal
+          footer={
+            <Space>
+              <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
+              <ActionButton
+                loading={remove.isPending}
+                tone="destructive"
+                onClick={async () => {
+                  await remove.mutateAsync(deleteId);
+                  setSelected((current) => current.filter((id) => id !== deleteId));
+                  setDeleteId("");
+                }}
+              >
+                确认删除
+              </ActionButton>
+            </Space>
+          }
+          onCancel={() => setDeleteId("")}
+          open
+          title="删除数量统计表"
+        >
+          <p>删除后，该统计表将退出结算合表范围。</p>
+        </Modal>
       ) : null}
     </section>
   );
@@ -335,13 +341,10 @@ function QuantityPreviewModal({
   }
 
   return (
-    <ModalShell ariaLabel="预览数量统计表" className="quantity-react-preview" onClose={onClose}>
-      <div className="modal-shell-head">
-        <div>
-          <h2>预览数量统计表</h2>
-          <p>{sheet ? `${sheet.month} · ${sheet.iacuc}` : "正在加载"}</p>
-        </div>
-        <div className="modal-shell-actions">
+    <Modal
+      className="quantity-react-preview"
+      footer={
+        <Space wrap>
           <ActionButton
             className="info-button"
             disabled={!sheet}
@@ -358,17 +361,20 @@ function QuantityPreviewModal({
             {pdfExport.isExporting ? "正在生成…" : "导出 PDF"}
           </ActionButton>
           <ActionButton onClick={onClose}>关闭</ActionButton>
-        </div>
-      </div>
+        </Space>
+      }
+      onCancel={onClose}
+      open
+      title={sheet ? `${sheet.month} · ${sheet.iacuc}` : "预览数量统计表"}
+      width="min(1120px, calc(100vw - 32px))"
+    >
       {pdfExport.isExporting || exportError ? (
         <div className="react-inline-notice" role="status" aria-live="polite">
           {exportError || "PDF 正在后台生成，完成后会自动下载。"}
         </div>
       ) : null}
-      <div className="modal-shell-body">
-        {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
-      </div>
-    </ModalShell>
+      {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
+    </Modal>
   );
 }
 

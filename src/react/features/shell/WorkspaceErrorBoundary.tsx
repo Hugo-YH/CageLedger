@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { Button } from "antd";
 
 import { clearUiStorage } from "../../state/uiStorage";
 import type { WorkspaceView } from "../../state/ui";
@@ -49,12 +50,9 @@ export class WorkspaceErrorBoundary extends Component<
           <strong>当前工作区未能加载</strong>
           <span>页面资源可能刚完成更新，请重新加载后继续操作。</span>
           <div className="action-row">
-            <button className="secondary" type="button" onClick={() => window.location.reload()}>
-              重新加载
-            </button>
-            <button
-              className="primary"
-              type="button"
+            <Button onClick={() => window.location.reload()}>重新加载</Button>
+            <Button
+              type="primary"
               onClick={() => {
                 clearUiStorage();
                 sessionStorage.removeItem(CHUNK_RECOVERY_KEY);
@@ -62,7 +60,7 @@ export class WorkspaceErrorBoundary extends Component<
               }}
             >
               返回首页
-            </button>
+            </Button>
           </div>
         </div>
       </section>

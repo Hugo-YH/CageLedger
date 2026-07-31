@@ -7,6 +7,7 @@ import { useMoveInPlacement, useReservePlacement, useSaveOccupancy } from "../..
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { ActionButton } from "../../../components/ui";
 import { animalAgeText, cageCode, currentOccupancy, emptyOccupancy, slotPosition } from "../../../../domain/cages";
+import { Field, SexSelect, SlotStatusSelect } from "./CageFormControls";
 import { CageSlotButton } from "./CageSlotButton";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -143,13 +144,7 @@ export function SlotEditor({
       </div>
       <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
         <div className="compact-form-row third">
-          <label>
-            状态
-            <select value={draft.status} onChange={(event) => update("status", event.target.value)}>
-              <option value="active">在用</option>
-              <option value="reserved">已预约</option>
-            </select>
-          </label>
+          <SlotStatusSelect id="cage-slot-status" value={draft.status} onChange={(value) => update("status", value)} />
           <Field label="笼盒编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />
           <Field
             label="动物数量"
@@ -162,17 +157,11 @@ export function SlotEditor({
           <fieldset className="monkey-detail-fields">
             <legend>猴个体信息</legend>
             <div className="compact-form-row third">
-              <label>
-                性别
-                <select
-                  value={draft.animalSex || "unknown"}
-                  onChange={(event) => update("animalSex", event.target.value)}
-                >
-                  <option value="unknown">请选择</option>
-                  <option value="male">雄</option>
-                  <option value="female">雌</option>
-                </select>
-              </label>
+              <SexSelect
+                id="cage-slot-sex"
+                value={draft.animalSex || "unknown"}
+                onChange={(value) => update("animalSex", value)}
+              />
               <Field
                 label="出生日期"
                 type="date"
@@ -217,9 +206,15 @@ export function SlotEditor({
           />
           <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
         </div>
-        <label>
+        <label htmlFor="cage-slot-notes">
           备注
-          <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
+          <Input.TextArea
+            aria-label="备注"
+            id="cage-slot-notes"
+            rows={3}
+            value={draft.notes}
+            onChange={(event) => update("notes", event.target.value)}
+          />
         </label>
         <div className="modal-shell-actions">
           <ActionButton tone="destructive" onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}>
@@ -362,13 +357,7 @@ export function BatchSlotEditor({
       </div>
       <div className="modal-shell-body form compact-slot-form">
         <div className="compact-form-row third">
-          <label>
-            状态
-            <select value={draft.status} onChange={(event) => update("status", event.target.value)}>
-              <option value="active">在用</option>
-              <option value="reserved">已预约</option>
-            </select>
-          </label>
+          <SlotStatusSelect id="cage-batch-status" value={draft.status} onChange={(value) => update("status", value)} />
           <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
           <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
         </div>
@@ -385,9 +374,15 @@ export function BatchSlotEditor({
           />
           <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
         </div>
-        <label>
+        <label htmlFor="cage-batch-notes">
           备注
-          <textarea rows={3} value={draft.notes} onChange={(event) => update("notes", event.target.value)} />
+          <Input.TextArea
+            aria-label="备注"
+            id="cage-batch-notes"
+            rows={3}
+            value={draft.notes}
+            onChange={(event) => update("notes", event.target.value)}
+          />
         </label>
       </div>
       <div className="modal-shell-actions">
@@ -437,32 +432,5 @@ export function ReserveBar({
         确认预留
       </ActionButton>
     </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  max,
-}: {
-  label: string;
-  value: string | number;
-  onChange: (value: string) => void;
-  type?: string;
-  max?: string;
-}) {
-  return (
-    <label>
-      {label}
-      <input
-        type={type}
-        value={value}
-        min={type === "number" ? 0 : undefined}
-        max={max}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
   );
 }

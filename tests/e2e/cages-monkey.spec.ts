@@ -48,7 +48,8 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   ).toContainText("E2E 猴房");
   await page.getByRole("button", { name: /E2E 猴房-01-A1/ }).click();
   await expect(page.getByRole("group", { name: "猴个体信息", exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "性别", exact: true }).selectOption("female");
+  await page.getByRole("combobox", { name: "性别", exact: true }).click();
+  await page.getByRole("option", { name: "雌", exact: true }).click();
   await page.getByLabel("出生日期", { exact: true }).fill("2024-01-15");
   await expect(page.getByLabel("年龄", { exact: true })).not.toHaveValue("自动计算");
   await page.getByRole("button", { name: "保存笼位", exact: true }).click();
