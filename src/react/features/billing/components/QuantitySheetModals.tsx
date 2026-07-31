@@ -1,5 +1,5 @@
 import type { CageRoom, QuantitySheet, QuantitySheetRow } from "../../../api/contracts";
-import { ModalShell } from "../../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell } from "../../../components/WorkspaceUi";
 import { roomBillingProfile } from "../../../../domain/quantitySheets";
 
 export function ConfirmSave({
@@ -74,9 +74,15 @@ export function ConfirmSave({
         <button className="secondary" type="button" onClick={onCancel}>
           取消
         </button>
-        <button className="primary" type="button" disabled={pending} onClick={onConfirm}>
+        <AsyncActionButton
+          className="primary"
+          type="button"
+          pending={pending}
+          pendingLabel="正在保存…"
+          onClick={onConfirm}
+        >
           确认保存
-        </button>
+        </AsyncActionButton>
       </div>
     </ModalShell>
   );

@@ -2,19 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { SettlementCandidateListParams, SettlementCandidateListResponse } from "./contracts";
 import { requestDownload, requestJson } from "./client";
-import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
 
-export function useSettlementCandidates(params: SettlementCandidateListParams, enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.settlementCandidates(params as unknown as Record<string, unknown>),
-    queryFn: () => listSettlementCandidates(params),
-    placeholderData: (previous) => previous,
-    enabled,
-  });
-}
-
-export function listSettlementCandidates(params: SettlementCandidateListParams) {
+function settlementCandidateSearch(params: SettlementCandidateListParams) {
   const search = new URLSearchParams({
     limit: String(params.limit),
     offset: String(params.offset),
@@ -24,11 +14,36 @@ export function listSettlementCandidates(params: SettlementCandidateListParams) 
   if (params.columnFilters && Object.keys(params.columnFilters).length) {
     search.set("columnFilters", JSON.stringify(params.columnFilters));
   }
-  return requestJson<SettlementCandidateListResponse>(`/api/billing-settlement-candidates?${search.toString()}`);
+  return search;
 }
 
-export function listAllSettlementCandidates(params: SettlementCandidateListParams) {
-  return loadAllPages((offset, limit) => listSettlementCandidates({ ...params, offset, limit }));
+export function fetchSettlementCandidates(params: SettlementCandidateListParams) {
+  return requestJson<SettlementCandidateListResponse>(
+    `/api/billing-settlement-candidates?${settlementCandidateSearch(params).toString()}`,
+  );
+}
+
+export async function fetchAllSettlementCandidates(params: SettlementCandidateListParams) {
+  const limit = 100;
+  const firstPage = await fetchSettlementCandidates({ ...params, limit, offset: 0 });
+  const items = [...firstPage.items];
+  const total = firstPage.page.total;
+
+  for (let offset = limit; offset < total; offset += limit) {
+    const nextPage = await fetchSettlementCandidates({ ...params, limit, offset });
+    items.push(...nextPage.items);
+  }
+
+  return items;
+}
+
+export function useSettlementCandidates(params: SettlementCandidateListParams, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.settlementCandidates(params as unknown as Record<string, unknown>),
+    queryFn: () => fetchSettlementCandidates(params),
+    placeholderData: (previous) => previous,
+    enabled,
+  });
 }
 
 export function exportMonthlyBillingSummary(month: string) {

@@ -5,7 +5,6 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
     if not month or not source_sheet_id or not source_iacuc:
         return [], []
 
-    applications_by_iacuc = deps["read_applications_by_iacuc"](conn)
     rows = source_sheet.get("rows", [])
     transfer_rows = []
     for row in rows:
@@ -47,6 +46,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
 
     target_iacucs = sorted({transfer["targetIacuc"] for transfer in transfer_rows if transfer["targetIacuc"]})
     source_row_ids = sorted({transfer["sourceRowId"] for transfer in transfer_rows if transfer.get("sourceRowId")})
+    applications_by_iacuc = deps["read_applications_by_iacuc"](conn) if transfer_rows else {}
     sheets = deps["select_quantity_sheets_for_transfer"](conn, month, source_sheet_id, target_iacucs, source_row_ids)
     events = []
     affected_sheet_by_id = {}

@@ -3442,8 +3442,8 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
         status = HTTPStatus.CREATED
 
     transfer_events, affected_sheets = sync_quantity_sheet_transfer_rows(conn, sheet, actor, now)
-    validation_sheets = list_quantity_sheets_by_month(conn, sheet["month"])
-    validate_custom_billing_segments(validation_sheets, read_rooms_for_quantity_sheets(conn, validation_sheets))
+    changed_sheets = [sheet, *affected_sheets]
+    validate_custom_billing_segments(changed_sheets, read_rooms_for_quantity_sheets(conn, changed_sheets))
     event = audit_event(actor, action, "quantity_sheet", sheet["id"], message, [], now, None, sheet)
     events = [event, *transfer_events]
     write_audit_events(conn, events)

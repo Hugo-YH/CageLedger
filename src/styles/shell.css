@@ -443,6 +443,26 @@ h3 {
   min-width: 0;
 }
 
+/* Settlement export actions are independent controls, so keep their footprint compact. */
+.settlement-export-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  grid-template-columns: none;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.settlement-export-toolbar > .panel-summary-chip {
+  margin-right: auto;
+}
+
+.settlement-export-toolbar > button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
 .workspace-head-actions-body {
   display: flex;
   flex-wrap: wrap;

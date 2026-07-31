@@ -21,7 +21,7 @@ export type QuantityRowHandle = {
   setCalculated: (animals: number, cages: number) => void;
 };
 
-export function QuantityEditorPages({
+export const QuantityEditorPages = memo(function QuantityEditorPages({
   rows,
   month,
   animalDetails,
@@ -102,7 +102,7 @@ export function QuantityEditorPages({
       })}
     </div>
   );
-}
+});
 
 function QuantityTableHeaders() {
   return (

@@ -5,7 +5,7 @@ import type {
   SettlementCandidate,
   SettlementCandidateListParams,
 } from "../../../api/contracts";
-import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
+import { fetchAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { Tooltip } from "../../../components/Tooltip";
@@ -22,6 +22,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selectedCandidates, setSelectedCandidates] = useState<SettlementCandidate[]>([]);
+  const [isSelectingAll, setIsSelectingAll] = useState(false);
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
   const [result, setResult] = useState<BillingStatementResponse | null>(null);
   const [notice, setNotice] = useState("");
@@ -117,7 +118,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     setAllFilteredSelected(true);
     setNotice("");
     try {
-      const candidates = await listAllSettlementCandidates(params);
+      const candidates = await fetchAllSettlementCandidates(params);
       setSelectedCandidates(candidates.filter((candidate) => candidate.totalAmount != null));
       setAllFilteredSelected(true);
     } catch (error) {
@@ -135,6 +136,21 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         ? [...current.filter((item) => item.id !== candidate.id), candidate]
         : current.filter((item) => item.id !== candidate.id),
     );
+  }
+
+  async function selectAllMatchingCandidates() {
+    setNotice("");
+    setIsSelectingAll(true);
+    try {
+      const candidates = await fetchAllSettlementCandidates(params);
+      const exportable = candidates.filter((candidate) => candidate.totalAmount != null);
+      setSelectedCandidates(exportable);
+      setNotice(`已选择当前筛选结果中的 ${exportable.length} 项，可批量导出 PDF。`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "读取全部结算候选项失败");
+    } finally {
+      setIsSelectingAll(false);
+    }
   }
 
   if (source === "cage_map") {
@@ -164,9 +180,22 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       ) : null}
       <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
         <div className="workspace-toolbar-main">
-          <span className="panel-summary-chip">
-            {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
-          </span>
+          <span className="panel-summary-chip">已选 {selectedCandidates.length} 项</span>
+          <AsyncActionButton
+            className="secondary"
+            type="button"
+            pending={isSelectingAll}
+            pendingLabel="正在读取全部项目…"
+            disabled={!total || pdfExport.isExporting}
+            onClick={() => void selectAllMatchingCandidates()}
+          >
+            全选当前筛选结果（{total} 项）
+          </AsyncActionButton>
+          {selectedCandidates.length ? (
+            <button className="ghost" type="button" onClick={() => setSelectedCandidates([])}>
+              清空选择
+            </button>
+          ) : null}
         </div>
         <div className="workspace-toolbar-actions">
           <div className="workspace-toolbar-action-group">
@@ -175,7 +204,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               type="button"
               pending={pdfExport.isExporting}
               pendingLabel={settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
-              disabled={!selectedCandidates.length || selectingAll}
+              disabled={!selectedCandidates.length}
               onClick={() => void exportCandidates(selectedCandidates)}
             >
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
@@ -185,7 +214,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               type="button"
               pending={batchStarting}
               pendingLabel="正在发起..."
-              disabled={!selectedCandidates.length || selectingAll}
+              disabled={!selectedCandidates.length}
               onClick={() => setBatchConfirmOpen(true)}
             >
               {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
