@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta5",
+    releasedAt: "2026-07-31 22:30",
+    title: "Ant Design 全量收敛与系统性能优化",
+    items: [
+      "完成另一设备 Ant Design 迁移成果合流，结算候选、接收批次、系统设置、动物巡检与报销台账全部使用 antd 组件，页面不再直接渲染通用原生控件，控制台弃用警告清零",
+      "数量统计表保存只校验当前表与受影响镜像表，消除整月逐日重算；无转出转入时跳过申请数据全量读取，保存耗时从约 67ms 降到 1ms 量级",
+      "IACUC 索引接口只返回前端使用的字段，响应从约 1.75MB 降到 298KB；录入区与伦理输入隔离重渲染，移动端导航与仪表盘独立懒加载，首屏体积下降",
+      "保存成功、导出进度、失败与错误提示使用 Ant Design 原生反馈与动效，尊重系统减少动态效果偏好",
+      "基础信息月份、房间与只读字段统一 Ant Design 控件高度与标签布局，列表统计摘要收敛为标准文本样式；清理遗留死样式与自研分页、弹窗包装",
+    ],
+  },
+  {
     version: "1.0.0-beta4.1",
     releasedAt: "2026-07-29 00:00",
     title: "Ant Design 表单与列表细节修复",
