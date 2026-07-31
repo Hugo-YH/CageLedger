@@ -2,6 +2,13 @@
   background: linear-gradient(115deg, rgb(247 253 251 / 98%), rgb(229 245 241 / 90%));
 }
 
+.inspection-finding-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .animal-management-body {
   display: grid;
   gap: 16px;

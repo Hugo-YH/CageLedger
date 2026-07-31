@@ -95,22 +95,6 @@ textarea:focus-visible,
   box-shadow: 0 5px 12px rgb(7 72 63 / 18%);
 }
 
-.button-loading-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.button-loading-label::before {
-  width: 12px;
-  height: 12px;
-  border: 2px solid currentcolor;
-  border-right-color: transparent;
-  border-radius: 999px;
-  content: "";
-  animation: apple-control-spin 700ms linear infinite;
-}
-
 .secondary,
 .secondary:not(.info-button) {
   border-color: var(--button-secondary-line);
@@ -164,15 +148,6 @@ textarea:focus-visible,
   background: color-mix(in srgb, var(--danger-soft) 78%, var(--danger));
 }
 
-.icon-button,
-.icon-danger {
-  width: var(--control-height);
-  min-width: var(--control-height);
-  padding: 0;
-  display: inline-grid;
-  place-items: center;
-}
-
 .compact,
 .compact-action {
   min-height: var(--control-height-compact);
@@ -218,10 +193,6 @@ textarea:hover {
   opacity: 0.34;
 }
 
-.nav-item {
-  border-radius: var(--radius-sm);
-}
-
 @media (width >= 761px) {
   .sidebar .nav-item {
     width: 100%;
@@ -244,16 +215,6 @@ textarea:hover {
 
 .nav-item.active {
   background: rgb(125 205 192 / 13%);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .nav-item:hover {
-    background: rgb(125 205 192 / 13%);
-  }
-}
-
-.navigation-submenu {
-  border-left-color: rgb(138 211 199 / 24%);
 }
 
 /* Parent entries establish context; the current leaf carries the selected state. */
@@ -295,21 +256,6 @@ textarea:hover {
 .shell.sidebar-collapsed .nav-toggle-rail:hover {
   background: #214447;
   box-shadow: 0 7px 18px rgb(8 31 33 / 24%);
-}
-
-@media (width >= 761px) {
-  .navigation-submenu-head {
-    display: none;
-  }
-
-  .navigation-submenu {
-    margin-block: 2px 6px;
-    padding-block: 2px;
-  }
-}
-
-.nav-toggle-rail {
-  z-index: var(--z-nav);
 }
 
 .shell.sidebar-collapsed .nav-toggle-rail {
@@ -406,22 +352,9 @@ textarea:hover {
   background: var(--surface-raised);
 }
 
-.dashboard-overview-card,
-.dashboard-facility-card,
-.billing-guide-card,
-.billing-scope-banner {
-  background-image: linear-gradient(180deg, var(--surface-raised), var(--surface-soft));
-}
-
 .billing-guide-card:hover,
 .billing-guide-card.active {
   background: var(--surface-hover);
-}
-
-.modal-backdrop {
-  z-index: var(--z-modal);
-  background: var(--backdrop);
-  backdrop-filter: blur(3px);
 }
 
 .modal-shell {
@@ -438,25 +371,10 @@ textarea:hover {
   background: var(--surface-overlay);
 }
 
-.app-tooltip {
-  z-index: var(--z-popover);
-  max-width: min(280px, calc(100vw - 32px));
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: var(--radius-sm);
-  background: #183638;
-  color: #f4fbfa;
-  box-shadow: var(--shadow-pop);
-  transform-origin: var(--tooltip-transform-origin, center);
-}
-
 @keyframes apple-control-spin {
   to {
     transform: rotate(360deg);
   }
-}
-
-.task-feedback-center {
-  z-index: var(--z-toast);
 }
 
 .empty-state {
@@ -533,24 +451,6 @@ textarea:hover {
   }
 }
 
-.appearance-theme-field {
-  display: grid;
-  grid-template-columns: minmax(104px, auto) minmax(180px, 260px);
-  gap: var(--space-2) var(--space-4);
-  align-items: center;
-  max-width: 480px;
-}
-
-.appearance-theme-field > span {
-  font-weight: 700;
-}
-
-.appearance-theme-field small {
-  grid-column: 2;
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
 @media (width <= 1180px) {
   .workspace {
     padding: var(--space-5);
@@ -565,14 +465,6 @@ textarea:hover {
   .workspace-toolbar {
     top: var(--space-2);
     min-height: 46px;
-  }
-
-  .appearance-theme-field {
-    grid-template-columns: 1fr;
-  }
-
-  .appearance-theme-field small {
-    grid-column: auto;
   }
 }
 

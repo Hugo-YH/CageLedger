@@ -254,7 +254,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
                         <Typography.Text strong>{module?.name || MODULE_LABELS[code]}</Typography.Text>
                       </Checkbox>
                       {MODULE_ANNOTATIONS[code] ? (
-                        <Tag bordered={false} color="blue">
+                        <Tag color="blue" variant="filled">
                           {MODULE_ANNOTATIONS[code]}
                         </Tag>
                       ) : null}
@@ -282,7 +282,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
         <Alert
           className="inspection-review-notice"
           description={catalog.data?.reviewNotice}
-          message="审核提示"
+          title="审核提示"
           showIcon
           type="warning"
         />
@@ -336,7 +336,7 @@ function InspectionModuleForm({
         <span className="inspection-module-card-title">
           <span id={`inspection-module-${moduleCode}`}>{MODULE_LABELS[moduleCode]}</span>
           {MODULE_ANNOTATIONS[moduleCode] ? (
-            <Tag bordered={false} color="blue">
+            <Tag color="blue" variant="filled">
               {MODULE_ANNOTATIONS[moduleCode]}
             </Tag>
           ) : null}
@@ -408,7 +408,7 @@ function InspectionBodyRegionSection({
       <Collapse
         className="inspection-body-region-collapse"
         bordered
-        expandIconPosition="end"
+        expandIconPlacement="end"
         size="small"
         items={[
           {
@@ -417,7 +417,7 @@ function InspectionBodyRegionSection({
               <span className="inspection-body-region-label">
                 <span className="inspection-body-region-label-main">
                   <strong>{region.name}</strong>
-                  <Tag bordered={false}>{region.description}</Tag>
+                  <Tag variant="filled">{region.description}</Tag>
                 </span>
                 <Space size={8}>
                   <Tag color={findings ? "error" : answered === items.length ? "success" : "default"}>{stateLabel}</Tag>
@@ -488,7 +488,7 @@ function InspectionCategory({
       </div>
       <Collapse
         className="inspection-category-collapse"
-        expandIconPosition="start"
+        expandIconPlacement="start"
         ghost
         items={[
           {
@@ -496,7 +496,7 @@ function InspectionCategory({
             label: (
               <span className="inspection-category-collapse-label">
                 <span>查看检查项</span>
-                <Tag bordered={false}>{items.length} 项</Tag>
+                <Tag variant="filled">{items.length} 项</Tag>
               </span>
             ),
             children: (

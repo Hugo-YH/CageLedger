@@ -41,14 +41,12 @@ export function InspectionStandards({
             <Descriptions.Item label="导入时间">
               {catalog.data.version.imported_at.replace("T", " ").slice(0, 16)}
             </Descriptions.Item>
-            <Descriptions.Item label="来源" span={2}>
-              {catalog.data.version.source}
-            </Descriptions.Item>
+            <Descriptions.Item label="来源">{catalog.data.version.source}</Descriptions.Item>
           </Descriptions>
           <Alert
             className="inspection-review-notice"
             description={`${catalog.data.reviewNotice} ${user.role === "admin" ? "系统管理员可通过受控导入流程审核并发布新版本。" : "当前目录由系统管理员维护。"}`}
-            message="审核提示"
+            title="审核提示"
             showIcon
             type="warning"
           />

@@ -8,7 +8,6 @@ import {
   Empty,
   Form,
   Input,
-  List,
   Modal,
   Select,
   Space,
@@ -324,7 +323,7 @@ function FindingDialog({ finding, onClose }: { finding: InspectionFinding; onClo
       <Descriptions className="inspection-finding-summary" column={{ xs: 1, sm: 2 }} size="small">
         <Descriptions.Item label="饲养间">{finding.roomName}</Descriptions.Item>
         <Descriptions.Item label="异常项目">{finding.nodeCode}</Descriptions.Item>
-        <Descriptions.Item label="定位信息" span={2}>
+        <Descriptions.Item label="定位信息" span={{ xs: 1, sm: 2 }}>
           {findingLocation(finding)}
         </Descriptions.Item>
       </Descriptions>
@@ -394,19 +393,16 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
             <Descriptions.Item label="动物数量">{query.data.item.snapshot.animalCount}</Descriptions.Item>
           </Descriptions>
           <Card size="small" title="巡检结论概览">
-            <List
-              dataSource={outcomeSummary}
-              renderItem={(module) => (
-                <List.Item>
-                  <Space wrap>
-                    <Typography.Text strong>{MODULE_LABELS[module.code]}</Typography.Text>
-                    <Tag>{module.items.length} 项标准</Tag>
-                    <Tag color="green">正常 {module.counts.normal}</Tag>
-                    <Tag color="red">异常 {module.counts.abnormal}</Tag>
-                  </Space>
-                </List.Item>
-              )}
-            />
+            <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+              {outcomeSummary.map((module) => (
+                <Space key={module.code} wrap>
+                  <Typography.Text strong>{MODULE_LABELS[module.code]}</Typography.Text>
+                  <Tag>{module.items.length} 项标准</Tag>
+                  <Tag color="green">正常 {module.counts.normal}</Tag>
+                  <Tag color="red">异常 {module.counts.abnormal}</Tag>
+                </Space>
+              ))}
+            </Space>
             {abnormalities.length ? (
               <Collapse
                 items={[
@@ -414,18 +410,15 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
                     key: "abnormalities",
                     label: `查看 ${abnormalities.length} 项异常登记`,
                     children: (
-                      <List
-                        dataSource={abnormalities}
-                        renderItem={(item) => (
-                          <List.Item>
-                            <Space wrap>
-                              <Tag>{MODULE_LABELS[item.moduleCode]}</Tag>
-                              <Typography.Text>{item.name}</Typography.Text>
-                              <Tag color="red">异常</Tag>
-                            </Space>
-                          </List.Item>
-                        )}
-                      />
+                      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+                        {abnormalities.map((item) => (
+                          <Space key={`${item.moduleCode}:${item.name}`} wrap>
+                            <Tag>{MODULE_LABELS[item.moduleCode]}</Tag>
+                            <Typography.Text>{item.name}</Typography.Text>
+                            <Tag color="red">异常</Tag>
+                          </Space>
+                        ))}
+                      </Space>
                     ),
                   },
                 ]}
@@ -436,18 +429,19 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
           </Card>
           <Card size="small" title="异常与处置">
             {query.data.findings.length ? (
-              <List
-                dataSource={query.data.findings}
-                renderItem={(finding) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      description={`${FINDING_STATUS_LABELS[finding.status]} · ${finding.actionNote || "待补充处置措施"}`}
-                      title={finding.nodeCode}
-                    />
+              <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+                {query.data.findings.map((finding) => (
+                  <div key={finding.nodeCode} className="inspection-finding-row">
+                    <div>
+                      <Typography.Text strong>{finding.nodeCode}</Typography.Text>
+                      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                        {FINDING_STATUS_LABELS[finding.status]} · {finding.actionNote || "待补充处置措施"}
+                      </Typography.Paragraph>
+                    </div>
                     {finding.attachments.length ? <Tag>{finding.attachments.length} 张照片</Tag> : null}
-                  </List.Item>
-                )}
-              />
+                  </div>
+                ))}
+              </Space>
             ) : (
               <Empty description="本次巡检未生成异常处置项" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}

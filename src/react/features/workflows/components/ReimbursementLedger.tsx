@@ -58,7 +58,7 @@ function QueryFeedback({
       <Alert
         showIcon
         type="error"
-        message={errorText}
+        title={errorText}
         action={
           <Button icon={<ReloadOutlined />} size="small" onClick={retry}>
             重试

@@ -72,7 +72,7 @@ export function MonthlyBillingSummary() {
       <Typography.Paragraph className="monthly-summary-hint" type="secondary">
         伦理经费和实验日期来自 IACUC 索引；报销单经费本号与单号优先使用已登记台账。
       </Typography.Paragraph>
-      {notice ? <Alert role="status" showIcon type="success" message={notice} /> : null}
+      {notice ? <Alert role="status" showIcon title={notice} type="success" /> : null}
     </Card>
   );
 }
