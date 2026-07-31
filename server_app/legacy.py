@@ -406,6 +406,7 @@ from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, tod
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_documentation_asset, send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
+from server_app.web.iacuc import iacuc_index_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
@@ -5025,6 +5026,7 @@ API_ROUTER.add(
     lambda handler, params: JsonResponse({"ok": True, "database": str(DB_PATH), "system": system_info()}),
 )
 API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(system_info()))
+API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 
 
 def current_session_response(handler, params):
@@ -5230,11 +5232,6 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             except PermissionError as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-            return
-        if path == "/api/iacuc-index":
-            if not self.require_user():
-                return
-            self.send_json(read_iacuc_index())
             return
         if path == "/api/iacuc-index/status":
             if not self.require_user():

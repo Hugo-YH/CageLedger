@@ -42,6 +42,22 @@ def read_iacuc_index(conn, iacuc_index_path, legacy_iacuc_index_path):
     )
 
 
+def filter_iacuc_index(payload, q, limit=80):
+    """Server-side IACUC lookup: prefix-first matching with a bounded result set."""
+    query = (q or "").strip().upper()
+    if not query:
+        return payload
+    items = payload.get("items", [])
+    matched = [item for item in items if query in str(item.get("iacuc", "")).strip().upper()]
+    matched.sort(
+        key=lambda item: (
+            not str(item.get("iacuc", "")).strip().upper().startswith(query),
+            str(item.get("iacuc", "")).strip().upper(),
+        )
+    )
+    return {**payload, "items": matched[:limit], "count": len(matched)}
+
+
 def replace_experiment_applications(conn, items, imported_at, application_payload):
     conn.execute("DELETE FROM experiment_applications")
     for index, item in enumerate(items, start=1):

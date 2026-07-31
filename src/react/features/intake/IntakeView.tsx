@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { useBootstrap } from "../../api/bootstrap";
@@ -9,7 +10,8 @@ import {
   useIntakeBatches,
   useSaveIntakeBatch,
 } from "../../api/intake";
-import { useIacucIndex } from "../../api/iacuc";
+import { fetchIacucSearch } from "../../api/iacuc";
+import { queryKeys } from "../../api/queryKeys";
 import { ActionButton } from "../../components/ui";
 import { AsyncActionButton, ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
 import {
@@ -32,8 +34,8 @@ export function IntakeView({
   navigate: (view: WorkspaceView) => void;
   mode: "entry" | "batches";
 }) {
+  const queryClient = useQueryClient();
   const bootstrap = useBootstrap("summary");
-  const iacucQuery = useIacucIndex();
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -66,11 +68,18 @@ export function IntakeView({
     setDraft((current) => normalizeIntakeBatch({ ...current, [key]: value }, roomNames));
   }
 
-  function parseMessage() {
+  async function parseMessage() {
     const parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
-    const match = iacucQuery.data?.items.find(
-      (item) => item.iacuc.trim().toUpperCase() === parsed.iacuc.trim().toUpperCase(),
-    );
+    const normalizedCode = parsed.iacuc.trim().toUpperCase();
+    let match: { project?: string; pi?: string; owner?: string } | undefined;
+    if (normalizedCode) {
+      const result = await queryClient.ensureQueryData({
+        queryKey: queryKeys.iacucSearch(normalizedCode, 1),
+        queryFn: () => fetchIacucSearch(normalizedCode, 1),
+        staleTime: 5 * 60_000,
+      });
+      match = result.items[0];
+    }
     // Only an explicit edit from the saved-batch list retains the persisted batch ID.
     const isEditingSavedBatch = mode === "batches" && editing;
     setDraft(

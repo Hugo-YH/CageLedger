@@ -22,6 +22,16 @@ export default defineConfig({
     emptyOutDir: true,
     target: "es2022",
     sourcemap: false,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "vendor-react", test: /node_modules[\\/](react|react-dom|scheduler|use-sync-external-store)/ },
+            { name: "vendor-query", test: /node_modules[\\/]@tanstack/ },
+          ],
+        },
+      },
+    },
   },
   test: {
     environment: "jsdom",

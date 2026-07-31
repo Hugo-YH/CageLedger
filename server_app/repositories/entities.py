@@ -58,12 +58,23 @@ def list_audit_events_page(conn, filters, filtered_where):
     cached = cache_get(key)
     if cached is not None:
         return cached
-    return cache_set(
-        key,
-        paginated_payloads(
-            conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"]
-        ),
+    result = paginated_payloads(
+        conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"]
     )
+    for item in result["items"]:
+        _trim_audit_snapshot(item)
+    return cache_set(key, result)
+
+
+def _trim_audit_snapshot(item):
+    # List rows only render summary fields; bound full before/after snapshots so
+    # large entity payloads do not inflate the audit page response.
+    for key in ("before", "after"):
+        value = item.get(key)
+        if isinstance(value, dict):
+            item[key] = {"truncated": True, "entityKeys": sorted(value.keys())}
+        elif isinstance(value, list):
+            item[key] = {"truncated": True, "count": len(value)}
 
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
