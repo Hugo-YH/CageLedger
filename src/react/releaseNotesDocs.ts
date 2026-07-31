@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta7",
+    releasedAt: "2026-08-01 00:57",
+    title: "版本规范、系统文档与关于系统页面优化",
+    items: [
+      "版本编号规范为 `a.b.c[-betaN]`，`build` 使用 Git 短 SHA，系统内统一显示为 `1.0.0-beta7（短 SHA）` 且不带 `v` 前缀；发布脚本支持 `--bump` 从最新标签自动推导下一版本",
+      "发布流程将容器镜像构建与推送设为固定步骤，非交互环境一律不允许跳过",
+      "文档首页项目门户链接与侧栏修复，更新日志编号规则统一并补齐每版 build 短 SHA；系统内更新记录入口指向 `/docs/releases/`",
+      "关于系统页面按 Ant Design Pro hero 模式重构，收敛为顶部 hero、系统状态、维护信息、界面外观四块全宽卡片；更新记录入口统一到 hero 区，移除维护信息卡内的重复入口",
+    ],
+  },
+  {
     version: "1.0.0-beta6",
     build: "c43431b",
     releasedAt: "2026-07-31 23:30",
