@@ -18,13 +18,14 @@ import {
   TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Space, Tooltip, Typography, type MenuProps } from "antd";
-import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
+import { lazy, Suspense, type ReactNode, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useLogout } from "../../api/session";
 import { clearUiStorage, persistWorkspaceView } from "../../state/uiStorage";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
+import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { WorkspaceErrorBoundary, WorkspaceLoading } from "./WorkspaceErrorBoundary";
 import { billingSidebarItems, isWorkspaceView } from "./workspaceNavigation";
 
@@ -240,17 +241,6 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
       ) : null}
     </Layout>
   );
-}
-
-function useIsMobileLayout() {
-  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 760px)");
-    const onChange = () => setIsMobile(media.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-  return isMobile;
 }
 
 function item(key: string, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {

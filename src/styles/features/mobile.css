@@ -1,0 +1,42 @@
+/* Mobile business pages: single-column antd-mobile shell. */
+.ant-mobile-page {
+  min-height: 100%;
+  background: var(--app-page-bg);
+}
+
+.ant-mobile-page .ant-mobile-page-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.ant-mobile-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.ant-mobile-page-body > .ant-card,
+.ant-mobile-page-body > .animal-ant-card,
+.ant-mobile-page-body > .ant-alert {
+  width: 100%;
+}
+
+.ant-mobile-page .inspection-context-grid {
+  grid-template-columns: 1fr;
+}
+
+.ant-mobile-page .inspection-module-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ant-mobile-page .intake-entry-card > .ant-card-head {
+  display: none;
+}
+
+.ant-mobile-page .scanner-card > .ant-card-head-title {
+  display: none;
+}

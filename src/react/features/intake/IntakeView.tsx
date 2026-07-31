@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Button as MobileButton } from "antd-mobile";
 import { useState } from "react";
 
 import { useBootstrap } from "../../api/bootstrap";
@@ -13,6 +14,8 @@ import {
 import { fetchIacucSearch } from "../../api/iacuc";
 import { queryKeys } from "../../api/queryKeys";
 import { ActionButton } from "../../components/ui";
+import { MobilePage } from "../../components/ui";
+import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { AsyncActionButton, ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
@@ -34,6 +37,7 @@ export function IntakeView({
   navigate: (view: WorkspaceView) => void;
   mode: "entry" | "batches";
 }) {
+  const isMobile = useIsMobileLayout();
   const queryClient = useQueryClient();
   const bootstrap = useBootstrap("summary");
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
@@ -207,6 +211,37 @@ export function IntakeView({
     } finally {
       setSelectingAll(false);
     }
+  }
+  if (isMobile && mode === "entry") {
+    return (
+      <MobilePage
+        actions={
+          <>
+            <MobileButton size="mini" onClick={startNew}>
+              新建批次
+            </MobileButton>
+            <MobileButton color="primary" form="intake-entry-panel" size="mini" type="submit">
+              保存待接收批次
+            </MobileButton>
+          </>
+        }
+        onBack={() => navigate("intake-entry")}
+        title="接收笼卡"
+      >
+        <IntakeEntryPanel
+          editing={editing}
+          draft={draft}
+          headActions={null}
+          notice={notice}
+          onParse={parseMessage}
+          onPrint={() => void printCurrentBatch()}
+          onSubmit={submit}
+          onUpdate={update}
+          roomNames={roomNames}
+          saving={save.isPending}
+        />
+      </MobilePage>
+    );
   }
 
   return (

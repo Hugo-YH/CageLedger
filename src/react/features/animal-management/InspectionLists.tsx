@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button as MobileButton, List as MobileList } from "antd-mobile";
 import {
   Alert,
   Button,
@@ -34,6 +35,8 @@ import {
 } from "../../api/animalManagement";
 import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
+import { MobilePage } from "../../components/ui";
+import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
 import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspectionId } from "./model";
@@ -41,6 +44,7 @@ import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspe
 const pageSize = 20;
 
 export function InspectionRecords({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
+  const isMobile = useIsMobileLayout();
   const [offset, setOffset] = useState(0);
   const [room, setRoom] = useState("");
   const [status, setStatus] = useState("");
@@ -61,6 +65,77 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
 
   if (query.isLoading) return <PageState title="正在加载巡检记录..." />;
   if (query.isError) return <PageState title="巡检记录加载失败" retry={() => void query.refetch()} />;
+  const filters = (
+    <Form className="inspection-list-filters" component={false} layout={isMobile ? "vertical" : "inline"}>
+      <Form.Item label="饲养间">
+        <Select
+          allowClear
+          className="min-select-control"
+          options={(query.data?.filterOptions.rooms || []).map((item) => ({ label: item, value: item }))}
+          placeholder="全部饲养间"
+          style={isMobile ? { width: "100%" } : undefined}
+          value={room || undefined}
+          onChange={(value) => {
+            setRoom(value || "");
+            setOffset(0);
+          }}
+        />
+      </Form.Item>
+      <Form.Item label="状态">
+        <Select
+          allowClear
+          className="min-select-control"
+          options={[
+            { label: "草稿", value: "draft" },
+            { label: "已提交", value: "submitted" },
+          ]}
+          placeholder="全部状态"
+          style={isMobile ? { width: "100%" } : undefined}
+          value={status || undefined}
+          onChange={(value) => {
+            setStatus(value || "");
+            setOffset(0);
+          }}
+        />
+      </Form.Item>
+    </Form>
+  );
+  if (isMobile) {
+    return (
+      <>
+        <MobilePage
+          actions={
+            <MobileButton color="primary" size="mini" onClick={() => navigate("animal-inspection-entry")}>
+              新建巡检
+            </MobileButton>
+          }
+          onBack={() => navigate("animal-inspection-entry")}
+          title="巡检记录"
+        >
+          {filters}
+          <Card className="animal-ant-card inspection-list-panel">
+            {items.length ? (
+              <MobileList>
+                {items.map((item) => (
+                  <MobileList.Item
+                    description={`${item.status === "draft" ? "草稿" : "已提交"} · ${item.createdByName} · ${formatDate(item.updatedAt)}`}
+                    extra={`${item.findingSummary?.total || 0} 项异常`}
+                    key={item.id}
+                    onClick={() => setSelectedId(item.id)}
+                  >
+                    {item.roomName} · {item.moduleCodes.map(moduleLabel).join("、")}
+                  </MobileList.Item>
+                ))}
+              </MobileList>
+            ) : (
+              <Empty description="暂无巡检记录" />
+            )}
+          </Card>
+        </MobilePage>
+        {selectedId ? <InspectionDetailDialog id={selectedId} onClose={() => setSelectedId("")} /> : null}
+      </>
+    );
+  }
   return (
     <section className="workspace-view animal-management-workspace">
       <WorkspaceHeader
@@ -80,37 +155,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
           extra={<Tag color="blue">共 {page.total} 条</Tag>}
           title="巡检记录"
         >
-          <Form className="inspection-list-filters" component={false} layout="inline">
-            <Form.Item label="饲养间">
-              <Select
-                allowClear
-                className="min-select-control"
-                options={(query.data?.filterOptions.rooms || []).map((item) => ({ label: item, value: item }))}
-                placeholder="全部饲养间"
-                value={room || undefined}
-                onChange={(value) => {
-                  setRoom(value || "");
-                  setOffset(0);
-                }}
-              />
-            </Form.Item>
-            <Form.Item label="状态">
-              <Select
-                allowClear
-                className="min-select-control"
-                options={[
-                  { label: "草稿", value: "draft" },
-                  { label: "已提交", value: "submitted" },
-                ]}
-                placeholder="全部状态"
-                value={status || undefined}
-                onChange={(value) => {
-                  setStatus(value || "");
-                  setOffset(0);
-                }}
-              />
-            </Form.Item>
-          </Form>
+          {filters}
           <Table
             className="inspection-table"
             columns={[
@@ -186,6 +231,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
 }
 
 export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceView) => void }) {
+  const isMobile = useIsMobileLayout();
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<InspectionFinding | null>(null);
@@ -194,6 +240,33 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const current = Math.floor(page.offset / page.limit) + 1;
   if (query.isLoading) return <PageState title="正在加载异常处置项..." />;
   if (query.isError) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
+  if (isMobile) {
+    const findings = query.data?.items || [];
+    return (
+      <>
+        <MobilePage onBack={() => navigate("animal-inspection-entry")} title="异常处置">
+          <Card className="animal-ant-card inspection-list-panel">
+            {findings.length ? (
+              <MobileList>
+                {findings.map((item) => (
+                  <MobileList.Item
+                    description={`${findingLocation(item)} · ${FINDING_STATUS_LABELS[item.status]}`}
+                    key={item.id}
+                    onClick={() => setSelected(item)}
+                  >
+                    {item.roomName} · {item.nodeCode}
+                  </MobileList.Item>
+                ))}
+              </MobileList>
+            ) : (
+              <Empty description="当前没有异常处置项" />
+            )}
+          </Card>
+        </MobilePage>
+        {selected ? <FindingDialog finding={selected} onClose={() => setSelected(null)} /> : null}
+      </>
+    );
+  }
   return (
     <section className="workspace-view animal-management-workspace">
       <WorkspaceHeader

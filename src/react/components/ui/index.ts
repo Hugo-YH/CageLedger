@@ -6,5 +6,6 @@ export { Dialog } from "./Dialog";
 export { Feedback } from "./Feedback";
 export { FormField } from "./FormField";
 export { HelpPopover } from "./HelpPopover";
+export { MobilePage } from "./MobilePage";
 export { Sheet } from "./Sheet";
 export { StatusTag, type StatusTone } from "./StatusTag";
