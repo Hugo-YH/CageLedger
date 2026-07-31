@@ -4,6 +4,7 @@ import type { ReleaseNote } from "./releaseNoteModel";
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "1.0.0-beta6",
+    build: "c43431b",
     releasedAt: "2026-07-31 23:30",
     title: "移动端业务页 antd-mobile 适配与导航重构",
     items: [
@@ -16,6 +17,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "1.0.0-beta5",
+    build: "338bd75",
     releasedAt: "2026-07-31 22:30",
     title: "Ant Design 全量收敛与系统性能优化",
     items: [
@@ -28,6 +30,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "1.0.0-beta4.1",
+    build: "2cb99b1",
     releasedAt: "2026-07-29 00:00",
     title: "Ant Design 表单与列表细节修复",
     items: [
@@ -38,6 +41,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "1.0.0-beta4",
+    build: "d056fbd",
     releasedAt: "2026-07-28 00:00",
     title: "发布构建修复",
     items: [
@@ -67,6 +71,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "1.0.0-beta1",
+    build: "fc9d8d7",
     releasedAt: "2026-07-28 00:00",
     title: "Ant Design 界面重构预发布",
     items: [
@@ -88,6 +93,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.8",
+    build: "a74451f",
     releasedAt: "2026-07-26 20:20",
     title: "跨页批量操作与统一界面系统",
     items: [
@@ -99,6 +105,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.7",
+    build: "da3f284",
     releasedAt: "2026-07-26 11:35",
     title: "区间化自定义收费与巡检结论优化",
     items: [
@@ -110,6 +117,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.6a",
+    build: "46facb8",
     releasedAt: "2026-07-18 22:50",
     title: "Mac mini 本地发布与验证",
     items: [
@@ -121,6 +129,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.6",
+    build: "c5ce5d0",
     releasedAt: "2026-07-18 21:21",
     title: "动物巡检与统一浮层交互",
     items: [
@@ -133,6 +142,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.5",
+    build: "d6fb068",
     releasedAt: "2026-07-14 21:45",
     title: "月度饲养费汇总 Excel 导出",
     items: [
@@ -144,6 +154,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.4a",
+    build: "6e00ddc",
     releasedAt: "2026-07-13 12:38",
     title: "ARM NAS 内网访问兼容修复",
     items: [
@@ -154,6 +165,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.4",
+    build: "eb3a746",
     releasedAt: "2026-07-13 08:30",
     title: "NAS 工作区加载稳定性修复",
     items: [
@@ -164,6 +176,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.3",
+    build: "b8976d4",
     releasedAt: "2026-07-12 10:56",
     title: "PDF 后台缓存与轻量发布门禁",
     items: [
@@ -175,6 +188,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.2a",
+    build: "27ab63d",
     releasedAt: "2026-07-11 13:00",
     title: "移动端与平板导航修复",
     items: [
@@ -186,6 +200,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.2",
+    build: "5fbaddb",
     releasedAt: "2026-07-11 12:00",
     title: "服务端 PDF 导出与结算性能优化",
     items: [
@@ -197,6 +212,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.1a",
+    build: "acfb051",
     releasedAt: "2026-07-10 00:00",
     title: "结算汇总总计金额显示修复",
     items: [
@@ -207,6 +223,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.1",
+    build: "4da1ab7",
     releasedAt: "2026-07-10 00:00",
     title: "工作区刷新恢复",
     items: [
@@ -217,6 +234,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.7.0",
+    build: "1a7d498",
     releasedAt: "2026-07-10 00:00",
     title: "本地多架构镜像发布与离线交付",
     items: [
@@ -227,6 +245,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.11",
+    build: "e0a4d1d",
     releasedAt: "2026-07-09 14:24",
     title: "容器发布与 ARM 镜像链路修复",
     items: [
@@ -237,6 +256,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.10",
+    build: "8392159",
     releasedAt: "2026-07-08 12:02",
     title: "项目负责人结算候选快照化提速",
     items: [
@@ -248,6 +268,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.9b",
+    build: "a553c40",
     releasedAt: "2026-07-07 17:48",
     title: "数量统计表梯度分配规则修正",
     items: [
@@ -260,6 +281,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.9a",
+    build: "43c030b",
     releasedAt: "2026-07-07 00:03",
     title: "梯度集中分配与开发访问放行",
     items: [
@@ -271,6 +293,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.9",
+    build: "a9e68ce",
     releasedAt: "2026-07-06 21:08",
     title: "数量统计表录入与结算汇总版式优化",
     items: [
@@ -282,6 +305,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.8",
+    build: "512390f",
     releasedAt: "2026-07-06 14:15",
     title: "结算汇总分页与梯度收费标识修复",
     items: [
@@ -293,6 +317,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.7b",
+    build: "21c5d87",
     releasedAt: "2026-07-03 17:01",
     title: "数量统计表全额减免联动",
     items: [
@@ -303,12 +328,14 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.7a",
+    build: "0b36d70",
     releasedAt: "2026-07-03 12:08",
     title: "结算汇总导出文件名优化",
     items: ["饲养费结算汇总表导出 PDF 的文件名改为“XXX课题组实验动物饲养费核算汇总表 xxxx年xx月”格式"],
   },
   {
     version: "0.6.7",
+    build: "e9e9b73",
     releasedAt: "2026-07-03 06:52",
     title: "项目负责人结算列表与工作区交互优化",
     items: [
@@ -321,6 +348,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.6",
+    build: "959e06b",
     releasedAt: "2026-07-03 00:04",
     title: "导航、笼位信息与架构门禁优化",
     items: [
@@ -333,6 +361,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.5",
+    build: "2cb065e",
     releasedAt: "2026-07-02 20:57",
     title: "浏览器回归与导航稳定性修复",
     items: [
@@ -344,6 +373,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.4",
+    build: "2cb51fa",
     releasedAt: "2026-07-02 18:26",
     title: "工作区导航与数量统计表录入优化",
     items: [
@@ -357,6 +387,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.3",
+    build: "91ae732",
     releasedAt: "2026-07-02 11:53",
     title: "笼卡必填信息与打印识别优化",
     items: [
@@ -369,6 +400,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.2",
+    build: "6480f80",
     releasedAt: "2026-07-01 16:45",
     title: "数量统计录入与结算汇总优化",
     items: [
@@ -382,6 +414,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.1",
+    build: "e8ccbd7",
     releasedAt: "2026-07-01 13:24",
     title: "群晖部署与多架构镜像修复",
     items: [
@@ -393,6 +426,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.6.0",
+    build: "b2f9684",
     releasedAt: "2026-07-01 08:52",
     title: "React 迁移与项目模块化",
     items: [
@@ -404,6 +438,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.25",
+    build: "3abe026",
     releasedAt: "2026-06-26 22:49",
     title: "列表表头筛选与排序",
     items: [
@@ -416,6 +451,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.24",
+    build: "3c38b9c",
     releasedAt: "2026-06-26 15:46",
     title: "按钮层级与预览弹窗优化",
     items: [
@@ -428,6 +464,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.23",
+    build: "7f529fe",
     releasedAt: "2026-06-26 08:18",
     title: "笼卡识别码稳定性修复",
     items: [
@@ -438,6 +475,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.22",
+    build: "933cd7b",
     releasedAt: "2026-06-24 16:41",
     title: "项目汇总表同步与核算汇总修正",
     items: [
@@ -449,6 +487,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.21",
+    build: "b44692e",
     releasedAt: "2026-06-24 11:18",
     title: "IACUC 有效期与减免规则完善",
     items: [
@@ -460,6 +499,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.20",
+    build: "7bfa96e",
     releasedAt: "2026-06-23 15:49",
     title: "全系统配色语义整理",
     items: [
@@ -470,6 +510,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.19b",
+    build: "43abfd0",
     releasedAt: "2026-06-23 14:21",
     title: "笼卡扫码查询与预览修复",
     items: [
@@ -481,6 +522,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.19a",
+    build: "be375d6",
     releasedAt: "2026-06-23 13:25",
     title: "移动端笼卡识别优化",
     items: [
@@ -492,6 +534,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.19",
+    build: "409ef63",
     releasedAt: "2026-06-23 13:09",
     title: "笼卡二维码短码与移动端识别",
     items: [
@@ -503,6 +546,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.18",
+    build: "e6240f8",
     releasedAt: "2026-06-22 19:33",
     title: "系统响应与结算性能优化",
     items: [
@@ -515,6 +559,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.17",
+    build: "c9a7a43",
     releasedAt: "2026-06-17 21:14",
     title: "数量统计表动物数量与录入体验优化",
     items: [
@@ -527,6 +572,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.16d",
+    build: "d63e098",
     releasedAt: "2026-06-17 17:26",
     title: "数量统计表多类型录入与权限优化",
     items: [
@@ -538,6 +584,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.16c",
+    build: "121d709",
     releasedAt: "2026-06-17 13:01",
     title: "系统 UI 与交互动画优化",
     items: [
@@ -548,6 +595,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.16b",
+    build: "c499890",
     releasedAt: "2026-06-17 11:58",
     title: "数量统计表连续录入优化",
     items: [
@@ -557,6 +605,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.16a",
+    build: "f7e8052",
     releasedAt: "2026-06-15 14:54",
     title: "笼卡打印状态流转修复",
     items: [
@@ -568,6 +617,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.16",
+    build: "9f425c0",
     releasedAt: "2026-06-11 13:58",
     title: "系统性能与长期运行稳定性优化",
     items: [
@@ -580,6 +630,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.15a",
+    build: "e242c1c",
     releasedAt: "2026-06-09 16:56",
     title: "数量统计表日期与录入顺序优化",
     items: [
@@ -592,6 +643,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.15",
+    build: "80dd2f8",
     releasedAt: "2026-06-07 13:43",
     title: "实验室运营台易用性优化",
     items: [
@@ -603,6 +655,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.14",
+    build: "6903baf",
     releasedAt: "2026-06-06 08:56",
     title: "数量统计表录入易用性收尾",
     items: [
@@ -614,6 +667,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.13",
+    build: "f94b3f8",
     releasedAt: "2026-06-05 10:58",
     title: "前后端版本一致性检查",
     items: [
@@ -624,6 +678,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.12d",
+    build: "cb19980",
     releasedAt: "2026-06-05 10:35",
     title: "数量统计表连续录入优化",
     items: [
@@ -635,6 +690,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.12c",
+    build: "59d1125",
     releasedAt: "2026-06-04 16:53",
     title: "数量统计表录入易用性优化",
     items: [
@@ -646,6 +702,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.12b",
+    build: "15c6ef4",
     releasedAt: "2026-06-04 11:48",
     title: "数量统计表已保存列表优化",
     items: [
@@ -656,6 +713,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.12a",
+    build: "973fb0e",
     releasedAt: "2026-06-03 16:46",
     title: "检疫笼卡版式微调",
     items: [
@@ -665,6 +723,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.12",
+    build: "a0614d0",
     releasedAt: "2026-06-03 16:34",
     title: "数量统计表录入体验修正",
     items: [
@@ -676,12 +735,14 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.11c",
+    build: "7ad10bf",
     releasedAt: "2026-06-02 17:29",
     title: "笼卡 IACUC 高亮微调",
     items: ["调整笼卡打印与预览中批次号 IACUC 高亮字号为 2.7mm，增强识别度并保持版面稳定"],
   },
   {
     version: "0.5.11b",
+    build: "93627b2",
     releasedAt: "2026-06-02 17:13",
     title: "数量统计表录入与导出修正",
     items: [
@@ -693,6 +754,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.11a",
+    build: "8b637f0",
     releasedAt: "2026-06-02 16:35",
     title: "数量统计表录入修正",
     items: [
@@ -702,6 +764,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.11",
+    build: "e8ee8b3",
     releasedAt: "2026-06-02 13:41",
     title: "性能优化持续收敛",
     items: [
@@ -712,6 +775,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.10",
+    build: "3fc6a7c",
     releasedAt: "2026-06-01 20:25",
     title: "数量统计表列表与预览优化",
     items: [
@@ -722,6 +786,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.9",
+    build: "9449b89",
     releasedAt: "2026-06-01 08:10",
     title: "流程与结算链路性能优化",
     items: [
@@ -732,6 +797,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.8b",
+    build: "0630e15",
     title: "检疫卡二维码与启动修复",
     items: [
       "修复待接收批次草稿初始化异常导致页面空白的问题，前端模块加载恢复正常",
@@ -741,6 +807,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.8a",
+    build: "f020a9e",
     title: "待接收批次勾选与房间变更保存修正",
     items: [
       "待接收批次列表表头新增当前页全选勾选框，并补齐半选状态，便于批量打印和批量标记接收",
@@ -750,6 +817,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.8",
+    build: "5e93edb",
     title: "保存链路性能系统性优化",
     items: [
       "将笼位占用、待接收批次、待进驻任务和房间笼架等高频写入迁移为 SQLite 局部写入，减少保存时整库重写",
@@ -759,6 +827,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.7a",
+    build: "5f28855",
     title: "编辑保存反馈与笼位弹窗体验优化",
     items: [
       "根据李志权反馈，统一补齐笼位、待接收、待进驻、数量统计表、房间笼架、账号、报销登记和结算流程等保存成功提示",
@@ -768,6 +837,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.7",
+    build: "121074c",
     title: "流程中心升级为结算与报销台账中心",
     items: [
       "根据邱素娟老师的流程建议，流程中心改为按月份和项目负责人维护报销台账，自动承接每月结算金额、报销状态和累计未缴",
@@ -777,6 +847,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.6",
+    build: "a33b453",
     title: "数量统计表录入贴合纸质表",
     items: [
       "根据柯主任建议，数量统计表录入改为左右两栏、每栏 15 行的纸质表布局，支持同一伦理同月追加统计表页",
@@ -786,6 +857,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.5",
+    build: "a4bcd56",
     title: "数量统计表与核算汇总表导出贴合现行模板",
     items: [
       "数量统计表导出改为 PDF 模板版，按单个伦理号逐表输出，并按当月天数左右双栏排布日期",
@@ -795,6 +867,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.4",
+    build: "c38ddd3",
     title: "README 与 Wiki 文档体系重整",
     items: [
       "README 收敛为轻量入口，统一项目简介、运行命令、部署入口和正式文档导航",
@@ -804,6 +877,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.3",
+    build: "1160ce7",
     title: "Spec-Driven 全项目整理",
     items: [
       "后端拆分为配置、数据库、缓存、HTTP、仓储和服务层，结算、数量统计表、笼卡接收与待进驻主链迁入 server_app",
@@ -813,6 +887,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.2c",
+    build: "8bc290d",
     title: "系统设置抽屉与列表控件细节修正",
     items: [
       "系统设置二级抽屉新增独立遮罩层，页面问号图标与提示气泡会退到抽屉下方，避免与抽屉卡片叠层穿插",
@@ -822,6 +897,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.2b",
+    build: "a6582c1",
     title: "核算界面与系统百科入口整理",
     items: [
       "重排动态笼位图和数量统计表结算入口，统一月份、课题组与 IACUC 的横向控件布局，并收紧操作区避免溢出工作区",
@@ -840,6 +916,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.2",
+    build: "9e84db4",
     title: "首页总览与演示数据完善",
     items: [
       "首页新增运营总览卡片、两设施摘要和快捷入口，汇总待接收、待进驻、本月流程与异常项",
@@ -849,6 +926,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.1a",
+    build: "e2d888e",
     title: "接收回退与分页交互修正",
     items: [
       "待接收批次从已接收回退到已打印时，会同步撤回尚未真正入驻的待进驻任务",
@@ -859,6 +937,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.1",
+    build: "dc14764",
     title: "分页加载与结算链路提速",
     items: [
       "待接收批次和待进驻动物改为按页加载，减少 intake 页面首次进入和翻页时的传输与渲染压力",
@@ -869,6 +948,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.5.0",
+    build: "feacfb7",
     title: "笼卡接收与待进驻流程串联",
     items: [
       "接收笼卡支持确认实际接收、部分到货和按实际接收日生成待进驻任务",
@@ -879,6 +959,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.10",
+    build: "ab90bc1",
     title: "性能优化与系统 Wiki 整合",
     items: [
       "数量统计表保存改为按受影响目标表同步，并以局部刷新和后台补偿减少保存后的等待",
@@ -889,6 +970,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9h",
+    build: "cb220b1",
     title: "最新发布版检查",
     items: [
       "系统更新检查改为比较 Gitea 最新 Release，而不是比较 main 分支最新提交",
@@ -897,6 +979,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9g",
+    build: "64dae5a",
     title: "Gitea 镜像构建脚本兼容修正",
     items: [
       "修复 Alpine sh 环境下不支持 Bash 小写转换语法导致的镜像发布失败",
@@ -905,6 +988,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9f",
+    build: "0e7a5bc",
     title: "Gitea 容器发布变量注入验证",
     items: [
       "容器发布工作流改为读取 Gitea Variables 中的 registry 用户名和访问令牌",
@@ -913,6 +997,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9e",
+    build: "b934e45",
     title: "Gitea 容器发布凭据验证",
     items: [
       "容器镜像发布改用专用 PACKAGE_PAT secret 登录 Gitea Container Registry",
@@ -921,6 +1006,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9d",
+    build: "45ae861",
     title: "Gitea 发布权限与 Release 脚本修正",
     items: [
       "启用仓库级 Actions token 权限覆盖后重新验证 Gitea Packages 发布能力",
@@ -929,6 +1015,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9c",
+    build: "28e1b37",
     title: "Gitea runner 网络修正验证",
     items: [
       "调整 runner 注册链路后再次发布验证版本，确认 job 容器可通过外部域名访问 Gitea",
@@ -937,6 +1024,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9b",
+    build: "d78ffca",
     title: "纯 Gitea 自动发布链验证",
     items: [
       "Gitea 工作流改为直接从私有仓库拉取源码，不再依赖 GitHub Actions Marketplace",
@@ -945,6 +1033,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9a",
+    build: "90c5150",
     title: "Gitea 自动发布链验证",
     items: [
       "在 Gitea act runner 上线后发布验证版本，检查标签触发、Release 上传和镜像发布链路",
@@ -953,6 +1042,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.9",
+    build: "40307f1",
     title: "Gitea 自动发布链迁移",
     items: [
       "发布工作流迁移到 .gitea/workflows，标签推送后可由 Gitea Actions 接管离线包与镜像发布",
@@ -962,6 +1052,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.8",
+    build: "2060f41",
     title: "私有 Gitea 上游与更新检查迁移",
     items: [
       "项目仓库地址、部署文档和容器默认配置切换到私有 Gitea 上游",
@@ -972,6 +1063,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.7",
+    build: "d48b5c8",
     title: "并发加载与基础设施按需加载优化",
     items: [
       "SQLite 初始化改为服务启动阶段执行，热路径连接只保留轻量 PRAGMA，降低并发访问下的重复 schema 与 WAL 设置开销",
@@ -983,6 +1075,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.6d",
+    build: "b6e5243",
     title: "房间管理员权限入口优化",
     items: [
       "根据 @李志权、@吴玉婷、@苏玉霞 反馈，房间管理员可进入房间管理页面调整授权饲养间下的笼架",
@@ -992,11 +1085,13 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.6c",
+    build: "e0173a5",
     title: "数量统计表保存反馈优化",
     items: ["根据 @苏玉霞 建议，数量统计表保存成功后新增站内成功提示，明确显示已保存的结算月份和伦理号"],
   },
   {
     version: "0.4.6b",
+    build: "b084aa1",
     title: "伦理号索引、结算流程与流程中心优化",
     items: [
       "伦理号索引导入改为保留 CSV 原始记录，相同伦理号按原表逐条保存，数量统计表录入优先匹配完整伦理号",
@@ -1008,6 +1103,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.6a",
+    build: "de939bc",
     title: "旧库结算流程迁移修复",
     items: [
       "修复旧版 billing_statements 启动迁移到结算流程表时因外键约束导致服务启动失败的问题",
@@ -1016,6 +1112,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.6",
+    build: "c524bf8",
     title: "后端性能、数据结构与系统文档优化",
     items: [
       "SQLite 启用 WAL、外键约束和 busy timeout，并为笼位、占用、数量统计表、结算流程、审计事件等高频查询补充业务索引",
@@ -1027,6 +1124,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5h",
+    build: "8ef5528",
     title: "通知规范、预约识别与账号授权优化",
     items: [
       "笼卡管理保存待接收批次、必填校验、删除确认等操作统一使用站内通知和站内确认弹层",
@@ -1037,6 +1135,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5g",
+    build: "3c19677",
     title: "前端版本刷新与缓存防护",
     items: [
       "前端启动时自动比对服务器版本与当前页面版本，发现版本不一致时带版本时间戳重新加载页面",
@@ -1046,6 +1145,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5f",
+    build: "c3a76b7",
     title: "系统设置导航与站内通知统一",
     items: [
       "系统设置调整为一级菜单，二级管理页改为抽屉式入口，侧栏恢复滚动并优化桌面端浮层展开交互",
@@ -1056,6 +1156,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5e",
+    build: "0d78919",
     title: "笼卡预览与记录展示整理",
     items: [
       "笼卡批次号中的 IACUC 编号在预览与实际打印中统一显示为红色，保持两端视觉一致",
@@ -1065,6 +1166,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5d",
+    build: "b7b0ad8",
     title: "笼卡批次号高亮修正",
     items: [
       "笼卡打印模板中批次号里的 IACUC 编号改为红色显示，便于在检疫卡上快速识别伦理编号",
@@ -1073,6 +1175,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5c",
+    build: "602ac31",
     title: "笼卡批量打印分页与内切纸对齐修正",
     items: [
       "修复多个待接收批次合并打印时未按每页 14 张强制分页，导致笼卡跨页和后续版面错位的问题",
@@ -1082,6 +1185,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5b",
+    build: "ff28826",
     title: "笼卡管理界面与操作流程优化",
     items: [
       "优化笼卡管理操作区，保存按钮改为主按钮并移除新建入口，支持粘贴、识别、保存后连续录入下一批次",
@@ -1093,6 +1197,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5a",
+    build: "01598d8",
     title: "预约识别与笼卡打印细化",
     items: [
       "增强预约消息识别，兼容锐竞/锐竟、采购订单编号、无冒号字段、全角括号、同一行品系数量和 26/5/13 等日期格式",
@@ -1103,6 +1208,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.5",
+    build: "1406379",
     title: "笼卡管理与接收打印",
     items: [
       "新增笼卡管理一级入口，支持粘贴预约接收消息自动识别批次号、IACUC、供应商、品系、数量、房间和接收日期",
@@ -1113,6 +1219,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.4",
+    build: "8c38113",
     title: "笼位编辑聚焦与猴信息完善",
     items: [
       "饲养间页面新增编辑功能，支持创建后修改所属设施、默认动物、默认收费项目、院内/院外和默认每笼只数",
@@ -1124,6 +1231,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.3",
+    build: "07d8ac3",
     title: "多设施动物饲养费适配",
     items: [
       "房间管理新增所属设施、默认动物、默认收费项目、院内/院外和默认每笼只数配置",
@@ -1134,6 +1242,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.2a",
+    build: "27e9ec8",
     title: "笼位周期管理与首页可视化优化",
     items: [
       "笼位编辑新增“饲养周期（天）”，按开始日期自动计算结束日期",
@@ -1144,6 +1253,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.1b",
+    build: "ec14df7",
     title: "结算流程中心管理优化",
     items: [
       "流程中心新增删除结算流程功能，删除时同步清理版本记录、明细和流程事件并写入操作日志",
@@ -1153,6 +1263,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.1a",
+    build: "eb6a9df",
     title: "界面交互与伦理号录入优化",
     items: [
       "优化非全尺寸窗口下的导航展示，管理页面统一收纳到齿轮入口和管理抽屉中",
@@ -1162,6 +1273,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.1",
+    build: "d5a5967",
     title: "移动端界面适配",
     items: [
       "移动端导航调整为底部导航栏，管理页面收纳到管理抽屉中",
@@ -1171,6 +1283,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.0b",
+    build: "11b4bf4",
     title: "发布流整理",
     items: [
       "新增本地顺序化发布脚本 release:local，固定按改版本、校验、打包、提交、打标签、推送的顺序执行",
@@ -1180,6 +1293,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.0a",
+    build: "f7a8645",
     title: "版本记录修正与发布对齐",
     items: [
       "补充 v0.4.0a 更新记录，明确本轮结算流程中心、核算界面重构和导航折叠优化内容",
@@ -1189,6 +1303,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.4.0",
+    build: "8bab8ef",
     title: "结算流程中心与核算界面重构",
     items: [
       "新增按项目负责人汇总的结算流程中心，支持结算单状态推进、详情弹窗、版本链和事件记录展示",
@@ -1198,6 +1313,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.9a",
+    build: "c13437b",
     title: "笼位图多选录入滚动体验修复",
     items: [
       "修复多选录入操作时页面滚动位置重置导致自动跳到顶部的问题",
@@ -1207,6 +1323,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.9",
+    build: "d11f888",
     title: "结算单财务版式优化",
     items: [
       "结算单调整为更偏财务单据风格，优化顶部信息栏、表格列宽比例和签章留白",
@@ -1216,6 +1333,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.8b",
+    build: "c073f0e",
     title: "数量统计表录入与更新记录展示优化",
     items: [
       "数量统计表录入列顺序调整为新增类型、新增数量、减少类型、减少数量",
@@ -1225,6 +1343,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.8a",
+    build: "b427bf0",
     title: "数量统计表转移与结算修正",
     items: [
       "数量统计表支持转入/转出按伦理号自动双向同步，目标伦理缺表时自动创建并入账",
@@ -1235,6 +1354,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.8",
+    build: "ac8d399",
     title: "笼位拖选与结算单打印优化",
     items: [
       "笼位图多选录入支持按住鼠标拖过笼位批量加入或移出选择",
@@ -1244,6 +1364,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.7",
+    build: "95a3af4",
     title: "笼位图与数量统计表界面优化",
     items: [
       "笼位图新增悬浮信息预览，空笼、预约和在用笼位可快速查看位置与占用详情",
@@ -1253,6 +1374,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.6",
+    build: "80ebe10",
     title: "登录审计记录",
     items: [
       "操作日志新增登录成功记录，便于追溯账号访问时间",
@@ -1262,6 +1384,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.5",
+    build: "9748f7e",
     title: "用户手册完善",
     items: [
       "新增完整用户手册，覆盖角色权限、功能操作、SOP、常见问题和数据安全建议",
@@ -1271,6 +1394,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.4",
+    build: "f407d39",
     title: "权限与界面交互优化",
     items: [
       "房间管理员仅展示并可编辑已授权饲养间，禁止访问未授权房间的笼架和笼位数据",
@@ -1280,6 +1404,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.3",
+    build: "2b86e94",
     title: "房间和笼架管理优化",
     items: [
       "新增饲养间不再自动生成笼架，笼架可按实际编号单独添加、删除和编辑",
@@ -1289,11 +1414,13 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.3.2",
+    build: "c28d651",
     title: "设施结构和窄屏导航修复",
     items: ["设施创建改为批量保存，避免笼位半量写入", "新增笼架编辑和非连续编号支持", "优化窄屏导航栏和退出按钮布局"],
   },
   {
     version: "0.3.1",
+    build: "2f82051",
     title: "项目负责人汇总计费",
     items: [
       "按项目负责人汇总多个 IACUC 结算",
@@ -1308,6 +1435,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: "0.2.1",
+    build: "20252fe",
     title: "离线部署和文档整理",
     items: [
       "支持 NAS 离线源码包构建",
