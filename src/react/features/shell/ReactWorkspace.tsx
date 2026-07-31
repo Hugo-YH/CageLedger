@@ -3,6 +3,7 @@ import {
   AuditOutlined,
   BookOutlined,
   CalculatorOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
   HomeOutlined,
   InfoCircleOutlined,
@@ -86,13 +87,18 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
     setMobileNavigationOpen(false);
   }
 
+  function openProjectHome() {
+    window.location.assign("/");
+  }
+
   async function signOut() {
     await logout.mutateAsync();
     window.dispatchEvent(new CustomEvent("cageledger:session-changed"));
   }
 
   const items: MenuProps["items"] = [
-    item("dashboard", "主页", <HomeOutlined />),
+    item("project-home", "主页", <HomeOutlined />),
+    item("dashboard", "总览", <DashboardOutlined />),
     {
       key: "intake",
       icon: <TagsOutlined />,
@@ -169,6 +175,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
           selectedKeys={[ui.activeView]}
           theme="dark"
           onClick={({ key }) => {
+            if (key === "project-home") {
+              openProjectHome();
+              return;
+            }
             if (isWorkspaceView(key)) navigate(key);
           }}
         />
@@ -215,6 +225,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
         onClose={() => setMobileNavigationOpen(false)}
         onNavigate={navigate}
         onOpen={() => setMobileNavigationOpen(true)}
+        onOpenProjectHome={openProjectHome}
         onRefresh={clearLocalCache}
         onSignOut={() => void signOut()}
       />
@@ -230,6 +241,7 @@ function MobileNavigation({
   onClose,
   onNavigate,
   onOpen,
+  onOpenProjectHome,
   onRefresh,
   onSignOut,
 }: {
@@ -240,6 +252,7 @@ function MobileNavigation({
   onClose: () => void;
   onNavigate: (view: WorkspaceView) => void;
   onOpen: () => void;
+  onOpenProjectHome: () => void;
   onRefresh: () => void;
   onSignOut: () => void;
 }) {
@@ -257,11 +270,21 @@ function MobileNavigation({
   return (
     <>
       <div className="ant-mobile-tabbar" aria-label="移动端主导航" role="tablist">
-        <TabBar activeKey={activeKey} onChange={(key) => (isWorkspaceView(key) ? onNavigate(key) : onOpen())}>
+        <TabBar
+          activeKey={activeKey}
+          onChange={(key) => {
+            const destination = mobileTabDestination(key);
+            if (destination) {
+              onNavigate(destination);
+              return;
+            }
+            onOpen();
+          }}
+        >
           <TabBar.Item
-            icon={<HomeOutlined />}
+            icon={<DashboardOutlined />}
             key="dashboard"
-            title={mobileTabTitle("主页", activeKey === "dashboard")}
+            title={mobileTabTitle("总览", activeKey === "dashboard")}
           />
           <TabBar.Item icon={<TagsOutlined />} key="intake" title={mobileTabTitle("笼卡", activeKey === "intake")} />
           <TabBar.Item icon={<AppstoreOutlined />} key="cages" title={mobileTabTitle("笼位", activeKey === "cages")} />
@@ -289,6 +312,11 @@ function MobileNavigation({
               关闭
             </Button>
           </div>
+          <List header="项目门户">
+            <List.Item arrow onClick={onOpenProjectHome}>
+              主页
+            </List.Item>
+          </List>
           <List header="笼卡管理">
             <MobileItem label="预约消息识别" view="intake-entry" onNavigate={onNavigate} />
             <MobileItem label="待接收批次" view="intake-batches" onNavigate={onNavigate} />
@@ -350,7 +378,7 @@ function mobileTabTitle(label: string, active: boolean) {
   );
 }
 
-function item(key: WorkspaceView, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {
+function item(key: string, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {
   return { key, label, icon };
 }
 
@@ -360,6 +388,17 @@ function mobileKey(view: WorkspaceView) {
   if (isBillingView(view)) return "billing";
   if (isSettingsView(view)) return "more";
   return view;
+}
+
+function mobileTabDestination(key: string): WorkspaceView | null {
+  const destinations: Record<string, WorkspaceView> = {
+    dashboard: "dashboard",
+    intake: "intake-entry",
+    cages: "cages",
+    animal: "animal-inspection-entry",
+    billing: "billing-quantity-entry",
+  };
+  return destinations[key] ?? null;
 }
 
 function isWorkspaceView(value: string): value is WorkspaceView {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Empty, Form, Input, Select, Space, Table, Tag } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag, Typography } from "antd";
 
 import {
   useConfirmReimbursementAllocation,
@@ -12,7 +13,7 @@ import {
   useSettlementObligations,
 } from "../../../api/reimbursementLedger";
 import type { SessionUser } from "../../../api/contracts";
-import { formatMoney, ModalShell, PageState } from "../../../components/WorkspaceUi";
+import { formatMoney } from "../../../components/WorkspaceUi";
 
 const PAGE = { limit: 20, offset: 0 };
 const claimStatusLabels: Record<string, string> = {
@@ -31,6 +32,44 @@ function moneyColumn(title: string, dataIndex: string) {
   };
 }
 
+function QueryFeedback({
+  loading,
+  error,
+  loadingText,
+  errorText,
+  retry,
+}: {
+  loading: boolean;
+  error: boolean;
+  loadingText: string;
+  errorText: string;
+  retry: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="ledger-loading" role="status">
+        <Spin size="small" />
+        <Typography.Text type="secondary">{loadingText}</Typography.Text>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <Alert
+        showIcon
+        type="error"
+        message={errorText}
+        action={
+          <Button icon={<ReloadOutlined />} size="small" onClick={retry}>
+            重试
+          </Button>
+        }
+      />
+    );
+  }
+  return null;
+}
+
 export function ObligationsPanel() {
   const [month, setMonth] = useState("");
   const [sourcePi, setSourcePi] = useState("");
@@ -38,7 +77,7 @@ export function ObligationsPanel() {
   const items = query.data?.items || [];
   return (
     <section className="ledger-section" aria-label="结算应收列表">
-      <div className="command-bar">
+      <div className="ledger-toolbar">
         <Form component={false} layout="inline">
           <Form.Item>
             <Input
@@ -57,10 +96,15 @@ export function ObligationsPanel() {
             />
           </Form.Item>
         </Form>
-        <Tag variant="filled">{query.data?.page.total || 0} 笔应收</Tag>
+        <Tag color="blue">{query.data?.page.total || 0} 笔应收</Tag>
       </div>
-      {query.isPending ? <PageState title="正在同步结算应收..." /> : null}
-      {query.isError ? <PageState title="结算应收加载失败" retry={() => query.refetch()} /> : null}
+      <QueryFeedback
+        error={query.isError}
+        errorText="结算应收加载失败"
+        loading={query.isPending}
+        loadingText="正在同步结算应收..."
+        retry={() => void query.refetch()}
+      />
       {!query.isPending && !query.isError ? (
         <Table
           className="antd-data-table reimbursement-table"
@@ -107,7 +151,7 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   const items = query.data?.items || [];
   return (
     <section className="ledger-section" aria-label="报销单列表">
-      <div className="command-bar">
+      <div className="ledger-toolbar">
         <Form component={false} layout="inline">
           <Form.Item>
             <Input.Search
@@ -129,10 +173,15 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
             />
           </Form.Item>
         </Form>
-        <Tag variant="filled">{query.data?.page.total || 0} 张报销单</Tag>
+        <Tag color="blue">{query.data?.page.total || 0} 张报销单</Tag>
       </div>
-      {query.isPending ? <PageState title="正在加载报销单..." /> : null}
-      {query.isError ? <PageState title="报销单加载失败" retry={() => query.refetch()} /> : null}
+      <QueryFeedback
+        error={query.isError}
+        errorText="报销单加载失败"
+        loading={query.isPending}
+        loadingText="正在加载报销单..."
+        retry={() => void query.refetch()}
+      />
       {!query.isPending && !query.isError ? (
         <Table
           className="antd-data-table reimbursement-table"
@@ -192,83 +241,89 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
   useEffect(() => setLineId(""), [claimId]);
   return (
     <section className="ledger-section reconciliation-section" aria-label="核销中心">
-      <Form className="reconciliation-picker" layout="vertical">
-        <Form.Item label="报销单">
-          <Select
-            allowClear
-            options={(claims.data?.items || []).map((claim) => ({
-              label: `${claim.documentNumber} · ${claim.fundingOwner}`,
-              value: claim.id,
-            }))}
-            placeholder="请选择报销单"
-            value={claimId || undefined}
-            onChange={(value) => setClaimId(value || "")}
-          />
-        </Form.Item>
-        <Form.Item label="经费明细">
-          <Select
-            allowClear
-            disabled={!selected}
-            options={lines.map((line) => ({
-              label: `${line.fundBookNo} · 可用 ${formatMoney(line.unallocatedAmount)}`,
-              value: line.id,
-            }))}
-            placeholder="请选择经费本号"
-            value={lineId || undefined}
-            onChange={(value) => setLineId(value || "")}
-          />
-        </Form.Item>
-        <Form.Item label="结算应收">
-          <Select
-            allowClear
-            options={(obligations.data?.items || [])
-              .filter((item) => item.outstandingAmount > 0)
-              .map((item) => ({
-                label: `${item.month} · ${item.sourcePi} · ${item.iacuc} · 待核销 ${formatMoney(item.outstandingAmount)}`,
-                value: item.id,
+      <Card className="reconciliation-form-card" size="small" title="创建核销草稿">
+        <Form className="reconciliation-picker" layout="vertical">
+          <Form.Item label="报销单">
+            <Select
+              allowClear
+              options={(claims.data?.items || []).map((claim) => ({
+                label: `${claim.documentNumber} · ${claim.fundingOwner}`,
+                value: claim.id,
               }))}
-            placeholder="请选择结算应收"
-            value={obligationId || undefined}
-            onChange={(value) => setObligationId(value || "")}
-          />
-        </Form.Item>
-        <Form.Item label="本次金额">
-          <Input
-            inputMode="decimal"
-            min="0"
-            step="0.01"
-            type="number"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            placeholder={selectedLine ? String(selectedLine.unallocatedAmount) : "0.00"}
-          />
-        </Form.Item>
-        <Form.Item>
-          <Button
-            disabled={!claimId || !lineId || !obligationId}
-            loading={create.isPending}
-            type="primary"
-            onClick={() =>
-              void create
-                .mutateAsync({ claimId, fundingLineId: lineId, obligationId, amount: Number(amount) })
-                .then(() => {
-                  setAmount("");
-                  void detail.refetch();
-                })
-            }
-          >
-            创建草稿
-          </Button>
-        </Form.Item>
-      </Form>
+              placeholder="请选择报销单"
+              value={claimId || undefined}
+              onChange={(value) => setClaimId(value || "")}
+            />
+          </Form.Item>
+          <Form.Item label="经费明细">
+            <Select
+              allowClear
+              disabled={!selected}
+              options={lines.map((line) => ({
+                label: `${line.fundBookNo} · 可用 ${formatMoney(line.unallocatedAmount)}`,
+                value: line.id,
+              }))}
+              placeholder="请选择经费本号"
+              value={lineId || undefined}
+              onChange={(value) => setLineId(value || "")}
+            />
+          </Form.Item>
+          <Form.Item label="结算应收">
+            <Select
+              allowClear
+              options={(obligations.data?.items || [])
+                .filter((item) => item.outstandingAmount > 0)
+                .map((item) => ({
+                  label: `${item.month} · ${item.sourcePi} · ${item.iacuc} · 待核销 ${formatMoney(item.outstandingAmount)}`,
+                  value: item.id,
+                }))}
+              placeholder="请选择结算应收"
+              value={obligationId || undefined}
+              onChange={(value) => setObligationId(value || "")}
+            />
+          </Form.Item>
+          <Form.Item label="本次金额">
+            <Input
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              type="number"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder={selectedLine ? String(selectedLine.unallocatedAmount) : "0.00"}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              disabled={!claimId || !lineId || !obligationId}
+              loading={create.isPending}
+              type="primary"
+              onClick={() =>
+                void create
+                  .mutateAsync({ claimId, fundingLineId: lineId, obligationId, amount: Number(amount) })
+                  .then(() => {
+                    setAmount("");
+                    void detail.refetch();
+                  })
+              }
+            >
+              创建草稿
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
       {selected ? (
-        <div className="reconciliation-context">
-          <strong>费用产生项目负责人</strong>
-          <span>将在每条分摊中显示</span>
-          <Button size="small" onClick={() => onOpenClaim(selected.id)}>
-            编辑报销单
-          </Button>
-        </div>
+        <Alert
+          action={
+            <Button size="small" type="link" onClick={() => onOpenClaim(selected.id)}>
+              编辑报销单
+            </Button>
+          }
+          description="费用产生项目负责人和报销经费负责人会同时保留在每条分摊记录中。"
+          message={`当前报销单：${selected.documentNumber}`}
+          showIcon
+          type="info"
+        />
       ) : null}
       <Table
         className="antd-data-table reimbursement-table"
@@ -315,43 +370,29 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
         rowKey="id"
         scroll={{ x: 960 }}
       />
-      {reverseTarget ? (
-        <ModalShell ariaLabel="撤销核销" className="reimbursement-reverse-dialog" onClose={() => setReverseTarget("")}>
-          <div className="modal-shell-head">
-            <h2>撤销核销</h2>
-          </div>
-          <div className="modal-shell-body">
-            <p>撤销后会恢复经费明细与结算应收余额。</p>
-            <Form layout="vertical">
-              <Form.Item label="撤销原因">
-                <Input.TextArea
-                  rows={3}
-                  value={reverseReason}
-                  onChange={(event) => setReverseReason(event.target.value)}
-                />
-              </Form.Item>
-            </Form>
-          </div>
-          <div className="modal-shell-actions">
-            <Button onClick={() => setReverseTarget("")}>取消</Button>
-            <Button
-              danger
-              loading={reverse.isPending}
-              type="primary"
-              disabled={!reverseReason.trim()}
-              onClick={() =>
-                void reverse.mutateAsync({ id: reverseTarget, reason: reverseReason }).then(() => {
-                  setReverseTarget("");
-                  setReverseReason("");
-                  void detail.refetch();
-                })
-              }
-            >
-              确认撤销
-            </Button>
-          </div>
-        </ModalShell>
-      ) : null}
+      <Modal
+        cancelText="取消"
+        confirmLoading={reverse.isPending}
+        okButtonProps={{ danger: true, disabled: !reverseReason.trim() }}
+        okText="确认撤销"
+        open={Boolean(reverseTarget)}
+        title="撤销核销"
+        onCancel={() => setReverseTarget("")}
+        onOk={() =>
+          void reverse.mutateAsync({ id: reverseTarget, reason: reverseReason }).then(() => {
+            setReverseTarget("");
+            setReverseReason("");
+            void detail.refetch();
+          })
+        }
+      >
+        <Typography.Paragraph type="secondary">撤销后会恢复经费明细与结算应收余额。</Typography.Paragraph>
+        <Form layout="vertical">
+          <Form.Item label="撤销原因">
+            <Input.TextArea rows={3} value={reverseReason} onChange={(event) => setReverseReason(event.target.value)} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </section>
   );
 }
@@ -362,9 +403,12 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
   const items = query.data?.items || [];
   return (
     <section className="ledger-section" aria-label="历史台账">
-      <p className="ledger-guidance">
-        历史台账保留只读展示。具备报销单号、经费本号及匹配结算应收的记录可由管理员迁入新核销体系。
-      </p>
+      <Alert
+        description="具备报销单号、经费本号及匹配结算应收的记录可由系统管理员迁入新核销体系。"
+        message="历史台账保留只读展示"
+        showIcon
+        type="info"
+      />
       <Table
         className="antd-data-table reimbursement-table"
         columns={[

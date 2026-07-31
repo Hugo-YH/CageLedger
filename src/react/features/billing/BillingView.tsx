@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Card, Segmented, Typography } from "antd";
 
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
@@ -63,35 +64,20 @@ export function BillingView({
         ) : null}
         {mode === "settlement" ? (
           <>
-            <section className="panel billing-guide-panel">
-              <div className="panel-head">
-                <div className="panel-title-line">
-                  <h2>结算数据来源</h2>
-                </div>
-              </div>
-              <div className="billing-guide-grid" role="tablist" aria-label="结算数据来源">
-                <button
-                  className={`billing-guide-card ${source === "cage_map" ? "active" : ""}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={source === "cage_map"}
-                  onClick={() => setSource("cage_map")}
-                >
-                  <strong>动态笼位图（自动）</strong>
-                  <span>按笼位真实占用时间线核算</span>
-                </button>
-                <button
-                  className={`billing-guide-card ${source === "quantity_sheet" ? "active" : ""}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={source === "quantity_sheet"}
-                  onClick={() => setSource("quantity_sheet")}
-                >
-                  <strong>数量统计表（录入）</strong>
-                  <span>汇总当前月份已保存统计表</span>
-                </button>
-              </div>
-            </section>
+            <Card className="settlement-source-card" size="small" title="结算数据来源">
+              <Segmented
+                block
+                options={[
+                  { label: "数量统计表（录入）", value: "quantity_sheet" },
+                  { label: "动态笼位图（自动）", value: "cage_map" },
+                ]}
+                value={source}
+                onChange={(value) => setSource(value as "quantity_sheet" | "cage_map")}
+              />
+              <Typography.Paragraph className="settlement-source-help" type="secondary">
+                数量统计表按已保存月度台账结算；动态笼位图仍处于调试阶段。
+              </Typography.Paragraph>
+            </Card>
             <SettlementCandidateList source={source} />
           </>
         ) : null}

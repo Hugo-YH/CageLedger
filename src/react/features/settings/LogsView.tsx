@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Card, Table, Typography } from "antd";
+import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 
 import { useAuditEvents } from "../../api/administration";
-import type { SessionUser } from "../../api/contracts";
-import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import type { AuditEvent, SessionUser } from "../../api/contracts";
+import { formatDateTime, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -11,7 +13,42 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
   const [pageSize, setPageSize] = useState(5);
   const query = useAuditEvents(pageSize, (page - 1) * pageSize);
   const total = query.data?.page.total || 0;
-  const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const columns: ColumnsType<AuditEvent> = [
+    {
+      title: "操作记录",
+      dataIndex: "message",
+      key: "message",
+      render: (message: string | undefined, item) => (
+        <div className="audit-table-message">
+          <Typography.Text strong>{message || "操作记录"}</Typography.Text>
+          <Typography.Text type="secondary">
+            {item.actorDisplayName || "未记录账号"} · {item.action || "manual"}
+          </Typography.Text>
+        </div>
+      ),
+    },
+    {
+      title: "发生时间",
+      dataIndex: "at",
+      key: "at",
+      width: 196,
+      align: "right",
+      render: (at: string) => <Typography.Text type="secondary">{formatDateTime(at)}</Typography.Text>,
+    },
+  ];
+  const pagination: TablePaginationConfig = {
+    current: page,
+    pageSize,
+    total,
+    showSizeChanger: true,
+    showQuickJumper: true,
+    showTotal: (count) => `共 ${count} 条`,
+    pageSizeOptions: [5, 10, 20, 50],
+    onChange: (nextPage, nextPageSize) => {
+      setPage(nextPage);
+      if (nextPageSize !== pageSize) setPageSize(nextPageSize);
+    },
+  };
   return (
     <section className="workspace-view settings-workspace">
       <WorkspaceHeader
@@ -24,49 +61,23 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
         switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body settings-workspace-body">
-        <section className="panel large">
-          <div className="panel-head">
-            <div className="panel-title-line">
-              <h2>操作记录</h2>
-            </div>
-          </div>
+        <Card className="settings-log-card" title="操作记录">
           {query.isPending ? (
             <PageState title="正在加载操作日志..." />
           ) : query.isError ? (
             <PageState title="操作日志加载失败" retry={() => query.refetch()} />
           ) : (
-            <>
-              <div className="audit-list">
-                {query.data?.items.length ? (
-                  query.data.items.map((item) => (
-                    <article className="audit-row" key={item.id}>
-                      <div>
-                        <strong>{item.message || "操作记录"}</strong>
-                        <p>
-                          {item.actorDisplayName || "未记录账号"} · {item.action || "manual"}
-                        </p>
-                      </div>
-                      <time>{formatDateTime(item.at)}</time>
-                    </article>
-                  ))
-                ) : (
-                  <PageState title="暂无操作日志" />
-                )}
-              </div>
-              <Pager
-                page={page}
-                pages={pages}
-                total={total}
-                pageSize={pageSize}
-                onPage={setPage}
-                onPageSize={(value) => {
-                  setPageSize(value);
-                  setPage(1);
-                }}
-              />
-            </>
+            <Table
+              className="app-data-table audit-log-table"
+              columns={columns}
+              dataSource={query.data?.items || []}
+              rowKey="id"
+              locale={{ emptyText: "暂无操作日志" }}
+              pagination={pagination}
+              size="middle"
+            />
           )}
-        </section>
+        </Card>
       </div>
     </section>
   );

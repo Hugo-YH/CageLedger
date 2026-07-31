@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Card, Segmented, Typography } from "antd";
+import { AuditOutlined } from "@ant-design/icons";
+import { Button, Card, Space, Tabs, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
@@ -38,9 +39,10 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
         <Card
           className="reimbursement-ledger-panel"
           title={
-            <Typography.Title level={2} style={{ margin: 0 }}>
-              核销工作台
-            </Typography.Title>
+            <Space size={8}>
+              <AuditOutlined />
+              <span>核销工作台</span>
+            </Space>
           }
           extra={
             tab === "claims" ? (
@@ -50,18 +52,28 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
             ) : null
           }
         >
-          <p className="ant-form-extra">结算版本、报销单、经费明细与核销分摊均保留审计链路。</p>
-          <Segmented<LedgerTab>
-            block
+          <Typography.Paragraph className="reimbursement-ledger-description" type="secondary">
+            结算版本、报销单、经费明细与核销分摊均保留审计链路。
+          </Typography.Paragraph>
+          <Tabs
+            activeKey={tab}
             className="ledger-tabs"
-            options={tabs.map(([value, label]) => ({ label, value }))}
-            value={tab}
-            onChange={setTab}
+            items={tabs.map(([key, label]) => ({
+              key,
+              label,
+              children:
+                key === "obligations" ? (
+                  <ObligationsPanel />
+                ) : key === "claims" ? (
+                  <ClaimsPanel user={user} onOpen={setClaimId} />
+                ) : key === "reconciliation" ? (
+                  <ReconciliationPanel user={user} onOpenClaim={setClaimId} />
+                ) : (
+                  <LegacyPanel user={user} />
+                ),
+            }))}
+            onChange={(key) => setTab(key as LedgerTab)}
           />
-          {tab === "obligations" ? <ObligationsPanel /> : null}
-          {tab === "claims" ? <ClaimsPanel user={user} onOpen={setClaimId} /> : null}
-          {tab === "reconciliation" ? <ReconciliationPanel user={user} onOpenClaim={setClaimId} /> : null}
-          {tab === "legacy" ? <LegacyPanel user={user} /> : null}
         </Card>
       </div>
       {claimId || creatingClaim ? (

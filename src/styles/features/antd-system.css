@@ -688,10 +688,11 @@
 }
 
 .ant-dashboard-task {
-  display: grid;
+  display: flex;
+  align-items: center;
   width: 100%;
-  min-height: 88px;
-  gap: 4px;
+  min-height: 84px;
+  gap: 12px;
   padding: 12px 16px;
   border: 0;
   border-inline-end: 1px solid var(--app-border);
@@ -700,9 +701,60 @@
   cursor: pointer;
 }
 
-.ant-dashboard-task .ant-typography-strong {
-  font-size: 24px;
-  line-height: 1.15;
+.ant-dashboard-task-icon {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--app-surface-subtle);
+  color: var(--app-text-secondary);
+  font-size: 16px;
+}
+
+.ant-dashboard-task.is-processing .ant-dashboard-task-icon {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.ant-dashboard-task.is-warning .ant-dashboard-task-icon {
+  background: #fffbe6;
+  color: #d48806;
+}
+
+.ant-dashboard-task.is-error .ant-dashboard-task-icon {
+  background: #fff2f0;
+  color: #cf1322;
+}
+
+.ant-dashboard-task-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ant-dashboard-task-copy .ant-typography {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ant-dashboard-task-action {
+  color: var(--app-primary);
+  font-size: 12px;
+}
+
+.ant-dashboard-task-count {
+  margin-inline-start: auto;
+}
+
+.ant-dashboard-task-count .ant-badge-count {
+  min-width: 26px;
+  height: 22px;
+  padding-inline: 7px;
+  border-radius: 11px;
+  line-height: 22px;
 }
 
 .ant-dashboard-task:hover {
@@ -710,10 +762,60 @@
 }
 
 .ant-dashboard-status {
+  display: grid;
+  gap: 14px;
+  min-height: 154px;
+}
+
+.ant-dashboard-status-head {
   display: flex;
-  align-items: center;
-  gap: 24px;
-  min-height: 150px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ant-dashboard-status-head .ant-statistic {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ant-dashboard-status-head .ant-statistic-title {
+  margin-bottom: 0;
+}
+
+.ant-dashboard-status-head .ant-statistic-content {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.ant-dashboard-status-bar {
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--app-border);
+}
+
+.ant-dashboard-status-segment {
+  display: block;
+  min-width: 0;
+  transition: width 160ms ease-out;
+}
+
+.ant-dashboard-status-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
+.ant-dashboard-status-line {
+  display: grid;
+  gap: 4px;
+}
+
+.ant-dashboard-status-line .ant-badge {
+  line-height: 1.2;
 }
 
 .ant-dashboard-room-list {
@@ -1216,14 +1318,13 @@
   background: var(--app-surface-subtle);
 }
 
-/* System settings uses standard Ant information hierarchy. Project resources
-   are intentionally kept on the public project portal rather than duplicated here. */
+/* System settings uses Ant's list, form and data-display hierarchy. */
 .ant-workspace .system-layout {
   grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
 }
 
-.ant-workspace .system-status-card .ant-card-body,
-.ant-workspace .system-release-card .ant-card-body {
+.ant-workspace .system-status-card .ant-card-body {
   padding-block: 20px;
 }
 
@@ -1236,18 +1337,159 @@
   margin-top: 20px;
 }
 
-.ant-workspace .system-release-card .ant-list-item {
+.ant-workspace .settings-log-card .ant-card-body {
+  padding-top: 8px;
+}
+
+.ant-workspace .audit-table-message {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ant-workspace .audit-log-table .ant-table-pagination {
+  margin: 16px 0 0;
+  justify-content: flex-end;
+}
+
+.ant-workspace .settings-data-table-card .ant-card-body {
+  padding-top: 12px;
+}
+
+.ant-workspace .settings-data-table-card .ant-card-extra .ant-input-search {
+  width: 248px;
+}
+
+.ant-workspace .principal-type-action {
+  width: 224px;
+}
+
+.ant-workspace .principal-type-action .ant-select {
+  width: 148px;
+}
+
+.ant-workspace .principal-type-action .ant-btn {
+  min-width: 64px;
+}
+
+.ant-workspace .settings-side-stack {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.ant-workspace .settings-side-stack .ant-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.ant-workspace .data-import-dragger {
+  margin-top: 16px;
+}
+
+.ant-workspace .data-import-dragger .ant-upload-drag-icon {
+  margin-bottom: 4px;
+  font-size: 24px;
+}
+
+.ant-workspace .data-import-dragger .ant-upload-text {
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.ant-workspace .data-import-dragger .ant-upload-hint {
+  margin-bottom: 0;
+}
+
+.ant-workspace .settings-user-collapse {
+  border: 0;
+  background: transparent;
+}
+
+.ant-workspace .settings-user-collapse > .ant-collapse-item {
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--ant-border-radius-lg, 8px);
+}
+
+.ant-workspace .settings-user-collapse > .ant-collapse-item:last-child {
+  margin-bottom: 0;
+}
+
+.ant-workspace .settings-user-collapse > .ant-collapse-item > .ant-collapse-header {
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.ant-workspace .settings-user-collapse .ant-collapse-content {
+  border-top: 1px solid var(--app-border);
+}
+
+.ant-workspace .settings-user-collapse .ant-collapse-content-box {
+  padding: 16px;
+}
+
+.ant-workspace .settings-user-editor {
+  max-width: 760px;
+}
+
+.ant-workspace .settings-room-access-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
+.ant-workspace .settings-room-access-group .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+}
+
+.ant-workspace .settings-rooms-card .ant-card-body {
+  padding-top: 12px;
+}
+
+.ant-workspace .settings-rooms-card > .ant-card-body > .ant-list > .ant-list-items > .ant-list-item {
+  padding-block: 8px;
+}
+
+.ant-workspace .settings-room-card {
+  box-shadow: none;
+}
+
+.ant-workspace .settings-room-content {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+}
+
+.ant-workspace .settings-room-header {
+  display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
 }
 
-.system-release-items {
-  margin: 0;
-  padding-inline-start: 20px;
-  color: var(--app-text-secondary);
+.ant-workspace .settings-room-header .ant-typography {
+  margin-bottom: 0;
 }
 
-.system-release-items li + li {
-  margin-top: 4px;
+.ant-workspace .settings-rack-list .ant-list-item-meta {
+  align-items: center;
+  min-width: 0;
+}
+
+.ant-workspace .settings-rack-list .ant-list-item-action {
+  margin-inline-start: 24px;
+}
+
+.ant-workspace .settings-rack-list .ant-list-item {
+  width: 100%;
+}
+
+.ant-workspace .settings-rack-list .ant-list-item-meta-title,
+.ant-workspace .settings-rack-list .ant-list-item-meta-description {
+  overflow-wrap: anywhere;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1400,13 +1642,46 @@
     margin-inline: 0 !important;
   }
 
-  .ant-dashboard-status {
-    align-items: flex-start;
+  .ant-dashboard-status-legend {
+    grid-template-columns: 1fr;
+  }
+
+  .ant-workspace .system-status-card .ant-card-body {
+    padding-block: 16px;
+  }
+
+  .ant-workspace .settings-data-table-card .ant-card-extra {
+    width: 100%;
+    margin-inline-start: 0;
+  }
+
+  .ant-workspace .settings-data-table-card .ant-card-extra .ant-input-search {
+    width: 100%;
+  }
+
+  .ant-workspace .principal-type-action {
+    width: 100%;
+  }
+
+  .ant-workspace .principal-type-action .ant-select {
+    width: calc(100% - 64px);
+  }
+
+  .ant-workspace .settings-room-access-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ant-workspace .settings-room-header {
     flex-direction: column;
   }
 
-  .ant-workspace .system-status-card .ant-card-body,
-  .ant-workspace .system-release-card .ant-card-body {
-    padding-block: 16px;
+  .ant-workspace .settings-room-header > .ant-space {
+    width: 100%;
+    justify-content: flex-end;
   }
+
+  .ant-workspace .audit-log-table .ant-table-pagination {
+    justify-content: center;
+  }
+
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Alert, Button, Card, Form, Input, Typography } from "antd";
+import { Alert, Button, Card, Flex, Form, Input, Space, Tag, Typography } from "antd";
+import { FileExcelOutlined } from "@ant-design/icons";
 
 import { exportMonthlyBillingSummary } from "../../../api/billing";
 
@@ -25,41 +26,51 @@ export function MonthlyBillingSummary() {
 
   return (
     <Card
-      className="monthly-billing-summary-panel"
-      size="small"
+      className="monthly-billing-summary-card"
       title={
-        <Typography.Title level={2} style={{ margin: 0 }}>
-          月度饲养费汇总
-        </Typography.Title>
+        <Space size={8}>
+          <FileExcelOutlined />
+          <span>月度饲养费汇总</span>
+        </Space>
       }
+      extra={<Tag color="blue">管理员导出</Tag>}
     >
-      <p className="ant-form-extra">按 IACUC 和设施汇总数量统计表的当月费用，供线下报销登记使用。</p>
-      <div className="monthly-billing-summary-body">
+      <Typography.Paragraph type="secondary">
+        按 IACUC 和设施汇总数量统计表的当月费用，供线下报销登记使用。
+      </Typography.Paragraph>
+      <div className="monthly-billing-summary-action">
         <Alert
-          className="monthly-summary-intro"
           type="info"
           showIcon
-          title="导出范围"
+          message="导出范围"
           description="包含当月全部可结算数量统计表，保留金额为 0 的有效记录。"
         />
-        <Form layout="vertical" className="monthly-summary-month-field">
-          <Form.Item htmlFor="monthly-billing-month" label="结算月份">
-            <Input
-              id="monthly-billing-month"
-              type="month"
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-            />
-          </Form.Item>
-        </Form>
-        <Button type="primary" loading={exporting} disabled={!month} onClick={() => void exportWorkbook()}>
-          导出月度汇总 Excel
-        </Button>
+        <Flex className="monthly-summary-controls" align="end" gap={16} wrap>
+          <Form layout="vertical">
+            <Form.Item htmlFor="monthly-billing-month" label="结算月份">
+              <Input
+                id="monthly-billing-month"
+                type="month"
+                value={month}
+                onChange={(event) => setMonth(event.target.value)}
+              />
+            </Form.Item>
+          </Form>
+          <Button
+            icon={<FileExcelOutlined />}
+            loading={exporting}
+            disabled={!month}
+            type="primary"
+            onClick={() => void exportWorkbook()}
+          >
+            导出月度汇总 Excel
+          </Button>
+        </Flex>
       </div>
-      <p className="ant-form-extra monthly-summary-hint">
+      <Typography.Paragraph className="monthly-summary-hint" type="secondary">
         伦理经费和实验日期来自 IACUC 索引；报销单经费本号与单号优先使用已登记台账。
-      </p>
-      {notice ? <Alert className="react-inline-notice" type="info" showIcon title={notice} /> : null}
+      </Typography.Paragraph>
+      {notice ? <Alert role="status" showIcon type="success" message={notice} /> : null}
     </Card>
   );
 }

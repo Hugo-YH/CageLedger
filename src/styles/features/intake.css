@@ -1,0 +1,126 @@
+/* Ant component composition for intake and scanner workspaces. */
+.ant-workspace .intake-entry-form,
+.ant-workspace .intake-entry-card,
+.ant-workspace .intake-batch-list-card,
+.ant-workspace .scanner-card {
+  width: 100%;
+}
+
+.ant-workspace .intake-entry-card .ant-card-body,
+.ant-workspace .intake-batch-list-card .ant-card-body,
+.ant-workspace .scanner-card .ant-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.ant-workspace .intake-entry-card .ant-divider-horizontal {
+  margin: 0;
+}
+
+.ant-workspace .intake-entry-card .ant-form-item {
+  margin-bottom: 0;
+}
+
+.ant-workspace .intake-entry-card .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.ant-workspace .intake-recognition-card,
+.ant-workspace .intake-print-card {
+  height: 100%;
+}
+
+.ant-workspace .intake-recognition-card .ant-card-body,
+.ant-workspace .intake-print-card .ant-card-body {
+  display: grid;
+  gap: 12px;
+  height: 100%;
+}
+
+.ant-workspace .intake-print-card .ant-card-body {
+  align-content: start;
+}
+
+.ant-workspace .intake-notice,
+.ant-workspace .intake-bulk-alert,
+.ant-workspace .scanner-alert {
+  margin: 0;
+}
+
+.ant-workspace .intake-list-meta {
+  min-height: 22px;
+}
+
+.ant-workspace .intake-list-pagination {
+  margin-top: 0;
+}
+
+.ant-workspace .scanner-card {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.ant-workspace .scanner-camera-card .ant-card-body {
+  padding: 12px;
+}
+
+.ant-workspace .scanner-code-field {
+  flex: 1 1 360px;
+  margin-bottom: 0;
+}
+
+.ant-workspace .scanner-code-field .ant-input {
+  width: 100%;
+}
+
+.ant-workspace .scanner-loading {
+  min-height: 96px;
+}
+
+.ant-workspace .scanner-empty {
+  margin-block: 32px;
+}
+
+.ant-workspace .scanner-result-card {
+  margin-top: 4px;
+}
+
+@media (width <= 760px) {
+  .ant-workspace .intake-entry-card .ant-card-head,
+  .ant-workspace .intake-batch-list-card .ant-card-head,
+  .ant-workspace .scanner-card .ant-card-head {
+    min-height: 48px;
+  }
+
+  .ant-workspace .intake-entry-card .ant-card-extra,
+  .ant-workspace .scanner-card .ant-card-extra {
+    margin-inline-start: 12px;
+  }
+
+  .ant-workspace .intake-bulk-alert .ant-alert-message {
+    width: 100%;
+  }
+
+  .ant-workspace .intake-list-pagination {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .ant-workspace .intake-print-card .ant-card-body {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .ant-workspace .intake-print-card .ant-btn {
+    grid-column: 1 / -1;
+  }
+
+  .ant-workspace .scanner-query-form .ant-flex {
+    align-items: stretch;
+  }
+
+  .ant-workspace .scanner-query-form .ant-btn {
+    width: 100%;
+  }
+}
