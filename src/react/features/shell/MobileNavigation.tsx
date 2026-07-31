@@ -99,6 +99,7 @@ export function MobileNavigation({
             key="dashboard"
             title={mobileTabTitle("总览", activeKey === "dashboard")}
           />
+          <TabBar.Item icon={<AppstoreOutlined />} key="cages" title={mobileTabTitle("笼位", activeKey === "cages")} />
           <TabBar.Item icon={<AuditOutlined />} key="animal" title={mobileTabTitle("动物", activeKey === "animal")} />
           <TabBar.Item icon={<AppstoreOutlined />} key="more" title={mobileTabTitle("更多", false)} />
         </TabBar>
@@ -224,6 +225,7 @@ function mobileTabTitle(label: string, active: boolean) {
 
 function mobileKey(view: WorkspaceView) {
   if (view === "dashboard") return "dashboard";
+  if (view === "cages") return "cages";
   if (isAnimalManagementView(view)) return "animal";
   return "none";
 }
@@ -235,6 +237,7 @@ function isAnimalManagementView(view: WorkspaceView) {
 function mobileTabDestination(key: string): WorkspaceView | null {
   const destinations: Record<string, WorkspaceView> = {
     dashboard: "dashboard",
+    cages: "cages",
     animal: "animal-inspection-entry",
   };
   return destinations[key] ?? null;
