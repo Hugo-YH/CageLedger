@@ -1,7 +1,7 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "1.0.0-beta5",
+  "version": "1.0.0-beta6",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
