@@ -8,9 +8,11 @@ usage() {
 Usage:
   bash scripts/release_local.sh --version 0.4.1 [--push] [--dry-run] [--skip-full-verify] [--skip-container-publish] [--skip-offline-image]
   bash scripts/release_local.sh 0.4.1 [--push] [--dry-run] [--skip-full-verify] [--skip-container-publish] [--skip-offline-image]
+  bash scripts/release_local.sh --bump beta [--push]
 
 Options:
   --version <ver>  Release version, for example 0.4.1 or 0.4.0a
+  --bump <type>    Auto-derive the next version from the latest tag: beta|patch|minor|major (default beta)
   --push           Push the current release branch and the new v<version> tag after commit/tag
   --dry-run        Print steps without executing them
   --skip-full-verify  Skip the Mac mini production build and Playwright release verification
@@ -20,6 +22,7 @@ EOF
 }
 
 VERSION=""
+BUMP=""
 PUSH=0
 DRY_RUN=0
 PUBLISH_CONTAINER=1
@@ -30,6 +33,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
       VERSION="${2:-}"
+      shift 2
+      ;;
+    --bump)
+      BUMP="${2:-beta}"
       shift 2
       ;;
     --push)
@@ -69,8 +76,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(node scripts/bump_version.mjs --bump "${BUMP:-beta}")" || exit 1
+  echo "Auto version from latest tag: ${VERSION}"
+fi
+
 if [[ -z "$VERSION" ]] || [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*$ ]]; then
-  echo "Release version is required and must look like 0.4.1 or 0.4.0a" >&2
+  echo "Release version must look like 0.4.1 or 0.4.0a; provide --version or --bump" >&2
   usage
   exit 1
 fi

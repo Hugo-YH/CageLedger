@@ -21,6 +21,7 @@ import { Button, Layout, Menu, Space, Tooltip, Typography, type MenuProps } from
 import { lazy, Suspense, type ReactNode, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
+import { useSystemInfo } from "../../api/administration";
 import { useLogout } from "../../api/session";
 import { clearUiStorage, persistWorkspaceView } from "../../state/uiStorage";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
@@ -71,6 +72,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
   const dispatch = useUiDispatch();
   const logout = useLogout();
+  const systemInfo = useSystemInfo();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const isMobileLayout = useIsMobileLayout();
 
@@ -218,7 +220,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
             <Suspense fallback={<WorkspaceLoading />}>{renderActiveView(ui.activeView, user, navigate)}</Suspense>
           </WorkspaceErrorBoundary>
           <footer className="workspace-footer ant-workspace-footer">
-            <span>CageLedger v{APP_VERSION}</span>
+            <span>
+              CageLedger v{APP_VERSION}
+              {systemInfo.data?.build ? `（${systemInfo.data.build}）` : ""}
+            </span>
             <span>中山大学中山眼科中心 · 实验动物中心</span>
           </footer>
         </Layout.Content>

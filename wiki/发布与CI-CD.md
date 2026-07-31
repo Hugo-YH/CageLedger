@@ -21,6 +21,13 @@ release notes
 
 容器镜像构建与推送是发布产物的固定组成部分。`--skip-container-publish` 只在交互式终端输入 `yes` 明确确认后才生效；非交互环境（脚本、CI、代理）不允许跳过，缺少 Docker 时发布流程直接失败并提示先启动 Docker。
 
+## 版本与构建标识
+
+- 版本格式 `a.b.c[-betaN]`：`a` 重大/代际版本，`b` 功能更新，`c` 补丁修复，`-betaN` 预发布后缀。
+- `build` 使用发布提交的 Git 短 SHA，系统统一显示为 `a.b.c（xxxx）`。
+- 版本唯一源 `package.json`；构建标识由发布脚本从 tag 对应提交派生，`/api/health` 返回 `build` 与 `revisionShort`。
+- 未显式指定版本时，发布脚本按 `--bump`（默认 `beta`）从最近 `v*` tag 自动推导下一个版本，并自动打标签与推送。
+
 ## 发布前准备
 
 1. 拉取远端并处理本地改动。

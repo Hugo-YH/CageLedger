@@ -87,6 +87,7 @@ def system_info():
         "repository": CAGELEDGER_REPOSITORY_URL,
         "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
         "branch": CAGELEDGER_BRANCH,
+        "build": short_revision(current_revision()),
         "revision": current_revision() or None,
         "revisionShort": short_revision(current_revision()),
     }

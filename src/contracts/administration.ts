@@ -45,6 +45,7 @@ export interface SystemInfo {
   license: string;
   copyright: string;
   repositoryUrl: string;
+  build: string;
   revisionShort: string;
 }
 
