@@ -91,15 +91,10 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
   const desktopGroup = page.getByRole("menuitem", { name: new RegExp(escapeRegExp(label)) }).first();
   const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
   if (useMobileNavigation) {
-    const tabLabel = mobileTabLabel(label);
-    await page.getByRole("tab", { name: tabLabel }).click();
-    if (tabLabel === "更多") {
-      const navigation = page.locator(".ant-mobile-navigation-sheet");
-      await expect(navigation).toBeVisible();
-      return navigation;
-    }
-    // Direct-destination tabs navigate to the group entry page without a sheet.
-    return page.locator(".ant-main-menu");
+    await page.getByRole("tab", { name: "更多" }).click();
+    const navigation = page.locator(".ant-mobile-navigation-sheet");
+    await expect(navigation).toBeVisible();
+    return navigation;
   }
   if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
   return page.locator(".ant-main-menu");
@@ -108,13 +103,8 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
 async function openNavigationEntry(page: Page, group: string, label: string) {
   const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
   if (useMobileNavigation) {
-    const directEntryByGroup: Record<string, string> = {
-      笼卡管理: "预约消息识别",
-      动物管理: "动物巡检",
-      饲养费管理: "数量统计表（录入）",
-    };
-    if (directEntryByGroup[group] === label) {
-      await page.getByRole("tab", { name: mobileTabLabel(group) }).click();
+    if (group === "动物管理") {
+      await page.getByRole("tab", { name: "动物" }).click();
       return;
     }
     await page.getByRole("tab", { name: "更多" }).click();
@@ -123,11 +113,4 @@ async function openNavigationEntry(page: Page, group: string, label: string) {
   }
   const menu = await openNavigationGroup(page, group, "");
   await menu.getByRole("menuitem", { name: new RegExp(escapeRegExp(label)) }).click();
-}
-
-function mobileTabLabel(group: string) {
-  return (
-    ({ 笼卡管理: "笼卡", 动物管理: "动物", 饲养费管理: "饲养费", 系统设置: "更多" } as Record<string, string>)[group] ||
-    group
-  );
 }

@@ -20,7 +20,8 @@ test("intake workspace remains operable at the mobile breakpoint", async ({ page
   await expect(page.getByRole("heading", { name: "接收笼卡", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "保存待接收批次", exact: true })).toBeVisible();
   await expect(page.getByLabel("预约消息")).toBeVisible();
-  await page.getByRole("tab", { name: "笼位", exact: true }).click();
+  await page.getByRole("tab", { name: "更多", exact: true }).click();
+  await page.locator(".ant-mobile-navigation-sheet").getByText("动态笼位图", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "动态笼位图", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "房间", exact: true })).toBeVisible();
   await openQuantityEntry(page);
