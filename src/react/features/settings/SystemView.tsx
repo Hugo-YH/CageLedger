@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { Alert, Button, Card, Descriptions, Select, Space, Typography } from "antd";
+import { Alert, Button, Card, Col, Descriptions, Flex, Row, Segmented, Space, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
 import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { MobilePage } from "../../components/ui";
+import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
 export function SystemView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
+  const isMobile = useIsMobileLayout();
   const ui = useUiState();
   const dispatch = useUiDispatch();
   const info = useSystemInfo();
@@ -27,19 +30,41 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
     );
 
   const data = info.data;
-  return (
-    <section className="workspace-view system-workspace">
-      <WorkspaceHeader
-        kicker="系统与文档工作台"
-        title="关于系统"
-        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="集中查看当前版本、界面偏好与维护信息；更新记录由项目文档统一维护。"
-        status={`当前版本 ${data.version}${data.build ? `（${data.build}）` : ""}`}
-        switcherLabel="系统功能"
-        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
-      />
-      <div className="workspace-body system-workspace-body">
-        <div className="system-layout">
+  const hero = (
+    <Card className="system-hero-card">
+      <Flex align="center" gap={16} wrap>
+        <img alt="" src="/cageledger-icon.svg" style={{ borderRadius: 12, height: 56, width: 56 }} />
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            {data.title}
+          </Typography.Title>
+          <Tag color="blue" style={{ marginTop: 6 }}>
+            {data.version}
+            {data.build ? `（${data.build}）` : ""}
+          </Tag>
+        </div>
+        <Space style={{ marginLeft: "auto" }} wrap>
+          <Button href="/docs/" type="link">
+            项目文档
+          </Button>
+          <Button href="/docs/releases/" type="link">
+            更新记录
+          </Button>
+          <Button href={data.repositoryUrl} rel="noreferrer" target="_blank" type="link">
+            Gitea 仓库
+          </Button>
+        </Space>
+      </Flex>
+      <Typography.Paragraph className="system-hero-description" type="secondary">
+        {data.description}
+      </Typography.Paragraph>
+    </Card>
+  );
+  const content = (
+    <>
+      {hero}
+      <Row gutter={[16, 16]}>
+        <Col lg={16} xs={24}>
           <Card
             className="system-status-card"
             extra={
@@ -72,35 +97,61 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
             </Descriptions>
             {checkEnabled ? <UpdateCard update={update} /> : null}
           </Card>
-
-          <Card title={<CardTitle>界面外观</CardTitle>}>
-            <Space align="start" orientation="vertical" size={8}>
-              <Typography.Text>显示模式</Typography.Text>
-              <Select
-                aria-label="显示模式"
-                onChange={(theme) => dispatch({ type: "set-theme", theme })}
-                options={[
-                  { label: "跟随系统", value: "system" },
-                  { label: "浅色", value: "light" },
-                  { label: "深色", value: "dark" },
-                ]}
-                value={ui.theme}
-              />
-              <Typography.Text type="secondary">主题仅影响本设备界面，不影响业务数据与其他用户。</Typography.Text>
-            </Space>
-          </Card>
-
-          <Card title={<CardTitle>维护信息</CardTitle>}>
-            <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} layout="vertical" size="small">
-              <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
-              <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
-              <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
-            </Descriptions>
-            <Button href="/docs/releases/" style={{ marginTop: 16 }} type="link">
-              在项目文档查看更新记录
-            </Button>
-          </Card>
-        </div>
+        </Col>
+        <Col lg={8} xs={24}>
+          <Space orientation="vertical" size={16} style={{ display: "flex" }}>
+            <Card title={<CardTitle>界面外观</CardTitle>}>
+              <Space orientation="vertical" size={8}>
+                <Typography.Text>显示模式</Typography.Text>
+                <Segmented
+                  aria-label="显示模式"
+                  block
+                  onChange={(theme) => dispatch({ type: "set-theme", theme: theme as "system" | "light" | "dark" })}
+                  options={[
+                    { label: "跟随系统", value: "system" },
+                    { label: "浅色", value: "light" },
+                    { label: "深色", value: "dark" },
+                  ]}
+                  value={ui.theme}
+                />
+                <Typography.Text type="secondary">主题仅影响本设备界面，不影响业务数据与其他用户。</Typography.Text>
+              </Space>
+            </Card>
+            <Card title={<CardTitle>维护信息</CardTitle>}>
+              <Descriptions column={1} layout="vertical" size="small">
+                <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
+                <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
+                <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
+              </Descriptions>
+              <Button href="/docs/releases/" style={{ marginTop: 12 }} type="link">
+                在项目文档查看更新记录
+              </Button>
+            </Card>
+          </Space>
+        </Col>
+      </Row>
+    </>
+  );
+  if (isMobile) {
+    return (
+      <MobilePage onBack={() => navigate("rooms")} title="关于系统">
+        {content}
+      </MobilePage>
+    );
+  }
+  return (
+    <section className="workspace-view system-workspace">
+      <WorkspaceHeader
+        kicker="系统与文档工作台"
+        title="关于系统"
+        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
+        summary="集中查看当前版本、界面偏好与维护信息；更新记录由项目文档统一维护。"
+        status={`当前版本 ${data.version}${data.build ? `（${data.build}）` : ""}`}
+        switcherLabel="系统功能"
+        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
+      />
+      <div className="workspace-body system-workspace-body">
+        <div className="system-layout">{content}</div>
       </div>
     </section>
   );
@@ -128,7 +179,7 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
       description={
         <Space orientation="vertical" size={4}>
           <Typography.Text>
-            {update.data?.latestVersion ? `最新发布版 v${update.data.latestVersion}` : "尚未获取远端版本"}
+            {update.data?.latestVersion ? `最新发布版 ${update.data.latestVersion}` : "尚未获取远端版本"}
           </Typography.Text>
           {update.data?.latestMessage ? <Typography.Text>{update.data.latestMessage}</Typography.Text> : null}
           {update.isError ? <Typography.Text type="danger">{update.error.message}</Typography.Text> : null}

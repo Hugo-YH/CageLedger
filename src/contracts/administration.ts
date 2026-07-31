@@ -37,6 +37,7 @@ export interface AuditEvent {
 export interface SystemInfo {
   name: string;
   title: string;
+  description: string;
   version: string;
   organization: string;
   department: string;
