@@ -6,6 +6,8 @@ from server_app.db import connect_db
 from server_app.repositories.iacuc import filter_iacuc_index, read_iacuc_index
 from server_app.web import JsonResponse
 
+IACUC_INDEX_CLIENT_KEYS = ("iacuc", "project", "pi", "owner", "funding", "projectStartDate", "projectEndDate")
+
 
 def iacuc_index_handler(handler, _params):
     user = handler.current_user()
@@ -16,7 +18,9 @@ def iacuc_index_handler(handler, _params):
         payload = read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
     q = query.get("q", [""])[0]
     limit = _bounded_int(query.get("limit", [""])[0], 80, 1, 500)
-    return JsonResponse(filter_iacuc_index(payload, q, limit))
+    result = filter_iacuc_index(payload, q, limit)
+    result["items"] = [{key: item.get(key) for key in IACUC_INDEX_CLIENT_KEYS} for item in result["items"]]
+    return JsonResponse(result)
 
 
 def _bounded_int(value, default, min_value, max_value):
