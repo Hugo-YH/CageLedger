@@ -7,11 +7,12 @@ export type TaskItem = {
   title: string;
   detail: string;
   status: TaskStatus;
+  progress?: number;
 };
 
 export type TaskFeedbackApi = {
   start: (task: Omit<TaskItem, "id" | "status">) => string;
-  update: (id: string, task: Partial<Pick<TaskItem, "title" | "detail">>) => void;
+  update: (id: string, task: Partial<Omit<TaskItem, "id" | "status">>) => void;
   complete: (id: string, detail: string) => void;
   fail: (id: string, detail: string) => void;
   dismiss: (id: string) => void;

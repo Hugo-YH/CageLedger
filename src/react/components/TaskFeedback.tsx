@@ -1,4 +1,4 @@
-import { App } from "antd";
+import { App, Progress } from "antd";
 import { type ReactNode, useRef } from "react";
 
 import { TaskFeedbackContext, type TaskFeedbackApi, type TaskItem } from "./TaskFeedbackContext";
@@ -12,7 +12,14 @@ export function TaskFeedbackProvider({ children }: { children: ReactNode }) {
     notification.open({
       key: task.id,
       title: task.title,
-      description: task.detail,
+      description: (
+        <>
+          {task.detail}
+          {task.status === "running" && task.progress != null ? (
+            <Progress percent={task.progress} size="small" strokeLinecap="round" style={{ marginTop: 8 }} />
+          ) : null}
+        </>
+      ),
       duration: task.status === "running" || task.status === "failed" ? 0 : 4.5,
       placement: "bottomRight",
       showProgress: task.status === "completed",
@@ -35,6 +42,7 @@ export function TaskFeedbackProvider({ children }: { children: ReactNode }) {
         title: task.title || previous?.title || "后台任务",
         detail: task.detail || previous?.detail || "正在处理...",
         status: "running" as const,
+        progress: task.progress,
       };
       tasks.current.set(id, next);
       show(next);

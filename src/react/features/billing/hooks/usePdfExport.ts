@@ -23,16 +23,17 @@ export function usePdfExport() {
   }, []);
 
   async function exportPdf(payload: PdfExportRequest) {
-    const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload) });
+    const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload), progress: 0 });
     try {
       let current = await startPdfExport(payload);
       update(current);
       while (current.status === "queued" || current.status === "rendering") {
-        tasks.update(taskId, { detail: progressLabel(current) });
+        tasks.update(taskId, { detail: progressLabel(current), progress: jobProgress(current) });
         await wait(POLL_INTERVAL_MS);
         current = await getPdfExportJob(current.id);
         update(current);
       }
+      tasks.update(taskId, { progress: 100 });
       if (current.status === "failed") throw new Error(current.error || "PDF 生成失败");
       if (!current.downloadUrl) throw new Error("PDF 已生成，但下载链接不可用");
       downloadFromUrl(current.downloadUrl);
@@ -63,6 +64,10 @@ function exportLabel(payload: PdfExportRequest) {
 
 function progressLabel(job: PdfExportJob) {
   return job.total > 1 ? `已完成 ${job.completed}/${job.total} 份。` : "正在排版并生成文件。";
+}
+
+function jobProgress(job: PdfExportJob) {
+  return job.total > 1 ? Math.round((job.completed / job.total) * 100) : undefined;
 }
 
 function wait(delay: number) {

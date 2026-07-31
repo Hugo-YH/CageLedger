@@ -1262,12 +1262,87 @@
   }
 }
 
+/* Feedback notices: state variants, entrance and icon motion. */
+.react-inline-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  animation: cageledger-notice-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.react-inline-notice .notice-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 16px;
+  animation: cageledger-icon-pop 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.react-inline-notice.is-success {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+}
+
+.react-inline-notice.is-success .notice-icon {
+  color: var(--app-success);
+}
+
+.react-inline-notice.is-error {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.react-inline-notice.is-error .notice-icon {
+  color: var(--app-error);
+}
+
+.react-inline-notice.is-info .notice-icon {
+  color: var(--app-primary);
+}
+
+/* Press feedback: buttons respond instantly (100-160ms, ease-out). */
+.ant-btn:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+@keyframes cageledger-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cageledger-icon-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+
+  55% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ant-btn,
   .ant-motion-collapse,
   .ant-motion-collapse-legacy,
   .ant-drawer,
-  .ant-modal {
+  .ant-modal,
+  .react-inline-notice,
+  .react-inline-notice .notice-icon {
+    animation: none !important;
     transition-duration: 1ms !important;
   }
 

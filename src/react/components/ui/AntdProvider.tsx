@@ -1,11 +1,20 @@
 import { App as AntApp, ConfigProvider, theme as antTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { type PropsWithChildren, useMemo } from "react";
+import { type PropsWithChildren, useEffect, useMemo, useState } from "react";
 
 import { useUiState } from "../../state/ui";
 
 export function AntdProvider({ children }: PropsWithChildren) {
   const { theme } = useUiState();
+  const [reducedMotion, setReducedMotion] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReducedMotion(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
   const resolvedTheme =
     theme === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : theme;
   const config = useMemo(
@@ -28,6 +37,7 @@ export function AntdProvider({ children }: PropsWithChildren) {
         controlHeight: 32,
         controlHeightSM: 24,
         controlHeightLG: 40,
+        motion: !reducedMotion,
         motionDurationFast: "0.12s",
         motionDurationMid: "0.16s",
         motionDurationSlow: "0.22s",
@@ -45,7 +55,7 @@ export function AntdProvider({ children }: PropsWithChildren) {
         Table: { headerBg: resolvedTheme === "dark" ? "#1f1f1f" : "#fafafa" },
       },
     }),
-    [resolvedTheme],
+    [reducedMotion, resolvedTheme],
   );
 
   return (

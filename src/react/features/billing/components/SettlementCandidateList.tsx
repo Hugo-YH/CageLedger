@@ -1,3 +1,4 @@
+import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
 import { Checkbox, Space, type TableProps } from "antd";
 import { useState } from "react";
 
@@ -27,11 +28,17 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
   const [result, setResult] = useState<BillingStatementResponse | null>(null);
   const [notice, setNotice] = useState("");
+  const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchStarting, setBatchStarting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
+
+  function showNotice(message: string, kind: "success" | "error" | "info" = "info") {
+    setNotice(message);
+    setNoticeKind(kind);
+  }
   const params: SettlementCandidateListParams = {
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -143,9 +150,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       });
       setSelected(candidate);
       setResult(response);
-      setNotice(persist ? "结算流程已创建，可到结算与报销台账继续处理。" : "结算预览已生成。");
+      showNotice(persist ? "结算流程已创建，可到结算与报销台账继续处理。" : "结算预览已生成。", "success");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "生成结算单失败");
+      showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
     }
   }
 
@@ -157,7 +164,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         items: candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
       });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "PDF 导出失败");
+      showNotice(error instanceof Error ? error.message : "PDF 导出失败", "error");
     }
   }
 
@@ -190,10 +197,11 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     setAllFilteredSelected(false);
     setBatchStarting(false);
     setBatchConfirmOpen(false);
-    setNotice(
+    showNotice(
       failures.length
         ? `已发起 ${completedIds.length} 个结算流程；${failures.length} 个未完成：${failures.join("、")}`
         : `已发起 ${completedIds.length} 个结算流程，可到结算与报销台账继续处理。`,
+      failures.length ? "error" : "success",
     );
   }
 
@@ -212,7 +220,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       setAllFilteredSelected(true);
     } catch (error) {
       setAllFilteredSelected(false);
-      setNotice(error instanceof Error ? error.message : "无法读取全部结算项");
+      showNotice(error instanceof Error ? error.message : "无法读取全部结算项", "error");
     } finally {
       setSelectingAll(false);
     }
@@ -248,8 +256,23 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         <span className="panel-summary-chip">共 {total} 项</span>
       </div>
       {notice || pdfExport.isExporting ? (
-        <div className="react-inline-notice" role="status" aria-live="polite">
-          {notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+        <div
+          className={`react-inline-notice ${notice ? `is-${noticeKind}` : "is-info"}`}
+          role="status"
+          aria-live="polite"
+        >
+          {notice ? (
+            noticeKind === "success" ? (
+              <CheckCircleFilled aria-hidden className="notice-icon" />
+            ) : noticeKind === "error" ? (
+              <CloseCircleFilled aria-hidden className="notice-icon" />
+            ) : (
+              <InfoCircleFilled aria-hidden className="notice-icon" />
+            )
+          ) : (
+            <InfoCircleFilled aria-hidden className="notice-icon" />
+          )}
+          <span>{notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}</span>
         </div>
       ) : null}
       <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
@@ -352,8 +375,15 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             </div>
           </div>
           {notice ? (
-            <div className="react-inline-notice" role="status">
-              {notice}
+            <div className={`react-inline-notice is-${noticeKind}`} role="status">
+              {noticeKind === "success" ? (
+                <CheckCircleFilled aria-hidden className="notice-icon" />
+              ) : noticeKind === "error" ? (
+                <CloseCircleFilled aria-hidden className="notice-icon" />
+              ) : (
+                <InfoCircleFilled aria-hidden className="notice-icon" />
+              )}
+              <span>{notice}</span>
             </div>
           ) : null}
           <div className="modal-shell-body settlement-preview settlement-document-preview">

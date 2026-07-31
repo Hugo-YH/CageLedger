@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
 import { Button, Input, InputNumber, Select, Switch, Tag } from "antd";
 
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
@@ -34,6 +35,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const [editorRows, setEditorRows] = useState(() => makeEditorRows(draft));
   const [exists, setExists] = useState(false);
   const [notice, setNotice] = useState("");
+  const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [confirmSave, setConfirmSave] = useState<QuantitySheet | null>(null);
   const [editingDialog, setEditingDialog] = useState(false);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
@@ -194,6 +196,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     const issues = validateQuantitySheet(sheet);
     if (issues.length) {
       setNotice(issues.slice(0, 4).join("；"));
+      setNoticeKind("error");
       return;
     }
     setConfirmSave(sheet);
@@ -215,8 +218,10 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           ? `${normalized.month} · ${normalized.iacuc} 统计表已保存；当前按结余笼数计算饲养费，录入区已清空。`
           : `${normalized.month} · ${normalized.iacuc} 统计表已保存，录入区已清空。`,
       );
+      setNoticeKind("success");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "保存失败");
+      setNoticeKind("error");
       setConfirmSave(null);
     }
   }
@@ -294,8 +299,15 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           {headActions ? <div className="panel-head-actions">{headActions}</div> : null}
         </div>
         {notice ? (
-          <div className="react-inline-notice" role="status">
-            {notice}
+          <div className={`react-inline-notice is-${noticeKind}`} role="status">
+            {noticeKind === "success" ? (
+              <CheckCircleFilled aria-hidden className="notice-icon" />
+            ) : noticeKind === "error" ? (
+              <CloseCircleFilled aria-hidden className="notice-icon" />
+            ) : (
+              <InfoCircleFilled aria-hidden className="notice-icon" />
+            )}
+            <span>{notice}</span>
           </div>
         ) : null}
         <div className="quantity-sheet-fields">
