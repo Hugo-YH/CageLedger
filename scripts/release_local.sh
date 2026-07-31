@@ -14,7 +14,7 @@ Options:
   --push           Push the current release branch and the new v<version> tag after commit/tag
   --dry-run        Print steps without executing them
   --skip-full-verify  Skip the Mac mini production build and Playwright release verification
-  --skip-container-publish  Skip Mac mini local multi-arch image publish before push
+  --skip-container-publish  Skip image publish ONLY with explicit interactive confirmation
   --skip-offline-image      Skip dist/ image tar.gz export during local container publish
 EOF
 }
@@ -103,6 +103,31 @@ import sys
 if sys.version_info < (3, 13):
     raise SystemExit("CageLedger release requires Python 3.13. Activate .venv or set CAGELEDGER_PYTHON_BIN.")
 PY
+
+# 容器镜像构建与推送是发布产物的固定组成部分，未经明确同意不允许跳过。
+if [[ "$PUBLISH_CONTAINER" -eq 0 ]]; then
+  if [[ -t 0 ]]; then
+    read -r -p "跳过容器镜像构建与推送？输入 yes 确认，其他输入将照常发布镜像: " SKIP_IMAGE_CONFIRM
+    if [[ "$SKIP_IMAGE_CONFIRM" != "yes" ]]; then
+      echo "未确认跳过，继续执行容器镜像构建与推送。" >&2
+      PUBLISH_CONTAINER=1
+    fi
+  else
+    echo "非交互环境不允许跳过容器镜像发布；请去掉 --skip-container-publish 后重试。" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$PUBLISH_CONTAINER" -eq 1 ]]; then
+  command -v docker >/dev/null 2>&1 || {
+    echo "容器镜像发布需要 docker，请先安装并启动 Docker。" >&2
+    exit 1
+  }
+  docker info >/dev/null 2>&1 || {
+    echo "docker daemon 未运行，请启动 Docker Desktop 后重试。" >&2
+    exit 1
+  }
+fi
 
 if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
   echo "Local tag v${VERSION} already exists." >&2
