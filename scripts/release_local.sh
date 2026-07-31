@@ -159,8 +159,8 @@ if ! rg -q -F "version: \"${VERSION}\"" src/react/releaseNotesDocs.ts; then
   exit 1
 fi
 
-if ! rg -q -F "## v${VERSION}" wiki/更新日志.md; then
-  echo "wiki/更新日志.md is missing the v${VERSION} VitePress release entry." >&2
+if ! rg -q -F "## ${VERSION}" wiki/更新日志.md; then
+  echo "wiki/更新日志.md is missing the ${VERSION} VitePress release entry." >&2
   exit 1
 fi
 

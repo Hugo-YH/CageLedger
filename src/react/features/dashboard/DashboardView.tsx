@@ -59,7 +59,7 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
         kicker="运营工作台"
         title="实验动物笼位管理与计费系统"
         summary="接收、入驻、巡检、结算与核销的日常运营概览。"
-        status={`v${APP_VERSION}`}
+        status={APP_VERSION}
       />
       <div className="workspace-body dashboard-workspace-body ant-dashboard-body">
         <Row gutter={[16, 16]}>
