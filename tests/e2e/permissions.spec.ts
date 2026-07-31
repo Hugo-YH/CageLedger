@@ -21,11 +21,12 @@ test("admin can create infrastructure and manage a room account", async ({ page 
   await page.getByLabel("初始密码", { exact: true }).fill("e2e-password");
   await page.getByLabel(roomName, { exact: true }).check();
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
-  const userCard = page.locator(".user-card").filter({ hasText: "E2E 房间管理员" });
-  await expect(userCard).toBeVisible();
-  await userCard.getByRole("button", { name: "删除", exact: true }).click();
+  const userItem = page.locator(".settings-user-collapse .ant-collapse-item").filter({ hasText: "E2E 房间管理员" });
+  await expect(userItem).toBeVisible();
+  await userItem.locator(".ant-collapse-header").click();
+  await userItem.getByRole("button", { name: "删除账号", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
-  await expect(userCard).toHaveCount(0);
+  await expect(userItem).toHaveCount(0);
 });
 
 test("room administrator keeps the server-side permission boundary", async ({ page }) => {

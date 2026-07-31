@@ -43,7 +43,7 @@ test("mobile navigation keeps submenus and account actions reachable", async ({ 
     expect(workspaceBounds?.width).toBe(viewport.width);
     await expect(page.locator(".workspace-view")).toHaveJSProperty("scrollWidth", viewport.width - 32);
 
-    await page.getByRole("tab", { name: "笼卡", exact: true }).click();
+    await page.getByRole("tab", { name: "更多", exact: true }).click();
     await expect(page.locator(".ant-mobile-navigation-sheet")).toBeVisible();
     await expect(page.getByText("预约消息识别", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");

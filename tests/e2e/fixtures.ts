@@ -91,10 +91,15 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
   const desktopGroup = page.getByRole("menuitem", { name: new RegExp(escapeRegExp(label)) }).first();
   const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
   if (useMobileNavigation) {
-    await page.getByRole("tab", { name: mobileTabLabel(label) }).click();
-    const navigation = page.locator(".ant-mobile-navigation-sheet");
-    await expect(navigation).toBeVisible();
-    return navigation;
+    const tabLabel = mobileTabLabel(label);
+    await page.getByRole("tab", { name: tabLabel }).click();
+    if (tabLabel === "更多") {
+      const navigation = page.locator(".ant-mobile-navigation-sheet");
+      await expect(navigation).toBeVisible();
+      return navigation;
+    }
+    // Direct-destination tabs navigate to the group entry page without a sheet.
+    return page.locator(".ant-main-menu");
   }
   if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
   return page.locator(".ant-main-menu");
@@ -103,7 +108,16 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
 async function openNavigationEntry(page: Page, group: string, label: string) {
   const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
   if (useMobileNavigation) {
-    await page.getByRole("tab", { name: mobileTabLabel(group) }).click();
+    const directEntryByGroup: Record<string, string> = {
+      笼卡管理: "预约消息识别",
+      动物管理: "动物巡检",
+      饲养费管理: "数量统计表（录入）",
+    };
+    if (directEntryByGroup[group] === label) {
+      await page.getByRole("tab", { name: mobileTabLabel(group) }).click();
+      return;
+    }
+    await page.getByRole("tab", { name: "更多" }).click();
     await page.locator(".ant-mobile-navigation-sheet").getByText(label, { exact: true }).click();
     return;
   }

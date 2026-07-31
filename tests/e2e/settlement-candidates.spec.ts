@@ -54,7 +54,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.reload();
   await openBillingNavigation(page);
   await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算列表", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
@@ -62,7 +62,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByLabel("全选当前筛选结果结算项").check();
-  const selectionSummary = page.getByLabel("结算导出操作").getByText(/已选 \d+ 项/, { exact: true });
+  const selectionSummary = page.getByLabel("结算批量操作").getByText(/已选 \d+ 项/, { exact: true });
   await expect(selectionSummary).toBeVisible();
   const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
   expect(selectedCount).toBeGreaterThan(5);
@@ -74,7 +74,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByRole("option", { name: "10 条/页", exact: true }).click();
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByLabel("结算导出操作").getByRole("button", { name: "导出 PDF", exact: true }).click();
+  await page.getByLabel("结算批量操作").getByRole("button", { name: "导出 PDF", exact: true }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe(
     `E2E 合表负责人课题组实验动物饲养费核算汇总表 ${month.replace("-", "年")}月.pdf`,
@@ -92,7 +92,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
 
   const batchRow = page.getByRole("row", { name: /E2E 批量负责人/ });
   await batchRow.getByRole("checkbox", { name: `选择 E2E 批量负责人 ${month} 结算项` }).check();
-  await page.getByLabel("结算导出操作").getByRole("button", { name: "批量发起结算", exact: true }).click();
+  await page.getByLabel("结算批量操作").getByRole("button", { name: "批量发起结算", exact: true }).click();
   const confirmDialog = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个项目负责人结算项");
   await confirmDialog.getByRole("button", { name: "发起 2 个流程", exact: true }).click();

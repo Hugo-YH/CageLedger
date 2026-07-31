@@ -85,6 +85,11 @@ test("login and open the main business workspaces", async ({ page }) => {
   await page.getByRole("button", { name: "展开导航栏", exact: true }).click();
   await page.getByRole("menuitem", { name: /主页/ }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+  await page
+    .getByRole("link", { name: /进入系统/ })
+    .first()
+    .click();
+  await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page.getByRole("button", { name: "登录", exact: true })).toBeVisible();
 });

@@ -5,7 +5,7 @@
   --app-border: #f0f0f0;
   --app-text: #1f1f1f;
   --app-text-secondary: #595959;
-  --app-primary: #1677ff;
+  --app-primary: #0958d9;
   --app-success: #389e0d;
   --app-warning: #d48806;
   --app-error: #cf1322;
@@ -715,7 +715,7 @@
 
 .ant-dashboard-task.is-processing .ant-dashboard-task-icon {
   background: #e6f4ff;
-  color: #1677ff;
+  color: var(--app-primary);
 }
 
 .ant-dashboard-task.is-warning .ant-dashboard-task-icon {
@@ -1505,6 +1505,19 @@
 }
 
 /* Feedback notices: state variants, entrance and icon motion. */
+.settings-rack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.settings-rack-row:last-child {
+  border-bottom: 0;
+}
+
 .react-inline-notice {
   display: flex;
   align-items: flex-start;

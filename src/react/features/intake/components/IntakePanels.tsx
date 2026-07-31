@@ -36,7 +36,15 @@ export function IntakeEntryPanel({
 }) {
   return (
     <form id="intake-entry-panel" className="intake-entry-form" onSubmit={onSubmit}>
-      <Card className="intake-entry-card" extra={headActions} title={editing ? "编辑接收笼卡" : "接收笼卡"}>
+      <Card
+        className="intake-entry-card"
+        extra={headActions}
+        title={
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            {editing ? "编辑接收笼卡" : "接收笼卡"}
+          </Typography.Title>
+        }
+      >
         <Row className="intake-recognition-row" gutter={[16, 16]}>
           <Col lg={18} md={16} xs={24}>
             <Card
@@ -71,7 +79,7 @@ export function IntakeEntryPanel({
             </Card>
           </Col>
         </Row>
-        {notice ? <Alert className="intake-notice" message={notice} showIcon type="info" /> : null}
+        {notice ? <Alert className="intake-notice" title={notice} showIcon type="info" /> : null}
         <Divider />
         <Form component={false} layout="vertical" requiredMark>
           <Row gutter={[16, 0]}>
@@ -132,6 +140,7 @@ export function IntakeEntryPanel({
               <Form.Item label="房间" required>
                 <Select
                   aria-label="房间"
+                  id="intake-room"
                   options={[
                     { value: "", label: "请选择系统房间" },
                     ...roomNames.map((room) => ({ value: room, label: room })),
@@ -220,6 +229,7 @@ function Field({
   return (
     <Form.Item label={label} required={required}>
       <Input
+        aria-label={label}
         type={type}
         value={value}
         min={type === "number" ? 0 : undefined}

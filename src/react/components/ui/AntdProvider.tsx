@@ -27,6 +27,8 @@ export function AntdProvider({ children }: PropsWithChildren) {
         colorSuccess: "#389e0d",
         colorWarning: "#d48806",
         colorError: "#cf1322",
+        colorLink: "#0958d9",
+        colorLinkHover: "#0958d9",
         // Dashboard labels and descriptions remain readable on neutral surfaces.
         colorTextSecondary: "#595959",
         colorTextDescription: "#595959",

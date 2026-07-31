@@ -1,4 +1,4 @@
-import { Alert, Card, Descriptions, List, Tag, Typography } from "antd";
+import { Alert, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useAnimalInspectionCatalog } from "../../api/animalManagement";
@@ -52,21 +52,18 @@ export function InspectionStandards({
             showIcon
             type="warning"
           />
-          <List
-            className="inspection-standard-list"
-            dataSource={catalog.data.modules}
-            grid={{ gutter: 16, xs: 1, sm: 2, lg: 3 }}
-            renderItem={(module) => (
-              <List.Item>
+          <Row className="inspection-standard-list" gutter={[16, 16]}>
+            {catalog.data.modules.map((module) => (
+              <Col key={module.code} lg={8} md={12} xs={24}>
                 <Card size="small">
                   <Typography.Text type="secondary">巡检模块</Typography.Text>
                   <Typography.Title level={4}>{module.name}</Typography.Title>
                   <Typography.Paragraph type="secondary">{module.description}</Typography.Paragraph>
                   <Tag color="blue">{catalogItems(catalog.data.nodes, module.code).length} 个巡检条目</Tag>
                 </Card>
-              </List.Item>
-            )}
-          />
+              </Col>
+            ))}
+          </Row>
         </Card>
       </div>
     </section>

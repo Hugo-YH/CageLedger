@@ -61,7 +61,14 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
         switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
       />
       <div className="workspace-body settings-workspace-body">
-        <Card className="settings-log-card" title="操作记录">
+        <Card
+          className="settings-log-card"
+          title={
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              操作记录
+            </Typography.Title>
+          }
+        >
           {query.isPending ? (
             <PageState title="正在加载操作日志..." />
           ) : query.isError ? (

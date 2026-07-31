@@ -1294,7 +1294,7 @@
 }
 
 .animal-management-workspace .inspection-module-choice.ant-card.is-selected {
-  border-color: #1677ff;
+  border-color: var(--app-primary);
   background: #e6f4ff;
 }
 

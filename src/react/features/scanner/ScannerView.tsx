@@ -86,7 +86,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
         summary="扫描二维码或输入笼卡识别码，查询当前笼位、项目和接收状态。"
         status={cameraActive ? "摄像头开启" : "只读查询"}
         actions={
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("intake-entry")}>
+          <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={() => navigate("intake-entry")}>
             返回笼卡管理
           </Button>
         }
@@ -99,14 +99,18 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
           extra={
             <Button
               danger={cameraActive}
-              icon={cameraActive ? <StopOutlined /> : <CameraOutlined />}
+              icon={cameraActive ? <StopOutlined aria-hidden /> : <CameraOutlined aria-hidden />}
               type={cameraActive ? "default" : "primary"}
               onClick={() => void toggleCamera()}
             >
               {cameraActive ? "停止扫码" : "启动摄像头"}
             </Button>
           }
-          title="识别笼卡"
+          title={
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              识别笼卡
+            </Typography.Title>
+          }
         >
           {cameraActive ? (
             <Card className="scanner-camera-card" size="small" title="扫码取景框" type="inner">
@@ -117,7 +121,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
             </Card>
           ) : null}
           {cameraError ? (
-            <Alert className="scanner-alert" message={`摄像头启动失败：${cameraError}`} showIcon type="error" />
+            <Alert className="scanner-alert" title={`摄像头启动失败：${cameraError}`} showIcon type="error" />
           ) : null}
           <form
             className="scanner-query-form"

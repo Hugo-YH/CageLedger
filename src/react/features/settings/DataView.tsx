@@ -87,12 +87,16 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
       />
       <div className="workspace-body settings-workspace-body">
         {notice ? (
-          <Alert closable message={notice.message} showIcon type={notice.type} onClose={() => setNotice(null)} />
+          <Alert closable title={notice.message} showIcon type={notice.type} onClose={() => setNotice(null)} />
         ) : null}
         <section className="settings-split-layout data-settings-layout">
           <Card
             className="settings-data-table-card"
-            title="项目负责人身份"
+            title={
+              <Typography.Title level={2} style={{ margin: 0 }}>
+                项目负责人身份
+              </Typography.Title>
+            }
             extra={
               <Input.Search
                 allowClear
@@ -125,7 +129,7 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
               {status.isPending ? (
                 <PageState title="正在读取索引状态..." />
               ) : (
-                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                   <Statistic title="已索引记录" value={status.data?.count || 0} suffix="条" />
                   <Typography.Text type="secondary">
                     {status.data?.updatedAt ? `最后更新 ${formatDateTime(status.data.updatedAt)}` : "尚未上传索引"}
@@ -146,7 +150,7 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
             </Card>
             {user.role === "admin" ? (
               <Card size="small" title="历史报销台账导入">
-                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                   <ImportDragger
                     accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     label="导入月汇总 Excel"

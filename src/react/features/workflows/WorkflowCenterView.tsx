@@ -41,7 +41,9 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
           title={
             <Space size={8}>
               <AuditOutlined />
-              <span>核销工作台</span>
+              <Typography.Title level={2} style={{ margin: 0 }}>
+                核销工作台
+              </Typography.Title>
             </Space>
           }
           extra={

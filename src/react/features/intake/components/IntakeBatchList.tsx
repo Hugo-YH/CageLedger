@@ -146,7 +146,7 @@ export function IntakeBatchList({
       {selectedItems.length ? (
         <Alert
           className="intake-bulk-alert"
-          message={
+          title={
             <Flex align="center" gap={12} justify="space-between" wrap>
               <Typography.Text strong>已选 {selectedItems.length} 项</Typography.Text>
               <Space wrap>

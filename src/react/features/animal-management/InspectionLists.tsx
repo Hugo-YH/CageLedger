@@ -354,7 +354,7 @@ function FindingDialog({ finding, onClose }: { finding: InspectionFinding; onClo
           <Input.TextArea rows={3} value={conclusion} onChange={(event) => setConclusion(event.target.value)} />
         </Form.Item>
       </Form>
-      {notice ? <Alert message={notice} showIcon type="info" /> : null}
+      {notice ? <Alert title={notice} showIcon type="info" /> : null}
       <Alert
         className="inspection-action-note"
         description="医疗、安乐死与给药建议作为人工参考，处置前执行兽医与伦理审核。"
@@ -380,9 +380,9 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
       width={860}
     >
       {query.isLoading ? <Typography.Text>正在加载巡检结论与处置记录...</Typography.Text> : null}
-      {query.isError || !query.data ? <Alert message="巡检记录详情加载失败" showIcon type="error" /> : null}
+      {query.isError || !query.data ? <Alert title="巡检记录详情加载失败" showIcon type="error" /> : null}
       {query.data ? (
-        <Space className="inspection-detail-content" direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space className="inspection-detail-content" orientation="vertical" size={16} style={{ width: "100%" }}>
           <Descriptions bordered column={{ xs: 1, sm: 2 }} size="small" title={query.data.item.roomName}>
             <Descriptions.Item label="巡检人">{query.data.item.createdByName}</Descriptions.Item>
             <Descriptions.Item label="提交时间">
@@ -431,7 +431,7 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
                 ]}
               />
             ) : (
-              <Alert message="本次巡检均已确认正常。" showIcon type="success" />
+              <Alert title="本次巡检均已确认正常。" showIcon type="success" />
             )}
           </Card>
           <Card size="small" title="异常与处置">

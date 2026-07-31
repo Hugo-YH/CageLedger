@@ -30,7 +30,9 @@ export function MonthlyBillingSummary() {
       title={
         <Space size={8}>
           <FileExcelOutlined />
-          <span>月度饲养费汇总</span>
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            月度饲养费汇总
+          </Typography.Title>
         </Space>
       }
       extra={<Tag color="blue">管理员导出</Tag>}
@@ -42,7 +44,7 @@ export function MonthlyBillingSummary() {
         <Alert
           type="info"
           showIcon
-          message="导出范围"
+          title="导出范围"
           description="包含当月全部可结算数量统计表，保留金额为 0 的有效记录。"
         />
         <Flex className="monthly-summary-controls" align="end" gap={16} wrap>
@@ -57,7 +59,7 @@ export function MonthlyBillingSummary() {
             </Form.Item>
           </Form>
           <Button
-            icon={<FileExcelOutlined />}
+            icon={<FileExcelOutlined aria-hidden />}
             loading={exporting}
             disabled={!month}
             type="primary"

@@ -140,7 +140,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       render: (_, candidate) => {
         const action = (
           <Button
-            icon={<EyeOutlined />}
+            icon={<EyeOutlined aria-hidden />}
             loading={generate.isPending}
             size="small"
             type="link"
@@ -255,7 +255,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       <Card className="settlement-candidate-card settlement-candidate-empty">
         <Empty
           description={
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               <Typography.Text strong>动态笼位图结算正在调试</Typography.Text>
               <Typography.Text type="secondary">
                 请切换到“数量统计表（录入）”查看项目负责人结算候选列表。
@@ -275,7 +275,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         title={
           <Space size={8}>
             <FileTextOutlined />
-            <span>项目负责人结算</span>
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              项目负责人结算
+            </Typography.Title>
           </Space>
         }
         extra={<Tag color="blue">共 {total} 项</Tag>}
@@ -285,7 +287,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         </Typography.Paragraph>
         {notice || pdfExport.isExporting ? (
           <Alert
-            message={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+            title={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
             role="status"
             showIcon
             type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
@@ -297,7 +299,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           </Tag>
           <Space wrap>
             <Button
-              icon={<DownloadOutlined />}
+              icon={<DownloadOutlined aria-hidden />}
               loading={pdfExport.isExporting}
               disabled={!selectedCandidates.length || selectingAll}
               onClick={() => void exportCandidates(selectedCandidates)}
@@ -305,7 +307,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
             </Button>
             <Button
-              icon={<PlayCircleOutlined />}
+              icon={<PlayCircleOutlined aria-hidden />}
               loading={batchStarting}
               type="primary"
               disabled={!selectedCandidates.length || selectingAll}
@@ -335,8 +337,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           <Pagination
             current={page}
             pageSize={pageSize}
+            pageSizeOptions={[5, 10, 20, 50]}
             showQuickJumper
-            showSizeChanger
+            showSizeChanger={{ "aria-label": "每页显示条数" }}
             showTotal={(count) => `共 ${count} 项`}
             total={total}
             onChange={(nextPage, nextPageSize) => {
@@ -368,24 +371,25 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           className="settlement-preview-modal"
           footer={
             <Space wrap>
-              <Button icon={<PrinterOutlined />} onClick={() => openSettlementPrint(result)}>
+              <Button icon={<PrinterOutlined aria-hidden />} onClick={() => openSettlementPrint(result)}>
                 打印结算单
               </Button>
               <Button
-                icon={<DownloadOutlined />}
+                icon={<DownloadOutlined aria-hidden />}
                 loading={pdfExport.isExporting}
                 onClick={() => void exportCandidates([selected])}
               >
                 导出 PDF
               </Button>
               <Button
-                icon={<PlayCircleOutlined />}
+                icon={<PlayCircleOutlined aria-hidden />}
                 loading={generate.isPending}
                 type="primary"
                 onClick={() => void generateFor(selected, true)}
               >
                 发起结算流程
               </Button>
+              <Button onClick={() => setSelected(null)}>关闭</Button>
             </Space>
           }
           open
@@ -396,7 +400,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           <Typography.Paragraph type="secondary">{selected.iacucs.join("、")}</Typography.Paragraph>
           {notice ? (
             <Alert
-              message={notice}
+              title={notice}
               role="status"
               showIcon
               type={noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info"}
