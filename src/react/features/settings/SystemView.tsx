@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Card, Col, Descriptions, Flex, Row, Segmented, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Descriptions, Flex, Segmented, Space, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
@@ -63,73 +63,62 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   const content = (
     <>
       {hero}
-      <Row gutter={[16, 16]}>
-        <Col lg={16} xs={24}>
-          <Card
-            className="system-status-card"
-            extra={
-              user.role === "admin" ? (
-                <Button
-                  loading={update.isFetching}
-                  onClick={() => {
-                    setCheckEnabled(true);
-                    if (checkEnabled) void update.refetch();
-                  }}
-                >
-                  检查更新
-                </Button>
-              ) : null
-            }
-            title={<CardTitle>系统状态</CardTitle>}
-          >
-            <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
-              <Descriptions.Item label="当前版本">
-                <Typography.Text strong>
-                  {data.version}
-                  {data.build ? `（${data.build}）` : ""}
-                </Typography.Text>
-              </Descriptions.Item>
-              <Descriptions.Item label="代码版本">
-                <Typography.Text code>{data.revisionShort || "未设置"}</Typography.Text>
-              </Descriptions.Item>
-              <Descriptions.Item label="所属单位">{`${data.organization} · ${data.department}`}</Descriptions.Item>
-              <Descriptions.Item label="开源协议">{data.license}</Descriptions.Item>
-            </Descriptions>
-            {checkEnabled ? <UpdateCard update={update} /> : null}
-          </Card>
-        </Col>
-        <Col lg={8} xs={24}>
-          <Space orientation="vertical" size={16} style={{ display: "flex" }}>
-            <Card title={<CardTitle>界面外观</CardTitle>}>
-              <Space orientation="vertical" size={8}>
-                <Typography.Text>显示模式</Typography.Text>
-                <Segmented
-                  aria-label="显示模式"
-                  block
-                  onChange={(theme) => dispatch({ type: "set-theme", theme: theme as "system" | "light" | "dark" })}
-                  options={[
-                    { label: "跟随系统", value: "system" },
-                    { label: "浅色", value: "light" },
-                    { label: "深色", value: "dark" },
-                  ]}
-                  value={ui.theme}
-                />
-                <Typography.Text type="secondary">主题仅影响本设备界面，不影响业务数据与其他用户。</Typography.Text>
-              </Space>
-            </Card>
-            <Card title={<CardTitle>维护信息</CardTitle>}>
-              <Descriptions column={1} layout="vertical" size="small">
-                <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
-                <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
-                <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
-              </Descriptions>
-              <Button href="/docs/releases/" style={{ marginTop: 12 }} type="link">
-                在项目文档查看更新记录
-              </Button>
-            </Card>
-          </Space>
-        </Col>
-      </Row>
+      <Card
+        className="system-status-card"
+        extra={
+          user.role === "admin" ? (
+            <Button
+              loading={update.isFetching}
+              onClick={() => {
+                setCheckEnabled(true);
+                if (checkEnabled) void update.refetch();
+              }}
+            >
+              检查更新
+            </Button>
+          ) : null
+        }
+        title={<CardTitle>系统状态</CardTitle>}
+      >
+        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
+          <Descriptions.Item label="当前版本">
+            <Typography.Text strong>
+              {data.version}
+              {data.build ? `（${data.build}）` : ""}
+            </Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="代码版本">
+            <Typography.Text code>{data.revisionShort || "未设置"}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="所属单位">{`${data.organization} · ${data.department}`}</Descriptions.Item>
+          <Descriptions.Item label="开源协议">{data.license}</Descriptions.Item>
+        </Descriptions>
+        {checkEnabled ? <UpdateCard update={update} /> : null}
+      </Card>
+      <Card title={<CardTitle>维护信息</CardTitle>}>
+        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
+          <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
+          <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
+          <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
+        </Descriptions>
+      </Card>
+      <Card title={<CardTitle>界面外观</CardTitle>}>
+        <Space orientation="vertical" size={8} style={{ display: "flex", maxWidth: 420 }}>
+          <Typography.Text>显示模式</Typography.Text>
+          <Segmented
+            aria-label="显示模式"
+            block
+            onChange={(theme) => dispatch({ type: "set-theme", theme: theme as "system" | "light" | "dark" })}
+            options={[
+              { label: "跟随系统", value: "system" },
+              { label: "浅色", value: "light" },
+              { label: "深色", value: "dark" },
+            ]}
+            value={ui.theme}
+          />
+          <Typography.Text type="secondary">主题仅影响本设备界面，不影响业务数据与其他用户。</Typography.Text>
+        </Space>
+      </Card>
     </>
   );
   if (isMobile) {
