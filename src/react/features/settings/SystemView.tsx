@@ -96,7 +96,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
               <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
               <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
             </Descriptions>
-            <Button href="/docs/updates/" style={{ marginTop: 16 }} type="link">
+            <Button href="/docs/releases/" style={{ marginTop: 16 }} type="link">
               在项目文档查看更新记录
             </Button>
           </Card>
