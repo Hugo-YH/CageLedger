@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button, Card, List, Space, Tag, Typography } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
@@ -87,110 +88,106 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
         switcherLabel="系统功能"
         switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
         actions={
-          <div className="workspace-head-button-row">
-            {canManageRooms ? (
-              <button className="secondary" type="button" onClick={() => setRoomDraft(newRoomDraft())}>
-                新增饲养间
-              </button>
-            ) : null}
-            <button
-              className="primary"
-              type="button"
+          <Space>
+            {canManageRooms ? <Button onClick={() => setRoomDraft(newRoomDraft())}>新增饲养间</Button> : null}
+            <Button
+              type="primary"
               disabled={!visibleRooms.length}
               onClick={() => setRackDraft(newRackDraft(visibleRooms[0], cageRacks))}
             >
               新增笼架
-            </button>
-          </div>
+            </Button>
+          </Space>
         }
       />
       <div className="workspace-body settings-workspace-body">
-        <section className="panel large">
-          <div className="panel-head">
-            <div className="panel-title-line">
-              <h2>饲养间与笼架</h2>
-            </div>
-            <div className="panel-head-actions">
-              <span className="panel-summary-chip">
-                {visibleRooms.length} 间 · {cageRacks.length} 架 · {cageSlots.length} 笼位
-              </span>
-            </div>
-          </div>
-          <div className="room-list react-room-list">
-            {visibleRooms.map((room) => {
+        <Card
+          className="settings-rooms-card"
+          extra={
+            <Tag color="processing">
+              {visibleRooms.length} 间 · {cageRacks.length} 架 · {cageSlots.length} 笼位
+            </Tag>
+          }
+          title="饲养间与笼架"
+        >
+          <List
+            dataSource={visibleRooms}
+            locale={{ emptyText: "当前没有可管理的饲养间。" }}
+            renderItem={(room) => {
               const roomRacks = cageRacks.filter((rack) => rack.roomId === room.id);
               return (
-                <article className="room-card" key={room.id}>
-                  <div className="room-card-head">
-                    <div>
-                      <strong>{room.name}</strong>
-                      <span>
-                        {room.area || "未设置区域"} · {facilityLabel(room.facility)} · 房间管理员：
-                        {room.roomManager || "未设置"}
-                      </span>
-                    </div>
-                    <div className="table-actions">
-                      {canManageRooms ? (
-                        <button className="ghost" type="button" onClick={() => setRoomDraft({ ...room })}>
-                          编辑房间
-                        </button>
-                      ) : null}
-                      {canManageRooms && visibleRooms.length > 1 ? (
-                        <button
-                          className="ghost danger-text"
-                          type="button"
-                          onClick={() => setDeleteTarget({ kind: "room", id: room.id, label: room.name })}
-                        >
-                          删除
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="rack-tree">
-                    {roomRacks.length ? (
-                      roomRacks.map((rack) => (
-                        <div className="rack-tree-item" key={rack.id}>
-                          <div>
-                            <strong>笼架 {rack.index}</strong>
-                            <span>
-                              {rack.rows} 行 × {rack.cols} 列 ·{" "}
-                              {cageSlots.filter((slot) => slot.rackId === rack.id).length} 笼位
-                            </span>
-                          </div>
-                          <div className="table-actions">
-                            <button className="ghost" type="button" onClick={() => setRackDraft({ ...rack })}>
-                              编辑
-                            </button>
-                            <button
-                              className="ghost danger-text"
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ kind: "rack", id: rack.id, label: `${room.name} 笼架 ${rack.index}` })
-                              }
+                <List.Item key={room.id}>
+                  <Card className="settings-room-card" size="small" style={{ width: "100%" }}>
+                    <div className="settings-room-content">
+                      <div className="settings-room-header">
+                        <div>
+                          <Typography.Text strong>{room.name}</Typography.Text>
+                          <Typography.Paragraph type="secondary">
+                            {room.area || "未设置区域"} · {facilityLabel(room.facility)} · 房间管理员：
+                            {room.roomManager || "未设置"}
+                          </Typography.Paragraph>
+                        </div>
+                        <Space>
+                          {canManageRooms ? (
+                            <Button type="link" onClick={() => setRoomDraft({ ...room })}>
+                              编辑房间
+                            </Button>
+                          ) : null}
+                          {canManageRooms && visibleRooms.length > 1 ? (
+                            <Button
+                              danger
+                              type="link"
+                              onClick={() => setDeleteTarget({ kind: "room", id: room.id, label: room.name })}
                             >
                               删除
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state compact">
-                        <p>当前房间尚未创建笼架。</p>
+                            </Button>
+                          ) : null}
+                        </Space>
                       </div>
-                    )}
-                  </div>
-                  <button
-                    className="secondary room-add-rack"
-                    type="button"
-                    onClick={() => setRackDraft(newRackDraft(room, cageRacks))}
-                  >
-                    在此房间新增笼架
-                  </button>
-                </article>
+                      <List
+                        bordered
+                        className="settings-rack-list"
+                        dataSource={roomRacks}
+                        locale={{ emptyText: "当前房间尚未创建笼架。" }}
+                        renderItem={(rack) => (
+                          <List.Item
+                            actions={[
+                              <Button key="edit" type="link" onClick={() => setRackDraft({ ...rack })}>
+                                编辑
+                              </Button>,
+                              <Button
+                                danger
+                                key="delete"
+                                type="link"
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    kind: "rack",
+                                    id: rack.id,
+                                    label: `${room.name} 笼架 ${rack.index}`,
+                                  })
+                                }
+                              >
+                                删除
+                              </Button>,
+                            ]}
+                          >
+                            <List.Item.Meta
+                              description={`${rack.rows} 行 × ${rack.cols} 列 · ${cageSlots.filter((slot) => slot.rackId === rack.id).length} 笼位`}
+                              title={`笼架 ${rack.index}`}
+                            />
+                          </List.Item>
+                        )}
+                      />
+                      <Button block onClick={() => setRackDraft(newRackDraft(room, cageRacks))}>
+                        在此房间新增笼架
+                      </Button>
+                    </div>
+                  </Card>
+                </List.Item>
               );
-            })}
-          </div>
-        </section>
+            }}
+          />
+        </Card>
       </div>
       {roomDraft ? (
         <RoomEditor

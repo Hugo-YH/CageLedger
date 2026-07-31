@@ -21,6 +21,22 @@
 - 动效使用 transform 和 opacity：按压 120ms、浮层 160ms、Drawer/Modal 220ms。
 - `prefers-reduced-motion` 下保留状态色与透明度，移除位移与缩放。
 
+## 布局归属与改动流程
+
+- 一个组件的网格、尺寸、间距和断点只由一个样式层负责。通用组件规则归属 `ux-foundation.css`；领域页面规则归属对应 feature CSS；Ant Token 覆盖归属主题层。
+- 通用样式只定义 Token、基础状态和跨页面可复用行为。通用样式不得直接改变业务组件的 `grid-template-columns`、固定宽度、定位或断点布局。
+- 领域组件使用完整的作用域选择器，例如 `.animal-management-workspace .inspection-module-picker`。组件改造同步清理旧 class、旧媒体查询和已失效的同名选择器。
+- 同名 class 出现多个定义时，变更前必须列出来源、加载顺序和适用断点；完成后保留唯一的布局定义，状态样式通过修饰类或 Ant 状态类补充。
+- 自适应网格优先使用 `repeat(auto-fit, minmax(...))`；桌面、平板与移动端分别验证列数、最小宽度、文字截断和操作可达性。固定窄列只用于明确的紧凑控件。
+- 页面级视觉修复完成前检查 computed style：`display`、`grid-template-columns`、`gap`、`min-width`、`overflow`、`position` 和 `z-index` 必须与组件规范一致。
+
+## UI 回归门禁
+
+- 布局、导航、表格、表单、弹窗、浮层和响应式改动都需要桌面、1180px、760px、手机横屏四档验证。
+- 视觉回归同时覆盖默认、hover、focus-visible、disabled、loading 和内容溢出状态；交互组件额外覆盖键盘焦点与关闭/返回路径。
+- 截图差异出现时先定位样式来源与 computed style，再修改组件规则。禁止连续叠加页面级覆盖规则处理同一视觉问题。
+- 组件存在遗留样式时，任务验收包含“旧规则已删除或已迁移”的代码检查；保留规则需写明仍服务的组件与断点。
+
 ## 项目门户
 
 - `/` 提供公开项目门户，只呈现产品定位、能力、流程和资源入口。

@@ -3,6 +3,7 @@ import {
   AuditOutlined,
   BookOutlined,
   CalculatorOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
   HomeOutlined,
   InfoCircleOutlined,
@@ -91,13 +92,18 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
     setMobileNavigationOpen(false);
   }
 
+  function openProjectHome() {
+    window.location.assign("/");
+  }
+
   async function signOut() {
     await logout.mutateAsync();
     window.dispatchEvent(new CustomEvent("cageledger:session-changed"));
   }
 
   const items: MenuProps["items"] = [
-    item("dashboard", "主页", <HomeOutlined />),
+    item("project-home", "主页", <HomeOutlined />),
+    item("dashboard", "总览", <DashboardOutlined />),
     {
       key: "intake",
       icon: <TagsOutlined />,
@@ -174,6 +180,10 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
           selectedKeys={[ui.activeView]}
           theme="dark"
           onClick={({ key }) => {
+            if (key === "project-home") {
+              openProjectHome();
+              return;
+            }
             if (isWorkspaceView(key)) navigate(key);
           }}
         />
@@ -222,6 +232,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
             onClose={() => setMobileNavigationOpen(false)}
             onNavigate={navigate}
             onOpen={() => setMobileNavigationOpen(true)}
+            onOpenProjectHome={openProjectHome}
             onRefresh={clearLocalCache}
             onSignOut={() => void signOut()}
           />
@@ -242,7 +253,7 @@ function useIsMobileLayout() {
   return isMobile;
 }
 
-function item(key: WorkspaceView, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {
+function item(key: string, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {
   return { key, label, icon };
 }
 

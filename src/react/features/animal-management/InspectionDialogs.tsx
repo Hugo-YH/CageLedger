@@ -47,6 +47,7 @@ export function FindingCaptureDialog({
     <Modal
       centered
       className="inspection-finding-modal"
+      destroyOnHidden
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>
@@ -166,6 +167,7 @@ export function ReferenceImageDialog({ preview, onClose }: { preview: ReferenceP
     <Modal
       centered
       className="inspection-image-modal"
+      destroyOnHidden
       footer={null}
       onCancel={onClose}
       open

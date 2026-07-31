@@ -1,4 +1,5 @@
-import { Button, Card, Col, Progress, Row, Skeleton, Space, Statistic, Tag, Typography } from "antd";
+import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
+import { Badge, Button, Card, Col, Progress, Row, Skeleton, Statistic, Tag, Typography } from "antd";
 
 import type { BootstrapResponse } from "../../api/contracts";
 import { useBootstrap } from "../../api/bootstrap";
@@ -22,10 +23,34 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
   const facilities = data.facilitySummaries;
   const roomsById = new Map(data.rooms.map((room) => [String(room.id || ""), room]));
   const tasks = [
-    { label: "待接收批次", value: value("intakePendingCount"), view: "intake-batches" as WorkspaceView },
-    { label: "待进驻任务", value: value("openPlacementTaskCount"), view: "cages" as WorkspaceView },
-    { label: "本月待办流程", value: value("currentMonthWorkflowTodoCount"), view: "workflow-center" as WorkspaceView },
-    { label: "异常项", value: value("exceptionCount"), view: "workflow-center" as WorkspaceView },
+    {
+      label: "待接收批次",
+      value: value("intakePendingCount"),
+      view: "intake-batches" as WorkspaceView,
+      icon: <InboxOutlined />,
+      tone: "processing",
+    },
+    {
+      label: "待进驻任务",
+      value: value("openPlacementTaskCount"),
+      view: "cages" as WorkspaceView,
+      icon: <ApartmentOutlined />,
+      tone: "warning",
+    },
+    {
+      label: "本月待办流程",
+      value: value("currentMonthWorkflowTodoCount"),
+      view: "workflow-center" as WorkspaceView,
+      icon: <ClockCircleOutlined />,
+      tone: "default",
+    },
+    {
+      label: "异常项",
+      value: value("exceptionCount"),
+      view: "workflow-center" as WorkspaceView,
+      icon: <ExclamationCircleOutlined />,
+      tone: "error",
+    },
   ];
 
   return (
@@ -50,10 +75,21 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
           <Row gutter={[0, 12]}>
             {tasks.map((task) => (
               <Col key={task.label} lg={6} md={12} sm={12} xs={24}>
-                <Button className="ant-dashboard-task" block type="text" onClick={() => navigate(task.view)}>
-                  <Typography.Text type="secondary">{task.label}</Typography.Text>
-                  <Typography.Text strong>{task.value}</Typography.Text>
-                  <Typography.Link>查看详情</Typography.Link>
+                <Button
+                  aria-label={`查看${task.label}，当前 ${task.value} 项`}
+                  className={`ant-dashboard-task is-${task.tone}`}
+                  block
+                  type="text"
+                  onClick={() => navigate(task.view)}
+                >
+                  <span className="ant-dashboard-task-icon" aria-hidden="true">
+                    {task.icon}
+                  </span>
+                  <span className="ant-dashboard-task-copy">
+                    <Typography.Text>{task.label}</Typography.Text>
+                    <Typography.Text className="ant-dashboard-task-action">查看详情</Typography.Text>
+                  </span>
+                  <Badge className="ant-dashboard-task-count" count={task.value} overflowCount={9999} showZero />
                 </Button>
               </Col>
             ))}
@@ -74,20 +110,13 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
           </Col>
           <Col lg={10} xs={24}>
             <Card className="ant-dashboard-section" size="small" title="笼位状态分布">
-              <div className="ant-dashboard-status">
-                <Progress
-                  aria-label="笼位占用率"
-                  percent={occupiedPct}
-                  size={132}
-                  strokeColor="#1677ff"
-                  type="circle"
-                />
-                <Space orientation="vertical" size={8}>
-                  <StatusLine label="在用" total={total} value={value("active")} />
-                  <StatusLine label="已预约" total={total} value={value("reserved")} />
-                  <StatusLine label="空笼位" total={total} value={value("empty")} />
-                </Space>
-              </div>
+              <CageStatusDistribution
+                active={value("active")}
+                empty={value("empty")}
+                reserved={value("reserved")}
+                total={total}
+                usedPercent={occupiedPct}
+              />
             </Card>
           </Col>
         </Row>
@@ -160,14 +189,69 @@ function FacilitySummary({ facility, item = {} }: { facility: string; item?: Rec
   );
 }
 
-function StatusLine({ label, value, total }: { label: string; value: number; total: number }) {
+function CageStatusDistribution({
+  active,
+  empty,
+  reserved,
+  total,
+  usedPercent,
+}: {
+  active: number;
+  empty: number;
+  reserved: number;
+  total: number;
+  usedPercent: number;
+}) {
+  const segments = [
+    { label: "在用", value: active, color: "#1677ff" },
+    { label: "已预约", value: reserved, color: "#722ed1" },
+    { label: "空笼位", value: empty, color: "#d9d9d9" },
+  ];
+
   return (
-    <Space size={8}>
-      <Typography.Text>{label}</Typography.Text>
+    <div className="ant-dashboard-status">
+      <div className="ant-dashboard-status-head">
+        <Statistic title="笼位使用率" suffix="%" value={usedPercent} />
+        <Typography.Text type="secondary">共 {total} 个笼位</Typography.Text>
+      </div>
+      <div
+        aria-label={`笼位状态分布：在用 ${active} 笼，已预约 ${reserved} 笼，空笼位 ${empty} 笼`}
+        className="ant-dashboard-status-bar"
+        role="img"
+      >
+        {segments.map((segment) => (
+          <span
+            aria-hidden="true"
+            className="ant-dashboard-status-segment"
+            key={segment.label}
+            style={{ backgroundColor: segment.color, width: `${percent(segment.value, total)}%` }}
+            title={`${segment.label} ${segment.value} 笼`}
+          />
+        ))}
+      </div>
+      <div className="ant-dashboard-status-legend" role="list">
+        {segments.map((segment) => (
+          <StatusLine
+            color={segment.color}
+            key={segment.label}
+            label={segment.label}
+            total={total}
+            value={segment.value}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatusLine({ color, label, value, total }: { color: string; label: string; value: number; total: number }) {
+  return (
+    <div className="ant-dashboard-status-line" role="listitem">
+      <Badge color={color} text={label} />
       <Typography.Text type="secondary">
         {value} 笼 · {percent(value, total)}%
       </Typography.Text>
-    </Space>
+    </div>
   );
 }
 

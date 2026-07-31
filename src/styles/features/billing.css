@@ -542,37 +542,13 @@ th {
   width: 220px;
 }
 
-.scanner-panel {
-  max-width: 920px;
-  margin: 0 auto;
-}
-
-.scanner-query-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: end;
-  padding: 20px;
-}
-
-.scanner-query-form label {
-  display: grid;
-  gap: 7px;
-}
-
-.scanner-result {
-  padding: 0 20px 24px;
-}
-
 .scanner-camera {
   position: relative;
-  width: min(560px, calc(100% - 40px));
-  margin: 20px auto 0;
+  width: min(640px, 100%);
+  margin: 0 auto;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 18px;
-  background: #071c1d;
-  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 8%);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: #000;
 }
 
 .scanner-camera video {
@@ -584,26 +560,17 @@ th {
 
 .scanner-camera span {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
-  left: 14px;
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: rgb(4 30 31 / 78%);
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  padding: 6px 10px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: rgb(0 0 0 / 65%);
   color: #fff;
   text-align: center;
-  backdrop-filter: blur(8px);
-}
-
-.scanner-camera-inactive {
-  display: none;
 }
 
 @media (width <= 760px) {
-  .scanner-query-form {
-    grid-template-columns: 1fr;
-  }
-
   .react-intake-view .intake-action-panel {
     min-width: 0;
   }
@@ -1447,5 +1414,210 @@ th {
 
   .reimbursement-claim-modal {
     width: min(100vw - 16px, 920px);
+  }
+}
+
+/* Ant Design financial workspace: shared density, hierarchy and responsive behavior. */
+.monthly-billing-summary-card {
+  max-width: 960px;
+}
+
+.monthly-billing-summary-card .ant-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.monthly-billing-summary-card .ant-typography,
+.settlement-source-help,
+.settlement-card-description,
+.reimbursement-ledger-description,
+.monthly-summary-hint {
+  margin-bottom: 0;
+}
+
+.monthly-billing-summary-action {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.monthly-summary-controls .ant-form-item {
+  min-width: 220px;
+  margin-bottom: 0;
+}
+
+.settlement-source-card,
+.settlement-candidate-card,
+.reimbursement-ledger-panel {
+  min-width: 0;
+}
+
+.settlement-candidate-card .ant-card-body,
+.reimbursement-ledger-panel .ant-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.settlement-source-help,
+.settlement-card-description,
+.reimbursement-ledger-description {
+  margin-top: 12px !important;
+}
+
+.settlement-action-bar {
+  position: sticky;
+  top: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
+}
+
+.settlement-table-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settlement-pagination {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settlement-preview-modal .ant-modal-body {
+  display: grid;
+  gap: 12px;
+}
+
+.settlement-preview {
+  height: min(68vh, 780px);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.settlement-document-preview iframe {
+  display: block;
+  width: 100%;
+  min-height: 740px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+.ledger-tabs .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+/* Ant Tabs owns its indicator and focus state. Legacy pill geometry applied to the
+   whole tabs container created an oversized rounded border around the panel. */
+.ledger-tabs {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ledger-section {
+  display: grid;
+  gap: 16px;
+}
+
+.ledger-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ledger-toolbar .ant-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ledger-toolbar .ant-form-item,
+.reconciliation-picker .ant-form-item {
+  margin-bottom: 0;
+}
+
+.ledger-loading {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.reconciliation-form-card .ant-card-body {
+  padding: 16px;
+}
+
+.reconciliation-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.reconciliation-picker .ant-form-item:last-child {
+  display: flex;
+  align-items: end;
+}
+
+@media (width <= 760px) {
+  .monthly-summary-controls {
+    align-items: stretch;
+  }
+
+  .monthly-summary-controls .ant-form {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .monthly-summary-controls .ant-btn {
+    width: 100%;
+  }
+
+  .settlement-action-bar,
+  .settlement-table-meta,
+  .ledger-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settlement-action-bar .ant-space {
+    display: flex;
+    width: 100%;
+  }
+
+  .settlement-action-bar .ant-btn {
+    flex: 1;
+  }
+
+  .settlement-pagination {
+    justify-content: center;
+    overflow: auto;
+    padding-bottom: 4px;
+  }
+
+  .reconciliation-picker {
+    grid-template-columns: 1fr;
   }
 }

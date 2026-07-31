@@ -26,6 +26,14 @@ npm run check
 
 `npm run dev` 和 `npm run test:e2e` 使用项目 `.venv` 的 Python 启动 API，避免继承 macOS 系统 Python。`CAGELEDGER_PYTHON_BIN` 可指定其他 Python 3.13 可执行文件。
 
+## UI 回归流程
+
+1. 使用 `rg` 枚举目标组件的 class、data attribute、媒体查询和导入顺序，记录唯一布局归属。
+2. 在桌面、1180px、760px、手机横屏验证目标页面的默认、焦点、禁用、加载和长文本状态。
+3. 检查浏览器 computed style 与容器溢出，重点覆盖 `display`、网格列、最小宽度、间距、定位和层级。
+4. 运行目标 CSS 的 Stylelint、`npm run check` 和 `git diff --check`；关键流程补充或更新 Playwright 截图断言。
+5. 视觉差异先回溯样式来源和级联顺序，再修改唯一组件规则。验收禁止新增同类覆盖层。
+
 ## 完整门禁
 
 `npm run verify:full` 在基础质量检查后执行 React 应用与 VitePress 文档站的生产构建，并执行完整 Playwright。E2E 使用临时 SQLite，测试数据不会写入正式数据库。

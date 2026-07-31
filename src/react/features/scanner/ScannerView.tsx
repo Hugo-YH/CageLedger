@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowLeftOutlined, CameraOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Empty,
+  Flex,
+  Form,
+  Input,
+  Result,
+  Spin,
+  Tag,
+  Typography,
+  type InputRef,
+} from "antd";
 
 import { requestJson } from "../../api/client";
 import type { WorkspaceView } from "../../state/ui";
@@ -14,7 +30,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<InputRef>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frameRef = useRef(0);
   const result = useQuery({
@@ -70,37 +86,38 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
         summary="扫描二维码或输入笼卡识别码，查询当前笼位、项目和接收状态。"
         status={cameraActive ? "摄像头开启" : "只读查询"}
         actions={
-          <button className="secondary" type="button" onClick={() => navigate("intake-entry")}>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("intake-entry")}>
             返回笼卡管理
-          </button>
+          </Button>
         }
         switcherLabel="笼卡功能"
         switcherItems={intakeSwitchItems(navigate)}
       />
       <div className="workspace-body">
-        <section className="panel scanner-panel">
-          <div className="panel-head">
-            <div className="panel-title-line">
-              <h2>识别笼卡</h2>
-            </div>
-            <div className="panel-head-actions">
-              <button
-                className={cameraActive ? "secondary" : "primary"}
-                type="button"
-                onClick={() => void toggleCamera()}
-              >
-                {cameraActive ? "停止扫码" : "启动摄像头"}
-              </button>
-            </div>
-          </div>
-          <div className={`scanner-camera ${cameraActive ? "" : "scanner-camera-inactive"}`}>
-            <video ref={videoRef} muted playsInline aria-label="笼卡扫码画面" />
-            <span>将笼卡二维码置于取景框内</span>
-          </div>
+        <Card
+          className="scanner-card"
+          extra={
+            <Button
+              danger={cameraActive}
+              icon={cameraActive ? <StopOutlined /> : <CameraOutlined />}
+              type={cameraActive ? "default" : "primary"}
+              onClick={() => void toggleCamera()}
+            >
+              {cameraActive ? "停止扫码" : "启动摄像头"}
+            </Button>
+          }
+          title="识别笼卡"
+        >
+          {cameraActive ? (
+            <Card className="scanner-camera-card" size="small" title="扫码取景框" type="inner">
+              <div className="scanner-camera">
+                <video ref={videoRef} muted playsInline aria-label="笼卡扫码画面" />
+                <span>将笼卡二维码置于取景框内</span>
+              </div>
+            </Card>
+          ) : null}
           {cameraError ? (
-            <div className="react-inline-notice" role="alert">
-              摄像头启动失败：{cameraError}
-            </div>
+            <Alert className="scanner-alert" message={`摄像头启动失败：${cameraError}`} showIcon type="error" />
           ) : null}
           <form
             className="scanner-query-form"
@@ -109,34 +126,46 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
               setQrId(normalizeCode(input));
             }}
           >
-            <label>
-              笼卡识别码
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="输入 4 位识别码或粘贴笼卡链接"
-              />
-            </label>
-            <button className="primary" type="submit">
-              查询
-            </button>
+            <Form component={false} layout="vertical">
+              <Flex align="flex-end" gap={12} wrap>
+                <Form.Item className="scanner-code-field" label="笼卡识别码">
+                  <Input
+                    ref={inputRef}
+                    allowClear
+                    placeholder="输入 4 位识别码或粘贴笼卡链接"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                  />
+                </Form.Item>
+                <Button htmlType="submit" icon={<SearchOutlined />} type="primary">
+                  查询
+                </Button>
+              </Flex>
+              <Typography.Text type="secondary">支持新笼卡识别码和旧版笼卡链接。</Typography.Text>
+            </Form>
           </form>
           {result.isFetching ? (
-            <div className="public-scan-state">正在查询...</div>
+            <Flex className="scanner-loading" align="center" gap={8} justify="center">
+              <Spin size="small" />
+              <Typography.Text type="secondary">正在查询笼卡信息...</Typography.Text>
+            </Flex>
           ) : result.error ? (
-            <div className="react-inline-notice" role="alert">
-              {result.error.message}
-            </div>
+            <Result
+              extra={<Button onClick={() => void result.refetch()}>重新查询</Button>}
+              status="error"
+              subTitle={result.error.message}
+              title="查询失败"
+            />
           ) : result.data ? (
             <CageCardResult item={result.data} />
           ) : (
-            <div className="empty-state">
-              <h3>等待识别</h3>
-              <p>支持新笼卡识别码和旧版笼卡链接。</p>
-            </div>
+            <Empty
+              className="scanner-empty"
+              description="输入识别码或启动摄像头开始查询"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           )}
-        </section>
+        </Card>
       </div>
     </section>
   );
@@ -153,22 +182,21 @@ function CageCardResult({ item }: { item: CageCardDetails }) {
     ["实验负责人", item.owner],
     ["品系", item.strainStandard || item.speciesLabel],
     ["数量", item.animalCount],
-  ];
+  ] as const;
   return (
-    <div className="scanner-result">
-      <div className="public-scan-header">
-        <h2>{String(item.batchNo || item.qrId || "笼卡详情")}</h2>
-        <span className="public-scan-status">{String(item.statusLabel || "待接收")}</span>
-      </div>
-      <dl className="public-scan-grid">
-        {rows.map(([label, value]) => (
-          <div key={String(label)}>
-            <dt>{label}</dt>
-            <dd>{String(value || "-")}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <Card
+      className="scanner-result-card"
+      extra={<Tag color="blue">{String(item.statusLabel || "待接收")}</Tag>}
+      size="small"
+      title={String(item.batchNo || item.qrId || "笼卡详情")}
+      type="inner"
+    >
+      <Descriptions
+        column={{ lg: 3, md: 2, sm: 2, xs: 1 }}
+        items={rows.map(([label, value]) => ({ key: label, label, children: String(value || "-") }))}
+        size="small"
+      />
+    </Card>
   );
 }
 

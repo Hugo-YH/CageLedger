@@ -1,3 +1,5 @@
+import { Alert, Card, Descriptions, List, Tag, Typography } from "antd";
+
 import type { SessionUser } from "../../api/contracts";
 import { useAnimalInspectionCatalog } from "../../api/animalManagement";
 import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
@@ -19,42 +21,53 @@ export function InspectionStandards({
   return (
     <section className="workspace-view animal-management-workspace">
       <WorkspaceHeader
-        kicker="动物管理工作台"
+        kicker="动物管理"
         title="巡检标准"
         summary="巡检条目、图例和处置建议以受控目录版本发布，历史巡检记录持续保留提交时的结论语义。"
         breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
-        status={catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
       />
       <div className="workspace-body animal-management-body">
-        <section className="panel inspection-standards-panel">
-          <div className="inspection-catalog-banner">
-            <div>
-              <span>当前目录版本</span>
-              <strong>{catalog.data.version.version}</strong>
-              <small>{catalog.data.version.source}</small>
-            </div>
-            <div>
-              <span>导入时间</span>
-              <strong>{catalog.data.version.imported_at.replace("T", " ").slice(0, 16)}</strong>
-              <small>
-                {user.role === "admin"
-                  ? "系统管理员可在受控导入流程中审核后发布新版本。"
-                  : "当前版本由系统管理员维护。"}
-              </small>
-            </div>
-          </div>
-          <p className="inspection-review-notice">{catalog.data.reviewNotice}</p>
-          <div className="inspection-standard-grid">
-            {catalog.data.modules.map((module) => (
-              <article key={module.code}>
-                <span>巡检模块</span>
-                <h2>{module.name}</h2>
-                <p>{module.description}</p>
-                <strong>{catalogItems(catalog.data.nodes, module.code).length} 个巡检条目</strong>
-              </article>
-            ))}
-          </div>
-        </section>
+        <Card
+          className="animal-ant-card inspection-standards-panel"
+          extra={
+            <Tag color={catalog.data.version.status === "active" ? "green" : "default"}>
+              {catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
+            </Tag>
+          }
+          title="巡检标准目录"
+        >
+          <Descriptions bordered className="inspection-catalog-summary" column={{ xs: 1, sm: 2 }} size="small">
+            <Descriptions.Item label="当前目录版本">{catalog.data.version.version}</Descriptions.Item>
+            <Descriptions.Item label="导入时间">
+              {catalog.data.version.imported_at.replace("T", " ").slice(0, 16)}
+            </Descriptions.Item>
+            <Descriptions.Item label="来源" span={2}>
+              {catalog.data.version.source}
+            </Descriptions.Item>
+          </Descriptions>
+          <Alert
+            className="inspection-review-notice"
+            description={`${catalog.data.reviewNotice} ${user.role === "admin" ? "系统管理员可通过受控导入流程审核并发布新版本。" : "当前目录由系统管理员维护。"}`}
+            message="审核提示"
+            showIcon
+            type="warning"
+          />
+          <List
+            className="inspection-standard-list"
+            dataSource={catalog.data.modules}
+            grid={{ gutter: 16, xs: 1, sm: 2, lg: 3 }}
+            renderItem={(module) => (
+              <List.Item>
+                <Card size="small">
+                  <Typography.Text type="secondary">巡检模块</Typography.Text>
+                  <Typography.Title level={4}>{module.name}</Typography.Title>
+                  <Typography.Paragraph type="secondary">{module.description}</Typography.Paragraph>
+                  <Tag color="blue">{catalogItems(catalog.data.nodes, module.code).length} 个巡检条目</Tag>
+                </Card>
+              </List.Item>
+            )}
+          />
+        </Card>
       </div>
     </section>
   );

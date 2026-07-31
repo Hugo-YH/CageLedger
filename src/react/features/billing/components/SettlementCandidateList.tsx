@@ -1,5 +1,24 @@
-import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
-import { Checkbox, Space, type TableProps } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Empty,
+  Modal,
+  Pagination,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  type TableProps,
+} from "antd";
+import {
+  DownloadOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  PlayCircleOutlined,
+  PrinterOutlined,
+} from "@ant-design/icons";
 import { useState } from "react";
 
 import type {
@@ -10,9 +29,7 @@ import type {
 import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
-import { Tooltip } from "../../../components/Tooltip";
-import { ActionButton, DataTable } from "../../../components/ui";
-import { AsyncActionButton, ConfirmDialog, ModalShell, Pager } from "../../../components/WorkspaceUi";
+import { DataTable } from "../../../components/ui";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
 
@@ -122,20 +139,18 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       width: 150,
       render: (_, candidate) => {
         const action = (
-          <AsyncActionButton
-            className="secondary info-button compact"
-            type="button"
-            pending={generate.isPending}
-            pendingLabel="生成中..."
+          <Button
+            icon={<EyeOutlined />}
+            loading={generate.isPending}
+            size="small"
+            type="link"
             disabled={candidate.totalAmount == null}
             onClick={() => void generateFor(candidate, false)}
           >
             预览结算单
-          </AsyncActionButton>
+          </Button>
         );
-        return (
-          <Space size={0}>{candidate.error ? <Tooltip content={candidate.error}>{action}</Tooltip> : action}</Space>
-        );
+        return candidate.error ? <Tooltip title={candidate.error}>{action}</Tooltip> : action;
       },
     },
   ];
@@ -237,161 +252,162 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
 
   if (source === "cage_map") {
     return (
-      <section className="panel settlement-workbench">
-        <div className="empty-state">
-          <h2>动态笼位图结算调试中</h2>
-          <p>请切换到“数量统计表（录入）”查看项目负责人结算候选列表。</p>
-        </div>
-      </section>
+      <Card className="settlement-candidate-card settlement-candidate-empty">
+        <Empty
+          description={
+            <Space direction="vertical" size={4}>
+              <Typography.Text strong>动态笼位图结算正在调试</Typography.Text>
+              <Typography.Text type="secondary">
+                请切换到“数量统计表（录入）”查看项目负责人结算候选列表。
+              </Typography.Text>
+            </Space>
+          }
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
+      </Card>
     );
   }
 
   return (
-    <section className="panel settlement-workbench">
-      <div className="panel-head">
-        <div className="panel-title-line">
-          <h2>项目负责人结算列表</h2>
-          <p>同一负责人、同一月份下的多个伦理号自动合表。</p>
-        </div>
-        <span className="panel-summary-chip">共 {total} 项</span>
-      </div>
-      {notice || pdfExport.isExporting ? (
-        <div
-          className={`react-inline-notice ${notice ? `is-${noticeKind}` : "is-info"}`}
-          role="status"
-          aria-live="polite"
-        >
-          {notice ? (
-            noticeKind === "success" ? (
-              <CheckCircleFilled aria-hidden className="notice-icon" />
-            ) : noticeKind === "error" ? (
-              <CloseCircleFilled aria-hidden className="notice-icon" />
-            ) : (
-              <InfoCircleFilled aria-hidden className="notice-icon" />
-            )
-          ) : (
-            <InfoCircleFilled aria-hidden className="notice-icon" />
-          )}
-          <span>{notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}</span>
-        </div>
-      ) : null}
-      <div className="workspace-toolbar settlement-export-toolbar" aria-label="结算导出操作">
-        <div className="workspace-toolbar-main">
-          <span className="panel-summary-chip">
+    <>
+      <Card
+        className="settlement-candidate-card"
+        title={
+          <Space size={8}>
+            <FileTextOutlined />
+            <span>项目负责人结算</span>
+          </Space>
+        }
+        extra={<Tag color="blue">共 {total} 项</Tag>}
+      >
+        <Typography.Paragraph className="settlement-card-description" type="secondary">
+          同一负责人、同一月份下的多个伦理号自动合表。
+        </Typography.Paragraph>
+        {notice || pdfExport.isExporting ? (
+          <Alert
+            message={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+            role="status"
+            showIcon
+            type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
+          />
+        ) : null}
+        <div className="settlement-action-bar" aria-label="结算批量操作">
+          <Tag color={selectedCandidates.length ? "processing" : "default"}>
             {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
-          </span>
-        </div>
-        <div className="workspace-toolbar-actions">
-          <div className="workspace-toolbar-action-group">
-            <AsyncActionButton
-              type="button"
-              tone="secondary"
-              pending={pdfExport.isExporting}
-              pendingLabel={settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+          </Tag>
+          <Space wrap>
+            <Button
+              icon={<DownloadOutlined />}
+              loading={pdfExport.isExporting}
               disabled={!selectedCandidates.length || selectingAll}
               onClick={() => void exportCandidates(selectedCandidates)}
             >
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
-            </AsyncActionButton>
-            <AsyncActionButton
-              type="button"
-              tone="primary"
-              pending={batchStarting}
-              pendingLabel="正在发起..."
+            </Button>
+            <Button
+              icon={<PlayCircleOutlined />}
+              loading={batchStarting}
+              type="primary"
               disabled={!selectedCandidates.length || selectingAll}
               onClick={() => setBatchConfirmOpen(true)}
             >
               {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
-            </AsyncActionButton>
-          </div>
+            </Button>
+          </Space>
         </div>
-      </div>
-      <div className="list-meta">
-        <span>{list.isFetching ? "正在计算结算候选项" : `当前加载 ${items.length} 项`}</span>
-        <span>
-          第 {page} / {pages} 页
-        </span>
-      </div>
-      <div className="table-wrap settlement-candidate-list" role="region" tabIndex={0} aria-label="项目负责人结算列表">
-        <DataTable columns={columns} dataSource={items} loading={list.isPending} pagination={false} rowKey="id" />
-      </div>
-      <Pager
-        page={page}
-        pages={pages}
-        total={total}
-        pageSize={pageSize}
-        onPage={setPage}
-        onPageSize={(value) => {
-          setPageSize(value);
-          setPage(1);
-        }}
-      />
-      {batchConfirmOpen ? (
-        <ConfirmDialog
-          title="批量发起结算流程"
-          message={`将为已选的 ${selectedCandidates.length} 个项目负责人结算项创建结算流程。系统会按顺序处理，每项保留独立的结算版本和审计记录。`}
-          confirmLabel={`发起 ${selectedCandidates.length} 个流程`}
-          pending={batchStarting}
-          onCancel={() => {
-            if (!batchStarting) setBatchConfirmOpen(false);
-          }}
-          onConfirm={() => void startSelectedCandidates()}
-        />
-      ) : null}
-      {selected && result ? (
-        <ModalShell
-          ariaLabel={`${selected.pi} ${selected.month} 结算预览`}
-          className="settlement-preview-modal"
-          onClose={() => setSelected(null)}
+        <div className="settlement-table-meta">
+          <Typography.Text type="secondary">
+            {list.isFetching ? "正在计算结算候选项" : `当前加载 ${items.length} 项`}
+          </Typography.Text>
+          <Typography.Text type="secondary">
+            第 {page} / {pages} 页
+          </Typography.Text>
+        </div>
+        <div
+          className="ant-table-region settlement-candidate-list"
+          role="region"
+          tabIndex={0}
+          aria-label="项目负责人结算列表"
         >
-          <div className="modal-shell-head">
-            <div>
-              <h2>
-                {selected.pi} · {selected.month}
-              </h2>
-              <p>{selected.iacucs.join("、")}</p>
-            </div>
-            <div className="modal-shell-actions">
-              <ActionButton onClick={() => openSettlementPrint(result)}>打印结算单</ActionButton>
-              <AsyncActionButton
-                type="button"
-                tone="secondary"
-                pending={pdfExport.isExporting}
-                pendingLabel="正在生成..."
+          <DataTable columns={columns} dataSource={items} loading={list.isPending} pagination={false} rowKey="id" />
+        </div>
+        <div className="settlement-pagination">
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            showQuickJumper
+            showSizeChanger
+            showTotal={(count) => `共 ${count} 项`}
+            total={total}
+            onChange={(nextPage, nextPageSize) => {
+              setPageSize(nextPageSize);
+              setPage(nextPageSize === pageSize ? nextPage : 1);
+            }}
+          />
+        </div>
+      </Card>
+      <Modal
+        cancelButtonProps={{ disabled: batchStarting }}
+        cancelText="取消"
+        confirmLoading={batchStarting}
+        okText={`发起 ${selectedCandidates.length} 个流程`}
+        open={batchConfirmOpen}
+        title="批量发起结算流程"
+        onCancel={() => {
+          if (!batchStarting) setBatchConfirmOpen(false);
+        }}
+        onOk={() => void startSelectedCandidates()}
+      >
+        <Typography.Paragraph>
+          将为已选的 {selectedCandidates.length}{" "}
+          个项目负责人结算项创建结算流程。系统会按顺序处理，每项保留独立的结算版本和审计记录。
+        </Typography.Paragraph>
+      </Modal>
+      {selected && result ? (
+        <Modal
+          className="settlement-preview-modal"
+          footer={
+            <Space wrap>
+              <Button icon={<PrinterOutlined />} onClick={() => openSettlementPrint(result)}>
+                打印结算单
+              </Button>
+              <Button
+                icon={<DownloadOutlined />}
+                loading={pdfExport.isExporting}
                 onClick={() => void exportCandidates([selected])}
               >
                 导出 PDF
-              </AsyncActionButton>
-              <AsyncActionButton
-                type="button"
-                tone="primary"
-                pending={generate.isPending}
-                pendingLabel="发起中..."
+              </Button>
+              <Button
+                icon={<PlayCircleOutlined />}
+                loading={generate.isPending}
+                type="primary"
                 onClick={() => void generateFor(selected, true)}
               >
                 发起结算流程
-              </AsyncActionButton>
-              <ActionButton onClick={() => setSelected(null)}>关闭</ActionButton>
-            </div>
-          </div>
+              </Button>
+            </Space>
+          }
+          open
+          title={`${selected.pi} · ${selected.month}`}
+          width={1200}
+          onCancel={() => setSelected(null)}
+        >
+          <Typography.Paragraph type="secondary">{selected.iacucs.join("、")}</Typography.Paragraph>
           {notice ? (
-            <div className={`react-inline-notice is-${noticeKind}`} role="status">
-              {noticeKind === "success" ? (
-                <CheckCircleFilled aria-hidden className="notice-icon" />
-              ) : noticeKind === "error" ? (
-                <CloseCircleFilled aria-hidden className="notice-icon" />
-              ) : (
-                <InfoCircleFilled aria-hidden className="notice-icon" />
-              )}
-              <span>{notice}</span>
-            </div>
+            <Alert
+              message={notice}
+              role="status"
+              showIcon
+              type={noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info"}
+            />
           ) : null}
-          <div className="modal-shell-body settlement-preview settlement-document-preview">
+          <div className="settlement-preview settlement-document-preview">
             <iframe title="结算单预览" srcDoc={settlementStatementHtml(result, false)} />
           </div>
-        </ModalShell>
+        </Modal>
       ) : null}
-    </section>
+    </>
   );
 }
 

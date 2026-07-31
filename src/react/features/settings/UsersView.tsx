@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Checkbox, Form, Input, Select, Space, Tag, Typography } from "antd";
+import { Button, Card, Checkbox, Collapse, Form, Input, Select, Space, Tag, Typography } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
@@ -99,19 +99,32 @@ export function UsersView({
               </Tag>
             }
           >
-            <div className="user-list react-user-list">
-              {items.map((item) => (
-                <UserEditor
-                  key={item.id}
-                  user={item}
-                  current={item.id === currentUser.id}
-                  rooms={rooms}
-                  pending={save.isPending}
-                  onSave={(user) => save.mutateAsync({ id: item.id, user, expectedUpdatedAt: item.updatedAt })}
-                  onDelete={() => setDeleteTarget(item)}
-                />
-              ))}
-            </div>
+            <Collapse
+              className="settings-user-collapse"
+              items={items.map((item) => ({
+                key: item.id,
+                label: (
+                  <Space size={8} wrap>
+                    <Typography.Text strong>{item.displayName}</Typography.Text>
+                    <Typography.Text type="secondary">{item.username}</Typography.Text>
+                    <Tag color={item.role === "admin" ? "blue" : "default"}>
+                      {item.role === "admin" ? "系统管理员" : `${item.roomIds.length} 个授权饲养间`}
+                    </Tag>
+                    {item.id === currentUser.id ? <Tag color="processing">当前账号</Tag> : null}
+                  </Space>
+                ),
+                children: (
+                  <UserEditor
+                    current={item.id === currentUser.id}
+                    onDelete={() => setDeleteTarget(item)}
+                    onSave={(next) => save.mutateAsync({ id: item.id, user: next, expectedUpdatedAt: item.updatedAt })}
+                    pending={save.isPending}
+                    rooms={rooms}
+                    user={item}
+                  />
+                ),
+              }))}
+            />
           </Card>
           <Card className="settings-side-panel" size="small" title="创建账号">
             <UserFields creating draft={createDraft} rooms={rooms} onChange={setCreateDraft} />
@@ -162,31 +175,19 @@ function UserEditor({
 }) {
   const [draft, setDraft] = useState<UserDraft>(() => userDraft(user));
   useEffect(() => setDraft(userDraft(user)), [user]);
+  if (current) return <Typography.Text type="secondary">当前登录账号由此处只读展示。</Typography.Text>;
   return (
-    <article className="user-card">
-      <div className="user-card-head">
-        <div>
-          <strong>{user.displayName}</strong>
-          <span>
-            {user.username} · {user.role === "admin" ? "系统管理员" : `${user.roomIds.length} 个授权饲养间`}
-          </span>
-        </div>
-        {current ? <Tag color="blue">当前账号</Tag> : null}
-      </div>
-      {current ? null : (
-        <>
-          <UserFields draft={draft} rooms={rooms} onChange={setDraft} />
-          <Space className="form-actions">
-            <Button danger type="link" size="small" onClick={onDelete}>
-              删除
-            </Button>
-            <Button type="primary" size="small" loading={pending} onClick={() => void onSave(draft)}>
-              保存账号
-            </Button>
-          </Space>
-        </>
-      )}
-    </article>
+    <div className="settings-user-editor">
+      <UserFields draft={draft} rooms={rooms} onChange={setDraft} />
+      <Space className="form-actions">
+        <Button danger onClick={onDelete}>
+          删除账号
+        </Button>
+        <Button type="primary" loading={pending} onClick={() => void onSave(draft)}>
+          保存账号
+        </Button>
+      </Space>
+    </div>
   );
 }
 
@@ -251,21 +252,12 @@ function UserFields({
       </Form.Item>
       {draft.role === "room_admin" ? (
         <Form.Item className="room-access-fieldset" label="饲养间授权">
-          {rooms.map((room) => (
-            <Checkbox
-              className="check-row"
-              key={room.id}
-              checked={draft.roomIds.includes(room.id)}
-              onChange={(event) =>
-                update(
-                  "roomIds",
-                  event.target.checked ? [...draft.roomIds, room.id] : draft.roomIds.filter((id) => id !== room.id),
-                )
-              }
-            >
-              {room.name}
-            </Checkbox>
-          ))}
+          <Checkbox.Group
+            className="settings-room-access-group"
+            options={rooms.map((room) => ({ label: room.name, value: room.id }))}
+            value={draft.roomIds}
+            onChange={(values) => update("roomIds", values.map(String))}
+          />
         </Form.Item>
       ) : (
         <p className="muted">系统管理员默认访问全部饲养间。</p>

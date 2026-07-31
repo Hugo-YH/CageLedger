@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { InspectionCatalogNode } from "../../api/contracts";
-import { groupedItems, inspectionAnswerKey, inspectionFacilityLabel, inspectionOutcome } from "./model";
+import {
+  abnormalAnimalBodyRegions,
+  groupedItems,
+  inspectionAnswerKey,
+  inspectionFacilityLabel,
+  inspectionOutcome,
+} from "./model";
 
 const nodes: InspectionCatalogNode[] = [
   { id: "category", code: "basic_01", moduleCode: "basicAssessment", name: "环境", nodeType: "CATEGORY" },
@@ -37,5 +43,99 @@ describe("animal inspection model", () => {
     expect(inspectionOutcome({ score: 1 })).toBe("abnormal");
     expect(inspectionOutcome({ outcome: "normal" })).toBe("normal");
     expect(inspectionOutcome({ outcome: "abnormal" })).toBe("abnormal");
+  });
+
+  it("orders abnormal-animal checks by body region without changing item codes", () => {
+    const abnormalNodes: InspectionCatalogNode[] = [
+      {
+        id: "abdomen",
+        code: "abnormal_03",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "腹部",
+        nodeType: "CATEGORY",
+      },
+      {
+        id: "anus",
+        parentId: "abdomen",
+        code: "abnormal_03_01",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "肛门",
+        nodeType: "SUBCATEGORY",
+        sortOrder: 1,
+      },
+      {
+        id: "abdomen-skin",
+        parentId: "abdomen",
+        code: "abnormal_03_02",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "腹部被毛/皮肤",
+        nodeType: "SUBCATEGORY",
+        sortOrder: 2,
+      },
+      {
+        id: "anus-item",
+        parentId: "anus",
+        code: "abnormal_03_01_01",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "肛周异常",
+        nodeType: "ITEM",
+      },
+      {
+        id: "abdomen-item",
+        parentId: "abdomen-skin",
+        code: "abnormal_03_02_01",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "腹部皮肤异常",
+        nodeType: "ITEM",
+      },
+      { id: "head", code: "abnormal_06", moduleCode: "abnormalAnimalAssessment", name: "头颈部", nodeType: "CATEGORY" },
+      {
+        id: "eye",
+        parentId: "head",
+        code: "abnormal_06_03",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "眼睛",
+        nodeType: "SUBCATEGORY",
+        sortOrder: 3,
+      },
+      {
+        id: "eye-item",
+        parentId: "eye",
+        code: "abnormal_06_03_01",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "眼睛异常",
+        nodeType: "ITEM",
+      },
+      {
+        id: "thorax",
+        code: "abnormal_07",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "胸部",
+        nodeType: "CATEGORY",
+      },
+      {
+        id: "thorax-skin",
+        parentId: "thorax",
+        code: "abnormal_07_01",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "胸部被毛/皮肤",
+        nodeType: "SUBCATEGORY",
+      },
+      {
+        id: "thorax-item",
+        parentId: "thorax-skin",
+        code: "abnormal_07_01_01",
+        moduleCode: "abnormalAnimalAssessment",
+        name: "胸部皮肤异常",
+        nodeType: "ITEM",
+      },
+    ];
+
+    const regions = abnormalAnimalBodyRegions(abnormalNodes);
+    expect(regions.map((region) => region.name)).toEqual(["头颈部", "胸腹部", "繁殖与肛周"]);
+    expect(regions[1].groups.flatMap((group) => group.items).map((item) => item.code)).toEqual(
+      expect.arrayContaining(["abnormal_03_02_01", "abnormal_07_01_01"]),
+    );
+    expect(regions[2].groups[0].items[0].code).toBe("abnormal_03_01_01");
   });
 });

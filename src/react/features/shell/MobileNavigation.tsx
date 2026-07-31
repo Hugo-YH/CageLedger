@@ -2,7 +2,7 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   CalculatorOutlined,
-  HomeOutlined,
+  DashboardOutlined,
   LogoutOutlined,
   ReloadOutlined,
   TagsOutlined,
@@ -13,7 +13,7 @@ import { useEffect } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
-import { billingSidebarItems, isWorkspaceView } from "./workspaceNavigation";
+import { billingSidebarItems } from "./workspaceNavigation";
 
 type NavIcon =
   "tag" | "grid" | "calculator" | "refresh" | "book" | "clipboard" | "building" | "info" | "database" | "users";
@@ -26,6 +26,7 @@ export function MobileNavigation({
   onClose,
   onNavigate,
   onOpen,
+  onOpenProjectHome,
   onRefresh,
   onSignOut,
 }: {
@@ -36,6 +37,7 @@ export function MobileNavigation({
   onClose: () => void;
   onNavigate: (view: WorkspaceView) => void;
   onOpen: () => void;
+  onOpenProjectHome: () => void;
   onRefresh: () => void;
   onSignOut: () => void;
 }) {
@@ -53,11 +55,21 @@ export function MobileNavigation({
   return (
     <>
       <div className="ant-mobile-tabbar" aria-label="移动端主导航" role="tablist">
-        <TabBar activeKey={activeKey} onChange={(key) => (isWorkspaceView(key) ? onNavigate(key) : onOpen())}>
+        <TabBar
+          activeKey={activeKey}
+          onChange={(key) => {
+            const destination = mobileTabDestination(key);
+            if (destination) {
+              onNavigate(destination);
+              return;
+            }
+            onOpen();
+          }}
+        >
           <TabBar.Item
-            icon={<HomeOutlined />}
+            icon={<DashboardOutlined />}
             key="dashboard"
-            title={mobileTabTitle("主页", activeKey === "dashboard")}
+            title={mobileTabTitle("总览", activeKey === "dashboard")}
           />
           <TabBar.Item icon={<TagsOutlined />} key="intake" title={mobileTabTitle("笼卡", activeKey === "intake")} />
           <TabBar.Item icon={<AppstoreOutlined />} key="cages" title={mobileTabTitle("笼位", activeKey === "cages")} />
@@ -85,6 +97,11 @@ export function MobileNavigation({
               关闭
             </Button>
           </div>
+          <List header="项目门户">
+            <List.Item arrow onClick={onOpenProjectHome}>
+              主页
+            </List.Item>
+          </List>
           <List header="笼卡管理">
             <MobileItem label="预约消息识别" view="intake-entry" onNavigate={onNavigate} />
             <MobileItem label="待接收批次" view="intake-batches" onNavigate={onNavigate} />
@@ -165,4 +182,15 @@ function isAnimalManagementView(view: WorkspaceView) {
 }
 function isSettingsView(view: WorkspaceView) {
   return view === "rooms" || view === "data" || view === "system" || view === "users" || view === "logs";
+}
+
+function mobileTabDestination(key: string): WorkspaceView | null {
+  const destinations: Record<string, WorkspaceView> = {
+    dashboard: "dashboard",
+    intake: "intake-entry",
+    cages: "cages",
+    animal: "animal-inspection-entry",
+    billing: "billing-quantity-entry",
+  };
+  return destinations[key] ?? null;
 }

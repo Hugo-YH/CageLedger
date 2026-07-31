@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card, Checkbox, Collapse, Select, Tag } from "antd";
+import { Alert, Button, Card, Checkbox, Collapse, Form, Select, Space, Tag, Typography } from "antd";
 
 import type { InspectionAnswer, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
 import {
@@ -16,6 +16,7 @@ import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
 import { FindingCaptureDialog, ReferenceImageDialog, type ReferencePreview } from "./InspectionDialogs";
 import {
+  abnormalAnimalBodyRegions,
   groupedItems,
   inspectionAnswerKey,
   inspectionFacilityLabel,
@@ -26,6 +27,11 @@ import {
 } from "./model";
 
 const moduleOrder: InspectionModuleCode[] = ["basicAssessment", "advancedAssessment", "abnormalAnimalAssessment"];
+
+const MODULE_ANNOTATIONS: Partial<Record<InspectionModuleCode, string>> = {
+  basicAssessment: "设施与福利",
+  advancedAssessment: "操作与伦理",
+};
 
 export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) => void }) {
   const [draftId, setDraftId] = useState(resumeInspectionId);
@@ -186,19 +192,20 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
             {notice}
           </p>
         ) : null}
-        <section className="panel inspection-context-panel" aria-labelledby="inspection-context-title">
-          <div className="panel-head">
-            <div className="panel-title-line">
-              <h2 id="inspection-context-title">巡检对象与评估模块</h2>
+        <Card
+          className="animal-ant-card inspection-context-panel"
+          title={
+            <Space size={8}>
+              <span id="inspection-context-title">巡检对象与评估模块</span>
               <HelpTooltip label="巡检对象快照说明">
                 提交后自动固化当前房间、IACUC、项目负责人、品系和数量快照。
               </HelpTooltip>
-            </div>
-          </div>
+            </Space>
+          }
+        >
           <div className="inspection-context-grid">
-            <div className="inspection-room-picker">
-              <label htmlFor="inspection-facility">
-                设施
+            <Form className="inspection-room-picker" component={false} layout="vertical">
+              <Form.Item label="设施">
                 <Select
                   aria-label="设施"
                   className="inspection-room-select"
@@ -213,9 +220,8 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
                     setRoomId("");
                   }}
                 />
-              </label>
-              <label htmlFor="inspection-room">
-                饲养间
+              </Form.Item>
+              <Form.Item label="饲养间">
                 <Select
                   aria-label="饲养间"
                   disabled={!facility}
@@ -228,28 +234,40 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
                   value={roomId}
                   onChange={setRoomId}
                 />
-              </label>
-            </div>
+              </Form.Item>
+            </Form>
             <div className="inspection-module-picker" role="group" aria-label="评估模块">
               {moduleOrder.map((code) => {
                 const module = catalog.data?.modules.find((item) => item.code === code);
                 return (
-                  <div className={modules.includes(code) ? "selected" : ""} data-module={code} key={code}>
-                    <Checkbox
-                      checked={modules.includes(code)}
-                      onChange={(event) => setModule(code, event.target.checked)}
-                    >
-                      <strong>{module?.name || MODULE_LABELS[code]}</strong>
-                    </Checkbox>
-                    <HelpTooltip label={`${module?.name || MODULE_LABELS[code]}说明`}>
-                      {module?.description || "按标准完成逐项巡检"}
-                    </HelpTooltip>
-                  </div>
+                  <Card
+                    className={`inspection-module-choice ${modules.includes(code) ? "is-selected" : ""}`}
+                    data-module={code}
+                    key={code}
+                    size="small"
+                  >
+                    <div className="inspection-module-choice-content">
+                      <Checkbox
+                        checked={modules.includes(code)}
+                        onChange={(event) => setModule(code, event.target.checked)}
+                      >
+                        <Typography.Text strong>{module?.name || MODULE_LABELS[code]}</Typography.Text>
+                      </Checkbox>
+                      {MODULE_ANNOTATIONS[code] ? (
+                        <Tag bordered={false} color="blue">
+                          {MODULE_ANNOTATIONS[code]}
+                        </Tag>
+                      ) : null}
+                      <HelpTooltip label={`${module?.name || MODULE_LABELS[code]}说明`}>
+                        {module?.description || "按标准完成逐项巡检"}
+                      </HelpTooltip>
+                    </div>
+                  </Card>
                 );
               })}
             </div>
           </div>
-        </section>
+        </Card>
         {modules.map((moduleCode) => (
           <InspectionModuleForm
             answerMap={answers}
@@ -261,10 +279,13 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
             onReference={setReferencePreview}
           />
         ))}
-        <aside className="inspection-review-notice">
-          <strong>审核提示</strong>
-          <span>{catalog.data?.reviewNotice}</span>
-        </aside>
+        <Alert
+          className="inspection-review-notice"
+          description={catalog.data?.reviewNotice}
+          message="审核提示"
+          showIcon
+          type="warning"
+        />
       </div>
       {findingDraft ? (
         <FindingCaptureDialog
@@ -306,7 +327,7 @@ function InspectionModuleForm({
 }) {
   return (
     <Card
-      className="inspection-module-card"
+      className="animal-ant-card inspection-module-card"
       data-module={moduleCode}
       aria-labelledby={`inspection-module-${moduleCode}`}
       size="small"
@@ -314,25 +335,112 @@ function InspectionModuleForm({
       title={
         <span className="inspection-module-card-title">
           <span id={`inspection-module-${moduleCode}`}>{MODULE_LABELS[moduleCode]}</span>
+          {MODULE_ANNOTATIONS[moduleCode] ? (
+            <Tag bordered={false} color="blue">
+              {MODULE_ANNOTATIONS[moduleCode]}
+            </Tag>
+          ) : null}
           <HelpTooltip label={`${MODULE_LABELS[moduleCode]}巡检说明`}>
             每个条目选择正常或异常；确认异常后补充定位、图例对照和现场照片。
           </HelpTooltip>
         </span>
       }
     >
-      {groupedItems(nodes, moduleCode).map(([category, items]) => (
-        <InspectionCategory
-          answerMap={answerMap}
-          category={category}
-          items={items}
-          key={category}
-          moduleCode={moduleCode}
-          onAnswer={onAnswer}
-          onFinding={onFinding}
-          onReference={onReference}
-        />
-      ))}
+      {moduleCode === "abnormalAnimalAssessment"
+        ? abnormalAnimalBodyRegions(nodes).map((region) => (
+            <InspectionBodyRegionSection
+              answerMap={answerMap}
+              key={region.key}
+              moduleCode={moduleCode}
+              onAnswer={onAnswer}
+              onFinding={onFinding}
+              onReference={onReference}
+              region={region}
+            />
+          ))
+        : groupedItems(nodes, moduleCode).map(([category, items]) => (
+            <InspectionCategory
+              answerMap={answerMap}
+              category={category}
+              items={items}
+              key={category}
+              moduleCode={moduleCode}
+              onAnswer={onAnswer}
+              onFinding={onFinding}
+              onReference={onReference}
+            />
+          ))}
     </Card>
+  );
+}
+
+function InspectionBodyRegionSection({
+  region,
+  moduleCode,
+  answerMap,
+  onAnswer,
+  onFinding,
+  onReference,
+}: {
+  region: ReturnType<typeof abnormalAnimalBodyRegions>[number];
+  moduleCode: InspectionModuleCode;
+  answerMap: Record<string, InspectionAnswer>;
+  onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onFinding: (node: InspectionCatalogNode) => void;
+  onReference: (preview: ReferencePreview) => void;
+}) {
+  const items = region.groups.flatMap((group) => group.items);
+  const answered = items.filter((node) => Boolean(answerMap[inspectionAnswerKey(moduleCode, node.code)])).length;
+  const findings = items.filter(
+    (node) => inspectionOutcome(answerMap[inspectionAnswerKey(moduleCode, node.code)]) === "abnormal",
+  ).length;
+  const stateLabel = findings
+    ? `${findings} 项异常`
+    : answered === items.length
+      ? `已确认 ${answered}/${items.length}`
+      : `待确认 ${answered}/${items.length}`;
+
+  return (
+    <section
+      className={`inspection-body-region ${findings ? "has-findings" : ""}`}
+      aria-label={`${region.name}异常动物评估`}
+    >
+      <Collapse
+        className="inspection-body-region-collapse"
+        bordered
+        expandIconPosition="end"
+        size="small"
+        items={[
+          {
+            key: region.key,
+            label: (
+              <span className="inspection-body-region-label">
+                <span className="inspection-body-region-label-main">
+                  <strong>{region.name}</strong>
+                  <Tag bordered={false}>{region.description}</Tag>
+                </span>
+                <Space size={8}>
+                  <Tag color={findings ? "error" : answered === items.length ? "success" : "default"}>{stateLabel}</Tag>
+                  <span className="inspection-body-region-count">{region.itemCount} 项</span>
+                </Space>
+              </span>
+            ),
+            children: region.groups.map((group) => (
+              <InspectionCategory
+                answerMap={answerMap}
+                category={group.name}
+                items={group.items}
+                key={group.key}
+                moduleCode={moduleCode}
+                onAnswer={onAnswer}
+                onFinding={onFinding}
+                onReference={onReference}
+              />
+            )),
+          },
+        ]}
+      />
+    </section>
   );
 }
 
@@ -371,10 +479,10 @@ function InspectionCategory({
           <Button
             className="inspection-all-normal"
             size="small"
-            type="default"
+            type="link"
             onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
           >
-            无异常
+            全部正常
           </Button>
         </div>
       </div>
@@ -387,8 +495,8 @@ function InspectionCategory({
             key: "items",
             label: (
               <span className="inspection-category-collapse-label">
-                <span>逐项检查</span>
-                <span>{items.length} 项</span>
+                <span>查看检查项</span>
+                <Tag bordered={false}>{items.length} 项</Tag>
               </span>
             ),
             children: (
@@ -418,25 +526,31 @@ function InspectionCategory({
                             </Button>
                           ) : null}
                         </div>
-                        <div className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
+                        <Space.Compact
+                          className="inspection-outcome-options"
+                          role="group"
+                          aria-label={`${node.name}巡检结论`}
+                        >
                           <Button
                             aria-pressed={outcome === "normal"}
-                            className={outcome === "normal" ? "selected normal" : "normal"}
+                            className="normal"
                             size="small"
+                            type={outcome === "normal" ? "primary" : "default"}
                             onClick={() => onAnswer(node, { outcome: "normal" })}
                           >
                             正常
                           </Button>
                           <Button
                             aria-pressed={outcome === "abnormal"}
-                            className={outcome === "abnormal" ? "selected abnormal" : "abnormal"}
-                            danger={outcome === "abnormal"}
+                            className="abnormal"
+                            danger
                             size="small"
+                            type={outcome === "abnormal" ? "primary" : "default"}
                             onClick={() => onFinding(node)}
                           >
                             异常
                           </Button>
-                        </div>
+                        </Space.Compact>
                         {node.description ? <p>{node.description}</p> : null}
                       </div>
                       {outcome === "abnormal" ? (

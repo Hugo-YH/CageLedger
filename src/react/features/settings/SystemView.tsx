@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Alert, Button, Card, Descriptions, Pagination, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Descriptions, Select, Space, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo, useSystemUpdate } from "../../api/administration";
 import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
-import { SYSTEM_RELEASE_NOTES } from "../../releaseNotes";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -13,8 +12,6 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   const dispatch = useUiDispatch();
   const info = useSystemInfo();
   const [checkEnabled, setCheckEnabled] = useState(false);
-  const [releasePage, setReleasePage] = useState(1);
-  const [releasePageSize, setReleasePageSize] = useState(5);
   const update = useSystemUpdate(checkEnabled && user.role === "admin");
   if (info.isPending)
     return (
@@ -36,7 +33,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
         kicker="系统与文档工作台"
         title="关于系统"
         breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="集中查看当前版本、正式文档、发布记录和反馈入口。"
+        summary="集中查看当前版本、界面偏好与维护信息；更新记录由项目文档统一维护。"
         status={`当前版本 v${data.version}`}
         switcherLabel="系统功能"
         switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
@@ -73,52 +70,6 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
             {checkEnabled ? <UpdateCard update={update} /> : null}
           </Card>
 
-          <Card
-            className="system-release-card"
-            extra={<Tag>{SYSTEM_RELEASE_NOTES.length} 个版本</Tag>}
-            title={<CardTitle>更新记录</CardTitle>}
-          >
-            <div className="system-release-list">
-              {SYSTEM_RELEASE_NOTES.slice((releasePage - 1) * releasePageSize, releasePage * releasePageSize).map(
-                (note) => (
-                  <article className="system-release-item" key={note.version}>
-                    <Space size={8}>
-                      <Typography.Text strong>v{note.version}</Typography.Text>
-                      {note.releasedAt ? <Typography.Text type="secondary">{note.releasedAt}</Typography.Text> : null}
-                    </Space>
-                    <Space orientation="vertical" size={4}>
-                      <Typography.Text>{note.title}</Typography.Text>
-                      <ul className="system-release-items">
-                        {note.items.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                      {note.note || note.notes ? (
-                        <Typography.Text type="secondary">备注：{note.note || note.notes}</Typography.Text>
-                      ) : null}
-                    </Space>
-                  </article>
-                ),
-              )}
-            </div>
-            <Pagination
-              className="system-release-pagination"
-              current={releasePage}
-              pageSize={releasePageSize}
-              pageSizeOptions={[5, 10, 20]}
-              showSizeChanger
-              total={SYSTEM_RELEASE_NOTES.length}
-              onChange={(page, pageSize) => {
-                setReleasePage(page);
-                setReleasePageSize(pageSize);
-              }}
-              onShowSizeChange={(_current, pageSize) => {
-                setReleasePage(1);
-                setReleasePageSize(pageSize);
-              }}
-            />
-          </Card>
-
           <Card title={<CardTitle>界面外观</CardTitle>}>
             <Space align="start" orientation="vertical" size={8}>
               <Typography.Text>显示模式</Typography.Text>
@@ -142,6 +93,9 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
               <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
               <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
             </Descriptions>
+            <Button href="/docs/updates/" style={{ marginTop: 16 }} type="link">
+              在项目文档查看更新记录
+            </Button>
           </Card>
         </div>
       </div>
