@@ -297,6 +297,11 @@
 
 /* Legacy global input rules add extra height and padding. Restore Ant's
    standard control geometry so Input, Select and DatePicker align in grids. */
+.ant-workspace input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+.ant-workspace textarea {
+  min-height: 0;
+}
+
 .ant-workspace input.ant-input {
   min-height: 32px;
   padding: 4px 11px;
@@ -397,6 +402,10 @@
 }
 
 .ant-workspace .quantity-ant-field .ant-select {
+  width: 100%;
+}
+
+.ant-workspace .quantity-ant-field .ant-picker {
   width: 100%;
 }
 

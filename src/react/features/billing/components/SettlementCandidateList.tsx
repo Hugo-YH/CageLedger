@@ -7,7 +7,6 @@ import {
   Modal,
   Pagination,
   Space,
-  Tag,
   Tooltip,
   Typography,
   type TableProps,
@@ -280,7 +279,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             </Typography.Title>
           </Space>
         }
-        extra={<Tag color="blue">共 {total} 项</Tag>}
+        extra={<Typography.Text type="secondary">共 {total} 项</Typography.Text>}
       >
         <Typography.Paragraph className="settlement-card-description" type="secondary">
           同一负责人、同一月份下的多个伦理号自动合表。
@@ -294,9 +293,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           />
         ) : null}
         <div className="settlement-action-bar" aria-label="结算批量操作">
-          <Tag color={selectedCandidates.length ? "processing" : "default"}>
+          <Typography.Text type={selectedCandidates.length ? undefined : "secondary"}>
             {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
-          </Tag>
+          </Typography.Text>
           <Space wrap>
             <Button
               icon={<DownloadOutlined aria-hidden />}

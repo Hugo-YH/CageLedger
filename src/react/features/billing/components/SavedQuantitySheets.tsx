@@ -1,4 +1,4 @@
-import { Button, Checkbox, Space, Tag, type TableProps } from "antd";
+import { Button, Checkbox, Space, Tag, Typography, type TableProps } from "antd";
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -188,9 +188,9 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     <section className="panel quantity-saved-panel">
       <div className="workspace-toolbar quantity-saved-toolbar">
         <div className="workspace-toolbar-main">
-          <Tag className="panel-summary-chip">
+          <Typography.Text className="panel-summary-chip" type="secondary">
             {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}
-          </Tag>
+          </Typography.Text>
         </div>
         <div className="workspace-toolbar-actions">
           <Space className="workspace-toolbar-action-group">

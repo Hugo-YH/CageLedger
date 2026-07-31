@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
-import { Button, Input, InputNumber, Select, Switch, Tag } from "antd";
+import { Button, DatePicker, Input, InputNumber, Select, Switch, Tag } from "antd";
+import dayjs from "dayjs";
 
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
@@ -317,15 +318,19 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               <span>月份和房间决定计费口径</span>
             </div>
             <div className="field-cluster-body quantity-field-group quantity-field-group-basic">
-              <label className="field-required" htmlFor="quantity-sheet-month">
-                月份
-                <Input
-                  type="month"
+              <label
+                className="field-required quantity-ant-field quantity-ant-field-required"
+                htmlFor="quantity-sheet-month"
+              >
+                <span>月份</span>
+                <DatePicker
                   id="quantity-sheet-month"
-                  max={todayMonth}
-                  value={draft.month}
-                  onChange={(event) => {
-                    const month = event.target.value;
+                  picker="month"
+                  format="YYYY-MM"
+                  value={draft.month ? dayjs(draft.month) : null}
+                  disabledDate={(current) => Boolean(current && current.isAfter(dayjs(todayMonth).endOf("month")))}
+                  onChange={(date) => {
+                    const month = date ? date.format("YYYY-MM") : "";
                     setField("month", month);
                     setEditorRows((rows) =>
                       rows.map((row, index) =>
