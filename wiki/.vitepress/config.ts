@@ -121,6 +121,24 @@ export default defineConfig({
       { text: "更新日志", link: "/releases/" },
     ],
     sidebar: {
+      "/": [
+        {
+          text: "文档首页",
+          items: [
+            { text: "产品概览", link: "/guide/overview" },
+            { text: "快速开始", link: "/guide/getting-started" },
+            { text: "更新日志", link: "/releases/" },
+          ],
+        },
+        {
+          text: "入口速览",
+          items: [
+            { text: "部署与运行", link: "/operations/deployment" },
+            { text: "本地开发", link: "/development/local-development" },
+            { text: "发布与交付", link: "/development/release-and-delivery" },
+          ],
+        },
+      ],
       "/guide/": [
         {
           text: "开始使用",

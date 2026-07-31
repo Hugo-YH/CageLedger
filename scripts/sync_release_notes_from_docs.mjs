@@ -12,7 +12,7 @@ const blocks = source.split(/^## /m).slice(1);
 
 const notes = blocks.map((block) => {
   const [heading, ...bodyLines] = block.split("\n");
-  const headingMatch = heading.match(/^v([^·\s]+)(?:\s+·\s+(.+))?\s*$/);
+  const headingMatch = heading.match(/^v?([^·\s]+)(?:\s+·\s+(.+))?\s*$/);
   if (!headingMatch) throw new Error(`Invalid release heading: ## ${heading}`);
   const body = bodyLines.join("\n");
   const titleMatch = body.match(/^###\s+(.+)$/m);
