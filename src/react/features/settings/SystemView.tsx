@@ -34,7 +34,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
         title="关于系统"
         breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
         summary="集中查看当前版本、界面偏好与维护信息；更新记录由项目文档统一维护。"
-        status={`当前版本 v${data.version}${data.build ? `（${data.build}）` : ""}`}
+        status={`当前版本 ${data.version}${data.build ? `（${data.build}）` : ""}`}
         switcherLabel="系统功能"
         switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
       />
@@ -60,7 +60,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
             <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
               <Descriptions.Item label="当前版本">
                 <Typography.Text strong>
-                  v{data.version}
+                  {data.version}
                   {data.build ? `（${data.build}）` : ""}
                 </Typography.Text>
               </Descriptions.Item>

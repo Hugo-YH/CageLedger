@@ -51,7 +51,7 @@ export function LoginView() {
           </Button>
         </Form>
         <div className="version-meta login-version">
-          <span>CageLedger v{APP_VERSION}</span>
+          <span>CageLedger {APP_VERSION}</span>
           <small>中山大学中山眼科中心 · 实验动物中心</small>
           <small>© 2026 中山大学中山眼科中心 实验动物中心. Licensed under Apache-2.0.</small>
         </div>
