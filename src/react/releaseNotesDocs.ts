@@ -4,6 +4,7 @@ import type { ReleaseNote } from "./releaseNoteModel";
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "1.0.0-beta8",
+    build: "2996de8",
     releasedAt: "2026-08-01 09:06",
     title: "版本号显示与发布命名规范统一",
     items: [
