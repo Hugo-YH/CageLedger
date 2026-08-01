@@ -1,0 +1,266 @@
+{
+  "source": "Mouse strain nomenclature curated from MGI_Strain.rpt (https://www.informatics.jax.org/downloads/reports/MGI_Strain.rpt, fetched 2026-08-01). Entries without mgi are common commercial/Chinese outbred stocks or F1 hybrids kept for facility readability.",
+  "entries": [
+    {
+      "standard": "C57BL/6J",
+      "mgi": "MGI:3028467",
+      "aliases": [
+        "c57bl/6j",
+        "c57bl6j",
+        "c57bl/6jax",
+        "c57bl6jax",
+        "c57/j",
+        "c57j",
+        "bl6j",
+        "b6j",
+        "c57bl6/j",
+        "c57bl/6jj"
+      ]
+    },
+    {
+      "standard": "C57BL/6N",
+      "mgi": "MGI:2159965",
+      "aliases": ["c57bl/6n", "c57bl6n", "c57bl/6nc", "c57bl6nc", "c57bl/6ncrl", "c57n", "bl6n", "b6n", "c57bl6/n"]
+    },
+    {
+      "standard": "C57BL/6",
+      "mgi": "MGI:3028467",
+      "aliases": [
+        "c57bl/6",
+        "c57bl6",
+        "c57bl",
+        "c57",
+        "bl6",
+        "b6",
+        "c57black6",
+        "c57black",
+        "c57bl/6小鼠",
+        "c57bl/6小白鼠",
+        "黑鼠",
+        "小黑鼠",
+        "c57小鼠"
+      ]
+    },
+    {
+      "standard": "BALB/cJ",
+      "mgi": "MGI:2159737",
+      "aliases": ["balb/cj", "balbcj", "balb-cj", "balb/cjax", "balb/cj小鼠"]
+    },
+    {
+      "standard": "BALB/c",
+      "mgi": "MGI:2159737",
+      "aliases": ["balb/c", "balbc", "balb-c", "balb", "balb/c小鼠", "balb/c小白鼠", "白鼠", "小白鼠"]
+    },
+    {
+      "standard": "BALB/c裸鼠",
+      "mgi": "MGI:2159964",
+      "aliases": [
+        "balb/c-nu",
+        "balb/c裸鼠",
+        "balb/c-nu/nu",
+        "c-nu",
+        "balb/c nude",
+        "balbcnu",
+        "balb/cnude",
+        "balb/cnu小鼠"
+      ]
+    },
+    {
+      "standard": "ICR",
+      "mgi": "MGI:2160272",
+      "aliases": [
+        "icr",
+        "icr/cd-1",
+        "icrcd1",
+        "cd-1",
+        "cd1",
+        "cd1icr",
+        "crl:cd-1(icr)",
+        "icr小鼠",
+        "icr（cd-1）小鼠",
+        "cd-1小鼠"
+      ]
+    },
+    {
+      "standard": "KM",
+      "mgi": "MGI:6508385",
+      "aliases": ["km", "km/zzng", "km小鼠", "昆明鼠", "kunming", "kunming mouse", "昆明小鼠"]
+    },
+    {
+      "standard": "裸鼠",
+      "mgi": "MGI:2161860",
+      "aliases": [
+        "裸鼠",
+        "裸小鼠",
+        "nude",
+        "nude mouse",
+        "nu/nu",
+        "nu",
+        "foxn1nu",
+        "foxn1<nu>",
+        "nu-j",
+        "nu/j",
+        "nude小鼠",
+        "裸鼠小鼠"
+      ]
+    },
+    {
+      "standard": "NOD/SCID",
+      "mgi": "MGI:7647332",
+      "aliases": [
+        "nod/scid",
+        "nodscid",
+        "nod.cb17-prkdcscid",
+        "nod.cb17-prkdc<scid>",
+        "nod cb17 scid",
+        "nod-scid",
+        "nod/cb17-scid",
+        "nod/scid小鼠"
+      ]
+    },
+    {
+      "standard": "NSG",
+      "mgi": "MGI:3577020",
+      "aliases": [
+        "nsg",
+        "nod.cg-prkdcscid il2rgtm1wjl/szj",
+        "nod.cg-prkdc<scid> il2rg<tm1wjl>/szj",
+        "nod/scid/il2rg",
+        "nod scid gamma",
+        "nsg小鼠"
+      ]
+    },
+    {
+      "standard": "NCG",
+      "mgi": "MGI:8175322",
+      "aliases": ["ncg", "nod.cg-prkdc em2gpt il2rg em26gpt/nju", "ncg小鼠"]
+    },
+    {
+      "standard": "NOG",
+      "mgi": "MGI:5431525",
+      "aliases": ["nog", "nod.cg-prkdcscid il2rgtm1sug/jic", "nod.cg-prkdc<scid> il2rg<tm1sug>/jic", "nog小鼠"]
+    },
+    {
+      "standard": "C3H/HeJ",
+      "mgi": "MGI:2159741",
+      "aliases": ["c3h/hej", "c3hhej", "c3h/j", "c3hj", "c3h"]
+    },
+    {
+      "standard": "C3H/HeN",
+      "mgi": "MGI:2160972",
+      "aliases": ["c3h/hen", "c3hhen"]
+    },
+    {
+      "standard": "DBA/2J",
+      "mgi": "MGI:2684695",
+      "aliases": ["dba/2j", "dba2j", "dba/2", "dba2", "dba"]
+    },
+    {
+      "standard": "DBA/2N",
+      "aliases": ["dba/2n", "dba2n"]
+    },
+    {
+      "standard": "FVB/NJ",
+      "mgi": "MGI:2163709",
+      "aliases": ["fvb/nj", "fvbnj", "fvb/n", "fvbn", "fvb"]
+    },
+    {
+      "standard": "129S1/SvImJ",
+      "mgi": "MGI:3037980",
+      "aliases": ["129s1/svimj", "129s1svimj", "129s1/sv", "129s1sv", "129/sv", "129sv", "129s1", "129", "129小鼠"]
+    },
+    {
+      "standard": "A/J",
+      "mgi": "MGI:2159747",
+      "aliases": ["a/j", "aj", "a/j小鼠"]
+    },
+    {
+      "standard": "AKR/J",
+      "mgi": "MGI:2159745",
+      "aliases": ["akr/j", "akrj", "akr"]
+    },
+    {
+      "standard": "SJL/J",
+      "mgi": "MGI:2159739",
+      "aliases": ["sjl/j", "sjlj", "sjl"]
+    },
+    {
+      "standard": "CBA/J",
+      "mgi": "MGI:2159756",
+      "aliases": ["cba/j", "cbaj", "cba"]
+    },
+    {
+      "standard": "SWR/J",
+      "mgi": "MGI:2180845",
+      "aliases": ["swr/j", "swrj", "swr"]
+    },
+    {
+      "standard": "C58/J",
+      "mgi": "MGI:2159755",
+      "aliases": ["c58/j", "c58j", "c58"]
+    },
+    {
+      "standard": "C57BR",
+      "mgi": "MGI:2159839",
+      "aliases": ["c57br", "c57br/a"]
+    },
+    {
+      "standard": "615",
+      "mgi": "MGI:2669495",
+      "aliases": ["615", "615/pbi", "615小鼠"]
+    },
+    {
+      "standard": "DDK",
+      "mgi": "MGI:2160494",
+      "aliases": ["ddk"]
+    },
+    {
+      "standard": "NIH",
+      "mgi": "MGI:2160970",
+      "aliases": ["nih", "nih swiss", "nih小鼠"]
+    },
+    {
+      "standard": "NOD/ShiLtJ",
+      "mgi": "MGI:2162056",
+      "aliases": ["nod/shiltj", "nodshiltj", "nod"]
+    },
+    {
+      "standard": "NMRI",
+      "aliases": ["nmri", "nmri小鼠"]
+    },
+    {
+      "standard": "OF1",
+      "aliases": ["of1", "of-1", "of1小鼠"]
+    },
+    {
+      "standard": "Swiss Webster",
+      "aliases": ["swiss webster", "swisswebster", "swiss", "swiss小鼠"]
+    },
+    {
+      "standard": "B6D2F1",
+      "aliases": ["b6d2f1", "b6d2", "(b6xd2)f1", "b6d2f1小鼠"]
+    },
+    {
+      "standard": "B6C3F1",
+      "aliases": ["b6c3f1", "b6c3", "(b6xc3)f1", "b6c3f1小鼠"]
+    },
+    {
+      "standard": "D2B6F1",
+      "aliases": ["d2b6f1", "(d2xb6)f1"]
+    },
+    {
+      "standard": "CB17-SCID",
+      "aliases": ["cb17-scid", "cb17scid", "c.b-17 scid", "c.b-17/scid", "cb17scid小鼠"]
+    },
+    {
+      "standard": "Rag1-KO",
+      "mgi": "MGI:2163461",
+      "aliases": ["rag1", "rag1-/-", "b6.129s7-rag1", "b6.129s7-rag1<tm1mom>/j"]
+    },
+    {
+      "standard": "Rag2-KO",
+      "mgi": "MGI:5555036",
+      "aliases": ["rag2", "rag2-/-", "c;129s4-rag2"]
+    }
+  ]
+}

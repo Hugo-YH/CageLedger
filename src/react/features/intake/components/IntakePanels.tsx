@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Typography } from "antd";
+import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
 
 import type { IntakeBatch, IntakeBatchStatus } from "../../../api/contracts";
 
@@ -20,6 +20,7 @@ export function IntakeEntryPanel({
   onSubmit,
   headActions,
   onParse,
+  onAiParse,
   onPrint,
   onUpdate,
 }: {
@@ -31,6 +32,7 @@ export function IntakeEntryPanel({
   onSubmit: React.FormEventHandler<HTMLFormElement>;
   headActions?: React.ReactNode;
   onParse: () => void;
+  onAiParse: () => void;
   onPrint: () => void;
   onUpdate: <K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) => void;
 }) {
@@ -50,9 +52,14 @@ export function IntakeEntryPanel({
             <Card
               className="intake-recognition-card"
               extra={
-                <Button htmlType="button" onClick={onParse} size="small">
-                  识别文本
-                </Button>
+                <Space>
+                  <Button htmlType="button" onClick={onAiParse} size="small">
+                    AI识别
+                  </Button>
+                  <Button htmlType="button" onClick={onParse} size="small">
+                    本地识别
+                  </Button>
+                </Space>
               }
               size="small"
               title="预约消息识别"

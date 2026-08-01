@@ -57,3 +57,7 @@ CAGELEDGER_UPDATE_CHECK_ENABLED = os.environ.get("CAGELEDGER_UPDATE_CHECK_ENABLE
     "yes",
     "on",
 }
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_API_URL = os.environ.get("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions").strip()
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat").strip()
+DEEPSEEK_TIMEOUT_SECONDS = int(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "30"))

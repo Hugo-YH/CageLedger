@@ -14,6 +14,7 @@ services:
       - CAGELEDGER_BRANCH=${CAGELEDGER_BRANCH:-main}
       - CAGELEDGER_UPDATE_CHECK_ENABLED=${CAGELEDGER_UPDATE_CHECK_ENABLED:-false}
       - CAGELEDGER_GITEA_TOKEN=${CAGELEDGER_GITEA_TOKEN:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
     volumes:
       - cageledger-data:/app/data
 

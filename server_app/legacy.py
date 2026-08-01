@@ -407,6 +407,7 @@ from server_app.shared.concurrency import StaleWriteError, require_current_versi
 from server_app.static import send_documentation_asset, send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
 from server_app.web.iacuc import iacuc_index_handler
+from server_app.web.intake_ai import intake_ai_parse_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
@@ -5021,12 +5022,11 @@ def multipart_filename(disposition):
 
 API_ROUTER = Router()
 API_ROUTER.add(
-    "GET",
-    r"/api/health",
-    lambda handler, params: JsonResponse({"ok": True, "database": str(DB_PATH), "system": system_info()}),
+    "GET", r"/api/health", lambda h, p: JsonResponse({"ok": True, "database": str(DB_PATH), "system": system_info()})
 )
 API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(system_info()))
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
+API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
 
 
 def current_session_response(handler, params):
@@ -5048,8 +5048,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if pdf_job_id:
             (download_pdf_export_job if pdf_job_download else read_pdf_export_job)(self, pdf_job_id)
             return
-        routed = API_ROUTER.dispatch("GET", path, self)
-        if routed:
+        if routed := API_ROUTER.dispatch("GET", path, self):
             self.send_json(routed.payload, routed.status)
             return
         if path.startswith("/api/public/cage-card/"):
@@ -5475,6 +5474,9 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if routed := API_ROUTER.dispatch("POST", path, self):
+            self.send_json(routed.payload, routed.status)
+            return
         if path == "/api/auth/login":
             self.handle_login()
             return

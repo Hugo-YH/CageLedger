@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { resolveProjectPython } from "./python_runtime.mjs";
 
@@ -11,10 +11,28 @@ const apiPort = process.env.CAGELEDGER_DEV_API_PORT || "5174";
 const appPort = process.env.CAGELEDGER_DEV_PORT || "5173";
 const docsPort = process.env.CAGELEDGER_DOCS_PORT || "5175";
 
+function loadDotEnv(root) {
+  const path = resolve(root, ".env");
+  if (!existsSync(path)) return {};
+  const loaded = {};
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator <= 0) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim();
+    if (key) loaded[key] = value;
+  }
+  return loaded;
+}
+
+const dotEnv = loadDotEnv(resolve(import.meta.dirname, ".."));
+
 function launch(command, args, env = {}) {
   const child = spawn(command, args, {
     stdio: "inherit",
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...dotEnv, ...env },
   });
   processes.add(child);
   child.on("exit", (code, signal) => {

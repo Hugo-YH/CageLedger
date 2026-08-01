@@ -6,6 +6,7 @@ import { useBootstrap } from "../../api/bootstrap";
 import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
 import {
   listAllIntakeBatches,
+  aiParseIntakeMessage,
   useConfirmIntakeBatch,
   useDeleteIntakeBatch,
   useIntakeBatches,
@@ -74,7 +75,26 @@ export function IntakeView({
 
   async function parseMessage() {
     const parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
-    const normalizedCode = parsed.iacuc.trim().toUpperCase();
+    await applyParsedMessage(parsed);
+  }
+
+  async function aiParseMessage() {
+    try {
+      const response = await aiParseIntakeMessage(draft.rawMessage, roomNames);
+      await applyParsedMessage(response.item);
+      const tokens = response.usage?.total_tokens;
+      const usageText = typeof tokens === "number" && tokens > 0 ? `，本次 AI 识别消耗 ${tokens} tokens` : "";
+      setNotice(`预约消息已识别（AI）${usageText}，请核对批次信息。`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
+    }
+  }
+
+  async function applyParsedMessage(parsed: Partial<IntakeBatch>) {
+    const normalized = normalizeIntakeBatch({ ...parsed, rawMessage: draft.rawMessage }, roomNames);
+    const normalizedCode = String(parsed.iacuc || "")
+      .trim()
+      .toUpperCase();
     let match: { project?: string; pi?: string; owner?: string } | undefined;
     if (normalizedCode) {
       const result = await queryClient.ensureQueryData({
@@ -90,16 +110,16 @@ export function IntakeView({
       normalizeIntakeBatch(
         {
           ...draft,
-          ...parsed,
-          id: isEditingSavedBatch ? draft.id : parsed.id,
-          project: match?.project || parsed.project,
-          pi: match?.pi || parsed.pi,
-          owner: match?.owner || parsed.owner,
+          ...normalized,
+          id: isEditingSavedBatch ? draft.id : String(normalized.id || draft.id),
+          project: match?.project || normalized.project,
+          pi: match?.pi || normalized.pi,
+          owner: match?.owner || normalized.owner,
         },
         roomNames,
       ),
     );
-    setNotice(parsed.batchNo ? "预约消息已识别，请核对批次信息。" : "未识别到完整批次号，请手动补充。");
+    setNotice(normalized.batchNo ? "预约消息已识别，请核对批次信息。" : "未识别到完整批次号，请手动补充。");
   }
 
   async function submit(event: React.FormEvent) {
@@ -233,6 +253,7 @@ export function IntakeView({
           draft={draft}
           headActions={null}
           notice={notice}
+          onAiParse={aiParseMessage}
           onParse={parseMessage}
           onPrint={() => void printCurrentBatch()}
           onSubmit={submit}
@@ -291,6 +312,7 @@ export function IntakeView({
               saving={save.isPending}
               onSubmit={submit}
               headActions={null}
+              onAiParse={aiParseMessage}
               onParse={parseMessage}
               onPrint={() => void printCurrentBatch()}
               onUpdate={update}
@@ -362,6 +384,7 @@ export function IntakeView({
                   保存待接收批次
                 </ActionButton>
               }
+              onAiParse={aiParseMessage}
               onParse={parseMessage}
               onPrint={() => void printCurrentBatch()}
               onUpdate={update}

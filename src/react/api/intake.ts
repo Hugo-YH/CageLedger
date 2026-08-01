@@ -81,3 +81,13 @@ export function useConfirmIntakeBatch() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
   });
 }
+
+export async function aiParseIntakeMessage(rawMessage: string, roomNames: string[]) {
+  return requestJson<{
+    item: Partial<IntakeBatch>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  }>("/api/intake/ai-parse", {
+    method: "POST",
+    body: JSON.stringify({ rawMessage, roomNames }),
+  });
+}
