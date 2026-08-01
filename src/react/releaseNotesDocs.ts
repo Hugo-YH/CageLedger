@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta8",
+    releasedAt: "2026-08-01 09:06",
+    title: "版本号显示与发布命名规范统一",
+    items: [
+      "系统内、更新日志与 Gitea Release 标题统一显示为 `a.b.c（build 短 SHA）`，不带 `v` 前缀，例如 `1.0.0-beta7（7ad0294）`",
+      "容器镜像与离线包等不支持括号的位置统一使用 `a.b.c-build`，例如镜像 tag `1.0.0-beta7-7ad0294`、离线包 `CageLedger-offline-1.0.0-beta7.tar.gz`",
+      "版本脚本支持 `--bump rc` 进入公测序列，`--bump patch` 从预发布转正式时保留 `a.b.c` 去掉后缀",
+      "更新日志标题、发布脚本检查、镜像 tag、离线包命名和部署文档全部遵循同一版本显示规范",
+    ],
+  },
+  {
     version: "1.0.0-beta7",
     build: "7ad0294",
     releasedAt: "2026-08-01 00:57",

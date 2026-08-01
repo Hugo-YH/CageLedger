@@ -53,7 +53,9 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   const downloadPromise = page.waitForEvent("download");
   await page.locator(".quantity-saved-panel").getByRole("button", { name: "导出 PDF", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("实验动物数量统计表 2026年07月 E2E-IACUC-001.pdf");
+  const now = new Date();
+  const pdfMonth = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月`;
+  expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${pdfMonth} E2E-IACUC-001.pdf`);
   await savedRow.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(savedRow).toHaveCount(0);
