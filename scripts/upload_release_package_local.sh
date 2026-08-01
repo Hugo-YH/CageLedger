@@ -112,6 +112,8 @@ else
 fi
 
 TAG="v${VERSION}"
+BUILD_SHORT="$(git rev-parse --short "${TAG}^{commit}" 2>/dev/null || git rev-parse --short HEAD)"
+RELEASE_DISPLAY="CageLedger ${VERSION}${BUILD_SHORT:+（${BUILD_SHORT}）}"
 RELEASE_FILE="$(mktemp)"
 cleanup() {
   rm -f "$RELEASE_FILE"
@@ -125,12 +127,12 @@ if [[ "$HTTP_CODE" = "200" ]]; then
   EXISTING_RELEASE_ID="$(printf '%s' "$RELEASE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
   RELEASE_JSON="$(curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
-    -d "{\"name\":\"CageLedger ${TAG}\"}" \
+    -d "{\"name\":\"${RELEASE_DISPLAY}\"}" \
     "${API_BASE}/repos/${REPOSITORY}/releases/${EXISTING_RELEASE_ID}")"
 elif [[ "$HTTP_CODE" = "404" ]]; then
   RELEASE_JSON="$(curl -fsS -X POST "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
-    -d "{\"tag_name\":\"${TAG}\",\"name\":\"CageLedger ${TAG}\"}" \
+    -d "{\"tag_name\":\"${TAG}\",\"name\":\"${RELEASE_DISPLAY}\"}" \
     "${API_BASE}/repos/${REPOSITORY}/releases")"
 else
   cat "$RELEASE_FILE" >&2
