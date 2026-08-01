@@ -75,19 +75,26 @@ export function IntakeView({
 
   async function parseMessage() {
     const parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
-    await applyParsedMessage(parsed);
+    const info = await applyParsedMessage(parsed);
+    setNotice(recognitionNotice(info));
   }
 
   async function aiParseMessage() {
     try {
       const response = await aiParseIntakeMessage(draft.rawMessage, roomNames);
-      await applyParsedMessage(response.item);
+      const info = await applyParsedMessage(response.item);
       const tokens = response.usage?.total_tokens;
       const usageText = typeof tokens === "number" && tokens > 0 ? `，本次 AI 识别消耗 ${tokens} tokens` : "";
-      setNotice(`预约消息已识别（AI）${usageText}，请核对批次信息。`);
+      setNotice(`预约消息已识别（AI）${usageText}${info.strainNote}，请核对批次信息。`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
     }
+  }
+
+  function recognitionNotice(info: { batchNo: boolean; strainNote: string }) {
+    return info.batchNo
+      ? `预约消息已识别，请核对批次信息${info.strainNote}。`
+      : `未识别到完整批次号，请手动补充${info.strainNote}。`;
   }
 
   async function applyParsedMessage(parsed: Partial<IntakeBatch>) {
@@ -119,7 +126,11 @@ export function IntakeView({
         roomNames,
       ),
     );
-    setNotice(normalized.batchNo ? "预约消息已识别，请核对批次信息。" : "未识别到完整批次号，请手动补充。");
+    const strainRaw = String(normalized.strainRaw || "").trim();
+    const strainStandard = String(normalized.strainStandard || "").trim();
+    const strainNote =
+      strainRaw && strainStandard && strainRaw !== strainStandard ? `，品系已按 MGI 标准化为 ${strainStandard}` : "";
+    return { batchNo: Boolean(normalized.batchNo), strainNote };
   }
 
   async function submit(event: React.FormEvent) {
