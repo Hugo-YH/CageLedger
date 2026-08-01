@@ -1,4 +1,4 @@
-import { Button, Checkbox, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
+import { Button, Checkbox, Flex, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -42,7 +42,6 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const remove = useDeleteQuantitySheet();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
-  const pages = Math.max(Math.ceil(total / pageSize), 1);
   const iacucExpiryByCode = new Map(
     (iacucIndex.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
   );
@@ -221,12 +220,6 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           <h2>已保存数量统计表</h2>
         </div>
       </div>
-      <div className="list-meta">
-        <span>{list.isFetching ? "正在加载" : `当前加载 ${items.length} 条`}</span>
-        <span>
-          第 {page} / {pages} 页
-        </span>
-      </div>
       <div className="table-wrap quantity-saved-list" role="region" tabIndex={0} aria-label="已保存数量统计表">
         <DataTable
           className="quantity-saved-table"
@@ -237,25 +230,27 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           rowKey="id"
         />
       </div>
-      <Pagination
-        current={page}
-        onChange={(nextPage, nextPageSize) => {
-          if (nextPageSize !== pageSize) {
-            setPageSize(nextPageSize);
-            setPage(1);
-            setSelected([]);
-            setAllFilteredSelected(false);
-            return;
-          }
-          setPage(nextPage);
-        }}
-        pageSize={pageSize}
-        pageSizeOptions={[5, 10, 20, 50]}
-        showQuickJumper
-        showSizeChanger={{ "aria-label": "每页显示条数" }}
-        showTotal={(count) => `共 ${count} 条`}
-        total={total}
-      />
+      <Flex className="quantity-saved-pagination" justify="flex-end">
+        <Pagination
+          current={page}
+          onChange={(nextPage, nextPageSize) => {
+            if (nextPageSize !== pageSize) {
+              setPageSize(nextPageSize);
+              setPage(1);
+              setSelected([]);
+              setAllFilteredSelected(false);
+              return;
+            }
+            setPage(nextPage);
+          }}
+          pageSize={pageSize}
+          pageSizeOptions={[5, 10, 20, 50]}
+          showQuickJumper
+          showSizeChanger={{ "aria-label": "每页显示条数" }}
+          showTotal={(count) => `共 ${count} 条`}
+          total={total}
+        />
+      </Flex>
       {viewId ? (
         <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
       ) : null}

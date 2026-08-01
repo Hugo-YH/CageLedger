@@ -67,7 +67,6 @@ export function IntakeView({
   const confirmReceipt = useConfirmIntakeBatch();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
-  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
 
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
     setDraft((current) => normalizeIntakeBatch({ ...current, [key]: value }, roomNames));
@@ -338,7 +337,6 @@ export function IntakeView({
               selectingAll={selectingAll}
               allFilteredSelected={allFilteredSelected}
               page={page}
-              totalPages={totalPages}
               pageSize={pageSize}
               params={params}
               filters={filters}

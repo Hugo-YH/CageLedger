@@ -727,16 +727,6 @@
   font-weight: 650;
 }
 
-.list-meta,
-.quantity-saved-list-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
 .bulk-action-bar {
   display: flex;
   align-items: center;

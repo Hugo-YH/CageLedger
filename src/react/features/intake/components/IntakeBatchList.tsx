@@ -15,7 +15,6 @@ export function IntakeBatchList({
   selectingAll,
   allFilteredSelected,
   page,
-  totalPages,
   pageSize,
   params,
   filters,
@@ -38,7 +37,6 @@ export function IntakeBatchList({
   selectingAll: boolean;
   allFilteredSelected: boolean;
   page: number;
-  totalPages: number;
   pageSize: number;
   params: IntakeListParams;
   filters: Record<string, string[]>;
@@ -162,12 +160,6 @@ export function IntakeBatchList({
           type="info"
         />
       ) : null}
-      <Flex className="intake-list-meta" justify="space-between" wrap>
-        <Typography.Text type="secondary">{loading ? "正在加载" : `当前加载 ${items.length} 条`}</Typography.Text>
-        <Typography.Text type="secondary">
-          第 {page} / {totalPages} 页
-        </Typography.Text>
-      </Flex>
       <div aria-label="待接收批次列表" className="ant-table-region" role="region" tabIndex={0}>
         <DataTable
           className="intake-batch-table"
@@ -185,7 +177,7 @@ export function IntakeBatchList({
           pageSize={pageSize}
           pageSizeOptions={[5, 10, 20, 50]}
           showQuickJumper
-          showSizeChanger
+          showSizeChanger={{ "aria-label": "每页显示条数" }}
           showTotal={(count) => `共 ${count} 条`}
           total={total}
           onChange={(nextPage, nextSize) => {

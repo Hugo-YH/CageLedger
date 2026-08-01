@@ -542,6 +542,10 @@ th {
   width: 220px;
 }
 
+.quantity-saved-pagination {
+  margin-top: 4px;
+}
+
 .scanner-camera {
   position: relative;
   width: min(640px, 100%);
@@ -980,6 +984,12 @@ th {
   .react-quantity-layout .quantity-sheet-head-actions,
   .settlement-command {
     grid-template-columns: 1fr;
+  }
+
+  .quantity-saved-pagination {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
 
   .quantity-print-sheet dl,

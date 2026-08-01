@@ -399,7 +399,6 @@ textarea:hover {
   min-height: var(--control-height-compact);
 }
 
-.list-meta,
 .panel-summary-chip,
 .workspace-status-badge,
 .workspace-status {
