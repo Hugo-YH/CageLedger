@@ -43,7 +43,7 @@ switch (bump) {
     else next = `${major}.${minor}.${patch + 1}-rc1`;
     break;
   case "patch":
-    next = `${major}.${minor}.${patch + 1}`;
+    next = prerelease ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch + 1}`;
     break;
   case "minor":
     next = `${major}.${minor + 1}.0`;

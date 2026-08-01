@@ -29,6 +29,7 @@ Git tag 使用 `v<version>`（例如 `v1.0.0-beta7`）遵循 Git 惯例；容器
 - `build` 使用发布提交的 Git 短 SHA，系统统一显示为 `a.b.c（xxxx）`。
 - 版本唯一源 `package.json`；构建标识由发布脚本从 tag 对应提交派生，`/api/health` 返回 `build` 与 `revisionShort`。
 - 未显式指定版本时，发布脚本按 `--bump`（支持 `beta|rc|patch|minor|major`，默认 `beta`）从最近 `v*` tag 自动推导下一个版本，并自动打标签与推送。
+- `--bump patch` 从 `-betaN` / `-rcN` 预发布转正式时保留 `a.b.c` 并去掉后缀（例如 `1.0.0-rc1` → `1.0.0`）；从正式版本继续补丁则 `a.b.c` 加一（例如 `1.0.0` → `1.0.1`）。
 - 显示规则：支持括号的位置显示 `a.b.c（xxxx）`（例如 `1.0.0-beta7（7ad0294）`）；不支持括号的位置使用 `a.b.c-xxxx`（例如镜像 tag `1.0.0-beta7-7ad0294`）。
 
 ## 发布前准备
