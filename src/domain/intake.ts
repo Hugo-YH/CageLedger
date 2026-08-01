@@ -1,7 +1,67 @@
 import type { IntakeBatch, IntakeBatchStatus } from "../contracts/intake";
 import { createClientId } from "./id";
+// Single source of truth shared with the Python backend: the curated MGI
+// strain alias table lives in server_app/resources/intake and both runtimes
+// read the same file so local and AI recognition resolve identical names.
+import mgiStrainAliases from "../../server_app/resources/intake/mgi-strain-aliases.json";
 
 const validStatuses = new Set<IntakeBatchStatus>(["draft", "pending_print", "printed", "received"]);
+const strainSeparatorPattern = /[\s\-_/\\.,;:·（）()【】[\]<>]+/g;
+const strainTrailingMousePattern = /(小鼠|小白鼠|mouse|mice)$/;
+
+export function normalizeStrainKey(raw: string) {
+  return String(raw || "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(strainSeparatorPattern, "");
+}
+
+let strainAliasMap: Record<string, string> | null = null;
+
+function strainAliases() {
+  if (!strainAliasMap) {
+    strainAliasMap = {};
+    for (const entry of mgiStrainAliases.entries) {
+      for (const alias of entry.aliases) {
+        strainAliasMap[normalizeStrainKey(alias)] = entry.standard;
+      }
+    }
+  }
+  return strainAliasMap;
+}
+
+export function standardizeStrain(raw: string) {
+  const key = normalizeStrainKey(raw);
+  if (!key) return "";
+  const aliases = strainAliases();
+  if (aliases[key]) return aliases[key];
+  return aliases[key.replace(strainTrailingMousePattern, "")] || "";
+}
+
+const supplierShortNames: Array<[string, string]> = [
+  ["江苏集萃药康", "江苏集萃"],
+  ["江苏集萃", "江苏集萃"],
+  ["广东药康", "广东药康"],
+  ["上海南方模式", "上海南模"],
+  ["上海南模", "上海南模"],
+  ["广东南模", "广东南模"],
+  ["珠海百试通", "珠海百试通"],
+  ["丹阳昌益", "丹阳昌益"],
+  ["北京维通利华", "北京维通利华"],
+  ["浙江维通利华", "浙江维通利华"],
+  ["上海斯莱克", "上海斯莱克"],
+  ["斯莱克", "上海斯莱克"],
+  ["北京华阜康", "北京华阜康"],
+  ["华阜康", "北京华阜康"],
+  ["北京百奥赛图", "北京百奥赛图"],
+  ["百奥赛图", "北京百奥赛图"],
+];
+
+export function abbreviateSupplier(raw: string) {
+  const text = String(raw || "").trim();
+  return supplierShortNames.find(([marker]) => text.includes(marker))?.[1] || text;
+}
 
 function numberOrNull(value: unknown) {
   if (value === "" || value == null) return null;
@@ -159,9 +219,9 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
       purchaseOrderNo,
       batchNo,
       iacuc,
-      supplier,
+      supplier: abbreviateSupplier(supplier),
       strainRaw,
-      strainStandard: strainRaw,
+      strainStandard: standardizeStrain(strainRaw) || strainRaw,
       species: inferSpecies(`${raw} ${strainRaw}`),
       sex: matchField(raw, ["性别"]),
       quantity,

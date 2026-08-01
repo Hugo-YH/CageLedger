@@ -1,4 +1,5 @@
 import type { IntakeBatch } from "../api/contracts";
+import { abbreviateSupplier } from "../../domain/intake";
 import { qrCodeSvg } from "./qrCode";
 
 export const INTAKE_CARD_PRINT_PAGE_SIZE = 14;
@@ -51,23 +52,6 @@ function highlightBatchIacuc(batchNo: string, iacuc: string) {
   const index = full.toUpperCase().indexOf(target.toUpperCase());
   if (index < 0) return escapeHtml(full);
   return `${escapeHtml(full.slice(0, index))}<span class="batch-iacuc-highlight">${escapeHtml(full.slice(index, index + target.length))}</span>${escapeHtml(full.slice(index + target.length))}`;
-}
-function abbreviateSupplier(value: string) {
-  const text = String(value || "");
-  const rules: Array<[RegExp, string]> = [
-    [/江苏集萃药康|江苏集萃/, "江苏集萃"],
-    [/广东药康/, "广东药康"],
-    [/上海(?:南方模式|南模)/, "上海南模"],
-    [/广东南模/, "广东南模"],
-    [/珠海百试通/, "珠海百试通"],
-    [/丹阳昌益/, "丹阳昌益"],
-    [/北京维通利华/, "北京维通利华"],
-    [/浙江维通利华/, "浙江维通利华"],
-    [/上海斯莱克|斯莱克/, "上海斯莱克"],
-    [/北京华阜康|华阜康/, "北京华阜康"],
-    [/北京百奥赛图|百奥赛图/, "北京百奥赛图"],
-  ];
-  return rules.find(([pattern]) => pattern.test(text))?.[1] || text;
 }
 function formatDate(value: string) {
   const parts = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
