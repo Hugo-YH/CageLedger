@@ -33,7 +33,7 @@ import {
   useResolveFinding,
   useUpdateFinding,
 } from "../../api/animalManagement";
-import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
@@ -150,11 +150,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
         }
       />
       <div className="workspace-body animal-management-body">
-        <Card
-          className="animal-ant-card inspection-list-panel"
-          extra={<Tag color="blue">共 {page.total} 条</Tag>}
-          title="巡检记录"
-        >
+        <Card className="animal-ant-card inspection-list-panel" title="巡检记录">
           {filters}
           <Table
             className="inspection-table"
@@ -206,15 +202,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
             ]}
             dataSource={items}
             locale={{ emptyText: <Empty description="暂无巡检记录" /> }}
-            pagination={{
-              current,
-              pageSize: page.limit,
-              showQuickJumper: page.total > page.limit * 5,
-              showSizeChanger: false,
-              showTotal: (total) => `共 ${total} 条`,
-              total: page.total,
-              onChange: (next) => setOffset((next - 1) * page.limit),
-            }}
+            pagination={false}
             rowKey="id"
             scroll={{ x: 920 }}
             onChange={(_, __, sorter) => {
@@ -222,6 +210,13 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
               const key = String(result?.columnKey || "");
               if (key && result?.order) updateSort(key, result.order === "ascend" ? "asc" : "desc");
             }}
+          />
+          <Pager
+            onPage={(next) => setOffset((next - 1) * page.limit)}
+            page={current}
+            pageSize={page.limit}
+            pages={Math.max(Math.ceil(page.total / page.limit), 1)}
+            total={page.total}
           />
         </Card>
       </div>
@@ -276,11 +271,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
         breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
       />
       <div className="workspace-body animal-management-body">
-        <Card
-          className="animal-ant-card inspection-list-panel"
-          extra={<Tag color="orange">共 {page.total} 项</Tag>}
-          title="异常处置队列"
-        >
+        <Card className="animal-ant-card inspection-list-panel" title="异常处置队列">
           <Form className="inspection-list-filters" component={false} layout="inline">
             <Form.Item label="处置状态">
               <Select
@@ -321,17 +312,16 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
             ]}
             dataSource={query.data?.items || []}
             locale={{ emptyText: <Empty description="当前没有异常处置项" /> }}
-            pagination={{
-              current,
-              pageSize: page.limit,
-              showQuickJumper: page.total > page.limit * 5,
-              showSizeChanger: false,
-              showTotal: (total) => `共 ${total} 条`,
-              total: page.total,
-              onChange: (next) => setOffset((next - 1) * page.limit),
-            }}
+            pagination={false}
             rowKey="id"
             scroll={{ x: 760 }}
+          />
+          <Pager
+            onPage={(next) => setOffset((next - 1) * page.limit)}
+            page={current}
+            pageSize={page.limit}
+            pages={Math.max(Math.ceil(page.total / page.limit), 1)}
+            total={page.total}
           />
         </Card>
       </div>

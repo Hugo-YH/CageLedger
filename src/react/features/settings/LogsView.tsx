@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Card, Table, Typography } from "antd";
-import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
+import type { ColumnsType } from "antd/es/table";
 
 import { useAuditEvents } from "../../api/administration";
 import type { AuditEvent, SessionUser } from "../../api/contracts";
-import { formatDateTime, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -36,19 +36,7 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
       render: (at: string) => <Typography.Text type="secondary">{formatDateTime(at)}</Typography.Text>,
     },
   ];
-  const pagination: TablePaginationConfig = {
-    current: page,
-    pageSize,
-    total,
-    showSizeChanger: true,
-    showQuickJumper: true,
-    showTotal: (count) => `共 ${count} 条`,
-    pageSizeOptions: [5, 10, 20, 50],
-    onChange: (nextPage, nextPageSize) => {
-      setPage(nextPage);
-      if (nextPageSize !== pageSize) setPageSize(nextPageSize);
-    },
-  };
+  const pages = Math.max(Math.ceil(total / pageSize), 1);
   return (
     <section className="workspace-view settings-workspace">
       <WorkspaceHeader
@@ -74,15 +62,28 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
           ) : query.isError ? (
             <PageState title="操作日志加载失败" retry={() => query.refetch()} />
           ) : (
-            <Table
-              className="app-data-table audit-log-table"
-              columns={columns}
-              dataSource={query.data?.items || []}
-              rowKey="id"
-              locale={{ emptyText: "暂无操作日志" }}
-              pagination={pagination}
-              size="middle"
-            />
+            <Fragment>
+              <Table
+                className="app-data-table audit-log-table"
+                columns={columns}
+                dataSource={query.data?.items || []}
+                rowKey="id"
+                locale={{ emptyText: "暂无操作日志" }}
+                pagination={false}
+                size="middle"
+              />
+              <Pager
+                onPage={setPage}
+                onPageSize={(nextSize) => {
+                  setPageSize(nextSize);
+                  setPage(1);
+                }}
+                page={page}
+                pageSize={pageSize}
+                pages={pages}
+                total={total}
+              />
+            </Fragment>
           )}
         </Card>
       </div>

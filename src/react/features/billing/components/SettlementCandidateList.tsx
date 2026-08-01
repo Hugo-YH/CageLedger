@@ -1,16 +1,5 @@
-import {
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  Empty,
-  Modal,
-  Pagination,
-  Space,
-  Tooltip,
-  Typography,
-  type TableProps,
-} from "antd";
+import { Alert, Button, Card, Checkbox, Empty, Modal, Space, Tooltip, Typography, type TableProps } from "antd";
+import { Pager } from "../../../components/WorkspaceUi";
 import {
   DownloadOutlined,
   EyeOutlined,
@@ -279,7 +268,6 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             </Typography.Title>
           </Space>
         }
-        extra={<Typography.Text type="secondary">共 {total} 项</Typography.Text>}
       >
         <Typography.Paragraph className="settlement-card-description" type="secondary">
           同一负责人、同一月份下的多个伦理号自动合表。
@@ -316,14 +304,6 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             </Button>
           </Space>
         </div>
-        <div className="settlement-table-meta">
-          <Typography.Text type="secondary">
-            {list.isFetching ? "正在计算结算候选项" : `当前加载 ${items.length} 项`}
-          </Typography.Text>
-          <Typography.Text type="secondary">
-            第 {page} / {pages} 页
-          </Typography.Text>
-        </div>
         <div
           className="ant-table-region settlement-candidate-list"
           role="region"
@@ -332,21 +312,18 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         >
           <DataTable columns={columns} dataSource={items} loading={list.isPending} pagination={false} rowKey="id" />
         </div>
-        <div className="settlement-pagination">
-          <Pagination
-            current={page}
-            pageSize={pageSize}
-            pageSizeOptions={[5, 10, 20, 50]}
-            showQuickJumper
-            showSizeChanger={{ "aria-label": "每页显示条数" }}
-            showTotal={(count) => `共 ${count} 项`}
-            total={total}
-            onChange={(nextPage, nextPageSize) => {
-              setPageSize(nextPageSize);
-              setPage(nextPageSize === pageSize ? nextPage : 1);
-            }}
-          />
-        </div>
+        <Pager
+          itemLabel="项"
+          onPage={setPage}
+          onPageSize={(nextSize) => {
+            setPageSize(nextSize);
+            setPage(1);
+          }}
+          page={page}
+          pageSize={pageSize}
+          pages={pages}
+          total={total}
+        />
       </Card>
       <Modal
         cancelButtonProps={{ disabled: batchStarting }}

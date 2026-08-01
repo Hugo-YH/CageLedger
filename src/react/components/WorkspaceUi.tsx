@@ -230,6 +230,7 @@ export function Pager({
   onPage,
   pageSize,
   onPageSize,
+  itemLabel = "条",
 }: {
   page: number;
   pages: number;
@@ -237,23 +238,28 @@ export function Pager({
   onPage: (page: number) => void;
   pageSize?: number;
   onPageSize?: (pageSize: number) => void;
+  itemLabel?: string;
 }) {
   return (
-    <div className="pager" role="navigation" aria-label="列表分页">
-      <Pagination
-        current={page}
-        pageSize={pageSize || Math.max(1, Math.ceil(total / Math.max(pages, 1)))}
-        pageSizeOptions={[5, 10, 20, 50, 100]}
-        showQuickJumper={pages > 8}
-        showSizeChanger={pageSize && onPageSize ? { "aria-label": "每页显示条数" } : false}
-        showTotal={(count) => `共 ${count} 条`}
-        total={total}
-        onChange={(nextPage, nextPageSize) => {
-          if (nextPageSize !== pageSize && onPageSize) onPageSize(nextPageSize);
-          else onPage(nextPage);
-        }}
-      />
-    </div>
+    <Flex align="center" className="pager" justify="space-between" role="navigation" wrap>
+      <Typography.Text type="secondary" aria-label="列表总数">
+        共 {total} {itemLabel}
+      </Typography.Text>
+      <div className="pager-scroll">
+        <Pagination
+          aria-label="列表分页"
+          current={page}
+          pageSize={pageSize || Math.max(1, Math.ceil(total / Math.max(pages, 1)))}
+          pageSizeOptions={[5, 10, 20, 50, 100]}
+          showSizeChanger={pageSize && onPageSize ? { "aria-label": "每页显示条数" } : false}
+          total={total}
+          onChange={(nextPage, nextPageSize) => {
+            if (nextPageSize !== pageSize && onPageSize) onPageSize(nextPageSize);
+            else onPage(nextPage);
+          }}
+        />
+      </div>
+    </Flex>
   );
 }
 

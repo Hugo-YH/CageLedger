@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { Fragment, useDeferredValue, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { InboxOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Input, Select, Space, Statistic, Table, Typography, Upload } from "antd";
@@ -8,7 +8,7 @@ import type { ColumnsType } from "antd/es/table";
 import { uploadFile, useIacucStatus, usePrincipalIdentities, useSavePrincipalIdentity } from "../../api/administration";
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
-import { formatDateTime, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -24,11 +24,16 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("");
   const deferredFilter = useDeferredValue(filter);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [uploading, setUploading] = useState("");
   const rows = (identities.data?.items || []).filter((item) =>
     item.pi.toLocaleLowerCase("zh-CN").includes(deferredFilter.trim().toLocaleLowerCase("zh-CN")),
   );
+  useEffect(() => setPage(1), [deferredFilter]);
+  const pages = Math.max(Math.ceil(rows.length / pageSize), 1);
+  const visibleRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
   async function upload(kind: "iacuc" | "monthly" | "arrears", file?: File) {
     if (!file) return;
@@ -113,15 +118,28 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
             ) : identities.isError ? (
               <PageState title="负责人身份加载失败" retry={() => identities.refetch()} />
             ) : (
-              <Table
-                className="app-data-table"
-                columns={columns}
-                dataSource={rows}
-                locale={{ emptyText: "当前没有匹配的项目负责人。" }}
-                pagination={{ pageSize: 12, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
-                rowKey="pi"
-                scroll={{ x: 760 }}
-              />
+              <Fragment>
+                <Table
+                  className="app-data-table"
+                  columns={columns}
+                  dataSource={visibleRows}
+                  locale={{ emptyText: "当前没有匹配的项目负责人。" }}
+                  pagination={false}
+                  rowKey="pi"
+                  scroll={{ x: 760 }}
+                />
+                <Pager
+                  onPage={setPage}
+                  onPageSize={(nextSize) => {
+                    setPageSize(nextSize);
+                    setPage(1);
+                  }}
+                  page={page}
+                  pageSize={pageSize}
+                  pages={pages}
+                  total={rows.length}
+                />
+              </Fragment>
             )}
           </Card>
           <aside className="settings-side-stack">

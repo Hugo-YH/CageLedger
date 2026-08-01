@@ -177,7 +177,7 @@ export function IntakeBatchList({
           <Pagination
             current={page}
             pageSize={pageSize}
-            pageSizeOptions={[5, 10, 20, 50]}
+            pageSizeOptions={[5, 10, 20, 50, 100]}
             showSizeChanger={{ "aria-label": "每页显示条数" }}
             total={total}
             onChange={(nextPage, nextSize) => {

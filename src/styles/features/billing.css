@@ -1497,17 +1497,6 @@ th {
   box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
 }
 
-.settlement-table-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.settlement-pagination {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .settlement-preview-modal .ant-modal-body {
   display: grid;
   gap: 12px;
@@ -1612,7 +1601,6 @@ th {
   }
 
   .settlement-action-bar,
-  .settlement-table-meta,
   .ledger-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -1625,12 +1613,6 @@ th {
 
   .settlement-action-bar .ant-btn {
     flex: 1;
-  }
-
-  .settlement-pagination {
-    justify-content: center;
-    overflow: auto;
-    padding-bottom: 4px;
   }
 
   .reconciliation-picker {

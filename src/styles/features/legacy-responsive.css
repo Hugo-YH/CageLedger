@@ -1,14 +1,3 @@
-@media (width <= 760px) {
-  .pager {
-    grid-template-columns: 1fr;
-  }
-
-  .pager > div,
-  .pager > div button {
-    width: 100%;
-  }
-}
-
 .billing-control-matrix-quantity > input,
 .billing-control-matrix-quantity > .iacuc-lookup {
   width: 100%;

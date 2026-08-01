@@ -652,13 +652,21 @@
 
 .ant-workspace .pager {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
   margin-top: 16px;
 }
 
 .ant-workspace .pager .ant-pagination {
   margin: 0;
+}
+
+.ant-workspace .pager .pager-scroll {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .ant-dashboard-view {
@@ -1698,7 +1706,13 @@
   }
 
   .ant-workspace .pager {
-    justify-content: center;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ant-workspace .pager .pager-scroll {
+    padding-bottom: 2px;
   }
 
   .ant-dashboard-task {
