@@ -4,6 +4,7 @@ import type { ReleaseNote } from "./releaseNoteModel";
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "1.0.0-beta10",
+    build: "73465ee",
     releasedAt: "2026-08-01 12:10",
     title: "预约消息 AI 识别与 MGI 品系标准化",
     items: [
