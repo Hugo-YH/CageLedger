@@ -13,6 +13,7 @@ RUN bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --n
 COPY index.html vite.config.ts tsconfig.json ./
 COPY assets ./assets
 COPY src ./src
+COPY server_app/resources/intake ./server_app/resources/intake
 COPY wiki ./wiki
 RUN CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
 
