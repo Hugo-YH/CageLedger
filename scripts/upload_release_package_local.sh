@@ -113,7 +113,7 @@ fi
 
 TAG="v${VERSION}"
 BUILD_SHORT="$(git rev-parse --short "${TAG}^{commit}" 2>/dev/null || git rev-parse --short HEAD)"
-RELEASE_DISPLAY="CageLedger ${VERSION}${BUILD_SHORT:+（${BUILD_SHORT}）}"
+RELEASE_DISPLAY="${VERSION}${BUILD_SHORT:+（${BUILD_SHORT}）}"
 RELEASE_FILE="$(mktemp)"
 cleanup() {
   rm -f "$RELEASE_FILE"

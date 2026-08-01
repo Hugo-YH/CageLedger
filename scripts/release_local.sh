@@ -12,7 +12,7 @@ Usage:
 
 Options:
   --version <ver>  Release version, for example 0.4.1 or 0.4.0a
-  --bump <type>    Auto-derive the next version from the latest tag: beta|patch|minor|major (default beta)
+  --bump <type>    Auto-derive the next version from the latest tag: beta|rc|patch|minor|major (default beta)
   --push           Push the current release branch and the new v<version> tag after commit/tag
   --dry-run        Print steps without executing them
   --skip-full-verify  Skip the Mac mini production build and Playwright release verification
