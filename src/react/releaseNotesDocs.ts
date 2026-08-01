@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta10",
+    releasedAt: "2026-08-01 12:10",
+    title: "预约消息 AI 识别与 MGI 品系标准化",
+    items: [
+      "预约消息识别新增「AI 识别」：将预约文本与解析规则发送到 DeepSeek，返回结构化字段后再走既有 IACUC 索引匹配与人工核对保存流程；未配置密钥时给出明确提示，本地识别保持可用",
+      "品系名称统一按 MGI 官方品系表标准化：本地识别与 AI 识别共用同一份别名表与全量索引，覆盖 MGI 全部 11.7 万条官方品系名，常用别名（`c57`、`昆明鼠`、`nude` 等）映射到标准名",
+      "供应商名称由后端确定性映射为常用简称，与笼卡打印口径一致",
+      "识别成功提示区分本地与 AI 来源，AI 识别展示本次消耗 tokens；品系被标准化时提示「品系已按 MGI 标准化为 X」",
+      "新增 `scripts/sync_mgi_strains.py` 从 MGI 官方报告刷新全量品系索引，`DEEPSEEK_API_KEY` 通过环境变量配置",
+    ],
+  },
+  {
     version: "1.0.0-beta9",
     build: "d311166",
     releasedAt: "2026-08-01 10:36",

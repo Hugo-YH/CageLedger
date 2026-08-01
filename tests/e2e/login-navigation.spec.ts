@@ -26,7 +26,7 @@ test("login and open the main business workspaces", async ({ page }) => {
     .fill(
       "锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8014 进驻日期：5月13日",
     );
-  await page.getByRole("button", { name: "识别文本", exact: true }).click();
+  await page.getByRole("button", { name: "本地识别", exact: true }).click();
   await expect(page.getByLabel("批次号", { exact: true })).toHaveValue("（Z2025050）2026042903");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("70");
   await expect(
