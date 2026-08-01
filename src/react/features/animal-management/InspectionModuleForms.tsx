@@ -54,7 +54,7 @@ export function InspectionModuleForm({
     >
       {moduleCode === "abnormalAnimalAssessment"
         ? abnormalAnimalBodyRegions(nodes).map((region) => (
-            <InspectionBodyRegionSection
+            <InspectionRegionSection
               answerMap={answerMap}
               key={region.key}
               moduleCode={moduleCode}
@@ -65,7 +65,7 @@ export function InspectionModuleForm({
             />
           ))
         : groupedItems(nodes, moduleCode).map(([category, items]) => (
-            <InspectionCategory
+            <InspectionSection
               answerMap={answerMap}
               category={category}
               items={items}
@@ -80,7 +80,7 @@ export function InspectionModuleForm({
   );
 }
 
-function InspectionBodyRegionSection({
+function InspectionRegionSection({
   region,
   moduleCode,
   answerMap,
@@ -96,23 +96,15 @@ function InspectionBodyRegionSection({
   onReference: (preview: ReferencePreview) => void;
 }) {
   const items = region.groups.flatMap((group) => group.items);
-  const answered = items.filter((node) => Boolean(answerMap[inspectionAnswerKey(moduleCode, node.code)])).length;
-  const findings = items.filter(
-    (node) => inspectionOutcome(answerMap[inspectionAnswerKey(moduleCode, node.code)]) === "abnormal",
-  ).length;
-  const stateLabel = findings
-    ? `${findings} 项异常`
-    : answered === items.length
-      ? `已确认 ${answered}/${items.length}`
-      : `待确认 ${answered}/${items.length}`;
+  const { findings, stateLabel, stateTone } = sectionState(items, moduleCode, answerMap);
 
   return (
     <section
-      className={`inspection-body-region ${findings ? "has-findings" : ""}`}
+      className={`inspection-section ${findings ? "has-findings" : ""}`}
       aria-label={`${region.name}异常动物评估`}
     >
       <Collapse
-        className="inspection-body-region-collapse"
+        className="inspection-section-collapse"
         bordered
         expandIconPlacement="end"
         size="small"
@@ -120,24 +112,24 @@ function InspectionBodyRegionSection({
           {
             key: region.key,
             label: (
-              <span className="inspection-body-region-label">
-                <span className="inspection-body-region-label-main">
+              <span className="inspection-section-label">
+                <span className="inspection-section-label-main">
                   <strong>{region.name}</strong>
                   <Tag variant="filled">{region.description}</Tag>
                 </span>
-                <Space size={8}>
-                  <Tag color={findings ? "error" : answered === items.length ? "success" : "default"}>{stateLabel}</Tag>
-                  <span className="inspection-body-region-count">{region.itemCount} 项</span>
-                </Space>
+                <Tag className="inspection-section-state" color={stateTone}>
+                  {stateLabel}
+                </Tag>
+                <span className="inspection-section-count">{region.itemCount} 项</span>
               </span>
             ),
             children: region.groups.map((group) => (
-              <InspectionCategory
+              <InspectionSubsection
                 answerMap={answerMap}
-                category={group.name}
                 items={group.items}
                 key={group.key}
                 moduleCode={moduleCode}
+                name={group.name}
                 onAnswer={onAnswer}
                 onFinding={onFinding}
                 onReference={onReference}
@@ -150,7 +142,7 @@ function InspectionBodyRegionSection({
   );
 }
 
-function InspectionCategory({
+function InspectionSection({
   category,
   items,
   moduleCode,
@@ -167,6 +159,195 @@ function InspectionCategory({
   onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
+  const { findings, stateLabel, stateTone } = sectionState(items, moduleCode, answerMap);
+  return (
+    <section className={`inspection-section ${findings ? "has-findings" : ""}`} aria-label={category}>
+      <Collapse
+        className="inspection-section-collapse"
+        expandIconPlacement="end"
+        size="small"
+        items={[
+          {
+            key: "items",
+            label: (
+              <span className="inspection-section-label">
+                <span className="inspection-section-label-main">
+                  <strong>{category}</strong>
+                </span>
+                <Tag className="inspection-section-state" color={stateTone}>
+                  {stateLabel}
+                </Tag>
+                <span className="inspection-section-count">{items.length} 项</span>
+                <Button
+                  className="inspection-all-normal"
+                  size="small"
+                  type="link"
+                  onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
+                >
+                  全部正常
+                </Button>
+              </span>
+            ),
+            children: (
+              <InspectionItems
+                answerMap={answerMap}
+                items={items}
+                moduleCode={moduleCode}
+                onAnswer={onAnswer}
+                onFinding={onFinding}
+                onReference={onReference}
+              />
+            ),
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
+function InspectionSubsection({
+  name,
+  items,
+  moduleCode,
+  answerMap,
+  onAnswer,
+  onFinding,
+  onReference,
+}: {
+  name: string;
+  items: InspectionCatalogNode[];
+  moduleCode: InspectionModuleCode;
+  answerMap: Record<string, InspectionAnswer>;
+  onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onFinding: (node: InspectionCatalogNode) => void;
+  onReference: (preview: ReferencePreview) => void;
+}) {
+  const { findings, stateLabel, stateTone } = sectionState(items, moduleCode, answerMap);
+  return (
+    <section className={`inspection-subsection ${findings ? "has-findings" : ""}`} aria-label={name}>
+      <Collapse
+        className="inspection-subsection-collapse"
+        expandIconPlacement="end"
+        ghost
+        size="small"
+        items={[
+          {
+            key: "items",
+            label: (
+              <span className="inspection-subsection-label">
+                <h4>{name}</h4>
+                <Tag className="inspection-subsection-state" color={stateTone}>
+                  {stateLabel}
+                </Tag>
+                <Button
+                  className="inspection-all-normal"
+                  size="small"
+                  type="link"
+                  onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
+                >
+                  全部正常
+                </Button>
+              </span>
+            ),
+            children: (
+              <InspectionItems
+                answerMap={answerMap}
+                items={items}
+                moduleCode={moduleCode}
+                onAnswer={onAnswer}
+                onFinding={onFinding}
+                onReference={onReference}
+              />
+            ),
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
+function InspectionItems({
+  items,
+  moduleCode,
+  answerMap,
+  onAnswer,
+  onFinding,
+  onReference,
+}: {
+  items: InspectionCatalogNode[];
+  moduleCode: InspectionModuleCode;
+  answerMap: Record<string, InspectionAnswer>;
+  onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onFinding: (node: InspectionCatalogNode) => void;
+  onReference: (preview: ReferencePreview) => void;
+}) {
+  return (
+    <div className="inspection-category-items">
+      {items.map((node) => {
+        const key = inspectionAnswerKey(moduleCode, node.code);
+        const answer = answerMap[key];
+        // A missing answer remains visibly pending until the inspector confirms it.
+        const outcome = answer ? inspectionOutcome(answer) : undefined;
+        const images = node.config?.referenceImages || [];
+        return (
+          <article className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`} key={node.code}>
+            <div className="inspection-node-main">
+              <div className="inspection-node-title">
+                <strong>{node.name}</strong>
+                {images.length ? (
+                  <Button
+                    className="inspection-reference-trigger"
+                    size="small"
+                    type="link"
+                    onClick={() => onReference({ images, initialIndex: 0, title: node.name })}
+                  >
+                    图例 {images.length}
+                  </Button>
+                ) : null}
+              </div>
+              <Space.Compact className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
+                <Button
+                  aria-pressed={outcome === "normal"}
+                  className="normal"
+                  size="small"
+                  type={outcome === "normal" ? "primary" : "default"}
+                  onClick={() => onAnswer(node, { outcome: "normal" })}
+                >
+                  正常
+                </Button>
+                <Button
+                  aria-pressed={outcome === "abnormal"}
+                  className="abnormal"
+                  danger
+                  size="small"
+                  type={outcome === "abnormal" ? "primary" : "default"}
+                  onClick={() => onFinding(node)}
+                >
+                  异常
+                </Button>
+              </Space.Compact>
+              {node.description ? <p>{node.description}</p> : null}
+            </div>
+            {outcome === "abnormal" ? (
+              <div className="inspection-finding-summary">
+                <strong>已登记异常</strong>
+                <span>
+                  {answer?.locationHint || answer?.animalIdentifier || answer?.note || "已登记，可点击异常修改。"}
+                </span>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function sectionState(
+  items: InspectionCatalogNode[],
+  moduleCode: InspectionModuleCode,
+  answerMap: Record<string, InspectionAnswer>,
+) {
   const answered = items.filter((node) => Boolean(answerMap[inspectionAnswerKey(moduleCode, node.code)])).length;
   const findings = items.filter(
     (node) => inspectionOutcome(answerMap[inspectionAnswerKey(moduleCode, node.code)]) === "abnormal",
@@ -176,108 +357,6 @@ function InspectionCategory({
     : answered === items.length
       ? `已确认 ${answered}/${items.length}`
       : `待确认 ${answered}/${items.length}`;
-  return (
-    <section className={`inspection-category ${findings ? "has-findings" : ""}`} aria-label={category}>
-      <div className="inspection-category-head">
-        <div className="inspection-category-title">
-          <h3>{category}</h3>
-          <Tag color={findings ? "error" : answered === items.length ? "success" : "default"}>{stateLabel}</Tag>
-          <Button
-            className="inspection-all-normal"
-            size="small"
-            type="link"
-            onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
-          >
-            全部正常
-          </Button>
-        </div>
-      </div>
-      <Collapse
-        className="inspection-category-collapse"
-        expandIconPlacement="start"
-        ghost
-        items={[
-          {
-            key: "items",
-            label: (
-              <span className="inspection-category-collapse-label">
-                <span>查看检查项</span>
-                <Tag variant="filled">{items.length} 项</Tag>
-              </span>
-            ),
-            children: (
-              <div className="inspection-category-items">
-                {items.map((node) => {
-                  const key = inspectionAnswerKey(moduleCode, node.code);
-                  const answer = answerMap[key];
-                  // A missing answer remains visibly pending until the inspector confirms it.
-                  const outcome = answer ? inspectionOutcome(answer) : undefined;
-                  const images = node.config?.referenceImages || [];
-                  return (
-                    <article
-                      className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`}
-                      key={node.code}
-                    >
-                      <div className="inspection-node-main">
-                        <div className="inspection-node-title">
-                          <strong>{node.name}</strong>
-                          {images.length ? (
-                            <Button
-                              className="inspection-reference-trigger"
-                              size="small"
-                              type="link"
-                              onClick={() => onReference({ images, initialIndex: 0, title: node.name })}
-                            >
-                              图例 {images.length}
-                            </Button>
-                          ) : null}
-                        </div>
-                        <Space.Compact
-                          className="inspection-outcome-options"
-                          role="group"
-                          aria-label={`${node.name}巡检结论`}
-                        >
-                          <Button
-                            aria-pressed={outcome === "normal"}
-                            className="normal"
-                            size="small"
-                            type={outcome === "normal" ? "primary" : "default"}
-                            onClick={() => onAnswer(node, { outcome: "normal" })}
-                          >
-                            正常
-                          </Button>
-                          <Button
-                            aria-pressed={outcome === "abnormal"}
-                            className="abnormal"
-                            danger
-                            size="small"
-                            type={outcome === "abnormal" ? "primary" : "default"}
-                            onClick={() => onFinding(node)}
-                          >
-                            异常
-                          </Button>
-                        </Space.Compact>
-                        {node.description ? <p>{node.description}</p> : null}
-                      </div>
-                      {outcome === "abnormal" ? (
-                        <div className="inspection-finding-summary">
-                          <strong>已登记异常</strong>
-                          <span>
-                            {answer?.locationHint ||
-                              answer?.animalIdentifier ||
-                              answer?.note ||
-                              "已登记，可点击异常修改。"}
-                          </span>
-                        </div>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            ),
-          },
-        ]}
-      />
-    </section>
-  );
+  const stateTone = findings ? "error" : answered === items.length ? "success" : "default";
+  return { answered, findings, stateLabel, stateTone };
 }

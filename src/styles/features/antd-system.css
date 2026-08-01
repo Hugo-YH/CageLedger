@@ -1041,65 +1041,35 @@
   font-weight: 600;
 }
 
-.ant-workspace .inspection-module-card .inspection-category {
-  padding: 12px 16px;
-}
-
-.ant-workspace .inspection-module-card .inspection-category + .inspection-category {
+.ant-workspace .inspection-module-card .inspection-section + .inspection-section {
   border-top-color: var(--app-border);
-}
-
-.ant-workspace .inspection-module-card .inspection-category-head {
-  margin-bottom: 4px;
-}
-
-.ant-workspace .inspection-module-card .inspection-category-head h3 {
-  color: var(--ant-color-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.ant-workspace .inspection-module-card .inspection-category-title {
-  gap: 6px;
-}
-
-.ant-workspace .inspection-module-card .inspection-category-title .ant-tag {
-  margin-inline-end: 0;
 }
 
 .ant-workspace .inspection-module-card .inspection-all-normal {
   margin-left: auto;
 }
 
-.ant-workspace .inspection-module-card .inspection-category-collapse {
-  border: 0;
-  background: transparent;
+.ant-workspace .inspection-module-card .inspection-section-collapse .ant-collapse-header {
+  color: var(--ant-color-text);
 }
 
-.ant-workspace .inspection-module-card .inspection-category-collapse > .ant-collapse-item {
-  border-bottom: 0;
-}
-
-.ant-workspace .inspection-module-card .inspection-category-collapse .ant-collapse-header {
-  min-height: 32px;
-  padding: 6px 0 !important;
-  color: var(--ant-color-text-secondary);
-  font-size: 13px;
-}
-
-.inspection-category-collapse-label {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.ant-workspace .inspection-module-card .inspection-category-collapse .ant-collapse-content {
+.ant-workspace .inspection-module-card .inspection-section-collapse .ant-collapse-content {
   border-top-color: var(--app-border);
 }
 
-.ant-workspace .inspection-module-card .inspection-category-collapse .ant-collapse-content-box {
+.ant-workspace .inspection-module-card .inspection-section-collapse .ant-collapse-content-box {
   padding: 0 !important;
+}
+
+@media (width > 760px) {
+  .ant-workspace
+    .inspection-module-card
+    .inspection-section-collapse
+    > .ant-collapse-item
+    > .ant-collapse-panel
+    > .ant-collapse-body {
+    padding: 0 0 0 32px !important;
+  }
 }
 
 .inspection-image-modal .ant-modal-content {

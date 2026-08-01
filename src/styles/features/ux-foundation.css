@@ -402,19 +402,15 @@ button:active:not(:disabled),
   padding: 8px 10px;
 }
 
-.inspection-category {
+.inspection-section {
   padding: 13px 14px;
 }
 
-.inspection-category-head {
-  margin-bottom: 6px;
-}
-
-.inspection-category-title {
+.inspection-section-label {
   gap: 7px;
 }
 
-.inspection-category-head h3 {
+.inspection-section-label-main strong {
   font-size: 15px;
 }
 
@@ -593,7 +589,7 @@ button:active:not(:disabled),
     font-size: 14px;
   }
 
-  .inspection-category {
+  .inspection-section {
     padding: 12px 10px;
   }
 

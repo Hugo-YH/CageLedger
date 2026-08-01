@@ -96,9 +96,9 @@
   border-radius: 8px;
   background: var(--app-surface);
   transition:
-    border-color var(--app-duration-fast) var(--app-ease-out),
-    background-color var(--app-duration-fast) var(--app-ease-out),
-    box-shadow var(--app-duration-fast) var(--app-ease-out);
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .inspection-module-panel[data-module="basicAssessment"] {
@@ -147,66 +147,73 @@
   white-space: nowrap;
 }
 
-.inspection-category {
-  padding: 16px 18px;
-}
-
-.inspection-body-region + .inspection-body-region {
+.inspection-section + .inspection-section {
   border-top: 1px solid var(--line-strong);
 }
 
-.inspection-body-region.has-findings {
+.inspection-section.has-findings {
   background: var(--ant-color-error-bg);
 }
 
-.inspection-body-region-collapse > .ant-collapse-item > .ant-collapse-header {
+.inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
   align-items: center;
   padding: 14px 18px;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
-.inspection-body-region-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
+.inspection-section-collapse > .ant-collapse-item > .ant-collapse-header:hover {
+  background: var(--app-surface-subtle);
+}
+
+.inspection-section-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
   padding: 0;
 }
 
-.inspection-body-region-label {
+.inspection-section-label {
   display: flex;
   flex: 1;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
-.inspection-body-region-label-main {
+.inspection-section-label-main {
   display: inline-flex;
   min-width: 0;
+  flex: 1;
   gap: 10px;
-  align-items: baseline;
+  align-items: center;
 }
 
-.inspection-body-region-label-main strong {
+.inspection-section-label-main strong {
   color: var(--ink-strong);
   font-size: 15px;
 }
 
-.inspection-body-region-label-main span,
-.inspection-body-region-count {
+.inspection-section-label-main span,
+.inspection-section-count {
   color: var(--ink-muted);
   font-size: 13px;
 }
 
-.inspection-body-region-label > .ant-space {
+.inspection-section-state.ant-tag {
   flex: none;
+  margin-inline-end: 0;
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
 }
 
-.inspection-category + .inspection-category {
-  border-top: 1px solid var(--line-strong);
+.inspection-section-count {
+  flex: none;
+  white-space: nowrap;
 }
 
-.inspection-category h3 {
-  margin: 0 0 10px;
-  color: var(--accent-deep);
-  font-size: 14px;
+.inspection-section-label > .inspection-all-normal {
+  flex: none;
 }
 
 .inspection-module-panel .panel-title-line {
@@ -241,98 +248,6 @@
   font-weight: 800;
 }
 
-.inspection-category-head {
-  margin-bottom: 10px;
-}
-
-.inspection-category-head h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.inspection-category-title {
-  display: flex;
-  min-width: 0;
-  gap: 8px;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.inspection-category-state {
-  overflow: hidden;
-  min-width: 0;
-  padding: 3px 7px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--ink-muted);
-  background: var(--surface-soft);
-  font-size: 11px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inspection-category-state.complete {
-  border-color: #b7dfc4;
-  color: #267245;
-  background: #edf9f0;
-}
-
-.inspection-category-state.has-findings {
-  border-color: #efc1bc;
-  color: #a33e35;
-  background: #fff0ee;
-}
-
-.inspection-category-details {
-  border-top: 1px solid var(--line);
-}
-
-.inspection-category-details > summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 2px;
-  color: var(--ink-muted);
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-  list-style: none;
-}
-
-.inspection-category-details > summary span:last-child {
-  color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.inspection-category-details > summary::after {
-  order: -1;
-  margin-right: 6px;
-  content: "+";
-  font-size: 15px;
-  color: var(--accent);
-}
-
-.inspection-category-details[open] > summary::after {
-  content: "−";
-}
-
-.inspection-category-details[open] > summary {
-  border-bottom: 1px solid var(--line);
-}
-
-.inspection-category .inspection-all-normal {
-  width: auto;
-  min-width: 0;
-  min-height: 24px;
-  margin-left: auto;
-  padding: 2px 6px;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
 .inspection-node {
   display: block;
   padding: 14px 12px;
@@ -348,6 +263,9 @@
   padding-inline: 8px;
   border-radius: 10px;
   background: rgb(255 243 228 / 55%);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .inspection-node-main {
@@ -404,6 +322,15 @@
   background: var(--surface);
   font-size: 12px;
   font-weight: 700;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.inspection-outcome-options button:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .inspection-outcome-options button.normal {
@@ -497,6 +424,19 @@
   color: #80500e;
   background: #fffaf0;
   font-size: 12px;
+  animation: inspection-summary-in var(--motion-base) var(--ease-out) both;
+}
+
+@keyframes inspection-summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .inspection-reference-trigger {
@@ -1146,16 +1086,8 @@
     font-size: 12px;
   }
 
-  .inspection-category {
+  .inspection-section {
     padding: 14px 12px;
-  }
-
-  .inspection-category-head {
-    margin-bottom: 8px;
-  }
-
-  .inspection-category-title {
-    gap: 6px;
   }
 
   .inspection-node-main {
@@ -1350,6 +1282,24 @@
   background: #fff;
 }
 
+.animal-management-workspace .inspection-module-card[data-module="basicAssessment"] {
+  --inspection-module-accent: #397db5;
+  --inspection-module-border: #bdd7ed;
+  --inspection-module-surface: #f0f7fd;
+}
+
+.animal-management-workspace .inspection-module-card[data-module="advancedAssessment"] {
+  --inspection-module-accent: #9a7420;
+  --inspection-module-border: #ead79c;
+  --inspection-module-surface: #fff9e9;
+}
+
+.animal-management-workspace .inspection-module-card[data-module="abnormalAnimalAssessment"] {
+  --inspection-module-accent: #af5b51;
+  --inspection-module-border: #efc7c2;
+  --inspection-module-surface: #fff3f1;
+}
+
 .animal-management-workspace .inspection-module-card[data-module] > .ant-card-head {
   background: #fff;
 }
@@ -1372,50 +1322,49 @@
   line-height: 20px;
 }
 
-.animal-management-workspace .inspection-category {
-  padding: 12px 20px;
+.animal-management-workspace .inspection-section {
+  padding: 0;
   border-top: 1px solid #f0f0f0;
   background: #fff;
 }
 
-.animal-management-workspace .inspection-category:first-child {
+.animal-management-workspace .inspection-section:first-child {
   border-top: 0;
 }
 
-.animal-management-workspace .inspection-body-region + .inspection-body-region {
-  margin-top: 12px;
-  border-top: 0;
+.animal-management-workspace .inspection-section + .inspection-section {
+  border-top: 1px solid #f0f0f0;
 }
 
-.animal-management-workspace .inspection-body-region.has-findings {
+.animal-management-workspace .inspection-section.has-findings {
   background: transparent;
 }
 
-.animal-management-workspace .inspection-body-region-collapse.ant-collapse {
+.animal-management-workspace .inspection-section-collapse.ant-collapse {
   overflow: hidden;
-  border: 1px solid #f0f0f0;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 0;
   background: #fff;
 }
 
-.animal-management-workspace .inspection-body-region-collapse > .ant-collapse-item > .ant-collapse-header {
-  padding: 10px 14px;
+.animal-management-workspace .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+  padding: 10px 14px 10px 32px;
 }
 
 .animal-management-workspace
-  .inspection-body-region-collapse
+  .inspection-section-collapse
   > .ant-collapse-item
   > .ant-collapse-content
   > .ant-collapse-content-box {
   padding: 0;
 }
 
-.animal-management-workspace .inspection-body-region-label-main {
+.animal-management-workspace .inspection-section-label-main {
   align-items: center;
   gap: 8px;
 }
 
-.animal-management-workspace .inspection-body-region-label-main .ant-tag {
+.animal-management-workspace .inspection-section-label-main .ant-tag {
   max-width: 100%;
   margin-inline-end: 0;
   overflow: hidden;
@@ -1427,73 +1376,96 @@
   white-space: nowrap;
 }
 
-.animal-management-workspace .inspection-body-region-count {
+.animal-management-workspace .inspection-section-count {
   color: #8c8c8c;
   font-size: 12px;
 }
 
-.animal-management-workspace .inspection-category.has-findings {
-  background: #fff;
-}
-
-.animal-management-workspace .inspection-category-head {
-  margin-bottom: 4px;
-}
-
-.animal-management-workspace .inspection-category-title {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 8px;
-}
-
-.animal-management-workspace .inspection-category-title h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 22px;
-}
-
-.animal-management-workspace .inspection-category-title .inspection-all-normal {
+.animal-management-workspace .inspection-section-label > .inspection-all-normal {
   margin-left: auto;
   padding-inline: 4px;
 }
 
-.animal-management-workspace .inspection-category-collapse.ant-collapse {
+.animal-management-workspace .inspection-subsection {
+  padding: 8px 20px 4px 24px;
+}
+
+.animal-management-workspace .inspection-subsection-collapse.ant-collapse {
   border: 0;
   background: transparent;
 }
 
-.animal-management-workspace .inspection-category-collapse .ant-collapse-item {
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-item {
   border-bottom: 0;
 }
 
-.animal-management-workspace .inspection-category-collapse .ant-collapse-header {
-  min-height: 28px;
-  padding: 2px 0;
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-header {
+  min-height: 32px;
+  padding: 6px 0;
   color: #595959;
-  font-size: 13px;
-  line-height: 24px;
 }
 
-.animal-management-workspace .inspection-category-collapse .ant-collapse-content,
-.animal-management-workspace .inspection-category-collapse .ant-collapse-content-box {
-  border: 0;
+.animal-management-workspace .inspection-subsection-label {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.animal-management-workspace .inspection-subsection-label h4 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-content {
+  border-top: 0;
   background: transparent;
 }
 
-.animal-management-workspace .inspection-category-collapse .ant-collapse-content-box {
-  padding: 4px 0 0;
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-content-box {
+  padding: 2px 0 0;
 }
 
-.animal-management-workspace .inspection-category-collapse-label {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
+.animal-management-workspace
+  .inspection-subsection-collapse
+  > .ant-collapse-item
+  > .ant-collapse-panel
+  > .ant-collapse-body {
+  padding: 2px 0 0 !important;
 }
 
-.animal-management-workspace .inspection-category-collapse-label .ant-tag {
+.animal-management-workspace
+  .inspection-section-collapse
+  > .ant-collapse-item
+  > .ant-collapse-panel
+  > .ant-collapse-body
+  > .inspection-category-items {
+  padding-left: 24px;
+}
+
+.animal-management-workspace .inspection-subsection-state.ant-tag {
   margin-inline-end: 0;
+}
+
+.animal-management-workspace .inspection-subsection-label .inspection-all-normal {
+  margin-left: auto;
+  padding-inline: 4px;
+}
+
+.animal-management-workspace .inspection-subsection + .inspection-subsection {
+  border-top: 1px dashed #f0f0f0;
+}
+
+.animal-management-workspace .inspection-subsection .inspection-category-items {
+  padding-left: 10px;
+  border-left: 1px solid #f0f0f0;
+}
+
+.animal-management-workspace .inspection-subsection .inspection-node {
+  padding-inline: 12px;
 }
 
 .animal-management-workspace .inspection-node {
@@ -1656,10 +1628,19 @@
 }
 
 @media (width <= 760px) {
+  .ant-workspace
+    .inspection-module-card
+    .inspection-section-collapse
+    > .ant-collapse-item
+    > .ant-collapse-panel
+    > .ant-collapse-body {
+    padding: 0 0 0 24px !important;
+  }
+
   .animal-management-workspace .inspection-context-panel > .ant-card-body,
   .animal-management-workspace .inspection-list-panel > .ant-card-body,
   .animal-management-workspace .inspection-standards-panel > .ant-card-body,
-  .animal-management-workspace .inspection-category {
+  .animal-management-workspace .inspection-section {
     padding: 16px;
   }
 
@@ -1677,19 +1658,35 @@
     min-height: 48px;
   }
 
-  .animal-management-workspace .inspection-body-region-collapse > .ant-collapse-item > .ant-collapse-header {
+  .animal-management-workspace .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
     padding: 10px 12px;
   }
 
-  .animal-management-workspace .inspection-body-region-label-main {
+  .animal-management-workspace .inspection-section-label-main {
     flex: 1;
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
   }
 
-  .animal-management-workspace .inspection-body-region-label-main .ant-tag {
+  .animal-management-workspace .inspection-section-label-main .ant-tag {
     max-width: 100%;
+  }
+
+  .animal-management-workspace .inspection-subsection {
+    padding: 8px 12px 4px 16px;
+  }
+
+  .ant-workspace .inspection-module-card .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+    padding: 10px 12px 10px 32px;
+  }
+
+  .animal-management-workspace .inspection-subsection .inspection-category-items {
+    padding-left: 8px;
+  }
+
+  .animal-management-workspace .inspection-subsection .inspection-node {
+    padding-inline: 8px;
   }
 
   .animal-management-workspace .inspection-node-main {
@@ -1715,30 +1712,30 @@
     margin-inline-end: 0;
   }
 
-  .inspection-body-region-collapse > .ant-collapse-item > .ant-collapse-header {
+  .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
     padding: 10px 12px;
   }
 
-  .inspection-body-region-label {
+  .inspection-section-label {
     align-items: flex-start;
     gap: 8px;
   }
 
-  .inspection-body-region-label-main {
+  .inspection-section-label-main {
     flex: 1;
     flex-direction: column;
     align-items: flex-start;
     gap: 1px;
   }
 
-  .inspection-body-region-label-main span {
+  .inspection-section-label-main span {
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .inspection-body-region-count {
+  .inspection-section-count {
     display: none;
   }
 }

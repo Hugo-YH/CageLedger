@@ -78,19 +78,28 @@ const ABNORMAL_BODY_REGIONS: BodyRegionDefinition[] = [
     name: "整体状态与行为",
     description: "精神、姿态、活动、体况与呼吸",
     categoryCodes: ["abnormal_01", "abnormal_02"],
+    subcategoryCodes: ["abnormal_01_02", "abnormal_02_01", "abnormal_02_02"],
+  },
+  {
+    key: "fur-skin",
+    name: "被毛/皮肤",
+    description: "全身被毛、皮肤与皮下状态",
+    categoryCodes: ["abnormal_01", "abnormal_03", "abnormal_06", "abnormal_07"],
+    subcategoryCodes: ["abnormal_01_01", "abnormal_03_02", "abnormal_06_01", "abnormal_07_01"],
   },
   {
     key: "head-neck",
     name: "头颈部",
-    description: "被毛/皮肤、耳朵、眼睛、口部与鼻子",
+    description: "耳朵、眼睛、口部与鼻子",
     categoryCodes: ["abnormal_06"],
+    subcategoryCodes: ["abnormal_06_02", "abnormal_06_03", "abnormal_06_04", "abnormal_06_05", "abnormal_06_06"],
   },
   {
     key: "thorax-abdomen",
     name: "胸腹部",
     description: "胸部与腹部外观、整体状态",
     categoryCodes: ["abnormal_07", "abnormal_03"],
-    subcategoryCodes: ["abnormal_07", "abnormal_03_02", "abnormal_03_03"],
+    subcategoryCodes: ["abnormal_07_02", "abnormal_03_03"],
   },
   {
     key: "limbs",
@@ -130,6 +139,43 @@ function nodeLineage(item: InspectionCatalogNode, nodesById: Map<string, Inspect
   return lineage;
 }
 
+const FUR_SKIN_GROUPS: Array<{ key: string; name: string; match: (name: string) => boolean }> = [
+  {
+    key: "fur",
+    name: "被毛",
+    match: (name) => name.includes("被毛") || name.includes("脱毛"),
+  },
+  {
+    key: "skin",
+    name: "皮肤",
+    match: () => true,
+  },
+];
+
+function furSkinGroup(itemName: string) {
+  const group = FUR_SKIN_GROUPS.find((candidate) => candidate.match(itemName)) || FUR_SKIN_GROUPS[1];
+  return { key: group.key, name: group.name };
+}
+
+function renameFurSkinItemName(name: string) {
+  if (name === "皮下肿胀") return "皮下肿瘤";
+  if (name === "皮下多处肿胀") return "皮下肿胀";
+  return name;
+}
+
+const OVERALL_GROUP_OVERRIDES: Record<string, { name: string; sortOrder: number }> = {
+  abnormal_01_02: { name: "形体状态", sortOrder: 0 },
+};
+
+const HEAD_NECK_GROUP_OVERRIDES: Record<string, { name: string; sortOrder: number }> = {
+  abnormal_06_04: { name: "头部", sortOrder: 0 },
+};
+
+const THORAX_ABDOMEN_GROUP_OVERRIDES: Record<string, { name: string; sortOrder: number }> = {
+  abnormal_07_02: { name: "呼吸状态", sortOrder: 0 },
+  abnormal_03_03: { name: "胸部", sortOrder: 1 },
+};
+
 /**
  * Reorders abnormal-animal checks for field inspection while preserving catalog IDs and answer keys.
  */
@@ -152,16 +198,43 @@ export function abnormalAnimalBodyRegions(nodes: InspectionCatalogNode[]): Inspe
           )),
     );
     if (!region) continue;
+    if (region.key === "fur-skin" && item.name === "肿胀") continue;
+    if (item.code === "abnormal_06_05_01") continue;
+    if (item.code === "abnormal_06_06_03") continue;
 
     const groups = regionGroups.get(region.key) || new Map<string, InspectionItemGroup & { sortOrder: number }>();
-    const group = groups.get(subcategory.code) || {
-      key: subcategory.code,
-      name: subcategory.name,
+    const itemName = region.key === "fur-skin" ? renameFurSkinItemName(item.name) : item.name;
+    const groupOverride =
+      region.key === "overall"
+        ? OVERALL_GROUP_OVERRIDES[subcategory.code]
+        : region.key === "head-neck"
+          ? HEAD_NECK_GROUP_OVERRIDES[subcategory.code]
+          : region.key === "thorax-abdomen"
+            ? THORAX_ABDOMEN_GROUP_OVERRIDES[subcategory.code]
+            : undefined;
+    const { key: groupKey, name: groupName } = groupOverride
+      ? { key: subcategory.code, name: groupOverride.name }
+      : region.key === "fur-skin"
+        ? furSkinGroup(itemName)
+        : { key: subcategory.code, name: subcategory.name };
+    const group = groups.get(groupKey) || {
+      key: groupKey,
+      name: groupName,
       items: [],
-      sortOrder: subcategory.sortOrder || 0,
+      sortOrder:
+        region.key === "fur-skin"
+          ? FUR_SKIN_GROUPS.findIndex((candidate) => candidate.key === groupKey)
+          : groupOverride
+            ? groupOverride.sortOrder
+            : subcategory.sortOrder || 0,
     };
-    group.items.push(item);
-    groups.set(subcategory.code, group);
+    if (
+      region.key !== "fur-skin" ||
+      !group.items.some((existing) => renameFurSkinItemName(existing.name) === itemName)
+    ) {
+      group.items.push(itemName === item.name ? item : { ...item, name: itemName });
+    }
+    groups.set(groupKey, group);
     regionGroups.set(region.key, groups);
   }
 

@@ -132,8 +132,9 @@ describe("animal inspection model", () => {
     ];
 
     const regions = abnormalAnimalBodyRegions(abnormalNodes);
-    expect(regions.map((region) => region.name)).toEqual(["头颈部", "胸腹部", "繁殖与肛周"]);
-    expect(regions[1].groups.flatMap((group) => group.items).map((item) => item.code)).toEqual(
+    expect(regions.map((region) => region.name)).toEqual(["被毛/皮肤", "头颈部", "繁殖与肛周"]);
+    expect(regions[0].groups.map((group) => group.name)).toEqual(["皮肤"]);
+    expect(regions[0].groups.flatMap((group) => group.items).map((item) => item.code)).toEqual(
       expect.arrayContaining(["abnormal_03_02_01", "abnormal_07_01_01"]),
     );
     expect(regions[2].groups[0].items[0].code).toBe("abnormal_03_01_01");
