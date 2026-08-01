@@ -171,23 +171,24 @@ export function IntakeBatchList({
           scroll={{ x: 998 }}
         />
       </div>
-      <Flex className="intake-list-pagination" justify="flex-end">
-        <Pagination
-          current={page}
-          pageSize={pageSize}
-          pageSizeOptions={[5, 10, 20, 50]}
-          showQuickJumper
-          showSizeChanger={{ "aria-label": "每页显示条数" }}
-          showTotal={(count) => `共 ${count} 条`}
-          total={total}
-          onChange={(nextPage, nextSize) => {
-            if (nextSize !== pageSize) {
-              onPageSize(nextSize);
-              return;
-            }
-            onPage(nextPage);
-          }}
-        />
+      <Flex align="center" className="intake-list-pagination" justify="space-between" wrap>
+        <Typography.Text type="secondary">共 {total} 条</Typography.Text>
+        <div className="intake-pagination-scroll">
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            pageSizeOptions={[5, 10, 20, 50]}
+            showSizeChanger={{ "aria-label": "每页显示条数" }}
+            total={total}
+            onChange={(nextPage, nextSize) => {
+              if (nextSize !== pageSize) {
+                onPageSize(nextSize);
+                return;
+              }
+              onPage(nextPage);
+            }}
+          />
+        </div>
       </Flex>
     </Card>
   );

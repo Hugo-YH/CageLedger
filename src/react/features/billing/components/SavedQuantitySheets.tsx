@@ -230,26 +230,27 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           rowKey="id"
         />
       </div>
-      <Flex className="quantity-saved-pagination" justify="flex-end">
-        <Pagination
-          current={page}
-          onChange={(nextPage, nextPageSize) => {
-            if (nextPageSize !== pageSize) {
-              setPageSize(nextPageSize);
-              setPage(1);
-              setSelected([]);
-              setAllFilteredSelected(false);
-              return;
-            }
-            setPage(nextPage);
-          }}
-          pageSize={pageSize}
-          pageSizeOptions={[5, 10, 20, 50]}
-          showQuickJumper
-          showSizeChanger={{ "aria-label": "每页显示条数" }}
-          showTotal={(count) => `共 ${count} 条`}
-          total={total}
-        />
+      <Flex align="center" className="quantity-saved-pagination" justify="space-between" wrap>
+        <Typography.Text type="secondary">共 {total} 条</Typography.Text>
+        <div className="quantity-saved-pagination-scroll">
+          <Pagination
+            current={page}
+            onChange={(nextPage, nextPageSize) => {
+              if (nextPageSize !== pageSize) {
+                setPageSize(nextPageSize);
+                setPage(1);
+                setSelected([]);
+                setAllFilteredSelected(false);
+                return;
+              }
+              setPage(nextPage);
+            }}
+            pageSize={pageSize}
+            pageSizeOptions={[5, 10, 20, 50]}
+            showSizeChanger={{ "aria-label": "每页显示条数" }}
+            total={total}
+          />
+        </div>
       </Flex>
       {viewId ? (
         <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
