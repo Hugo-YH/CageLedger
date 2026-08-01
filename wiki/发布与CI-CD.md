@@ -19,6 +19,8 @@ release notes
 
 版本号、提交、tag、Release、离线包和镜像保持一一对应。
 
+Git tag 使用 `v<version>`（例如 `v1.0.0-beta7`）遵循 Git 惯例；容器镜像 tag 使用 `<version>-<build>`（例如 `1.0.0-beta7-7ad0294`），其中 `<build>` 为发布提交的 Git 短 SHA，与系统内显示的 build 一致。
+
 容器镜像构建与推送是发布产物的固定组成部分。`--skip-container-publish` 只在交互式终端输入 `yes` 明确确认后才生效；非交互环境（脚本、CI、代理）不允许跳过，缺少 Docker 时发布流程直接失败并提示先启动 Docker。
 
 ## 版本与构建标识

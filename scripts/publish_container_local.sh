@@ -95,14 +95,14 @@ docker buildx version >/dev/null 2>&1 || {
 
 IMAGE_REPO="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}"
 BASE_REPO="${REGISTRY}/${NAMESPACE}/${BASE_IMAGE_NAME}"
-TAG="v${VERSION}"
+GIT_TAG="v${VERSION}"
 LATEST_TAG="latest"
 SOURCE_REF="HEAD"
 
 cd "${ROOT}"
 
-if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  SOURCE_REF="refs/tags/${TAG}"
+if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
+  SOURCE_REF="refs/tags/${GIT_TAG}"
 fi
 
 if [[ "${SOURCE_REF}" == "HEAD" ]]; then
@@ -130,6 +130,8 @@ trap cleanup EXIT
 
 git worktree add --detach "${WORKTREE_DIR}" "${SOURCE_REF}" >/dev/null
 REVISION="$(git -C "${WORKTREE_DIR}" rev-parse HEAD)"
+REVISION_SHORT="${REVISION:0:7}"
+IMAGE_TAG="${VERSION}-${REVISION_SHORT}"
 
 docker buildx build \
   --platform linux/arm64 \
@@ -137,7 +139,7 @@ docker buildx build \
   --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
   --build-arg CAGELEDGER_APP_VERSION="${VERSION}" \
   --build-arg CAGELEDGER_REVISION="${REVISION}" \
-  -t "${IMAGE_REPO}:${TAG}-arm64" \
+  -t "${IMAGE_REPO}:${IMAGE_TAG}-arm64" \
   --push \
   "${WORKTREE_DIR}"
 
@@ -147,14 +149,14 @@ docker buildx build \
   --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
   --build-arg CAGELEDGER_APP_VERSION="${VERSION}" \
   --build-arg CAGELEDGER_REVISION="${REVISION}" \
-  -t "${IMAGE_REPO}:${TAG}-amd64" \
+  -t "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
   --push \
   "${WORKTREE_DIR}"
 
 docker buildx imagetools create \
-  -t "${IMAGE_REPO}:${TAG}" \
-  "${IMAGE_REPO}:${TAG}-amd64" \
-  "${IMAGE_REPO}:${TAG}-arm64" >/dev/null
+  -t "${IMAGE_REPO}:${IMAGE_TAG}" \
+  "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
+  "${IMAGE_REPO}:${IMAGE_TAG}-arm64" >/dev/null
 
 verify_multi_arch_manifest() {
   local image_ref="$1"
@@ -164,25 +166,26 @@ verify_multi_arch_manifest() {
   grep -q 'Platform:.*linux/arm64' <<<"${manifest}"
 }
 
-verify_multi_arch_manifest "${IMAGE_REPO}:${TAG}"
+verify_multi_arch_manifest "${IMAGE_REPO}:${IMAGE_TAG}"
 
 # latest is a moving alias of the newest successfully verified release manifest.
 docker buildx imagetools create \
   -t "${IMAGE_REPO}:${LATEST_TAG}" \
-  "${IMAGE_REPO}:${TAG}" >/dev/null
+  "${IMAGE_REPO}:${IMAGE_TAG}" >/dev/null
 
 verify_multi_arch_manifest "${IMAGE_REPO}:${LATEST_TAG}"
 
 if [[ "${EXPORT_OFFLINE_IMAGES}" -eq 1 ]]; then
   bash "${ROOT}/scripts/package_offline_image.sh" \
     --version "${VERSION}" \
+    --tag "${IMAGE_TAG}" \
     --registry "${REGISTRY}" \
     --namespace "${NAMESPACE}" \
     --image-name "${IMAGE_NAME}" >/dev/null
 fi
 
 printf '%s\n%s\n%s\n%s\n' \
-  "${IMAGE_REPO}:${TAG}" \
-  "${IMAGE_REPO}:${TAG}-amd64" \
-  "${IMAGE_REPO}:${TAG}-arm64" \
+  "${IMAGE_REPO}:${IMAGE_TAG}" \
+  "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
+  "${IMAGE_REPO}:${IMAGE_TAG}-arm64" \
   "${IMAGE_REPO}:${LATEST_TAG}"
