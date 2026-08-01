@@ -49,7 +49,7 @@ export function IntakeView({
   const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);
   const [selectingAll, setSelectingAll] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
-  const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName));
+  const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName, user.phone));
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
   const [notice, setNotice] = useState("");
@@ -119,6 +119,7 @@ export function IntakeView({
           ...draft,
           ...normalized,
           id: isEditingSavedBatch ? draft.id : String(normalized.id || draft.id),
+          vetPhone: normalized.vetPhone || (isEditingSavedBatch ? draft.vetPhone : user.phone),
           project: match?.project || normalized.project,
           pi: match?.pi || normalized.pi,
           owner: match?.owner || normalized.owner,
@@ -149,7 +150,7 @@ export function IntakeView({
         setNotice("待接收批次已更新。");
         return;
       }
-      setDraft(createIntakeDraft(user.displayName));
+      setDraft(createIntakeDraft(user.displayName, user.phone));
       setEditing(false);
       setNotice(`待接收批次 ${response.item.batchNo} 已保存，可继续录入下一批。`);
     } catch (error) {
@@ -158,7 +159,7 @@ export function IntakeView({
   }
 
   function startNew() {
-    setDraft(createIntakeDraft(user.displayName));
+    setDraft(createIntakeDraft(user.displayName, user.phone));
     setEditing(false);
     setNotice("");
   }

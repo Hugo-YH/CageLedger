@@ -24,13 +24,14 @@ def has_any_user(conn):
 def insert_user(conn, user):
     conn.execute(
         """
-        INSERT INTO users (id, username, display_name, password_hash, role, room_ids, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, username, display_name, phone, password_hash, role, room_ids, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             user["id"],
             user["username"],
             user["display_name"],
+            user["phone"],
             user["password_hash"],
             user["role"],
             user["room_ids"],
@@ -41,25 +42,25 @@ def insert_user(conn, user):
     )
 
 
-def update_user_with_password(conn, user_id, username, display_name, password_hash, role, room_ids, updated_at):
+def update_user_with_password(conn, user_id, username, display_name, phone, password_hash, role, room_ids, updated_at):
     conn.execute(
         """
         UPDATE users
-        SET username = ?, display_name = ?, password_hash = ?, role = ?, room_ids = ?, updated_at = ?
+        SET username = ?, display_name = ?, phone = ?, password_hash = ?, role = ?, room_ids = ?, updated_at = ?
         WHERE id = ?
         """,
-        (username, display_name, password_hash, role, room_ids, updated_at, user_id),
+        (username, display_name, phone, password_hash, role, room_ids, updated_at, user_id),
     )
 
 
-def update_user_without_password(conn, user_id, username, display_name, role, room_ids, updated_at):
+def update_user_without_password(conn, user_id, username, display_name, phone, role, room_ids, updated_at):
     conn.execute(
         """
         UPDATE users
-        SET username = ?, display_name = ?, role = ?, room_ids = ?, updated_at = ?
+        SET username = ?, display_name = ?, phone = ?, role = ?, room_ids = ?, updated_at = ?
         WHERE id = ?
         """,
-        (username, display_name, role, room_ids, updated_at, user_id),
+        (username, display_name, phone, role, room_ids, updated_at, user_id),
     )
 
 

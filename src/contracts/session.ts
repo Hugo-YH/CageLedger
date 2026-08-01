@@ -4,6 +4,7 @@ export interface SessionUser {
   id: string;
   username: string;
   displayName: string;
+  phone: string;
   role: UserRole;
   roomIds: string[];
   active: boolean;

@@ -16,6 +16,12 @@ def ensure_animal_inspection_finding_location_schema(conn):
             conn.execute(f"ALTER TABLE animal_inspection_findings ADD COLUMN {column} {column_type}")
 
 
+def ensure_users_phone_column(conn):
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "phone" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+
+
 def backfill_quantity_sheet_staff(conn, room_ids=None):
     ensure_animal_inspection_finding_location_schema(conn)
     room_filter = {clean_text(item) for item in (room_ids or []) if clean_text(item)}

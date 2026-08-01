@@ -469,6 +469,7 @@ def initialize_base_schema(
             id TEXT PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
             display_name TEXT NOT NULL,
+            phone TEXT,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL,
             room_ids TEXT NOT NULL,

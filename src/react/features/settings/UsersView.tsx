@@ -11,6 +11,7 @@ import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 const emptyDraft = {
   username: "",
   displayName: "",
+  phone: "",
   password: "",
   role: "room_admin" as UserRole,
   roomIds: [] as string[],
@@ -175,7 +176,29 @@ function UserEditor({
 }) {
   const [draft, setDraft] = useState<UserDraft>(() => userDraft(user));
   useEffect(() => setDraft(userDraft(user)), [user]);
-  if (current) return <Typography.Text type="secondary">当前登录账号由此处只读展示。</Typography.Text>;
+  if (current)
+    return (
+      <div className="settings-user-editor">
+        <Typography.Text type="secondary">
+          当前登录账号仅可维护联系电话，登录名、显示姓名与角色由其他管理员账号管理。
+        </Typography.Text>
+        <Form className="user-fields-react" layout="vertical" requiredMark={false}>
+          <Form.Item htmlFor="managed-user-phone" label="联系电话">
+            <Input
+              id="managed-user-phone"
+              value={draft.phone}
+              placeholder="用于预约消息识别的联系电话"
+              onChange={(event) => setDraft({ ...draft, phone: event.target.value })}
+            />
+          </Form.Item>
+        </Form>
+        <Space className="form-actions">
+          <Button type="primary" loading={pending} onClick={() => void onSave({ phone: draft.phone })}>
+            保存联系电话
+          </Button>
+        </Space>
+      </div>
+    );
   return (
     <div className="settings-user-editor">
       <UserFields draft={draft} rooms={rooms} onChange={setDraft} />
@@ -195,6 +218,7 @@ function userDraft(user: ManagedUser): UserDraft {
   return {
     username: user.username,
     displayName: user.displayName,
+    phone: user.phone || "",
     password: "",
     role: user.role,
     roomIds: [...user.roomIds],
@@ -227,6 +251,14 @@ function UserFields({
           id="managed-user-display-name"
           value={draft.displayName}
           onChange={(event) => update("displayName", event.target.value)}
+        />
+      </Form.Item>
+      <Form.Item htmlFor="managed-user-phone" label="联系电话">
+        <Input
+          id="managed-user-phone"
+          value={draft.phone}
+          placeholder="用于预约消息识别的联系电话"
+          onChange={(event) => update("phone", event.target.value)}
         />
       </Form.Item>
       <Form.Item

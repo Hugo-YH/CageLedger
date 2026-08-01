@@ -193,7 +193,7 @@ export function IntakeEntryPanel({
               />
             </Col>
             <Col lg={8} md={12} xs={24}>
-              <Field label="兽医电话" value={draft.vetPhone} onChange={(value) => onUpdate("vetPhone", value)} />
+              <Field label="联系电话" value={draft.vetPhone} onChange={(value) => onUpdate("vetPhone", value)} />
             </Col>
             <Col lg={12} md={12} xs={24}>
               <Field

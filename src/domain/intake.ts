@@ -137,8 +137,8 @@ export function defaultAnimalsPerCage(species: string) {
   return species === "rat" ? 4 : 5;
 }
 
-export function createIntakeDraft(receiverName = ""): IntakeBatch {
-  return normalizeIntakeBatch({ id: createClientId(), receiverName, status: "pending_print" });
+export function createIntakeDraft(receiverName = "", phone = ""): IntakeBatch {
+  return normalizeIntakeBatch({ id: createClientId(), receiverName, vetPhone: phone, status: "pending_print" });
 }
 
 export function missingIntakeRequiredFields(item: IntakeBatch) {

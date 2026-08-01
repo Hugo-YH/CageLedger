@@ -520,6 +520,7 @@ def migrate_schema(conn):
     backfill_billing_workflow_scope(conn)
     migrate_reimbursement_record_schema(conn)
     backfills.backfill_quantity_sheet_staff(conn)
+    backfills.ensure_users_phone_column(conn)
 
 
 def ensure_experiment_applications_duplicate_schema(conn):
