@@ -8,3 +8,4 @@ src/vendor/
 web-dist/
 wiki/.vitepress/cache/
 wiki/.vitepress/dist/
+server_app/resources/intake/mgi-strain-index.json

@@ -14,11 +14,13 @@ from pathlib import Path
 from typing import Any
 
 _ALIAS_PATH = Path(__file__).resolve().parent.parent.parent / "resources" / "intake" / "mgi-strain-aliases.json"
+_INDEX_PATH = Path(__file__).resolve().parent.parent.parent / "resources" / "intake" / "mgi-strain-index.json"
 _SEPARATOR_RE = re.compile(r"[\s\-_/\\.,;:·（）()【】\[\]<>]+")
 _TRAILING_MOUSE_RE = re.compile(r"(小鼠|小白鼠|mouse|mice)$")
 
 _entries: list[dict[str, Any]] | None = None
 _alias_map: dict[str, str] | None = None
+_index_map: dict[str, str] | None = None
 
 
 def normalize_strain_key(raw: str) -> str:
@@ -46,6 +48,14 @@ def _alias_map_cached() -> dict[str, str]:
     return _alias_map
 
 
+def _index_map_cached() -> dict[str, str]:
+    global _index_map
+    if _index_map is None:
+        data = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
+        _index_map = {key: name for key, name in data["entries"]}
+    return _index_map
+
+
 def standardize_strain(raw: str) -> str:
     """Return the standard strain name for a known alias, or empty string."""
     key = normalize_strain_key(raw)
@@ -55,7 +65,10 @@ def standardize_strain(raw: str) -> str:
     if key in alias_map:
         return alias_map[key]
     stripped = _TRAILING_MOUSE_RE.sub("", key)
-    return alias_map.get(stripped, "")
+    if stripped in alias_map:
+        return alias_map[stripped]
+    index_map = _index_map_cached()
+    return index_map.get(key) or index_map.get(stripped, "")
 
 
 _SUPPLIER_RULES: tuple[tuple[str, str], ...] = (

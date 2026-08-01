@@ -55,6 +55,10 @@ describe("intake message parser", () => {
       ["NOD/SCID", "NOD/SCID"],
       ["NSG小鼠", "NSG"],
       ["Rag2-/-", "Rag2-KO"],
+      ["BALB/cAnN-Foxn1<nu>", "BALB/cAnN-Foxn1<nu>"],
+      ["NOD.CB17-Prkdc<scid>/NcrCrl", "NOD.CB17-Prkdc<scid>/NcrCrl"],
+      ["B6.Cg-Foxn1<nu>/J", "B6.Cg-Foxn1<nu>/J"],
+      ["101", "101"],
       ["某新品系", ""],
     ];
     for (const [raw, expected] of cases) {

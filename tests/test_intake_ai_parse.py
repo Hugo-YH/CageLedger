@@ -154,6 +154,21 @@ class StrainStandardTest(unittest.TestCase):
         self.assertEqual(standardize_strain("某新品系"), "")
         self.assertEqual(standardize_strain(""), "")
 
+    def test_full_mgi_index_fallback(self):
+        cases = {
+            "BALB/cAnN-Foxn1<nu>": "BALB/cAnN-Foxn1<nu>",
+            "NOD.CB17-Prkdc<scid>/NcrCrl": "NOD.CB17-Prkdc<scid>/NcrCrl",
+            "B6.Cg-Foxn1<nu>/J": "B6.Cg-Foxn1<nu>/J",
+            "101": "101",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(standardize_strain(raw), expected)
+
+    def test_curated_aliases_win_over_full_index(self):
+        self.assertEqual(standardize_strain("NOD.Cg-Prkdc<scid> Il2rg<tm1Wjl>/SzJ"), "NSG")
+        self.assertEqual(standardize_strain("B6.129S7-Rag1<tm1Mom>/J"), "Rag1-KO")
+
     def test_supplier_abbreviation(self):
         cases = {
             "广东南模生物科技股份有限公司": "广东南模",
