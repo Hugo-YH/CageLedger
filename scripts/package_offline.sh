@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(node -p "require('${ROOT}/package.json').version")"
 OUT_DIR="${ROOT}/dist"
-PACKAGE_NAME="CageLedger-offline-v${VERSION}.tar.gz"
+PACKAGE_NAME="CageLedger-offline-${VERSION}.tar.gz"
 
 cd "${ROOT}"
 npm run build >/dev/null

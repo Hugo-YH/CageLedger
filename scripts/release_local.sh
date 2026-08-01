@@ -169,7 +169,7 @@ if [[ "$FULL_VERIFY" -eq 1 ]]; then
 else
   run npm run check
 fi
-OFFLINE_PACKAGE_PATH="${ROOT}/dist/CageLedger-offline-v${VERSION}.tar.gz"
+OFFLINE_PACKAGE_PATH="${ROOT}/dist/CageLedger-offline-${VERSION}.tar.gz"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "+ npm run package:offline"
 else

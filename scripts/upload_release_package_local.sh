@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/upload_release_package_local.sh --version 0.7.6 --package /absolute/path/to/CageLedger-offline-v0.7.6.tar.gz
+  bash scripts/upload_release_package_local.sh --version 0.7.6 --package /absolute/path/to/CageLedger-offline-0.7.6.tar.gz
 
 Options:
   --version <ver>    Release version without the v prefix.

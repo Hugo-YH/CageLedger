@@ -74,8 +74,8 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 
 1. 同步 `cageledger-base` 的多架构 tag
 2. 从干净的 tag 或 HEAD worktree 构建 `amd64` 和 `arm64`
-3. 推送 `git.cellnucle.us/hugo/cageledger:vX.Y.Z`
-4. 将已验证的 `vX.Y.Z` 多架构 manifest 同步为 `latest`
+3. 推送 `git.cellnucle.us/hugo/cageledger:X.Y.Z-<build>`
+4. 将已验证的 `X.Y.Z-<build>` 多架构 manifest 同步为 `latest`
 5. 导出 `dist/` 下的离线镜像 tar.gz
 
 ## 凭据
