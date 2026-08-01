@@ -41,7 +41,7 @@ import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
 import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspectionId } from "./model";
 
-const pageSize = 20;
+const pageSize = 10;
 
 export function InspectionRecords({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const isMobile = useIsMobileLayout();

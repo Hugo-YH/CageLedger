@@ -10,7 +10,7 @@ import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
 export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) => void; user: SessionUser }) {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const query = useAuditEvents(pageSize, (page - 1) * pageSize);
   const total = query.data?.page.total || 0;
   const columns: ColumnsType<AuditEvent> = [

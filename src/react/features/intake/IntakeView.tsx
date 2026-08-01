@@ -43,7 +43,7 @@ export function IntakeView({
   const bootstrap = useBootstrap("summary");
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);

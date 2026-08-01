@@ -18,7 +18,7 @@ import { usePdfExport } from "../hooks/usePdfExport";
 
 export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet) => void }) {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selected, setSelected] = useState<string[]>([]);

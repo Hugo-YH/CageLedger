@@ -25,7 +25,7 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
   const [filter, setFilter] = useState("");
   const deferredFilter = useDeferredValue(filter);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(12);
+  const [pageSize, setPageSize] = useState(10);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [uploading, setUploading] = useState("");
   const rows = (identities.data?.items || []).filter((item) =>
