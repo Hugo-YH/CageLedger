@@ -6,6 +6,13 @@ from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
 from server_app.shared import clean_text, new_id, now_iso
 
+from .listing import (
+    CLAIM_LIST_COLUMNS,
+    LEGACY_LIST_COLUMNS,
+    OBLIGATION_LIST_COLUMNS,
+    list_column_where,
+    list_sort_order,
+)
 from .repository import (
     allocation_payload as _allocation_payload,
 )
@@ -72,11 +79,15 @@ def list_obligations(conn, actor, filters):
     _require_authenticated(actor)
     sync_settlement_obligations(conn)
     clauses, params = _obligation_filters(filters)
+    column_clauses, column_params = list_column_where(filters, OBLIGATION_LIST_COLUMNS)
+    clauses.extend(column_clauses)
+    params.extend(column_params)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     total = conn.execute(f"SELECT COUNT(*) FROM reimbursement_settlement_obligations{where}", params).fetchone()[0]
     rows = conn.execute(
         f"""SELECT * FROM reimbursement_settlement_obligations{where}
-            ORDER BY month DESC, source_pi COLLATE NOCASE, iacuc, updated_at DESC LIMIT ? OFFSET ?""",
+            ORDER BY {list_sort_order(filters, OBLIGATION_LIST_COLUMNS, "month DESC, source_pi COLLATE NOCASE, iacuc, updated_at DESC")}
+            LIMIT ? OFFSET ?""",
         (*params, _limit(filters), _offset(filters)),
     ).fetchall()
     return {"items": [_obligation_payload(conn, row) for row in rows], "page": _page(filters, total)}
@@ -109,10 +120,15 @@ def list_claims(conn, actor, filters):
     if actor.get("role") != "admin":
         clauses.append("created_by = ?")
         params.append(actor["id"])
+    column_clauses, column_params = list_column_where(filters, CLAIM_LIST_COLUMNS)
+    clauses.extend(column_clauses)
+    params.extend(column_params)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     total = conn.execute(f"SELECT COUNT(*) FROM reimbursement_claims{where}", params).fetchone()[0]
     rows = conn.execute(
-        f"SELECT * FROM reimbursement_claims{where} ORDER BY updated_at DESC, rowid DESC LIMIT ? OFFSET ?",
+        f"""SELECT * FROM reimbursement_claims{where}
+            ORDER BY {list_sort_order(filters, CLAIM_LIST_COLUMNS, "updated_at DESC, rowid DESC")}
+            LIMIT ? OFFSET ?""",
         (*params, _limit(filters), _offset(filters)),
     ).fetchall()
     return {"items": [_claim_payload(conn, row, include_detail=False) for row in rows], "page": _page(filters, total)}
@@ -421,11 +437,15 @@ def get_attachment(conn, actor, attachment_id):
 def list_legacy_records(conn, actor, filters):
     _require_authenticated(actor)
     limit, offset = _limit(filters), _offset(filters)
+    clauses, params = list_column_where(filters, LEGACY_LIST_COLUMNS)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
-        "SELECT payload FROM reimbursement_records ORDER BY month DESC, latest_event_at DESC, rowid DESC LIMIT ? OFFSET ?",
-        (limit, offset),
+        f"""SELECT payload FROM reimbursement_records{where}
+            ORDER BY {list_sort_order(filters, LEGACY_LIST_COLUMNS, "month DESC, latest_event_at DESC, rowid DESC")}
+            LIMIT ? OFFSET ?""",
+        (*params, limit, offset),
     ).fetchall()
-    total = conn.execute("SELECT COUNT(*) FROM reimbursement_records").fetchone()[0]
+    total = conn.execute(f"SELECT COUNT(*) FROM reimbursement_records{where}", params).fetchone()[0]
     items = []
     for row in rows:
         item = json.loads(row["payload"])

@@ -1,6 +1,8 @@
 import { Button, Checkbox, Input, Popover, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import { useContext } from "react";
+import TableMeasureRowContext from "antd/es/table/TableMeasureRowContext";
 
 export interface TableFilterOption {
   value: string;
@@ -13,6 +15,7 @@ export interface FilterableColumnTitleProps {
   values: string[];
   options: TableFilterOption[];
   loading?: boolean;
+  filterable?: boolean;
   onOpenChange?: (open: boolean) => void;
   onSort: () => void;
   onFilter: (values: string[]) => void;
@@ -23,6 +26,7 @@ export function FilterableColumnTitle({
   values,
   options,
   loading = false,
+  filterable = true,
   onOpenChange,
   onSort,
   onFilter,
@@ -30,9 +34,16 @@ export function FilterableColumnTitle({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState(values);
+  const inMeasureRow = useContext(TableMeasureRowContext);
   useEffect(() => {
     onOpenChange?.(open);
   }, [onOpenChange, open]);
+
+  // antd clones header titles into an aria-hidden measure row for width
+  // tracking; keep that clone inert instead of duplicating focusable controls.
+  if (inMeasureRow) {
+    return <span className="filterable-column-title">{label}</span>;
+  }
 
   const visibleOptions = options.filter((option) =>
     `${option.label} ${option.value}`.toLocaleLowerCase("zh-CN").includes(search.trim().toLocaleLowerCase("zh-CN")),
@@ -100,17 +111,19 @@ export function FilterableColumnTitle({
       >
         <span>{label}</span>
       </Button>
-      <Popover content={content} open={open} placement="bottomLeft" trigger="click" onOpenChange={setPopoverOpen}>
-        <Button
-          className="table-filter-button"
-          icon={<FilterOutlined />}
-          size="small"
-          type="text"
-          aria-label={`筛选${label}`}
-          aria-pressed={values.length > 0}
-          onClick={(event) => event.stopPropagation()}
-        />
-      </Popover>
+      {filterable ? (
+        <Popover content={content} open={open} placement="bottomLeft" trigger="click" onOpenChange={setPopoverOpen}>
+          <Button
+            className="table-filter-button"
+            icon={<FilterOutlined />}
+            size="small"
+            type="text"
+            aria-label={`筛选${label}`}
+            aria-pressed={values.length > 0}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </Popover>
+      ) : null}
     </span>
   );
 }

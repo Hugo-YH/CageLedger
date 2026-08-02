@@ -5104,7 +5104,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             with connect_db() as conn:
                 self.send_json(
-                    list_reimbursement_obligations(conn, user, self.list_filters(default_limit=20, max_limit=100))
+                    list_reimbursement_obligations(conn, user, self.list_filters(default_limit=20, max_limit=10000))
                 )
             return
         if path == "/api/reimbursement-ledger/claims":
@@ -5113,7 +5113,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             with connect_db() as conn:
                 self.send_json(
-                    list_reimbursement_claims(conn, user, self.list_filters(default_limit=20, max_limit=100))
+                    list_reimbursement_claims(conn, user, self.list_filters(default_limit=20, max_limit=10000))
                 )
             return
         if path == "/api/reimbursement-ledger/legacy-records":
@@ -5122,7 +5122,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             with connect_db() as conn:
                 self.send_json(
-                    list_reimbursement_legacy_records(conn, user, self.list_filters(default_limit=20, max_limit=100))
+                    list_reimbursement_legacy_records(conn, user, self.list_filters(default_limit=20, max_limit=10000))
                 )
             return
         attachment_id = self.reimbursement_attachment_route(path)
