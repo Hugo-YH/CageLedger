@@ -32,7 +32,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(
     page.locator("#intake-room").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("8014");
-  await page.getByRole("button", { name: "二维码扫描", exact: true }).click();
+  await page.getByRole("menuitem", { name: /二维码扫描/ }).click();
   await expect(page.getByRole("heading", { name: "识别笼卡", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "启动摄像头", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "返回笼卡管理", exact: true }).click();

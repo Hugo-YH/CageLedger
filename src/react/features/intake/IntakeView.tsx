@@ -310,7 +310,6 @@ export function IntakeView({
               >
                 保存待接收批次
               </AsyncActionButton>
-              <ActionButton onClick={() => navigate("cage-card-scanner")}>二维码扫描</ActionButton>
             </>
           ) : null
         }
