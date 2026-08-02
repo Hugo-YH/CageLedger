@@ -44,6 +44,7 @@ export function IntakeView({
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [aiParsing, setAiParsing] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);
@@ -79,6 +80,7 @@ export function IntakeView({
   }
 
   async function aiParseMessage() {
+    setAiParsing(true);
     try {
       const response = await aiParseIntakeMessage(draft.rawMessage, roomNames);
       const info = await applyParsedMessage(response.item);
@@ -87,6 +89,8 @@ export function IntakeView({
       setNotice(`预约消息已识别（AI）${usageText}${info.strainNote}，请核对批次信息。`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
+    } finally {
+      setAiParsing(false);
     }
   }
 
@@ -263,6 +267,7 @@ export function IntakeView({
           editing={editing}
           draft={draft}
           headActions={null}
+          aiPending={aiParsing}
           notice={notice}
           onAiParse={aiParseMessage}
           onParse={parseMessage}
@@ -321,6 +326,7 @@ export function IntakeView({
               roomNames={roomNames}
               notice={notice}
               saving={save.isPending}
+              aiPending={aiParsing}
               onSubmit={submit}
               headActions={null}
               onAiParse={aiParseMessage}
@@ -388,6 +394,7 @@ export function IntakeView({
               roomNames={roomNames}
               notice={notice}
               saving={save.isPending}
+              aiPending={aiParsing}
               onSubmit={submit}
               headActions={
                 <ActionButton loading={save.isPending} tone="primary" type="submit">

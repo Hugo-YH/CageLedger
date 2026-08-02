@@ -1,4 +1,5 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Button } from "antd";
 
 import type { QuantitySheetRow } from "../../../api/contracts";
 
@@ -231,15 +232,16 @@ const QuantityEntryCells = memo(
                 if (normalized) setDate(normalized, normalized);
               }}
             />
-            <button
-              className="quantity-date-picker-button"
-              type="button"
+            <Button
               aria-label={`选择第 ${index + 1} 行日期`}
+              className="quantity-date-picker-button"
+              htmlType="button"
+              icon={<CalendarIcon />}
+              size="small"
               tabIndex={-1}
+              type="text"
               onClick={() => pickerRef.current?.showPicker()}
-            >
-              <CalendarIcon />
-            </button>
+            />
             <input
               ref={pickerRef}
               className="quantity-date-picker-native"

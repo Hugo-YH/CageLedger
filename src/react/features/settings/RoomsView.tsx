@@ -89,7 +89,11 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
         switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
         actions={
           <Space>
-            {canManageRooms ? <Button onClick={() => setRoomDraft(newRoomDraft())}>新增饲养间</Button> : null}
+            {canManageRooms ? (
+              <Button type="primary" onClick={() => setRoomDraft(newRoomDraft())}>
+                新增饲养间
+              </Button>
+            ) : null}
             <Button
               type="primary"
               disabled={!visibleRooms.length}

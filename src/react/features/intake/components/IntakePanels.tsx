@@ -1,3 +1,4 @@
+import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
 
 import type { IntakeBatch, IntakeBatchStatus } from "../../../api/contracts";
@@ -21,6 +22,7 @@ export function IntakeEntryPanel({
   headActions,
   onParse,
   onAiParse,
+  aiPending,
   onPrint,
   onUpdate,
 }: {
@@ -33,6 +35,7 @@ export function IntakeEntryPanel({
   headActions?: React.ReactNode;
   onParse: () => void;
   onAiParse: () => void;
+  aiPending: boolean;
   onPrint: () => void;
   onUpdate: <K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) => void;
 }) {
@@ -53,7 +56,14 @@ export function IntakeEntryPanel({
               className="intake-recognition-card"
               extra={
                 <Space>
-                  <Button htmlType="button" onClick={onAiParse} size="small">
+                  <Button
+                    htmlType="button"
+                    icon={<RobotOutlined aria-hidden />}
+                    loading={aiPending}
+                    onClick={onAiParse}
+                    size="small"
+                    type="primary"
+                  >
                     AI识别
                   </Button>
                   <Button htmlType="button" onClick={onParse} size="small">
