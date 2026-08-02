@@ -131,7 +131,6 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             icon={<EyeOutlined aria-hidden />}
             loading={generate.isPending}
             size="small"
-            type="link"
             disabled={candidate.totalAmount == null}
             onClick={() => void generateFor(candidate, false)}
           >

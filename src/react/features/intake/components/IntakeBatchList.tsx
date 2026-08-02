@@ -115,15 +115,15 @@ export function IntakeBatchList({
     {
       key: "actions",
       title: "操作",
-      width: 92,
+      width: 118,
       align: "right",
       fixed: "right",
       render: (_, item) => (
         <Space className="table-actions" size={4}>
-          <Button size="small" type="link" onClick={() => onEdit(item)}>
+          <Button size="small" onClick={() => onEdit(item)}>
             编辑
           </Button>
-          <Button danger size="small" type="link" onClick={() => onDelete(item)}>
+          <Button danger size="small" onClick={() => onDelete(item)}>
             删除
           </Button>
         </Space>

@@ -137,17 +137,17 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     {
       key: "actions",
       title: "操作",
-      width: 152,
+      width: 186,
       align: "right",
       render: (_, item) => (
         <Space size={4} className="table-actions">
-          <Button size="small" type="link" onClick={() => setViewId(item.id)}>
+          <Button size="small" onClick={() => setViewId(item.id)}>
             预览
           </Button>
-          <Button size="small" type="link" onClick={() => setEditId(item.id)}>
+          <Button size="small" onClick={() => setEditId(item.id)}>
             编辑
           </Button>
-          <Button danger size="small" type="link" onClick={() => setDeleteId(item.id)}>
+          <Button danger size="small" onClick={() => setDeleteId(item.id)}>
             删除
           </Button>
         </Space>

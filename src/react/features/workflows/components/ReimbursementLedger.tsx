@@ -315,7 +315,7 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
       {selected ? (
         <Alert
           action={
-            <Button size="small" type="link" onClick={() => onOpenClaim(selected.id)}>
+            <Button size="small" onClick={() => onOpenClaim(selected.id)}>
               编辑报销单
             </Button>
           }
@@ -356,7 +356,7 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
                   </Button>
                 ) : null}
                 {user.role === "admin" && item.status === "confirmed" ? (
-                  <Button danger size="small" type="text" onClick={() => setReverseTarget(item.id)}>
+                  <Button danger size="small" onClick={() => setReverseTarget(item.id)}>
                     撤销
                   </Button>
                 ) : null}

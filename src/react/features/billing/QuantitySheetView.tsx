@@ -701,7 +701,7 @@ function CustomBillingSegmentsEditor({
               <strong>区间 {index + 1}</strong>
               <span>预估 ¥{estimateCustomBillingSegment(segment).toFixed(2)}</span>
             </div>
-            <Button danger size="small" type="link" onClick={() => onRemoved(segment.id)}>
+            <Button danger size="small" onClick={() => onRemoved(segment.id)}>
               删除
             </Button>
           </div>

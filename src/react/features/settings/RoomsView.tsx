@@ -133,11 +133,7 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
                         </Typography.Paragraph>
                       </div>
                       <Space>
-                        {canManageRooms ? (
-                          <Button type="link" onClick={() => setRoomDraft({ ...room })}>
-                            编辑房间
-                          </Button>
-                        ) : null}
+                        {canManageRooms ? <Button onClick={() => setRoomDraft({ ...room })}>编辑房间</Button> : null}
                         {canManageRooms && visibleRooms.length > 1 ? (
                           <Button
                             danger
@@ -161,9 +157,7 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
                               </Typography.Paragraph>
                             </div>
                             <Space>
-                              <Button type="link" onClick={() => setRackDraft({ ...rack })}>
-                                编辑
-                              </Button>
+                              <Button onClick={() => setRackDraft({ ...rack })}>编辑</Button>
                               <Button
                                 danger
                                 type="link"
