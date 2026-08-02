@@ -310,7 +310,6 @@ textarea:hover {
   letter-spacing: -0.025em;
 }
 
-.panel-summary-chip,
 .workspace-status-badge,
 .workspace-status {
   min-height: 26px;
@@ -399,7 +398,6 @@ textarea:hover {
   min-height: var(--control-height-compact);
 }
 
-.panel-summary-chip,
 .workspace-status-badge,
 .workspace-status {
   color: var(--muted);

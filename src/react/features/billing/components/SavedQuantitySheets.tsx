@@ -186,9 +186,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     <section className="panel quantity-saved-panel">
       <div className="workspace-toolbar quantity-saved-toolbar">
         <div className="workspace-toolbar-main">
-          <Typography.Text className="panel-summary-chip" type="secondary">
-            {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}
-          </Typography.Text>
+          <Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}</Tag>
         </div>
         <div className="workspace-toolbar-actions">
           <Space className="workspace-toolbar-action-group">

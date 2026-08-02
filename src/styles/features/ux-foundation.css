@@ -247,17 +247,6 @@ button:active:not(:disabled),
   border-color: rgb(15 118 110 / 42%);
 }
 
-.workspace-toolbar .panel-summary-chip,
-.panel-head .panel-summary-chip {
-  min-height: 28px;
-  padding: 4px 9px;
-  border-color: rgb(47 122 114 / 20%);
-  background: #f1f8f6;
-  color: #285f59;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
 .quantity-saved-toolbar {
   grid-template-columns: minmax(0, 1fr) auto;
 }

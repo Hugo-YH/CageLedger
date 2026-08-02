@@ -100,7 +100,7 @@ test("selects every saved quantity sheet across result pages", async ({ page }) 
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByLabel("全选当前筛选结果统计表").check();
-  const selectionSummary = page.locator(".quantity-saved-panel .panel-summary-chip");
+  const selectionSummary = page.locator(".quantity-saved-panel .ant-tag");
   await expect(selectionSummary).toHaveText(/^\d+ 条 · 已选 \d+$/);
   const summaryMatch = (await selectionSummary.innerText()).match(/^(\d+) 条 · 已选 (\d+)$/);
   expect(summaryMatch).not.toBeNull();
