@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Empty, Form, Input, Space, Tag } from "antd";
+import { Empty, Space, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import type { SettlementObligation } from "../../../api/contracts";
@@ -12,11 +12,9 @@ const PAGE = { limit: 20, offset: 0 };
 const obligationStatusLabels: Record<string, string> = { settled: "已核销", pending: "待核销" };
 
 export function ObligationsPanel() {
-  const [month, setMonth] = useState("");
-  const [sourcePi, setSourcePi] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const params = { ...PAGE, month, sourcePi, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
+  const params = { ...PAGE, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
   const query = useSettlementObligations(params);
   const items = query.data?.items || [];
 
@@ -79,24 +77,6 @@ export function ObligationsPanel() {
   return (
     <section className="ledger-section" aria-label="结算应收列表">
       <div className="ledger-toolbar">
-        <Form component={false} layout="inline">
-          <Form.Item>
-            <Input
-              aria-label="结算月份"
-              type="month"
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-            />
-          </Form.Item>
-          <Form.Item>
-            <Input.Search
-              aria-label="费用产生项目负责人"
-              value={sourcePi}
-              onChange={(event) => setSourcePi(event.target.value)}
-              placeholder="费用产生项目负责人"
-            />
-          </Form.Item>
-        </Form>
         <Tag color="blue">{query.data?.page.total || 0} 笔应收</Tag>
       </div>
       <QueryFeedback

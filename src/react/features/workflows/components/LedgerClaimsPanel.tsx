@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Empty, Form, Input, Select, Tag } from "antd";
+import { Button, Empty, Form, Select, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import type { ReimbursementClaim, SessionUser } from "../../../api/contracts";
@@ -11,11 +11,10 @@ import { LEDGER_CLAIMS_PATH, claimStatusLabels, moneyColumn } from "./ledgerList
 const PAGE = { limit: 20, offset: 0 };
 
 export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: string) => void }) {
-  const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const params = { ...PAGE, keyword, status, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
+  const params = { ...PAGE, status, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
   const query = useReimbursementClaims(params);
   const items = query.data?.items || [];
 
@@ -85,14 +84,6 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
     <section className="ledger-section" aria-label="报销单列表">
       <div className="ledger-toolbar">
         <Form component={false} layout="inline">
-          <Form.Item>
-            <Input.Search
-              aria-label="检索报销单"
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="检索报销单号或经费负责人"
-            />
-          </Form.Item>
           <Form.Item>
             <Select
               aria-label="报销单状态"
