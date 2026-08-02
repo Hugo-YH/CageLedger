@@ -3,7 +3,7 @@ import type { KeyboardEvent, SyntheticEvent, ThHTMLAttributes } from "react";
 import { Table, type TableProps } from "antd";
 import { Resizable, type ResizeCallbackData } from "react-resizable";
 
-const MIN_COLUMN_WIDTH = 64;
+const MIN_COLUMN_WIDTH = 40;
 const MAX_COLUMN_WIDTH = 640;
 const DEFAULT_COLUMN_WIDTH = 140;
 const WIDTH_STORAGE_KEY = "cageledger:table-column-widths:v1";

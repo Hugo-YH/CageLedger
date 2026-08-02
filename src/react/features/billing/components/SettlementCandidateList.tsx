@@ -67,7 +67,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           onChange={() => void toggleAllFiltered()}
         />
       ),
-      width: 52,
+      width: 40,
       render: (_, candidate) => (
         <Checkbox
           aria-label={`选择 ${candidate.pi} ${candidate.month} 结算项`}

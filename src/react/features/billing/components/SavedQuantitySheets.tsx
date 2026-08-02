@@ -66,7 +66,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const columns: TableProps<QuantitySheet>["columns"] = [
     {
       key: "selection",
-      width: 52,
+      width: 40,
       title: (
         <Checkbox
           aria-label="全选当前筛选结果统计表"
