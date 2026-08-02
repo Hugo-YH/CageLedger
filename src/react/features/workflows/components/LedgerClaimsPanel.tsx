@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Empty, Form, Select, Tag } from "antd";
+import { Button, Empty, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import type { ReimbursementClaim, SessionUser } from "../../../api/contracts";
@@ -11,10 +11,9 @@ import { LEDGER_CLAIMS_PATH, claimStatusLabels, moneyColumn } from "./ledgerList
 const PAGE = { limit: 20, offset: 0 };
 
 export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: string) => void }) {
-  const [status, setStatus] = useState("all");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const params = { ...PAGE, status, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
+  const params = { ...PAGE, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
   const query = useReimbursementClaims(params);
   const items = query.data?.items || [];
 
@@ -24,11 +23,12 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   function setFilter(key: string, values: string[]) {
     setFilters((current) => ({ ...current, [key]: values }));
   }
-  const title = (column: string, label: string, filterable = true) => (
+  const title = (column: string, label: string, filterable = true, labelMap?: Record<string, string>) => (
     <LedgerColumnTitle
       column={column}
       filterable={filterable}
       label={label}
+      labelMap={labelMap}
       onFilter={(values) => setFilter(column, values)}
       onSort={() => toggleSort(column)}
       params={params}
@@ -38,6 +38,11 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   );
 
   const columns: TableProps<ReimbursementClaim>["columns"] = [
+    {
+      key: "status",
+      title: title("status", "状态", true, claimStatusLabels),
+      render: (_, item) => <Tag>{claimStatusLabels[item.status]}</Tag>,
+    },
     { key: "documentNumber", title: title("documentNumber", "报销单号"), dataIndex: "documentNumber" },
     { key: "fundingOwner", title: title("fundingOwner", "经费负责人"), dataIndex: "fundingOwner" },
     {
@@ -64,11 +69,6 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
       align: "right",
     },
     {
-      key: "status",
-      title: title("status", "状态", false),
-      render: (_, item) => <Tag>{claimStatusLabels[item.status]}</Tag>,
-    },
-    {
       key: "actions",
       title: "操作",
       fixed: "right",
@@ -83,19 +83,6 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   return (
     <section className="ledger-section" aria-label="报销单列表">
       <div className="ledger-toolbar">
-        <Form component={false} layout="inline">
-          <Form.Item>
-            <Select
-              aria-label="报销单状态"
-              options={[
-                { label: "全部状态", value: "all" },
-                ...Object.entries(claimStatusLabels).map(([value, label]) => ({ label, value })),
-              ]}
-              value={status}
-              onChange={setStatus}
-            />
-          </Form.Item>
-        </Form>
         <Tag color="blue">{query.data?.page.total || 0} 张报销单</Tag>
       </div>
       <QueryFeedback
