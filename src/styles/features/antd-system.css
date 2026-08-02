@@ -624,13 +624,6 @@
   white-space: nowrap;
 }
 
-.ant-workspace .intake-batch-table .table-cell-text {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .app-status-tag {
   border-radius: 4px;
 }

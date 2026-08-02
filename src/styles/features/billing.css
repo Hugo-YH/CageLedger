@@ -1283,15 +1283,9 @@ th {
   table-layout: auto;
 }
 
-.reimbursement-table th,
-.reimbursement-table td {
+.reimbursement-table th {
   white-space: nowrap;
   vertical-align: middle;
-}
-
-.reimbursement-table td:nth-child(2) {
-  white-space: normal;
-  min-width: 130px;
 }
 
 .reimbursement-table .pill {

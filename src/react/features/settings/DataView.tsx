@@ -55,7 +55,7 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
   }
 
   const columns: ColumnsType<PrincipalIdentity> = [
-    { title: "项目负责人", dataIndex: "pi", key: "pi", ellipsis: true },
+    { title: "项目负责人", dataIndex: "pi", key: "pi" },
     {
       title: "负责人身份",
       dataIndex: "principalType",

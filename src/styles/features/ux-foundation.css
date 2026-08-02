@@ -363,6 +363,13 @@ button:active:not(:disabled),
   box-shadow: 0 0 0 2px var(--ant-color-primary-border-hover);
 }
 
+/* Business list cells wrap instead of clipping: narrowing a column reflows
+ * text, and long codes (IACUC, batch numbers) break when the column is tight. */
+.app-data-table .ant-table-tbody > tr > td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .empty-state {
   min-height: 220px;
   padding: 26px;
