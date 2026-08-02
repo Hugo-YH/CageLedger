@@ -167,6 +167,7 @@ export function IntakeBatchList({
           dataSource={items}
           loading={loading}
           pagination={false}
+          resizeKey="intake-batch"
           rowKey="id"
           scroll={{ x: 998 }}
         />

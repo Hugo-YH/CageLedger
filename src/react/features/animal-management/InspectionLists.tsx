@@ -12,7 +12,6 @@ import {
   Modal,
   Select,
   Space,
-  Table,
   Tag,
   Typography,
 } from "antd";
@@ -35,7 +34,7 @@ import {
 } from "../../api/animalManagement";
 import { PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
-import { MobilePage } from "../../components/ui";
+import { DataTable, MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb } from "../shell/workspaceNavigation";
@@ -152,8 +151,9 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
       <div className="workspace-body animal-management-body">
         <Card className="animal-ant-card inspection-list-panel" title="巡检记录">
           {filters}
-          <Table
+          <DataTable
             className="inspection-table"
+            resizeKey="inspection-records"
             columns={[
               { title: "饲养间", dataIndex: "roomName", key: "room", sorter: true },
               {
@@ -286,8 +286,9 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
               />
             </Form.Item>
           </Form>
-          <Table
+          <DataTable
             className="inspection-table"
+            resizeKey="inspection-findings"
             columns={[
               { title: "饲养间", dataIndex: "roomName" },
               { title: "异常项目", dataIndex: "nodeCode" },

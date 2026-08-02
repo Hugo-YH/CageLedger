@@ -312,6 +312,57 @@ button:active:not(:disabled),
   -webkit-line-clamp: 2;
 }
 
+/* Draggable column widths: a quiet handle on the header edge that lights up on
+ * hover and keeps an explicit slider role for keyboard adjustment. */
+.app-data-table .app-table-resizable {
+  position: relative;
+}
+
+.app-data-table .react-resizable-handle {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.app-data-table .react-resizable-handle::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 18px;
+  border-radius: 1px;
+  background: var(--ant-color-border);
+  content: "";
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 120ms ease-out,
+    height 120ms ease-out;
+}
+
+.app-data-table th:hover .react-resizable-handle,
+.app-data-table .react-resizable-handle:focus-visible,
+.app-data-table .react-resizable-handle:active {
+  opacity: 1;
+}
+
+.app-data-table .react-resizable-handle:hover::after,
+.app-data-table .react-resizable-handle:active::after {
+  height: 24px;
+  background: var(--ant-color-primary);
+}
+
+.app-data-table .react-resizable-handle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--ant-color-primary-border-hover);
+}
+
 .empty-state {
   min-height: 220px;
   padding: 26px;

@@ -1,10 +1,11 @@
 import { Fragment, useState } from "react";
-import { Card, Table, Typography } from "antd";
+import { Card, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { useAuditEvents } from "../../api/administration";
 import type { AuditEvent, SessionUser } from "../../api/contracts";
 import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { DataTable } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -63,14 +64,14 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
             <PageState title="操作日志加载失败" retry={() => query.refetch()} />
           ) : (
             <Fragment>
-              <Table
+              <DataTable
                 className="app-data-table audit-log-table"
                 columns={columns}
                 dataSource={query.data?.items || []}
                 rowKey="id"
+                resizeKey="audit-log"
                 locale={{ emptyText: "暂无操作日志" }}
                 pagination={false}
-                size="middle"
               />
               <Pager
                 onPage={setPage}

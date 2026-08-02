@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Form, Input, Modal, Select, Space, Spin, Tag, Typography } from "antd";
 
 import {
   useConfirmReimbursementAllocation,
@@ -14,6 +14,7 @@ import {
 } from "../../../api/reimbursementLedger";
 import type { SessionUser } from "../../../api/contracts";
 import { formatMoney } from "../../../components/WorkspaceUi";
+import { DataTable } from "../../../components/ui";
 
 const PAGE = { limit: 20, offset: 0 };
 const claimStatusLabels: Record<string, string> = {
@@ -106,8 +107,9 @@ export function ObligationsPanel() {
         retry={() => void query.refetch()}
       />
       {!query.isPending && !query.isError ? (
-        <Table
+        <DataTable
           className="antd-data-table reimbursement-table"
+          resizeKey="reimbursement-receivables"
           columns={[
             { title: "结算月份", dataIndex: "month" },
             { title: "费用产生项目负责人", dataIndex: "sourcePi" },
@@ -183,8 +185,9 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
         retry={() => void query.refetch()}
       />
       {!query.isPending && !query.isError ? (
-        <Table
+        <DataTable
           className="antd-data-table reimbursement-table"
+          resizeKey="reimbursement-claims"
           columns={[
             { title: "报销单号", dataIndex: "documentNumber" },
             { title: "经费负责人", dataIndex: "fundingOwner" },
@@ -320,13 +323,14 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
             </Button>
           }
           description="费用产生项目负责人和报销经费负责人会同时保留在每条分摊记录中。"
-          message={`当前报销单：${selected.documentNumber}`}
+          title={`当前报销单：${selected.documentNumber}`}
           showIcon
           type="info"
         />
       ) : null}
-      <Table
+      <DataTable
         className="antd-data-table reimbursement-table"
+        resizeKey="reimbursement-allocations"
         columns={[
           { title: "费用产生负责人", dataIndex: "sourcePi" },
           { title: "报销经费负责人", dataIndex: "fundingOwner" },
@@ -405,12 +409,13 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
     <section className="ledger-section" aria-label="历史台账">
       <Alert
         description="具备报销单号、经费本号及匹配结算应收的记录可由系统管理员迁入新核销体系。"
-        message="历史台账保留只读展示"
+        title="历史台账保留只读展示"
         showIcon
         type="info"
       />
-      <Table
+      <DataTable
         className="antd-data-table reimbursement-table"
+        resizeKey="reimbursement-legacy"
         columns={[
           { title: "月份", render: (_, item) => String(item.month || "-") },
           { title: "费用产生负责人", render: (_, item) => String(item.pi || "-") },

@@ -227,6 +227,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           dataSource={items}
           loading={list.isFetching}
           pagination={false}
+          resizeKey="quantity-saved"
           rowKey="id"
         />
       </div>

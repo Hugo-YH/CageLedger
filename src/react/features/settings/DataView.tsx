@@ -1,7 +1,7 @@
 import { Fragment, useDeferredValue, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { InboxOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Input, Select, Space, Statistic, Table, Typography, Upload } from "antd";
+import { Alert, Button, Card, Input, Select, Space, Statistic, Typography, Upload } from "antd";
 import type { UploadProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
@@ -9,6 +9,7 @@ import { uploadFile, useIacucStatus, usePrincipalIdentities, useSavePrincipalIde
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
 import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { DataTable } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
 import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
@@ -119,13 +120,14 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
               <PageState title="负责人身份加载失败" retry={() => identities.refetch()} />
             ) : (
               <Fragment>
-                <Table
+                <DataTable
                   className="app-data-table"
                   columns={columns}
                   dataSource={visibleRows}
                   locale={{ emptyText: "当前没有匹配的项目负责人。" }}
                   pagination={false}
                   rowKey="pi"
+                  resizeKey="principal-identities"
                   scroll={{ x: 760 }}
                 />
                 <Pager

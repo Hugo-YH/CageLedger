@@ -309,7 +309,14 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           tabIndex={0}
           aria-label="项目负责人结算列表"
         >
-          <DataTable columns={columns} dataSource={items} loading={list.isPending} pagination={false} rowKey="id" />
+          <DataTable
+            columns={columns}
+            dataSource={items}
+            loading={list.isPending}
+            pagination={false}
+            resizeKey="settlement-candidates"
+            rowKey="id"
+          />
         </div>
         <Pager
           itemLabel="项"
