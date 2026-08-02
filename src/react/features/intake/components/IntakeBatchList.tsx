@@ -212,12 +212,16 @@ function IntakeColumnTitle({
 }) {
   const [open, setOpen] = useState(false);
   const options = useIntakeFilterOptions(params, column, open);
+  const displayOptions = (options.data?.items || []).map((option) => ({
+    ...option,
+    label: column === "status" ? (intakeStatusLabel(option.value as IntakeBatchStatus) ?? option.label) : option.label,
+  }));
 
   return (
     <FilterableColumnTitle
       label={label}
       loading={options.isFetching}
-      options={options.data?.items || []}
+      options={displayOptions}
       values={values}
       onFilter={onFilter}
       onOpenChange={setOpen}
