@@ -384,8 +384,8 @@ function IacucExpiryTag({ endDate }: { endDate: string }) {
   const remainingDays = Math.ceil(
     (new Date(`${endDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000,
   );
-  const color = remainingDays < 0 ? "error" : remainingDays <= 30 ? "warning" : "blue";
-  const event = remainingDays < 0 ? "已到期" : remainingDays <= 30 ? "即将到期" : "到期";
+  const color = remainingDays < 0 ? "error" : remainingDays <= 90 ? "warning" : "blue";
+  const event = remainingDays < 0 ? "已到期" : remainingDays <= 90 ? "即将到期" : "到期";
   const label = `${endDate} ${event}`;
   return <Tag color={color}>{label}</Tag>;
 }
