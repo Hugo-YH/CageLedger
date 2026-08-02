@@ -1075,6 +1075,13 @@
   min-width: 920px;
 }
 
+.quantity-saved-list table th {
+  position: static !important;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
 .quantity-select-col {
   width: 42px;
   text-align: center;
