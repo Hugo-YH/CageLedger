@@ -11,7 +11,6 @@
     "src/styles/features/react.css",
     "src/styles/responsive.css",
     "src/styles/features/apple-ux.css",
-    "src/styles/features/mobile.css",
     "src/styles/features/ux-foundation.css",
     "src/styles/shell.css",
     "src/styles/components.css",
@@ -83,11 +82,6 @@
       "owner": "legacy-apple-ux",
       "status": "compatibility",
       "removeAfter": "shared-component-migration"
-    },
-    "src/styles/features/mobile.css": {
-      "owner": "legacy-mobile",
-      "status": "compatibility",
-      "removeAfter": "mobile-navigation-migration"
     }
   },
   "componentFamilies": {
@@ -140,6 +134,13 @@
       "allowedPrefixes": ["[data-ui='mobile-navigation']", ".ant-mobile-tabbar", ".ant-mobile-navigation-sheet"],
       "breakpoints": ["760px", "landscape"],
       "status": "in-progress"
+    },
+    "mobile-page": {
+      "root": "[data-ui='mobile-page']",
+      "owner": "src/styles/shell.css",
+      "allowedPrefixes": ["[data-ui='mobile-page']"],
+      "breakpoints": ["760px", "landscape"],
+      "status": "complete"
     }
   },
   "antGlobalOwner": "src/styles/features/antd-system.css",
@@ -151,8 +152,7 @@
         "src/styles/features/legacy-responsive.css",
         "src/styles/features/react.css",
         "src/styles/responsive.css",
-        "src/styles/features/apple-ux.css",
-        "src/styles/features/mobile.css"
+        "src/styles/features/apple-ux.css"
       ],
       "reviewBy": "v1.1.0"
     }

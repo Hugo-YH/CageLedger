@@ -508,3 +508,19 @@
     border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-sm);
   }
 }
+
+@media (width <= 760px) {
+  .settings-split-layout,
+  .settings-rooms-card,
+  .settings-room-card,
+  .settings-room-content,
+  .settings-room-header,
+  .settings-rack-row {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .settings-room-header {
+    flex-wrap: wrap;
+  }
+}

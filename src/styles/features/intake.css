@@ -126,3 +126,11 @@
     width: 100%;
   }
 }
+
+[data-ui="mobile-page"] .intake-entry-card > .ant-card-head {
+  display: none;
+}
+
+[data-ui="mobile-page"] .scanner-card > .ant-card-head-title {
+  display: none;
+}

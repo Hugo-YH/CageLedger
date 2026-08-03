@@ -15,7 +15,7 @@ export function MobilePage({
   children: ReactNode;
 }) {
   return (
-    <section className="workspace-view ant-mobile-page">
+    <section className="workspace-view ant-mobile-page" data-ui="mobile-page">
       <NavBar back={onBack ? undefined : null} onBack={onBack} right={actions}>
         {titleAsHeading ? (
           <h2 className="ant-mobile-page-title">{title}</h2>
