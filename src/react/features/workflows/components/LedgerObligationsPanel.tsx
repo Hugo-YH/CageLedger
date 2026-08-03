@@ -6,7 +6,7 @@ import type { SettlementObligation } from "../../../api/contracts";
 import { useSettlementObligations } from "../../../api/reimbursementLedger";
 import { DataTable } from "../../../components/ui";
 import { LedgerColumnTitle, QueryFeedback } from "./LedgerListShared";
-import { LEDGER_OBLIGATIONS_PATH, moneyColumn } from "./ledgerListModel";
+import { moneyColumn } from "./ledgerListModel";
 
 const PAGE = { limit: 20, offset: 0 };
 const obligationStatusLabels: Record<string, string> = { settled: "已核销", pending: "待核销" };
@@ -33,7 +33,7 @@ export function ObligationsPanel() {
       onFilter={(values) => setFilter(column, values)}
       onSort={() => toggleSort(column)}
       params={params}
-      path={LEDGER_OBLIGATIONS_PATH}
+      list="reimbursement-obligations"
       values={filters[column] || []}
     />
   );

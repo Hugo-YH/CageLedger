@@ -5,7 +5,6 @@ from server_app.repositories.billing_candidates import (
     delete_billing_candidate_snapshot,
     get_billing_candidate_snapshot,
     get_quantity_settlement_group,
-    list_billing_candidate_filter_options,
     list_billing_candidate_snapshot_keys,
     list_billing_candidate_snapshots_page,
     mark_billing_candidate_snapshots_stale,
@@ -48,7 +47,6 @@ def list_settlement_candidates(conn, filters, calculate, source_type="quantity_s
         payload = list_billing_candidate_snapshots_page(conn, source_type, filters)
 
     payload["items"] = [_public_candidate(item) for item in payload["items"]]
-    payload["filterOptions"] = list_billing_candidate_filter_options(conn, source_type, filters)
     return cache_set(response_cache_key, payload, ttl_seconds=SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS)
 
 

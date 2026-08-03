@@ -7,7 +7,6 @@ import { useLegacyReimbursements, useMigrateLegacyReimbursement } from "../../..
 import { formatMoney } from "../../../components/WorkspaceUi";
 import { DataTable } from "../../../components/ui";
 import { LedgerColumnTitle } from "./LedgerListShared";
-import { LEDGER_LEGACY_PATH } from "./ledgerListModel";
 
 const PAGE = { limit: 20, offset: 0 };
 
@@ -33,7 +32,7 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
       onFilter={(values) => setFilter(column, values)}
       onSort={() => toggleSort(column)}
       params={params}
-      path={LEDGER_LEGACY_PATH}
+      list="reimbursement-legacy"
       values={filters[column] || []}
     />
   );

@@ -14,6 +14,7 @@ from server_app.repositories.billing_candidates import (
     QUANTITY_SETTLEMENT_CALCULATION_VERSION,
     billing_candidate_snapshot_registry_needs_sync,
     get_billing_candidate_snapshot,
+    list_billing_candidate_filter_options,
     list_quantity_settlement_groups,
     sync_billing_candidate_snapshot_registry,
     upsert_billing_candidate_snapshot,
@@ -62,8 +63,13 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
             self.assertEqual(calls, [("2026-07", "李教授")])
             self.assertEqual(result["items"][0]["pi"], "李教授")
             self.assertEqual(result["items"][0]["iacucs"], ["Z3"])
-            self.assertEqual(result["filterOptions"]["amount"], [{"value": "123.00", "label": "¥123.00", "count": 1}])
-            self.assertEqual([item["value"] for item in result["filterOptions"]["iacuc"]], ["Z1", "Z2", "Z3", "Z4"])
+            options = list_billing_candidate_filter_options(
+                conn,
+                "quantity_sheet",
+                {"limit": 1, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+            )
+            self.assertEqual(options["amount"], [{"value": "123.00", "label": "¥123.00", "count": 1}])
+            self.assertEqual([item["value"] for item in options["iacuc"]], ["Z1", "Z2", "Z3", "Z4"])
 
     def test_amount_sort_refreshes_all_stale_candidates_once(self):
         with build_candidate_conn() as conn:
@@ -107,7 +113,12 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
             self.assertEqual(len(calls), 3)
             self.assertEqual([item["pi"] for item in first["items"]], ["张教授", "王教授"])
             self.assertEqual([item["pi"] for item in second["items"]], ["王教授", "李教授"])
-            self.assertEqual([item["value"] for item in first["filterOptions"]["amount"]], ["10.00", "20.00", "30.00"])
+            options = list_billing_candidate_filter_options(
+                conn,
+                "quantity_sheet",
+                {"limit": 2, "offset": 0, "sortKey": "amount", "sortDir": "desc", "columnFilters": {}},
+            )
+            self.assertEqual([item["value"] for item in options["amount"]], ["10.00", "20.00", "30.00"])
 
     def test_generate_path_can_write_snapshot_from_statement(self):
         with build_candidate_conn() as conn:

@@ -9,6 +9,7 @@ import type {
   QuantitySheetWriteResponse,
 } from "./contracts";
 import { requestJson } from "./client";
+import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
 
@@ -45,17 +46,7 @@ export function useQuantitySheetRooms() {
 }
 
 export function useQuantityFilterOptions(params: QuantitySheetListParams, column: string, enabled: boolean) {
-  const search = new URLSearchParams({ column, limit: String(params.limit), offset: "0" });
-  if (params.columnFilters && Object.keys(params.columnFilters).length)
-    search.set("columnFilters", JSON.stringify(params.columnFilters));
-  return useQuery({
-    queryKey: ["quantity-sheets", "filter-options", column, params.columnFilters || {}],
-    queryFn: () =>
-      requestJson<{ items: Array<{ value: string; label: string; count: number }> }>(
-        `/api/quantity-sheets/filter-options?${search.toString()}`,
-      ),
-    enabled,
-  });
+  return useColumnFilterOptions("quantity-sheets", column, params.columnFilters, enabled);
 }
 
 export function useQuantitySheetDetail(id: string) {

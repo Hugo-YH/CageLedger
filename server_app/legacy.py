@@ -250,9 +250,6 @@ from server_app.repositories.billing import (
     list_quantity_sheet_filter_options as list_quantity_sheet_filter_options_repository,
 )
 from server_app.repositories.billing import (
-    list_quantity_sheets as list_quantity_sheets_repository,
-)
-from server_app.repositories.billing import (
     list_quantity_sheets_by_month as list_quantity_sheets_by_month_repository,
 )
 from server_app.repositories.billing import (
@@ -307,6 +304,7 @@ from server_app.repositories.entities import (
 from server_app.repositories.entities import (
     upsert_placement_task as upsert_placement_task_repository,
 )
+from server_app.repositories.filter_options import route_column_filter_options
 from server_app.repositories.iacuc import read_iacuc_index as read_iacuc_index_repository
 from server_app.repositories.iacuc import (
     replace_experiment_applications,
@@ -3382,10 +3380,6 @@ def filtered_where(filter_specs, filters):
     return " AND ".join(where), tuple(params)
 
 
-def list_quantity_sheets(conn):
-    return list_quantity_sheets_repository(conn)
-
-
 def list_quantity_sheets_by_month_iacuc(conn, month, iacuc):
     return list_quantity_sheets_by_month_iacuc_repository(conn, month, iacuc)
 
@@ -5260,6 +5254,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             with connect_db() as conn:
                 self.send_json({"users": list_users(conn)})
+            return
+        if route_column_filter_options(self, path):
             return
         if path == "/api/quantity-sheets":
             if not self.require_user():

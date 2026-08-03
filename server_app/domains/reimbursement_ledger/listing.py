@@ -64,9 +64,11 @@ def list_sort_order(filters, columns, default):
     return f"{spec['order']} {direction}, rowid DESC"
 
 
-def list_column_where(filters, columns):
+def list_column_where(filters, columns, exclude_column=""):
     clauses, params = [], []
     for key, values in (filters.get("columnFilters") or {}).items():
+        if key == exclude_column:
+            continue
         spec = columns.get(key)
         cleaned = [clean_text(value) for value in values if clean_text(value)]
         if not spec or not cleaned:
@@ -75,3 +77,28 @@ def list_column_where(filters, columns):
         clauses.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
         params.extend(cleaned)
     return clauses, params
+
+
+def list_column_options(conn, table, columns, filters, column):
+    spec = columns.get(column)
+    if not spec:
+        return {"items": []}
+    clauses, params = list_column_where(filters, columns, exclude_column=column)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"""
+        SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
+        FROM {table}{where}
+        GROUP BY value
+        ORDER BY value COLLATE NOCASE
+        LIMIT 500
+        """,
+        params,
+    ).fetchall()
+    return {
+        "items": [
+            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]}
+            for row in rows
+            if row["value"]
+        ]
+    }

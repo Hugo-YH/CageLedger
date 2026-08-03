@@ -15,11 +15,42 @@ import type {
   SettlementCandidateListParams,
 } from "../../../api/contracts";
 import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
+import { useColumnFilterOptions } from "../../../api/filterOptions";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { DataTable } from "../../../components/ui";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
+
+function SettlementColumnTitle({
+  column,
+  label,
+  params,
+  values,
+  onSort,
+  onFilter,
+}: {
+  column: string;
+  label: string;
+  params: SettlementCandidateListParams;
+  values: string[];
+  onSort: () => void;
+  onFilter: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const options = useColumnFilterOptions("settlement-candidates", column, params.columnFilters, open);
+  return (
+    <FilterableColumnTitle
+      label={label}
+      loading={options.isFetching}
+      options={options.data?.items || []}
+      values={values}
+      onFilter={onFilter}
+      onOpenChange={setOpen}
+      onSort={onSort}
+    />
+  );
+}
 
 export function SettlementCandidateList({ source }: { source: "quantity_sheet" | "cage_map" }) {
   const [page, setPage] = useState(1);
@@ -90,11 +121,11 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       width,
       align: key === "amount" ? ("right" as const) : undefined,
       title: (
-        <FilterableColumnTitle
+        <SettlementColumnTitle
+          column={key}
           label={label}
+          params={params}
           values={filters[key] || []}
-          options={list.data?.filterOptions[key] || []}
-          loading={list.isFetching}
           onSort={() => {
             setSort((current) => ({
               key,

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { ReloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Spin, Typography } from "antd";
 
+import { useColumnFilterOptions } from "../../../api/filterOptions";
 import type { LedgerListParams } from "../../../api/reimbursementLedger";
-import { useLedgerFilterOptions } from "../../../api/reimbursementLedger";
 import { FilterableColumnTitle, type TableFilterOption } from "../../../components/FilterableTableHeader";
 
 export function QueryFeedback({
@@ -45,7 +45,7 @@ export function QueryFeedback({
 }
 
 export function LedgerColumnTitle({
-  path,
+  list,
   params,
   column,
   label,
@@ -56,7 +56,7 @@ export function LedgerColumnTitle({
   onSort,
   onFilter,
 }: {
-  path?: string;
+  list?: string;
   params: LedgerListParams;
   column: string;
   label: string;
@@ -68,7 +68,12 @@ export function LedgerColumnTitle({
   onFilter: (values: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const optionsQuery = useLedgerFilterOptions(path ?? "", params, column, open && !localOptions && Boolean(path));
+  const optionsQuery = useColumnFilterOptions(
+    list ?? "",
+    column,
+    params.columnFilters,
+    open && !localOptions && Boolean(list),
+  );
   const serverOptions = (optionsQuery.data?.items || []).map((option) => ({
     ...option,
     label: labelMap?.[option.value] ?? option.label,

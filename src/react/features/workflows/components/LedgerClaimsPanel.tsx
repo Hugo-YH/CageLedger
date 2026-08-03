@@ -6,7 +6,7 @@ import type { ReimbursementClaim, SessionUser } from "../../../api/contracts";
 import { useReimbursementClaims } from "../../../api/reimbursementLedger";
 import { DataTable } from "../../../components/ui";
 import { LedgerColumnTitle, QueryFeedback } from "./LedgerListShared";
-import { LEDGER_CLAIMS_PATH, claimStatusLabels, moneyColumn } from "./ledgerListModel";
+import { claimStatusLabels, moneyColumn } from "./ledgerListModel";
 
 const PAGE = { limit: 20, offset: 0 };
 
@@ -32,7 +32,7 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
       onFilter={(values) => setFilter(column, values)}
       onSort={() => toggleSort(column)}
       params={params}
-      path={LEDGER_CLAIMS_PATH}
+      list="reimbursement-claims"
       values={filters[column] || []}
     />
   );
