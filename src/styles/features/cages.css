@@ -236,3 +236,44 @@
 .cage-preview {
   overflow-x: auto;
 }
+
+/* Mobile cage map and slot sizing (migrated from responsive.css). */
+@media (width <= 760px) {
+  .cage-preview {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .slot {
+    min-height: 88px;
+    padding: 8px;
+    gap: 5px;
+  }
+
+  .slot-code {
+    font-size: 10px;
+  }
+
+  .slot-iacuc {
+    font-size: 12px;
+    padding-right: 0;
+  }
+
+  .slot-person,
+  .slot-date {
+    font-size: 11px;
+  }
+
+  .slot-empty-text {
+    font-size: 13px;
+  }
+
+  .compact-form-row.half,
+  .compact-form-row.third {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-slot-form label {
+    grid-template-columns: 1fr;
+  }
+}

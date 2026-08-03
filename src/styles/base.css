@@ -1182,3 +1182,33 @@ svg {
   border-radius: 14px;
   background: linear-gradient(135deg, rgb(255 250 239 / 95%), rgb(240 250 247 / 72%));
 }
+
+/* Mobile element baseline (migrated from responsive.css). */
+@media (width <= 760px) {
+  html,
+  body,
+  #app {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    overflow: auto;
+  }
+
+  table {
+    min-width: 640px;
+  }
+
+  th,
+  td {
+    padding: 10px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    min-height: 44px;
+  }
+}

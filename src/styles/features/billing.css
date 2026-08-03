@@ -1495,3 +1495,11 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+/* Quantity entry table keeps a scrollable width on mobile (migrated from
+ * responsive.css). */
+@media (width <= 760px) {
+  .quantity-entry-table {
+    min-width: 760px;
+  }
+}

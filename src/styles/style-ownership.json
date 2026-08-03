@@ -8,7 +8,6 @@
     "src/styles/base.css",
     "src/styles/features/core.css",
     "src/styles/features/react.css",
-    "src/styles/responsive.css",
     "src/styles/features/apple-ux.css",
     "src/styles/features/ux-foundation.css",
     "src/styles/shell.css",
@@ -66,11 +65,6 @@
       "owner": "legacy-react",
       "status": "compatibility",
       "removeAfter": "all-feature-migration"
-    },
-    "src/styles/responsive.css": {
-      "owner": "legacy-responsive",
-      "status": "compatibility",
-      "removeAfter": "all-feature-breakpoints"
     },
     "src/styles/features/apple-ux.css": {
       "owner": "legacy-apple-ux",
@@ -141,12 +135,7 @@
   "exceptions": [
     {
       "reason": "Historical selectors remain while their data-ui scoped replacements are migrated.",
-      "files": [
-        "src/styles/features/core.css",
-        "src/styles/features/react.css",
-        "src/styles/responsive.css",
-        "src/styles/features/apple-ux.css"
-      ],
+      "files": ["src/styles/features/core.css", "src/styles/features/react.css", "src/styles/features/apple-ux.css"],
       "reviewBy": "v1.1.0"
     }
   ]

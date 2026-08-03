@@ -1583,6 +1583,44 @@
   }
 }
 
+/* Shared mobile layout adjustments (migrated from responsive.css). */
+@media (width <= 760px) {
+  .table-wrap {
+    max-width: calc(100vw - 24px);
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panel.large {
+    min-height: auto;
+  }
+
+  .panel-head {
+    display: grid;
+    gap: 10px;
+  }
+
+  .field-cluster {
+    padding: 12px;
+  }
+
+  .field-cluster-head {
+    display: grid;
+    gap: 4px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Shared legacy form and button primitives (migrated from
  * legacy-responsive.css). */
 .pill {

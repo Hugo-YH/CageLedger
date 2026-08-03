@@ -1642,3 +1642,10 @@ h3 {
   left: 22px;
   top: 76px;
 }
+
+/* Mobile metrics stack (migrated from responsive.css). */
+@media (width <= 760px) {
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
