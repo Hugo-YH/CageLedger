@@ -8,3 +8,231 @@
     overflow-x: auto;
   }
 }
+
+/* Cage map legend, slot states and the compact slot form (migrated from
+ * legacy-responsive.css). */
+.legend,
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+}
+
+.status-dot.empty,
+.pill.empty {
+  background: #eef2f3;
+  color: #526269;
+}
+
+.status-dot.reserved,
+.pill.reserved {
+  background: var(--reserved-soft);
+  color: var(--reserved-text);
+}
+
+.status-dot.active,
+.pill.active {
+  background: #e7f7ef;
+  color: #1f7a55;
+}
+
+.status-dot.period-open {
+  background: #fff6cc;
+}
+
+.status-dot.period-normal {
+  background: #ddf5dd;
+}
+
+.status-dot.period-overdue {
+  background: #ffe1ea;
+}
+
+.pill.ended {
+  background: #f6ebe8;
+  color: #9f2d21;
+}
+
+.pill.sampled {
+  background: #fff2d8;
+  color: #995b00;
+}
+
+.cage-preview {
+  position: relative;
+  overflow: visible;
+}
+
+.slot {
+  border: 1px solid var(--line);
+  min-height: 118px;
+  border-radius: 8px;
+  padding: 11px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 7px;
+  background: #fff;
+  color: var(--text);
+  position: relative;
+  transition:
+    outline-color 160ms ease,
+    box-shadow 180ms ease,
+    transform 120ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.slot:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.slot:hover,
+.slot.selected {
+  outline: 3px solid rgb(15 118 110 / 18%);
+  border-color: var(--primary);
+}
+
+.slot.selected {
+  box-shadow: 0 10px 20px rgb(15 118 110 / 16%);
+  transform: translateY(-1px);
+}
+
+.slot.active {
+  background: #e9f7ef;
+  border-color: #9bd2b5;
+}
+
+.slot.period-open {
+  background: #fff9db;
+  border-color: #eddc8b;
+}
+
+.slot.period-normal {
+  background: #e8f7e8;
+  border-color: #9fd2a5;
+}
+
+.slot.period-overdue {
+  background: #ffe8ef;
+  border-color: #e7a6b7;
+}
+
+.slot.reserved {
+  background: var(--reserved-soft);
+  border-color: var(--reserved-line);
+}
+
+.slot.empty {
+  background: #f3f5f6;
+  border-color: #d8e0e3;
+  color: #7a888e;
+}
+
+.slot-code {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.slot-iacuc {
+  color: #163b37;
+  font-size: 14px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 34px;
+}
+
+.slot.reserved .slot-iacuc {
+  color: var(--reserved-text);
+}
+
+.slot-person,
+.slot-date {
+  color: #4f6268;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.slot-date {
+  margin-top: auto;
+  font-weight: 700;
+}
+
+.slot-empty-text {
+  color: #87959b;
+  font-size: 16px;
+  margin: auto 0;
+  text-align: center;
+}
+
+.slot small,
+.slot-person,
+.slot-date {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-slot-form {
+  gap: 10px;
+}
+
+.compact-form-row {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-form-row.half {
+  grid-template-columns: 1fr;
+}
+
+.compact-form-row.third {
+  grid-template-columns: 1fr;
+}
+
+.compact-slot-form label {
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+}
+
+.compact-slot-form input,
+.compact-slot-form select,
+.compact-slot-form textarea {
+  padding: 8px 10px;
+}
+
+.compact-slot-form textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.compact-slot-form textarea[name="notes"] {
+  min-height: 72px;
+}
+
+.cage-preview {
+  overflow-x: auto;
+}

@@ -7,7 +7,6 @@
     "antd-mobile/es/global/global.css",
     "src/styles/base.css",
     "src/styles/features/core.css",
-    "src/styles/features/legacy-responsive.css",
     "src/styles/features/react.css",
     "src/styles/responsive.css",
     "src/styles/features/apple-ux.css",
@@ -62,11 +61,6 @@
       "owner": "legacy-core",
       "status": "compatibility",
       "removeAfter": "shell-and-common"
-    },
-    "src/styles/features/legacy-responsive.css": {
-      "owner": "legacy-responsive",
-      "status": "compatibility",
-      "removeAfter": "all-feature-breakpoints"
     },
     "src/styles/features/react.css": {
       "owner": "legacy-react",
@@ -149,7 +143,6 @@
       "reason": "Historical selectors remain while their data-ui scoped replacements are migrated.",
       "files": [
         "src/styles/features/core.css",
-        "src/styles/features/legacy-responsive.css",
         "src/styles/features/react.css",
         "src/styles/responsive.css",
         "src/styles/features/apple-ux.css"
