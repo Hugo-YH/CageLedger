@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta14",
+    releasedAt: "2026-08-03",
+    title: "系统性能优化",
+    items: [
+      "MGI 全量品系索引改为按需懒加载：预约消息识别页构建包由 7.5MB 降至 40KB，本地识别首次需要全量索引时才加载，离线能力不变",
+      "结算应收列表同步改为一次批量读取既有应收，报销单列表的经费明细计数合并进列表查询，消除两处列表 N+1",
+      "巡检记录列表的异常状态计数改为分组批量取回，一页记录从 20 次查询收敛为 1 次",
+      "设置页「房间管理」的基础设施加载去除未使用的批次、任务、计费规则与占用数据，响应由约 573KB 降至 247KB",
+    ],
+  },
+  {
     version: "1.0.0-beta13",
     build: "9ad65d5",
     releasedAt: "2026-08-03",
