@@ -3,7 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta13",
+    releasedAt: "2026-08-03",
+    title: "筛选选项统一与样式归属迁移收尾",
+    items: [
+      "全系统列表筛选项统一为服务端 `/api/filter-options` 聚合接口：数量统计表、待接收批次、结算候选与核销工作台四列表共用同一套列白名单与 GROUP BY 计数，结算候选列表响应移除内联筛选项（单次请求约 16KB 降至 1.3KB），核销工作台不再全量拉取表格数据",
+      "样式归属契约迁移完成：删除 `mobile.css`、`legacy-responsive.css`、`responsive.css`、`core.css`、`apple-ux.css`、`react.css`、`ux-foundation.css` 七个兼容样式文件，规则按唯一所有者归入 shell、components、modal 与各业务域文件，并补充 `data-ui` 组件边界",
+      "迁移过程清理约千行确认不渲染的遗留样式（旧按钮原语、旧表单与壳层导航类），`components.css` 收敛至 1800 行上限内；契约文档与样式归属 registry 同步更新",
+    ],
+  },
+  {
     version: "1.0.0-beta12",
+    build: "bf3dd8f",
     releasedAt: "2026-08-03",
     title: "样式归属清单与样式门禁",
     items: [
