@@ -6,7 +6,6 @@
     "antd/dist/reset.css",
     "antd-mobile/es/global/global.css",
     "src/styles/base.css",
-    "src/styles/features/react.css",
     "src/styles/features/ux-foundation.css",
     "src/styles/shell.css",
     "src/styles/components.css",
@@ -53,11 +52,6 @@
       "status": "in-progress",
       "selectorPrefixes": [".project-"],
       "scopeRoots": ["[data-feature=\"project-home\"]", ".project-home"]
-    },
-    "src/styles/features/react.css": {
-      "owner": "legacy-react",
-      "status": "compatibility",
-      "removeAfter": "all-feature-migration"
     }
   },
   "componentFamilies": {
@@ -123,7 +117,7 @@
   "exceptions": [
     {
       "reason": "Historical selectors remain while their data-ui scoped replacements are migrated.",
-      "files": ["src/styles/features/react.css"],
+      "files": [],
       "reviewBy": "v1.1.0"
     }
   ]

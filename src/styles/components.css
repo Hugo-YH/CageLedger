@@ -1698,6 +1698,13 @@
     box-shadow var(--motion-base) var(--ease-standard);
 }
 
+.empty-state {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+}
+
 /* Shared compact controls and table surfaces (migrated from apple-ux.css). */
 .compact,
 .compact-action {

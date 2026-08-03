@@ -330,6 +330,90 @@ button:active:not(:disabled),
   color: var(--text);
 }
 
+/* Modal base rules (migrated from react.css; later rules in this file are the
+ * canonical values and keep winning the cascade). */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 76% 16%, rgb(13 118 104 / 15%), transparent 30%), rgb(11 30 39 / 38%);
+  backdrop-filter: blur(5px);
+}
+
+.modal-backdrop > .modal-shell {
+  position: relative;
+  inset: auto;
+  width: min(var(--modal-width, 900px), 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow:
+    0 24px 60px rgb(9 31 38 / 25%),
+    var(--shadow-inset);
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.modal-backdrop > .confirm-dialog {
+  width: min(440px, 100%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.modal-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px;
+}
+
+.modal-shell-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  backdrop-filter: blur(12px);
+}
+
+.modal-shell-head .panel-head {
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.modal-shell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modal-shell-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor-modal {
+  position: fixed;
+  top: 56px;
+  right: 24px;
+  bottom: 24px;
+  width: min(560px, calc(100vw - 48px));
+  z-index: 90;
+  overflow: auto;
+  box-shadow:
+    0 24px 60px rgb(9 31 38 / 22%),
+    var(--shadow-inset);
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
 .modal-backdrop > .modal-shell {
   border-radius: 16px;
 }
@@ -622,5 +706,14 @@ button:active:not(:disabled),
   .modal-shell,
   .editor-modal {
     padding: 14px;
+  }
+
+  .editor-modal {
+    inset: 84px 14px 14px;
+    width: auto;
+  }
+
+  .modal-shell {
+    grid-template-rows: auto minmax(0, 1fr);
   }
 }

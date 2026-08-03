@@ -1502,4 +1502,9 @@ th {
   .quantity-entry-table {
     min-width: 760px;
   }
+
+  .billing-layout,
+  .quantity-billing-layout {
+    grid-template-columns: 1fr;
+  }
 }

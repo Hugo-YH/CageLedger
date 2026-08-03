@@ -8,7 +8,6 @@
 @import url("antd/dist/reset.css");
 @import url("antd-mobile/es/global/global.css");
 @import url("./base.css");
-@import url("./features/react.css");
 @import url("./features/ux-foundation.css");
 @import url("./shell.css");
 @import url("./components.css");

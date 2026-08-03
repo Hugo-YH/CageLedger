@@ -524,3 +524,14 @@
     flex-wrap: wrap;
   }
 }
+
+.room-list {
+  display: grid;
+  gap: 12px;
+}
+
+@media (width <= 760px) {
+  .system-layout {
+    grid-template-columns: 1fr;
+  }
+}

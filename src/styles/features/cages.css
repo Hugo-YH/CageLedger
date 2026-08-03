@@ -283,4 +283,13 @@
   .compact-slot-form label {
     grid-template-columns: 1fr;
   }
+
+  .cage-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .react-cage-view .cage-preview > .panel-head .panel-head-actions {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
 }
