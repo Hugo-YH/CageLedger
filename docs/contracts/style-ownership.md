@@ -21,15 +21,14 @@
 
 ## 组件边界
 
-| 组件族     | 根标识                        | 唯一所有者          | 允许范围                 |
-| ---------- | ----------------------------- | ------------------- | ------------------------ |
-| 应用壳     | `data-ui="app-shell"`         | `shell.css`         | 侧栏、工作区容器、安全区 |
-| 侧栏       | `data-ui="sidebar"`           | `shell.css`         | 桌面导航、移动导航切换   |
-| 工作区标题 | `data-ui="workspace-header"`  | `shell.css`         | 上下文标题与元信息       |
-| 命令栏     | `data-ui="workspace-toolbar"` | `components.css`    | 操作分组、sticky 行为    |
-| 表格       | `data-ui="data-table"`        | `ux-foundation.css` | 容器、横向滚动、分页     |
-| 弹窗       | `data-ui="modal"`             | `modal.css`         | 标题、正文、页脚与焦点   |
-| 移动导航   | `data-ui="mobile-navigation"` | `shell.css`         | TabBar、Sheet、安全区    |
+| 组件族   | 根标识                        | 唯一所有者          | 允许范围                 |
+| -------- | ----------------------------- | ------------------- | ------------------------ |
+| 应用壳   | `data-ui="app-shell"`         | `shell.css`         | 侧栏、工作区容器、安全区 |
+| 侧栏     | `data-ui="sidebar"`           | `shell.css`         | 桌面导航、移动导航切换   |
+| 命令栏   | `data-ui="workspace-toolbar"` | `components.css`    | 操作分组、sticky 行为    |
+| 表格     | `data-ui="data-table"`        | `ux-foundation.css` | 容器、横向滚动、分页     |
+| 弹窗     | `data-ui="modal"`             | `modal.css`         | 标题、正文、页脚与焦点   |
+| 移动导航 | `data-ui="mobile-navigation"` | `shell.css`         | TabBar、Sheet、安全区    |
 
 ## 修改流程
 

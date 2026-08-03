@@ -131,17 +131,18 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 ## 数据与系统管理
 
-| 方法             | 路径                               | 说明                           |
-| ---------------- | ---------------------------------- | ------------------------------ |
-| `GET` / `POST`   | `/api/users`                       | 管理账号                       |
-| `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                 |
-| `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                |
-| `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源           |
-| `POST`           | `/api/iacuc-index/upload`          | 上传 CSV，更新快照和派生字段   |
-| `GET`            | `/api/principal-identities`        | PI 身份和减免配置              |
-| `PUT`            | `/api/principal-identities/{name}` | 更新 PI 配置                   |
-| `GET`            | `/api/audit-events`                | 分页操作日志                   |
-| `GET`            | `/api/system/update-check`         | Gitea 最新 Release，管理员权限 |
+| 方法             | 路径                               | 说明                                                                               |
+| ---------------- | ---------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET` / `POST`   | `/api/users`                       | 管理账号                                                                           |
+| `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                                                                     |
+| `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                                                                    |
+| `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源                                                               |
+| `POST`           | `/api/iacuc-index/upload`          | 上传 CSV，更新快照和派生字段                                                       |
+| `GET`            | `/api/principal-identities`        | PI 身份和减免配置                                                                  |
+| `PUT`            | `/api/principal-identities/{name}` | 更新 PI 配置                                                                       |
+| `GET`            | `/api/audit-events`                | 分页操作日志                                                                       |
+| `GET`            | `/api/system/update-check`         | Gitea 最新 Release，管理员权限                                                     |
+| `GET`            | `/api/system/environment`          | 容器/宿主运行环境参数与 SQLite 状态（CPU、内存、系统、Python、数据库），管理员权限 |
 
 ## Typed API 规则
 

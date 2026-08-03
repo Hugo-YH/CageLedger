@@ -11,12 +11,11 @@ import {
   useSubmitAnimalInspection,
 } from "../../api/animalManagement";
 import { useBootstrap } from "../../api/bootstrap";
-import { AsyncActionButton, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { AsyncActionButton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { HelpTooltip } from "../../components/Tooltip";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb } from "../shell/workspaceNavigation";
 import { FindingCaptureDialog, ReferenceImageDialog, type ReferencePreview } from "./InspectionDialogs";
 import { InspectionModuleForm } from "./InspectionModuleForms";
 import {
@@ -287,12 +286,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   }
   return (
     <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <WorkspaceHeader
-        kicker="动物管理工作台"
-        title="动物巡检"
-        summary="以饲养间为对象完成正常确认、异常留证和提交锁定。"
-        status={draftId ? "草稿编辑中" : "新建巡检"}
-        breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
+      <WorkspaceToolbar
         actions={
           <>
             <AsyncActionButton

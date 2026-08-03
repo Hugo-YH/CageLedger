@@ -3,7 +3,7 @@ import { Badge, Button, Card, Col, Progress, Row, Skeleton, Statistic, Tag, Typo
 
 import type { BootstrapResponse } from "../../api/contracts";
 import { useBootstrap } from "../../api/bootstrap";
-import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { PageState } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 
@@ -55,12 +55,20 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
 
   return (
     <section className="workspace-view dashboard-view ant-dashboard-view">
-      <WorkspaceHeader
-        kicker="运营工作台"
-        title="实验动物笼位管理与计费系统"
-        summary="接收、入驻、巡检、结算与核销的日常运营概览。"
-        status={APP_VERSION}
-      />
+      <div className="dashboard-hero">
+        <Typography.Text className="workspace-kicker" type="secondary">
+          运营工作台
+        </Typography.Text>
+        <div className="workspace-title-line">
+          <Typography.Title level={1}>实验动物笼位管理与计费系统</Typography.Title>
+          <Tag className="workspace-status-badge" color="blue">
+            {APP_VERSION}
+          </Tag>
+        </div>
+        <Typography.Paragraph className="workspace-summary" type="secondary">
+          接收、入驻、巡检、结算与核销的日常运营概览。
+        </Typography.Paragraph>
+      </div>
       <div className="workspace-body dashboard-workspace-body ant-dashboard-body">
         <Row gutter={[16, 16]}>
           <DashboardStatistic label="总笼位" value={total} />

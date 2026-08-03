@@ -9,6 +9,7 @@ import type {
   ManagedUser,
   PagedResponse,
   PrincipalIdentity,
+  SystemEnvironment,
   SystemInfo,
   SystemUpdateStatus,
 } from "./contracts";
@@ -119,6 +120,14 @@ export function useAuditEvents(limit: number, offset: number) {
 }
 export function useSystemInfo() {
   return useQuery({ queryKey: queryKeys.systemInfo, queryFn: () => requestJson<SystemInfo>("/api/system/info") });
+}
+export function useSystemEnvironment(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.systemEnvironment,
+    queryFn: () => requestJson<SystemEnvironment>("/api/system/environment"),
+    enabled,
+    retry: false,
+  });
 }
 export function useSystemUpdate(enabled: boolean) {
   return useQuery({

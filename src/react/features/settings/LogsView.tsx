@@ -3,13 +3,11 @@ import { Card, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import { useAuditEvents } from "../../api/administration";
-import type { AuditEvent, SessionUser } from "../../api/contracts";
-import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import type { AuditEvent } from "../../api/contracts";
+import { formatDateTime, PageState, Pager } from "../../components/WorkspaceUi";
 import { DataTable } from "../../components/ui";
-import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
-export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) => void; user: SessionUser }) {
+export function LogsView() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const query = useAuditEvents(pageSize, (page - 1) * pageSize);
@@ -40,15 +38,6 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
   const pages = Math.max(Math.ceil(total / pageSize), 1);
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
-      <WorkspaceHeader
-        kicker="审计工作台"
-        title="操作日志"
-        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="查看系统写入操作、操作者和对象变更，追踪数据维护来源。"
-        status={`${total} 条记录`}
-        switcherLabel="系统功能"
-        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
-      />
       <div className="workspace-body settings-workspace-body">
         <Card
           className="settings-log-card"

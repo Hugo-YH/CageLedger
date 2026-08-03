@@ -14,7 +14,7 @@ export function Feedback({
 }) {
   if (kind === "loading")
     return (
-      <Spin tip={title}>
+      <Spin description={title}>
         <div className="app-feedback-space" />
       </Spin>
     );

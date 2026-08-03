@@ -1,103 +1,17 @@
-import { Breadcrumb, Button, Card, Empty, Flex, Modal, Pagination, Space, Tag, Typography } from "antd";
+import { Button, Empty, Flex, Modal, Pagination, Space, Typography } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 import { type ReactNode, useEffect, useRef } from "react";
 
 import { ActionButton, CommandBar, type ActionButtonProps, type ActionTone } from "./ui";
 
-export interface WorkspaceBreadcrumbItem {
-  label: string;
-  onClick?: () => void;
-}
-
-export interface WorkspaceSwitcherItem {
-  label: string;
-  description?: string;
-  onClick: () => void;
-}
-
-export function WorkspaceHeader({
-  kicker,
-  title,
-  summary,
-  status,
-  metrics,
-  actions,
-  toolbar,
-  breadcrumbs,
-  switcherLabel = "快速跳转",
-  switcherItems,
-}: {
-  kicker: string;
-  title: string;
-  summary: string;
-  status?: string;
-  metrics?: Array<{ label: string; value: ReactNode; tone?: "success" | "warning" | "todo" }>;
-  actions?: ReactNode;
-  toolbar?: ReactNode;
-  breadcrumbs?: WorkspaceBreadcrumbItem[];
-  switcherLabel?: string;
-  switcherItems?: WorkspaceSwitcherItem[];
-}) {
-  const hasBreadcrumbs = Boolean(breadcrumbs?.length);
-  void switcherLabel;
-  void switcherItems;
-  return (
-    <>
-      <header
-        className={`workspace-head ${hasBreadcrumbs ? "workspace-head-breadcrumb" : ""}`}
-        data-ui="workspace-header"
-      >
-        <div className="workspace-head-main">
-          <Typography.Text className="workspace-kicker" type="secondary">
-            {kicker}
-          </Typography.Text>
-          {hasBreadcrumbs ? (
-            <Breadcrumb
-              items={breadcrumbs!.map((crumb) => ({
-                title: crumb.onClick ? (
-                  <Button type="link" onClick={crumb.onClick}>
-                    {crumb.label}
-                  </Button>
-                ) : (
-                  crumb.label
-                ),
-              }))}
-            />
-          ) : null}
-          <Flex align="center" className="workspace-title-line" gap={8} wrap>
-            <Typography.Title level={1}>{title}</Typography.Title>
-            {status ? (
-              <Tag className="workspace-status-badge" color="blue">
-                {status}
-              </Tag>
-            ) : null}
-          </Flex>
-          {summary ? (
-            <Typography.Paragraph className="workspace-summary" type="secondary">
-              {summary}
-            </Typography.Paragraph>
-          ) : null}
-          {metrics?.length ? (
-            <div className="workspace-meta-strip">
-              {metrics.map((metric) => (
-                <Card className={`workspace-meta-card ${metric.tone || ""}`} key={metric.label} size="small">
-                  <span>{metric.label}</span>
-                  <strong>{metric.value}</strong>
-                </Card>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </header>
-      {toolbar || actions ? (
-        <CommandBar
-          className="workspace-toolbar"
-          context={toolbar ? <div className="workspace-toolbar-main">{toolbar}</div> : undefined}
-          actions={actions ? <div className="workspace-toolbar-action-group">{actions}</div> : undefined}
-        />
-      ) : null}
-    </>
-  );
+export function WorkspaceToolbar({ toolbar, actions }: { toolbar?: ReactNode; actions?: ReactNode }) {
+  return toolbar || actions ? (
+    <CommandBar
+      className="workspace-toolbar"
+      context={toolbar ? <div className="workspace-toolbar-main">{toolbar}</div> : undefined}
+      actions={actions ? <div className="workspace-toolbar-action-group">{actions}</div> : undefined}
+    />
+  ) : null;
 }
 
 export function PageState({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {

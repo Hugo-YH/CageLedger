@@ -17,7 +17,7 @@ import { queryKeys } from "../../api/queryKeys";
 import { ActionButton } from "../../components/ui";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
-import { AsyncActionButton, ModalShell, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
   missingIntakeRequiredFields,
@@ -27,7 +27,6 @@ import {
 import { openIntakeCardPrint } from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
 import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, intakeSwitchItems } from "../shell/workspaceNavigation";
 
 export function IntakeView({
   user,
@@ -283,20 +282,7 @@ export function IntakeView({
 
   return (
     <section className="workspace-view intake-workspace react-intake-view" data-feature="intake">
-      <WorkspaceHeader
-        kicker="笼卡接收工作台"
-        title={mode === "entry" ? "预约消息识别" : "待接收批次"}
-        breadcrumbs={[breadcrumb("笼卡管理", () => navigate("intake-entry"))]}
-        summary={
-          mode === "entry"
-            ? "识别预约消息或扫描笼卡，核对信息后保存为待接收批次。"
-            : "集中查询、打印和接收已保存批次，接收后自动进入待进驻任务。"
-        }
-        status={mode === "entry" ? "预约信息录入" : `${total} 个批次`}
-        metrics={[
-          { label: "待接收批次", value: total },
-          { label: "已选批次", value: selectedItems.length, tone: "success" },
-        ]}
+      <WorkspaceToolbar
         actions={
           mode === "entry" ? (
             <>
@@ -313,8 +299,6 @@ export function IntakeView({
             </>
           ) : null
         }
-        switcherLabel="笼卡功能"
-        switcherItems={intakeSwitchItems(navigate)}
       />
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">

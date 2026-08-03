@@ -19,8 +19,7 @@ import {
 
 import { requestJson } from "../../api/client";
 import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, intakeSwitchItems } from "../shell/workspaceNavigation";
-import { WorkspaceHeader } from "../../components/WorkspaceUi";
+import { WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 
@@ -167,19 +166,12 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
   }
   return (
     <section className="workspace-view scanner-workspace" data-feature="intake">
-      <WorkspaceHeader
-        kicker="笼卡快速识别"
-        title="二维码扫描"
-        breadcrumbs={[breadcrumb("笼卡管理", () => navigate("intake-entry"))]}
-        summary="扫描二维码或输入笼卡识别码，查询当前笼位、项目和接收状态。"
-        status={cameraActive ? "摄像头开启" : "只读查询"}
+      <WorkspaceToolbar
         actions={
           <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={() => navigate("intake-entry")}>
             返回笼卡管理
           </Button>
         }
-        switcherLabel="笼卡功能"
-        switcherItems={intakeSwitchItems(navigate)}
       />
       <div className="workspace-body">{content}</div>
     </section>

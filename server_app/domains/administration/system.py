@@ -1,5 +1,11 @@
 import json
+import os
+import platform
 import re
+import resource
+import socket
+import sqlite3
+import sys
 from http import HTTPStatus
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -18,6 +24,7 @@ from server_app.config import (
     CAGELEDGER_REPOSITORY_URL,
     CAGELEDGER_REVISION,
     CAGELEDGER_UPDATE_CHECK_ENABLED,
+    DB_PATH,
     ROOT,
 )
 from server_app.shared import now_iso
@@ -91,6 +98,127 @@ def system_info():
         "revision": current_revision() or None,
         "revisionShort": short_revision(current_revision()),
     }
+
+
+def system_environment():
+    """返回容器/宿主运行环境参数（静态只读，管理员接口）。"""
+    return {
+        "cpu": {
+            "model": cpu_model(),
+            "architecture": platform.machine(),
+            "cores": os.cpu_count() or 0,
+            "load": load_average(),
+        },
+        "memory": {
+            "totalBytes": memory_total_bytes(),
+        },
+        "system": {
+            "platform": platform.platform(),
+            "release": platform.release(),
+            "version": platform.version(),
+            "hostname": socket.gethostname(),
+            "container": "docker" if is_container() else None,
+        },
+        "python": {
+            "version": platform.python_version(),
+            "implementation": platform.python_implementation(),
+            "compiler": platform.python_compiler(),
+            "executable": sys.executable,
+            "bits64": sys.maxsize > 2**32,
+        },
+        "database": database_status(),
+    }
+
+
+def cpu_model():
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8", errors="replace") as handle:
+            model = parse_proc_cpuinfo(handle.read())
+    except OSError:
+        model = ""
+    return model or platform.processor()
+
+
+def parse_proc_cpuinfo(text):
+    """从 /proc/cpuinfo 文本提取首个 model name。"""
+    for line in text.splitlines():
+        if line.startswith("model name"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def memory_total_bytes():
+    try:
+        with open("/proc/meminfo", encoding="utf-8", errors="replace") as handle:
+            total = parse_proc_meminfo(handle.read())
+    except OSError:
+        total = 0
+    if total:
+        return total
+    if sys.platform == "darwin":
+        try:
+            return os.sysconf("SC_PHYS_PAGES") * resource.getpagesize()
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def parse_proc_meminfo(text):
+    """从 /proc/meminfo 文本提取 MemTotal（kB）并换算为字节。"""
+    for line in text.splitlines():
+        if line.startswith("MemTotal:"):
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    return int(parts[1]) * 1024
+                except ValueError:
+                    return 0
+            return 0
+    return 0
+
+
+def load_average():
+    try:
+        return [round(value, 2) for value in os.getloadavg()]
+    except OSError:
+        return [None, None, None]
+
+
+def is_container():
+    return os.path.exists("/.dockerenv")
+
+
+def database_status():
+    """SQLite 只读状态检查：可打开性、日志模式、体积与表数量。"""
+    try:
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        try:
+            ok = conn.execute("SELECT 1").fetchone() is not None
+            journal_mode = str(conn.execute("PRAGMA journal_mode").fetchone()[0])
+            page_count = int(conn.execute("PRAGMA page_count").fetchone()[0])
+            page_size = int(conn.execute("PRAGMA page_size").fetchone()[0])
+            tables = int(
+                conn.execute(
+                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchone()[0]
+            )
+        finally:
+            conn.close()
+        return {
+            "ok": ok,
+            "journalMode": journal_mode,
+            "sizeBytes": page_count * page_size,
+            "tables": tables,
+            "path": str(DB_PATH),
+        }
+    except (OSError, sqlite3.Error, ValueError):
+        return {
+            "ok": False,
+            "journalMode": "",
+            "sizeBytes": None,
+            "tables": 0,
+            "path": str(DB_PATH),
+        }
 
 
 def app_version():

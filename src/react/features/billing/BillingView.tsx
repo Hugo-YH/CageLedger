@@ -4,14 +4,11 @@ import { Card, Segmented, Typography } from "antd";
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, billingSwitchItems } from "../shell/workspaceNavigation";
-import { WorkspaceHeader } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { SettlementCandidateList } from "./components/SettlementCandidateList";
 import { MonthlyBillingSummary } from "./components/MonthlyBillingSummary";
 
-const currentMonth = new Date().toISOString().slice(0, 7);
 type BillingMode = "cage-map" | "quantity-entry" | "quantity-saved" | "settlement" | "monthly-summary";
 
 export function BillingView({
@@ -82,19 +79,6 @@ export function BillingView({
   }
   return (
     <section className="workspace-view billing-workspace react-billing-view" data-feature="billing">
-      <WorkspaceHeader
-        kicker="饲养费核算工作台"
-        title={title}
-        breadcrumbs={[breadcrumb("饲养费管理", () => navigate("billing-quantity-entry"))]}
-        summary={billingDescription(mode)}
-        status={billingBadge(mode, source)}
-        metrics={[
-          { label: "结算月份", value: currentMonth.replace("-", "年") + "月" },
-          { label: "当前任务", value: title, tone: "success" },
-        ]}
-        switcherLabel="饲养费功能"
-        switcherItems={billingSwitchItems(navigate, user.role === "admin")}
-      />
       <div className="workspace-body billing-workspace-body">{body}</div>
     </section>
   );
@@ -106,20 +90,4 @@ function billingTitle(mode: BillingMode) {
   if (mode === "quantity-saved") return "已保存数量统计表";
   if (mode === "monthly-summary") return "月度饲养费汇总";
   return "按项目负责人结算";
-}
-
-function billingBadge(mode: BillingMode, source: "quantity_sheet" | "cage_map") {
-  if (mode === "cage-map") return "自动核算";
-  if (mode === "quantity-entry") return "人工录入";
-  if (mode === "quantity-saved") return "数据维护";
-  if (mode === "monthly-summary") return "管理员导出";
-  return `当前来源：${source === "quantity_sheet" ? "数量统计表" : "动态笼位图"}`;
-}
-
-function billingDescription(mode: BillingMode) {
-  if (mode === "cage-map") return "按笼位真实占用时间线检查核算数据，适用于日常维护完整的饲养间。";
-  if (mode === "quantity-entry") return "按伦理号和房间录入月度数量变化，保存后进入结算汇总范围。";
-  if (mode === "quantity-saved") return "集中检索、预览、编辑和导出已保存的数量统计表。";
-  if (mode === "monthly-summary") return "按月份导出 IACUC 与设施维度的饲养费汇总 Excel，用于线下报销登记。";
-  return "选择月份、项目负责人和数据来源，自动合并负责人名下伦理并生成结算单。";
 }

@@ -1,10 +1,10 @@
 :root {
   --app-page-bg: #f5f5f5;
-  --app-surface: #fff;
-  --app-surface-subtle: #fafafa;
-  --app-border: #f0f0f0;
+  --app-surface: var(--surface);
+  --app-surface-subtle: var(--surface-soft);
+  --app-border: var(--surface-strong);
   --app-text: #1f1f1f;
-  --app-text-secondary: #595959;
+  --app-text-secondary: var(--muted);
   --app-primary: #0958d9;
   --app-success: #389e0d;
   --app-warning: #d48806;
@@ -38,7 +38,7 @@
 }
 
 .ant-empty-description {
-  color: #595959 !important;
+  color: var(--app-text-secondary) !important;
 }
 
 .ant-shell {
@@ -67,7 +67,7 @@
   display: flex;
   align-items: center;
   min-height: 64px;
-  gap: 10px;
+  gap: 8px;
   padding: 12px 16px;
   color: #fff;
 }
@@ -81,7 +81,7 @@
 .ant-brand-copy {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 4px;
 }
 
 .ant-brand-copy strong {
@@ -96,7 +96,7 @@
 .ant-brand-copy span {
   overflow: hidden;
   color: rgb(255 255 255 / 60%);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -106,7 +106,7 @@
   position: absolute;
   top: 10px;
   right: 8px;
-  z-index: 2;
+  z-index: var(--z-raised);
   color: rgb(255 255 255 / 85%) !important;
 }
 
@@ -143,9 +143,9 @@
 .ant-sidebar-account {
   flex: 0 0 auto;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0 12px 16px;
-  padding: 14px 12px 0;
+  padding: 16px 12px 0;
   border-top: 1px solid rgb(255 255 255 / 12%);
 }
 
@@ -169,7 +169,6 @@
 }
 
 /* Compatibility layer: legacy views inherit the Ant surface hierarchy during migration. */
-.ant-workspace .workspace-head,
 .ant-workspace .panel,
 .ant-workspace .surface,
 .ant-workspace .workspace-toolbar {
@@ -219,30 +218,10 @@
   letter-spacing: 0;
 }
 
-.ant-workspace .workspace-head {
-  display: block;
-  padding: 0 0 16px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.ant-workspace .workspace-head::before,
-.ant-workspace .workspace-head::after {
-  display: none;
-}
-
-.ant-workspace .workspace-kicker {
-  color: var(--ant-color-primary);
-  font-weight: 500;
-  letter-spacing: 0;
-}
-
 .ant-workspace .workspace-title-line .ant-typography {
   margin: 0;
   color: var(--app-text);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 600;
   line-height: 1.25;
 }
@@ -278,7 +257,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   background: var(--app-surface);
   box-shadow: var(--app-shadow-overlay);
 }
@@ -308,13 +287,13 @@
 
 .ant-workspace input.ant-input {
   min-height: 32px;
-  padding: 4px 11px;
+  padding: 4px 12px;
   border-radius: var(--ant-border-radius, 6px);
   background: var(--app-surface);
 }
 
 .ant-workspace textarea.ant-input {
-  padding: 4px 11px;
+  padding: 4px 12px;
   border-radius: var(--ant-border-radius, 6px);
   background: var(--app-surface);
 }
@@ -325,7 +304,7 @@
   gap: 8px;
   color: var(--ant-color-text);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 22px;
 }
 
@@ -368,10 +347,10 @@
   display: flex;
   align-items: center;
   min-height: 22px;
-  gap: 6px;
+  gap: 8px;
   color: var(--ant-color-text);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 22px;
 }
 
@@ -388,7 +367,7 @@
   border-radius: 4px;
   color: var(--ant-color-text-secondary);
   background: var(--ant-color-fill-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 18px;
 }
@@ -435,7 +414,7 @@
 .ant-workspace button.flow-button {
   min-height: 32px;
   border-radius: 6px;
-  font-weight: 500;
+  font-weight: 400;
   box-shadow: none;
 }
 
@@ -519,7 +498,7 @@
 .inspection-finding-modal-title span {
   color: var(--ant-color-primary);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 20px;
 }
 
@@ -564,7 +543,7 @@
 }
 
 .inspection-finding-modal .inspection-reference-images {
-  padding-bottom: 2px;
+  padding-bottom: 4px;
 }
 
 .inspection-finding-modal .inspection-reference-button {
@@ -633,7 +612,7 @@
 }
 
 .app-sheet-title {
-  padding: 14px 16px 8px;
+  padding: 16px 16px 8px;
   color: var(--app-text);
   font-size: 16px;
   font-weight: 600;
@@ -682,7 +661,7 @@
 
 .ant-dashboard-statistic .ant-statistic-title,
 .ant-dashboard-section .ant-statistic-title {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .ant-dashboard-statistic.is-success .ant-statistic-content {
@@ -734,18 +713,18 @@
 
 .ant-dashboard-task.is-warning .ant-dashboard-task-icon {
   background: #fffbe6;
-  color: #d48806;
+  color: var(--app-warning);
 }
 
 .ant-dashboard-task.is-error .ant-dashboard-task-icon {
   background: #fff2f0;
-  color: #cf1322;
+  color: var(--app-error);
 }
 
 .ant-dashboard-task-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 4px;
 }
 
 .ant-dashboard-task-copy .ant-typography {
@@ -766,8 +745,8 @@
 .ant-dashboard-task-count .ant-badge-count {
   min-width: 26px;
   height: 22px;
-  padding-inline: 7px;
-  border-radius: 11px;
+  padding-inline: 8px;
+  border-radius: 8px;
   line-height: 22px;
 }
 
@@ -777,7 +756,7 @@
 
 .ant-dashboard-status {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-height: 154px;
 }
 
@@ -799,7 +778,7 @@
 }
 
 .ant-dashboard-status-head .ant-statistic-content {
-  font-size: 28px;
+  font-size: 30px;
   line-height: 1;
 }
 
@@ -869,7 +848,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 4px 16px 8px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .ant-mobile-sheet-actions {
@@ -880,7 +859,7 @@
 
 .app-command-bar {
   min-height: 52px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-surface);
@@ -992,7 +971,7 @@
   height: 22px;
   min-height: 22px;
   margin-inline-start: 4px;
-  padding: 0 2px !important;
+  padding: 0 4px !important;
   color: var(--ant-color-text-quaternary);
   border-radius: 4px;
   opacity: 0.72;
@@ -1089,7 +1068,7 @@
 
 .inspection-image-modal .ant-modal-title small {
   color: var(--ant-color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
 }
 
@@ -1121,7 +1100,7 @@
   overflow: hidden;
   margin-top: 8px;
   color: var(--ant-color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1141,7 +1120,7 @@
   box-shadow: none;
   color: var(--ant-color-text);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* Base legacy button rules also match Ant Switch because it renders a button. */
@@ -1196,7 +1175,7 @@
 
 .ant-workspace .react-quantity-layout .quantity-options-toggle {
   min-height: 48px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--app-border);
   border-radius: var(--ant-border-radius, 6px);
   background: var(--app-surface);
@@ -1224,7 +1203,7 @@
 
 .ant-workspace .react-quantity-layout .quantity-options-toggle-copy small {
   color: var(--ant-color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .ant-workspace .react-quantity-layout .quantity-options-badges {
@@ -1234,7 +1213,7 @@
 .ant-workspace .react-quantity-layout .quantity-options-badge {
   min-height: 20px;
   margin-inline-end: 0;
-  padding-inline: 6px;
+  padding-inline: 8px;
   border-radius: var(--ant-border-radius-sm, 4px);
   color: var(--ant-color-primary);
   font-size: 12px;
@@ -1278,7 +1257,7 @@
 .ant-workspace .quantity-free-cage-field small,
 .ant-workspace .quantity-custom-billing-empty {
   color: var(--ant-color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .ant-workspace .quantity-full-exemption-row {
@@ -1327,7 +1306,7 @@
 
 .ant-workspace .audit-table-message {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1378,7 +1357,7 @@
 
 .ant-workspace .data-import-dragger .ant-upload-text {
   margin-bottom: 4px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .ant-workspace .data-import-dragger .ant-upload-hint {
@@ -1403,7 +1382,7 @@
 
 .ant-workspace .settings-user-collapse > .ant-collapse-item > .ant-collapse-header {
   align-items: center;
-  padding: 14px 16px;
+  padding: 16px;
 }
 
 .ant-workspace .settings-user-collapse .ant-collapse-content {
@@ -1511,7 +1490,7 @@
 
 .react-inline-notice .notice-icon {
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 16px;
   animation: cageledger-icon-pop 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -1619,7 +1598,7 @@
   }
 
   .inspection-finding-modal-title strong {
-    font-size: 18px;
+    font-size: 16px;
     line-height: 26px;
   }
 
@@ -1705,7 +1684,7 @@
   }
 
   .ant-workspace .pager .pager-scroll {
-    padding-bottom: 2px;
+    padding-bottom: 4px;
   }
 
   .ant-dashboard-task {

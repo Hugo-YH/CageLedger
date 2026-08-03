@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { Alert, Button, Card, Descriptions, Flex, Segmented, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Descriptions, Divider, Flex, Segmented, Skeleton, Space, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
-import { useSystemInfo, useSystemUpdate } from "../../api/administration";
-import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { useSystemEnvironment, useSystemInfo, useSystemUpdate } from "../../api/administration";
+import { PageState } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
-import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
 export function SystemView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const isMobile = useIsMobileLayout();
   const ui = useUiState();
   const dispatch = useUiDispatch();
   const info = useSystemInfo();
+  const environment = useSystemEnvironment(user.role === "admin");
   const [checkEnabled, setCheckEnabled] = useState(false);
   const update = useSystemUpdate(checkEnabled && user.role === "admin");
   if (info.isPending)
@@ -93,6 +93,65 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
           <Descriptions.Item label="所属单位">{`${data.organization} · ${data.department}`}</Descriptions.Item>
           <Descriptions.Item label="开源协议">{data.license}</Descriptions.Item>
         </Descriptions>
+        {user.role === "admin" ? (
+          <>
+            <Divider dashed style={{ margin: "16px 0" }} />
+            <Flex align="center" justify="space-between" style={{ marginBottom: 12 }}>
+              <Typography.Text strong>运行环境</Typography.Text>
+              <Space size={8}>
+                <Typography.Text type="secondary">容器视角 · 静态参数</Typography.Text>
+                <Button size="small" loading={environment.isFetching} onClick={() => void environment.refetch()}>
+                  刷新运行环境
+                </Button>
+              </Space>
+            </Flex>
+            {environment.isPending ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : environment.isError ? (
+              <Alert description={environment.error.message} showIcon title="运行环境信息获取失败" type="error" />
+            ) : environment.data ? (
+              <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
+                <Descriptions.Item label="CPU 型号">{environment.data.cpu.model || "未知"}</Descriptions.Item>
+                <Descriptions.Item label="CPU 架构">{environment.data.cpu.architecture}</Descriptions.Item>
+                <Descriptions.Item label="逻辑核心数">{`${environment.data.cpu.cores} 核`}</Descriptions.Item>
+                <Descriptions.Item label="负载（1/5/15 分钟）">
+                  {formatLoad(environment.data.cpu.load)}
+                </Descriptions.Item>
+                <Descriptions.Item label="内存总量">
+                  {formatBytes(environment.data.memory.totalBytes)}
+                </Descriptions.Item>
+                <Descriptions.Item label="操作系统">{environment.data.system.platform}</Descriptions.Item>
+                <Descriptions.Item label="内核版本">{environment.data.system.release}</Descriptions.Item>
+                <Descriptions.Item label="主机名">{environment.data.system.hostname}</Descriptions.Item>
+                <Descriptions.Item label="运行形态">
+                  {environment.data.system.container === "docker" ? "Docker 容器" : "本机进程"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Python 版本">{environment.data.python.version}</Descriptions.Item>
+                <Descriptions.Item label="Python 实现">{environment.data.python.implementation}</Descriptions.Item>
+                <Descriptions.Item label="编译器">{environment.data.python.compiler}</Descriptions.Item>
+                <Descriptions.Item label="解释器路径">
+                  <Typography.Text code style={{ wordBreak: "break-all" }}>
+                    {environment.data.python.executable}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="64 位">{environment.data.python.bits64 ? "是" : "否"}</Descriptions.Item>
+                <Descriptions.Item label="数据库状态">
+                  {environment.data.database.ok ? <Tag color="success">正常</Tag> : <Tag color="error">异常</Tag>}
+                </Descriptions.Item>
+                <Descriptions.Item label="数据库文件">
+                  {formatBytes(environment.data.database.sizeBytes)}
+                </Descriptions.Item>
+                <Descriptions.Item label="WAL 模式">{environment.data.database.journalMode || "—"}</Descriptions.Item>
+                <Descriptions.Item label="数据表数量">{`${environment.data.database.tables} 张`}</Descriptions.Item>
+                <Descriptions.Item label="数据库路径">
+                  <Typography.Text code style={{ wordBreak: "break-all" }}>
+                    {environment.data.database.path}
+                  </Typography.Text>
+                </Descriptions.Item>
+              </Descriptions>
+            ) : null}
+          </>
+        ) : null}
         {checkEnabled ? <UpdateCard update={update} /> : null}
       </Card>
       <Card title={<CardTitle>维护信息</CardTitle>}>
@@ -130,15 +189,6 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   }
   return (
     <section className="workspace-view system-workspace" data-feature="administration">
-      <WorkspaceHeader
-        kicker="系统与文档工作台"
-        title="关于系统"
-        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="集中查看当前版本、界面偏好与维护信息；更新记录由项目文档统一维护。"
-        status={`当前版本 ${data.version}${data.build ? `（${data.build}）` : ""}`}
-        switcherLabel="系统功能"
-        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
-      />
       <div className="workspace-body system-workspace-body">
         <div className="system-layout">{content}</div>
       </div>
@@ -184,4 +234,15 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
       type={update.isError ? "error" : update.data?.updateAvailable ? "warning" : "info"}
     />
   );
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "未知";
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GiB`;
+  return `${(value / 1024 ** 2).toFixed(0)} MiB`;
+}
+
+function formatLoad(load: [number | null, number | null, number | null]): string {
+  if (load.every((value) => value === null)) return "不可用";
+  return load.map((value) => (value === null ? "—" : value.toFixed(2))).join(" / ");
 }

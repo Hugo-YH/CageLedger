@@ -8,17 +8,15 @@ import type { ColumnsType } from "antd/es/table";
 import { uploadFile, useIacucStatus, usePrincipalIdentities, useSavePrincipalIdentity } from "../../api/administration";
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
-import { formatDateTime, PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { formatDateTime, PageState, Pager } from "../../components/WorkspaceUi";
 import { DataTable } from "../../components/ui";
-import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
 const principalTypeOptions = [
   { value: "independent", label: "独立科研人员" },
   { value: "pi", label: "PI" },
 ];
 
-export function DataView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
+export function DataView({ user }: { user: SessionUser }) {
   const status = useIacucStatus();
   const identities = usePrincipalIdentities();
   const saveIdentity = useSavePrincipalIdentity();
@@ -82,18 +80,9 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
 
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
-      <WorkspaceHeader
-        kicker="数据治理工作台"
-        title="数据管理"
-        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="维护 IACUC 索引、负责人身份和历史报销台账，保障录入与结算自动匹配。"
-        status={`${status.data?.count || 0} 条 IACUC`}
-        switcherLabel="系统功能"
-        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
-      />
       <div className="workspace-body settings-workspace-body">
         {notice ? (
-          <Alert closable title={notice.message} showIcon type={notice.type} onClose={() => setNotice(null)} />
+          <Alert closable={{ onClose: () => setNotice(null) }} showIcon title={notice.message} type={notice.type} />
         ) : null}
         <section className="settings-split-layout data-settings-layout">
           <Card

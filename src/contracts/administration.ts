@@ -50,6 +50,39 @@ export interface SystemInfo {
   revisionShort: string;
 }
 
+export interface SystemEnvironment {
+  cpu: {
+    model: string;
+    architecture: string;
+    cores: number;
+    load: [number | null, number | null, number | null];
+  };
+  memory: {
+    totalBytes: number | null;
+  };
+  system: {
+    platform: string;
+    release: string;
+    version: string;
+    hostname: string;
+    container: "docker" | null;
+  };
+  python: {
+    version: string;
+    implementation: string;
+    compiler: string;
+    executable: string;
+    bits64: boolean;
+  };
+  database: {
+    ok: boolean;
+    journalMode: string;
+    sizeBytes: number | null;
+    tables: number;
+    path: string;
+  };
+}
+
 export interface SystemUpdateStatus {
   currentVersion?: string | null;
   latestVersion?: string | null;

@@ -38,7 +38,7 @@
   flex: 0 0 auto;
   gap: 8px;
   color: var(--app-text);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   text-decoration: none;
 }
@@ -92,7 +92,7 @@
 
 .project-hero h1.ant-typography {
   max-width: 760px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   font-size: clamp(36px, 5vw, 60px);
   line-height: 1.16;
   letter-spacing: -0.035em;
@@ -102,16 +102,16 @@
   max-width: 680px;
   margin-bottom: 28px;
   color: var(--app-text-secondary);
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.75;
 }
 
 .project-hero-panel.ant-card {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--ant-color-primary) 22%, var(--app-border));
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--app-surface) 94%, var(--ant-color-primary-bg));
-  box-shadow: 0 20px 48px rgb(0 0 0 / 8%);
+  box-shadow: var(--shadow-lift);
 }
 
 .project-hero-panel .ant-card-body {
@@ -155,12 +155,12 @@
 }
 
 .project-demo-head .project-eyebrow {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .project-demo-head strong {
   display: block;
-  font-size: 22px;
+  font-size: 20px;
   letter-spacing: -0.02em;
 }
 
@@ -181,9 +181,9 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   align-content: start;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--app-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--app-surface) 88%, transparent);
 }
 
@@ -195,7 +195,7 @@
   border-radius: 6px;
   background: var(--app-surface);
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
@@ -219,7 +219,7 @@
 .project-demo-flow {
   position: relative;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .project-demo-flow-line {
@@ -247,7 +247,7 @@
   align-items: center;
   gap: 12px;
   min-height: 54px;
-  padding: 10px;
+  padding: 8px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--app-surface) 92%, transparent);
@@ -262,9 +262,9 @@
   border-radius: 50%;
   background: var(--ant-color-primary);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .project-demo-flow-item strong,
@@ -273,13 +273,13 @@
 }
 
 .project-demo-flow-item strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .project-demo-flow-item small {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .project-demo-ledger {
@@ -288,7 +288,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 20px;
-  padding-top: 18px;
+  padding-top: 16px;
   border-top: 1px solid var(--app-border);
   color: var(--app-text-secondary);
   font-size: 12px;
@@ -361,7 +361,7 @@
   flex-direction: column;
   align-items: flex-start;
   min-height: 190px;
-  padding: 22px;
+  padding: 24px;
 }
 
 .project-capability-icon,
@@ -374,13 +374,13 @@
   border-radius: 8px;
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .project-capability-card h4.ant-typography,
 .project-resource-card h4.ant-typography {
   margin-block: 0 8px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .project-capability-card .ant-typography,
@@ -430,7 +430,7 @@
   margin: 0 auto;
   padding-bottom: 32px;
   color: var(--app-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 [data-feature="project-home"] .project-home-footer .ant-divider {
@@ -536,7 +536,7 @@
   }
 
   .project-hero h1.ant-typography {
-    font-size: 36px;
+    font-size: 38px;
   }
 
   .project-hero-copy > .ant-typography {

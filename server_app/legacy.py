@@ -48,6 +48,7 @@ from server_app.domains.administration import (
     ensure_default_admin,
     list_users,
     merge_audit_logs,
+    system_environment,
     system_info,
     system_update_status,
     update_user,
@@ -5241,6 +5242,15 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 self.send_json(system_update_status())
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_GATEWAY)
+            return
+        if path == "/api/system/environment":
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            self.send_json(system_environment())
             return
         if path == "/api/users":
             user = self.require_user()

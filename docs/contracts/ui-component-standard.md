@@ -4,7 +4,7 @@
 
 - 桌面与平板端使用 `antd`；移动端使用 `antd-mobile`。
 - `src/react/components/ui/` 是页面使用的统一适配层。
-- 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceHeader`、Ant `Form`、`Table`、`Card`、`Modal`、`Drawer`、`Empty` 与 `Result`。
+- 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceToolbar`、Ant `Form`、`Table`、`Card`、`Modal`、`Drawer`、`Empty` 与 `Result`。
 - 笼位图、数量台账网格、巡检评分、图表与打印模板可保留专用 DOM，通用操作、状态与浮层使用适配层。
 
 ## 视觉与交互

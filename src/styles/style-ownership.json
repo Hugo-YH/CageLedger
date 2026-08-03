@@ -65,13 +65,6 @@
       "breakpoints": ["desktop", "1180px", "760px", "landscape"],
       "status": "in-progress"
     },
-    "workspace-header": {
-      "root": "[data-ui='workspace-header']",
-      "owner": "src/styles/shell.css",
-      "allowedPrefixes": ["[data-ui='workspace-header']", ".workspace-head"],
-      "breakpoints": ["desktop", "760px"],
-      "status": "in-progress"
-    },
     "command-bar": {
       "root": "[data-ui='workspace-toolbar']",
       "owner": "src/styles/components.css",

@@ -11,7 +11,7 @@ from .auth import (
     user_from_token,
     verify_password,
 )
-from .system import system_info, system_update_status
+from .system import system_environment, system_info, system_update_status
 from .users import create_user, delete_user, update_user
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "list_users",
     "merge_audit_logs",
     "sanitize_user",
+    "system_environment",
     "system_info",
     "system_update_status",
     "update_user",

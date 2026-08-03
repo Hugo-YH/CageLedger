@@ -3,9 +3,6 @@ import { AuditOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Tabs, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
-import type { WorkspaceView } from "../../state/ui";
-import { WorkspaceHeader } from "../../components/WorkspaceUi";
-import { breadcrumb, billingSwitchItems } from "../shell/workspaceNavigation";
 import { ClaimsPanel, LegacyPanel, ObligationsPanel, ReconciliationPanel } from "./components/ReimbursementLedger";
 import { ReimbursementClaimDialog } from "./components/ReimbursementClaimDialog";
 
@@ -18,23 +15,13 @@ const tabs: Array<[LedgerTab, string]> = [
   ["legacy", "历史台账"],
 ];
 
-export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
+export function WorkflowCenterView({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<LedgerTab>("obligations");
   const [claimId, setClaimId] = useState("");
   const [creatingClaim, setCreatingClaim] = useState(false);
-  const title = tabs.find(([key]) => key === tab)?.[1] || "结算应收";
 
   return (
     <section className="workspace-view workflow-center-view reimbursement-ledger-view" data-feature="workflow">
-      <WorkspaceHeader
-        kicker="结算与报销台账中心"
-        title="结算与报销台账"
-        breadcrumbs={[breadcrumb("饲养费管理", () => navigate("billing-quantity-entry"))]}
-        summary="结算应收保留费用产生负责人；报销单经费负责人可跨项目负责人分摊核销。"
-        status={title}
-        switcherLabel="饲养费功能"
-        switcherItems={billingSwitchItems(navigate, user.role === "admin")}
-      />
       <div className="workspace-body workflow-workspace-body">
         <Card
           className="reimbursement-ledger-panel"

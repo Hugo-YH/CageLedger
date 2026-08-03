@@ -2,11 +2,10 @@ import { Alert, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useAnimalInspectionCatalog } from "../../api/animalManagement";
-import { PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { PageState } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb } from "../shell/workspaceNavigation";
 import { catalogItems } from "./model";
 
 export function InspectionStandards({
@@ -70,12 +69,6 @@ export function InspectionStandards({
   }
   return (
     <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <WorkspaceHeader
-        kicker="动物管理"
-        title="巡检标准"
-        summary="巡检条目、图例和处置建议以受控目录版本发布，历史巡检记录持续保留提交时的结论语义。"
-        breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
-      />
       <div className="workspace-body animal-management-body">{content}</div>
     </section>
   );

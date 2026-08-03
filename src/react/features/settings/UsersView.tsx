@@ -4,9 +4,7 @@ import { Button, Card, Checkbox, Collapse, Form, Input, Select, Space, Tag, Typo
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
 import { useDeleteUser, useSaveUser, useUsers } from "../../api/administration";
-import { ConfirmDialog, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
-import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
+import { ConfirmDialog, PageState } from "../../components/WorkspaceUi";
 
 const emptyDraft = {
   username: "",
@@ -18,13 +16,7 @@ const emptyDraft = {
 };
 type UserDraft = typeof emptyDraft;
 
-export function UsersView({
-  currentUser,
-  navigate,
-}: {
-  currentUser: SessionUser;
-  navigate: (view: WorkspaceView) => void;
-}) {
+export function UsersView({ currentUser }: { currentUser: SessionUser }) {
   const users = useUsers(currentUser.role === "admin");
   const bootstrap = useBootstrap("summary");
   const save = useSaveUser();
@@ -34,14 +26,6 @@ export function UsersView({
   if (currentUser.role !== "admin")
     return (
       <section className="workspace-view">
-        <WorkspaceHeader
-          kicker="权限工作台"
-          title="账号管理"
-          breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-          summary="账号管理仅向系统管理员开放。"
-          switcherLabel="系统功能"
-          switcherItems={settingsSwitchItems(navigate, false)}
-        />
         <div className="workspace-body">
           <section className="panel">
             <PageState title="需要系统管理员权限" />
@@ -75,15 +59,6 @@ export function UsersView({
   }
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
-      <WorkspaceHeader
-        kicker="权限工作台"
-        title="账号管理"
-        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="维护系统管理员和房间管理员，房间授权直接决定业务数据范围。"
-        status={`${items.length} 个账号`}
-        switcherLabel="系统功能"
-        switcherItems={settingsSwitchItems(navigate, currentUser.role === "admin")}
-      />
       <div className="workspace-body settings-workspace-body">
         <section className="settings-split-layout">
           <Card

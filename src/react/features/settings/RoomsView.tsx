@@ -4,13 +4,11 @@ import { Button, Card, Empty, Space, Tag, Typography } from "antd";
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
-import { ConfirmDialog, PageState, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { ConfirmDialog, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
-import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb, settingsSwitchItems } from "../shell/workspaceNavigation";
 
-export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
+export function RoomsView({ user }: { user: SessionUser }) {
   const query = useBootstrap("full");
   const save = useSaveInfrastructure();
   const removeRoom = useDeleteRoom();
@@ -79,14 +77,7 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
   }
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
-      <WorkspaceHeader
-        kicker="基础设施工作台"
-        title="房间管理"
-        breadcrumbs={[breadcrumb("系统设置", () => navigate("rooms"))]}
-        summary="维护饲养间、笼架和笼位规模，供笼位录入与饲养费核算共同使用。"
-        status={canManageRooms ? "系统管理员可维护" : "当前账号可维护授权笼架"}
-        switcherLabel="系统功能"
-        switcherItems={settingsSwitchItems(navigate, user.role === "admin")}
+      <WorkspaceToolbar
         actions={
           <Space>
             {canManageRooms ? (
@@ -95,7 +86,6 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
               </Button>
             ) : null}
             <Button
-              type="primary"
               disabled={!visibleRooms.length}
               onClick={() => setRackDraft(newRackDraft(visibleRooms[0], cageRacks))}
             >

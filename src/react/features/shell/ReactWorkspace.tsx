@@ -257,7 +257,7 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "intake-entry") return <IntakeView mode="entry" user={user} navigate={navigate} />;
   if (view === "intake-batches") return <IntakeView mode="batches" user={user} navigate={navigate} />;
   if (view === "cage-card-scanner") return <ScannerView navigate={navigate} />;
-  if (view === "cages") return <CagesView navigate={navigate} />;
+  if (view === "cages") return <CagesView />;
   if (view === "animal-inspection-entry") return <AnimalManagementView mode="entry" user={user} navigate={navigate} />;
   if (view === "animal-inspection-findings")
     return <AnimalManagementView mode="findings" user={user} navigate={navigate} />;
@@ -271,11 +271,11 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "billing-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
   if (view === "billing-monthly-summary" && user.role === "admin")
     return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
-  if (view === "workflow-center") return <WorkflowCenterView user={user} navigate={navigate} />;
-  if (view === "rooms") return <RoomsView user={user} navigate={navigate} />;
-  if (view === "users") return <UsersView currentUser={user} navigate={navigate} />;
-  if (view === "data") return <DataView user={user} navigate={navigate} />;
-  if (view === "logs") return <LogsView user={user} navigate={navigate} />;
+  if (view === "workflow-center") return <WorkflowCenterView user={user} />;
+  if (view === "rooms") return <RoomsView user={user} />;
+  if (view === "users") return <UsersView currentUser={user} />;
+  if (view === "data") return <DataView user={user} />;
+  if (view === "logs") return <LogsView />;
   if (view === "system") return <SystemView user={user} navigate={navigate} />;
   return <DashboardView navigate={navigate} />;
 }

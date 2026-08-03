@@ -10,13 +10,13 @@
 }
 
 .ghost.danger-text:hover {
-  background: #ffe8e4;
+  background: var(--danger-soft);
   border-color: var(--danger-line);
 }
 
 .secondary.danger-text:hover {
-  background: #ffe8e4;
-  border-color: #e7a8a0;
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
   color: var(--danger-hover);
 }
 
@@ -32,23 +32,23 @@
 }
 
 .history h3 {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .history-item {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
   margin-top: 8px;
   background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(248 252 251 / 96%));
 }
 
 .history-item p {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 4px;
 }
 
@@ -56,14 +56,14 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .summary-tile {
-  background: linear-gradient(180deg, #fbfdfd 0%, #f4f9f8 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 8px;
+  padding: 16px;
   position: relative;
   overflow: hidden;
   transition:
@@ -77,7 +77,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: rgb(13 118 104 / 22%);
+  background: rgb(9 88 217 / 22%);
   opacity: 0;
   transition: opacity var(--motion-base) var(--ease-standard);
 }
@@ -87,7 +87,7 @@
 }
 
 .summary-tile:hover {
-  border-color: rgb(15 118 110 / 20%);
+  border-color: rgb(9 88 217 / 20%);
   box-shadow: 0 10px 22px rgb(16 42 47 / 7%);
   transform: translateY(-1px);
 }
@@ -100,8 +100,7 @@
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(249 252 251 / 98%));
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 72%);
+  background: var(--surface);
   scrollbar-gutter: stable;
   position: relative;
   transition:
@@ -110,10 +109,8 @@
 }
 
 .table-wrap:focus-within {
-  border-color: rgb(13 118 104 / 28%);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 72%),
-    var(--focus-ring);
+  border-color: rgb(9 88 217 / 28%);
+  box-shadow: var(--focus-ring);
 }
 
 .table-wrap::after {
@@ -133,7 +130,7 @@
   position: sticky;
   left: 0;
   top: 0;
-  z-index: 4;
+  z-index: var(--z-raised);
   float: left;
   width: 1px;
   height: 1px;
@@ -145,14 +142,14 @@ table {
   width: 100%;
   border-collapse: collapse;
   min-width: 720px;
-  background: #fff;
+  background: var(--surface);
   font-variant-numeric: tabular-nums;
 }
 
 .table-wrap table:not(.quantity-template-table) th {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: var(--z-raised);
 }
 
 .table-wrap table:not(.quantity-template-table) tbody tr {
@@ -167,29 +164,29 @@ table {
 }
 
 .table-wrap table:not(.quantity-template-table) tbody tr:hover {
-  box-shadow: inset 3px 0 0 rgb(13 118 104 / 24%);
+  box-shadow: inset 3px 0 0 rgb(9 88 217 / 24%);
 }
 
 th,
 td {
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   text-align: left;
 }
 
 th {
   background: var(--table-head);
-  color: #4d5d64;
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 14px;
   white-space: nowrap;
-  font-weight: 760;
+  font-weight: 600;
   box-shadow: inset 0 -1px 0 rgb(183 202 198 / 72%);
 }
 
 .dense-table th,
 .dense-table td {
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .dense-table:not(.quantity-template-table) td {
@@ -212,7 +209,7 @@ th {
   grid-template-columns: minmax(210px, 1fr) minmax(172px, 210px) auto;
   align-items: end;
   gap: 16px;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: linear-gradient(135deg, var(--surface-strong), var(--surface));
@@ -231,16 +228,16 @@ th {
 .monthly-summary-intro span,
 .monthly-summary-hint {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
 .monthly-summary-month-field {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .monthly-summary-month-field input {
@@ -254,7 +251,7 @@ th {
 }
 
 .monthly-summary-hint {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
 }
 
 @media (width <= 760px) {
@@ -284,11 +281,11 @@ th {
 .billing-unavailable-overlay {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: var(--z-raised);
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 28px;
   background: rgb(244 250 248 / 62%);
   backdrop-filter: blur(10px);
@@ -313,11 +310,11 @@ th {
   min-width: 56px;
   min-height: 30px;
   border: 1px solid var(--warning-line);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--warning-soft);
   color: var(--button-warning);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.14em;
 }
 
@@ -328,14 +325,14 @@ th {
 }
 
 .dense-table tbody tr:hover td {
-  background: #f3faf8;
+  background: var(--surface-soft);
 }
 
 .react-inline-notice {
-  margin: 14px 0;
-  padding: 11px 14px;
+  margin: 16px 0;
+  padding: 12px 16px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 7%, white);
   color: var(--text-soft);
   font-size: 14px;
@@ -348,7 +345,7 @@ th {
   background: transparent;
   color: inherit;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
@@ -356,19 +353,19 @@ th {
 .react-intake-view .intake-action-panel {
   display: grid;
   align-content: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 220px;
 }
 
 .react-intake-view .intake-action-panel > span {
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 
 .react-intake-view .table-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 
@@ -376,7 +373,7 @@ th {
   display: inline-flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 
@@ -434,7 +431,7 @@ th {
   margin: 0 auto;
   overflow: hidden;
   border-radius: var(--ant-border-radius-lg, 8px);
-  background: #000;
+  background: var(--text);
 }
 
 .scanner-camera video {
@@ -449,7 +446,7 @@ th {
   right: 12px;
   bottom: 12px;
   left: 12px;
-  padding: 6px 10px;
+  padding: 8px;
   border-radius: var(--ant-border-radius, 6px);
   background: rgb(0 0 0 / 65%);
   color: #fff;
@@ -463,19 +460,19 @@ th {
 }
 
 .react-billing-view .source-switch {
-  padding: 14px 18px 18px;
+  padding: 16px;
 }
 
 .react-quantity-layout {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .react-quantity-layout .quantity-entry-wrap {
   max-height: none;
   overflow: auto visible;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
 }
 
 .react-quantity-layout .quantity-entry-table {
@@ -485,26 +482,33 @@ th {
 
 .react-quantity-layout .quantity-entry-table thead {
   position: sticky;
-  z-index: 3;
+  z-index: var(--z-raised);
   top: 0;
 }
 
 .react-quantity-layout .quantity-entry-table th,
 .react-quantity-layout .quantity-entry-table td {
-  padding: 5px;
+  padding: 4px;
   vertical-align: top;
 }
 
 .react-quantity-layout .quantity-entry-table input,
 .react-quantity-layout .quantity-entry-table select {
-  min-width: 88px;
-  height: 36px;
-  padding: 6px 8px;
-  font-size: 13px;
+  min-width: 0;
+  min-height: 32px;
+  height: 32px;
+  padding: 4px 8px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
 }
 
 .react-quantity-layout .quantity-entry-table .quantity-date-cell input[name="rowDate"] {
   min-width: 112px;
+  padding-right: 32px;
 }
 
 .react-quantity-layout .quantity-entry-table.animal-details-hidden {
@@ -522,8 +526,8 @@ th {
 
 .react-quantity-layout .quantity-entry-toolbar {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 12px;
-  padding: 10px 14px;
+  gap: 8px 12px;
+  padding: 8px 16px;
 }
 
 .react-quantity-layout .quantity-entry-toolbar-main {
@@ -534,7 +538,7 @@ th {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: nowrap;
 }
 
@@ -544,7 +548,7 @@ th {
 
 .react-quantity-layout .quantity-entry-toolbar-button {
   min-height: 38px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   font-size: 14px;
 }
 
@@ -557,11 +561,11 @@ th {
   align-items: center;
   gap: 8px;
   min-height: 42px;
-  padding: 7px 11px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--surface-soft);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .react-quantity-layout .quantity-animal-toggle.required {
@@ -581,15 +585,15 @@ th {
 .react-quantity-layout .quantity-options-toggle {
   width: 100%;
   min-height: 48px;
-  padding: 10px 14px;
-  border: 1px solid rgb(47 122 114 / 18%);
-  border-radius: 14px;
+  padding: 8px 16px;
+  border: 1px solid rgb(9 88 217 / 18%);
+  border-radius: 8px;
   background: linear-gradient(180deg, rgb(248 252 251 / 98%), rgb(241 248 246 / 96%));
   color: var(--text);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 16px;
   text-align: left;
 }
 
@@ -612,20 +616,20 @@ th {
 .react-quantity-layout .quantity-options-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .react-quantity-layout .quantity-options-badge {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  padding: 3px 9px;
-  border: 1px solid rgb(13 118 104 / 18%);
-  border-radius: 999px;
+  padding: 4px 8px;
+  border: 1px solid rgb(9 88 217 / 18%);
+  border-radius: 4px;
   background: rgb(232 247 244 / 96%);
   color: var(--primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -634,12 +638,12 @@ th {
   flex: 0 0 auto;
   color: var(--primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.04em;
 }
 
 .react-quantity-layout .quantity-options-toggle:hover {
-  border-color: rgb(13 118 104 / 26%);
+  border-color: rgb(9 88 217 / 26%);
   background: linear-gradient(180deg, rgb(250 253 252 / 99%), rgb(236 247 244 / 98%));
 }
 
@@ -655,7 +659,7 @@ th {
   height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   opacity: 0;
   transform: translateY(-50%);
@@ -669,31 +673,31 @@ th {
 
 .filterable-table-header .table-filter-popover {
   position: absolute;
-  z-index: 25;
+  z-index: var(--z-float);
   top: calc(100% + 6px);
   right: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   width: 230px;
   max-height: 340px;
   padding: 12px;
   overflow: auto;
   border: 1px solid var(--line-strong);
-  border-radius: 13px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--surface);
   box-shadow: 0 18px 44px rgb(15 47 48 / 18%);
 }
 
 .filterable-table-header .table-filter-popover > div {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .filterable-table-header .table-filter-popover label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .quantity-react-preview {
@@ -702,9 +706,9 @@ th {
 
 .quantity-print-sheet {
   padding: 24px;
-  border: 1px solid #aebabb;
-  background: #fff;
-  color: #172426;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
 }
 
 .quantity-print-sheet header {
@@ -715,7 +719,7 @@ th {
 .quantity-confirm-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 18px;
+  gap: 8px 16px;
 }
 
 .quantity-print-sheet dl div,
@@ -723,8 +727,8 @@ th {
   display: grid;
   grid-template-columns: 100px 1fr;
   gap: 8px;
-  padding: 7px 0;
-  border-bottom: 1px solid #d8e0e0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .quantity-print-sheet dt,
@@ -735,19 +739,19 @@ th {
 .quantity-print-sheet dd,
 .quantity-confirm-grid dd {
   margin: 0;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .quantity-print-sheet table {
   width: 100%;
-  margin-top: 18px;
+  margin-top: 16px;
   border-collapse: collapse;
 }
 
 .quantity-print-sheet th,
 .quantity-print-sheet td {
-  padding: 7px;
-  border: 1px solid #9ea9aa;
+  padding: 8px;
+  border: 1px solid var(--muted);
   text-align: center;
 }
 
@@ -760,9 +764,9 @@ th {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
-  padding: 14px;
-  border-radius: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -771,12 +775,12 @@ th {
   grid-template-columns: minmax(180px, 0.6fr) minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
-  padding: 18px;
+  padding: 16px;
 }
 
 .settlement-command label {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .settlement-candidate-table {
@@ -825,30 +829,30 @@ th {
 }
 
 .app-modal-root.settlement-preview-modal .settlement-preview {
-  padding: 0 18px 20px;
+  padding: 0 16px 20px;
 }
 
 .app-modal-root.settlement-preview-modal .settlement-document-preview iframe {
   width: 100%;
   min-height: 720px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .settlement-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
 .settlement-metrics > div {
   display: grid;
-  gap: 5px;
-  padding: 14px;
+  gap: 4px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -877,7 +881,7 @@ th {
   .quantity-saved-pagination-scroll {
     max-width: 100%;
     overflow-x: auto;
-    padding-bottom: 2px;
+    padding-bottom: 4px;
   }
 
   .quantity-print-sheet dl,
@@ -925,8 +929,8 @@ th {
 
 .slot-animal-meta {
   color: var(--primary-dark);
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -935,35 +939,35 @@ th {
 
 .monkey-detail-fields {
   min-width: 0;
-  margin: 2px 0;
-  padding: 14px;
+  margin: 4px 0;
+  padding: 16px;
   border: 1px solid var(--reserved-line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--reserved-soft), rgb(255 255 255 / 82%));
 }
 
 .monkey-detail-fields legend {
-  padding: 0 7px;
+  padding: 0 8px;
   color: var(--primary-dark);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .monkey-detail-fields small {
   display: block;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .monkey-age-field {
   display: grid;
   align-content: start;
-  gap: 7px;
+  gap: 8px;
 }
 
 .monkey-age-field label {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .react-rack-row .slot-position {
@@ -971,13 +975,13 @@ th {
   right: 8px;
   bottom: 6px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   opacity: 0.7;
 }
 
 .cage-reserve-bar {
   position: sticky;
-  z-index: 8;
+  z-index: var(--z-sticky);
   right: 16px;
   bottom: 16px;
   left: 16px;
@@ -986,16 +990,16 @@ th {
   justify-content: space-between;
   gap: 16px;
   margin: -66px 16px 16px;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
-  border-radius: 14px;
+  border-radius: 8px;
   background: color-mix(in srgb, white 92%, var(--accent));
   box-shadow: 0 12px 36px rgb(15 47 48 / 16%);
 }
 
 .cage-reserve-bar div {
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .cage-reserve-bar span {
@@ -1013,7 +1017,7 @@ th {
 
 .placement-react-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .placement-react-list article {
@@ -1021,9 +1025,9 @@ th {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -1113,22 +1117,22 @@ th {
 .ledger-tabs {
   display: flex;
   gap: 4px;
-  padding: 5px;
-  margin: 0 0 18px;
+  padding: 4px;
+  margin: 0 0 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--panel-soft);
 }
 
 .ledger-tabs button {
   flex: 1 1 0;
   min-height: 38px;
-  padding: 7px 12px;
+  padding: 8px 12px;
   border: 0;
   border-radius: 8px;
   color: var(--muted);
   background: transparent;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .ledger-tabs button.active {
@@ -1139,7 +1143,7 @@ th {
 
 .ledger-section {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .ledger-section .command-bar {
@@ -1171,7 +1175,7 @@ th {
 }
 
 .reimbursement-table .pill {
-  margin-left: 6px;
+  margin-left: 8px;
 }
 
 .table-empty {
@@ -1183,29 +1187,29 @@ th {
 
 .compact {
   min-height: 32px;
-  padding: 5px 10px;
-  font-size: 13px;
+  padding: 4px 8px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
 .reconciliation-picker {
   display: grid;
   grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(240px, 1.3fr) 120px max-content;
-  gap: 10px;
+  gap: 8px;
   align-items: end;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--panel-soft), var(--panel));
 }
 
 .reconciliation-picker label,
 .funding-line-editor label {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .reconciliation-picker select,
@@ -1215,9 +1219,9 @@ th {
 
 .reconciliation-context {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-left: 3px solid var(--green);
   background: var(--panel-soft);
 }
@@ -1242,9 +1246,9 @@ th {
 .funding-line-editor {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, 0.7fr) max-content;
-  gap: 10px;
+  gap: 8px;
   align-items: end;
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1258,8 +1262,8 @@ th {
 .allocation-summary-list > div {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 8px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--green-dark);
@@ -1269,7 +1273,7 @@ th {
 .attachment-list span,
 .allocation-summary-list span:not(.pill) {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .allocation-summary-list .pill {
@@ -1332,7 +1336,7 @@ th {
   gap: 16px;
   padding: 16px;
   border-radius: 8px;
-  background: #fafafa;
+  background: var(--surface-soft);
 }
 
 [data-feature="billing"] .monthly-summary-controls .ant-form-item {
@@ -1361,15 +1365,15 @@ th {
 [data-feature="billing"] .settlement-action-bar {
   position: sticky;
   top: 12px;
-  z-index: 3;
+  z-index: var(--z-raised);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--surface-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
 }
 
@@ -1382,7 +1386,7 @@ th {
   height: min(68vh, 780px);
   overflow: auto;
   padding: 0;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--surface-strong);
   border-radius: 6px;
 }
 
@@ -1392,7 +1396,7 @@ th {
   min-height: 740px;
   border: 0;
   border-radius: 0;
-  background: #fff;
+  background: var(--surface);
 }
 
 [data-feature="billing"] .ledger-tabs .ant-tabs-nav {
@@ -1421,7 +1425,7 @@ th {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--surface-strong);
 }
 
 [data-feature="billing"] .ledger-toolbar .ant-form {
@@ -1513,7 +1517,7 @@ th {
 .reimbursement-ledger-panel .reimbursement-ledger-context {
   position: relative;
   min-height: 0;
-  padding: 4px 0 14px;
+  padding: 4px 0 16px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
@@ -1522,11 +1526,11 @@ th {
 }
 
 .reimbursement-ledger-context .panel-title-line {
-  gap: 3px;
+  gap: 4px;
 }
 
 .reimbursement-ledger-context .panel-title-line h2 {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .reimbursement-ledger-context .panel-title-line p {
@@ -1537,22 +1541,22 @@ th {
 .reimbursement-ledger-context > .primary {
   min-height: 34px;
   padding-inline: 12px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .ledger-tabs {
-  gap: 5px;
+  gap: 4px;
   padding: 4px;
-  border-radius: 999px;
+  border-radius: 8px;
 }
 
 .ledger-tabs button {
   min-height: 34px;
-  border-radius: 999px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 14px;
 }
 
 .reconciliation-picker {
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: var(--shadow-inset);
 }

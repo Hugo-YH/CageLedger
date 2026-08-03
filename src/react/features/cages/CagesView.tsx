@@ -12,12 +12,10 @@ import {
   VirtualRack,
 } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
-import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb } from "../shell/workspaceNavigation";
-import { WorkspaceHeader } from "../../components/WorkspaceUi";
+import { WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui";
 
-export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
+export function CagesView() {
   const summary = useBootstrap("summary");
   const rooms = (summary.data?.rooms || []) as unknown as CageRoom[];
   const [roomId, setRoomId] = useState("");
@@ -59,17 +57,7 @@ export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => voi
 
   return (
     <section className="workspace-view cage-workspace react-cage-view" data-feature="cages">
-      <WorkspaceHeader
-        kicker="笼位运营工作台"
-        title="动态笼位图"
-        breadcrumbs={[breadcrumb("笼位管理", () => navigate("cages"))]}
-        summary="按房间和笼架查看占用、预约与饲养周期状态，选中笼位后集中维护。"
-        status={`${selectedRoom?.name || "选择房间"} · ${selectedRack?.name || "加载笼架"}`}
-        metrics={[
-          { label: "当前笼架", value: `${slots.length} 笼` },
-          { label: "待进驻", value: tasks.length, tone: "warning" },
-          { label: "已选笼位", value: selectedSlotIds.length || (selectedSlot ? 1 : 0) },
-        ]}
+      <WorkspaceToolbar
         actions={<ActionButton onClick={() => setTasksOpen(true)}>待进驻 {tasks.length}</ActionButton>}
         toolbar={
           <>

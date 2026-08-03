@@ -2,6 +2,8 @@ import { Button, Checkbox, Input, Popover, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useContext } from "react";
+// antd 6.5.2 的 TableMeasureRowContext 只有 default 导出；antd lint 的
+// "use named imports" 规则对该模块不适用，保留 default 导入。
 import TableMeasureRowContext from "antd/es/table/TableMeasureRowContext";
 
 export interface TableFilterOption {

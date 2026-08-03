@@ -106,7 +106,7 @@
   [data-feature="intake"] .intake-pagination-scroll {
     max-width: 100%;
     overflow-x: auto;
-    padding-bottom: 2px;
+    padding-bottom: 4px;
   }
 
   [data-feature="intake"] .intake-print-card .ant-card-body {
@@ -137,9 +137,9 @@
 
 /* Scanner result card and intake batch table (migrated from core.css). */
 .scanner-result-card {
-  border: 1px solid rgb(15 118 110 / 20%);
-  border-radius: 10px;
-  background: #fbfdfd;
+  border: 1px solid rgb(9 88 217 / 20%);
+  border-radius: 8px;
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -151,8 +151,8 @@
 
 .intake-batch-table th,
 .intake-batch-table td {
-  padding: 9px 8px;
-  font-size: 13px;
+  padding: 8px;
+  font-size: 14px;
   line-height: 1.35;
   vertical-align: middle;
 }

@@ -6,29 +6,31 @@
     -apple-system, blinkmacsystemfont, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
     "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
   --font-mono: "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
-  --text-xs: 11px;
+  --text-xs: 12px;
   --text-sm: 12px;
   --text-md: 14px;
   --text-lg: 16px;
   --text-xl: 20px;
-  --text-2xl: 28px;
+  --text-2xl: 30px;
   --leading-tight: 1.2;
   --leading-normal: 1.5;
   --leading-relaxed: 1.65;
   --space-1: 4px;
   --space-2: 8px;
-  --space-3: 12px;
   --space-4: 16px;
-  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
   --radius-xs: 6px;
   --radius-sm: 8px;
-  --radius-control: 9px;
-  --radius-panel: 12px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-tag: 4px;
   --z-base: 0;
+  --z-raised: 10;
   --z-sticky: 20;
+  --z-float: 50;
   --z-nav: 100;
+  --z-drawer: 300;
   --z-popover: 600;
   --z-modal: 700;
   --z-toast: 800;
@@ -110,6 +112,7 @@
   --finance-line: #d5cfee;
   --finance-text: #4b3f7a;
   --shadow: 0 20px 54px rgb(19 42 44 / 10%);
+  --shadow-sm: 0 1px 2px rgb(16 35 34 / 4%);
   --shadow-soft: 0 10px 28px rgb(19 42 44 / 7%);
   --shadow-lift: 0 18px 38px rgb(18 45 48 / 12%);
   --shadow-pop: 0 18px 42px rgb(9 31 38 / 16%);
@@ -118,22 +121,22 @@
   --focus-ring-danger: 0 0 0 3px rgb(180 35 24 / 14%);
   --focus-ring-warning: 0 0 0 3px rgb(168 100 8 / 16%);
   --focus-ring-info: 0 0 0 3px rgb(54 90 102 / 16%);
-  --radius-xl: 18px;
-  --radius-lg: 14px;
-  --radius-md: 10px;
-  --title-lg: 31px;
+  --radius-xl: 16px;
+  --radius-lg: 8px;
+  --radius-md: 8px;
+  --title-lg: 30px;
   --title-md: 20px;
   --title-sm: 16px;
-  --motion-fast: 120ms;
-  --motion-base: 180ms;
-  --motion-slow: 240ms;
-  --motion-press: 120ms;
-  --motion-popover: 160ms;
-  --motion-drawer: 220ms;
-  --motion-instant: 80ms;
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-fast: 100ms;
+  --motion-base: 200ms;
+  --motion-slow: 300ms;
+  --motion-press: 100ms;
+  --motion-popover: 200ms;
+  --motion-drawer: 300ms;
+  --motion-instant: 100ms;
+  --ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --ease-drawer: cubic-bezier(0.645, 0.045, 0.355, 1);
   --ease-standard: var(--ease-out);
   --ease-emphasis: var(--ease-out);
 
@@ -207,7 +210,7 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(13 118 104 / 32%) rgb(232 241 240 / 72%);
+  scrollbar-color: rgb(9 88 217 / 32%) rgb(232 241 240 / 72%);
 }
 
 *::-webkit-scrollbar {
@@ -223,7 +226,7 @@
 *::-webkit-scrollbar-thumb {
   border: 2px solid rgb(232 241 240 / 72%);
   border-radius: 999px;
-  background: rgb(13 118 104 / 34%);
+  background: rgb(9 88 217 / 34%);
 }
 
 :root[data-theme="dark"] * {

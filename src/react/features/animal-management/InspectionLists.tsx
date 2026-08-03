@@ -32,12 +32,11 @@ import {
   useResolveFinding,
   useUpdateFinding,
 } from "../../api/animalManagement";
-import { PageState, Pager, WorkspaceHeader } from "../../components/WorkspaceUi";
+import { PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { DataTable, MobilePage } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
-import { breadcrumb } from "../shell/workspaceNavigation";
 import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspectionId } from "./model";
 
 const pageSize = 10;
@@ -137,11 +136,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
   }
   return (
     <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <WorkspaceHeader
-        kicker="动物管理"
-        title="巡检记录"
-        summary="查看本人记录和授权饲养间记录。"
-        breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
+      <WorkspaceToolbar
         actions={
           <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
             新建巡检
@@ -263,12 +258,6 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   }
   return (
     <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <WorkspaceHeader
-        kicker="动物管理"
-        title="异常处置"
-        summary="异常登记进入处置队列，按待处理、处理中、待复查和已关闭闭环跟进。"
-        breadcrumbs={[breadcrumb("动物管理", () => navigate("animal-inspection-entry"))]}
-      />
       <div className="workspace-body animal-management-body">
         <Card className="animal-ant-card inspection-list-panel" title="异常处置队列">
           <Form className="inspection-list-filters" component={false} layout="inline">

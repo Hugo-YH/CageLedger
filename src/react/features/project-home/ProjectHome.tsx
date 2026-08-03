@@ -88,9 +88,7 @@ export function ProjectHome() {
           <Button href={PROJECT_METADATA.repositoryUrl} icon={<GithubOutlined />} target="_blank">
             Gitea
           </Button>
-          <Button href="/app" type="primary">
-            进入系统
-          </Button>
+          <Button href="/app">进入系统</Button>
         </Space>
       </header>
 

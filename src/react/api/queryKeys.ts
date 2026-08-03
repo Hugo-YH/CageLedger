@@ -26,6 +26,7 @@ export const queryKeys = {
   iacucSearch: (q: string, limit: number) => ["iacuc-index", "search", q, limit] as const,
   auditEvents: (filters: Record<string, unknown>) => ["audit-events", filters] as const,
   systemInfo: ["system", "info"] as const,
+  systemEnvironment: ["system", "environment"] as const,
   systemUpdate: ["system", "update"] as const,
   animalInspectionCatalog: ["animal-inspection-catalog"] as const,
   animalInspectionsRoot: ["animal-inspections"] as const,

@@ -25,15 +25,15 @@
 .animal-management-workspace > .workspace-toolbar .inspection-save-draft,
 .animal-management-workspace > .workspace-toolbar .inspection-submit {
   min-height: 34px;
-  padding: 7px 12px;
-  font-size: 13px;
+  padding: 8px 12px;
+  font-size: 14px;
 }
 
 .form-notice {
   margin: 0;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--ink-strong);
   background: var(--surface-soft);
 }
@@ -48,8 +48,8 @@
 /* The inspection context is a short setup form, so its heading stays compact in flow. */
 .inspection-context-panel > .panel-head {
   position: static;
-  margin: 0 0 14px;
-  padding: 10px 12px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
 }
 
 .inspection-context-panel > .panel-head::after {
@@ -68,22 +68,22 @@
 .list-toolbar > label,
 .inspection-finding-dialog label {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   color: var(--ink-muted);
-  font-weight: 700;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .inspection-room-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .inspection-module-picker {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .inspection-module-picker > div {
@@ -102,21 +102,21 @@
 }
 
 .inspection-module-panel[data-module="basicAssessment"] {
-  --inspection-module-accent: #397db5;
-  --inspection-module-border: #bdd7ed;
-  --inspection-module-surface: #f0f7fd;
+  --inspection-module-accent: var(--primary);
+  --inspection-module-border: var(--primary-soft);
+  --inspection-module-surface: var(--primary-soft);
 }
 
 .inspection-module-panel[data-module="advancedAssessment"] {
-  --inspection-module-accent: #9a7420;
-  --inspection-module-border: #ead79c;
-  --inspection-module-surface: #fff9e9;
+  --inspection-module-accent: var(--amber);
+  --inspection-module-border: var(--warning-line);
+  --inspection-module-surface: var(--warning-soft);
 }
 
 .inspection-module-panel[data-module="abnormalAnimalAssessment"] {
-  --inspection-module-accent: #af5b51;
-  --inspection-module-border: #efc7c2;
-  --inspection-module-surface: #fff3f1;
+  --inspection-module-accent: var(--danger);
+  --inspection-module-border: var(--danger-line);
+  --inspection-module-surface: var(--danger-soft);
 }
 
 [data-feature="animal-management"] .inspection-module-picker > div.selected {
@@ -157,7 +157,7 @@
 
 [data-feature="animal-management"] .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
   align-items: center;
-  padding: 14px 18px;
+  padding: 16px;
   transition:
     background-color var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out);
@@ -187,19 +187,19 @@
   display: inline-flex;
   min-width: 0;
   flex: 1;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .inspection-section-label-main strong {
   color: var(--ink-strong);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .inspection-section-label-main span,
 .inspection-section-count {
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 [data-feature="animal-management"] .inspection-section-state.ant-tag {
@@ -248,13 +248,13 @@
   place-items: center;
   color: var(--accent-deep);
   background: var(--surface-soft);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .inspection-node {
   display: block;
-  padding: 14px 12px;
+  padding: 16px 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -265,7 +265,7 @@
 .inspection-node.has-finding {
   margin-inline: -8px;
   padding-inline: 8px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgb(255 243 228 / 55%);
   transition:
     background-color var(--motion-fast) var(--ease-out),
@@ -288,7 +288,7 @@
 
 .inspection-node-title > strong {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .inspection-node-main p,
@@ -307,25 +307,25 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-column: 2;
-  gap: 6px;
+  gap: 8px;
 }
 
 .inspection-outcome-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-column: 2;
-  gap: 6px;
+  gap: 8px;
 }
 
 .inspection-outcome-options button {
   min-height: 32px;
-  padding: 6px 8px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 4px;
   color: var(--ink-muted);
   background: var(--surface);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   transition:
     transform var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out),
@@ -338,20 +338,20 @@
 }
 
 .inspection-outcome-options button.normal {
-  border-color: #b7dfc4;
-  color: #267245;
-  background: #edf9f0;
+  border-color: var(--success-line);
+  color: var(--green);
+  background: var(--success-soft);
 }
 
 .inspection-outcome-options button.abnormal {
-  border-color: #efc1bc;
-  color: #a33e35;
-  background: #fff0ee;
+  border-color: var(--danger-line);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .inspection-outcome-options button.selected {
   border-color: currentcolor;
-  box-shadow: 0 0 0 2px rgb(25 130 117 / 12%);
+  box-shadow: var(--focus-ring);
 }
 
 .inspection-score-options label {
@@ -376,46 +376,46 @@
   min-height: 32px;
   justify-content: center;
   align-items: center;
-  padding: 6px 8px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 6px;
   color: var(--ink-muted);
   background: var(--surface);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .inspection-score-options label:nth-child(1) .inspection-score-label {
-  border-color: #b7dfc4;
-  background: #edf9f0;
-  color: #267245;
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: var(--green);
 }
 
 .inspection-score-options label:nth-child(2) .inspection-score-label {
-  border-color: #ecd79a;
-  background: #fff9e7;
-  color: #86610b;
+  border-color: var(--warning-line);
+  background: var(--warning-soft);
+  color: var(--amber);
 }
 
 .inspection-score-options label:nth-child(3) .inspection-score-label {
-  border-color: #efc1bc;
-  background: #fff0ee;
-  color: #a33e35;
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .inspection-score-options input:checked + .tooltip-anchor .inspection-score-label,
 .inspection-score-options input:checked + .inspection-score-label {
   border-color: currentcolor;
-  box-shadow: 0 0 0 2px rgb(25 130 117 / 12%);
+  box-shadow: var(--focus-ring);
 }
 
 .inspection-finding-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   padding: 12px;
   border: 1px solid rgb(211 125 28 / 28%);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgb(255 249 241 / 78%);
 }
 
@@ -423,10 +423,10 @@
   display: flex;
   gap: 8px;
   margin-top: 8px;
-  padding: 7px 10px;
+  padding: 8px;
   border-left: 3px solid var(--warning);
-  color: #80500e;
-  background: #fffaf0;
+  color: var(--amber);
+  background: var(--warning-soft);
   font-size: 12px;
   animation: inspection-summary-in var(--motion-base) var(--ease-out) both;
 }
@@ -446,13 +446,13 @@
 .inspection-reference-trigger {
   flex: 0 0 auto;
   min-height: 26px;
-  padding: 3px 7px;
-  border: 1px solid #b8ddd8;
-  border-radius: 999px;
+  padding: 4px 8px;
+  border: 1px solid var(--success-line);
+  border-radius: 4px;
   color: var(--accent-deep);
   background: var(--accent-soft);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   cursor: zoom-in;
 }
 
@@ -468,7 +468,7 @@
 .inspection-suggestion {
   grid-column: 1 / -1;
   margin: 0;
-  color: #80500e;
+  color: var(--amber);
   line-height: 1.5;
 }
 
@@ -480,10 +480,10 @@
 
 .inspection-reference-strip {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 12px;
-  border: 1px solid #b8ddd8;
-  border-radius: 10px;
+  border: 1px solid var(--success-line);
+  border-radius: 8px;
   background: var(--accent-soft);
 }
 
@@ -541,13 +541,13 @@
 .inspection-image-dialog .modal-head h2 {
   overflow: hidden;
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .inspection-image-dialog .modal-head p {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   color: var(--ink-muted);
   font-size: 12px;
 }
@@ -557,7 +557,7 @@
   width: auto;
   min-width: 0;
   min-height: 30px;
-  padding: 5px 9px;
+  padding: 4px 8px;
   font-size: 12px;
 }
 
@@ -578,7 +578,7 @@
   width: 100%;
   max-height: calc(78vh - 120px);
   object-fit: contain;
-  background: #102326;
+  background: var(--text);
 }
 
 .inspection-image-dialog-gallery {
@@ -597,7 +597,7 @@
   color: var(--ink-muted);
   background: var(--surface-soft);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: left;
   cursor: zoom-in;
 }
@@ -605,7 +605,7 @@
 .inspection-image-dialog-gallery img {
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: 5px;
+  border-radius: 4px;
   object-fit: cover;
 }
 
@@ -618,16 +618,16 @@
   display: flex;
   gap: 8px;
   margin: 0;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-left: 3px solid var(--warning);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--ink-muted);
-  background: #fffaf0;
+  background: var(--warning-soft);
   line-height: 1.5;
 }
 
 .inspection-review-notice strong {
-  color: #7d560d;
+  color: var(--amber);
   white-space: nowrap;
 }
 
@@ -636,7 +636,7 @@
   flex-wrap: wrap;
   gap: 12px;
   align-items: end;
-  padding: 14px 18px;
+  padding: 16px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -647,18 +647,18 @@
 .list-meta {
   margin-left: auto;
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .inspection-table .row-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 
 .inspection-table .secondary {
   min-height: 32px;
-  padding: 5px 9px;
+  padding: 4px 8px;
 }
 
 .table-sort-button {
@@ -667,14 +667,14 @@
   color: inherit;
   background: transparent;
   font: inherit;
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .table-sort-button.active::after {
   content: " · 排序";
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .status-pill,
@@ -682,19 +682,19 @@
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  padding: 2px 8px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 4px;
   color: var(--ink-muted);
   background: var(--surface-soft);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .status-pill.draft {
-  color: #745d10;
-  background: #fff9e7;
+  color: var(--amber);
+  background: var(--warning-soft);
 }
 
 .status-pill.submitted,
@@ -705,17 +705,17 @@
 
 .status-pill.pending,
 .severity-chip.severity-1 {
-  color: #a8332a;
-  background: #fff0ee;
-  border-color: #f0c3bf;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
 }
 
 .status-pill.in_progress,
 .status-pill.pending_recheck,
 .severity-chip.severity-2 {
-  color: #865911;
-  background: #fff8e7;
-  border-color: #f1dda5;
+  color: var(--amber);
+  background: var(--warning-soft);
+  border-color: var(--warning-line);
 }
 
 .inspection-finding-dialog {
@@ -731,13 +731,13 @@
   justify-content: space-between;
   gap: 16px;
   align-items: start;
-  padding: 18px 20px 14px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--line);
 }
 
 .inspection-finding-dialog .modal-head h2 {
-  margin: 2px 0;
-  font-size: 22px;
+  margin: 4px 0;
+  font-size: 20px;
 }
 
 .inspection-finding-dialog .modal-head p {
@@ -747,7 +747,7 @@
 
 .inspection-finding-dialog .modal-body {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-height: 0;
   overflow: auto;
   padding: 16px 20px;
@@ -756,7 +756,7 @@
 .inspection-location-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .inspection-finding-dialog textarea {
@@ -773,7 +773,7 @@
 .inspection-finding-dialog .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   padding: 12px 20px 16px;
   border-top: 1px solid var(--line);
   background: rgb(255 255 255 / 96%);
@@ -787,9 +787,9 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 16px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -800,7 +800,7 @@
 
 .inspection-detail-scores {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .inspection-detail-section-head {
@@ -827,10 +827,10 @@
 
 .inspection-detail-score-grid article {
   display: grid;
-  gap: 5px;
-  padding: 10px;
+  gap: 4px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -846,7 +846,7 @@
 .inspection-detail-score-counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
 .inspection-detail-score-counts span,
@@ -854,75 +854,75 @@
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  padding: 2px 7px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 4px;
   background: var(--surface);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .inspection-detail-score-counts .score-3 {
-  border-color: #b7dfc4;
-  color: #267245;
-  background: #edf9f0;
+  border-color: var(--success-line);
+  color: var(--green);
+  background: var(--success-soft);
 }
 
 .inspection-detail-score-counts .outcome-normal,
 .inspection-detail-exception-scores .outcome-normal {
-  border-color: #b7dfc4;
-  color: #267245;
-  background: #edf9f0;
+  border-color: var(--success-line);
+  color: var(--green);
+  background: var(--success-soft);
 }
 
 .inspection-detail-score-counts .outcome-abnormal,
 .inspection-detail-exception-scores .outcome-abnormal {
-  border-color: #efc1bc;
-  color: #a33e35;
-  background: #fff0ee;
+  border-color: var(--danger-line);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .inspection-detail-score-counts .score-2,
 .inspection-detail-exception-scores .score-2 {
-  border-color: #ecd79a;
-  color: #86610b;
-  background: #fff9e7;
+  border-color: var(--warning-line);
+  color: var(--amber);
+  background: var(--warning-soft);
 }
 
 .inspection-detail-score-counts .score-1,
 .inspection-detail-exception-scores .score-1 {
-  border-color: #efc1bc;
-  color: #a33e35;
-  background: #fff0ee;
+  border-color: var(--danger-line);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .inspection-detail-exception-scores {
-  border: 1px solid #f1dda5;
-  border-radius: 10px;
-  background: #fffaf0;
+  border: 1px solid var(--warning-line);
+  border-radius: 8px;
+  background: var(--warning-soft);
 }
 
 .inspection-detail-exception-scores summary {
-  padding: 10px;
-  color: #80500e;
-  font-size: 13px;
-  font-weight: 800;
+  padding: 8px;
+  color: var(--amber);
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .inspection-detail-exception-scores ul {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
-  padding: 0 10px 10px;
+  padding: 0 8px 8px;
   list-style: none;
 }
 
 .inspection-detail-exception-scores li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px 8px;
+  gap: 4px 8px;
   align-items: center;
   padding: 8px;
   border-radius: 8px;
@@ -931,7 +931,7 @@
 
 .inspection-detail-exception-scores li span {
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .inspection-detail-exception-scores li strong {
@@ -948,12 +948,12 @@
 
 .inspection-detail-all-normal {
   margin: 0;
-  padding: 9px 10px;
-  border: 1px solid #b7dfc4;
+  padding: 8px;
+  border: 1px solid var(--success-line);
   border-radius: 8px;
-  color: #267245;
-  background: #edf9f0;
-  font-size: 13px;
+  color: var(--green);
+  background: var(--success-soft);
+  font-size: 14px;
 }
 
 .inspection-detail-findings {
@@ -966,10 +966,10 @@
 
 .inspection-detail-findings li {
   display: grid;
-  gap: 3px;
-  padding: 10px;
+  gap: 4px;
+  padding: 8px;
   border-left: 3px solid var(--warning);
-  background: #fffaf0;
+  background: var(--warning-soft);
 }
 
 .inspection-catalog-banner {
@@ -980,7 +980,7 @@
 
 .inspection-catalog-banner > div {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   padding: 20px;
 }
 
@@ -994,23 +994,23 @@
 }
 
 .inspection-catalog-banner strong {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .inspection-standard-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  padding: 18px;
+  padding: 16px;
 }
 
 .inspection-standard-grid article {
   display: grid;
   gap: 8px;
   min-height: 170px;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -1042,7 +1042,7 @@
 @media (width <= 760px) {
   .animal-management-workspace > .workspace-toolbar {
     grid-template-columns: 1fr;
-    padding: 8px 10px;
+    padding: 8px;
   }
 
   .animal-management-workspace > .workspace-toolbar .workspace-toolbar-actions,
@@ -1067,7 +1067,7 @@
   .inspection-module-picker > div {
     position: relative;
     min-height: 40px;
-    padding: 7px 10px;
+    padding: 8px;
   }
 
   [data-feature="animal-management"] .inspection-module-picker .ant-checkbox-wrapper {
@@ -1075,7 +1075,7 @@
   }
 
   .inspection-module-picker strong {
-    font-size: 13px;
+    font-size: 14px;
     text-align: left;
   }
 
@@ -1091,16 +1091,16 @@
   }
 
   .inspection-section {
-    padding: 14px 12px;
+    padding: 16px 12px;
   }
 
   .inspection-node-main {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 9px;
+    row-gap: 8px;
   }
 
   .inspection-node-title > strong {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .inspection-score-options,
@@ -1127,7 +1127,7 @@
   .inspection-finding-dialog {
     width: 100%;
     max-height: calc(100dvh - 24px);
-    border-radius: 18px 18px 0 0;
+    border-radius: 16px 16px 0 0;
   }
 
   .inspection-finding-dialog .modal-head,
@@ -1155,13 +1155,6 @@
   }
 }
 
-/* Ant Design baseline for the animal-management domain. */
-.animal-management-workspace .workspace-head,
-.animal-management-workspace .workspace-head::before,
-.animal-management-workspace .workspace-head::after {
-  background: transparent;
-}
-
 .animal-management-workspace .workspace-body {
   gap: 16px;
 }
@@ -1169,9 +1162,9 @@
 .animal-management-workspace .animal-ant-card.ant-card,
 .animal-management-workspace .inspection-list-panel.ant-card,
 .animal-management-workspace .inspection-standards-panel.ant-card {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--surface-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: none;
 }
 
@@ -1180,14 +1173,14 @@
 .animal-management-workspace .inspection-standards-panel > .ant-card-head {
   min-height: 52px;
   padding: 0 24px;
-  border-bottom-color: #f0f0f0;
-  background: #fff;
+  border-bottom-color: var(--surface-strong);
+  background: var(--surface);
 }
 
 .animal-management-workspace .animal-ant-card > .ant-card-head .ant-card-head-title,
 .animal-management-workspace .inspection-list-panel > .ant-card-head .ant-card-head-title,
 .animal-management-workspace .inspection-standards-panel > .ant-card-head .ant-card-head-title {
-  padding: 14px 0;
+  padding: 16px 0;
   font-size: 16px;
   font-weight: 600;
 }
@@ -1230,15 +1223,15 @@
   display: block;
   min-height: 48px;
   padding: 0;
-  border-color: #d9d9d9;
+  border-color: var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: none;
 }
 
 .animal-management-workspace .inspection-module-choice.ant-card.is-selected {
   border-color: var(--app-primary);
-  background: #e6f4ff;
+  background: var(--primary-soft);
 }
 
 .animal-management-workspace .inspection-module-choice .ant-card-body {
@@ -1278,34 +1271,34 @@
 .animal-management-workspace .inspection-module-card > .ant-card-head {
   min-height: 48px;
   border-left: 0;
-  background: #fff;
+  background: var(--surface);
 }
 
 .animal-management-workspace .inspection-module-card[data-module] {
-  border-color: #f0f0f0;
-  background: #fff;
+  border-color: var(--surface-strong);
+  background: var(--surface);
 }
 
 .animal-management-workspace .inspection-module-card[data-module="basicAssessment"] {
-  --inspection-module-accent: #397db5;
-  --inspection-module-border: #bdd7ed;
-  --inspection-module-surface: #f0f7fd;
+  --inspection-module-accent: var(--primary);
+  --inspection-module-border: var(--primary-soft);
+  --inspection-module-surface: var(--primary-soft);
 }
 
 .animal-management-workspace .inspection-module-card[data-module="advancedAssessment"] {
-  --inspection-module-accent: #9a7420;
-  --inspection-module-border: #ead79c;
-  --inspection-module-surface: #fff9e9;
+  --inspection-module-accent: var(--amber);
+  --inspection-module-border: var(--warning-line);
+  --inspection-module-surface: var(--warning-soft);
 }
 
 .animal-management-workspace .inspection-module-card[data-module="abnormalAnimalAssessment"] {
-  --inspection-module-accent: #af5b51;
-  --inspection-module-border: #efc7c2;
-  --inspection-module-surface: #fff3f1;
+  --inspection-module-accent: var(--danger);
+  --inspection-module-border: var(--danger-line);
+  --inspection-module-surface: var(--danger-soft);
 }
 
 .animal-management-workspace .inspection-module-card[data-module] > .ant-card-head {
-  background: #fff;
+  background: var(--surface);
 }
 
 .animal-management-workspace .inspection-module-card-title {
@@ -1328,8 +1321,8 @@
 
 .animal-management-workspace .inspection-section {
   padding: 0;
-  border-top: 1px solid #f0f0f0;
-  background: #fff;
+  border-top: 1px solid var(--surface-strong);
+  background: var(--surface);
 }
 
 .animal-management-workspace .inspection-section:first-child {
@@ -1337,7 +1330,7 @@
 }
 
 .animal-management-workspace .inspection-section + .inspection-section {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--surface-strong);
 }
 
 .animal-management-workspace .inspection-section.has-findings {
@@ -1348,11 +1341,11 @@
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: #fff;
+  background: var(--surface);
 }
 
 .animal-management-workspace .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
-  padding: 10px 14px 10px 32px;
+  padding: 8px 16px 8px 32px;
 }
 
 .animal-management-workspace
@@ -1372,7 +1365,7 @@
   max-width: 100%;
   margin-inline-end: 0;
   overflow: hidden;
-  color: #595959;
+  color: var(--muted);
   font-size: 12px;
   line-height: 20px;
   text-overflow: ellipsis;
@@ -1381,7 +1374,7 @@
 }
 
 .animal-management-workspace .inspection-section-count {
-  color: #8c8c8c;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -1405,8 +1398,8 @@
 
 .animal-management-workspace .inspection-subsection-collapse .ant-collapse-header {
   min-height: 32px;
-  padding: 6px 0;
-  color: #595959;
+  padding: 8px 0;
+  color: var(--muted);
 }
 
 .animal-management-workspace .inspection-subsection-label {
@@ -1420,7 +1413,7 @@
 .animal-management-workspace .inspection-subsection-label h4 {
   margin: 0;
   color: var(--ink-strong);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1430,7 +1423,7 @@
 }
 
 .animal-management-workspace .inspection-subsection-collapse .ant-collapse-content-box {
-  padding: 2px 0 0;
+  padding: 4px 0 0;
 }
 
 .animal-management-workspace
@@ -1438,7 +1431,7 @@
   > .ant-collapse-item
   > .ant-collapse-panel
   > .ant-collapse-body {
-  padding: 2px 0 0 !important;
+  padding: 4px 0 0 !important;
 }
 
 .animal-management-workspace
@@ -1460,12 +1453,12 @@
 }
 
 .animal-management-workspace .inspection-subsection + .inspection-subsection {
-  border-top: 1px dashed #f0f0f0;
+  border-top: 1px dashed var(--surface-strong);
 }
 
 .animal-management-workspace .inspection-subsection .inspection-category-items {
-  padding-left: 10px;
-  border-left: 1px solid #f0f0f0;
+  padding-left: 8px;
+  border-left: 1px solid var(--surface-strong);
 }
 
 .animal-management-workspace .inspection-subsection .inspection-node {
@@ -1474,7 +1467,7 @@
 
 .animal-management-workspace .inspection-node {
   padding: 12px 0;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--surface-strong);
 }
 
 .animal-management-workspace .inspection-node:first-child {
@@ -1484,7 +1477,7 @@
 .animal-management-workspace .inspection-node.has-finding {
   padding-inline: 12px;
   border-radius: 6px;
-  background: #fff2f0;
+  background: var(--danger-soft);
 }
 
 .animal-management-workspace .inspection-node-main {
@@ -1503,13 +1496,13 @@
 
 .animal-management-workspace .inspection-node-title > strong {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .animal-management-workspace .inspection-node-main p {
   grid-column: 1 / -1;
   margin: 0;
-  color: #8c8c8c;
+  color: var(--muted);
   font-size: 12px;
   line-height: 20px;
 }
@@ -1526,7 +1519,7 @@
   display: flex;
   gap: 8px;
   margin-top: 8px;
-  color: #a8071a;
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -1613,7 +1606,7 @@
 
 .inspection-image-gallery figcaption {
   margin-top: 8px;
-  color: #8c8c8c;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -1663,14 +1656,14 @@
   }
 
   .animal-management-workspace .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
-    padding: 10px 12px;
+    padding: 8px 12px;
   }
 
   .animal-management-workspace .inspection-section-label-main {
     flex: 1;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 4px;
   }
 
   .animal-management-workspace .inspection-section-label-main .ant-tag {
@@ -1682,7 +1675,7 @@
   }
 
   .ant-workspace .inspection-module-card .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
-    padding: 10px 12px 10px 32px;
+    padding: 8px 12px 8px 32px;
   }
 
   .animal-management-workspace .inspection-subsection .inspection-category-items {
@@ -1717,7 +1710,7 @@
   }
 
   .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
-    padding: 10px 12px;
+    padding: 8px 12px;
   }
 
   .inspection-section-label {
@@ -1729,7 +1722,7 @@
     flex: 1;
     flex-direction: column;
     align-items: flex-start;
-    gap: 1px;
+    gap: 4px;
   }
 
   .inspection-section-label-main span {
