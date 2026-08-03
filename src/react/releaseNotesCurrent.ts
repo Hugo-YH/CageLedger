@@ -2,6 +2,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.0",
+    releasedAt: "2026-08-03 17:50",
+    title: "结算单展示合并与笼架命名修复",
+    items: [
+      "项目负责人结算单将自定义收费与非自定义收费合并为单列展示，物种按伦理数据正确识别，不再显示占位的“动物”字样",
+      "删除结算单自定义收费明细中的冗余说明文字，明细表直接展示收费区间",
+      "新增笼架按房间名与序号自动命名，修复犬饲养间等房间无法添加笼架的问题",
+      "发布镜像构建改用 HTTPS 拉取 apt 包，避免国内网络环境下构建失败",
+    ],
+  },
+  {
     version: "0.7.9",
     releasedAt: "2026-07-31 16:05",
     title: "数量统计表录入与保存性能优化",

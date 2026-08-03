@@ -1,6 +1,7 @@
 import { ensureTestInfrastructure, expect, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
 
 const bulkSheetIds = Array.from({ length: 7 }, (_, index) => `sheet-e2e-quantity-bulk-${index + 1}`);
+const currentMonthLabel = new Date().toISOString().slice(0, 7).replace("-", "年") + "月";
 
 test.afterEach(async ({ page }) => {
   for (const id of bulkSheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
@@ -45,7 +46,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   const downloadPromise = page.waitForEvent("download");
   await page.locator(".quantity-saved-panel").getByRole("button", { name: "导出 PDF", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("实验动物数量统计表 2026年07月 E2E-IACUC-001.pdf");
+  expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${currentMonthLabel} E2E-IACUC-001.pdf`);
   await savedRow.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(savedRow).toHaveCount(0);
