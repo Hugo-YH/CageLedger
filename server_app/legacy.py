@@ -1379,12 +1379,9 @@ def read_bootstrap_state(conn, actor, scope="summary", room_id=""):
         **summary,
     }
     if scope == "full":
-        payload["billingRules"] = state.get("billingRules", [])
-        payload["adjustments"] = state.get("adjustments", [])
-        payload["intakeBatches"] = state.get("intakeBatches", [])
-        payload["placementTasks"] = state.get("placementTasks", [])
+        # Only the settings room manager consumes the full scope, and it
+        # renders rooms/racks/slots; the remaining lists were never read.
         payload["slots"] = state.get("slots", [])
-        payload["occupancies"] = state.get("occupancies", [])
         log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]), slots=len(payload["slots"]))
         return payload
     if scope == "room":

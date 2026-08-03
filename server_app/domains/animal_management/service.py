@@ -73,7 +73,19 @@ def list_inspections(conn, actor, filters):
         f"SELECT * FROM animal_inspections WHERE {clause} ORDER BY {sort_key} {direction}, id DESC LIMIT ? OFFSET ?",
         (*params, limit, offset),
     ).fetchall()
-    items = [_inspection_list_item(conn, row) for row in rows]
+    finding_counts = {}
+    if rows:
+        inspection_ids = [row["id"] for row in rows]
+        placeholders = ", ".join("?" for _ in inspection_ids)
+        for count_row in conn.execute(
+            f"""SELECT inspection_id, status, COUNT(*) AS count
+                FROM animal_inspection_findings
+                WHERE inspection_id IN ({placeholders})
+                GROUP BY inspection_id, status""",
+            inspection_ids,
+        ).fetchall():
+            finding_counts.setdefault(count_row["inspection_id"], Counter())[count_row["status"]] = count_row["count"]
+    items = [_inspection_list_item(conn, row, finding_counts.get(row["id"])) for row in rows]
     options = {
         "rooms": _distinct(conn, f"SELECT DISTINCT room_name FROM animal_inspections WHERE {clause}", params),
         "creators": _distinct(conn, f"SELECT DISTINCT created_by_name FROM animal_inspections WHERE {clause}", params),
@@ -454,14 +466,16 @@ def _inspection_values(item):
     )
 
 
-def _inspection_list_item(conn, row):
+def _inspection_list_item(conn, row, finding_counts=None):
     item = _inspection_payload(row)
-    counts = Counter(
-        finding["status"]
-        for finding in conn.execute(
-            "SELECT status FROM animal_inspection_findings WHERE inspection_id = ?", (item["id"],)
+    counts = finding_counts
+    if counts is None:
+        counts = Counter(
+            finding["status"]
+            for finding in conn.execute(
+                "SELECT status FROM animal_inspection_findings WHERE inspection_id = ?", (item["id"],)
+            )
         )
-    )
     item["findingSummary"] = {
         "total": sum(counts.values()),
         "pending": counts["pending"] + counts["in_progress"] + counts["pending_recheck"],
