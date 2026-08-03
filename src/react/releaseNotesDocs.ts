@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta15",
+    releasedAt: "2026-08-03",
+    title: "系统状态运行环境、工作区头部精简与 Ant Design 合规整改",
+    items: [
+      "关于系统新增「运行环境」区块（仅管理员可见）：展示 CPU 型号/架构/核心数/负载、内存总量、系统与内核、容器标识、Python 参数，以及 SQLite 只读状态（日志模式、文件大小、数据表数量、数据库路径），支持手动刷新",
+      "业务工作区移除面包屑、页面标题行和状态统计，操作区独立为顶部工具栏；总览页保留应用名称与版本标识",
+      "全量样式按 Ant Design design.md 整改：字号/字重/间距/圆角回归官方档位，动效时长与缓动改用官方规范，主色与状态色收敛到单一 token 体系，z-index 分层 token 化，同屏双主按钮收敛为单个主操作",
+      "数量统计表录入控件统一为 Ant 规格（32px 高度、1px 边框、6px 圆角），修复新增/减少类型下拉与数字输入重叠、日期选择图标悬停跳位",
+      "修复 antd 弃用 API（Spin tip、Drawer height、Alert message/onClose）与性能告警",
+    ],
+  },
+  {
     version: "1.0.0-beta14",
     build: "2b725b0",
     releasedAt: "2026-08-03",
