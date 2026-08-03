@@ -17,6 +17,7 @@ export function CommandBar({
       align="center"
       aria-label={ariaLabel}
       className={`app-command-bar ${className}`.trim()}
+      data-ui="workspace-toolbar"
       gap="small"
       justify="space-between"
       role="toolbar"

@@ -204,53 +204,6 @@ button:active:not(:disabled),
   box-shadow: none;
 }
 
-/* The side navigation supplies context for operational pages; preserve the dashboard introduction only. */
-.workspace-view:not(.dashboard-view) > .workspace-head {
-  display: none;
-}
-
-.workspace-toolbar {
-  top: 10px;
-  z-index: 28;
-  min-height: 58px;
-  padding: 10px 12px;
-  border-radius: 14px;
-}
-
-.workspace-toolbar-main,
-.workspace-toolbar-actions,
-.workspace-toolbar-action-group,
-.quantity-saved-actions {
-  min-height: 34px;
-}
-
-.workspace-toolbar-action-group > .primary,
-.workspace-toolbar-action-group > .secondary,
-.workspace-toolbar-action-group > .danger {
-  min-height: 34px;
-  padding-inline: 12px;
-  font-size: 13px;
-}
-
-.workspace-toolbar-action-group > .primary {
-  min-width: 104px;
-}
-
-.workspace-toolbar-action-group > .secondary {
-  background: #f4faf9;
-  border-color: rgb(15 118 110 / 22%);
-  color: var(--primary-ink);
-}
-
-.workspace-toolbar-action-group > .secondary:hover:not(:disabled) {
-  background: #e8f5f1;
-  border-color: rgb(15 118 110 / 42%);
-}
-
-.quantity-saved-toolbar {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
 .panel {
   border-radius: 14px;
 }
@@ -561,10 +514,6 @@ button:active:not(:disabled),
     padding: 3px 2px 8px;
   }
 
-  .workspace-toolbar {
-    position: sticky;
-  }
-
   .navigation-submenu-head .compact {
     min-height: 30px;
     border-color: rgb(189 210 208 / 22%);
@@ -593,35 +542,6 @@ button:active:not(:disabled),
   .workspace-breadcrumbs h1,
   .workspace-title-line h1 {
     font-size: 25px;
-  }
-
-  .workspace-toolbar {
-    position: sticky;
-    top: 8px;
-    grid-template-columns: minmax(0, 1fr) auto;
-    padding: 8px 10px;
-  }
-
-  .workspace-toolbar-main:empty,
-  .workspace-toolbar-spacer {
-    display: none;
-  }
-
-  .workspace-toolbar-actions {
-    min-width: 0;
-  }
-
-  .workspace-toolbar-action-group {
-    flex-wrap: nowrap;
-    gap: 7px;
-  }
-
-  .workspace-toolbar-action-group > .primary,
-  .workspace-toolbar-action-group > .secondary,
-  .workspace-toolbar-action-group > .danger {
-    min-height: 32px;
-    padding-inline: 10px;
-    font-size: 12px;
   }
 
   .inspection-context-grid,

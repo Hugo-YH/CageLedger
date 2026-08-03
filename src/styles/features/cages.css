@@ -1,0 +1,10 @@
+/* Cage map and room management own only cage-domain layout and breakpoints. */
+[data-feature="cages"] {
+  min-inline-size: 0;
+}
+
+@media (width <= 760px) {
+  [data-feature="cages"] .cage-map-grid {
+    overflow-x: auto;
+  }
+}

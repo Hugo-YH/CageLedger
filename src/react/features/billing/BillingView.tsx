@@ -27,7 +27,7 @@ export function BillingView({
   const [source, setSource] = useState<"quantity_sheet" | "cage_map">("quantity_sheet");
   const title = billingTitle(mode);
   const body = (
-    <>
+    <div data-feature="billing">
       {mode === "quantity-entry" ? <QuantitySheetView user={user} mode="entry" /> : null}
       {mode === "quantity-saved" ? <QuantitySheetView user={user} mode="saved" /> : null}
       {mode === "cage-map" ? (
@@ -71,7 +71,7 @@ export function BillingView({
         </>
       ) : null}
       {mode === "monthly-summary" && user.role === "admin" ? <MonthlyBillingSummary /> : null}
-    </>
+    </div>
   );
   if (isMobile) {
     return (
@@ -81,7 +81,7 @@ export function BillingView({
     );
   }
   return (
-    <section className="workspace-view billing-workspace react-billing-view">
+    <section className="workspace-view billing-workspace react-billing-view" data-feature="billing">
       <WorkspaceHeader
         kicker="饲养费核算工作台"
         title={title}

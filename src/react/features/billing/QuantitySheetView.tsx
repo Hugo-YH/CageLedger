@@ -597,7 +597,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
 
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">
-      {mode === "entry" ? <div className="workspace-toolbar quantity-entry-toolbar">{entryToolbar}</div> : null}
+      {mode === "entry" ? (
+        <div className="workspace-toolbar quantity-entry-toolbar" data-ui="workspace-toolbar">
+          {entryToolbar}
+        </div>
+      ) : null}
       {mode === "entry" ? renderEditor() : <SavedQuantitySheets onEdit={loadForEdit} />}
       {mode === "saved" && editingDialog ? (
         <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={() => setEditingDialog(false)}>

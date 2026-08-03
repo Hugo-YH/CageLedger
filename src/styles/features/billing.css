@@ -155,124 +155,6 @@ table {
   z-index: 2;
 }
 
-.table-wrap table:not(.quantity-template-table) th.filterable-th {
-  overflow: visible;
-  padding: 0;
-  position: relative;
-  z-index: 5;
-}
-
-.filterable-th {
-  min-width: 116px;
-}
-
-.table-sort-button {
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 34px 8px 10px !important;
-  gap: 6px;
-  font-weight: 800;
-  text-align: left;
-}
-
-.table-sort-button:hover,
-.table-filter-button:hover {
-  background: rgb(13 118 104 / 8%);
-}
-
-.filterable-th.is-sorted .table-sort-button {
-  color: var(--primary);
-}
-
-.filterable-th.is-filtered .table-filter-button {
-  color: var(--primary);
-}
-
-.table-filter-button {
-  position: absolute;
-  top: 0;
-  right: 2px;
-  width: 30px;
-  min-width: 30px;
-  min-height: 38px;
-  padding: 0 !important;
-  vertical-align: top;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(4px);
-  transition:
-    opacity var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard),
-    color var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard);
-}
-
-.filterable-th:hover .table-filter-button,
-.filterable-th:focus-within .table-filter-button,
-.filterable-th.is-filtered .table-filter-button,
-.filterable-th.is-filter-open .table-filter-button {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(0);
-}
-
-.table-filter-button svg {
-  width: 15px;
-  height: 15px;
-}
-
-.table-filter-panel {
-  width: min(280px, calc(100vw - 32px));
-  max-height: 360px;
-  display: grid;
-  gap: 10px;
-  text-align: left;
-}
-
-.table-filter-options {
-  display: grid;
-  gap: 4px;
-  max-height: 220px;
-  overflow: auto;
-  margin: 10px 0;
-  padding-right: 2px;
-}
-
-.table-filter-options .ant-checkbox-wrapper {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 5px 6px;
-  margin-inline-start: 0;
-  border-radius: var(--app-radius-sm);
-  font-weight: 600;
-}
-
-.table-filter-options .ant-checkbox-wrapper:hover {
-  background: var(--app-fill-secondary);
-}
-
-.table-filter-options .ant-checkbox + span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.table-filter-options small {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.table-filter-actions {
-  display: flex !important;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgb(204 218 218 / 72%);
-}
-
 .table-wrap table:not(.quantity-template-table) tbody tr {
   transition:
     background-color var(--motion-base) var(--ease-standard),
@@ -934,19 +816,19 @@ th {
   white-space: nowrap;
 }
 
-.settlement-preview-modal {
+.app-modal-root.settlement-preview-modal {
   --modal-width: 1480px;
 }
 
-.settlement-preview-modal .settlement-preview {
+.app-modal-root.settlement-preview-modal .settlement-preview {
   padding: 0;
 }
 
-.settlement-preview {
+.app-modal-root.settlement-preview-modal .settlement-preview {
   padding: 0 18px 20px;
 }
 
-.settlement-document-preview iframe {
+.app-modal-root.settlement-preview-modal .settlement-document-preview iframe {
   width: 100%;
   min-height: 720px;
   border: 1px solid var(--line);
@@ -1428,24 +1310,24 @@ th {
 }
 
 /* Ant Design financial workspace: shared density, hierarchy and responsive behavior. */
-.monthly-billing-summary-card {
+[data-feature="billing"] .monthly-billing-summary-card {
   max-width: 960px;
 }
 
-.monthly-billing-summary-card .ant-card-body {
+[data-feature="billing"] .monthly-billing-summary-card .ant-card-body {
   display: grid;
   gap: 16px;
 }
 
-.monthly-billing-summary-card .ant-typography,
-.settlement-source-help,
-.settlement-card-description,
-.reimbursement-ledger-description,
-.monthly-summary-hint {
+[data-feature="billing"] .monthly-billing-summary-card .ant-typography,
+[data-feature="billing"] .settlement-source-help,
+[data-feature="billing"] .settlement-card-description,
+[data-feature="billing"] .reimbursement-ledger-description,
+[data-feature="billing"] .monthly-summary-hint {
   margin-bottom: 0;
 }
 
-.monthly-billing-summary-action {
+[data-feature="billing"] .monthly-billing-summary-action {
   display: grid;
   gap: 16px;
   padding: 16px;
@@ -1453,30 +1335,30 @@ th {
   background: #fafafa;
 }
 
-.monthly-summary-controls .ant-form-item {
+[data-feature="billing"] .monthly-summary-controls .ant-form-item {
   min-width: 220px;
   margin-bottom: 0;
 }
 
-.settlement-source-card,
-.settlement-candidate-card,
-.reimbursement-ledger-panel {
+[data-feature="billing"] .settlement-source-card,
+[data-feature="billing"] .settlement-candidate-card,
+[data-feature="billing"] .reimbursement-ledger-panel {
   min-width: 0;
 }
 
-.settlement-candidate-card .ant-card-body,
-.reimbursement-ledger-panel .ant-card-body {
+[data-feature="billing"] .settlement-candidate-card .ant-card-body,
+[data-feature="billing"] .reimbursement-ledger-panel .ant-card-body {
   display: grid;
   gap: 16px;
 }
 
-.settlement-source-help,
-.settlement-card-description,
-.reimbursement-ledger-description {
+[data-feature="billing"] .settlement-source-help,
+[data-feature="billing"] .settlement-card-description,
+[data-feature="billing"] .reimbursement-ledger-description {
   margin-top: 12px !important;
 }
 
-.settlement-action-bar {
+[data-feature="billing"] .settlement-action-bar {
   position: sticky;
   top: 12px;
   z-index: 3;
@@ -1491,12 +1373,12 @@ th {
   box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
 }
 
-.settlement-preview-modal .ant-modal-body {
+.app-modal-root.settlement-preview-modal .ant-modal-body {
   display: grid;
   gap: 12px;
 }
 
-.settlement-preview {
+.app-modal-root.settlement-preview-modal .settlement-preview {
   height: min(68vh, 780px);
   overflow: auto;
   padding: 0;
@@ -1504,7 +1386,7 @@ th {
   border-radius: 6px;
 }
 
-.settlement-document-preview iframe {
+.app-modal-root.settlement-preview-modal .settlement-document-preview iframe {
   display: block;
   width: 100%;
   min-height: 740px;
@@ -1513,13 +1395,13 @@ th {
   background: #fff;
 }
 
-.ledger-tabs .ant-tabs-nav {
+[data-feature="billing"] .ledger-tabs .ant-tabs-nav {
   margin-bottom: 16px;
 }
 
 /* Ant Tabs owns its indicator and focus state. Legacy pill geometry applied to the
    whole tabs container created an oversized rounded border around the panel. */
-.ledger-tabs {
+[data-feature="billing"] .ledger-tabs {
   margin: 0;
   padding: 0;
   border: 0;
@@ -1528,12 +1410,12 @@ th {
   box-shadow: none;
 }
 
-.ledger-section {
+[data-feature="billing"] .ledger-section {
   display: grid;
   gap: 16px;
 }
 
-.ledger-toolbar {
+[data-feature="billing"] .ledger-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1542,18 +1424,18 @@ th {
   border-bottom: 1px solid #f0f0f0;
 }
 
-.ledger-toolbar .ant-form {
+[data-feature="billing"] .ledger-toolbar .ant-form {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
 
-.ledger-toolbar .ant-form-item,
-.reconciliation-picker .ant-form-item {
+[data-feature="billing"] .ledger-toolbar .ant-form-item,
+[data-feature="billing"] .reconciliation-picker .ant-form-item {
   margin-bottom: 0;
 }
 
-.ledger-loading {
+[data-feature="billing"] .ledger-loading {
   display: flex;
   min-height: 120px;
   align-items: center;
@@ -1561,11 +1443,11 @@ th {
   gap: 8px;
 }
 
-.reconciliation-form-card .ant-card-body {
+[data-feature="billing"] .reconciliation-form-card .ant-card-body {
   padding: 16px;
 }
 
-.reconciliation-picker {
+[data-feature="billing"] .reconciliation-picker {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 16px;
@@ -1575,41 +1457,41 @@ th {
   background: transparent;
 }
 
-.reconciliation-picker .ant-form-item:last-child {
+[data-feature="billing"] .reconciliation-picker .ant-form-item:last-child {
   display: flex;
   align-items: end;
 }
 
 @media (width <= 760px) {
-  .monthly-summary-controls {
+  [data-feature="billing"] .monthly-summary-controls {
     align-items: stretch;
   }
 
-  .monthly-summary-controls .ant-form {
+  [data-feature="billing"] .monthly-summary-controls .ant-form {
     flex: 1 1 100%;
     width: 100%;
   }
 
-  .monthly-summary-controls .ant-btn {
+  [data-feature="billing"] .monthly-summary-controls .ant-btn {
     width: 100%;
   }
 
-  .settlement-action-bar,
-  .ledger-toolbar {
+  [data-feature="billing"] .settlement-action-bar,
+  [data-feature="billing"] .ledger-toolbar {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .settlement-action-bar .ant-space {
+  [data-feature="billing"] .settlement-action-bar .ant-space {
     display: flex;
     width: 100%;
   }
 
-  .settlement-action-bar .ant-btn {
+  [data-feature="billing"] .settlement-action-bar .ant-btn {
     flex: 1;
   }
 
-  .reconciliation-picker {
+  [data-feature="billing"] .reconciliation-picker {
     grid-template-columns: 1fr;
   }
 }

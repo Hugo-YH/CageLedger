@@ -43,7 +43,10 @@ export function WorkspaceHeader({
   void switcherItems;
   return (
     <>
-      <header className={`workspace-head ${hasBreadcrumbs ? "workspace-head-breadcrumb" : ""}`}>
+      <header
+        className={`workspace-head ${hasBreadcrumbs ? "workspace-head-breadcrumb" : ""}`}
+        data-ui="workspace-header"
+      >
         <div className="workspace-head-main">
           <Typography.Text className="workspace-kicker" type="secondary">
             {kicker}
@@ -178,7 +181,7 @@ export function ModalShell({
       title={<span className="app-visually-hidden">{ariaLabel}</span>}
       width="min(1120px, calc(100vw - 32px))"
     >
-      <section aria-label={ariaLabel} className={`modal-shell ${className}`.trim()} ref={shellRef}>
+      <section aria-label={ariaLabel} className={`modal-shell ${className}`.trim()} data-ui="modal" ref={shellRef}>
         {children}
       </section>
     </Modal>

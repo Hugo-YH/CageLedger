@@ -57,7 +57,7 @@ export function FilterableColumnTitle({
   }
 
   const content = (
-    <div className="table-filter-panel">
+    <div className="table-filter-panel" data-ui="data-table-filter">
       <Input.Search
         allowClear
         placeholder="搜索当前列"

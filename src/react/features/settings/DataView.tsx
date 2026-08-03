@@ -81,7 +81,7 @@ export function DataView({ user, navigate }: { user: SessionUser; navigate: (vie
   ];
 
   return (
-    <section className="workspace-view settings-workspace">
+    <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceHeader
         kicker="数据治理工作台"
         title="数据管理"

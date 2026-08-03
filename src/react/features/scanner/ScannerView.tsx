@@ -166,7 +166,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
     );
   }
   return (
-    <section className="workspace-view scanner-workspace">
+    <section className="workspace-view scanner-workspace" data-feature="intake">
       <WorkspaceHeader
         kicker="笼卡快速识别"
         title="二维码扫描"

@@ -1,0 +1,10 @@
+/* Workflow and reimbursement workspaces own their domain-only layout. */
+[data-feature="workflow"] {
+  min-inline-size: 0;
+}
+
+@media (width <= 760px) {
+  [data-feature="workflow"] .ant-table-wrapper {
+    overflow-x: auto;
+  }
+}

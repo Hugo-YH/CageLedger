@@ -350,7 +350,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       </Modal>
       {selected && result ? (
         <Modal
-          className="settlement-preview-modal"
+          rootClassName="app-modal-root settlement-preview-modal"
           footer={
             <Space wrap>
               <Button icon={<PrinterOutlined aria-hidden />} onClick={() => openSettlementPrint(result)}>

@@ -119,13 +119,13 @@
   --inspection-module-surface: #fff3f1;
 }
 
-.inspection-module-picker > div.selected {
+[data-feature="animal-management"] .inspection-module-picker > div.selected {
   border-color: var(--ant-color-primary);
   box-shadow: inset 3px 0 0 var(--ant-color-primary);
   background: var(--ant-color-primary-bg);
 }
 
-.inspection-module-picker .ant-checkbox-wrapper {
+[data-feature="animal-management"] .inspection-module-picker .ant-checkbox-wrapper {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -134,11 +134,11 @@
   cursor: pointer;
 }
 
-.inspection-module-picker .ant-checkbox {
+[data-feature="animal-management"] .inspection-module-picker .ant-checkbox {
   top: 0;
 }
 
-.inspection-module-picker strong {
+[data-feature="animal-management"] .inspection-module-picker strong {
   overflow: hidden;
   color: var(--ink-strong);
   font-size: 14px;
@@ -155,7 +155,7 @@
   background: var(--ant-color-error-bg);
 }
 
-.inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+[data-feature="animal-management"] .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
   align-items: center;
   padding: 14px 18px;
   transition:
@@ -163,11 +163,15 @@
     box-shadow var(--motion-fast) var(--ease-out);
 }
 
-.inspection-section-collapse > .ant-collapse-item > .ant-collapse-header:hover {
+[data-feature="animal-management"] .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header:hover {
   background: var(--app-surface-subtle);
 }
 
-.inspection-section-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
+[data-feature="animal-management"]
+  .inspection-section-collapse
+  > .ant-collapse-item
+  > .ant-collapse-content
+  > .ant-collapse-content-box {
   padding: 0;
 }
 
@@ -198,7 +202,7 @@
   font-size: 13px;
 }
 
-.inspection-section-state.ant-tag {
+[data-feature="animal-management"] .inspection-section-state.ant-tag {
   flex: none;
   margin-inline-end: 0;
   transition:
@@ -1066,7 +1070,7 @@
     padding: 7px 10px;
   }
 
-  .inspection-module-picker .ant-checkbox-wrapper {
+  [data-feature="animal-management"] .inspection-module-picker .ant-checkbox-wrapper {
     justify-content: flex-start;
   }
 

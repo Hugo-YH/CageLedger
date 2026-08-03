@@ -1,0 +1,54 @@
+/*
+ * Cross-surface design primitives. The application tokens and VitePress theme
+ * consume these values; this file does not own component layout.
+ */
+:root {
+  --cl-font-sans:
+    -apple-system, blinkmacsystemfont, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  --cl-font-mono: "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
+  --cl-brand-1: #1677ff;
+  --cl-brand-2: #4096ff;
+  --cl-brand-3: #0958d9;
+  --cl-color-bg: #f5f5f5;
+  --cl-color-surface: #fff;
+  --cl-color-surface-soft: #fafafa;
+  --cl-color-text: rgb(0 0 0 / 88%);
+  --cl-color-text-secondary: rgb(0 0 0 / 65%);
+  --cl-color-text-tertiary: rgb(0 0 0 / 45%);
+  --cl-color-border: #d9d9d9;
+  --cl-color-border-secondary: #f0f0f0;
+  --cl-color-success: #52c41a;
+  --cl-color-warning: #faad14;
+  --cl-color-error: #ff4d4f;
+  --cl-color-info: #1677ff;
+  --cl-space-1: 4px;
+  --cl-space-2: 8px;
+  --cl-space-3: 12px;
+  --cl-space-4: 16px;
+  --cl-space-5: 20px;
+  --cl-space-6: 24px;
+  --cl-space-8: 32px;
+  --cl-shadow-card: 0 3px 6px -4px rgb(0 0 0 / 12%), 0 6px 16px 0 rgb(0 0 0 / 8%), 0 9px 28px 8px rgb(0 0 0 / 5%);
+  --cl-radius-control: 6px;
+  --cl-radius-card: 8px;
+  --cl-z-base: 0;
+  --cl-z-sticky: 10;
+  --cl-z-dropdown: 1000;
+  --cl-z-modal: 1000;
+  --cl-z-toast: 1010;
+  --cl-motion-fast: 120ms;
+  --cl-motion-base: 160ms;
+  --cl-motion-overlay: 220ms;
+  --cl-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --cl-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --cl-ease-drawer: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cl-motion-fast: 1ms;
+    --cl-motion-base: 1ms;
+    --cl-motion-overlay: 1ms;
+  }
+}

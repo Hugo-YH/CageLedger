@@ -75,7 +75,7 @@ const anchorItems = [
 
 export function ProjectHome() {
   return (
-    <Layout className="project-home">
+    <Layout className="project-home" data-feature="project-home">
       <header className="project-home-header">
         <a className="project-home-brand" href="#overview">
           <img alt="" src="/cageledger-icon.svg" />

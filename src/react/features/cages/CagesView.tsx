@@ -58,7 +58,7 @@ export function CagesView({ navigate }: { navigate: (view: WorkspaceView) => voi
   if (!rooms.length) return <CageEmpty />;
 
   return (
-    <section className="workspace-view cage-workspace react-cage-view">
+    <section className="workspace-view cage-workspace react-cage-view" data-feature="cages">
       <WorkspaceHeader
         kicker="笼位运营工作台"
         title="动态笼位图"

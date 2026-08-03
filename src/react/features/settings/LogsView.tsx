@@ -39,7 +39,7 @@ export function LogsView({ navigate, user }: { navigate: (view: WorkspaceView) =
   ];
   const pages = Math.max(Math.ceil(total / pageSize), 1);
   return (
-    <section className="workspace-view settings-workspace">
+    <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceHeader
         kicker="审计工作台"
         title="操作日志"

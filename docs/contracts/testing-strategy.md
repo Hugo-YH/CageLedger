@@ -33,6 +33,7 @@ npm run check
 3. 检查浏览器 computed style 与容器溢出，重点覆盖 `display`、网格列、最小宽度、间距、定位和层级。
 4. 运行目标 CSS 的 Stylelint、`npm run check` 和 `git diff --check`；关键流程补充或更新 Playwright 截图断言。
 5. 视觉差异先回溯样式来源和级联顺序，再修改唯一组件规则。验收禁止新增同类覆盖层。
+6. 每次 UI 变更执行 `npm run check:style-ownership`，并按 [`ui-change-evidence.md`](../templates/ui-change-evidence.md) 保存组件归属、四档视口、溢出与 computed style 证据。
 
 ## 完整门禁
 

@@ -69,10 +69,11 @@
 - 通知和确认统一使用站内组件；页面代码不调用浏览器原生 `alert()`、`confirm()`。
 - 颜色使用 `src/styles.css` 的语义变量，规则见 `docs/contracts/ui-color-system.md`。
 - 新增图标优先沿用现有图标系统，保持按钮尺寸、焦点环和语义色一致。
-- UI 组件拥有唯一的布局归属：通用视觉写入 `src/styles/features/ux-foundation.css`，业务专属布局写入对应 feature 样式；同一组件不得由多个样式文件定义网格、尺寸或响应式规则。
+- UI 组件拥有唯一的布局归属，登记来源为 `src/styles/style-ownership.json`。Shell 写入 `src/styles/shell.css`，通用组件写入 `src/styles/components.css`，业务专属布局写入对应 feature 样式；同一组件不得由多个样式文件定义网格、尺寸或响应式规则。
 - UI 改动前使用 `rg` 检查目标 class、data attribute 和媒体查询的全部定义；改动后合并或删除过期规则，避免通过更高选择器追加覆盖。
 - 响应式布局使用组件专属断点规则。页面级组件不得被全局 `@media` 选择器重置为单列、固定宽度或独立间距。
 - 影响布局、表单、表格、导航、弹窗或浮层的改动必须验证桌面、1180px、760px 和手机横屏；目标组件在每个视口只保留一个有效布局来源。
+- UI 修改前运行 `npm run check:style-ownership` 并检索目标选择器、`data-ui` / `data-feature` 与媒体查询；修改后删除替代规则，记录截图与 computed style 证据。
 
 ## 5. 后端规则
 

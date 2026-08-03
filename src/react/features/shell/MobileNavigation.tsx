@@ -82,7 +82,7 @@ export function MobileNavigation({
 
   return (
     <>
-      <div className="ant-mobile-tabbar" aria-label="移动端主导航" role="tablist">
+      <div className="ant-mobile-tabbar" aria-label="移动端主导航" data-ui="mobile-navigation" role="tablist">
         <TabBar
           activeKey={activeKey}
           onChange={(key) => {
@@ -112,7 +112,7 @@ export function MobileNavigation({
         onClose={onClose}
         onMaskClick={onClose}
       >
-        <div className="ant-mobile-navigation-sheet">
+        <div className="ant-mobile-navigation-sheet" data-ui="mobile-navigation-sheet">
           <div className="ant-mobile-sheet-head">
             <div>
               <strong>全部功能</strong>

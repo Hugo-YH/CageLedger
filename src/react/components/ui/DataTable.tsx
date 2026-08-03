@@ -150,6 +150,7 @@ export function DataTable<RecordType extends object>({
       className={tableClassName}
       columns={mergedColumns}
       components={{ header: { cell: ResizableHeaderCell } }}
+      data-ui="data-table"
       scroll={scroll ? { ...scroll, x: scrollX ?? scroll.x } : undefined}
       size="middle"
     />

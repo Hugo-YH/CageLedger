@@ -282,7 +282,7 @@ export function IntakeView({
   }
 
   return (
-    <section className="workspace-view intake-workspace react-intake-view">
+    <section className="workspace-view intake-workspace react-intake-view" data-feature="intake">
       <WorkspaceHeader
         kicker="笼卡接收工作台"
         title={mode === "entry" ? "预约消息识别" : "待接收批次"}

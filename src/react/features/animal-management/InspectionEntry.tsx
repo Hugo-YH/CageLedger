@@ -286,7 +286,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
     );
   }
   return (
-    <section className="workspace-view animal-management-workspace">
+    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
       <WorkspaceHeader
         kicker="动物管理工作台"
         title="动物巡检"

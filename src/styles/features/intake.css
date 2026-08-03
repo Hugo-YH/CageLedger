@@ -1,128 +1,128 @@
 /* Ant component composition for intake and scanner workspaces. */
-.ant-workspace .intake-entry-form,
-.ant-workspace .intake-entry-card,
-.ant-workspace .intake-batch-list-card,
-.ant-workspace .scanner-card {
+[data-feature="intake"] .intake-entry-form,
+[data-feature="intake"] .intake-entry-card,
+[data-feature="intake"] .intake-batch-list-card,
+[data-feature="intake"] .scanner-card {
   width: 100%;
 }
 
-.ant-workspace .intake-entry-card .ant-card-body,
-.ant-workspace .intake-batch-list-card .ant-card-body,
-.ant-workspace .scanner-card .ant-card-body {
+[data-feature="intake"] .intake-entry-card .ant-card-body,
+[data-feature="intake"] .intake-batch-list-card .ant-card-body,
+[data-feature="intake"] .scanner-card .ant-card-body {
   display: grid;
   gap: 16px;
 }
 
-.ant-workspace .intake-entry-card .ant-divider-horizontal {
+[data-feature="intake"] .intake-entry-card .ant-divider-horizontal {
   margin: 0;
 }
 
-.ant-workspace .intake-entry-card .ant-form-item {
+[data-feature="intake"] .intake-entry-card .ant-form-item {
   margin-bottom: 0;
 }
 
-.ant-workspace .intake-entry-card .ant-form-item-label {
+[data-feature="intake"] .intake-entry-card .ant-form-item-label {
   padding-bottom: 4px;
 }
 
-.ant-workspace .intake-recognition-card,
-.ant-workspace .intake-print-card {
+[data-feature="intake"] .intake-recognition-card,
+[data-feature="intake"] .intake-print-card {
   height: 100%;
 }
 
-.ant-workspace .intake-recognition-card .ant-card-body,
-.ant-workspace .intake-print-card .ant-card-body {
+[data-feature="intake"] .intake-recognition-card .ant-card-body,
+[data-feature="intake"] .intake-print-card .ant-card-body {
   display: grid;
   gap: 12px;
   height: 100%;
 }
 
-.ant-workspace .intake-print-card .ant-card-body {
+[data-feature="intake"] .intake-print-card .ant-card-body {
   align-content: start;
 }
 
-.ant-workspace .intake-notice,
-.ant-workspace .intake-bulk-alert,
-.ant-workspace .scanner-alert {
+[data-feature="intake"] .intake-notice,
+[data-feature="intake"] .intake-bulk-alert,
+[data-feature="intake"] .scanner-alert {
   margin: 0;
 }
 
-.ant-workspace .intake-list-pagination {
+[data-feature="intake"] .intake-list-pagination {
   margin-top: 0;
 }
 
-.ant-workspace .scanner-card {
+[data-feature="intake"] .scanner-card {
   max-width: 960px;
   margin: 0 auto;
 }
 
-.ant-workspace .scanner-camera-card .ant-card-body {
+[data-feature="intake"] .scanner-camera-card .ant-card-body {
   padding: 12px;
 }
 
-.ant-workspace .scanner-code-field {
+[data-feature="intake"] .scanner-code-field {
   flex: 1 1 360px;
   margin-bottom: 0;
 }
 
-.ant-workspace .scanner-code-field .ant-input {
+[data-feature="intake"] .scanner-code-field .ant-input {
   width: 100%;
 }
 
-.ant-workspace .scanner-loading {
+[data-feature="intake"] .scanner-loading {
   min-height: 96px;
 }
 
-.ant-workspace .scanner-empty {
+[data-feature="intake"] .scanner-empty {
   margin-block: 32px;
 }
 
-.ant-workspace .scanner-result-card {
+[data-feature="intake"] .scanner-result-card {
   margin-top: 4px;
 }
 
 @media (width <= 760px) {
-  .ant-workspace .intake-entry-card .ant-card-head,
-  .ant-workspace .intake-batch-list-card .ant-card-head,
-  .ant-workspace .scanner-card .ant-card-head {
+  [data-feature="intake"] .intake-entry-card .ant-card-head,
+  [data-feature="intake"] .intake-batch-list-card .ant-card-head,
+  [data-feature="intake"] .scanner-card .ant-card-head {
     min-height: 48px;
   }
 
-  .ant-workspace .intake-entry-card .ant-card-extra,
-  .ant-workspace .scanner-card .ant-card-extra {
+  [data-feature="intake"] .intake-entry-card .ant-card-extra,
+  [data-feature="intake"] .scanner-card .ant-card-extra {
     margin-inline-start: 12px;
   }
 
-  .ant-workspace .intake-bulk-alert .ant-alert-message {
+  [data-feature="intake"] .intake-bulk-alert .ant-alert-message {
     width: 100%;
   }
 
-  .ant-workspace .intake-list-pagination {
+  [data-feature="intake"] .intake-list-pagination {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
 
-  .ant-workspace .intake-pagination-scroll {
+  [data-feature="intake"] .intake-pagination-scroll {
     max-width: 100%;
     overflow-x: auto;
     padding-bottom: 2px;
   }
 
-  .ant-workspace .intake-print-card .ant-card-body {
+  [data-feature="intake"] .intake-print-card .ant-card-body {
     grid-template-columns: 1fr auto;
     align-items: center;
   }
 
-  .ant-workspace .intake-print-card .ant-btn {
+  [data-feature="intake"] .intake-print-card .ant-btn {
     grid-column: 1 / -1;
   }
 
-  .ant-workspace .scanner-query-form .ant-flex {
+  [data-feature="intake"] .scanner-query-form .ant-flex {
     align-items: stretch;
   }
 
-  .ant-workspace .scanner-query-form .ant-btn {
+  [data-feature="intake"] .scanner-query-form .ant-btn {
     width: 100%;
   }
 }

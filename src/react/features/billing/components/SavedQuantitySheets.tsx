@@ -184,7 +184,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
 
   return (
     <section className="panel quantity-saved-panel">
-      <div className="workspace-toolbar quantity-saved-toolbar">
+      <div className="workspace-toolbar quantity-saved-toolbar" data-ui="workspace-toolbar">
         <div className="workspace-toolbar-main">
           <Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}</Tag>
         </div>
@@ -218,7 +218,13 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           <h2>已保存数量统计表</h2>
         </div>
       </div>
-      <div className="table-wrap quantity-saved-list" role="region" tabIndex={0} aria-label="已保存数量统计表">
+      <div
+        className="table-wrap quantity-saved-list"
+        data-ui="data-table"
+        role="region"
+        tabIndex={0}
+        aria-label="已保存数量统计表"
+      >
         <DataTable
           className="quantity-saved-table"
           columns={columns}

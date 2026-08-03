@@ -148,11 +148,12 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   ];
 
   return (
-    <Layout className={`ant-shell ${ui.sidebarCollapsed ? "ant-shell-collapsed" : ""}`} hasSider>
+    <Layout className={`ant-shell ${ui.sidebarCollapsed ? "ant-shell-collapsed" : ""}`} data-ui="app-shell" hasSider>
       <Layout.Sider
         aria-label="主导航"
         breakpoint="lg"
         className="ant-sidebar"
+        data-ui="sidebar"
         collapsed={ui.sidebarCollapsed}
         collapsedWidth={64}
         theme="dark"
@@ -215,7 +216,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
         </div>
       </Layout.Sider>
       <Layout className="ant-workspace-layout">
-        <Layout.Content className="workspace ant-workspace">
+        <Layout.Content className="workspace ant-workspace" data-ui="workspace">
           <WorkspaceErrorBoundary resetKey={ui.activeView}>
             <Suspense fallback={<WorkspaceLoading />}>{renderActiveView(ui.activeView, user, navigate)}</Suspense>
           </WorkspaceErrorBoundary>

@@ -78,7 +78,7 @@ export function RoomsView({ user, navigate }: { user: SessionUser; navigate: (vi
     setDeleteTarget(null);
   }
   return (
-    <section className="workspace-view settings-workspace">
+    <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceHeader
         kicker="基础设施工作台"
         title="房间管理"

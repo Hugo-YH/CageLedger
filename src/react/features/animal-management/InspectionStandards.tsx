@@ -69,7 +69,7 @@ export function InspectionStandards({
     );
   }
   return (
-    <section className="workspace-view animal-management-workspace">
+    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
       <WorkspaceHeader
         kicker="动物管理"
         title="巡检标准"

@@ -136,7 +136,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
     );
   }
   return (
-    <section className="workspace-view animal-management-workspace">
+    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
       <WorkspaceHeader
         kicker="动物管理"
         title="巡检记录"
@@ -262,7 +262,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
     );
   }
   return (
-    <section className="workspace-view animal-management-workspace">
+    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
       <WorkspaceHeader
         kicker="动物管理"
         title="异常处置"

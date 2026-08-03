@@ -23,7 +23,7 @@
 
 ## 布局归属与改动流程
 
-- 一个组件的网格、尺寸、间距和断点只由一个样式层负责。通用组件规则归属 `ux-foundation.css`；领域页面规则归属对应 feature CSS；Ant Token 覆盖归属主题层。
+- 一个组件的网格、尺寸、间距和断点只由一个样式层负责。唯一归属登记在 [`style-ownership.md`](./style-ownership.md) 与 `src/styles/style-ownership.json`；Shell 规则归属 `shell.css`，通用组件归属 `components.css`，领域页面归属对应 feature CSS，Ant Token 覆盖归属主题层。
 - 通用样式只定义 Token、基础状态和跨页面可复用行为。通用样式不得直接改变业务组件的 `grid-template-columns`、固定宽度、定位或断点布局。
 - 领域组件使用完整的作用域选择器，例如 `.animal-management-workspace .inspection-module-picker`。组件改造同步清理旧 class、旧媒体查询和已失效的同名选择器。
 - 同名 class 出现多个定义时，变更前必须列出来源、加载顺序和适用断点；完成后保留唯一的布局定义，状态样式通过修饰类或 Ant 状态类补充。

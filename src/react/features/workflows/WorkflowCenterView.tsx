@@ -25,7 +25,7 @@ export function WorkflowCenterView({ user, navigate }: { user: SessionUser; navi
   const title = tabs.find(([key]) => key === tab)?.[1] || "结算应收";
 
   return (
-    <section className="workspace-view workflow-center-view reimbursement-ledger-view">
+    <section className="workspace-view workflow-center-view reimbursement-ledger-view" data-feature="workflow">
       <WorkspaceHeader
         kicker="结算与报销台账中心"
         title="结算与报销台账"

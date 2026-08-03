@@ -74,7 +74,7 @@ export function UsersView({
     setCreateDraft(emptyDraft);
   }
   return (
-    <section className="workspace-view settings-workspace">
+    <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceHeader
         kicker="权限工作台"
         title="账号管理"

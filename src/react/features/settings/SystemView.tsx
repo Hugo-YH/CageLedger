@@ -129,7 +129,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
     );
   }
   return (
-    <section className="workspace-view system-workspace">
+    <section className="workspace-view system-workspace" data-feature="administration">
       <WorkspaceHeader
         kicker="系统与文档工作台"
         title="关于系统"

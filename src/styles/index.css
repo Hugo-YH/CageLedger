@@ -1,20 +1,27 @@
-/* Import order preserves the established cascade during modularization. */
+/*
+ * Cascade contract: shared tokens -> reset -> base -> compatibility ->
+ * canonical shell/components/Ant -> feature owners -> print. Compatibility
+ * styles intentionally load first while their rules are migrated away.
+ */
+@import url("./brand-tokens.css");
 @import url("./tokens.css");
 @import url("antd/dist/reset.css");
 @import url("antd-mobile/es/global/global.css");
 @import url("./base.css");
-@import url("./shell.css");
-@import url("./components.css");
 @import url("./features/core.css");
 @import url("./features/legacy-responsive.css");
-@import url("./features/billing.css");
 @import url("./features/react.css");
-@import url("./features/animal-management.css");
 @import url("./responsive.css");
-@import url("./features/administration.css");
-@import url("./features/ux-foundation.css");
 @import url("./features/apple-ux.css");
+@import url("./features/mobile.css");
+@import url("./features/ux-foundation.css");
+@import url("./shell.css");
+@import url("./components.css");
 @import url("./features/antd-system.css");
 @import url("./features/intake.css");
+@import url("./features/billing.css");
+@import url("./features/animal-management.css");
+@import url("./features/cages.css");
+@import url("./features/workflow.css");
+@import url("./features/administration.css");
 @import url("./features/project-home.css");
-@import url("./features/mobile.css");

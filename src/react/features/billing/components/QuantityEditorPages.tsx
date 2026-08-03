@@ -47,6 +47,7 @@ export const QuantityEditorPages = memo(function QuantityEditorPages({
             <div className="quantity-template-page-title">第 {pageIndex + 1} 页</div>
             <div
               className="table-wrap"
+              data-ui="data-table"
               role="region"
               tabIndex={0}
               aria-label={`数量统计表第 ${pageIndex + 1} 页录入区`}

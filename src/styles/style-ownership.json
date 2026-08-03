@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "importOrder": [
+    "src/styles/brand-tokens.css",
+    "src/styles/tokens.css",
+    "antd/dist/reset.css",
+    "antd-mobile/es/global/global.css",
+    "src/styles/base.css",
+    "src/styles/features/core.css",
+    "src/styles/features/legacy-responsive.css",
+    "src/styles/features/react.css",
+    "src/styles/responsive.css",
+    "src/styles/features/apple-ux.css",
+    "src/styles/features/mobile.css",
+    "src/styles/features/ux-foundation.css",
+    "src/styles/shell.css",
+    "src/styles/components.css",
+    "src/styles/features/antd-system.css",
+    "src/styles/features/intake.css",
+    "src/styles/features/billing.css",
+    "src/styles/features/animal-management.css",
+    "src/styles/features/cages.css",
+    "src/styles/features/workflow.css",
+    "src/styles/features/administration.css",
+    "src/styles/features/project-home.css"
+  ],
+  "stylesheets": {
+    "src/styles/brand-tokens.css": { "owner": "shared-brand", "status": "complete" },
+    "src/styles/tokens.css": { "owner": "application-tokens", "status": "complete" },
+    "src/styles/base.css": { "owner": "element-baseline", "status": "in-progress" },
+    "src/styles/shell.css": { "owner": "application-shell", "status": "in-progress" },
+    "src/styles/components.css": { "owner": "shared-components", "status": "in-progress" },
+    "src/styles/features/ux-foundation.css": {
+      "owner": "shared-ux-compatibility",
+      "status": "compatibility",
+      "removeAfter": "shared-layout-migration"
+    },
+    "src/styles/features/antd-system.css": { "owner": "antd-theme", "status": "in-progress" },
+    "src/styles/features/intake.css": { "owner": "intake", "status": "in-progress" },
+    "src/styles/features/billing.css": { "owner": "billing", "status": "in-progress" },
+    "src/styles/features/animal-management.css": {
+      "owner": "animal-management",
+      "status": "in-progress",
+      "selectorPrefixes": [".inspection-"],
+      "scopeRoots": [
+        "[data-feature=\"animal-management\"]",
+        ".animal-management-workspace",
+        ".inspection-finding-modal",
+        ".inspection-detail-modal",
+        ".inspection-image-dialog"
+      ]
+    },
+    "src/styles/features/cages.css": { "owner": "cages", "status": "in-progress" },
+    "src/styles/features/workflow.css": { "owner": "workflow", "status": "in-progress" },
+    "src/styles/features/administration.css": { "owner": "administration", "status": "in-progress" },
+    "src/styles/features/project-home.css": {
+      "owner": "project-home",
+      "status": "in-progress",
+      "selectorPrefixes": [".project-"],
+      "scopeRoots": ["[data-feature=\"project-home\"]", ".project-home"]
+    },
+    "src/styles/features/core.css": {
+      "owner": "legacy-core",
+      "status": "compatibility",
+      "removeAfter": "shell-and-common"
+    },
+    "src/styles/features/legacy-responsive.css": {
+      "owner": "legacy-responsive",
+      "status": "compatibility",
+      "removeAfter": "all-feature-breakpoints"
+    },
+    "src/styles/features/react.css": {
+      "owner": "legacy-react",
+      "status": "compatibility",
+      "removeAfter": "all-feature-migration"
+    },
+    "src/styles/responsive.css": {
+      "owner": "legacy-responsive",
+      "status": "compatibility",
+      "removeAfter": "all-feature-breakpoints"
+    },
+    "src/styles/features/apple-ux.css": {
+      "owner": "legacy-apple-ux",
+      "status": "compatibility",
+      "removeAfter": "shared-component-migration"
+    },
+    "src/styles/features/mobile.css": {
+      "owner": "legacy-mobile",
+      "status": "compatibility",
+      "removeAfter": "mobile-navigation-migration"
+    }
+  },
+  "componentFamilies": {
+    "app-shell": {
+      "root": "[data-ui='app-shell']",
+      "owner": "src/styles/shell.css",
+      "allowedPrefixes": ["[data-ui='app-shell']", ".ant-shell"],
+      "breakpoints": ["desktop", "1180px", "760px", "landscape"],
+      "status": "in-progress"
+    },
+    "sidebar": {
+      "root": "[data-ui='sidebar']",
+      "owner": "src/styles/shell.css",
+      "allowedPrefixes": ["[data-ui='sidebar']", ".ant-sidebar"],
+      "breakpoints": ["desktop", "1180px", "760px", "landscape"],
+      "status": "in-progress"
+    },
+    "workspace-header": {
+      "root": "[data-ui='workspace-header']",
+      "owner": "src/styles/shell.css",
+      "allowedPrefixes": ["[data-ui='workspace-header']", ".workspace-head"],
+      "breakpoints": ["desktop", "760px"],
+      "status": "in-progress"
+    },
+    "command-bar": {
+      "root": "[data-ui='workspace-toolbar']",
+      "owner": "src/styles/components.css",
+      "allowedPrefixes": ["[data-ui='command-bar']", "[data-ui='workspace-toolbar']", ".app-command-bar"],
+      "breakpoints": ["desktop", "760px"],
+      "status": "in-progress"
+    },
+    "data-table": {
+      "root": "[data-ui='data-table']",
+      "owner": "src/styles/components.css",
+      "allowedPrefixes": ["[data-ui='data-table']"],
+      "breakpoints": ["desktop", "1180px", "760px"],
+      "status": "in-progress"
+    },
+    "modal": {
+      "root": "[data-ui='modal']",
+      "owner": "src/styles/features/ux-foundation.css",
+      "allowedPrefixes": ["[data-ui='modal']", ".app-modal-root"],
+      "portalRoots": [".app-modal-root"],
+      "breakpoints": ["desktop", "760px"],
+      "status": "in-progress"
+    },
+    "mobile-navigation": {
+      "root": "[data-ui='mobile-navigation']",
+      "owner": "src/styles/shell.css",
+      "allowedPrefixes": ["[data-ui='mobile-navigation']", ".ant-mobile-tabbar", ".ant-mobile-navigation-sheet"],
+      "breakpoints": ["760px", "landscape"],
+      "status": "in-progress"
+    }
+  },
+  "antGlobalOwner": "src/styles/features/antd-system.css",
+  "exceptions": [
+    {
+      "reason": "Historical selectors remain while their data-ui scoped replacements are migrated.",
+      "files": [
+        "src/styles/features/core.css",
+        "src/styles/features/legacy-responsive.css",
+        "src/styles/features/react.css",
+        "src/styles/responsive.css",
+        "src/styles/features/apple-ux.css",
+        "src/styles/features/mobile.css"
+      ],
+      "reviewBy": "v1.1.0"
+    }
+  ]
+}
