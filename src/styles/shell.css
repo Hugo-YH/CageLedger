@@ -1,3 +1,110 @@
+/* Workspace view, header and status primitives (migrated from
+ * ux-foundation.css; later rules in this file stay canonical). */
+.workspace-view {
+  animation: none;
+}
+
+.workspace {
+  padding: 22px 24px 28px;
+}
+
+.workspace::before {
+  left: var(--sidebar-width);
+  height: 176px;
+  opacity: 0.72;
+}
+
+.workspace-head {
+  display: block;
+  padding: 4px 2px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace-head::after {
+  display: none;
+}
+
+.workspace-head::before {
+  display: none;
+}
+
+.workspace-head-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.workspace-kicker {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+.workspace-summary {
+  max-width: 800px;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.workspace-title-line,
+.workspace-breadcrumbs {
+  gap: 7px;
+}
+
+.workspace-title-line h1,
+.workspace-breadcrumbs h1 {
+  font-size: clamp(26px, 2.5vw, 34px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.workspace-status-badge,
+.workspace-status {
+  min-height: 26px;
+  padding-inline: 10px;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+@media (width <= 1180px) {
+  .workspace {
+    padding: 18px 20px 24px;
+  }
+
+  .workspace-head {
+    padding: 3px 2px 8px;
+  }
+}
+
+@media (width <= 760px) {
+  .workspace {
+    padding: 16px 14px calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .workspace-view {
+    gap: 14px;
+  }
+
+  .workspace-head {
+    padding: 2px 0 8px;
+    border-radius: 0;
+  }
+
+  .workspace-head::after {
+    display: none;
+  }
+
+  .workspace-breadcrumbs h1,
+  .workspace-title-line h1 {
+    font-size: 25px;
+  }
+}
+
 .quantity-save-confirm-note .icon {
   width: 18px;
   height: 18px;

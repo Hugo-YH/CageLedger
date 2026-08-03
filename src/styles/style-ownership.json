@@ -6,9 +6,9 @@
     "antd/dist/reset.css",
     "antd-mobile/es/global/global.css",
     "src/styles/base.css",
-    "src/styles/features/ux-foundation.css",
     "src/styles/shell.css",
     "src/styles/components.css",
+    "src/styles/features/modal.css",
     "src/styles/features/antd-system.css",
     "src/styles/features/intake.css",
     "src/styles/features/billing.css",
@@ -24,11 +24,7 @@
     "src/styles/base.css": { "owner": "element-baseline", "status": "in-progress" },
     "src/styles/shell.css": { "owner": "application-shell", "status": "in-progress" },
     "src/styles/components.css": { "owner": "shared-components", "status": "in-progress" },
-    "src/styles/features/ux-foundation.css": {
-      "owner": "shared-ux-compatibility",
-      "status": "compatibility",
-      "removeAfter": "shared-layout-migration"
-    },
+    "src/styles/features/modal.css": { "owner": "modal", "status": "in-progress" },
     "src/styles/features/antd-system.css": { "owner": "antd-theme", "status": "in-progress" },
     "src/styles/features/intake.css": { "owner": "intake", "status": "in-progress" },
     "src/styles/features/billing.css": { "owner": "billing", "status": "in-progress" },
@@ -92,7 +88,7 @@
     },
     "modal": {
       "root": "[data-ui='modal']",
-      "owner": "src/styles/features/ux-foundation.css",
+      "owner": "src/styles/components.css",
       "allowedPrefixes": ["[data-ui='modal']", ".app-modal-root"],
       "portalRoots": [".app-modal-root"],
       "breakpoints": ["desktop", "760px"],
@@ -113,12 +109,5 @@
       "status": "complete"
     }
   },
-  "antGlobalOwner": "src/styles/features/antd-system.css",
-  "exceptions": [
-    {
-      "reason": "Historical selectors remain while their data-ui scoped replacements are migrated.",
-      "files": [],
-      "reviewBy": "v1.1.0"
-    }
-  ]
+  "antGlobalOwner": "src/styles/features/antd-system.css"
 }

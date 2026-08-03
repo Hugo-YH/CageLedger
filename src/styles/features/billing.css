@@ -1508,3 +1508,51 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+/* Ledger context and reconciliation picker (migrated from ux-foundation.css). */
+.reimbursement-ledger-panel .reimbursement-ledger-context {
+  position: relative;
+  min-height: 0;
+  padding: 4px 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.reimbursement-ledger-context .panel-title-line {
+  gap: 3px;
+}
+
+.reimbursement-ledger-context .panel-title-line h2 {
+  font-size: 18px;
+}
+
+.reimbursement-ledger-context .panel-title-line p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.reimbursement-ledger-context > .primary {
+  min-height: 34px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+
+.ledger-tabs {
+  gap: 5px;
+  padding: 4px;
+  border-radius: 999px;
+}
+
+.ledger-tabs button {
+  min-height: 34px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.reconciliation-picker {
+  border-radius: 14px;
+  box-shadow: var(--shadow-inset);
+}

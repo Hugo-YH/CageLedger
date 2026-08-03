@@ -12,12 +12,12 @@
 2. 应用 Token 与 Ant reset：`tokens.css`、Ant reset、antd-mobile reset
 3. 元素基线：`base.css`
 4. Shell：`shell.css`
-5. 通用组件：`components.css`、`ux-foundation.css`
+5. 通用组件：`components.css`、`modal.css`
 6. Ant 全局边界：`antd-system.css`
 7. 业务域：`intake.css`、`billing.css`、`animal-management.css`、`administration.css`、`project-home.css`
 8. 打印：仅由打印模板及其专属样式管理
 
-`core.css`、`legacy-responsive.css`、`react.css`、`responsive.css`、`apple-ux.css` 与 `mobile.css` 处于登记的兼容期。迁移完成后删除文件和导入，禁止继续向这些文件增加规则。
+历史兼容文件（`core.css`、`legacy-responsive.css`、`react.css`、`responsive.css`、`apple-ux.css`、`mobile.css`、`ux-foundation.css`）已完成迁移并从导入中删除，不允许重新引入。
 
 ## 组件边界
 
@@ -28,7 +28,7 @@
 | 工作区标题 | `data-ui="workspace-header"`  | `shell.css`         | 上下文标题与元信息       |
 | 命令栏     | `data-ui="workspace-toolbar"` | `components.css`    | 操作分组、sticky 行为    |
 | 表格       | `data-ui="data-table"`        | `ux-foundation.css` | 容器、横向滚动、分页     |
-| 弹窗       | `data-ui="modal"`             | `ux-foundation.css` | 标题、正文、页脚与焦点   |
+| 弹窗       | `data-ui="modal"`             | `modal.css`         | 标题、正文、页脚与焦点   |
 | 移动导航   | `data-ui="mobile-navigation"` | `shell.css`         | TabBar、Sheet、安全区    |
 
 ## 修改流程

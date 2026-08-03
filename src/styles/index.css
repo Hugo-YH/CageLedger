@@ -8,9 +8,9 @@
 @import url("antd/dist/reset.css");
 @import url("antd-mobile/es/global/global.css");
 @import url("./base.css");
-@import url("./features/ux-foundation.css");
 @import url("./shell.css");
 @import url("./components.css");
+@import url("./features/modal.css");
 @import url("./features/antd-system.css");
 @import url("./features/intake.css");
 @import url("./features/billing.css");

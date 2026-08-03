@@ -1,0 +1,174 @@
+/* Modal family (migrated from ux-foundation.css; rule order below preserves
+ * the previous cascade winners). */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 76% 16%, rgb(13 118 104 / 15%), transparent 30%), rgb(11 30 39 / 38%);
+  backdrop-filter: blur(5px);
+}
+
+.modal-backdrop > .modal-shell {
+  position: relative;
+  inset: auto;
+  width: min(var(--modal-width, 900px), 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow:
+    0 24px 60px rgb(9 31 38 / 25%),
+    var(--shadow-inset);
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.modal-backdrop > .confirm-dialog {
+  width: min(440px, 100%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.modal-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px;
+}
+
+.modal-shell-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  backdrop-filter: blur(12px);
+}
+
+.modal-shell-head .panel-head {
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.modal-shell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modal-shell-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor-modal {
+  position: fixed;
+  top: 56px;
+  right: 24px;
+  bottom: 24px;
+  width: min(560px, calc(100vw - 48px));
+  z-index: 90;
+  overflow: auto;
+  box-shadow:
+    0 24px 60px rgb(9 31 38 / 22%),
+    var(--shadow-inset);
+  animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.modal-backdrop > .modal-shell {
+  border-radius: 16px;
+}
+
+.modal-shell {
+  border-color: var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  background: var(--surface-overlay);
+}
+
+.modal-shell-head,
+.modal-shell-actions {
+  background: var(--surface-overlay);
+}
+
+@media (prefers-contrast: more) {
+  .modal-shell {
+    border-color: var(--line-strong);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .modal-shell,
+  .modal-shell-head,
+  .modal-shell-actions {
+    backdrop-filter: none;
+    background: var(--surface-raised);
+  }
+}
+
+.modal-shell-head,
+.modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgb(255 255 255 / 99%), rgb(248 252 251 / 95%));
+}
+
+.modal-shell-head > button,
+.modal-head > button,
+.modal-head .inspection-image-dialog-close {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.modal-shell-actions,
+.modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  background: linear-gradient(0deg, rgb(255 255 255 / 99%), rgb(248 252 251 / 94%));
+}
+
+.modal-shell-body,
+.modal-body {
+  overscroll-behavior: contain;
+}
+
+@media (width <= 760px) {
+  .modal-backdrop > .modal-shell {
+    width: 100%;
+    max-height: min(86dvh, 760px);
+    border-width: 1px 0 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .modal-shell,
+  .editor-modal {
+    padding: 14px;
+  }
+
+  .editor-modal {
+    inset: 84px 14px 14px;
+    width: auto;
+  }
+
+  .modal-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
