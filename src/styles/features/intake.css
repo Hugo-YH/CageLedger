@@ -134,3 +134,96 @@
 [data-ui="mobile-page"] .scanner-card > .ant-card-head-title {
   display: none;
 }
+
+/* Scanner result card and intake batch table (migrated from core.css). */
+.scanner-result-card {
+  border: 1px solid rgb(15 118 110 / 20%);
+  border-radius: 10px;
+  background: #fbfdfd;
+  overflow: hidden;
+}
+
+.intake-batch-table {
+  width: 100%;
+  min-width: 1260px;
+  table-layout: fixed;
+}
+
+.intake-batch-table th,
+.intake-batch-table td {
+  padding: 9px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.intake-batch-table th:first-child,
+.intake-batch-table td:first-child {
+  width: 38px;
+  text-align: center;
+}
+
+.intake-batch-table th:nth-child(2),
+.intake-batch-table td:nth-child(2) {
+  width: 78px;
+}
+
+.intake-batch-table th:nth-child(3),
+.intake-batch-table td:nth-child(3) {
+  width: 200px;
+}
+
+.intake-batch-table th:nth-child(4),
+.intake-batch-table td:nth-child(4) {
+  width: 180px;
+}
+
+.intake-batch-table th:nth-child(5),
+.intake-batch-table td:nth-child(5) {
+  width: 110px;
+}
+
+.intake-batch-table th:nth-child(6),
+.intake-batch-table td:nth-child(6) {
+  width: 110px;
+}
+
+.intake-batch-table th:nth-child(7),
+.intake-batch-table td:nth-child(7) {
+  width: 64px;
+}
+
+.intake-batch-table th:nth-child(8),
+.intake-batch-table td:nth-child(8) {
+  width: 66px;
+}
+
+.intake-batch-table th:nth-child(9),
+.intake-batch-table td:nth-child(9) {
+  width: 112px;
+}
+
+.intake-batch-table th:nth-child(10),
+.intake-batch-table td:nth-child(10) {
+  width: 70px;
+}
+
+.intake-batch-table th:nth-child(11),
+.intake-batch-table td:nth-child(11) {
+  width: 150px;
+  white-space: nowrap;
+}
+
+.intake-batch-table .table-cell-text {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.intake-batch-table .ghost {
+  margin-right: 4px;
+  padding-inline: 8px;
+}

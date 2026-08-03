@@ -6,7 +6,6 @@
     "antd/dist/reset.css",
     "antd-mobile/es/global/global.css",
     "src/styles/base.css",
-    "src/styles/features/core.css",
     "src/styles/features/react.css",
     "src/styles/features/apple-ux.css",
     "src/styles/features/ux-foundation.css",
@@ -55,11 +54,6 @@
       "status": "in-progress",
       "selectorPrefixes": [".project-"],
       "scopeRoots": ["[data-feature=\"project-home\"]", ".project-home"]
-    },
-    "src/styles/features/core.css": {
-      "owner": "legacy-core",
-      "status": "compatibility",
-      "removeAfter": "shell-and-common"
     },
     "src/styles/features/react.css": {
       "owner": "legacy-react",
@@ -135,7 +129,7 @@
   "exceptions": [
     {
       "reason": "Historical selectors remain while their data-ui scoped replacements are migrated.",
-      "files": ["src/styles/features/core.css", "src/styles/features/react.css", "src/styles/features/apple-ux.css"],
+      "files": ["src/styles/features/react.css", "src/styles/features/apple-ux.css"],
       "reviewBy": "v1.1.0"
     }
   ]

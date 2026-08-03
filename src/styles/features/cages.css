@@ -237,6 +237,13 @@
   overflow-x: auto;
 }
 
+.cage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
 /* Mobile cage map and slot sizing (migrated from responsive.css). */
 @media (width <= 760px) {
   .cage-preview {
