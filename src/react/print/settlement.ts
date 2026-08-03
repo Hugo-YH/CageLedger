@@ -1,6 +1,7 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
 import { customBillingDetailsMarkup } from "./settlementCustomBilling";
 import {
+  columnBaseLabel,
   displayUnitLabel,
   documentNumberFor,
   escapeHtml,
@@ -11,9 +12,11 @@ import {
   resolveDisplayTotalCount,
   settlementPrintStyles,
   settlementStatementDocumentTitle,
+  speciesLabelFor,
 } from "./settlementSupport";
 type Breakdown = {
   iacuc?: string;
+  species?: string;
   animalCount?: number;
   cageCount?: number;
   freeCages?: number;
@@ -30,6 +33,8 @@ type Breakdown = {
   statementTiered?: boolean;
   statementFreeAllowance?: boolean;
   statementFullExemption?: boolean;
+  customBilling?: boolean;
+  customBillingSegmentId?: string;
   supportAmount?: number;
   payableAmount?: number;
   amount?: number;
@@ -42,6 +47,7 @@ type SettlementColumn = {
   key: string;
   iacuc: string;
   speciesLabel: string;
+  customBilling: boolean;
   billingUnit: string;
   unitPrice: number;
   overageUnitPrice: number;
@@ -284,6 +290,7 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
         key,
         iacuc,
         speciesLabel: speciesLabelFor(item),
+        customBilling: Boolean(item.customBillingSegmentId || item.customBilling),
         billingUnit: String(item.billingUnit || ""),
         unitPrice: Number(item.statementUnitPrice ?? item.unitPrice ?? 0),
         overageUnitPrice: Number(item.statementOverageUnitPrice ?? item.overageUnitPrice ?? 0),
@@ -309,11 +316,11 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
   });
   const duplicateCounts = new Map<string, number>();
   sorted.forEach((column) => {
-    const baseLabel = column.speciesLabel === "小鼠" ? column.iacuc : `${column.iacuc}（${column.speciesLabel}）`;
+    const baseLabel = columnBaseLabel(column);
     duplicateCounts.set(baseLabel, (duplicateCounts.get(baseLabel) || 0) + 1);
   });
   return sorted.map((column) => {
-    const baseLabel = column.speciesLabel === "小鼠" ? column.iacuc : `${column.iacuc}（${column.speciesLabel}）`;
+    const baseLabel = columnBaseLabel(column);
     const hasDuplicate = (duplicateCounts.get(baseLabel) || 0) > 1;
     const suffix = hasDuplicate ? ` / ¥${money(column.unitPrice)}` : "";
     return {
@@ -321,10 +328,7 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
       showFree: false,
       showTiered: false,
       span: 2,
-      label:
-        column.speciesLabel === "小鼠"
-          ? `${column.iacuc}${suffix}`
-          : `${column.iacuc}（${column.speciesLabel}${suffix}）`,
+      label: `${baseLabel}${suffix}`,
     };
   });
 }
@@ -533,6 +537,7 @@ function breakdownColumnKey(item: Breakdown) {
     (item.statementTiered ?? item.tiered) ? "1" : "0",
     (item.statementFreeAllowance ?? item.freeAllowance) ? "1" : "0",
     (item.statementFullExemption ?? item.fullExemption) ? "1" : "0",
+    String(item.customBillingSegmentId || (item.customBilling ? "custom" : "")),
   ].join("|");
 }
 
@@ -546,40 +551,6 @@ function columnGroupKey(item: Breakdown) {
     item.tiered ? "1" : "0",
     item.freeAllowance ? "1" : "0",
   ].join("|");
-}
-
-function speciesLabelFor(item: Breakdown) {
-  const billingItem = String(item.billingItem || "").trim();
-  if (billingItem.includes("小鼠")) return "小鼠";
-  if (billingItem.includes("大鼠")) return "大鼠";
-  if (billingItem.includes("豚鼠")) return "豚鼠";
-  if (billingItem.includes("兔")) return "兔";
-  if (billingItem.includes("猴")) return "猴";
-  if (billingItem.includes("猪")) return "猪";
-  if (billingItem.includes("犬")) return "犬";
-  const unitPrice = Number(item.unitPrice || 0);
-  const billingUnit = String(item.billingUnit || "");
-  if (billingUnit === "animal_day") {
-    if (unitPrice === 3) return "豚鼠";
-    if (unitPrice === 5) return "兔";
-    if (unitPrice === 35 || unitPrice === 65) return "猴";
-    if (unitPrice === 15 || unitPrice === 45) return "猪/犬";
-    return "动物";
-  }
-  if (
-    unitPrice === 4.5 ||
-    unitPrice === 6.5 ||
-    unitPrice === 7.2 ||
-    unitPrice === 13.5 ||
-    unitPrice === 19.5 ||
-    unitPrice === 21.6
-  ) {
-    return "小鼠";
-  }
-  if (unitPrice === 8.5 || unitPrice === 14 || unitPrice === 25.5 || unitPrice === 42) {
-    return "大鼠";
-  }
-  return "动物";
 }
 
 function resolveUnit(statement: BillingStatement, lines: BillingStatementLine[]) {

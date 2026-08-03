@@ -35,6 +35,66 @@ export function money(value: unknown) {
   return Number(value || 0).toFixed(2);
 }
 
+export type SettlementSpeciesItem = {
+  species?: string;
+  billingItem?: string;
+  billingUnit?: string;
+  unitPrice?: number;
+};
+
+const speciesByKey: Record<string, string> = {
+  mouse: "小鼠",
+  rat: "大鼠",
+  guinea_pig: "豚鼠",
+  rabbit: "兔",
+  monkey: "猴",
+  pig: "猪",
+  dog: "犬",
+};
+
+export function speciesLabelFor(item: SettlementSpeciesItem) {
+  const species = String(item.species || "")
+    .trim()
+    .toLowerCase();
+  if (speciesByKey[species]) return speciesByKey[species];
+  const billingItem = String(item.billingItem || "").trim();
+  if (billingItem.includes("小鼠")) return "小鼠";
+  if (billingItem.includes("大鼠")) return "大鼠";
+  if (billingItem.includes("豚鼠")) return "豚鼠";
+  if (billingItem.includes("兔")) return "兔";
+  if (billingItem.includes("猴")) return "猴";
+  if (billingItem.includes("猪")) return "猪";
+  if (billingItem.includes("犬")) return "犬";
+  const unitPrice = Number(item.unitPrice || 0);
+  const billingUnit = String(item.billingUnit || "");
+  if (billingUnit === "animal_day") {
+    if (unitPrice === 3) return "豚鼠";
+    if (unitPrice === 5) return "兔";
+    if (unitPrice === 35 || unitPrice === 65) return "猴";
+    if (unitPrice === 15 || unitPrice === 45) return "猪/犬";
+    return "动物";
+  }
+  if (
+    unitPrice === 4.5 ||
+    unitPrice === 6.5 ||
+    unitPrice === 7.2 ||
+    unitPrice === 13.5 ||
+    unitPrice === 19.5 ||
+    unitPrice === 21.6
+  ) {
+    return "小鼠";
+  }
+  if (unitPrice === 8.5 || unitPrice === 14 || unitPrice === 25.5 || unitPrice === 42) {
+    return "大鼠";
+  }
+  return "动物";
+}
+
+export function columnBaseLabel(column: { iacuc: string; speciesLabel: string; customBilling: boolean }) {
+  if (column.customBilling) return `${column.iacuc}（${column.speciesLabel}，自定义收费）`;
+  return column.speciesLabel === "小鼠" ? column.iacuc : `${column.iacuc}（${column.speciesLabel}）`;
+}
+
 export function escapeHtml(value: unknown) {
   return String(value || "").replace(
     /[&<>"']/g,

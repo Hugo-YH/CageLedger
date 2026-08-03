@@ -214,6 +214,7 @@ def statement_columns(statement, lines):
                 "key": key,
                 "iacuc": iacuc,
                 "species": species_label(item),
+                "customBilling": bool(item.get("customBillingSegmentId")),
                 "unit": str(item.get("billingUnit") or ""),
                 "unitPrice": as_number(item.get("statementUnitPrice", item.get("unitPrice"))),
                 "overageUnitPrice": as_number(item.get("statementOverageUnitPrice", item.get("overageUnitPrice"))),
@@ -232,13 +233,19 @@ def statement_columns(statement, lines):
     )
     labels = {}
     for item in sorted_columns:
-        base = item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
+        base = _statement_column_label(item)
         labels[base] = labels.get(base, 0) + 1
     for item in sorted_columns:
-        base = item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
+        base = _statement_column_label(item)
         suffix = f" / ¥{item['unitPrice']:.2f}" if labels[base] > 1 else ""
         item["label"] = f"{base}{suffix}"
     return sorted_columns
+
+
+def _statement_column_label(item):
+    if item["customBilling"]:
+        return f"{item['iacuc']}（{item['species']}，自定义收费）"
+    return item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
 
 
 def statement_row(line, columns, unit):
@@ -466,6 +473,7 @@ def breakdown_key(item):
             "1" if item.get("statementTiered", item.get("tiered")) else "0",
             "1" if item.get("statementFreeAllowance", item.get("freeAllowance")) else "0",
             "1" if item.get("statementFullExemption", item.get("fullExemption")) else "0",
+            str(item.get("customBillingSegmentId") or ("custom" if item.get("customBilling") else "")),
         ]
     )
 
@@ -511,6 +519,18 @@ def billing_statement_custom_billing_details_markup(lines):
 
 
 def species_label(item):
+    species = str(item.get("species") or "").strip().lower()
+    species_labels = {
+        "mouse": "小鼠",
+        "rat": "大鼠",
+        "guinea_pig": "豚鼠",
+        "rabbit": "兔",
+        "monkey": "猴",
+        "pig": "猪",
+        "dog": "犬",
+    }
+    if species in species_labels:
+        return species_labels[species]
     label = str(item.get("billingItem") or "")
     for species in ("小鼠", "大鼠", "豚鼠", "兔", "猴", "猪", "犬"):
         if species in label:
