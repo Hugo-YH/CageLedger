@@ -9,8 +9,8 @@ import {
 } from "./intake";
 
 describe("intake message parser", () => {
-  it("extracts the purchase and husbandry fields", () => {
-    const result = parseIntakeMessage(
+  it("extracts the purchase and husbandry fields", async () => {
+    const result = await parseIntakeMessage(
       "锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8101 进驻日期：5月13日",
       "管理员",
       ["8101"],
@@ -42,7 +42,7 @@ describe("intake message parser", () => {
     expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人", "房间", "接收日期"]);
   });
 
-  it("standardizes MGI strain names from the shared alias table", () => {
+  it("standardizes MGI strain names from the shared alias table", async () => {
     const cases: Array<[string, string]> = [
       ["c57", "C57BL/6"],
       ["c57bl/6j", "C57BL/6J"],
@@ -62,7 +62,7 @@ describe("intake message parser", () => {
       ["某新品系", ""],
     ];
     for (const [raw, expected] of cases) {
-      expect(standardizeStrain(raw)).toBe(expected);
+      expect(await standardizeStrain(raw)).toBe(expected);
     }
   });
 

@@ -74,7 +74,7 @@ export function IntakeView({
   }
 
   async function parseMessage() {
-    const parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
+    const parsed = await parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
     const info = await applyParsedMessage(parsed);
     setNotice(recognitionNotice(info));
   }

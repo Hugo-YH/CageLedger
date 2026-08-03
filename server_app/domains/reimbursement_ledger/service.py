@@ -126,7 +126,10 @@ def list_claims(conn, actor, filters):
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     total = conn.execute(f"SELECT COUNT(*) FROM reimbursement_claims{where}", params).fetchone()[0]
     rows = conn.execute(
-        f"""SELECT * FROM reimbursement_claims{where}
+        f"""SELECT reimbursement_claims.*,
+                   (SELECT COUNT(*) FROM reimbursement_claim_funding_lines fl
+                    WHERE fl.claim_id = reimbursement_claims.id) AS funding_line_count
+            FROM reimbursement_claims{where}
             ORDER BY {list_sort_order(filters, CLAIM_LIST_COLUMNS, "updated_at DESC, rowid DESC")}
             LIMIT ? OFFSET ?""",
         (*params, _limit(filters), _offset(filters)),
@@ -506,6 +509,11 @@ def sync_settlement_obligations(conn):
            JOIN billing_statement_versions AS versions ON versions.id = workflows.current_version_id
            WHERE workflows.current_version_id <> '' AND versions.version_status <> 'voided'"""
     ).fetchall()
+    if not rows:
+        return
+    existing_by_workflow = {}
+    for existing in conn.execute("SELECT * FROM reimbursement_settlement_obligations ORDER BY created_at").fetchall():
+        existing_by_workflow.setdefault(existing["workflow_id"], existing)
     changed = False
     for row in rows:
         version = json.loads(row["payload"])
@@ -516,11 +524,7 @@ def sync_settlement_obligations(conn):
         statement_iacuc = "、".join(dict.fromkeys(statement_iacucs)) or clean_text(statement.get("iacuc", row["iacuc"]))
         if not source_pi:
             continue
-        existing = conn.execute(
-            """SELECT * FROM reimbursement_settlement_obligations
-               WHERE workflow_id = ? ORDER BY created_at LIMIT 1""",
-            (row["workflow_id"],),
-        ).fetchone()
+        existing = existing_by_workflow.get(row["workflow_id"])
         now = now_iso()
         if not existing:
             _upsert_obligation(

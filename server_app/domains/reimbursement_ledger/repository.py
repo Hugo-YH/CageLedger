@@ -57,6 +57,7 @@ def obligation_payload(conn, row):
 
 def claim_payload(conn, row, include_detail):
     payload = load(row["payload"])
+    row_keys = row.keys()
     payload.update(
         {
             "id": row["id"],
@@ -67,9 +68,13 @@ def claim_payload(conn, row, include_detail):
             "allocatedAmount": money(row["allocated_amount"]),
             "unallocatedAmount": money(row["unallocated_amount"]),
             "attachmentCount": row["attachment_count"],
-            "fundingLineCount": conn.execute(
-                "SELECT COUNT(*) FROM reimbursement_claim_funding_lines WHERE claim_id = ?", (row["id"],)
-            ).fetchone()[0],
+            "fundingLineCount": (
+                row["funding_line_count"]
+                if "funding_line_count" in row_keys
+                else conn.execute(
+                    "SELECT COUNT(*) FROM reimbursement_claim_funding_lines WHERE claim_id = ?", (row["id"],)
+                ).fetchone()[0]
+            ),
             "createdBy": row["created_by"],
             "createdByName": row["created_by_name"],
             "createdAt": row["created_at"],
