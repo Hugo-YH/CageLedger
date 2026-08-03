@@ -238,3 +238,12 @@
   border-color: rgb(27 41 38 / 88%);
   background: rgb(89 184 170 / 48%);
 }
+
+/* Control sizing and surface aliases (migrated from apple-ux.css). */
+:root {
+  --control-height: 36px;
+  --control-height-compact: 30px;
+  --control-padding-inline: 12px;
+  --card-border: color-mix(in srgb, var(--line) 88%, transparent);
+  --surface-elevated: var(--surface-raised);
+}

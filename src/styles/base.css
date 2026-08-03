@@ -1212,3 +1212,77 @@ svg {
     min-height: 44px;
   }
 }
+
+/* Element and control baseline (migrated from apple-ux.css). */
+html,
+body,
+#root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button,
+[role="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-height);
+  padding: 0 var(--control-padding-inline);
+  border-radius: var(--radius-control);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover,
+  [role="button"]:not([aria-disabled="true"]):hover {
+    filter: none;
+  }
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.97);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 68%, transparent);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
+
+input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+select,
+textarea {
+  border-color: var(--line);
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+  color: var(--text);
+  box-shadow: var(--shadow-inset);
+}
+
+input:not([type="checkbox"], [type="radio"], [type="hidden"]):hover,
+select:hover,
+textarea:hover {
+  border-color: var(--line-strong);
+  background: var(--control-bg-hover);
+}

@@ -1642,3 +1642,8 @@ h3 {
   left: 22px;
   top: 76px;
 }
+
+/* Workspace meta surfaces (migrated from apple-ux.css). */
+.workspace-meta-card {
+  background: var(--surface-raised);
+}

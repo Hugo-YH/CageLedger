@@ -334,6 +334,34 @@ button:active:not(:disabled),
   border-radius: 16px;
 }
 
+/* Modal surfaces and media adjustments (migrated from apple-ux.css). */
+.modal-shell {
+  border-color: var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  background: var(--surface-overlay);
+}
+
+.modal-shell-head,
+.modal-shell-actions {
+  background: var(--surface-overlay);
+}
+
+@media (prefers-contrast: more) {
+  .modal-shell {
+    border-color: var(--line-strong);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .modal-shell,
+  .modal-shell-head,
+  .modal-shell-actions {
+    backdrop-filter: none;
+    background: var(--surface-raised);
+  }
+}
+
 .modal-shell-head,
 .modal-head {
   position: sticky;
