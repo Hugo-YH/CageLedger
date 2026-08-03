@@ -90,8 +90,7 @@ export function speciesLabelFor(item: SettlementSpeciesItem) {
   return "动物";
 }
 
-export function columnBaseLabel(column: { iacuc: string; speciesLabel: string; customBilling: boolean }) {
-  if (column.customBilling) return `${column.iacuc}（${column.speciesLabel}，自定义收费）`;
+export function columnBaseLabel(column: { iacuc: string; speciesLabel: string }) {
   return column.speciesLabel === "小鼠" ? column.iacuc : `${column.iacuc}（${column.speciesLabel}）`;
 }
 

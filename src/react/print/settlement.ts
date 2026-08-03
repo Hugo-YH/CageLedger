@@ -33,8 +33,6 @@ type Breakdown = {
   statementTiered?: boolean;
   statementFreeAllowance?: boolean;
   statementFullExemption?: boolean;
-  customBilling?: boolean;
-  customBillingSegmentId?: string;
   supportAmount?: number;
   payableAmount?: number;
   amount?: number;
@@ -47,7 +45,6 @@ type SettlementColumn = {
   key: string;
   iacuc: string;
   speciesLabel: string;
-  customBilling: boolean;
   billingUnit: string;
   unitPrice: number;
   overageUnitPrice: number;
@@ -290,7 +287,6 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
         key,
         iacuc,
         speciesLabel: speciesLabelFor(item),
-        customBilling: Boolean(item.customBillingSegmentId || item.customBilling),
         billingUnit: String(item.billingUnit || ""),
         unitPrice: Number(item.statementUnitPrice ?? item.unitPrice ?? 0),
         overageUnitPrice: Number(item.statementOverageUnitPrice ?? item.overageUnitPrice ?? 0),
@@ -537,7 +533,6 @@ function breakdownColumnKey(item: Breakdown) {
     (item.statementTiered ?? item.tiered) ? "1" : "0",
     (item.statementFreeAllowance ?? item.freeAllowance) ? "1" : "0",
     (item.statementFullExemption ?? item.fullExemption) ? "1" : "0",
-    String(item.customBillingSegmentId || (item.customBilling ? "custom" : "")),
   ].join("|");
 }
 

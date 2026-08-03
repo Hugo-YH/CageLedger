@@ -214,7 +214,6 @@ def statement_columns(statement, lines):
                 "key": key,
                 "iacuc": iacuc,
                 "species": species_label(item),
-                "customBilling": bool(item.get("customBillingSegmentId")),
                 "unit": str(item.get("billingUnit") or ""),
                 "unitPrice": as_number(item.get("statementUnitPrice", item.get("unitPrice"))),
                 "overageUnitPrice": as_number(item.get("statementOverageUnitPrice", item.get("overageUnitPrice"))),
@@ -243,8 +242,6 @@ def statement_columns(statement, lines):
 
 
 def _statement_column_label(item):
-    if item["customBilling"]:
-        return f"{item['iacuc']}（{item['species']}，自定义收费）"
     return item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
 
 
@@ -473,7 +470,6 @@ def breakdown_key(item):
             "1" if item.get("statementTiered", item.get("tiered")) else "0",
             "1" if item.get("statementFreeAllowance", item.get("freeAllowance")) else "0",
             "1" if item.get("statementFullExemption", item.get("fullExemption")) else "0",
-            str(item.get("customBillingSegmentId") or ("custom" if item.get("customBilling") else "")),
         ]
     )
 
