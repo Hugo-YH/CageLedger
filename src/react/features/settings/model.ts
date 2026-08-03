@@ -26,11 +26,12 @@ export function newRoomDraft(): RoomDraft {
 
 export function newRackDraft(room: CageRoom, racks: CageRack[]): CageRack {
   const indexes = racks.filter((rack) => rack.roomId === room.id).map((rack) => rack.index);
+  const index = indexes.length ? Math.max(...indexes) + 1 : 1;
   return {
     id: `rack-${createClientId()}`,
     roomId: room.id,
-    name: "",
-    index: indexes.length ? Math.max(...indexes) + 1 : 1,
+    name: `${room.name} ${String(index).padStart(2, "0")} 号笼架`,
+    index,
     rows: 6,
     cols: 10,
   };

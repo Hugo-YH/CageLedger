@@ -18,6 +18,8 @@ export default tseslint.config(
       "src/vendor/**",
       "test-results/**",
       "web-dist/**",
+      ".vitepress/**",
+      "wiki/.vitepress/**",
     ],
   },
   js.configs.recommended,

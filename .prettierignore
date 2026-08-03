@@ -6,3 +6,5 @@ dist/
 node_modules/
 src/vendor/
 web-dist/
+.vitepress/
+wiki/.vitepress/
