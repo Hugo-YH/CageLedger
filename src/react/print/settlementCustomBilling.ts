@@ -70,5 +70,5 @@ export function customBillingDetailsMarkup(lines: BillingStatementLine[]) {
         `<tr><td>${escapeHtml(item.iacuc)}</td><td>${escapeHtml(item.startDate)}</td><td>${escapeHtml(item.endDate)}</td><td class="num">${numberText(item.quantity)}</td><td class="money">${money(item.unitPrice)} / ${item.billingUnit === "animal_day" ? "只/天" : "笼/天"}</td><td class="money">${money(item.amount)}</td><td>${escapeHtml(item.note || "-")}</td></tr>`,
     )
     .join("");
-  return `<main class="document custom-billing-details"><h1>自定义收费明细</h1><p>以下收费区间独立于减免和梯度收费，已计入本结算单应缴金额。</p><table class="custom-billing-table"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>${rows}</tbody></table></main>`;
+  return `<main class="document custom-billing-details"><h1>自定义收费明细</h1><table class="custom-billing-table"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>${rows}</tbody></table></main>`;
 }

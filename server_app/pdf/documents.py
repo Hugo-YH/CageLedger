@@ -511,7 +511,7 @@ def billing_statement_custom_billing_details_markup(lines):
         f'<tr><td>{h(item["iacuc"])}</td><td>{h(format_date(item["startDate"]))}</td><td>{h(format_date(item["endDate"]))}</td><td class="num">{number_text(item["quantity"])}</td><td class="money">{item["unitPrice"]:.2f} / {"只/天" if item["billingUnit"] == "animal_day" else "笼/天"}</td><td class="money">{item["amount"]:.2f}</td><td>{h(item["note"] or "-")}</td></tr>'
         for item in sorted(details.values(), key=lambda value: (value["iacuc"], value["startDate"], value["endDate"]))
     )
-    return f"""<main class=\"document custom-billing-details\"><h1>自定义收费明细</h1><p>以下收费区间独立于减免和梯度收费，已计入本结算单应缴金额。</p><table class=\"custom-billing-table\"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table></main>"""
+    return f"""<main class=\"document custom-billing-details\"><h1>自定义收费明细</h1><table class=\"custom-billing-table\"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table></main>"""
 
 
 def species_label(item):
