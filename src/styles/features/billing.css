@@ -507,6 +507,10 @@ th {
   box-shadow: none;
 }
 
+.react-quantity-layout .quantity-balance-input {
+  appearance: textfield;
+}
+
 .react-quantity-layout .quantity-entry-table .quantity-date-cell input[name="rowDate"] {
   min-width: 112px;
   padding-right: 32px;
