@@ -4,7 +4,8 @@ import type { ReleaseNote } from "./releaseNoteModel";
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "1.0.0-beta16",
-    build: "待发布",
+    build: "bd164cb",
+    releasedAt: "2026-08-04",
     title: "数量统计表录入控件细节修复",
     items: [
       "日期选择图标悬停时保持输入框内垂直居中，不再跳出输入框；按压缩放反馈保留",
