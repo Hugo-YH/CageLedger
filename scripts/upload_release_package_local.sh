@@ -112,8 +112,8 @@ else
 fi
 
 TAG="v${VERSION}"
-BUILD_SHORT="$(git rev-parse --short "${TAG}^{commit}" 2>/dev/null || git rev-parse --short HEAD)"
-RELEASE_DISPLAY="${VERSION}${BUILD_SHORT:+（${BUILD_SHORT}）}"
+RELEASE_BUILD="$(node -p "require('${ROOT}/package.json').build || ''")"
+RELEASE_DISPLAY="${VERSION}${RELEASE_BUILD:+（Build ${RELEASE_BUILD}）}"
 RELEASE_FILE="$(mktemp)"
 cleanup() {
   rm -f "$RELEASE_FILE"

@@ -19,18 +19,18 @@ release notes
 
 版本号、提交、tag、Release、离线包和镜像保持一一对应。
 
-Git tag 使用 `v<version>`（例如 `v1.0.0-beta7`）遵循 Git 惯例；容器镜像 tag 使用 `<version>-<build>`（例如 `1.0.0-beta7-7ad0294`），其中 `<build>` 为发布提交的 Git 短 SHA，与系统内显示的 build 一致。
+Git tag 与容器镜像 tag 只带版本号：Git tag 使用 `v<version>`（例如 `v1.0.0-beta7`），容器镜像 tag 使用 `<version>`（例如 `1.0.0-beta7`）；`build` 不再进入软件包 tag。
 
 容器镜像构建与推送是发布产物的固定组成部分。`--skip-container-publish` 只在交互式终端输入 `yes` 明确确认后才生效；非交互环境（脚本、CI、代理）不允许跳过，缺少 Docker 时发布流程直接失败并提示先启动 Docker。
 
 ## 版本与构建标识
 
 - 版本格式 `a.b.c[-betaN | -rcN]`：`a` 重大/代际版本，`b` 功能更新，`c` 补丁修复，`-betaN` 内测后缀，`-rcN` 公测后缀。
-- `build` 使用发布提交的 Git 短 SHA，系统统一显示为 `a.b.c（xxxx）`。
-- 版本唯一源 `package.json`；构建标识由发布脚本从 tag 对应提交派生，`/api/health` 返回 `build` 与 `revisionShort`。
+- `build` 为纯数字构建号，从最早记录 `0.2.0（Build 1）` 起按发布顺序逐次递增，带后缀的小版本（如 `0.5.16a`、`0.5.16b`）各占一个 build；系统统一显示为 `a.b.c（Build N）`。
+- 版本唯一源 `package.json`（含 `build` 字段）；发布脚本从更新记录推导下一个 build 并写入 `package.json`，`/api/health` 与 `/api/system/info` 返回 `build` 与 `revisionShort`。
 - 未显式指定版本时，发布脚本按 `--bump`（支持 `beta|rc|patch|minor|major`，默认 `beta`）从最近 `v*` tag 自动推导下一个版本，并自动打标签与推送。
 - `--bump patch` 从 `-betaN` / `-rcN` 预发布转正式时保留 `a.b.c` 并去掉后缀（例如 `1.0.0-rc1` → `1.0.0`）；从正式版本继续补丁则 `a.b.c` 加一（例如 `1.0.0` → `1.0.1`）。
-- 显示规则：支持括号的位置显示 `a.b.c（xxxx）`（例如 `1.0.0-beta7（7ad0294）`）；不支持括号的位置使用 `a.b.c-xxxx`（例如镜像 tag `1.0.0-beta7-7ad0294`）。
+- 显示规则：支持括号的位置显示 `a.b.c（Build N）`（例如 `1.0.0-beta7（Build 135）`）；软件包 tag 只带版本号。
 
 ## 发布前准备
 
@@ -74,8 +74,8 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 
 1. 同步 `cageledger-base` 的多架构 tag
 2. 从干净的 tag 或 HEAD worktree 构建 `amd64` 和 `arm64`
-3. 推送 `git.cellnucle.us/hugo/cageledger:X.Y.Z-<build>`
-4. 将已验证的 `X.Y.Z-<build>` 多架构 manifest 同步为 `latest`
+3. 推送 `git.cellnucle.us/hugo/cageledger:X.Y.Z`
+4. 将已验证的 `X.Y.Z` 多架构 manifest 同步为 `latest`
 5. 导出 `dist/` 下的离线镜像 tar.gz
 
 ## 凭据

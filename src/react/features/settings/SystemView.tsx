@@ -40,7 +40,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
           </Typography.Title>
           <Tag color="blue" style={{ marginTop: 6 }}>
             {data.version}
-            {data.build ? `（${data.build}）` : ""}
+            {data.build ? `（Build ${data.build}）` : ""}
           </Tag>
         </div>
         <Space style={{ marginLeft: "auto" }} wrap>
@@ -84,7 +84,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
           <Descriptions.Item label="当前版本">
             <Typography.Text strong>
               {data.version}
-              {data.build ? `（${data.build}）` : ""}
+              {data.build ? `（Build ${data.build}）` : ""}
             </Typography.Text>
           </Descriptions.Item>
           <Descriptions.Item label="代码版本">

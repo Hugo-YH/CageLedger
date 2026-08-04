@@ -130,8 +130,7 @@ trap cleanup EXIT
 
 git worktree add --detach "${WORKTREE_DIR}" "${SOURCE_REF}" >/dev/null
 REVISION="$(git -C "${WORKTREE_DIR}" rev-parse HEAD)"
-REVISION_SHORT="${REVISION:0:7}"
-IMAGE_TAG="${VERSION}-${REVISION_SHORT}"
+IMAGE_TAG="${VERSION}"
 
 docker buildx build \
   --platform linux/arm64 \

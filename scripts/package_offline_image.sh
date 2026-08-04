@@ -10,7 +10,7 @@ Usage:
 
 Options:
   --version <ver>     Image version without leading v. Default: package.json version
-  --tag <tag>         Full image tag to export. Default: <version>-<short SHA>
+  --tag <tag>         Full image tag to export. Default: <version>
   --registry <host>   Registry host. Default: git.cellnucle.us
   --namespace <name>  Registry namespace. Default: hugo
   --image-name <name> Image name. Default: cageledger
@@ -73,7 +73,7 @@ command -v docker >/dev/null 2>&1 || {
 
 IMAGE_REPO="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}"
 if [[ -z "$IMAGE_TAG" ]]; then
-  IMAGE_TAG="${VERSION}-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo local)"
+  IMAGE_TAG="${VERSION}"
 fi
 TAG="${IMAGE_TAG}"
 OUT_DIR="${ROOT}/dist"
