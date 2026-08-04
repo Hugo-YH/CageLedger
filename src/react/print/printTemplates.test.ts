@@ -317,7 +317,9 @@ describe("print templates", () => {
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
     expect(html).toContain('<th colspan="12">汇总</th>');
-    expect(html).toContain('<th colspan="4">总笼数</th><th colspan="4">减免总笼数</th><th colspan="4">阶梯总笼数</th>');
+    expect(html).toContain(
+      '<th colspan="3">总笼数</th><th colspan="3">减免总笼数</th><th colspan="3">阶梯总笼数</th><th colspan="3">缴纳（元）</th>',
+    );
     expect(html).toContain('<th colspan="12">Z2026001（梯度收费）</th>');
     expect(html).toContain(
       '<th colspan="3">笼数</th><th colspan="3">减免</th><th colspan="3">梯度</th><th colspan="3">缴纳（元）</th>',
@@ -392,7 +394,7 @@ describe("print templates", () => {
       ],
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
-    expect(html).toContain('<td colspan="4" class="num">197</td>');
+    expect(html).toContain('<td colspan="3" class="num">197</td>');
     expect(html).toContain('<td colspan="3" class="num">146</td><td colspan="3" class="money">949.00</td>');
     expect(html).toContain('<td colspan="4" class="num">51</td><td colspan="4" class="money">1051.50</td>');
   });
@@ -536,7 +538,7 @@ describe("print templates", () => {
     expect(html).toContain('<td colspan="4" class="money">0.00</td>');
     expect(html).toContain('<td colspan="6" class="money">27.00</td>');
     expect(html).toContain(
-      '2026-06-02</td><td colspan="6" class="num">6</td><td colspan="6" class="num group-empty-cell"></td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="money group-empty-cell"></td><td colspan="6" class="num">6</td><td colspan="6" class="money">27.00</td>',
+      '2026-06-02</td><td colspan="4" class="num">6</td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="money">27.00</td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="money group-empty-cell"></td><td colspan="6" class="num">6</td><td colspan="6" class="money">27.00</td>',
     );
     expect(html).not.toContain("未缴纳月份");
     expect(html).not.toContain("CageLedger · Apache-2.0");

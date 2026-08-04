@@ -264,6 +264,7 @@ def statement_row(line, columns, unit):
         "totalCount": display_line_count(line, unit, values.values()),
         "totalFree": as_number(line.get("freeCages")),
         "totalTier": as_number(line.get("tier2BillableCages")),
+        "totalAmount": as_number(line.get("amount")),
         "values": values,
     }
 
@@ -318,10 +319,15 @@ def settlement_page_markup(
     for row in rows:
         leading_values = (
             group_cells(
-                {"count": row["totalCount"], "free": row["totalFree"], "tier": row["totalTier"], "amount": 0},
+                {
+                    "count": row["totalCount"],
+                    "free": row["totalFree"],
+                    "tier": row["totalTier"],
+                    "amount": row["totalAmount"],
+                },
                 page_has_free,
                 page_has_tier,
-                False,
+                True,
             )
             if page["leading"]
             else ""
@@ -341,10 +347,10 @@ def settlement_page_markup(
     )
     leading_totals = (
         group_cells(
-            {"count": total_count, "free": total_free, "tier": total_tier, "amount": 0},
+            {"count": total_count, "free": total_free, "tier": total_tier, "amount": total_payable},
             page_has_free,
             page_has_tier,
-            False,
+            True,
         )
         if page["leading"]
         else ""

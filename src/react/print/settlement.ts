@@ -134,12 +134,12 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
                   count: row.totalCount,
                   free: row.totalFree,
                   support: 0,
-                  amount: 0,
+                  amount: row.totalAmount,
                   tier2Billable: row.totalTier2,
                 },
                 pageHasFree,
                 pageHasTier,
-                false,
+                true,
               )
             : "";
           const valueCells = resolvedSlots
@@ -209,15 +209,14 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             pageHasTier,
             unit === "animal_day" ? "减免总数量" : unit === "mixed" ? "减免总量" : "减免总笼数",
             unit === "animal_day" ? "阶梯总数量" : unit === "mixed" ? "阶梯总量" : "阶梯总笼数",
-            "",
           )
         : "";
       const leadingTotalsRowMarkup = page.showLeadingTotals
         ? renderGroupCells(
-            { count: totalCount, free: totalFree, support: 0, amount: 0, tier2Billable: totalTier2 },
+            { count: totalCount, free: totalFree, support: 0, amount: totalPayable, tier2Billable: totalTier2 },
             pageHasFree,
             pageHasTier,
-            false,
+            true,
           )
         : "";
       return `<main class="document document-page${pageIndex < totalPages - 1 ? " document-page-break" : ""}"><section class="header"><div class="header-grid"><div class="header-main"><h1>${title}</h1><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div></div></section>
@@ -438,6 +437,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
       totalCount: resolveDisplayLineCount(line, unit, [...perColumn.values()]),
       totalFree: Number(line.freeCages || 0),
       totalTier2: Number(line.tier2BillableCages || 0),
+      totalAmount: Number(line.amount || 0),
       perColumn,
     };
   }
@@ -516,6 +516,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
     totalCount: resolveDisplayLineCount(line, unit, [...perColumn.values()]),
     totalFree: Number(line.freeCages || 0),
     totalTier2: Number(line.tier2BillableCages || 0),
+    totalAmount: Number(line.amount || 0),
     perColumn,
   };
 }
