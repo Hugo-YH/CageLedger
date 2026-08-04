@@ -507,7 +507,7 @@
   position: relative;
   display: grid;
   gap: 4px;
-  grid-template-columns: 42px minmax(62px, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
 }
 
 .quantity-change-stack .quantity-change-editor + .quantity-change-editor {
