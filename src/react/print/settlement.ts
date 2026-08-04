@@ -1,6 +1,7 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
 import { customBillingDetailsMarkup } from "./settlementCustomBilling";
 import {
+  columnBaseLabel,
   displayUnitLabel,
   documentNumberFor,
   escapeHtml,
@@ -11,9 +12,11 @@ import {
   resolveDisplayTotalCount,
   settlementPrintStyles,
   settlementStatementDocumentTitle,
+  speciesLabelFor,
 } from "./settlementSupport";
 type Breakdown = {
   iacuc?: string;
+  species?: string;
   animalCount?: number;
   cageCount?: number;
   freeCages?: number;
@@ -131,12 +134,12 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
                   count: row.totalCount,
                   free: row.totalFree,
                   support: 0,
-                  amount: 0,
+                  amount: row.totalAmount,
                   tier2Billable: row.totalTier2,
                 },
                 pageHasFree,
                 pageHasTier,
-                false,
+                true,
               )
             : "";
           const valueCells = resolvedSlots
@@ -206,15 +209,14 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             pageHasTier,
             unit === "animal_day" ? "减免总数量" : unit === "mixed" ? "减免总量" : "减免总笼数",
             unit === "animal_day" ? "阶梯总数量" : unit === "mixed" ? "阶梯总量" : "阶梯总笼数",
-            "",
           )
         : "";
       const leadingTotalsRowMarkup = page.showLeadingTotals
         ? renderGroupCells(
-            { count: totalCount, free: totalFree, support: 0, amount: 0, tier2Billable: totalTier2 },
+            { count: totalCount, free: totalFree, support: 0, amount: totalPayable, tier2Billable: totalTier2 },
             pageHasFree,
             pageHasTier,
-            false,
+            true,
           )
         : "";
       return `<main class="document document-page${pageIndex < totalPages - 1 ? " document-page-break" : ""}"><section class="header"><div class="header-grid"><div class="header-main"><h1>${title}</h1><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div></div></section>
@@ -309,11 +311,11 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
   });
   const duplicateCounts = new Map<string, number>();
   sorted.forEach((column) => {
-    const baseLabel = column.speciesLabel === "小鼠" ? column.iacuc : `${column.iacuc}（${column.speciesLabel}）`;
+    const baseLabel = columnBaseLabel(column);
     duplicateCounts.set(baseLabel, (duplicateCounts.get(baseLabel) || 0) + 1);
   });
   return sorted.map((column) => {
-    const baseLabel = column.speciesLabel === "小鼠" ? column.iacuc : `${column.iacuc}（${column.speciesLabel}）`;
+    const baseLabel = columnBaseLabel(column);
     const hasDuplicate = (duplicateCounts.get(baseLabel) || 0) > 1;
     const suffix = hasDuplicate ? ` / ¥${money(column.unitPrice)}` : "";
     return {
@@ -321,10 +323,7 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
       showFree: false,
       showTiered: false,
       span: 2,
-      label:
-        column.speciesLabel === "小鼠"
-          ? `${column.iacuc}${suffix}`
-          : `${column.iacuc}（${column.speciesLabel}${suffix}）`,
+      label: `${baseLabel}${suffix}`,
     };
   });
 }
@@ -438,6 +437,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
       totalCount: resolveDisplayLineCount(line, unit, [...perColumn.values()]),
       totalFree: Number(line.freeCages || 0),
       totalTier2: Number(line.tier2BillableCages || 0),
+      totalAmount: Number(line.amount || 0),
       perColumn,
     };
   }
@@ -516,6 +516,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
     totalCount: resolveDisplayLineCount(line, unit, [...perColumn.values()]),
     totalFree: Number(line.freeCages || 0),
     totalTier2: Number(line.tier2BillableCages || 0),
+    totalAmount: Number(line.amount || 0),
     perColumn,
   };
 }
@@ -546,40 +547,6 @@ function columnGroupKey(item: Breakdown) {
     item.tiered ? "1" : "0",
     item.freeAllowance ? "1" : "0",
   ].join("|");
-}
-
-function speciesLabelFor(item: Breakdown) {
-  const billingItem = String(item.billingItem || "").trim();
-  if (billingItem.includes("小鼠")) return "小鼠";
-  if (billingItem.includes("大鼠")) return "大鼠";
-  if (billingItem.includes("豚鼠")) return "豚鼠";
-  if (billingItem.includes("兔")) return "兔";
-  if (billingItem.includes("猴")) return "猴";
-  if (billingItem.includes("猪")) return "猪";
-  if (billingItem.includes("犬")) return "犬";
-  const unitPrice = Number(item.unitPrice || 0);
-  const billingUnit = String(item.billingUnit || "");
-  if (billingUnit === "animal_day") {
-    if (unitPrice === 3) return "豚鼠";
-    if (unitPrice === 5) return "兔";
-    if (unitPrice === 35 || unitPrice === 65) return "猴";
-    if (unitPrice === 15 || unitPrice === 45) return "猪/犬";
-    return "动物";
-  }
-  if (
-    unitPrice === 4.5 ||
-    unitPrice === 6.5 ||
-    unitPrice === 7.2 ||
-    unitPrice === 13.5 ||
-    unitPrice === 19.5 ||
-    unitPrice === 21.6
-  ) {
-    return "小鼠";
-  }
-  if (unitPrice === 8.5 || unitPrice === 14 || unitPrice === 25.5 || unitPrice === 42) {
-    return "大鼠";
-  }
-  return "动物";
 }
 
 function resolveUnit(statement: BillingStatement, lines: BillingStatementLine[]) {

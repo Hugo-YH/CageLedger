@@ -6,6 +6,8 @@ dist/
 node_modules/
 src/vendor/
 web-dist/
+.vitepress/
+wiki/.vitepress/
 wiki/.vitepress/cache/
 wiki/.vitepress/dist/
 server_app/resources/intake/mgi-strain-index.json

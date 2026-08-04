@@ -232,13 +232,17 @@ def statement_columns(statement, lines):
     )
     labels = {}
     for item in sorted_columns:
-        base = item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
+        base = _statement_column_label(item)
         labels[base] = labels.get(base, 0) + 1
     for item in sorted_columns:
-        base = item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
+        base = _statement_column_label(item)
         suffix = f" / ¥{item['unitPrice']:.2f}" if labels[base] > 1 else ""
         item["label"] = f"{base}{suffix}"
     return sorted_columns
+
+
+def _statement_column_label(item):
+    return item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
 
 
 def statement_row(line, columns, unit):
@@ -260,6 +264,7 @@ def statement_row(line, columns, unit):
         "totalCount": display_line_count(line, unit, values.values()),
         "totalFree": as_number(line.get("freeCages")),
         "totalTier": as_number(line.get("tier2BillableCages")),
+        "totalAmount": as_number(line.get("amount")),
         "values": values,
     }
 
@@ -314,10 +319,15 @@ def settlement_page_markup(
     for row in rows:
         leading_values = (
             group_cells(
-                {"count": row["totalCount"], "free": row["totalFree"], "tier": row["totalTier"], "amount": 0},
+                {
+                    "count": row["totalCount"],
+                    "free": row["totalFree"],
+                    "tier": row["totalTier"],
+                    "amount": row["totalAmount"],
+                },
                 page_has_free,
                 page_has_tier,
-                False,
+                True,
             )
             if page["leading"]
             else ""
@@ -337,10 +347,10 @@ def settlement_page_markup(
     )
     leading_totals = (
         group_cells(
-            {"count": total_count, "free": total_free, "tier": total_tier, "amount": 0},
+            {"count": total_count, "free": total_free, "tier": total_tier, "amount": total_payable},
             page_has_free,
             page_has_tier,
-            False,
+            True,
         )
         if page["leading"]
         else ""
@@ -507,10 +517,22 @@ def billing_statement_custom_billing_details_markup(lines):
         f'<tr><td>{h(item["iacuc"])}</td><td>{h(format_date(item["startDate"]))}</td><td>{h(format_date(item["endDate"]))}</td><td class="num">{number_text(item["quantity"])}</td><td class="money">{item["unitPrice"]:.2f} / {"只/天" if item["billingUnit"] == "animal_day" else "笼/天"}</td><td class="money">{item["amount"]:.2f}</td><td>{h(item["note"] or "-")}</td></tr>'
         for item in sorted(details.values(), key=lambda value: (value["iacuc"], value["startDate"], value["endDate"]))
     )
-    return f"""<main class=\"document custom-billing-details\"><h1>自定义收费明细</h1><p>以下收费区间独立于减免和梯度收费，已计入本结算单应缴金额。</p><table class=\"custom-billing-table\"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table></main>"""
+    return f"""<main class=\"document custom-billing-details\"><h1>自定义收费明细</h1><table class=\"custom-billing-table\"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table></main>"""
 
 
 def species_label(item):
+    species = str(item.get("species") or "").strip().lower()
+    species_labels = {
+        "mouse": "小鼠",
+        "rat": "大鼠",
+        "guinea_pig": "豚鼠",
+        "rabbit": "兔",
+        "monkey": "猴",
+        "pig": "猪",
+        "dog": "犬",
+    }
+    if species in species_labels:
+        return species_labels[species]
     label = str(item.get("billingItem") or "")
     for species in ("小鼠", "大鼠", "豚鼠", "兔", "猴", "猪", "犬"):
         if species in label:
@@ -525,7 +547,7 @@ def quantity_styles():
 
 
 def settlement_styles():
-    return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;min-height:277mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td,.custom-billing-table th,.custom-billing-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(2) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.custom-billing-details{page-break-before:always;padding-top:10mm}.custom-billing-details h1{justify-content:flex-start}.custom-billing-details p{margin:4px 0}.custom-billing-table th{background:#f1f5f4}.custom-billing-table td{height:8mm;word-break:break-word}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{padding:2px 3px}.summary-table thead tr:nth-child(2) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6.5mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
+    return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td,.custom-billing-table th,.custom-billing-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(2) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.custom-billing-details{padding-top:10mm;break-inside:avoid;page-break-inside:avoid}.custom-billing-details h1{justify-content:flex-start}.custom-billing-details p{margin:4px 0}.custom-billing-table th{background:#f1f5f4}.custom-billing-table td{height:8mm;word-break:break-word}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{padding:2px 3px}.summary-table thead tr:nth-child(2) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6.5mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
 
 
 def document_html(title, styles, body):

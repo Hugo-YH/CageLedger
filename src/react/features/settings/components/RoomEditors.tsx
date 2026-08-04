@@ -121,6 +121,15 @@ export function RackEditor({
   onSave: () => void;
 }) {
   const update = (key: keyof CageRack, value: string | number) => onChange({ ...draft, [key]: value });
+  const rackName = (roomId: string, index: number) => {
+    const room = rooms.find((item) => item.id === roomId);
+    return room ? `${room.name} ${String(index).padStart(2, "0")} 号笼架` : draft.name;
+  };
+  const updateRoom = (roomId: string) => onChange({ ...draft, roomId, name: rackName(roomId, draft.index) });
+  const updateIndex = (value: number) => {
+    const index = Math.max(Number(value), 1);
+    onChange({ ...draft, index, name: rackName(draft.roomId, index) });
+  };
   return (
     <ModalShell ariaLabel="编辑笼架" className="settings-editor-modal" onClose={onClose}>
       <div className="modal-shell-head">
@@ -136,7 +145,7 @@ export function RackEditor({
               aria-label="所属饲养间"
               options={rooms.map((room) => ({ label: room.name, value: room.id }))}
               value={draft.roomId}
-              onChange={(value) => update("roomId", value)}
+              onChange={(value) => updateRoom(value)}
             />
           </Form.Item>
         </Form>
@@ -145,7 +154,7 @@ export function RackEditor({
             label="笼架编号"
             type="number"
             value={String(draft.index)}
-            onChange={(value) => update("index", Math.max(Number(value), 1))}
+            onChange={(value) => updateIndex(Number(value))}
           />
           <Field
             label="行数"

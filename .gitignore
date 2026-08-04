@@ -40,5 +40,6 @@ test-results
 *.njsproj
 *.sln
 *.sw?
-
+.vitepress/
+wiki/.vitepress/
 tmp/
