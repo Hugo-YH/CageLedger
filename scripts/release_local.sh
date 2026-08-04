@@ -102,6 +102,10 @@ if [[ -z "$RELEASE_BRANCH" ]]; then
   exit 1
 fi
 
+if [[ "$RELEASE_BRANCH" == "rc" ]] && [[ "$VERSION" =~ -rc[0-9]+$ ]]; then
+  run bash scripts/check_rc_merged.sh
+fi
+
 if [[ -n "${CAGELEDGER_PYTHON_BIN:-}" ]]; then
   PYTHON_BIN_DIR="$(dirname "$CAGELEDGER_PYTHON_BIN")"
   export PATH="$PYTHON_BIN_DIR:$PATH"
