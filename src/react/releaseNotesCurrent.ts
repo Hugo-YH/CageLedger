@@ -2,6 +2,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.2",
+    releasedAt: "2026-08-04 13:20",
+    title: "结算单汇总列与 PDF 缓存修复",
+    items: [
+      "结算单汇总列恢复「总数量+缴纳（元）」两列展示，数据行补齐当日金额与整月合计，与明细列结构一致",
+      "PDF 导出缓存 key 纳入渲染版本号，样式或排版改动后旧缓存自动失效，不再返回历史版本文件",
+    ],
+  },
+  {
     version: "0.8.1",
     releasedAt: "2026-08-04 12:20",
     title: "结算单自定义收费明细自适应分页",
