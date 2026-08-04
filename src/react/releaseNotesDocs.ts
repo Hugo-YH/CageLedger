@@ -3,7 +3,20 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta16",
+    build: "待发布",
+    title: "数量统计表录入控件细节修复",
+    items: [
+      "日期选择图标悬停时保持输入框内垂直居中，不再跳出输入框；按压缩放反馈保留",
+      "录入单元格输入框与下拉框撑满列宽，结余只数/笼数与表头严格对齐；类型下拉收缩至可用宽度，消除与相邻输入框重叠",
+      "新增、减少、结余只数与结余笼数输入框统一隐藏数字上下箭头，保持键盘输入",
+      "开启「动物数量」后加宽日期列并收窄结余两列，左右半区列宽一致",
+      "归档 Ant Design 设计语言规范（antd CLI design.md），作为后续 UI 对照依据",
+    ],
+  },
+  {
     version: "1.0.0-beta15",
+    build: "8a4e52d",
     releasedAt: "2026-08-03",
     title: "系统状态运行环境、工作区头部精简与 Ant Design 合规整改",
     items: [
