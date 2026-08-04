@@ -2,6 +2,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.1",
+    releasedAt: "2026-08-04 12:20",
+    title: "结算单自定义收费明细自适应分页",
+    items: [
+      "结算单自定义收费明细改为自适应排版：汇总表下方空间足够时与汇总表同页展示，空间不足时自动换到下一页，明细表格不被拆分",
+      "汇总表内容较少的月份（如仅几天产生饲养费）不再强制占用整页，打印页数随内容自然减少",
+    ],
+  },
+  {
     version: "0.8.0",
     releasedAt: "2026-08-03 17:50",
     title: "结算单展示合并与笼架命名修复",
