@@ -33,7 +33,7 @@ def pdf_export_job_route(path):
     return value, False
 
 
-PDF_RENDER_VERSION = "2026-08-04-settlement-pagination"
+PDF_RENDER_VERSION = "2026-08-04-settlement-summary-amount"
 
 
 def quantity_pdf_cache_key(sheet):
