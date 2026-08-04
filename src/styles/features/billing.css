@@ -536,6 +536,18 @@ th {
   min-width: 560px;
 }
 
+.react-quantity-layout .quantity-entry-table.animal-details-enabled th:nth-child(1),
+.react-quantity-layout .quantity-entry-table.animal-details-enabled th:nth-child(6) {
+  width: 132px;
+}
+
+.react-quantity-layout .quantity-entry-table.animal-details-enabled th:nth-child(4),
+.react-quantity-layout .quantity-entry-table.animal-details-enabled th:nth-child(5),
+.react-quantity-layout .quantity-entry-table.animal-details-enabled th:nth-child(9),
+.react-quantity-layout .quantity-entry-table.animal-details-enabled th:nth-child(10) {
+  width: 86px;
+}
+
 .react-quantity-layout .quantity-page-toolbar {
   display: flex;
   align-items: center;
