@@ -507,7 +507,7 @@ th {
   box-shadow: none;
 }
 
-.react-quantity-layout .quantity-balance-input {
+.react-quantity-layout .quantity-entry-table input[type="number"] {
   appearance: textfield;
 }
 
