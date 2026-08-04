@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-rc1",
+    build: "待发布",
+    title: "首个公测版：合并 main 生产修复与 beta 全部功能",
+    items: [
+      "整合 main 分支的生产修复：结算单汇总列恢复「总数量+缴纳（元）」两列并补齐金额、自定义收费明细自适应分页、PDF 导出缓存按渲染版本失效、笼架自动命名、IACUC 前缀匹配",
+      "保留 beta 分支全部 UI 与性能工作：Ant Design 全量合规整改、MGI 索引懒加载、结算应收批量读取、巡检异常计数批量取回、系统状态运行环境区块",
+      "建立 main/beta/rc 三线分支模型，rc 发布前强制校验 main 与 beta 已全部合并",
+    ],
+  },
+  {
     version: "1.0.0-beta16",
     build: "bd164cb",
     releasedAt: "2026-08-04",
