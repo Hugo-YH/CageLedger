@@ -112,6 +112,28 @@ export function ProjectHome() {
           </Card>
         </section>
 
+        <section className="project-section project-showcase-section" id="showcase">
+          <SectionHeading
+            eyebrow="界面展示"
+            title="桌面与移动端统一体验"
+            detail="同一套业务链路在桌面工作台、笼位视图和移动端保持一致的操作体验。"
+          />
+          <div className="project-showcase-grid">
+            <figure className="project-showcase-figure project-showcase-wide">
+              <img alt="系统总览界面（桌面端）" src="/screenshots/dashboard-desktop.png" />
+              <figcaption>系统总览</figcaption>
+            </figure>
+            <figure className="project-showcase-figure project-showcase-wide">
+              <img alt="笼位管理界面（桌面端）" src="/screenshots/cages-desktop.png" />
+              <figcaption>笼位管理</figcaption>
+            </figure>
+            <figure className="project-showcase-figure project-showcase-mobile">
+              <img alt="系统总览界面（移动端）" src="/screenshots/mobile-overview.png" />
+              <figcaption>移动端</figcaption>
+            </figure>
+          </div>
+        </section>
+
         <section className="project-section" id="capabilities">
           <SectionHeading
             eyebrow="核心能力"
