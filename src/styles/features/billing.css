@@ -494,6 +494,7 @@ th {
 
 .react-quantity-layout .quantity-entry-table input,
 .react-quantity-layout .quantity-entry-table select {
+  width: 100%;
   min-width: 0;
   min-height: 32px;
   height: 32px;
