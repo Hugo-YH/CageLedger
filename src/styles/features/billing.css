@@ -507,6 +507,13 @@ th {
   box-shadow: none;
 }
 
+.react-quantity-layout .quantity-entry-table input[type="number"]::-webkit-outer-spin-button,
+.react-quantity-layout .quantity-entry-table input[type="number"]::-webkit-inner-spin-button {
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .react-quantity-layout .quantity-entry-table input[type="number"] {
   appearance: textfield;
 }
