@@ -511,6 +511,15 @@ th {
   padding-right: 32px;
 }
 
+.react-quantity-layout .quantity-date-picker-button:hover:not(:disabled),
+.react-quantity-layout .quantity-date-picker-button:focus-visible {
+  transform: translateY(-50%);
+}
+
+.react-quantity-layout .quantity-date-picker-button:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.97);
+}
+
 .react-quantity-layout .quantity-entry-table.animal-details-hidden {
   min-width: 560px;
 }
