@@ -33,12 +33,15 @@ def pdf_export_job_route(path):
     return value, False
 
 
+PDF_RENDER_VERSION = "2026-08-04-settlement-pagination"
+
+
 def quantity_pdf_cache_key(sheet):
-    return f"quantity-sheet:{sheet.get('id', '')}"
+    return f"quantity-sheet:{PDF_RENDER_VERSION}:{sheet.get('id', '')}"
 
 
 def billing_pdf_cache_key(month, pi, source_type="quantity_sheet"):
-    return f"billing-statement:{source_type}:{month}:{pi}"
+    return f"billing-statement:{PDF_RENDER_VERSION}:{source_type}:{month}:{pi}"
 
 
 def invalidate_pdf_cache_for_sheets(sheets):
