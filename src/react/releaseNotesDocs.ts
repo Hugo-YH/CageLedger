@@ -4,7 +4,8 @@ import type { ReleaseNote } from "./releaseNoteModel";
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "1.0.0-rc1",
-    build: "待发布",
+    build: "56c9ab4",
+    releasedAt: "2026-08-04",
     title: "首个公测版：合并 main 生产修复与 beta 全部功能",
     items: [
       "整合 main 分支的生产修复：结算单汇总列恢复「总数量+缴纳（元）」两列并补齐金额、自定义收费明细自适应分页、PDF 导出缓存按渲染版本失效、笼架自动命名、IACUC 前缀匹配",
