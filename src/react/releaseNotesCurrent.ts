@@ -2,6 +2,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.3",
+    releasedAt: "2026-08-05 12:50",
+    title: "结算候选登记人员列与打印状态自动标记修复",
+    items: [
+      "项目负责人结算列表新增「登记人员」列，按负责人合并多个统计表的登记人，支持表头排序与漏斗筛选",
+      "修复待接收批次打印后未自动标记为已打印的问题，打印完成的批次立即进入已打印状态",
+    ],
+  },
+  {
     version: "0.8.2",
     releasedAt: "2026-08-04 13:20",
     title: "结算单汇总列与 PDF 缓存修复",
