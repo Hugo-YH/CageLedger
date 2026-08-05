@@ -5564,6 +5564,11 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 clean_text=clean_text,
             )
             return
+        if path == "/api/billing-settlements/xlsx":
+            download_settlement_xlsx(
+                self, connect_db=connect_db, generate_statement=generate_billing_statement_by_pi, clean_text=clean_text
+            )
+            return
         if path == "/api/billing-monthly-summary/export":
             export_monthly_billing_summary(
                 self,

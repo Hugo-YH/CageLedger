@@ -817,7 +817,7 @@ th {
 }
 
 .settlement-candidate-table {
-  min-width: 910px;
+  min-width: 1080px;
   table-layout: fixed;
 }
 
@@ -835,6 +835,10 @@ th {
 
 .settlement-col-iacuc {
   width: auto;
+}
+
+.settlement-col-manager {
+  width: 180px;
 }
 
 .settlement-col-amount {

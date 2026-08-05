@@ -132,6 +132,21 @@ def intake_batch_order_by(filters, entity_order_by):
     return f"{spec['order']} {sort_dir}, rowid DESC"
 
 
+_INTAKE_STATUS_LABELS = {
+    "draft": "草稿",
+    "pending_print": "未打印",
+    "printed": "已打印",
+    "received": "已接收",
+}
+
+
+def _intake_filter_label(column, value):
+    text = str(value or "")
+    if column == "status":
+        return _INTAKE_STATUS_LABELS.get(text, text or "空白")
+    return text or "空白"
+
+
 def list_intake_batch_filter_options(conn, filters, filtered_where, column):
     spec = INTAKE_BATCH_LIST_COLUMNS.get(column)
     if not spec:
@@ -150,7 +165,12 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
     ).fetchall()
     return {
         "items": [
-            {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]} for row in rows
+            {
+                "value": row["value"] or "",
+                "label": _intake_filter_label(column, row["value"]),
+                "count": row["count"],
+            }
+            for row in rows
         ],
     }
 

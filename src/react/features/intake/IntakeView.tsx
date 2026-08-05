@@ -176,7 +176,7 @@ export function IntakeView({
     const printable = targets.filter((item) => item.status === "pending_print" || item.status === "draft");
     for (const item of printable) {
       await save.mutateAsync({
-        item: { ...item, status: "printed", updatedAt: new Date().toISOString() },
+        item: { ...item, status: "printed" },
         exists: true,
       });
     }

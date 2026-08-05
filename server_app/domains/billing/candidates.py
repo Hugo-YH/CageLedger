@@ -163,12 +163,33 @@ def _refresh_snapshot(conn, group, calculate, source_type, now):
     return get_billing_candidate_snapshot(conn, month, pi_name, source_type)
 
 
-def _public_candidate(item):
+def _quantity_sheet_managers(conn, keys):
+    cleaned = sorted({(str(month or "").strip(), str(pi or "").strip()) for month, pi in keys if month and pi})
+    if not cleaned:
+        return {}
+    placeholders = ", ".join("(?, ?)" for _ in cleaned)
+    rows = conn.execute(
+        f"""
+        SELECT month, pi, manager
+        FROM quantity_sheets
+        WHERE (month, pi) IN ({placeholders})
+          AND TRIM(COALESCE(manager, '')) != ''
+        """,
+        [value for pair in cleaned for value in pair],
+    ).fetchall()
+    managers = {}
+    for row in rows:
+        managers.setdefault((row["month"], row["pi"]), set()).add(str(row["manager"]).strip())
+    return {f"{month}::{pi}": "、".join(sorted(names)) for (month, pi), names in managers.items()}
+
+
+def _public_candidate(item, manager=""):
     return {
         "id": item["id"],
         "month": item["month"],
         "pi": item["pi"],
         "iacucs": list(item.get("iacucs") or []),
+        "manager": manager or "",
         "totalAmount": item.get("totalAmount"),
         "error": item.get("error", ""),
     }

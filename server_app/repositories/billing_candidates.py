@@ -1,12 +1,15 @@
 import json
 
 SETTLEMENT_CANDIDATE_LIST_COLUMNS = {
-    "month": {"expr": "month", "order": "month"},
-    "pi": {"expr": "pi", "order": "pi"},
-    "iacuc": {"expr": "iacucs_text", "order": "iacucs_text"},
+    "month": {"expr": "billing_candidate_snapshots.month", "order": "billing_candidate_snapshots.month"},
+    "pi": {"expr": "billing_candidate_snapshots.pi", "order": "billing_candidate_snapshots.pi"},
+    "iacuc": {"expr": "billing_candidate_snapshots.iacucs_text", "order": "billing_candidate_snapshots.iacucs_text"},
     "amount": {
-        "expr": "CASE WHEN total_amount IS NULL THEN '' ELSE printf('%.2f', total_amount) END",
-        "order": "total_amount",
+        "expr": (
+            "CASE WHEN billing_candidate_snapshots.total_amount IS NULL THEN '' "
+            "ELSE printf('%.2f', billing_candidate_snapshots.total_amount) END"
+        ),
+        "order": "billing_candidate_snapshots.total_amount",
     },
 }
 
@@ -181,9 +184,41 @@ def list_billing_candidate_filter_options(conn, source_type, filters):
         "month": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "month"),
         "pi": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "pi"),
         "iacuc": list_billing_candidate_iacuc_filter_options(conn, source_type, filters),
+        "manager": list_billing_candidate_manager_filter_options(conn, source_type, filters),
         "amount": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "amount"),
     }
     return items
+
+
+def list_billing_candidate_manager_filter_options(conn, source_type, filters):
+    where, params = billing_candidate_snapshot_where(
+        source_type=source_type,
+        filters=filters,
+        exclude_column="manager",
+    )
+    rows = conn.execute(
+        f"""
+        SELECT qs.manager AS value, COUNT(DISTINCT billing_candidate_snapshots.rowid) AS count
+        FROM billing_candidate_snapshots
+        JOIN quantity_sheets qs
+          ON qs.month = billing_candidate_snapshots.month
+         AND qs.pi = billing_candidate_snapshots.pi
+        WHERE {where}
+          AND TRIM(COALESCE(qs.manager, '')) != ''
+        GROUP BY qs.manager
+        ORDER BY qs.manager COLLATE NOCASE
+        LIMIT 500
+        """,
+        params,
+    ).fetchall()
+    return [
+        {
+            "value": row["value"],
+            "label": row["value"],
+            "count": row["count"],
+        }
+        for row in rows
+    ]
 
 
 def list_billing_candidate_scalar_filter_options(conn, source_type, filters, column):
@@ -380,11 +415,21 @@ def delete_orphaned_billing_candidate_snapshots(conn, source_type, live_keys):
 
 def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_column="", stale_only=False):
     working_filters = filters or {}
-    where_parts = ["source_type = ?"]
+    where_parts = ["billing_candidate_snapshots.source_type = ?"]
     params = [source_type]
     for column, values in (working_filters.get("columnFilters") or {}).items():
         cleaned = [str(value).strip() for value in values if str(value).strip()]
         if column == exclude_column or not cleaned:
+            continue
+        if column == "manager":
+            placeholders = ", ".join("?" for _ in cleaned)
+            where_parts.append(
+                f"EXISTS (SELECT 1 FROM quantity_sheets qs "
+                f"WHERE qs.month = billing_candidate_snapshots.month "
+                f"AND qs.pi = billing_candidate_snapshots.pi "
+                f"AND TRIM(COALESCE(qs.manager, '')) IN ({placeholders}))"
+            )
+            params.extend(cleaned)
             continue
         if column == "iacuc":
             placeholders = ", ".join("?" for _ in cleaned)
@@ -400,13 +445,22 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
         where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
         params.extend(cleaned)
     if stale_only:
-        where_parts.append("is_stale = 1")
+        where_parts.append("billing_candidate_snapshots.is_stale = 1")
     return " AND ".join(where_parts), tuple(params)
 
 
 def billing_candidate_snapshot_order_by(filters):
     sort_key = str(filters.get("sortKey", "") or "").strip()
     sort_dir = "ASC" if str(filters.get("sortDir", "") or "").lower() == "asc" else "DESC"
+    if sort_key == "manager":
+        return (
+            "(SELECT GROUP_CONCAT(manager, '、') FROM ("
+            "SELECT DISTINCT manager FROM quantity_sheets qs "
+            "WHERE qs.month = billing_candidate_snapshots.month "
+            "AND qs.pi = billing_candidate_snapshots.pi "
+            "AND TRIM(COALESCE(qs.manager, '')) != '' ORDER BY manager"
+            f")) COLLATE NOCASE {sort_dir}, month {sort_dir}, pi COLLATE NOCASE, rowid DESC"
+        )
     if sort_key == "pi":
         return f"pi COLLATE NOCASE {sort_dir}, month DESC, rowid DESC"
     if sort_key == "iacuc":

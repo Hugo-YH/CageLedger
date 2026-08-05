@@ -51,6 +51,7 @@ export interface SettlementCandidate {
   month: string;
   pi: string;
   iacucs: string[];
+  manager: string;
   totalAmount: number | null;
   error?: string;
 }
@@ -58,7 +59,7 @@ export interface SettlementCandidate {
 export interface SettlementCandidateListParams {
   limit: number;
   offset: number;
-  sortKey?: "month" | "pi" | "iacuc" | "amount";
+  sortKey?: "month" | "pi" | "iacuc" | "manager" | "amount";
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
 }

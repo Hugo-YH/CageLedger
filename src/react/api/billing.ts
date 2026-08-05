@@ -57,3 +57,10 @@ export function exportMonthlyBillingSummary(month: string) {
     body: JSON.stringify({ month }),
   });
 }
+
+export function exportSettlementXlsx(items: Array<{ month: string; pi: string; sourceType: string }>) {
+  return requestDownload("/api/billing-settlements/xlsx", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}

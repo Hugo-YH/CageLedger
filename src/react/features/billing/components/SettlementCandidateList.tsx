@@ -67,6 +67,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchStarting, setBatchStarting] = useState(false);
+  const [xlsxExporting, setXlsxExporting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
@@ -198,6 +199,21 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       });
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "PDF 导出失败", "error");
+    }
+  }
+
+  async function exportCandidatesXlsx(candidates: SettlementCandidate[]) {
+    setXlsxExporting(true);
+    setNotice("");
+    try {
+      const filename = await exportSettlementXlsx(
+        candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
+      );
+      setNotice(`已导出 Excel：${filename}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Excel 导出失败");
+    } finally {
+      setXlsxExporting(false);
     }
   }
 
