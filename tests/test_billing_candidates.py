@@ -251,6 +251,29 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
             )
             self.assertEqual([item["pi"] for item in sorted_by_manager["items"]], ["王教授", "李教授"])
 
+    def test_candidate_list_combined_month_and_manager_filters(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-07", "李教授", "Z3", manager="张三")
+            seed_quantity_sheet(conn, "sheet-2", "2026-07", "李教授", "Z4", manager="李四")
+            seed_quantity_sheet(conn, "sheet-3", "2026-06", "王教授", "Z5", manager="张三")
+
+            result = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "month",
+                    "sortDir": "desc",
+                    "columnFilters": {"month": ["2026-07"], "manager": ["张三"]},
+                },
+                lambda month, pi_name: {"iacucs": ["Z"], "totalAmount": 10},
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+
+            self.assertEqual([item["pi"] for item in result["items"]], ["李教授"])
+            self.assertIn("manager", result["filterOptions"])
+
     def test_invalidation_updates_or_removes_only_the_affected_snapshot(self):
         with build_candidate_conn() as conn:
             seed_quantity_sheet(conn, "sheet-1", "2026-06", "张教授", "Z1")

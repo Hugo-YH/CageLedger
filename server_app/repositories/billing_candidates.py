@@ -1,12 +1,15 @@
 import json
 
 SETTLEMENT_CANDIDATE_LIST_COLUMNS = {
-    "month": {"expr": "month", "order": "month"},
-    "pi": {"expr": "pi", "order": "pi"},
-    "iacuc": {"expr": "iacucs_text", "order": "iacucs_text"},
+    "month": {"expr": "billing_candidate_snapshots.month", "order": "billing_candidate_snapshots.month"},
+    "pi": {"expr": "billing_candidate_snapshots.pi", "order": "billing_candidate_snapshots.pi"},
+    "iacuc": {"expr": "billing_candidate_snapshots.iacucs_text", "order": "billing_candidate_snapshots.iacucs_text"},
     "amount": {
-        "expr": "CASE WHEN total_amount IS NULL THEN '' ELSE printf('%.2f', total_amount) END",
-        "order": "total_amount",
+        "expr": (
+            "CASE WHEN billing_candidate_snapshots.total_amount IS NULL THEN '' "
+            "ELSE printf('%.2f', billing_candidate_snapshots.total_amount) END"
+        ),
+        "order": "billing_candidate_snapshots.total_amount",
     },
 }
 
@@ -412,7 +415,7 @@ def delete_orphaned_billing_candidate_snapshots(conn, source_type, live_keys):
 
 def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_column="", stale_only=False):
     working_filters = filters or {}
-    where_parts = ["source_type = ?"]
+    where_parts = ["billing_candidate_snapshots.source_type = ?"]
     params = [source_type]
     for column, values in (working_filters.get("columnFilters") or {}).items():
         cleaned = [str(value).strip() for value in values if str(value).strip()]
@@ -442,7 +445,7 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
         where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
         params.extend(cleaned)
     if stale_only:
-        where_parts.append("is_stale = 1")
+        where_parts.append("billing_candidate_snapshots.is_stale = 1")
     return " AND ".join(where_parts), tuple(params)
 
 
