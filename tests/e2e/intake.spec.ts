@@ -88,3 +88,53 @@ test("landscape phone opens submenus after a desktop navigation collapse", async
   await expect(billingMenu).toBeVisible();
   await expect(billingMenu.getByRole("button", { name: /^数量统计表（录入）/ })).toBeVisible();
 });
+
+test("marking a saved batch as printed keeps its server version", async ({ page }) => {
+  const batchId = `batch-e2e-print-${Date.now()}`;
+  const batchNo = `E2E-PRINT-${Date.now()}`;
+  await page.goto("/");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+  await page.request.post("/api/intake-batches", {
+    data: {
+      item: {
+        id: batchId,
+        receiverName: "系统管理员",
+        status: "pending_print",
+        batchNo,
+        iacuc: "Z2026001",
+        supplier: "广东药康",
+        pi: "E2E 打印负责人",
+        owner: "E2E 实验负责人",
+        roomId: "",
+        roomName: "8014",
+        intakeDate: new Date().toISOString().slice(0, 10),
+        endDate: new Date().toISOString().slice(0, 10),
+        quantity: 10,
+        suggestedCardCount: 2,
+        finalCardCount: 2,
+        species: "mouse",
+        cards: [],
+      },
+    },
+  });
+  await page.locator("nav.nav").getByRole("button", { name: "笼卡管理", exact: true }).click();
+  await page
+    .locator("#nav-intake")
+    .getByRole("button", { name: /^待接收批次/ })
+    .click();
+  await expect(page.getByRole("heading", { name: "待接收批次列表", exact: true })).toBeVisible();
+
+  const row = page.locator("tr", { hasText: batchNo }).first();
+  await expect(row).toContainText("未打印");
+  await row.getByRole("checkbox", { name: `选择 ${batchNo}` }).check();
+  await page.getByRole("button", { name: "标记已打印", exact: true }).click();
+  await expect(row).toContainText("已打印");
+
+  const response = await page.request.get(`/api/intake-batches/${batchId}`);
+  const payload = await response.json();
+  expect((payload.item ?? payload).status).toBe("printed");
+  await page.request.delete(`/api/intake-batches/${batchId}`);
+});
