@@ -405,7 +405,7 @@ from server_app.services.reimbursement import (
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_frontend_asset
-from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
+from server_app.web import CageLedgerHttpHandler, JsonResponse, Router, download_settlement_xlsx
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
@@ -5552,6 +5552,11 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 validate_permission=validate_quantity_sheet_permission,
                 generate_statement=generate_billing_statement_by_pi,
                 clean_text=clean_text,
+            )
+            return
+        if path == "/api/billing-settlements/xlsx":
+            download_settlement_xlsx(
+                self, connect_db=connect_db, generate_statement=generate_billing_statement_by_pi, clean_text=clean_text
             )
             return
         if path == "/api/billing-monthly-summary/export":

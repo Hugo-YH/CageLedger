@@ -5,7 +5,7 @@ import type {
   SettlementCandidate,
   SettlementCandidateListParams,
 } from "../../../api/contracts";
-import { fetchAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
+import { exportSettlementXlsx, fetchAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableTableHeader } from "../../../components/FilterableTableHeader";
 import { Tooltip } from "../../../components/Tooltip";
@@ -28,6 +28,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const [notice, setNotice] = useState("");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchStarting, setBatchStarting] = useState(false);
+  const [xlsxExporting, setXlsxExporting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
@@ -69,6 +70,21 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "PDF 导出失败");
+    }
+  }
+
+  async function exportCandidatesXlsx(candidates: SettlementCandidate[]) {
+    setXlsxExporting(true);
+    setNotice("");
+    try {
+      const filename = await exportSettlementXlsx(
+        candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
+      );
+      setNotice(`已导出 Excel：${filename}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Excel 导出失败");
+    } finally {
+      setXlsxExporting(false);
     }
   }
 
@@ -208,6 +224,16 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               onClick={() => void exportCandidates(selectedCandidates)}
             >
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+            </AsyncActionButton>
+            <AsyncActionButton
+              className="secondary"
+              type="button"
+              pending={xlsxExporting}
+              pendingLabel="正在生成 Excel..."
+              disabled={!selectedCandidates.length}
+              onClick={() => void exportCandidatesXlsx(selectedCandidates)}
+            >
+              {selectedCandidates.length > 1 ? "批量导出 Excel" : "导出 Excel"}
             </AsyncActionButton>
             <AsyncActionButton
               className="primary flow-button"
