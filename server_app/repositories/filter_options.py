@@ -17,6 +17,7 @@ from server_app.domains.reimbursement_ledger.listing import (
 )
 from server_app.repositories.billing_candidates import (
     list_billing_candidate_iacuc_filter_options,
+    list_billing_candidate_manager_filter_options,
     list_billing_candidate_scalar_filter_options,
 )
 from server_app.repositories.entities import list_intake_batch_filter_options
@@ -55,6 +56,8 @@ def route_column_filter_options(handler, path):
         elif list_name == "settlement-candidates":
             if column == "iacuc":
                 items = list_billing_candidate_iacuc_filter_options(conn, "quantity_sheet", filters)
+            elif column == "manager":
+                items = list_billing_candidate_manager_filter_options(conn, "quantity_sheet", filters)
             else:
                 items = list_billing_candidate_scalar_filter_options(conn, "quantity_sheet", filters, column)
             handler.send_json({"items": items})

@@ -14,7 +14,7 @@ import type {
   SettlementCandidate,
   SettlementCandidateListParams,
 } from "../../../api/contracts";
-import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
+import { exportSettlementXlsx, listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useColumnFilterOptions } from "../../../api/filterOptions";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
@@ -114,6 +114,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         { key: "month", label: "结算月份", width: 120 },
         { key: "pi", label: "项目负责人姓名", width: 160 },
         { key: "iacuc", label: "IACUC", width: 300 },
+        { key: "manager", label: "登记人员", width: 150 },
         { key: "amount", label: "金额", width: 150 },
       ] as const
     ).map(({ key, label, width }) => ({
@@ -149,6 +150,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         }
         if (key === "amount") {
           return candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`;
+        }
+        if (key === "manager") {
+          return candidate.manager || "-";
         }
         return candidate[key];
       },
@@ -338,6 +342,14 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               onClick={() => void exportCandidates(selectedCandidates)}
             >
               {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+            </Button>
+            <Button
+              icon={<FileTextOutlined aria-hidden />}
+              loading={xlsxExporting}
+              disabled={!selectedCandidates.length || selectingAll}
+              onClick={() => void exportCandidatesXlsx(selectedCandidates)}
+            >
+              {selectedCandidates.length > 1 ? "批量导出 Excel" : "导出 Excel"}
             </Button>
             <Button
               icon={<PlayCircleOutlined aria-hidden />}
