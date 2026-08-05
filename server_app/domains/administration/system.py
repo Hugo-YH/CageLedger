@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from server_app.config import (
+    CAGELEDGER_APP_BUILD,
     CAGELEDGER_APP_VERSION,
     CAGELEDGER_BRANCH,
     CAGELEDGER_CONTACT_EMAIL,
@@ -94,7 +95,7 @@ def system_info():
         "repository": CAGELEDGER_REPOSITORY_URL,
         "repositoryUrl": CAGELEDGER_REPOSITORY_URL,
         "branch": CAGELEDGER_BRANCH,
-        "build": short_revision(current_revision()),
+        "build": app_build() or None,
         "revision": current_revision() or None,
         "revisionShort": short_revision(current_revision()),
     }
@@ -227,6 +228,16 @@ def app_version():
     package_path = ROOT / "package.json"
     try:
         return json.loads(package_path.read_text(encoding="utf-8")).get("version", "")
+    except (OSError, json.JSONDecodeError):
+        return ""
+
+
+def app_build():
+    if CAGELEDGER_APP_BUILD:
+        return str(CAGELEDGER_APP_BUILD)
+    package_path = ROOT / "package.json"
+    try:
+        return str(json.loads(package_path.read_text(encoding="utf-8")).get("build", "") or "")
     except (OSError, json.JSONDecodeError):
         return ""
 

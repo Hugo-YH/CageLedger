@@ -223,7 +223,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
           <footer className="workspace-footer ant-workspace-footer">
             <span>
               CageLedger {APP_VERSION}
-              {systemInfo.data?.build ? `（${systemInfo.data.build}）` : ""}
+              {systemInfo.data?.build ? `（Build ${systemInfo.data.build}）` : ""}
             </span>
             <span>中山大学中山眼科中心 · 实验动物中心</span>
           </footer>

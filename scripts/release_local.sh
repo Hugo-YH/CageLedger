@@ -155,7 +155,20 @@ if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>
   exit 1
 fi
 
-run node scripts/set_version.mjs --version "$VERSION"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  NEXT_BUILD="$(node -e '
+const fs = require("fs");
+const src = fs.readFileSync("wiki/更新日志.md", "utf8");
+const nums = [...src.matchAll(/^## .*（Build (\d+)）.*$/gm)].map((m) => Number(m[1]));
+if (nums.length === 0) process.exit(1);
+console.log(Math.max(...nums) + 1);
+')" || exit 1
+else
+  NEXT_BUILD="<auto>"
+fi
+echo "Next build number: ${NEXT_BUILD}"
+
+run node scripts/set_version.mjs --version "$VERSION" --build "$NEXT_BUILD"
 run node scripts/sync_release_notes_from_docs.mjs
 
 if ! rg -q -F "version: \"${VERSION}\"" src/react/releaseNotesDocs.ts; then

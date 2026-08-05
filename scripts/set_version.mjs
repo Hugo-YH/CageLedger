@@ -25,6 +25,15 @@ function argValue(name) {
 const explicitVersion = argValue("--version");
 const bump = argValue("--bump");
 const newVersion = explicitVersion || (bump === "patch" ? nextPatch(oldVersion) : "");
+const buildText = argValue("--build");
+
+let newBuild = "";
+if (buildText) {
+  if (!/^\d+$/.test(buildText)) {
+    throw new Error(`--build must be a positive integer, got: ${buildText}`);
+  }
+  newBuild = String(Number(buildText));
+}
 
 if (!newVersion || !/^\d+\.\d+\.\d+[0-9A-Za-z.-]*$/.test(newVersion)) {
   throw new Error("Usage: node scripts/set_version.mjs --version 0.3.1 OR --version 0.4.0a OR --bump patch");
@@ -39,6 +48,9 @@ function readText(file) {
 }
 
 packageJson.version = newVersion;
+if (newBuild) {
+  packageJson.build = Number(newBuild);
+}
 fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
 let indexHtml = readText("index.html");
@@ -53,4 +65,15 @@ let deployment = readText("wiki/部署与运行.md");
 deployment = deployment.replaceAll(oldVersion, newVersion);
 writeText("wiki/部署与运行.md", deployment);
 
-console.log(newVersion);
+if (newBuild) {
+  let changelog = readText("wiki/更新日志.md");
+  const escaped = newVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const headingRe = new RegExp(`^(##\\s+${escaped})(?:（[^）]*）)?(?=\\s*·|\\s*$)`, "m");
+  if (!headingRe.test(changelog)) {
+    throw new Error(`wiki/更新日志.md is missing a release heading for ${newVersion}.`);
+  }
+  changelog = changelog.replace(headingRe, `$1（Build ${newBuild}）`);
+  writeText("wiki/更新日志.md", changelog);
+}
+
+console.log(`${newVersion}${newBuild ? ` (build ${newBuild})` : ""}`);

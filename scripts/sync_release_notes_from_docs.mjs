@@ -22,7 +22,7 @@ const notes = blocks.map((block) => {
   const noteMatch = body.match(/^>\s*备注：(.+)$/m);
   return {
     version: headingMatch[1],
-    ...(headingMatch[2] ? { build: headingMatch[2].trim() } : {}),
+    ...(headingMatch[2] ? { build: headingMatch[2].trim().replace(/^Build\s*/i, "") } : {}),
     ...(headingMatch[3] ? { releasedAt: headingMatch[3].trim() } : {}),
     title: titleMatch[1].trim(),
     items,
