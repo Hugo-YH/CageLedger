@@ -275,7 +275,7 @@
 
 .ant-workspace :is(input, select, textarea):not(.ant-input, .ant-select-selector):focus {
   border-color: var(--ant-color-primary);
-  box-shadow: 0 0 0 2px rgb(22 119 255 / 12%);
+  box-shadow: var(--focus-ring);
 }
 
 /* Legacy global input rules add extra height and padding. Restore Ant's
@@ -1658,7 +1658,7 @@
     padding-bottom: env(safe-area-inset-bottom);
     border-top: 1px solid var(--app-border);
     background: var(--app-surface);
-    box-shadow: 0 -4px 14px rgb(0 0 0 / 6%);
+    box-shadow: var(--shadow-soft);
   }
 
   .app-command-bar {

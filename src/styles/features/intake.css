@@ -137,7 +137,7 @@
 
 /* Scanner result card and intake batch table (migrated from core.css). */
 .scanner-result-card {
-  border: 1px solid rgb(9 88 217 / 20%);
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
   border-radius: 8px;
   background: var(--surface);
   overflow: hidden;
