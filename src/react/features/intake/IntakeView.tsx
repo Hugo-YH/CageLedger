@@ -15,7 +15,7 @@ import {
 import { fetchIacucSearch } from "../../api/iacuc";
 import { queryKeys } from "../../api/queryKeys";
 import { ActionButton } from "../../components/ui";
-import { MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { AsyncActionButton, ModalShell, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {

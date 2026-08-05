@@ -82,6 +82,7 @@ class ApiContractTests(unittest.TestCase):
             "/api/reimbursement-ledger/claims?limit=5&offset=0": {"items", "page"},
             "/api/reimbursement-ledger/legacy-records?limit=5&offset=0": {"items", "page"},
             "/api/principal-identities": {"items"},
+            "/api/iacuc-index/expiry": {"items"},
             "/api/users": {"users"},
         }
         for path, keys in expected.items():

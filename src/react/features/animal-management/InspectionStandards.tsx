@@ -3,7 +3,7 @@ import { Alert, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
 import type { SessionUser } from "../../api/contracts";
 import { useAnimalInspectionCatalog } from "../../api/animalManagement";
 import { PageState } from "../../components/WorkspaceUi";
-import { MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { catalogItems } from "./model";

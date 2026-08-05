@@ -405,7 +405,7 @@ from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, tod
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_documentation_asset, send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
-from server_app.web.iacuc import iacuc_index_handler
+from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
@@ -5019,6 +5019,7 @@ API_ROUTER.add(
 )
 API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(system_info()))
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
+API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
 
 

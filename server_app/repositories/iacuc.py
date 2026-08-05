@@ -45,9 +45,9 @@ def read_iacuc_index(conn, iacuc_index_path, legacy_iacuc_index_path):
 def filter_iacuc_index(payload, q, limit=80):
     """Server-side IACUC lookup: prefix-first matching with a bounded result set."""
     query = (q or "").strip().upper()
-    if not query:
-        return payload
     items = payload.get("items", [])
+    if not query:
+        return {**payload, "items": items[:limit], "count": len(items)}
     matched = [item for item in items if query in str(item.get("iacuc", "")).strip().upper()]
     matched.sort(
         key=lambda item: (

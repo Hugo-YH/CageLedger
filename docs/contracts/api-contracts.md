@@ -136,6 +136,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `GET` / `POST`   | `/api/users`                       | 管理账号                                                                           |
 | `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                                                                     |
 | `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                                                                    |
+| `GET`            | `/api/iacuc-index/expiry`          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用                           |
 | `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源                                                               |
 | `POST`           | `/api/iacuc-index/upload`          | 上传 CSV，更新快照和派生字段                                                       |
 | `GET`            | `/api/principal-identities`        | PI 身份和减免配置                                                                  |

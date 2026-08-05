@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
-import { useIacucIndex } from "../../api/iacuc";
+import { useIacucSearch } from "../../api/iacuc";
 import { useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
 import { ActionButton } from "../../components/ui";
@@ -19,7 +19,6 @@ import {
   roomBillingUnit,
   validateQuantitySheet,
 } from "../../../domain/quantitySheets";
-import { matchIacucOptions } from "../../../domain/iacuc";
 import { QuantityEditorPages, type QuantityRowHandle } from "./components/QuantityEditorPages";
 import { ConfirmSave } from "./components/QuantitySheetModals";
 import { SavedQuantitySheets } from "./components/SavedQuantitySheets";
@@ -29,10 +28,10 @@ const QUANTITY_ROWS_PER_PAGE = 31;
 
 export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "entry" | "saved" }) {
   const roomsQuery = useQuantitySheetRooms();
-  const iacucQuery = useIacucIndex();
   const identitiesQuery = usePrincipalIdentities();
   const rooms = roomsQuery.data?.items || [];
   const [draft, setDraft] = useState(() => createQuantitySheet(todayMonth, user.displayName));
+  const iacucQuery = useIacucSearch(draft.iacuc, 20);
   const [editorRows, setEditorRows] = useState(() => makeEditorRows(draft));
   const [exists, setExists] = useState(false);
   const [notice, setNotice] = useState("");
@@ -52,10 +51,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const freeCageEnabled =
     supportsFreeCages && (Number(draft.preferredFreeCages || 0) > 0 || draft.freeCagePriority !== null);
   const tierPriorityEnabled = supportsTierPriority && draft.tierCagePriority !== null;
-  const iacucOptions = useMemo(
-    () => matchIacucOptions(iacucQuery.data?.items || [], draft.iacuc),
-    [draft.iacuc, iacucQuery.data?.items],
-  );
+  const iacucOptions = useMemo(() => iacucQuery.data?.items || [], [iacucQuery.data?.items]);
   const save = useSaveQuantitySheet();
 
   const recalculate = useCallback(() => {

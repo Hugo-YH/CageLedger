@@ -20,7 +20,7 @@ import {
 import { requestJson } from "../../api/client";
 import type { WorkspaceView } from "../../state/ui";
 import { WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 
 type CageCardDetails = Record<string, string | number | null | undefined>;
