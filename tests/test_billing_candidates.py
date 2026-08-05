@@ -192,6 +192,65 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
                 )
             sync.assert_not_called()
 
+    def test_candidate_list_includes_merged_sheet_managers(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-07", "李教授", "Z3", manager="张三")
+            seed_quantity_sheet(conn, "sheet-2", "2026-07", "李教授", "Z4", manager="李四")
+            seed_quantity_sheet(conn, "sheet-3", "2026-07", "王教授", "Z5", manager="")
+
+            result = list_settlement_candidates(
+                conn,
+                {"limit": 10, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+                lambda month, pi_name: {"iacucs": ["Z"], "totalAmount": 10},
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+
+            by_pi = {item["pi"]: item["manager"] for item in result["items"]}
+            self.assertEqual(by_pi["李教授"], "张三、李四")
+            self.assertEqual(by_pi["王教授"], "")
+            manager_options = {item["value"]: item["count"] for item in result["filterOptions"]["manager"]}
+            self.assertEqual(manager_options, {"张三": 1, "李四": 1})
+
+    def test_candidate_list_filters_and_sorts_by_sheet_manager(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-07", "李教授", "Z3", manager="张三")
+            seed_quantity_sheet(conn, "sheet-2", "2026-07", "李教授", "Z4", manager="李四")
+            seed_quantity_sheet(conn, "sheet-3", "2026-07", "王教授", "Z5", manager="张三")
+
+            def calculate(month, pi_name):
+                return {"iacucs": ["Z"], "totalAmount": 10}
+
+            filtered = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "manager",
+                    "sortDir": "asc",
+                    "columnFilters": {"manager": ["张三"]},
+                },
+                calculate,
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+            self.assertEqual({item["pi"] for item in filtered["items"]}, {"李教授", "王教授"})
+
+            sorted_by_manager = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "manager",
+                    "sortDir": "asc",
+                    "columnFilters": {},
+                },
+                calculate,
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+            self.assertEqual([item["pi"] for item in sorted_by_manager["items"]], ["王教授", "李教授"])
+
     def test_invalidation_updates_or_removes_only_the_affected_snapshot(self):
         with build_candidate_conn() as conn:
             seed_quantity_sheet(conn, "sheet-1", "2026-06", "张教授", "Z1")
@@ -250,7 +309,7 @@ def build_candidate_conn():
     return conn
 
 
-def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc):
+def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc, manager=""):
     payload = {
         "id": sheet_id,
         "month": month,
@@ -263,9 +322,17 @@ def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc):
         INSERT INTO quantity_sheets (
             id, month, iacuc, room_id, room_name, manager, project, pi, owner, funding, updated_at, payload
         )
-        VALUES (?, ?, ?, '', '', '', '', ?, '', '', ?, ?)
+        VALUES (?, ?, ?, '', '', ?, '', ?, '', '', ?, ?)
         """,
-        (sheet_id, month, iacuc, pi_name, f"{sheet_id}-updated", json.dumps(payload, ensure_ascii=False)),
+        (
+            sheet_id,
+            month,
+            iacuc,
+            manager,
+            pi_name,
+            f"{sheet_id}-updated",
+            json.dumps(payload, ensure_ascii=False),
+        ),
     )
 
 

@@ -58,6 +58,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
+  await expect(row).toContainText("系统管理员");
   await expect(row).toContainText("¥");
   await page.getByLabel("每页显示条数").selectOption("5");
   await page.getByLabel("全选当前筛选结果结算项").check();

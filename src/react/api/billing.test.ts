@@ -12,8 +12,8 @@ describe("fetchAllSettlementCandidates", () => {
       const payload = {
         items:
           offset === 0
-            ? [{ id: "candidate-1", month: "2026-07", pi: "甲", iacucs: ["Z1"], totalAmount: 10 }]
-            : [{ id: "candidate-2", month: "2026-07", pi: "乙", iacucs: ["Z2"], totalAmount: 20 }],
+            ? [{ id: "candidate-1", month: "2026-07", pi: "甲", iacucs: ["Z1"], manager: "张三", totalAmount: 10 }]
+            : [{ id: "candidate-2", month: "2026-07", pi: "乙", iacucs: ["Z2"], manager: "李四", totalAmount: 20 }],
         page: { total: 101, limit: 100, offset },
         filterOptions: {},
       };

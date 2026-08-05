@@ -235,6 +235,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
             <col className="settlement-col-month" />
             <col className="settlement-col-pi" />
             <col className="settlement-col-iacuc" />
+            <col className="settlement-col-manager" />
             <col className="settlement-col-amount" />
             <col className="settlement-col-actions" />
           </colgroup>
@@ -253,6 +254,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
                 ["month", "结算月份"],
                 ["pi", "项目负责人姓名"],
                 ["iacuc", "IACUC"],
+                ["manager", "登记人员"],
                 ["amount", "金额"],
               ].map(([column, label]) => (
                 <FilterableTableHeader
@@ -297,6 +299,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
                   <td title={candidate.iacucs.join("、") || candidate.error || "-"}>
                     {candidate.iacucs.join("、") || "待检查"}
                   </td>
+                  <td>{candidate.manager || "-"}</td>
                   <td className="money-cell">
                     {candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`}
                   </td>
@@ -331,7 +334,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
               ))
             ) : (
               <tr>
-                <td colSpan={6}>{list.isPending ? "正在加载..." : "当前筛选条件下没有可结算项目。"}</td>
+                <td colSpan={7}>{list.isPending ? "正在加载..." : "当前筛选条件下没有可结算项目。"}</td>
               </tr>
             )}
           </tbody>
