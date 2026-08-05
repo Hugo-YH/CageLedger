@@ -1742,3 +1742,158 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.inspection-draft-banner {
+  margin-bottom: 16px;
+}
+
+.inspection-editor-panel .inspection-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.inspection-editor-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.inspection-editor-body {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 8px;
+  max-height: min(64vh, 680px);
+  overflow: auto;
+}
+
+.inspection-editor-tree {
+  background: transparent;
+}
+
+.inspection-tree-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inspection-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspection-tree-change.ant-tag {
+  margin-inline-end: 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.inspection-node-form {
+  padding: 4px 8px 24px;
+}
+
+.inspection-node-drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inspection-form-section {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.inspection-form-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.inspection-scoring-row,
+.inspection-suboption-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.inspection-scoring-row .ant-form-item,
+.inspection-suboption-row .ant-form-item {
+  margin-bottom: 8px;
+}
+
+.inspection-scoring-remove {
+  margin-top: 2px;
+}
+
+.inspection-reference-images {
+  display: grid;
+  gap: 10px;
+}
+
+.inspection-reference-images-empty {
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.inspection-reference-image-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.inspection-reference-image-thumb {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.inspection-publish-modal .inspection-publish-summary {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.inspection-publish-count {
+  margin: 12px 0 4px;
+}
+
+.inspection-publish-diff-list {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.inspection-publish-diff-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspection-publish-diff-item:last-child {
+  border-bottom: 0;
+}
+
+.inspection-publish-diff-name {
+  max-width: 260px;
+}

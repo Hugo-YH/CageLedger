@@ -147,14 +147,14 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 ## 动物巡检与目录
 
-| 方法   | 路径                                           | 请求或参数                                               | 响应                                                                 | 权限     |
-| ------ | ---------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------- | -------- |
-| `GET`  | `/api/animal-inspection-catalog`               | 空                                                       | `{ version, modules, nodes, reviewNotice }`                          | 登录可见 |
-| `GET`  | `/api/animal-inspection-catalog/draft`         | 空                                                       | `{ version, modules, nodes, hasDraft }`；无草稿时克隆 active         | `admin`  |
-| `PUT`  | `/api/animal-inspection-catalog/draft`         | `{ modules, nodes, expectedUpdatedAt }`                  | 保存后的 `{ version, modules, nodes, hasDraft }`；非法 400、过期 409 | `admin`  |
-| `POST` | `/api/animal-inspection-catalog/draft/publish` | 空                                                       | 新 active 的 `{ version, modules, nodes }`；旧 active 转 history     | `admin`  |
-| `POST` | `/api/animal-inspection-catalog/images`        | `multipart/form-data`，字段 `file`（jpg/png/webp，≤5MB） | `{ ok, filename, url }`                                              | `admin`  |
-| `GET`  | `/api/animal-inspection-reference/{filename}`  | 空                                                       | 图片二进制；data 目录优先，resources 回退                            | 登录可见 |
+| 方法   | 路径                                           | 请求或参数                                               | 响应                                                                                                  | 权限     |
+| ------ | ---------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------- |
+| `GET`  | `/api/animal-inspection-catalog`               | 空                                                       | `{ version, modules, nodes, reviewNotice }`                                                           | 登录可见 |
+| `GET`  | `/api/animal-inspection-catalog/draft`         | 空                                                       | `{ version, modules, nodes, hasDraft, active }`；无草稿时克隆 active；`active` 为未转换的生效目录基线 | `admin`  |
+| `PUT`  | `/api/animal-inspection-catalog/draft`         | `{ modules, nodes, expectedUpdatedAt }`                  | 保存后的 `{ version, modules, nodes, hasDraft }`；非法 400、过期 409                                  | `admin`  |
+| `POST` | `/api/animal-inspection-catalog/draft/publish` | 空                                                       | 新 active 的 `{ version, modules, nodes }`；旧 active 转 history                                      | `admin`  |
+| `POST` | `/api/animal-inspection-catalog/images`        | `multipart/form-data`，字段 `file`（jpg/png/webp，≤5MB） | `{ ok, filename, url }`                                                                               | `admin`  |
+| `GET`  | `/api/animal-inspection-reference/{filename}`  | 空                                                       | 图片二进制；data 目录优先，resources 回退                                                             | 登录可见 |
 
 目录草稿契约与 `GET /api/animal-inspection-catalog` 的 `modules`/`nodes` 结构一致；草稿节点可引用现有分类/子分类的 `id` 或 `code` 作为 `parentId`。发布后版本号为 `manual-YYYYMMDD-HHMM`，历史版本保留在 `inspection_catalog_versions`，答案快照语义不受影响。
 

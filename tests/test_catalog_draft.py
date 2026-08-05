@@ -35,6 +35,8 @@ class CatalogDraftTests(unittest.TestCase):
         self.assertEqual(draft["version"]["version"], "draft")
         self.assertEqual(len(draft["nodes"]), len(active["nodes"]))
         self.assertFalse(draft["hasDraft"])
+        self.assertEqual(draft["active"]["version"]["version"], active["version"])
+        self.assertEqual(len(draft["active"]["nodes"]), len(active["nodes"]))
 
     def test_save_draft_persists_changes_and_marks_has_draft(self):
         first = get_draft(self.conn)

@@ -5951,7 +5951,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             return
         try:
             with connect_db() as conn:
-                payload = publish_animal_inspection_catalog_draft(conn, user, image_root=ANIMAL_INSPECTION_IMAGES_PATH)
+                publish_animal_inspection_catalog_draft(conn, user, image_root=ANIMAL_INSPECTION_IMAGES_PATH)
+                payload = animal_inspection_catalog_payload(conn, user)
             self.send_json(payload)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)

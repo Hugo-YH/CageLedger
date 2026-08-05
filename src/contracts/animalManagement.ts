@@ -10,13 +10,23 @@ export interface InspectionCatalogNode {
   code: string;
   moduleCode: InspectionModuleCode;
   name: string;
+  nameEn?: string;
   description?: string;
+  descriptionEn?: string;
   nodeType: "CATEGORY" | "SUBCATEGORY" | "ITEM";
   inputType?: "score" | "severity" | "severity_with_options";
   sortOrder?: number;
   config?: {
-    scoringCriteria?: Record<string, { level: string; description?: string }>;
-    subOptions?: Array<{ id?: string; value?: string; label?: string; name?: string; nameCn?: string }>;
+    scoringCriteria?: Record<string, { level: string; levelEn?: string; description?: string; descriptionEn?: string }>;
+    subOptions?: Array<{
+      id?: string;
+      value?: string;
+      label?: string;
+      name?: string;
+      nameCn?: string;
+      nameEn?: string;
+      descriptionEn?: string;
+    }>;
     referenceImages?: Array<{ url: string; desc?: string }>;
     referenceOrigin?: "exact" | "same_name";
     suggestionMeasure?: string;
@@ -31,11 +41,53 @@ export interface InspectionCatalogModule {
   version?: number;
 }
 
+export interface InspectionCatalogVersion {
+  version: string;
+  source: string;
+  status: string;
+  imported_at: string;
+}
+
 export interface InspectionCatalogResponse {
-  version: { version: string; source: string; status: string; imported_at: string };
+  version: InspectionCatalogVersion;
   modules: InspectionCatalogModule[];
   nodes: InspectionCatalogNode[];
   reviewNotice: string;
+}
+
+export interface InspectionCatalogDraftVersion extends InspectionCatalogVersion {
+  updatedAt: string;
+}
+
+export interface InspectionCatalogBaseline {
+  version: InspectionCatalogVersion | null;
+  modules: InspectionCatalogModule[];
+  nodes: InspectionCatalogNode[];
+}
+
+export interface InspectionCatalogDraftResponse {
+  version: InspectionCatalogDraftVersion;
+  modules: InspectionCatalogModule[];
+  nodes: InspectionCatalogNode[];
+  hasDraft: boolean;
+  /** Raw (untransformed) active catalog used as the edit baseline and diff reference. */
+  active: InspectionCatalogBaseline;
+}
+
+export type InspectionNodeChange = "added" | "modified" | "removed";
+
+export interface InspectionCatalogNodeDiff {
+  code: string;
+  moduleCode: InspectionModuleCode;
+  name: string;
+  change: InspectionNodeChange;
+}
+
+export interface InspectionCatalogDiff {
+  added: number;
+  modified: number;
+  removed: number;
+  nodes: InspectionCatalogNodeDiff[];
 }
 
 export interface InspectionAnswer {

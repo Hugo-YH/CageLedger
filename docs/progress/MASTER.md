@@ -15,7 +15,7 @@
 ## Phase Checklist
 
 - [x] Phase P0: 后端草稿/发布/图片 (4/4 tasks) — [phase-0-backend.md](phase-0-backend.md)
-- [ ] Phase P1: 前端在线编辑 (0/3 tasks) — [phase-1-frontend.md](phase-1-frontend.md)
+- [x] Phase P1: 前端在线编辑 (3/3 tasks) — [phase-1-frontend.md](phase-1-frontend.md)
 - [ ] Phase P2: 一致性收尾 (0/3 tasks) — [phase-2-consistency.md](phase-2-consistency.md)
 - [ ] Phase P3: 前端硬编码摘除 (0/1 tasks) — [phase-3-hardcode-removal.md](phase-3-hardcode-removal.md)
 
@@ -30,22 +30,25 @@ adaptive:
     replan: 5
     rescope: 7
   total_tasks: 11
-  completed_tasks: 4
-  last_updated: "2026-08-05T22:55:00+08:00"
+  completed_tasks: 7
+  last_updated: "2026-08-06T07:20:00+08:00"
 ```
 
 ## Task Telemetry Log
 
-| Task                 | Effort | S.U.P.E.R | Unplanned Deps | Notes                                                              |
-| :------------------- | :----- | :-------- | :------------- | :----------------------------------------------------------------- |
-| T1 catalog_schema.py | M      | S, P      | —              | 父级引用同时支持节点 id 与 code；参考图存在性校验需注入 image_root |
-| T2 草稿接口          | M      | U, P      | T1             | 单草稿模型；GET 无草稿时克隆 active；PUT 乐观锁 expectedUpdatedAt  |
-| T3 发布接口          | S      | U, R      | T2             | active→history、draft→active、manual-YYYYMMDD-HHMM；写审计         |
-| T4 图片上传          | M      | E, R      | —              | data 目录 + 种子幂等迁移 + 路由回退；白名单 jpg/png/webp ≤5MB      |
+| Task                 | Effort | S.U.P.E.R | Unplanned Deps | Notes                                                                      |
+| :------------------- | :----- | :-------- | :------------- | :------------------------------------------------------------------------- |
+| T1 catalog_schema.py | M      | S, P      | —              | 父级引用同时支持节点 id 与 code；参考图存在性校验需注入 image_root         |
+| T2 草稿接口          | M      | U, P      | T1             | 单草稿模型；GET 无草稿时克隆 active；PUT 乐观锁 expectedUpdatedAt          |
+| T3 发布接口          | S      | U, R      | T2             | active→history、draft→active、manual-YYYYMMDD-HHMM；写审计                 |
+| T4 图片上传          | M      | E, R      | —              | data 目录 + 种子幂等迁移 + 路由回退；白名单 jpg/png/webp ≤5MB              |
+| T5 编辑模式          | XL     | S, U      | T2             | 目录树 + 节点表单 + 草稿保存；antd v6 弃用项清理；表单转换与 diff 归一修复 |
+| T6 图片管理          | M      | R         | 4, 5           | 上传即落盘并绑定节点引用；替换/删除/缩略图                                 |
+| T7 发布确认          | M      | P         | 3, 5           | 差异摘要弹窗 + 只读视图草稿提示；发布后标准页更新                          |
 
 ## Current Status
 
-P0（后端草稿/发布/图片）4/4 已完成并通过 API 冒烟验证。下一步进入 P1（前端在线编辑）。
+P0、P1 全部完成（7/11）。巡检标准页已支持管理员在线编辑（树 + 节点表单 + 图片 + 草稿/发布），浏览器验收通过。下一步进入 P2（历史版本回滚、目录数据清理、全量回归）。
 
 ## Next Steps
 
@@ -57,3 +60,4 @@ P0（后端草稿/发布/图片）4/4 已完成并通过 API 冒烟验证。下�
 
 - 2026-08-05：启动规范驱动流程，完成 Phase 0-5 文档与子技能，开始 P0 实现
 - 2026-08-05：完成 P0 全部 4 个任务（校验/草稿/发布/图片），后端测试 113 全绿，API 冒烟通过
+- 2026-08-06：完成 P1 全部 3 个任务（编辑模式/图片管理/发布确认），Playwright 浏览器验收通过，npm run check 全绿

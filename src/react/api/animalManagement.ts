@@ -6,9 +6,11 @@ import type {
   AnimalInspectionListParams,
   FindingStatus,
   InspectionAnswer,
+  InspectionCatalogDraftResponse,
   InspectionCatalogResponse,
   InspectionFinding,
 } from "./contracts";
+import { uploadFile } from "./administration";
 import { requestDownload, requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
@@ -25,6 +27,52 @@ export function useAnimalInspectionCatalog() {
     queryKey: queryKeys.animalInspectionCatalog,
     queryFn: () => requestJson<InspectionCatalogResponse>("/api/animal-inspection-catalog"),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAnimalInspectionCatalogDraft(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.animalInspectionCatalogDraft,
+    queryFn: () => requestJson<InspectionCatalogDraftResponse>("/api/animal-inspection-catalog/draft"),
+    staleTime: 5 * 60 * 1000,
+    enabled,
+  });
+}
+
+export function useSaveInspectionCatalogDraft() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      modules: InspectionCatalogResponse["modules"];
+      nodes: InspectionCatalogResponse["nodes"];
+      expectedUpdatedAt: string;
+    }) =>
+      requestJson<InspectionCatalogDraftResponse>("/api/animal-inspection-catalog/draft", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (payload) => {
+      client.setQueryData(queryKeys.animalInspectionCatalogDraft, payload);
+    },
+  });
+}
+
+export function usePublishInspectionCatalogDraft() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      requestJson<InspectionCatalogResponse>("/api/animal-inspection-catalog/draft/publish", { method: "POST" }),
+    onSuccess: (payload) => {
+      client.setQueryData(queryKeys.animalInspectionCatalog, payload);
+      void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraft });
+    },
+  });
+}
+
+export function useUploadInspectionCatalogImage() {
+  return useMutation({
+    mutationFn: (file: File) =>
+      uploadFile<{ ok: boolean; filename: string; url: string }>("/api/animal-inspection-catalog/images", file),
   });
 }
 

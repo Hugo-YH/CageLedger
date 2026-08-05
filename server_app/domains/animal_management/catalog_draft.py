@@ -137,7 +137,19 @@ def _draft_payload(conn, row):
         "modules": modules,
         "nodes": version_nodes(conn, row["version"]),
         "hasDraft": _has_draft_changes(conn, modules, row["version"]),
+        "active": _active_baseline(conn),
     }
+
+
+def _active_baseline(conn):
+    active = active_version(conn)
+    if not active:
+        return {"version": None, "modules": [], "nodes": []}
+    payload = conn.execute(
+        "SELECT payload FROM inspection_catalog_versions WHERE version = ?", (active["version"],)
+    ).fetchone()
+    modules = json.loads(payload["payload"]).get("modules", []) if payload else []
+    return {"version": dict(active), "modules": modules, "nodes": version_nodes(conn, active["version"])}
 
 
 def _has_draft_changes(conn, draft_modules, draft_version):
