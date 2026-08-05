@@ -404,7 +404,7 @@ from server_app.services.reimbursement import (
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_documentation_asset, send_frontend_asset
-from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
+from server_app.web import CageLedgerHttpHandler, JsonResponse, Router, download_settlement_xlsx
 from server_app.web.iacuc import iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
@@ -4429,14 +4429,6 @@ def upsert_reimbursement_record(conn, payload):
 
 def delete_reimbursement_record(conn, record_id):
     delete_reimbursement_record_repository(conn, record_id)
-
-
-def reimbursement_status_label(value):
-    return {
-        REIMBURSEMENT_STATUS_PENDING: "待提交",
-        REIMBURSEMENT_STATUS_REIMBURSING: "报销中",
-        REIMBURSEMENT_STATUS_COMPLETED: "已完成",
-    }.get(normalize_reimbursement_status(value), "待提交")
 
 
 def reimbursement_record_id(month, pi_name):

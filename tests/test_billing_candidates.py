@@ -15,6 +15,7 @@ from server_app.repositories.billing_candidates import (
     billing_candidate_snapshot_registry_needs_sync,
     get_billing_candidate_snapshot,
     list_billing_candidate_filter_options,
+    list_billing_candidate_manager_filter_options,
     list_quantity_settlement_groups,
     sync_billing_candidate_snapshot_registry,
     upsert_billing_candidate_snapshot,
@@ -220,7 +221,14 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
             by_pi = {item["pi"]: item["manager"] for item in result["items"]}
             self.assertEqual(by_pi["李教授"], "张三、李四")
             self.assertEqual(by_pi["王教授"], "")
-            manager_options = {item["value"]: item["count"] for item in result["filterOptions"]["manager"]}
+            manager_options = {
+                option["value"]: option["count"]
+                for option in list_billing_candidate_manager_filter_options(
+                    conn,
+                    "quantity_sheet",
+                    {"limit": 10, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+                )
+            }
             self.assertEqual(manager_options, {"张三": 1, "李四": 1})
 
     def test_candidate_list_filters_and_sorts_by_sheet_manager(self):
@@ -283,7 +291,12 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
             )
 
             self.assertEqual([item["pi"] for item in result["items"]], ["李教授"])
-            self.assertIn("manager", result["filterOptions"])
+            manager_options = list_billing_candidate_manager_filter_options(
+                conn,
+                "quantity_sheet",
+                {"limit": 10, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+            )
+            self.assertIn("张三", {option["value"] for option in manager_options})
 
     def test_invalidation_updates_or_removes_only_the_affected_snapshot(self):
         with build_candidate_conn() as conn:
