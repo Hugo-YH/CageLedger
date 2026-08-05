@@ -38,7 +38,7 @@
       "version": 1,
       "sortOrder": 3,
       "status": 0,
-      "description": "评分标准：1分为严重；2分为轻微；3分为未勾选此项默认为3分。",
+      "description": "按正常/异常判定，确认异常后补充定位、图例对照和现场照片。",
       "descriptionEn": "Scoring criteria: 1 = Severe; 2 = Mild; 3 = Normal (default if not checked).",
       "createdAt": 1784018507601
     }

@@ -6,7 +6,7 @@ import { PageState } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
-import { catalogItems } from "./model";
+import { moduleItemCount } from "./model";
 
 export function InspectionStandards({
   user,
@@ -40,7 +40,7 @@ export function InspectionStandards({
         </Descriptions>
         <Alert
           className="inspection-review-notice"
-          description={`${catalog.data.reviewNotice} ${user.role === "admin" ? "系统管理员可通过受控导入流程审核并发布新版本。" : "当前目录由系统管理员维护。"}`}
+          description={`${catalog.data.reviewNotice} ${user.role === "admin" ? "巡检标准目录由系统管理员维护，内容更新随新版本发布生效。" : "当前目录由系统管理员维护。"}`}
           title="审核提示"
           showIcon
           type="warning"
@@ -52,7 +52,7 @@ export function InspectionStandards({
                 <Typography.Text type="secondary">巡检模块</Typography.Text>
                 <Typography.Title level={4}>{module.name}</Typography.Title>
                 <Typography.Paragraph type="secondary">{module.description}</Typography.Paragraph>
-                <Tag color="blue">{catalogItems(catalog.data.nodes, module.code).length} 个巡检条目</Tag>
+                <Tag color="blue">{moduleItemCount(catalog.data.nodes, module.code)} 个巡检条目</Tag>
               </Card>
             </Col>
           ))}

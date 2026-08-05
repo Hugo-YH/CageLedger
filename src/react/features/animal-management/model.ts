@@ -32,6 +32,13 @@ export function catalogItems(nodes: InspectionCatalogNode[], moduleCode: Inspect
   return nodes.filter((node) => node.moduleCode === moduleCode && node.nodeType === "ITEM");
 }
 
+export function moduleItemCount(nodes: InspectionCatalogNode[], moduleCode: InspectionModuleCode) {
+  if (moduleCode === "abnormalAnimalAssessment") {
+    return abnormalAnimalBodyRegions(nodes).reduce((sum, region) => sum + region.itemCount, 0);
+  }
+  return catalogItems(nodes, moduleCode).length;
+}
+
 export function categoryLabel(item: InspectionCatalogNode, nodes: InspectionCatalogNode[]) {
   const byId = new Map(nodes.map((node) => [String(node.id), node]));
   let current = byId.get(String(item.parentId));
