@@ -97,7 +97,7 @@ test("landscape phone opens submenus after a desktop navigation collapse", async
 test("marking a saved batch as printed keeps its server version", async ({ page }) => {
   const batchId = `batch-e2e-print-${Date.now()}`;
   const batchNo = `E2E-PRINT-${Date.now()}`;
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -125,12 +125,13 @@ test("marking a saved batch as printed keeps its server version", async ({ page 
       },
     },
   });
-  await page.locator("nav.nav").getByRole("button", { name: "笼卡管理", exact: true }).click();
-  await page
-    .locator("#nav-intake")
-    .getByRole("button", { name: /^待接收批次/ })
-    .click();
-  await expect(page.getByRole("heading", { name: "待接收批次列表", exact: true })).toBeVisible();
+  await ensureTestInfrastructure(page);
+  const intakeGroup = page
+    .getByRole("button", { name: "笼卡管理", exact: true })
+    .or(page.locator(".ant-main-menu").getByRole("menuitem", { name: /笼卡管理/ }).first());
+  await intakeGroup.click();
+  await page.locator(".ant-main-menu").getByRole("menuitem", { name: /待接收批次/ }).click();
+  await expect(page.getByRole("region", { name: "待接收批次列表" })).toBeVisible();
 
   const row = page.locator("tr", { hasText: batchNo }).first();
   await expect(row).toContainText("未打印");

@@ -81,7 +81,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
     `E2E 合表负责人课题组实验动物饲养费核算汇总表 ${month.replace("-", "年")}月.pdf`,
   );
   const xlsxDownloadPromise = page.waitForEvent("download");
-  await page.getByLabel("结算导出操作").getByRole("button", { name: "导出 Excel", exact: true }).click();
+  await page.getByLabel("结算批量操作").getByRole("button", { name: "导出 Excel", exact: true }).click();
   const xlsxDownload = await xlsxDownloadPromise;
   expect(xlsxDownload.suggestedFilename()).toBe(
     `E2E 合表负责人课题组实验动物饲养费核算汇总表 ${month.replace("-", "年")}月.xlsx`,
