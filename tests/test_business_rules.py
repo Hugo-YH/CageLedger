@@ -115,9 +115,94 @@ class BusinessRuleParityTests(unittest.TestCase):
                 "freeCagePriority": None,
             },
         ]
-        self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z1": 8, "Z2": 2})
+        self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z1": 6, "Z2": 4})
         breakdown[0]["freeEligible"] = False
         self.assertEqual(server.allocate_daily_free_cages_by_iacuc(breakdown, 10), {"Z2": 8})
+
+    def test_free_cage_apply_skips_items_without_allowance(self):
+        breakdown = [
+            {
+                "iacuc": "Z1",
+                "species": "rat",
+                "cageCount": 3,
+                "billingUnit": "cage_day",
+                "freeAllowance": False,
+                "freeEligible": True,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z1",
+                "species": "mouse",
+                "cageCount": 5,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "freeCages": 0,
+            },
+        ]
+        allocations = server.allocate_daily_free_cages_by_iacuc(breakdown, 10)
+        self.assertEqual(allocations, {"Z1": 5})
+        server.apply_free_cage_allocations(breakdown, allocations)
+        self.assertEqual(breakdown[0]["freeCages"], 0)
+        self.assertEqual(breakdown[1]["freeCages"], 5)
+
+    def test_preferred_allocation_does_not_receive_leftover_again(self):
+        breakdown = [
+            {
+                "iacuc": "Z1",
+                "cageCount": 30,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 10,
+                "freeCagePriority": 1,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2",
+                "cageCount": 30,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": None,
+                "freeCages": 0,
+            },
+        ]
+        allocations = server.allocate_daily_free_cages_by_iacuc(breakdown, 20)
+        self.assertEqual(allocations, {"Z1": 10, "Z2": 10})
+        server.apply_free_cage_allocations(breakdown, allocations)
+        self.assertEqual(breakdown[0]["freeCages"], 10)
+        self.assertEqual(breakdown[1]["freeCages"], 10)
+
+    def test_priority_without_preferred_count_still_gets_leftover_first(self):
+        breakdown = [
+            {
+                "iacuc": "Z1",
+                "cageCount": 4,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": 1,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2",
+                "cageCount": 20,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": None,
+                "freeCages": 0,
+            },
+        ]
+        allocations = server.allocate_daily_free_cages_by_iacuc(breakdown, 10)
+        self.assertEqual(allocations, {"Z1": 4, "Z2": 6})
+        server.apply_free_cage_allocations(breakdown, allocations)
+        self.assertEqual(breakdown[0]["freeCages"], 4)
+        self.assertEqual(breakdown[1]["freeCages"], 6)
 
     def test_quantity_sheet_expiry_note_identifies_iacuc_and_first_ineligible_date(self):
         sheets = [
@@ -149,8 +234,8 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(lines[14]["iacucBreakdown"][0]["freeCages"], 4)
         self.assertEqual(lines[15]["iacucBreakdown"][0]["freeCages"], 0)
         self.assertEqual(
-            server.quantity_sheet_free_allowance_notes(lines),
-            "Z2026001 于 2026-06-15 到期，自 2026-06-16 起不参与减免",
+            server.quantity_sheet_free_allowance_notes(lines, generated_date="2026-06-01"),
+            "Z2026001 将于 2026-06-15 到期，自 2026-06-16 起不参与减免",
         )
 
     def test_quantity_sheet_expiry_note_marks_full_month_ineligible(self):
@@ -170,6 +255,34 @@ class BusinessRuleParityTests(unittest.TestCase):
             server.quantity_sheet_free_allowance_notes(lines),
             "Z2026002 已于 2025-12-31 到期，本月不参与减免",
         )
+
+    def test_quantity_sheet_expiry_note_skips_far_future_expiry(self):
+        lines = [
+            {
+                "date": "2026-07-01",
+                "iacucBreakdown": [
+                    {
+                        "iacuc": "Z-FAR",
+                        "freeAllowance": True,
+                        "freeAllowanceExpiryDate": "2028-12-31",
+                    },
+                    {
+                        "iacuc": "Z-SOON",
+                        "freeAllowance": True,
+                        "freeAllowanceExpiryDate": "2026-09-30",
+                    },
+                    {
+                        "iacuc": "Z-PAST",
+                        "freeAllowance": True,
+                        "freeAllowanceExpiryDate": "2026-06-30",
+                    },
+                ],
+            }
+        ]
+        notes = server.quantity_sheet_free_allowance_notes(lines)
+        self.assertNotIn("Z-FAR", notes)
+        self.assertIn("Z-SOON", notes)
+        self.assertIn("Z-PAST", notes)
 
     def test_tiered_allocation_concentrates_tier_on_largest_iacuc_and_priority_target(self):
         automatic = [

@@ -420,7 +420,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                         {draft.fullExemption
                           ? "当前伦理在有效期内产生的饲养费全部减免"
                           : draft.pi
-                            ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先使用指定额度`
+                            ? `项目负责人每日总额度 ${freeCageAllowance} 笼；开启后本伦理优先参与减免分配，可再指定每日优先笼数`
                             : "选择 IACUC 后显示项目负责人减免额度"}
                       </span>
                     </div>
@@ -429,7 +429,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                         draft.fullExemption
                           ? "全额减免已开启，普通优先减免暂停使用。"
                           : supportsFreeCages
-                            ? "打开后先按本伦理设置的笼数减免。"
+                            ? "打开后本伦理优先参与减免分配；未填写笼数时按剩余额度优先分配。"
                             : "当前计费口径没有项目负责人减免额度。"
                       }
                     >
@@ -462,7 +462,9 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                           setField("preferredFreeCages", event.target.value === "" ? null : Number(event.target.value))
                         }
                       />
-                      <small>指定额度优先分配给当前伦理号，剩余额度继续自动分配。</small>
+                      <small>
+                        指定额度优先分配给当前伦理号，剩余额度继续自动分配；可不填写，仅开启开关时本伦理号在剩余额度分配中优先。
+                      </small>
                     </label>
                   ) : null}
                   <div className={`quantity-full-exemption-row ${draft.fullExemption ? "enabled" : ""}`}>

@@ -256,7 +256,7 @@ def _expired_allowance_note(items, month):
             notes.append(f"{iacuc} 已于 {expiry} 到期，本月不参与减免")
             continue
         next_day = (expiry_date + timedelta(days=1)).isoformat() if expiry_date else first_ineligible_date
-        notes.append(f"{iacuc} 于 {expiry} 到期，自 {next_day} 起不参与减免")
+        notes.append(f"{iacuc} 将于 {expiry} 到期，自 {next_day} 起不参与减免")
     return "；".join(notes)
 
 

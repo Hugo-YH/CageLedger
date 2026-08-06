@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from server_app.domains.iacuc import normalize_application_date, normalize_iacuc_number
 from server_app.shared import as_int, clean_text, new_id
@@ -204,35 +204,65 @@ def quantity_sheet_breakdown_item(
     }
 
 
-def quantity_sheet_free_allowance_notes(lines):
+def quantity_sheet_free_allowance_notes(lines, generated_date=None):
     expired = {}
+    reference = None
     for line in lines or []:
+        line_date = _parse_iso_date(line.get("date", ""))
+        if line_date and (reference is None or line_date < reference):
+            reference = line_date
         for item in line.get("iacucBreakdown", []):
             expiry_date = item.get("freeAllowanceExpiryDate", "")
             iacuc = normalize_iacuc_number(item.get("iacuc", ""))
             if not expiry_date or not iacuc or not (item.get("freeAllowance") or item.get("fullExemption")):
                 continue
             expired.setdefault(iacuc, (expiry_date, line.get("date", "")))
+    if reference is None:
+        return ""
+    # 只提示已到期或 3 个月内即将到期的伦理号，避免把远期到期写入说明。
+    cutoff = _months_later_month_end(reference, 3)
+    visible = {
+        iacuc: (expiry_date, ineligible_date)
+        for iacuc, (expiry_date, ineligible_date) in expired.items()
+        if (expiry := _parse_iso_date(expiry_date)) is None or expiry <= cutoff
+    }
     return "；".join(
-        _free_allowance_expiry_note(iacuc, expiry_date, ineligible_date)
-        for iacuc, (expiry_date, ineligible_date) in sorted(expired.items())
+        _free_allowance_expiry_note(iacuc, expiry_date, ineligible_date, generated_date)
+        for iacuc, (expiry_date, ineligible_date) in sorted(visible.items())
     )
 
 
-def _free_allowance_expiry_note(iacuc, expiry_date, first_ineligible_date):
+def _free_allowance_expiry_note(iacuc, expiry_date, first_ineligible_date, generated_date=None):
     expiry = _parse_iso_date(expiry_date)
     first_ineligible = _parse_iso_date(first_ineligible_date)
+    generated = _parse_iso_date(generated_date) if generated_date else date.today()
+    # 到期日早于结算月首行日期：整个结算月都不参与减免。
     if expiry and first_ineligible and expiry + timedelta(days=1) < first_ineligible:
         return f"{iacuc} 已于 {expiry_date} 到期，本月不参与减免"
     next_day = (expiry + timedelta(days=1)).isoformat() if expiry else first_ineligible_date
-    return f"{iacuc} 于 {expiry_date} 到期，自 {next_day} 起不参与减免"
+    verb = "已于" if expiry and generated and expiry < generated else "将于"
+    return f"{iacuc} {verb} {expiry_date} 到期，自 {next_day} 起不参与减免"
 
 
 def _parse_iso_date(value):
     try:
-        return date.fromisoformat(str(value or ""))
+        return datetime.fromisoformat(str(value or "")).date()
     except ValueError:
         return None
+
+
+def _months_later_month_end(reference, months):
+    year = reference.year
+    month = reference.month + months
+    while month > 12:
+        month -= 12
+        year += 1
+    next_year = year
+    next_month = month + 1
+    if next_month > 12:
+        next_month = 1
+        next_year += 1
+    return date(next_year, next_month, 1) - timedelta(days=1)
 
 
 def quantity_sheet_billing_profile(profile, sheet):

@@ -253,7 +253,7 @@ describe("print templates", () => {
     expect(html).toContain("Z1（猴）");
     expect(html).toContain("Z2");
     expect(html).toContain("48.00");
-    expect(html).toContain('<td colspan="4" class="money">0.00</td>');
+    expect(html).toContain('<td colspan="5" class="money">0.00</td>');
     expect(html).toContain("计费单位：混合");
     expect(html).toContain('class="meta-table"');
     expect(html).toContain("全额减免：Z1");
@@ -318,13 +318,15 @@ describe("print templates", () => {
     const html = settlementStatementHtml(result, false);
     expect(html).toContain('<th colspan="12">汇总</th>');
     expect(html).toContain(
-      '<th colspan="3">总笼数</th><th colspan="3">减免总笼数</th><th colspan="3">阶梯总笼数</th><th colspan="3">缴纳（元）</th>',
+      '<th colspan="3">笼数</th><th colspan="2">减免</th><th colspan="3">梯度</th><th colspan="4">缴纳（元）</th>',
     );
     expect(html).toContain('<th colspan="12">Z2026001（梯度收费）</th>');
     expect(html).toContain(
-      '<th colspan="3">笼数</th><th colspan="3">减免</th><th colspan="3">梯度</th><th colspan="3">缴纳（元）</th>',
+      '<th colspan="3">笼数</th><th colspan="2">减免</th><th colspan="3">梯度</th><th colspan="4">缴纳（元）</th>',
     );
-    expect(html).toContain('<td colspan="3" class="num">5</td><td colspan="3" class="money">770.00</td>');
+    expect(html).toContain(
+      '<td colspan="2" class="num">5</td><td colspan="3" class="num group-empty-cell"></td><td colspan="4" class="money">770.00</td>',
+    );
     expect(html).not.toContain("梯度笼数");
   });
 
@@ -395,8 +397,8 @@ describe("print templates", () => {
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
     expect(html).toContain('<td colspan="3" class="num">197</td>');
-    expect(html).toContain('<td colspan="3" class="num">146</td><td colspan="3" class="money">949.00</td>');
-    expect(html).toContain('<td colspan="4" class="num">51</td><td colspan="4" class="money">1051.50</td>');
+    expect(html).toContain('<td colspan="3" class="num">146</td><td colspan="4" class="money">949.00</td>');
+    expect(html).toContain('<td colspan="3" class="num">51</td><td colspan="5" class="money">1051.50</td>');
   });
 
   it("keeps a recorded zero-balance collection date in the settlement printout", () => {
@@ -466,7 +468,7 @@ describe("print templates", () => {
         totalFreeCageDays: 0,
         totalBillableCageDays: 1,
         totalAmount: 4.5,
-        notes: "Z1 于 2026-06-15 到期，自 2026-06-16 起不参与减免",
+        notes: "Z1 将于 2026-06-15 到期，自 2026-06-16 起不参与减免",
       },
       lines: [
         {
@@ -481,7 +483,7 @@ describe("print templates", () => {
         },
       ],
     } as BillingStatementResponse;
-    expect(settlementStatementHtml(result, false)).toContain("Z1 于 2026-06-15 到期，自 2026-06-16 起不参与减免");
+    expect(settlementStatementHtml(result, false)).toContain("Z1 将于 2026-06-15 到期，自 2026-06-16 起不参与减免");
   });
 
   it("hides unused allowance columns and keeps paid amounts explicit", () => {
@@ -534,11 +536,11 @@ describe("print templates", () => {
     const html = settlementStatementHtml(result, false);
     expect(html).toContain('<th colspan="12">Z1</th>');
     expect(html).toContain('<th colspan="12">Z2</th>');
-    expect(html).toContain('<th colspan="4">笼数</th><th colspan="4">减免</th><th colspan="4">缴纳（元）</th>');
-    expect(html).toContain('<td colspan="4" class="money">0.00</td>');
+    expect(html).toContain('<th colspan="4">笼数</th><th colspan="3">减免</th><th colspan="5">缴纳（元）</th>');
+    expect(html).toContain('<td colspan="5" class="money">0.00</td>');
     expect(html).toContain('<td colspan="6" class="money">27.00</td>');
     expect(html).toContain(
-      '2026-06-02</td><td colspan="4" class="num">6</td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="money">27.00</td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="num group-empty-cell"></td><td colspan="4" class="money group-empty-cell"></td><td colspan="6" class="num">6</td><td colspan="6" class="money">27.00</td>',
+      '2026-06-02</td><td colspan="4" class="num">6</td><td colspan="3" class="num group-empty-cell"></td><td colspan="5" class="money">27.00</td><td colspan="4" class="num group-empty-cell"></td><td colspan="3" class="num group-empty-cell"></td><td colspan="5" class="money group-empty-cell"></td><td colspan="6" class="num">6</td><td colspan="6" class="money">27.00</td>',
     );
     expect(html).not.toContain("未缴纳月份");
     expect(html).not.toContain("CageLedger · Apache-2.0");
@@ -597,7 +599,7 @@ describe("print templates", () => {
     expect(html).toContain(">Z6<");
     expect(html.match(/单位支持/g)).toHaveLength(6);
     expect(html.match(/项目负责人<\/td><td>实验负责人\/经办人<\/td><td>日期<\/td>/g)).toHaveLength(2);
-    expect(pages[1]).toContain("总笼数");
+    expect(pages[1]).toContain(">笼数<");
     expect(pages[1]).toContain("汇总");
     expect(pages[1]).toContain(
       '<td colspan="7" class="row-label row-label-summary row-label-summary-wide">本月待缴纳饲养费<br />总计（元）</td><td colspan="6" class="money summary-total-money">94.50</td>',

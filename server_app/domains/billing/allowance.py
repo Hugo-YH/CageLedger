@@ -42,6 +42,8 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
     remaining_by_iacuc = {}
     allocations = {}
     eligible = []
+    preferred_iacucs = set()
+    priority_only_iacucs = set()
     for item in breakdown or []:
         if item.get("freeEligible") is False:
             continue
@@ -55,6 +57,10 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
             continue
         if not item.get("freeAllowance") or item.get("billingUnit") != "cage_day":
             continue
+        if (as_int(item.get("preferredFreeCages")) or 0) > 0:
+            preferred_iacucs.add(iacuc)
+        elif as_int(item.get("freeCagePriority")) is not None:
+            priority_only_iacucs.add(iacuc)
         entry = {
             "iacuc": iacuc,
             "cageCount": count,
@@ -83,23 +89,30 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
         candidates = [
             {**item, "remainingCages": remaining_by_iacuc.get(item["iacuc"], 0)}
             for item in eligible
-            if remaining_by_iacuc.get(item["iacuc"], 0) > 0
+            if remaining_by_iacuc.get(item["iacuc"], 0) > 0 and item["iacuc"] not in preferred_iacucs
         ]
         if not candidates:
             break
-        coverable = sorted(
-            (item for item in candidates if item["remainingCages"] <= remaining), key=free_cage_allocation_sort_key
-        )
-        if coverable:
-            target = coverable[0]
-            allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
-            remaining_by_iacuc[target["iacuc"]] = 0
-            remaining -= target["remainingCages"]
-            continue
-        target = sorted(candidates, key=free_cage_allocation_sort_key)[0]
-        allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + remaining
-        remaining_by_iacuc[target["iacuc"]] = max(target["remainingCages"] - remaining, 0)
-        remaining = 0
+        # 开了优先减免（未填笼数）的伦理号在剩余额度分配中优先于未开启的。
+        priority_candidates = [item for item in candidates if item["iacuc"] in priority_only_iacucs]
+        ordinary_candidates = [item for item in candidates if item["iacuc"] not in priority_only_iacucs]
+        for group in (priority_candidates, ordinary_candidates):
+            if not group or remaining <= 0:
+                continue
+            coverable = sorted(
+                (item for item in group if item["remainingCages"] <= remaining),
+                key=free_cage_allocation_sort_key,
+            )
+            if coverable:
+                target = coverable[0]
+                allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
+                remaining_by_iacuc[target["iacuc"]] = 0
+                remaining -= target["remainingCages"]
+                continue
+            target = sorted(group, key=free_cage_allocation_sort_key)[0]
+            allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + remaining
+            remaining_by_iacuc[target["iacuc"]] = max(target["remainingCages"] - remaining, 0)
+            remaining = 0
 
     return allocations
 
@@ -107,8 +120,9 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
 def apply_free_cage_allocations(breakdown, allocations):
     remaining = dict(allocations or {})
     for item in breakdown or []:
-        # Custom-billing entries remain outside every exemption allocation.
-        if item.get("freeEligible") is False:
+        # Custom-billing entries and non-allowance items (e.g. rats) remain
+        # outside every exemption allocation unless fully exempted.
+        if item.get("freeEligible") is False or (not item.get("freeAllowance") and not item.get("fullExemption")):
             item["freeCages"] = 0
             continue
         iacuc = normalize_iacuc_number(item.get("iacuc", ""))

@@ -3609,7 +3609,8 @@ def validate_quantity_sheet_animal_requirements(conn, sheet):
 
 def validate_quantity_sheet_free_cage_settings(conn, sheet):
     preferred = max(as_int(sheet.get("preferredFreeCages")) or 0, 0)
-    if preferred <= 0:
+    has_priority = as_int(sheet.get("freeCagePriority")) is not None
+    if preferred <= 0 and not has_priority:
         return
     pi_name = clean_text(sheet.get("pi", ""))
     if not pi_name:
@@ -3618,11 +3619,18 @@ def validate_quantity_sheet_free_cage_settings(conn, sheet):
     allowance = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
     if preferred > allowance:
         raise ValueError(f"优先减免笼数不能超过 {pi_name} 的每日总减免额度 {allowance} 笼")
-    total = preferred
+    # Merge preferred amounts per IACUC: the same IACUC may span multiple
+    # sheets, and allocation treats it as one unit.
+    preferred_by_iacuc = {normalize_iacuc_number(sheet.get("iacuc", "")): preferred}
     for item in list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name):
-        if item.get("id") == sheet.get("id"):
+        if item.get("id") == sheet.get("id") or not item.get("iacuc"):
             continue
-        total += max(as_int(item.get("preferredFreeCages")) or 0, 0)
+        iacuc = normalize_iacuc_number(item.get("iacuc"))
+        preferred_by_iacuc[iacuc] = max(
+            preferred_by_iacuc.get(iacuc, 0),
+            max(as_int(item.get("preferredFreeCages")) or 0, 0),
+        )
+    total = sum(preferred_by_iacuc.values())
     if total > allowance:
         raise ValueError(f"{pi_name} 本月已指定优先减免 {total} 笼/天，超过总额度 {allowance} 笼/天")
 
@@ -3735,8 +3743,8 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
     rooms = read_rooms_for_quantity_sheets(conn, sheets)
     applications_by_iacuc = read_applications_by_iacuc(conn)
     lines = quantity_sheet_statement_lines(sheets, free_cages, rooms, applications_by_iacuc)
-    notes = quantity_sheet_free_allowance_notes(lines)
     generated_at = now_iso()
+    notes = quantity_sheet_free_allowance_notes(lines, generated_date=generated_at)
     iacucs = sorted({normalize_iacuc_number(item.get("iacuc", "")) for item in sheets if item.get("iacuc")})
     statement_iacuc = iacucs[0] if iacucs else sheet_iacuc
     statement = {
@@ -4106,7 +4114,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         rooms = read_rooms_for_quantity_sheets(conn, sheets)
         applications_by_iacuc = read_applications_by_iacuc(conn)
         lines = quantity_sheet_statement_lines(sheets, free_cages, rooms, applications_by_iacuc)
-        notes = quantity_sheet_free_allowance_notes(lines)
+        notes = quantity_sheet_free_allowance_notes(lines, generated_date=generated_at)
         statement = {
             "id": new_id("stmt"),
             "iacuc": f"pi::{pi_name}",

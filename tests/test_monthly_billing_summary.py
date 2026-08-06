@@ -127,7 +127,7 @@ class MonthlyBillingSummaryTests(unittest.TestCase):
             {"张教授": "independent"},
             {},
         )
-        self.assertEqual(rows[0]["notes"], "Z2026004 于 2026-06-10 到期，自 2026-06-11 起不参与减免")
+        self.assertEqual(rows[0]["notes"], "Z2026004 将于 2026-06-10 到期，自 2026-06-11 起不参与减免")
 
 
 def sheet(sheet_id, iacuc, room_id, room_name, cages):

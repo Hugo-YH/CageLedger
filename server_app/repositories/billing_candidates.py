@@ -14,7 +14,7 @@ SETTLEMENT_CANDIDATE_LIST_COLUMNS = {
 }
 
 # Bump when quantity-sheet settlement rules change so persisted list snapshots are recalculated after deployment.
-QUANTITY_SETTLEMENT_CALCULATION_VERSION = "2026-07-10-iacuc-date-normalization"
+QUANTITY_SETTLEMENT_CALCULATION_VERSION = "2026-08-06-preferred-free-cage-fix"
 
 
 def list_quantity_settlement_groups(conn):
