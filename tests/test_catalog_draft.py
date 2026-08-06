@@ -4,7 +4,9 @@ import unittest
 from server_app.domains.animal_management.catalog import active_version, version_nodes
 from server_app.domains.animal_management.catalog_draft import (
     get_draft,
+    list_catalog_versions,
     publish_draft,
+    restore_catalog_version,
     save_draft,
 )
 from server_app.domains.animal_management.catalog_schema import CatalogValidationError
@@ -110,6 +112,62 @@ class CatalogDraftTests(unittest.TestCase):
     def test_publish_without_draft_raises_lookup_error(self):
         with self.assertRaises(LookupError):
             publish_draft(self.conn, ACTOR)
+
+    def _publish_modified_draft(self, name):
+        first = get_draft(self.conn)
+        nodes = first["nodes"]
+        nodes[0]["name"] = name
+        save_draft(
+            self.conn,
+            ACTOR,
+            {"modules": first["modules"], "nodes": nodes, "expectedUpdatedAt": first["version"]["updatedAt"]},
+        )
+        return publish_draft(self.conn, ACTOR)
+
+    def test_list_versions_returns_metadata_newest_first(self):
+        first = self._publish_modified_draft("第一版")
+        second = self._publish_modified_draft("第二版")
+        versions = list_catalog_versions(self.conn)["items"]
+        self.assertEqual(versions[0]["version"], second["version"]["version"])
+        self.assertEqual(versions[0]["status"], "active")
+        self.assertTrue(versions[0]["isActive"])
+        self.assertEqual(sum(1 for item in versions if item["isActive"]), 1)
+        self.assertEqual(versions[0]["nodeCount"], 233)
+        self.assertTrue(any(item["version"] == first["version"]["version"] for item in versions))
+
+    def test_restore_history_version_republishes_content(self):
+        first = self._publish_modified_draft("第一版")
+        second = self._publish_modified_draft("第二版")
+        restored = restore_catalog_version(self.conn, ACTOR, first["version"]["version"])
+        self.assertTrue(restored["version"]["version"].startswith("manual-"))
+        self.assertNotEqual(restored["version"]["version"], second["version"]["version"])
+        self.assertEqual(restored["nodes"][0]["name"], "第一版")
+        history = self.conn.execute(
+            "SELECT status FROM inspection_catalog_versions WHERE version = ?", (second["version"]["version"],)
+        ).fetchone()
+        self.assertEqual(history["status"], "history")
+        audit = self.conn.execute(
+            "SELECT action, entity_id FROM audit_events WHERE action = 'inspection_catalog.restored' ORDER BY at DESC LIMIT 1"
+        ).fetchone()
+        self.assertEqual(audit["entity_id"], restored["version"]["version"])
+
+    def test_restore_current_active_version_rejected(self):
+        active = self._publish_modified_draft("当前版")
+        with self.assertRaises(ValueError):
+            restore_catalog_version(self.conn, ACTOR, active["version"]["version"])
+
+    def test_restore_missing_version_raises_lookup_error(self):
+        with self.assertRaises(LookupError):
+            restore_catalog_version(self.conn, ACTOR, "missing-version")
+
+    def test_restore_seed_imported_version_republishes_content(self):
+        # The seed import stores raw payloads without moduleCode; restoring must still validate.
+        seed_version = active_version(self.conn)["version"]
+        self._publish_modified_draft("新版")
+        restored = restore_catalog_version(self.conn, ACTOR, seed_version)
+        self.assertTrue(restored["version"]["version"].startswith("manual-"))
+        self.assertEqual(len(restored["nodes"]), 233)
+        self.assertEqual(restored["nodes"][0]["name"], "外观")
 
 
 if __name__ == "__main__":

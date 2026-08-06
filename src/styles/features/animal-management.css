@@ -1897,3 +1897,30 @@
 .inspection-publish-diff-name {
   max-width: 260px;
 }
+
+.inspection-version-list {
+  display: grid;
+  gap: 8px;
+}
+
+.inspection-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.inspection-version-row.is-active {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.inspection-version-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}

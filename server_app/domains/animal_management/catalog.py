@@ -6,8 +6,8 @@ from pathlib import Path
 from server_app.config import ANIMAL_INSPECTION_CATALOG_PATH
 from server_app.shared import clean_text, now_iso
 
-CATALOG_VERSION = "cageledger-v1-20260805"
-CATALOG_SOURCE = "CageLedger 内部维护 2026-08-05"
+CATALOG_VERSION = "cageledger-v3-20260806"
+CATALOG_SOURCE = "CageLedger 内部维护 2026-08-06（清理合并 + 表单展示配置化）"
 
 
 def load_catalog(path: Path = ANIMAL_INSPECTION_CATALOG_PATH):
@@ -26,6 +26,10 @@ def ensure_catalog_rows(conn):
     conn.execute(
         "INSERT INTO inspection_catalog_versions (version, source, status, imported_at, payload) VALUES (?, ?, 'active', ?, ?)",
         (CATALOG_VERSION, CATALOG_SOURCE, imported_at, json.dumps({"modules": catalog["modules"]}, ensure_ascii=False)),
+    )
+    conn.execute(
+        "UPDATE inspection_catalog_versions SET status = 'history' WHERE status = 'active' AND version != ?",
+        (CATALOG_VERSION,),
     )
     module_by_id = {str(item.get("id")): clean_text(item.get("code")) for item in catalog["modules"]}
     for node in catalog["nodes"]:

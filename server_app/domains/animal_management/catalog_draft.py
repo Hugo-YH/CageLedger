@@ -74,10 +74,10 @@ def publish_draft(conn, actor, image_root=None):
     version = _next_manual_version(conn, now)
     source = f"用户发布：{clean_text(actor.get('displayName'))}"
     with conn:
-        if active["version"] != DRAFT_VERSION:
-            conn.execute(
-                "UPDATE inspection_catalog_versions SET status = 'history' WHERE version = ?", (active["version"],)
-            )
+        conn.execute(
+            "UPDATE inspection_catalog_versions SET status = 'history' WHERE status = 'active' AND version != ?",
+            (version,),
+        )
         conn.execute(
             "INSERT INTO inspection_catalog_versions (version, source, status, imported_at, payload) VALUES (?, ?, 'active', ?, ?)",
             (version, source, now, json.dumps({"modules": payload["modules"]}, ensure_ascii=False)),
@@ -230,7 +230,13 @@ def _next_manual_version(conn, now):
     version = f"manual-{base}"
     if not conn.execute("SELECT 1 FROM inspection_catalog_versions WHERE version = ?", (version,)).fetchone():
         return version
-    return f"manual-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    seconds = datetime.now().strftime("%Y%m%d-%H%M%S")
+    candidate = f"manual-{seconds}"
+    suffix = 2
+    while conn.execute("SELECT 1 FROM inspection_catalog_versions WHERE version = ?", (candidate,)).fetchone():
+        candidate = f"manual-{seconds}-{suffix}"
+        suffix += 1
+    return candidate
 
 
 def _active_catalog_payload(conn, version):
@@ -247,3 +253,93 @@ def _active_catalog_payload(conn, version):
         "modules": modules,
         "nodes": version_nodes(conn, version),
     }
+
+
+def list_catalog_versions(conn):
+    """Return all catalog versions with metadata, newest first."""
+    effective_active = active_version(conn)
+    effective_version = effective_active["version"] if effective_active else None
+    rows = conn.execute(
+        """
+        SELECT v.version, v.source, v.status, v.imported_at,
+               (SELECT COUNT(*) FROM inspection_catalog_nodes n WHERE n.version = v.version) AS node_count
+        FROM inspection_catalog_versions v
+        WHERE v.version != ?
+        ORDER BY v.imported_at DESC, v.version DESC
+        """,
+        (DRAFT_VERSION,),
+    ).fetchall()
+    return {
+        "items": [
+            {
+                "version": row["version"],
+                "source": row["source"],
+                "status": row["status"],
+                "importedAt": row["imported_at"],
+                "nodeCount": row["node_count"],
+                "isActive": row["version"] == effective_version,
+            }
+            for row in rows
+        ]
+    }
+
+
+def get_catalog_version(conn, version):
+    """Return one version's full payload for review (admin-only callers)."""
+    row = conn.execute(
+        "SELECT version, source, status, imported_at FROM inspection_catalog_versions WHERE version = ?",
+        (version,),
+    ).fetchone()
+    if not row:
+        raise LookupError("目录版本不存在")
+    payload = conn.execute("SELECT payload FROM inspection_catalog_versions WHERE version = ?", (version,)).fetchone()
+    modules = json.loads(payload["payload"]).get("modules", []) if payload else []
+    return {"version": dict(row), "modules": modules, "nodes": version_nodes(conn, version)}
+
+
+def restore_catalog_version(conn, actor, source_version, image_root=None):
+    """Publish a historical version's content as a new active version."""
+    source = conn.execute(
+        "SELECT version, source, imported_at, payload FROM inspection_catalog_versions WHERE version = ?",
+        (source_version,),
+    ).fetchone()
+    if not source:
+        raise LookupError("目录版本不存在")
+    active = active_version(conn)
+    if active and active["version"] == source_version:
+        raise ValueError("该版本已是当前生效版本")
+    modules = json.loads(source["payload"]).get("modules", [])
+    nodes = version_nodes(conn, source_version)
+    validate_catalog(modules, nodes, image_root=image_root)
+    now = now_iso()
+    version = _next_manual_version(conn, now)
+    actor_name = clean_text(actor.get("displayName"))
+    with conn:
+        conn.execute(
+            "UPDATE inspection_catalog_versions SET status = 'history' WHERE status = 'active' AND version != ?",
+            (version,),
+        )
+        conn.execute(
+            "INSERT INTO inspection_catalog_versions (version, source, status, imported_at, payload) VALUES (?, ?, 'active', ?, ?)",
+            (
+                version,
+                f"回滚自 {source['version']}：{actor_name}",
+                now,
+                json.dumps({"modules": modules}, ensure_ascii=False),
+            ),
+        )
+        _insert_nodes(conn, version, nodes)
+        audit = audit_event(
+            actor,
+            "inspection_catalog.restored",
+            "inspection_catalog",
+            version,
+            f"{actor_name} 将目录回滚到 {source['version']} 并发布为 {version}",
+            [],
+            now,
+            {"source": source["version"], "previousActive": active["version"] if active else None},
+            {"version": version, "nodeCount": len(nodes)},
+        )
+        write_audit_events(conn, [audit])
+        conn.commit()
+    return _active_catalog_payload(conn, version)

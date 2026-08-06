@@ -100,7 +100,7 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
   return page.locator(".ant-main-menu");
 }
 
-async function openNavigationEntry(page: Page, group: string, label: string) {
+export async function openNavigationEntry(page: Page, group: string, label: string) {
   const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
   if (useMobileNavigation) {
     if (group === "动物管理") {

@@ -34,7 +34,7 @@ class AnimalInspectionServiceTests(unittest.TestCase):
         catalog = catalog_payload(self.conn, ACTOR)
         self.assertEqual(catalog["version"]["status"], "active")
         self.assertEqual(len(catalog["modules"]), 3)
-        self.assertEqual(len(catalog["nodes"]), 245)
+        self.assertEqual(len(catalog["nodes"]), 233)
         self.assertTrue(all(node["moduleCode"] for node in catalog["nodes"]))
 
     def test_catalog_reuses_same_module_same_name_reference_images(self):

@@ -62,6 +62,7 @@ describe("animal inspection model", () => {
         name: "肛门",
         nodeType: "SUBCATEGORY",
         sortOrder: 1,
+        config: { presentation: { region: "reproduction-perianal" } },
       },
       {
         id: "abdomen-skin",
@@ -71,6 +72,7 @@ describe("animal inspection model", () => {
         name: "腹部被毛/皮肤",
         nodeType: "SUBCATEGORY",
         sortOrder: 2,
+        config: { presentation: { region: "fur-skin" } },
       },
       {
         id: "anus-item",
@@ -97,6 +99,7 @@ describe("animal inspection model", () => {
         name: "眼睛",
         nodeType: "SUBCATEGORY",
         sortOrder: 3,
+        config: { presentation: { region: "head-neck" } },
       },
       {
         id: "eye-item",
@@ -120,6 +123,7 @@ describe("animal inspection model", () => {
         moduleCode: "abnormalAnimalAssessment",
         name: "胸部被毛/皮肤",
         nodeType: "SUBCATEGORY",
+        config: { presentation: { region: "fur-skin" } },
       },
       {
         id: "thorax-item",

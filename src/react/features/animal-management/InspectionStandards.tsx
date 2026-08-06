@@ -8,6 +8,7 @@ import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { InspectionCatalogEditor } from "./InspectionCatalogEditor";
+import { InspectionVersionHistoryModal } from "./InspectionVersionHistoryModal";
 import { moduleItemCount } from "./model";
 
 export function InspectionStandards({
@@ -20,6 +21,7 @@ export function InspectionStandards({
   const isMobile = useIsMobileLayout();
   const isAdmin = user.role === "admin";
   const [editing, setEditing] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const catalog = useAnimalInspectionCatalog();
   const draft = useAnimalInspectionCatalogDraft(isAdmin);
   if (catalog.isLoading) return <PageState title="正在加载巡检标准..." />;
@@ -65,9 +67,14 @@ export function InspectionStandards({
               {catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
             </Tag>
             {isAdmin ? (
-              <Button size="small" type="primary" ghost onClick={() => setEditing(true)}>
-                编辑目录
-              </Button>
+              <Space>
+                <Button size="small" onClick={() => setVersionsOpen(true)}>
+                  版本历史
+                </Button>
+                <Button size="small" type="primary" ghost onClick={() => setEditing(true)}>
+                  编辑目录
+                </Button>
+              </Space>
             ) : null}
           </Space>
         }
@@ -100,6 +107,7 @@ export function InspectionStandards({
           ))}
         </Row>
       </Card>
+      {isAdmin ? <InspectionVersionHistoryModal open={versionsOpen} onClose={() => setVersionsOpen(false)} /> : null}
     </>
   );
   if (isMobile) {

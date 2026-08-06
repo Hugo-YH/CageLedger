@@ -27,14 +27,14 @@ const baselineHotspots = new Map([
   [
     "server_app/legacy.py",
     {
-      ceiling: 7009,
+      ceiling: 7054,
       reason:
-        "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, documentation static routing, transitional domain dispatch, slim admin/IACUC routes, and animal-inspection catalog draft/publish/image routes",
+        "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, documentation static routing, transitional domain dispatch, slim admin/IACUC routes, and animal-inspection catalog draft/publish/image/version routes",
     },
   ],
   [
     "src/styles/features/animal-management.css",
-    { ceiling: 1900, reason: "animal management workspace, inspection entry/lists and catalog editor styles" },
+    { ceiling: 1927, reason: "animal management workspace, inspection entry/lists and catalog editor styles" },
   ],
   [
     "server_app/domains/animal_management/service.py",

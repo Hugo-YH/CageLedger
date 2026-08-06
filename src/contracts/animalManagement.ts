@@ -30,6 +30,13 @@ export interface InspectionCatalogNode {
     referenceImages?: Array<{ url: string; desc?: string }>;
     referenceOrigin?: "exact" | "same_name";
     suggestionMeasure?: string;
+    /** Abnormal-module presentation hints: body-region assignment and display renaming. */
+    presentation?: {
+      region?: string;
+      groupName?: string;
+      groupSortOrder?: number;
+      displayName?: string;
+    };
   };
 }
 
@@ -72,6 +79,15 @@ export interface InspectionCatalogDraftResponse {
   hasDraft: boolean;
   /** Raw (untransformed) active catalog used as the edit baseline and diff reference. */
   active: InspectionCatalogBaseline;
+}
+
+export interface InspectionCatalogVersionSummary {
+  version: string;
+  source: string;
+  status: string;
+  importedAt: string;
+  nodeCount: number;
+  isActive: boolean;
 }
 
 export type InspectionNodeChange = "added" | "modified" | "removed";

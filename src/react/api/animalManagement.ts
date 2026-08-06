@@ -8,6 +8,7 @@ import type {
   InspectionAnswer,
   InspectionCatalogDraftResponse,
   InspectionCatalogResponse,
+  InspectionCatalogVersionSummary,
   InspectionFinding,
 } from "./contracts";
 import { uploadFile } from "./administration";
@@ -65,6 +66,33 @@ export function usePublishInspectionCatalogDraft() {
     onSuccess: (payload) => {
       client.setQueryData(queryKeys.animalInspectionCatalog, payload);
       void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraft });
+    },
+  });
+}
+
+export function useAnimalInspectionCatalogVersions(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.animalInspectionCatalogVersions,
+    queryFn: () => requestJson<{ items: InspectionCatalogVersionSummary[] }>("/api/animal-inspection-catalog/versions"),
+    staleTime: 30 * 1000,
+    enabled,
+  });
+}
+
+export function useRestoreInspectionCatalogVersion() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (version: string) =>
+      requestJson<InspectionCatalogResponse>(
+        `/api/animal-inspection-catalog/versions/${encodeURIComponent(version)}/restore`,
+        {
+          method: "POST",
+        },
+      ),
+    onSuccess: (payload) => {
+      client.setQueryData(queryKeys.animalInspectionCatalog, payload);
+      void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraft });
+      void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogVersions });
     },
   });
 }

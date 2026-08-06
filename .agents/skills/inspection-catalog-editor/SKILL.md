@@ -7,9 +7,9 @@ description: 巡检标准在线编辑器的规范开发子技能。用于在 Cag
 
 ## 工作流
 
-1. 开始任何工作前，先读 `docs/progress/MASTER.md`（跨会话连续性协议）和 `docs/progress/phase-N-*.md`，确认当前任务
+1. 开始任何工作前，先读 `docs/archives/animal-inspection-catalog-editor/progress/MASTER.md`（跨会话连续性协议）和对应的 `phase-N-*.md`，确认当前任务
 2. 每完成一个任务：跑 S.U.P.E.R Code Review Checklist → 更新进度文件勾选项 → 在 MASTER.md 的 Telemetry Log 记录 effort/S.U.P.E.R/未计划依赖
-3. 全部完成后触发归档：`docs/archives/animal-inspection-catalog-editor/`
+3. 全部完成后归档到 `docs/archives/animal-inspection-catalog-editor/`（本功能已于 2026-08-06 完成归档）
 
 ## S.U.P.E.R 架构原则（必须内联遵守）
 
@@ -38,7 +38,7 @@ description: 巡检标准在线编辑器的规范开发子技能。用于在 Cag
 
 ## 进度更新
 
-- 完成一个任务后：勾选 `docs/progress/phase-N-*.md` 对应项 → 更新 `docs/progress/MASTER.md` 的 Phase Checklist 计数、Current Status、Task Telemetry Log（effort/S.U.P.E.R/未计划依赖）
+- 完成一个任务后：勾选 `docs/archives/animal-inspection-catalog-editor/progress/phase-N-*.md` 对应项 → 更新 MASTER.md 的 Phase Checklist 计数、Current Status、Task Telemetry Log（effort/S.U.P.E.R/未计划依赖）
 - 会话开始和结束都要更新 MASTER.md 的 Current Status
 
 ## 自适应控制

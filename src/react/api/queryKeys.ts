@@ -31,6 +31,7 @@ export const queryKeys = {
   systemUpdate: ["system", "update"] as const,
   animalInspectionCatalog: ["animal-inspection-catalog"] as const,
   animalInspectionCatalogDraft: ["animal-inspection-catalog", "draft"] as const,
+  animalInspectionCatalogVersions: ["animal-inspection-catalog", "versions"] as const,
   animalInspectionsRoot: ["animal-inspections"] as const,
   animalInspections: (filters: Record<string, unknown>) => ["animal-inspections", filters] as const,
   animalInspection: (id: string) => ["animal-inspections", "detail", id] as const,
