@@ -1,12 +1,6 @@
 import { Alert, Button, Card, Checkbox, Empty, Modal, Space, Tooltip, Typography, type TableProps } from "antd";
 import { Pager } from "../../../components/WorkspaceUi";
-import {
-  DownloadOutlined,
-  EyeOutlined,
-  FileTextOutlined,
-  PlayCircleOutlined,
-  PrinterOutlined,
-} from "@ant-design/icons";
+import { DownloadOutlined, EyeOutlined, PlayCircleOutlined, PrinterOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
 import type {
@@ -288,20 +282,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
 
   return (
     <>
-      <Card
-        className="settlement-candidate-card"
-        title={
-          <Space size={8}>
-            <FileTextOutlined />
-            <Typography.Title level={2} style={{ margin: 0 }}>
-              项目负责人结算
-            </Typography.Title>
-          </Space>
-        }
-      >
-        <Typography.Paragraph className="settlement-card-description" type="secondary">
-          同一负责人、同一月份下的多个伦理号自动合表。
-        </Typography.Paragraph>
+      <Card className="settlement-candidate-card">
         {notice || pdfExport.isExporting ? (
           <Alert
             title={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}

@@ -36,7 +36,7 @@ export function VirtualRack({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => (roomSpecies === "monkey" ? 144 : 126),
+    estimateSize: () => (roomSpecies === "monkey" ? 144 : 128),
     overscan: 3,
   });
   return (
@@ -50,7 +50,7 @@ export function VirtualRack({
               key={row}
               style={{
                 transform: `translateY(${virtualRow.start}px)`,
-                gridTemplateColumns: `repeat(${rack.cols}, minmax(112px, 1fr))`,
+                gridTemplateColumns: `repeat(${rack.cols}, var(--cage-slot-size, 120px))`,
               }}
             >
               {slots
@@ -131,6 +131,7 @@ export function SlotEditor({
     <ModalShell
       ariaLabel={`编辑笼位 ${cageCode(slot, rack.index, roomName)}`}
       className="cage-slot-modal"
+      width={640}
       onClose={onClose}
     >
       <div className="modal-shell-head">
@@ -244,7 +245,7 @@ export function PlacementDrawer({
 }) {
   const moveIn = useMoveInPlacement(roomId);
   return (
-    <ModalShell ariaLabel="待进驻动物" className="placement-react-drawer" onClose={onClose}>
+    <ModalShell ariaLabel="待进驻动物" className="placement-react-drawer" width={640} onClose={onClose}>
       <div className="modal-shell-head">
         <div>
           <h2>待进驻动物</h2>
@@ -345,7 +346,7 @@ export function BatchSlotEditor({
     onDone(`已将 ${slots.length} 个笼位设为空。`);
   }
   return (
-    <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" onClose={onClose}>
+    <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" width={720} onClose={onClose}>
       <div className="modal-shell-head">
         <div>
           <h2 id="batch-slot-title">批量编辑 {slots.length} 个笼位</h2>

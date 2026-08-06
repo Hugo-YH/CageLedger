@@ -1,4 +1,4 @@
-import { Button, Drawer, Form, Input, InputNumber, Popconfirm, Select, Space, Tag, Typography } from "antd";
+import { Button, Drawer, Form, Input, InputNumber, Popconfirm, Space, Tag, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
 
 import { formValuesToNode, nodeToFormValues } from "../../../domain/inspectionCatalog";
@@ -6,12 +6,6 @@ import type { InspectionNodeFormValues } from "../../../domain/inspectionCatalog
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { InspectionCatalogNode } from "../../api/contracts";
 import { InspectionReferenceImages } from "./InspectionReferenceImages";
-
-const INPUT_TYPE_OPTIONS = [
-  { value: "score", label: "评分" },
-  { value: "severity", label: "严重程度" },
-  { value: "severity_with_options", label: "严重程度 + 选项" },
-] as const;
 
 export function InspectionNodeForm({
   node,
@@ -29,8 +23,6 @@ export function InspectionNodeForm({
   const isMobile = useIsMobileLayout();
   const [form] = Form.useForm<InspectionNodeFormValues>();
   const initialValues = nodeToFormValues(node);
-  const watchedInputType = Form.useWatch("inputType", form);
-  const inputType = watchedInputType ?? initialValues.inputType;
   const showItemSections = node.nodeType === "ITEM";
 
   return (
@@ -94,94 +86,55 @@ export function InspectionNodeForm({
         </Form.Item>
         {showItemSections ? (
           <>
-            <Form.Item name="inputType" label="输入类型" rules={[{ required: true, message: "请选择输入类型" }]}>
-              <Select options={[...INPUT_TYPE_OPTIONS]} />
-            </Form.Item>
             <Form.Item name="suggestionMeasure" label="处置建议">
               <Input.TextArea rows={2} maxLength={300} />
             </Form.Item>
             <Form.Item name="referenceImages" label="参考图" tooltip="上传后立即保存到服务器，随草稿一起发布">
               <InspectionReferenceImages />
             </Form.Item>
-            {inputType ? (
-              <Form.List name="scoringCriteria">
-                {(fields, { add, remove }) => (
-                  <div className="inspection-form-section">
-                    <div className="inspection-form-section-head">
-                      <Typography.Text strong>评分标准</Typography.Text>
-                      <Button
-                        size="small"
-                        type="dashed"
-                        icon={<PlusOutlined />}
-                        onClick={() => add({ key: String(fields.length + 1), level: "", description: "" })}
-                      >
-                        添加档位
-                      </Button>
-                    </div>
-                    {fields.map((field) => (
-                      <div className="inspection-scoring-row" key={field.key}>
-                        <Form.Item name={[field.name, "key"]} rules={[{ required: true, message: "分数" }]}>
-                          <InputNumber min={0} max={99} placeholder="分数" style={{ width: 76 }} />
-                        </Form.Item>
-                        <Form.Item name={[field.name, "level"]} rules={[{ required: true, message: "等级" }]}>
-                          <Input placeholder="等级，如：严重" style={{ width: 150 }} />
-                        </Form.Item>
-                        <Form.Item name={[field.name, "description"]}>
-                          <Input placeholder="说明（可选）" />
-                        </Form.Item>
-                        <Button
-                          className="inspection-scoring-remove"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          disabled={fields.length <= 1}
-                          onClick={() => remove(field.name)}
-                        />
-                      </div>
-                    ))}
+            <Typography.Text type="secondary" className="inspection-binary-hint">
+              巡检录入按「正常 / 异常」判定，无需配置评分；异常类型用于异常确认时选择具体表现。
+            </Typography.Text>
+            <Form.List name="subOptions">
+              {(fields, { add, remove }) => (
+                <div className="inspection-form-section">
+                  <div className="inspection-form-section-head">
+                    <Typography.Text strong>异常类型选项</Typography.Text>
+                    <Button
+                      size="small"
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      onClick={() => add({ id: "", nameCn: "" })}
+                    >
+                      添加选项
+                    </Button>
                   </div>
-                )}
-              </Form.List>
-            ) : null}
-            {inputType === "severity_with_options" ? (
-              <Form.List name="subOptions">
-                {(fields, { add, remove }) => (
-                  <div className="inspection-form-section">
-                    <div className="inspection-form-section-head">
-                      <Typography.Text strong>子选项</Typography.Text>
+                  {fields.length === 0 ? (
+                    <Typography.Text type="secondary">无异常类型选项，异常确认时无需选择。</Typography.Text>
+                  ) : null}
+                  {fields.map((field) => (
+                    <div className="inspection-suboption-row" key={field.key}>
+                      <Form.Item name={[field.name, "id"]} rules={[{ required: true, message: "标识" }]}>
+                        <Input placeholder="标识，如：pale" style={{ width: 120 }} />
+                      </Form.Item>
+                      <Form.Item name={[field.name, "nameCn"]} rules={[{ required: true, message: "名称" }]}>
+                        <Input placeholder="中文名，如：苍白" style={{ width: 140 }} />
+                      </Form.Item>
+                      <Form.Item name={[field.name, "nameEn"]}>
+                        <Input placeholder="英文名（可选）" style={{ width: 140 }} />
+                      </Form.Item>
                       <Button
-                        size="small"
-                        type="dashed"
-                        icon={<PlusOutlined />}
-                        onClick={() => add({ id: "", nameCn: "" })}
-                      >
-                        添加选项
-                      </Button>
+                        className="inspection-scoring-remove"
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => remove(field.name)}
+                      />
                     </div>
-                    {fields.map((field) => (
-                      <div className="inspection-suboption-row" key={field.key}>
-                        <Form.Item name={[field.name, "id"]} rules={[{ required: true, message: "标识" }]}>
-                          <Input placeholder="标识，如：pale" style={{ width: 120 }} />
-                        </Form.Item>
-                        <Form.Item name={[field.name, "nameCn"]} rules={[{ required: true, message: "名称" }]}>
-                          <Input placeholder="中文名，如：苍白" style={{ width: 140 }} />
-                        </Form.Item>
-                        <Form.Item name={[field.name, "nameEn"]}>
-                          <Input placeholder="英文名（可选）" style={{ width: 140 }} />
-                        </Form.Item>
-                        <Button
-                          className="inspection-scoring-remove"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => remove(field.name)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Form.List>
-            ) : null}
+                  ))}
+                </div>
+              )}
+            </Form.List>
           </>
         ) : null}
       </Form>
