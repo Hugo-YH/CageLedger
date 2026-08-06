@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-rc2",
+    build: "147",
+    title: "巡检在线编辑与结算导出整合",
+    items: [
+      "巡检标准页新增管理员在线编辑：模块 → 分类 → 子分类 → 条目四级目录树、节点表单、参考图、版本历史与回滚，异常模块表单配置化摘除硬编码",
+      "项目负责人结算列表新增登记人员列（展示/排序/筛选），修复月份等组合筛选导致的服务端报错",
+      "新增结算单 Excel 活表导出：与打印/PDF 版式一致，金额与合计写公式，批量导出打包 ZIP，文件名与 PDF 规则一致",
+      "待接收批次打印后自动标记已打印，状态筛选项汉化",
+      "build 编号改为按发布顺序递增的纯数字，系统统一显示 `a.b.c（Build N）`",
+    ],
+  },
+  {
     version: "1.0.0-beta17",
     build: "146",
     releasedAt: "2026-08-06",
