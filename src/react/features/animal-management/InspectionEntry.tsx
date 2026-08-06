@@ -31,6 +31,7 @@ const moduleOrder: InspectionModuleCode[] = ["basicAssessment", "advancedAssessm
 const MODULE_ANNOTATIONS: Partial<Record<InspectionModuleCode, string>> = {
   basicAssessment: "设施与福利",
   advancedAssessment: "操作与伦理",
+  abnormalAnimalAssessment: "体况与外观",
 };
 
 export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) => void }) {
