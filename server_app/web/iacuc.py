@@ -23,6 +23,21 @@ def iacuc_index_handler(handler, _params):
     return JsonResponse(result)
 
 
+def iacuc_expiry_handler(handler, _params):
+    """精简的 IACUC 到期日索引，仅返回编码与到期日，供列表页批量标记即将到期。"""
+    user = handler.current_user()
+    if not user:
+        return JsonResponse({"error": "请先登录"}, HTTPStatus.UNAUTHORIZED)
+    with connect_db() as conn:
+        payload = read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
+    items = [
+        {"iacuc": item.get("iacuc"), "projectEndDate": item.get("projectEndDate")}
+        for item in payload.get("items", [])
+        if item.get("iacuc")
+    ]
+    return JsonResponse({"items": items, "count": len(items)})
+
+
 def _bounded_int(value, default, min_value, max_value):
     try:
         number = int(value)

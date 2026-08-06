@@ -28,6 +28,7 @@ from server_app.cache import (
 )
 from server_app.config import (
     ANIMAL_INSPECTION_CATALOG_PATH,
+    ANIMAL_INSPECTION_IMAGES_PATH,
     DB_PATH,
     HOST,
     IACUC_INDEX_PATH,
@@ -90,6 +91,26 @@ from server_app.domains.animal_management import (
 )
 from server_app.domains.animal_management import (
     update_finding as update_animal_inspection_finding,
+)
+from server_app.domains.animal_management.catalog_draft import (
+    get_draft as get_animal_inspection_catalog_draft,
+)
+from server_app.domains.animal_management.catalog_draft import (
+    list_catalog_versions as list_animal_inspection_catalog_versions,
+)
+from server_app.domains.animal_management.catalog_draft import (
+    publish_draft as publish_animal_inspection_catalog_draft,
+)
+from server_app.domains.animal_management.catalog_draft import (
+    restore_catalog_version as restore_animal_inspection_catalog_version,
+)
+from server_app.domains.animal_management.catalog_draft import (
+    save_draft as save_animal_inspection_catalog_draft,
+)
+from server_app.domains.animal_management.catalog_images import (
+    ensure_seed_images,
+    image_size_error,
+    save_reference_image,
 )
 from server_app.domains.billing import (
     BILLING_PRINCIPAL_INDEPENDENT,
@@ -405,7 +426,7 @@ from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, tod
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_documentation_asset, send_frontend_asset
 from server_app.web import CageLedgerHttpHandler, JsonResponse, Router, download_settlement_xlsx
-from server_app.web.iacuc import iacuc_index_handler
+from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
@@ -505,6 +526,12 @@ def initialize_schema(conn):
         [
             SchemaStep("legacy-schema", initialize_legacy_schema),
             SchemaStep("animal-inspection-catalog", ensure_animal_inspection_catalog),
+            SchemaStep(
+                "animal-inspection-images",
+                lambda conn: ensure_seed_images(
+                    ANIMAL_INSPECTION_IMAGES_PATH, ANIMAL_INSPECTION_CATALOG_PATH / "images"
+                ),
+            ),
         ]
     )
     registry.apply(conn)
@@ -5011,6 +5038,7 @@ API_ROUTER.add(
 )
 API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(system_info()))
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
+API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
 
 
@@ -5067,6 +5095,26 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 return
             with connect_db() as conn:
                 self.send_json(animal_inspection_catalog_payload(conn, user))
+            return
+        if path == "/api/animal-inspection-catalog/draft":
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            with connect_db() as conn:
+                self.send_json(get_animal_inspection_catalog_draft(conn, image_root=ANIMAL_INSPECTION_IMAGES_PATH))
+            return
+        if path == "/api/animal-inspection-catalog/versions":
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            with connect_db() as conn:
+                self.send_json(list_animal_inspection_catalog_versions(conn))
             return
         if path == "/api/animal-inspections":
             user = self.require_user()
@@ -5175,8 +5223,11 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if reference_name:
             if not self.require_user():
                 return
-            target = (ANIMAL_INSPECTION_CATALOG_PATH / "images" / reference_name).resolve()
-            root = (ANIMAL_INSPECTION_CATALOG_PATH / "images").resolve()
+            target = (ANIMAL_INSPECTION_IMAGES_PATH / reference_name).resolve()
+            root = ANIMAL_INSPECTION_IMAGES_PATH.resolve()
+            if not target.is_file() or root not in target.parents:
+                target = (ANIMAL_INSPECTION_CATALOG_PATH / "images" / reference_name).resolve()
+                root = (ANIMAL_INSPECTION_CATALOG_PATH / "images").resolve()
             if not target.is_file() or root not in target.parents:
                 self.send_json({"error": "参考图例不存在"}, HTTPStatus.NOT_FOUND)
                 return
@@ -5482,6 +5533,16 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if path == "/api/animal-inspections":
             self.handle_animal_inspection_save(None)
             return
+        if path == "/api/animal-inspection-catalog/draft/publish":
+            self.handle_animal_inspection_catalog_publish()
+            return
+        if path == "/api/animal-inspection-catalog/images":
+            self.handle_animal_inspection_catalog_image_upload()
+            return
+        version = self.catalog_version_restore_route(path)
+        if version:
+            self.handle_animal_inspection_catalog_version_restore(version)
+            return
         inspection_id = self.animal_inspection_submit_route(path)
         if inspection_id:
             self.handle_animal_inspection_submit(inspection_id)
@@ -5647,6 +5708,9 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
+        if path == "/api/animal-inspection-catalog/draft":
+            self.handle_animal_inspection_catalog_draft_save()
+            return
         claim_id = self.reimbursement_claim_route(path)
         if claim_id:
             self.handle_reimbursement_claim_save(claim_id)
@@ -5868,6 +5932,83 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                     "items": file_items,
                     "auditLogs": merge_audit_logs([], [event]),
                 }
+            )
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_catalog_draft_save(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            body = self.read_json_body()
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            with connect_db() as conn:
+                payload = save_animal_inspection_catalog_draft(
+                    conn, user, body, image_root=ANIMAL_INSPECTION_IMAGES_PATH
+                )
+            self.send_json(payload)
+        except StaleWriteError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_catalog_publish(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with connect_db() as conn:
+                publish_animal_inspection_catalog_draft(conn, user, image_root=ANIMAL_INSPECTION_IMAGES_PATH)
+                payload = animal_inspection_catalog_payload(conn, user)
+            self.send_json(payload)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_catalog_version_restore(self, version):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            with connect_db() as conn:
+                restore_animal_inspection_catalog_version(conn, user, version, image_root=ANIMAL_INSPECTION_IMAGES_PATH)
+                payload = animal_inspection_catalog_payload(conn, user)
+            self.send_json(payload)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_animal_inspection_catalog_image_upload(self):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            raw = self.read_raw_body()
+            filename, file_body = parse_multipart_upload(self.headers.get("Content-Type", ""), raw)
+            if size_error := image_size_error(file_body):
+                raise ValueError(size_error)
+            name = save_reference_image(ANIMAL_INSPECTION_IMAGES_PATH, filename, file_body)
+            self.send_json(
+                {"ok": True, "filename": name, "url": f"/api/animal-inspection-reference/{name}"},
+                HTTPStatus.CREATED,
             )
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -6553,6 +6694,14 @@ class CageLedgerHandler(CageLedgerHttpHandler):
     def animal_inspection_reference_route(self, path):
         prefix = "/api/animal-inspection-reference/"
         value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
+        return value if value and "/" not in value else None
+
+    def catalog_version_restore_route(self, path):
+        prefix = "/api/animal-inspection-catalog/versions/"
+        suffix = "/restore"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+        value = unquote(path[len(prefix) : -len(suffix)])
         return value if value and "/" not in value else None
 
     def animal_inspection_finding_action_route(self, path, action):

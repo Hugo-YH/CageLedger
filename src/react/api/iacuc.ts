@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import type { IacucIndexItem } from "./contracts";
+import type { IacucExpiryItem, IacucIndexItem } from "./contracts";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
-export function useIacucIndex() {
+export function useIacucExpiry() {
   return useQuery({
-    queryKey: ["iacuc-index"],
-    queryFn: () => requestJson<{ items: IacucIndexItem[]; count?: number }>("/api/iacuc-index"),
+    queryKey: queryKeys.iacucExpiry,
+    queryFn: () => requestJson<{ items: IacucExpiryItem[]; count?: number }>("/api/iacuc-index/expiry"),
     staleTime: 5 * 60_000,
   });
 }

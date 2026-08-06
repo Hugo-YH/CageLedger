@@ -13,7 +13,7 @@ import {
 import { useBootstrap } from "../../api/bootstrap";
 import { AsyncActionButton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { HelpTooltip } from "../../components/Tooltip";
-import { MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { FindingCaptureDialog, ReferenceImageDialog, type ReferencePreview } from "./InspectionDialogs";

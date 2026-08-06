@@ -136,6 +136,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `GET` / `POST`   | `/api/users`                       | 管理账号                                                                           |
 | `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                                                                     |
 | `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                                                                    |
+| `GET`            | `/api/iacuc-index/expiry`          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用                           |
 | `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源                                                               |
 | `POST`           | `/api/iacuc-index/upload`          | 上传 CSV，更新快照和派生字段                                                       |
 | `GET`            | `/api/principal-identities`        | PI 身份和减免配置                                                                  |
@@ -143,6 +144,21 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `GET`            | `/api/audit-events`                | 分页操作日志                                                                       |
 | `GET`            | `/api/system/update-check`         | Gitea 最新 Release，管理员权限                                                     |
 | `GET`            | `/api/system/environment`          | 容器/宿主运行环境参数与 SQLite 状态（CPU、内存、系统、Python、数据库），管理员权限 |
+
+## 动物巡检与目录
+
+| 方法   | 路径                                                        | 请求或参数                                               | 响应                                                                                                  | 权限     |
+| ------ | ----------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------- |
+| `GET`  | `/api/animal-inspection-catalog`                            | 空                                                       | `{ version, modules, nodes, reviewNotice }`                                                           | 登录可见 |
+| `GET`  | `/api/animal-inspection-catalog/draft`                      | 空                                                       | `{ version, modules, nodes, hasDraft, active }`；无草稿时克隆 active；`active` 为未转换的生效目录基线 | `admin`  |
+| `PUT`  | `/api/animal-inspection-catalog/draft`                      | `{ modules, nodes, expectedUpdatedAt }`                  | 保存后的 `{ version, modules, nodes, hasDraft }`；非法 400、过期 409                                  | `admin`  |
+| `POST` | `/api/animal-inspection-catalog/draft/publish`              | 空                                                       | 新 active 的 `{ version, modules, nodes }`；旧 active 转 history                                      | `admin`  |
+| `POST` | `/api/animal-inspection-catalog/images`                     | `multipart/form-data`，字段 `file`（jpg/png/webp，≤5MB） | `{ ok, filename, url }`                                                                               | `admin`  |
+| `GET`  | `/api/animal-inspection-reference/{filename}`               | 空                                                       | 图片二进制；data 目录优先，resources 回退                                                             | 登录可见 |
+| `GET`  | `/api/animal-inspection-catalog/versions`                   | 空                                                       | `{ items: [{ version, source, status, importedAt, nodeCount, isActive }] }`                           | `admin`  |
+| `POST` | `/api/animal-inspection-catalog/versions/{version}/restore` | 空                                                       | 新 active 的目录 payload；回滚源内容发布为新版本，旧 active 转 history                                | `admin`  |
+
+目录草稿契约与 `GET /api/animal-inspection-catalog` 的 `modules`/`nodes` 结构一致；草稿节点可引用现有分类/子分类的 `id` 或 `code` 作为 `parentId`。发布后版本号为 `manual-YYYYMMDD-HHMM`，历史版本保留在 `inspection_catalog_versions`，答案快照语义不受影响。
 
 ## Typed API 规则
 

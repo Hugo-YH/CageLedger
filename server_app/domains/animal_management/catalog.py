@@ -6,8 +6,8 @@ from pathlib import Path
 from server_app.config import ANIMAL_INSPECTION_CATALOG_PATH
 from server_app.shared import clean_text, now_iso
 
-CATALOG_VERSION = "xbehav-v1-20260716"
-CATALOG_SOURCE = "xbehav assessment export 2026-07-16"
+CATALOG_VERSION = "cageledger-v3-20260806"
+CATALOG_SOURCE = "CageLedger 内部维护 2026-08-06（清理合并 + 表单展示配置化）"
 
 
 def load_catalog(path: Path = ANIMAL_INSPECTION_CATALOG_PATH):
@@ -26,6 +26,10 @@ def ensure_catalog_rows(conn):
     conn.execute(
         "INSERT INTO inspection_catalog_versions (version, source, status, imported_at, payload) VALUES (?, ?, 'active', ?, ?)",
         (CATALOG_VERSION, CATALOG_SOURCE, imported_at, json.dumps({"modules": catalog["modules"]}, ensure_ascii=False)),
+    )
+    conn.execute(
+        "UPDATE inspection_catalog_versions SET status = 'history' WHERE status = 'active' AND version != ?",
+        (CATALOG_VERSION,),
     )
     module_by_id = {str(item.get("id")): clean_text(item.get("code")) for item in catalog["modules"]}
     for node in catalog["nodes"]:
@@ -57,16 +61,9 @@ def ensure_catalog_rows(conn):
 
 def catalog_payload(conn):
     ensure_catalog_rows(conn)
-    version = conn.execute(
-        "SELECT version, source, status, imported_at FROM inspection_catalog_versions WHERE status = 'active' ORDER BY imported_at DESC LIMIT 1"
-    ).fetchone()
+    version = active_version(conn)
     if not version:
         raise RuntimeError("巡检标准目录未初始化")
-    rows = conn.execute(
-        """SELECT code, module_code, parent_id, node_type, input_type, name, sort_order, config_json, payload
-           FROM inspection_catalog_nodes WHERE version = ? ORDER BY module_code, sort_order, code""",
-        (version["version"],),
-    ).fetchall()
     version_payload = conn.execute(
         "SELECT payload FROM inspection_catalog_versions WHERE version = ?", (version["version"],)
     ).fetchone()
@@ -74,18 +71,33 @@ def catalog_payload(conn):
     return {
         "version": dict(version),
         "modules": modules,
-        "nodes": [
-            {
-                **json.loads(row["payload"]),
-                "code": row["code"],
-                "moduleCode": row["module_code"],
-                "parentId": row["parent_id"],
-                "nodeType": row["node_type"],
-                "inputType": row["input_type"],
-                "name": row["name"],
-                "sortOrder": row["sort_order"],
-                "config": json.loads(row["config_json"]),
-            }
-            for row in rows
-        ],
+        "nodes": version_nodes(conn, version["version"]),
     }
+
+
+def active_version(conn):
+    return conn.execute(
+        "SELECT version, source, status, imported_at FROM inspection_catalog_versions WHERE status = 'active' ORDER BY imported_at DESC LIMIT 1"
+    ).fetchone()
+
+
+def version_nodes(conn, version):
+    rows = conn.execute(
+        """SELECT code, module_code, parent_id, node_type, input_type, name, sort_order, config_json, payload
+           FROM inspection_catalog_nodes WHERE version = ? ORDER BY module_code, sort_order, code""",
+        (version,),
+    ).fetchall()
+    return [
+        {
+            **json.loads(row["payload"]),
+            "code": row["code"],
+            "moduleCode": row["module_code"],
+            "parentId": row["parent_id"],
+            "nodeType": row["node_type"],
+            "inputType": row["input_type"],
+            "name": row["name"],
+            "sortOrder": row["sort_order"],
+            "config": json.loads(row["config_json"]),
+        }
+        for row in rows
+    ]

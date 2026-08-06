@@ -34,7 +34,8 @@ import {
 } from "../../api/animalManagement";
 import { PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
-import { DataTable, MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
+import { DataTable } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspectionId } from "./model";

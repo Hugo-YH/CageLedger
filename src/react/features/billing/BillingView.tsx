@@ -4,7 +4,7 @@ import { Card, Segmented, Typography } from "antd";
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
-import { MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { SettlementCandidateList } from "./components/SettlementCandidateList";
 import { MonthlyBillingSummary } from "./components/MonthlyBillingSummary";

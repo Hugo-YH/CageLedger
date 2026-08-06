@@ -8,6 +8,9 @@ PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DB_PATH.parent / "p
 ANIMAL_INSPECTION_ATTACHMENTS_PATH = Path(
     os.environ.get("CAGELEDGER_ANIMAL_INSPECTION_ATTACHMENTS", DB_PATH.parent / "animal-inspection-attachments")
 )
+ANIMAL_INSPECTION_IMAGES_PATH = Path(
+    os.environ.get("CAGELEDGER_ANIMAL_INSPECTION_IMAGES", DB_PATH.parent / "animal-inspection-images")
+)
 REIMBURSEMENT_ATTACHMENTS_PATH = Path(
     os.environ.get("CAGELEDGER_REIMBURSEMENT_ATTACHMENTS", DB_PATH.parent / "reimbursement-attachments")
 )

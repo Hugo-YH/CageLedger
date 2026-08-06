@@ -106,12 +106,12 @@
 
 .slot:hover,
 .slot.selected {
-  outline: 3px solid rgb(9 88 217 / 18%);
+  outline: 3px solid color-mix(in srgb, var(--primary) 18%, transparent);
   border-color: var(--primary);
 }
 
 .slot.selected {
-  box-shadow: 0 10px 20px rgb(9 88 217 / 16%);
+  box-shadow: var(--shadow-soft);
   transform: translateY(-1px);
 }
 

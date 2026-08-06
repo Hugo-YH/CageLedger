@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
 import { requestJson } from "../../../api/client";
-import { useIacucIndex } from "../../../api/iacuc";
+import { useIacucExpiry } from "../../../api/iacuc";
 import {
   useDeleteQuantitySheet,
   listAllQuantitySheets,
@@ -37,13 +37,13 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     columnFilters: filters,
   };
   const list = useQuantitySheets(params);
-  const iacucIndex = useIacucIndex();
+  const iacucExpiry = useIacucExpiry();
   const detail = useQuantitySheetDetail(viewId || editId);
   const remove = useDeleteQuantitySheet();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const iacucExpiryByCode = new Map(
-    (iacucIndex.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
+    (iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
   );
   const toggleAllFiltered = async () => {
     if (allFilteredSelected) {

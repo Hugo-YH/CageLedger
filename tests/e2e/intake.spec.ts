@@ -126,11 +126,17 @@ test("marking a saved batch as printed keeps its server version", async ({ page 
     },
   });
   await ensureTestInfrastructure(page);
-  const intakeGroup = page
-    .getByRole("button", { name: "笼卡管理", exact: true })
-    .or(page.locator(".ant-main-menu").getByRole("menuitem", { name: /笼卡管理/ }).first());
+  const intakeGroup = page.getByRole("button", { name: "笼卡管理", exact: true }).or(
+    page
+      .locator(".ant-main-menu")
+      .getByRole("menuitem", { name: /笼卡管理/ })
+      .first(),
+  );
   await intakeGroup.click();
-  await page.locator(".ant-main-menu").getByRole("menuitem", { name: /待接收批次/ }).click();
+  await page
+    .locator(".ant-main-menu")
+    .getByRole("menuitem", { name: /待接收批次/ })
+    .click();
   await expect(page.getByRole("region", { name: "待接收批次列表" })).toBeVisible();
 
   const row = page.locator("tr", { hasText: batchNo }).first();

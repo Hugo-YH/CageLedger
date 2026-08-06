@@ -116,11 +116,16 @@
   --shadow-soft: 0 10px 28px rgb(19 42 44 / 7%);
   --shadow-lift: 0 18px 38px rgb(18 45 48 / 12%);
   --shadow-pop: 0 18px 42px rgb(9 31 38 / 16%);
+  --shadow-fade-right: -12px 0 18px rgb(20 34 38 / 8%);
+  --shadow-fade-left: 12px 0 18px rgb(20 34 38 / 8%);
+  --shadow-edge-light: -8px 0 12px rgb(248 251 251 / 94%);
   --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 82%);
   --focus-ring: 0 0 0 3px rgb(22 119 255 / 18%);
   --focus-ring-danger: 0 0 0 3px rgb(180 35 24 / 14%);
   --focus-ring-warning: 0 0 0 3px rgb(168 100 8 / 16%);
   --focus-ring-info: 0 0 0 3px rgb(54 90 102 / 16%);
+  --scrollbar-thumb: color-mix(in srgb, var(--primary) 34%, transparent);
+  --scrollbar-track: color-mix(in srgb, var(--surface-strong) 72%, transparent);
   --radius-xl: 16px;
   --radius-lg: 8px;
   --radius-md: 8px;
@@ -175,6 +180,8 @@
   --primary-dark: #91caff;
   --primary-ink: #e6f4ff;
   --primary-soft: #111d2c;
+  --scrollbar-thumb: color-mix(in srgb, var(--success-line) 65%, transparent);
+  --scrollbar-track: color-mix(in srgb, var(--surface-strong) 88%, transparent);
   --button-primary: #1668dc;
   --button-primary-hover: #4096ff;
   --button-primary-soft: #111d2c;
@@ -210,7 +217,7 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(9 88 217 / 32%) rgb(232 241 240 / 72%);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 *::-webkit-scrollbar {
@@ -219,27 +226,27 @@
 }
 
 *::-webkit-scrollbar-track {
-  background: rgb(232 241 240 / 72%);
+  background: var(--scrollbar-track);
   border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid rgb(232 241 240 / 72%);
+  border: 2px solid var(--scrollbar-track);
   border-radius: 999px;
-  background: rgb(9 88 217 / 34%);
+  background: var(--scrollbar-thumb);
 }
 
 :root[data-theme="dark"] * {
-  scrollbar-color: rgb(89 184 170 / 48%) rgb(27 41 38 / 88%);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 :root[data-theme="dark"] *::-webkit-scrollbar-track {
-  background: rgb(27 41 38 / 88%);
+  background: var(--scrollbar-track);
 }
 
 :root[data-theme="dark"] *::-webkit-scrollbar-thumb {
-  border-color: rgb(27 41 38 / 88%);
-  background: rgb(89 184 170 / 48%);
+  border-color: var(--scrollbar-track);
+  background: var(--scrollbar-thumb);
 }
 
 /* Control sizing and surface aliases (migrated from apple-ux.css). */

@@ -76,8 +76,18 @@ for (const file of cssFiles) {
     if (details.status === "complete") violations.push(message);
     else warnings.push(message);
   }
+  // 硬编码色检测同时覆盖 hex 与现代 rgb()/rgba() 写法；白 alpha 覆盖层
+  // （rgb(255 255 255 / N%)）是设计语言内的半透明叠加，不作为表面色违规。
+  const colorValue = /(?:#[0-9a-fA-F]{3,8}\b|rgba?\(\s*(?!255 255 255\s*\/)[0-9 ,./%]+\))/;
+  const colorProperty = /(?<![\w-])(?:color|background(?:-color)?|border(?:-color)?)\s*:/;
   const hardcodedColors = [
-    ...contents.matchAll(/(?:color|background(?:-color)?|border(?:-color)?)\s*:\s*#[0-9a-fA-F]{3,8}\b/g),
+    ...contents.matchAll(new RegExp(`${colorProperty.source}\\s*${colorValue.source}`, "g")),
+    ...contents.matchAll(
+      new RegExp(
+        `(?<![\\w-])border\\s*:\\s*[^;]*?(?:#[0-9a-fA-F]{3,8}\\b|rgba?\\(\\s*(?!255 255 255\\s*\\/)[0-9 ,./%]+\\))`,
+        "g",
+      ),
+    ),
   ].length;
   if (hardcodedColors && details.status !== "compatibility" && relative !== "src/styles/brand-tokens.css") {
     warnings.push(`${relative}: ${hardcodedColors} hard-coded color declaration(s) remain for token migration`);

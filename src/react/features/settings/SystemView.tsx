@@ -4,7 +4,7 @@ import { Alert, Button, Card, Descriptions, Divider, Flex, Segmented, Skeleton, 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemEnvironment, useSystemInfo, useSystemUpdate } from "../../api/administration";
 import { PageState } from "../../components/WorkspaceUi";
-import { MobilePage } from "../../components/ui";
+import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 

@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./react/App";
 import { queryClient } from "./react/api/queryClient";
 import { TaskFeedbackProvider } from "./react/components/TaskFeedback";
-import { AntdProvider } from "./react/components/ui";
+import { AntdProvider } from "./react/components/ui/AntdProvider";
 import { UiProvider } from "./react/state/ui";
 import "./styles.css";
 

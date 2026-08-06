@@ -1,0 +1,4 @@
+interface:
+  display_name: "巡检标准在线编辑器"
+  short_description: "巡检目录草稿/发布/校验/图片维护的规范开发子技能"
+  default_prompt: "按任务分解与 S.U.P.E.R 规范实现巡检标准在线编辑器的后端接口与前端编辑模式"

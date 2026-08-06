@@ -10,6 +10,11 @@ export interface IacucIndexItem {
   projectEndDate?: string;
 }
 
+export interface IacucExpiryItem {
+  iacuc: string;
+  projectEndDate?: string;
+}
+
 export type ManagedUser = SessionUser;
 
 export interface PrincipalIdentity {
