@@ -14,6 +14,7 @@ import {
 const MODULE_ANNOTATIONS: Partial<Record<InspectionModuleCode, string>> = {
   basicAssessment: "设施与福利",
   advancedAssessment: "操作与伦理",
+  abnormalAnimalAssessment: "体况与外观",
 };
 
 export function InspectionModuleForm({
@@ -121,6 +122,14 @@ function InspectionRegionSection({
                   {stateLabel}
                 </Tag>
                 <span className="inspection-section-count">{region.itemCount} 项</span>
+                <Button
+                  className="inspection-all-normal"
+                  size="small"
+                  type="link"
+                  onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
+                >
+                  全部正常
+                </Button>
               </span>
             ),
             children: region.groups.map((group) => (
