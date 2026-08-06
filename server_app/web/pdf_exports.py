@@ -1,4 +1,6 @@
+import hashlib
 from http import HTTPStatus
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from server_app.pdf import (
@@ -33,15 +35,42 @@ def pdf_export_job_route(path):
     return value, False
 
 
-PDF_RENDER_VERSION = "2026-08-04-settlement-summary-amount"
+PDF_RENDER_VERSION = "2026-08-06-settlement-layout-and-notes"
+
+
+def _render_code_fingerprint() -> str:
+    """Hash the PDF rendering pipeline sources so cache keys change whenever
+    rendering code changes, instead of relying on a manually bumped version."""
+    root = Path(__file__).resolve().parent.parent
+    sources = [
+        Path(__file__).resolve(),
+        root / "pdf" / "documents.py",
+        root / "pdf" / "renderer.py",
+        root / "pdf" / "cache.py",
+        root / "domains" / "billing" / "statements.py",
+        root / "domains" / "billing" / "allowance.py",
+        root / "domains" / "billing" / "charging.py",
+        root / "domains" / "billing" / "monthly_summary.py",
+    ]
+    digest = hashlib.sha256()
+    for path in sources:
+        digest.update(path.name.encode("utf-8"))
+        try:
+            digest.update(path.read_bytes())
+        except OSError:
+            pass
+    return digest.hexdigest()[:12]
+
+
+PDF_RENDER_CODE_FINGERPRINT = _render_code_fingerprint()
 
 
 def quantity_pdf_cache_key(sheet):
-    return f"quantity-sheet:{PDF_RENDER_VERSION}:{sheet.get('id', '')}"
+    return f"quantity-sheet:{PDF_RENDER_VERSION}:{PDF_RENDER_CODE_FINGERPRINT}:{sheet.get('id', '')}"
 
 
 def billing_pdf_cache_key(month, pi, source_type="quantity_sheet"):
-    return f"billing-statement:{PDF_RENDER_VERSION}:{source_type}:{month}:{pi}"
+    return f"billing-statement:{PDF_RENDER_VERSION}:{PDF_RENDER_CODE_FINGERPRINT}:{source_type}:{month}:{pi}"
 
 
 def invalidate_pdf_cache_for_sheets(sheets):

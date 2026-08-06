@@ -204,11 +204,9 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
       const leadingHeaderMarkup = page.showLeadingTotals ? `<th colspan="${GROUP_GRID_UNITS}">汇总</th>` : "";
       const leadingSubHeaderMarkup = page.showLeadingTotals
         ? renderGroupHeaders(
-            unit === "animal_day" ? "总数量" : unit === "mixed" ? "总量" : "总笼数",
+            unit === "animal_day" ? "数量" : unit === "mixed" ? "数量" : "笼数",
             pageHasFree,
             pageHasTier,
-            unit === "animal_day" ? "减免总数量" : unit === "mixed" ? "减免总量" : "减免总笼数",
-            unit === "animal_day" ? "阶梯总数量" : unit === "mixed" ? "阶梯总量" : "阶梯总笼数",
           )
         : "";
       const leadingTotalsRowMarkup = page.showLeadingTotals
@@ -404,7 +402,21 @@ function renderGroupedValueCells(cells: Array<{ className: string; value: string
 function splitGroupUnits(parts: number) {
   const base = Math.floor(GROUP_GRID_UNITS / parts);
   const remainder = GROUP_GRID_UNITS % parts;
-  return Array.from({ length: parts }, (_, index) => base + (index < remainder ? 1 : 0));
+  const units = Array.from({ length: parts }, (_, index) => base + (index < remainder ? 1 : 0));
+  // The last cell is the payable amount; give it one extra grid unit so large
+  // totals like 60922.00 do not overflow the column. Take the extra width from
+  // a middle column so the leading count column keeps enough room for large
+  // totals like 11328.
+  if (parts >= 3 && units[units.length - 1] < GROUP_GRID_UNITS - parts + 1) {
+    units[units.length - 1] += 1;
+    for (let index = 1; index < units.length - 1; index += 1) {
+      if (units[index] > 1) {
+        units[index] -= 1;
+        break;
+      }
+    }
+  }
+  return units;
 }
 
 function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit: string) {
