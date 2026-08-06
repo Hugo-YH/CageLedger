@@ -2,8 +2,11 @@ import { execFileSync } from "node:child_process";
 import { relative, resolve } from "node:path";
 import { defineConfig } from "vitepress";
 
+import { emitLlms } from "./emit-llms.mjs";
+import { pageRoutes } from "./page-routes.mjs";
+
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const documentationEditBranch = process.env.CAGELEDGER_DOCS_EDIT_BRANCH ?? "main";
+const documentationEditBranch = process.env.CAGELEDGER_DOCS_EDIT_BRANCH ?? "beta";
 const documentationRepository = "https://git.cellnucle.us/hugo/cageledger";
 
 function contributorsFor(filePath: string): string[] {
@@ -31,39 +34,6 @@ function contributorsFor(filePath: string): string[] {
   }
 }
 
-const pageRoutes = {
-  "Home.md": "index.md",
-  "产品概览.md": "guide/overview.md",
-  "快速开始.md": "guide/getting-started.md",
-  "业务流程.md": "guide/business-flow.md",
-  "工作台导航.md": "guide/navigation.md",
-  "用户操作手册.md": "guide/user-manual.md",
-  "笼卡管理.md": "guide/cage-cards.md",
-  "笼位与房间管理.md": "guide/rooms-and-cages.md",
-  "动物巡检.md": "guide/animal-inspection.md",
-  "数量统计表.md": "guide/quantity-sheets.md",
-  "饲养费核算.md": "guide/billing.md",
-  "结算与报销.md": "guide/settlement-and-reimbursement.md",
-  "常见问题.md": "guide/faq.md",
-  "部署与运行.md": "operations/deployment.md",
-  "系统配置.md": "operations/configuration.md",
-  "环境变量.md": "operations/environment.md",
-  "账号与权限.md": "operations/accounts-and-permissions.md",
-  "数据管理与IACUC索引.md": "operations/data-and-iacuc.md",
-  "备份与维护.md": "operations/backup-and-maintenance.md",
-  "故障排查.md": "operations/troubleshooting.md",
-  "本地开发.md": "development/local-development.md",
-  "项目结构.md": "development/project-structure.md",
-  "前端架构.md": "development/frontend-architecture.md",
-  "后端架构.md": "development/backend-architecture.md",
-  "API与数据模型.md": "development/api-and-data-model.md",
-  "UI组件标准.md": "development/ui-component-standard.md",
-  "测试与质量.md": "development/testing-and-quality.md",
-  "开发规范.md": "development/contributing.md",
-  "发布与CI-CD.md": "development/release-and-delivery.md",
-  "更新日志.md": "releases/index.md",
-} as const;
-
 const wikiLinkTargets = Object.fromEntries(
   Object.entries(pageRoutes).map(([source, route]) => [source.replace(/\.md$/, ""), `/${route.replace(/\.md$/, "")}`]),
 );
@@ -74,6 +44,7 @@ export default defineConfig({
   description: "实验动物笼位管理与计费系统文档",
   base: "/docs/",
   cleanUrls: true,
+  buildEnd: emitLlms().buildEnd,
   lastUpdated: process.env.CAGELEDGER_DOCS_LAST_UPDATED !== "false",
   transformPageData(pageData) {
     return {
