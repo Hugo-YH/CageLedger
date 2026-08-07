@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
-import { Button, DatePicker, Input, InputNumber, Select, Switch, Tag } from "antd";
+import { Button, DatePicker, Input, InputNumber, Popover, Select, Space, Switch, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
-import { useIacucSearch } from "../../api/iacuc";
-import { useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
+import { fetchIacucSearch, useIacucSearch } from "../../api/iacuc";
+import { useQuantitySheetPiHistory, useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
+import { queryKeys } from "../../api/queryKeys";
 import { Tooltip } from "../../components/Tooltip";
 import { ActionButton } from "../../components/ui";
 import { AsyncActionButton, ModalShell } from "../../components/WorkspaceUi";
@@ -40,6 +43,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const [editingDialog, setEditingDialog] = useState(false);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
+  const lastFilledIacuc = useRef("");
+  const queryClient = useQueryClient();
   const selectedRoom = rooms.find((room) => room.id === draft.roomId);
   const unit = roomBillingUnit(selectedRoom);
   const billingProfile = roomBillingProfile(selectedRoom);
@@ -52,7 +57,53 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     supportsFreeCages && (Number(draft.preferredFreeCages || 0) > 0 || draft.freeCagePriority !== null);
   const tierPriorityEnabled = supportsTierPriority && draft.tierCagePriority !== null;
   const iacucOptions = useMemo(() => iacucQuery.data?.items || [], [iacucQuery.data?.items]);
+  const iacucMatch = useMemo(
+    () => iacucOptions.find((item) => item.iacuc.trim().toUpperCase() === draft.iacuc.trim().toUpperCase()),
+    [iacucOptions, draft.iacuc],
+  );
+  const piHistory = useQuantitySheetPiHistory(
+    iacucMatch?.iacuc || "",
+    draft.month,
+    mode === "entry" && Boolean(iacucMatch),
+  );
+  const previousPi = piHistory.data?.item?.pi || "";
+  const piHint =
+    mode === "entry" &&
+    Boolean(draft.iacuc.trim()) &&
+    Boolean(iacucMatch?.pi) &&
+    Boolean(previousPi) &&
+    draft.pi.trim() === iacucMatch?.pi.trim() &&
+    previousPi.trim() !== iacucMatch?.pi.trim();
   const save = useSaveQuantitySheet();
+
+  function exactIacucMatch(value: string) {
+    const normalized = value.trim().toUpperCase();
+    return iacucQuery.data?.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
+  }
+
+  const fillFromIacuc = useCallback(
+    (match: { iacuc: string; project?: string; pi?: string; owner?: string; funding?: string }) => {
+      lastFilledIacuc.current = match.iacuc;
+      setDraft((current) => ({
+        ...current,
+        iacuc: match.iacuc,
+        project: match.project || current.project,
+        pi: match.pi || current.pi,
+        owner: match.owner || current.owner,
+        funding: match.funding || current.funding,
+      }));
+    },
+    [],
+  );
+
+  // Auto-fill as soon as the typed IACUC resolves to a known code, without
+  // waiting for the field to lose focus (covers datalist selection and paste).
+  useEffect(() => {
+    const normalized = draft.iacuc.trim().toUpperCase();
+    if (!normalized) return;
+    const exact = iacucQuery.data?.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
+    if (exact && lastFilledIacuc.current !== exact.iacuc) fillFromIacuc(exact);
+  }, [iacucQuery.data, draft.iacuc, fillFromIacuc]);
 
   const recalculate = useCallback(() => {
     let animals = 0;
@@ -157,17 +208,24 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     }));
   }
 
-  function applyIacuc(value: string) {
+  async function applyIacuc(value: string) {
     const normalized = value.trim().toUpperCase();
-    const match = iacucQuery.data?.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
-    setDraft((current) => ({
-      ...current,
-      iacuc: match?.iacuc || normalized,
-      project: match?.project || current.project,
-      pi: match?.pi || current.pi,
-      owner: match?.owner || current.owner,
-      funding: match?.funding || current.funding,
-    }));
+    const match = exactIacucMatch(normalized);
+    if (match) {
+      fillFromIacuc(match);
+      return;
+    }
+    if (!normalized) return;
+    // The debounced search may not have resolved before blur; fetch the exact code now.
+    const result = await queryClient.ensureQueryData({
+      queryKey: queryKeys.iacucSearch(normalized, 20),
+      queryFn: () => fetchIacucSearch(normalized, 20),
+      staleTime: 5 * 60_000,
+    });
+    const exact = result.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
+    if (exact) {
+      fillFromIacuc(exact);
+    }
   }
 
   function collectSheet() {
@@ -371,7 +429,14 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                   list="quantity-iacuc-options"
                   value={draft.iacuc}
                   required
-                  onChange={(event) => setField("iacuc", event.target.value.toUpperCase())}
+                  onChange={(event) => {
+                    const value = event.target.value.toUpperCase();
+                    setField("iacuc", value);
+                    if (!value.trim()) {
+                      lastFilledIacuc.current = "";
+                      setDraft((current) => ({ ...current, project: "", pi: "", owner: "", funding: "" }));
+                    }
+                  }}
                   onBlur={(event) => applyIacuc(event.target.value)}
                 />
                 <datalist id="quantity-iacuc-options">
@@ -392,7 +457,36 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                 value={draft.funding}
                 onChange={(value) => setField("funding", value)}
               />
-              <AutoFilledField label="项目负责人" value={draft.pi} onChange={(value) => setField("pi", value)} />
+              <AutoFilledField
+                label="项目负责人"
+                value={draft.pi}
+                onChange={(value) => setField("pi", value)}
+                hint={
+                  piHint
+                    ? {
+                        title: (
+                          <Space size={6}>
+                            <InfoCircleFilled className="quantity-pi-hint-icon" />
+                            <span>项目负责人与 IACUC 登记不一致</span>
+                          </Space>
+                        ),
+                        content: (
+                          <div className="quantity-pi-history-hint">
+                            <Typography.Paragraph type="secondary" className="quantity-pi-hint-text">
+                              {piHistory.data?.item?.month} 该伦理号最近一次按「{previousPi}」结算，与 IACUC 登记的「
+                              {iacucMatch?.pi}」不一致，请确认后修改。
+                            </Typography.Paragraph>
+                            <div className="quantity-pi-hint-actions">
+                              <Button size="small" type="primary" onClick={() => setField("pi", previousPi)}>
+                                带入「{previousPi}」
+                              </Button>
+                            </div>
+                          </div>
+                        ),
+                      }
+                    : undefined
+                }
+              />
               <AutoFilledField label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
             </div>
           </div>
@@ -640,11 +734,14 @@ function AutoFilledField({
   label,
   value,
   onChange,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  hint?: { title?: ReactNode; content: ReactNode };
 }) {
+  const input = <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />;
   return (
     <label className="quantity-ant-field quantity-auto-field">
       <span>
@@ -653,7 +750,13 @@ function AutoFilledField({
           自动带入
         </Tag>
       </span>
-      <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
+      {hint ? (
+        <Popover placement="top" open title={hint.title} content={hint.content}>
+          {input}
+        </Popover>
+      ) : (
+        input
+      )}
     </label>
   );
 }

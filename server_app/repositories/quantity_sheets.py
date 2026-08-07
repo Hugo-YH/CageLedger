@@ -17,6 +17,22 @@ def list_quantity_sheets(conn):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def find_latest_quantity_sheet_pi(conn, iacuc, before_month):
+    row = conn.execute(
+        """
+        SELECT month, pi
+        FROM quantity_sheets
+        WHERE iacuc = ? AND month < ?
+        ORDER BY month DESC, updated_at DESC, rowid DESC
+        LIMIT 1
+        """,
+        (iacuc, before_month),
+    ).fetchone()
+    if not row:
+        return None
+    return {"month": row["month"], "pi": row["pi"]}
+
+
 def list_quantity_sheets_by_month(conn, month):
     rows = conn.execute(
         """

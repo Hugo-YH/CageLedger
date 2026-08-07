@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Checkbox, Empty, Modal, Space, Tooltip, Typography, type TableProps } from "antd";
+import { Alert, Button, Checkbox, Empty, Modal, Space, Tooltip, Typography, type TableProps } from "antd";
 import { Pager } from "../../../components/WorkspaceUi";
 import { DownloadOutlined, EyeOutlined, PlayCircleOutlined, PrinterOutlined } from "@ant-design/icons";
 import { useState } from "react";
@@ -264,85 +264,80 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
 
   if (source === "cage_map") {
     return (
-      <Card className="settlement-candidate-card settlement-candidate-empty">
-        <Empty
-          description={
-            <Space orientation="vertical" size={4}>
-              <Typography.Text strong>动态笼位图结算正在调试</Typography.Text>
-              <Typography.Text type="secondary">
-                请切换到“数量统计表（录入）”查看项目负责人结算候选列表。
-              </Typography.Text>
-            </Space>
-          }
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </Card>
+      <Empty
+        className="settlement-candidate-empty"
+        description={
+          <Space orientation="vertical" size={4}>
+            <Typography.Text strong>动态笼位图结算正在调试</Typography.Text>
+            <Typography.Text type="secondary">请切换到“数量统计表（录入）”查看项目负责人结算候选列表。</Typography.Text>
+          </Space>
+        }
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+      />
     );
   }
 
   return (
     <>
-      <Card className="settlement-candidate-card">
-        {notice || pdfExport.isExporting ? (
-          <Alert
-            title={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
-            role="status"
-            showIcon
-            type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
-          />
-        ) : null}
-        <div className="settlement-action-bar" aria-label="结算批量操作">
-          <Typography.Text type={selectedCandidates.length ? undefined : "secondary"}>
-            {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
-          </Typography.Text>
-          <Space wrap>
-            <Button
-              icon={<DownloadOutlined aria-hidden />}
-              loading={pdfExport.isExporting}
-              disabled={!selectedCandidates.length || selectingAll}
-              onClick={() => void exportCandidates(selectedCandidates)}
-            >
-              {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
-            </Button>
-            <Button
-              icon={<PlayCircleOutlined aria-hidden />}
-              loading={batchStarting}
-              type="primary"
-              disabled={!selectedCandidates.length || selectingAll}
-              onClick={() => setBatchConfirmOpen(true)}
-            >
-              {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
-            </Button>
-          </Space>
-        </div>
-        <div
-          className="ant-table-region settlement-candidate-list"
-          role="region"
-          tabIndex={0}
-          aria-label="项目负责人结算列表"
-        >
-          <DataTable
-            columns={columns}
-            dataSource={items}
-            loading={list.isPending}
-            pagination={false}
-            resizeKey="settlement-candidates"
-            rowKey="id"
-          />
-        </div>
-        <Pager
-          itemLabel="项"
-          onPage={setPage}
-          onPageSize={(nextSize) => {
-            setPageSize(nextSize);
-            setPage(1);
-          }}
-          page={page}
-          pageSize={pageSize}
-          pages={pages}
-          total={total}
+      {notice || pdfExport.isExporting ? (
+        <Alert
+          title={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+          role="status"
+          showIcon
+          type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
         />
-      </Card>
+      ) : null}
+      <div className="settlement-action-bar" aria-label="结算批量操作">
+        <Typography.Text type={selectedCandidates.length ? undefined : "secondary"}>
+          {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
+        </Typography.Text>
+        <Space wrap>
+          <Button
+            icon={<DownloadOutlined aria-hidden />}
+            loading={pdfExport.isExporting}
+            disabled={!selectedCandidates.length || selectingAll}
+            onClick={() => void exportCandidates(selectedCandidates)}
+          >
+            {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
+          </Button>
+          <Button
+            icon={<PlayCircleOutlined aria-hidden />}
+            loading={batchStarting}
+            type="primary"
+            disabled={!selectedCandidates.length || selectingAll}
+            onClick={() => setBatchConfirmOpen(true)}
+          >
+            {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
+          </Button>
+        </Space>
+      </div>
+      <div
+        className="ant-table-region settlement-candidate-list"
+        role="region"
+        tabIndex={0}
+        aria-label="项目负责人结算列表"
+      >
+        <DataTable
+          columns={columns}
+          dataSource={items}
+          loading={list.isPending}
+          pagination={false}
+          resizeKey="settlement-candidates"
+          rowKey="id"
+        />
+      </div>
+      <Pager
+        itemLabel="项"
+        onPage={setPage}
+        onPageSize={(nextSize) => {
+          setPageSize(nextSize);
+          setPage(1);
+        }}
+        page={page}
+        pageSize={pageSize}
+        pages={pages}
+        total={total}
+      />
       <Modal
         cancelButtonProps={{ disabled: batchStarting }}
         cancelText="取消"

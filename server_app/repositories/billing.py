@@ -33,6 +33,7 @@ from .billing_workflows import (
 )
 from .quantity_sheets import (
     delete_quantity_sheet_by_id,
+    find_latest_quantity_sheet_pi,
     get_quantity_sheet,
     insert_quantity_sheet,
     list_quantity_sheet_filter_options,
@@ -62,6 +63,7 @@ __all__ = [
     "billing_workflow_version_row",
     "delete_billing_workflow_tree",
     "delete_quantity_sheet_by_id",
+    "find_latest_quantity_sheet_pi",
     "get_billing_version",
     "get_billing_workflow",
     "get_billing_workflow_by_key",

@@ -1383,16 +1383,6 @@ th {
   min-width: 0;
 }
 
-[data-feature="billing"] .settlement-page-title {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 16px;
-}
-
-[data-feature="billing"] .settlement-page-description {
-  margin: 0 !important;
-}
-
 [data-feature="billing"] .settlement-candidate-card .ant-card-body,
 [data-feature="billing"] .reimbursement-ledger-panel .ant-card-body {
   display: grid;
@@ -1602,4 +1592,25 @@ th {
 .reconciliation-picker {
   border-radius: 8px;
   box-shadow: var(--shadow-inset);
+}
+
+[data-feature="billing"] .quantity-pi-history-hint {
+  display: grid;
+  gap: 8px;
+  max-width: 340px;
+}
+
+[data-feature="billing"] .quantity-pi-hint-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+[data-feature="billing"] .quantity-pi-hint-icon {
+  color: var(--primary);
+}
+
+[data-feature="billing"] .quantity-pi-hint-actions {
+  display: flex;
+  justify-content: flex-end;
 }
