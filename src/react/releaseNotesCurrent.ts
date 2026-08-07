@@ -2,6 +2,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const CURRENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.6",
+    releasedAt: "2026-08-07 11:50",
+    title: "结算单明细行归零与列宽分配优化",
+    items: [
+      "结算单明细行对「取材/转出当日」显示 0（数量 0、金额 0.00），当日之后无记录留空，方便核对饲养费截止日",
+      "有减免或梯度列的伦理，未分配到减免/梯度的日期也显示 0 而不是空，便于对账",
+      "伦理列宽度默认按子列均分（四等分/三等分/二等分），同名字段在各列宽度一致；金额较大的列自动加宽金额列，避免大额数字溢出",
+    ],
+  },
+  {
     version: "0.8.5",
     releasedAt: "2026-08-06 18:00",
     title: "减免分配、说明时态与结算单 PDF 版式修复",
