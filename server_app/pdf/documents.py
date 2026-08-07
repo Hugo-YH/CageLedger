@@ -170,6 +170,7 @@ def billing_statement_html(statement, lines):
         summary = summaries[column["key"]]
         column["showFree"] = summary["free"] > 0
         column["showTiered"] = summary["tier"] > 0
+        column["needsWideAmount"] = as_number(summary["amount"]) >= 100
     pages = settlement_pages(columns)
     total_count = display_total_count(statement, unit, summaries.values())
     total_free = as_number(statement.get("totalFreeCageDays"))
@@ -259,6 +260,7 @@ def statement_row(line, columns, unit):
         current["support"] += as_number(item.get("supportAmount"))
         current["amount"] += as_number(item.get("payableAmount", item.get("amount")))
         current["tier"] += as_number(item.get("tier2BillableCages"))
+        current["hasRecord"] = True
     return {
         "date": str(line.get("date") or ""),
         "totalCount": display_line_count(line, unit, values.values()),
@@ -306,12 +308,17 @@ def settlement_page_markup(
         for slot in slots
     )
     leading_header = f'<th colspan="{GROUP_UNITS}">汇总</th>' if page["leading"] else ""
-    leading_sub = group_headers(unit_label(unit, total=False), page_has_free, page_has_tier) if page["leading"] else ""
+    leading_sub = (
+        group_headers(unit_label(unit, total=False), page_has_free, page_has_tier, total_payable >= 100)
+        if page["leading"]
+        else ""
+    )
     sub_headers = "".join(
         group_headers(
             "" if not slot else ("数量" if slot["unit"] == "animal_day" else "笼数"),
             slot["showFree"] if slot else False,
             slot["showTiered"] if slot else False,
+            slot["needsWideAmount"] if slot else False,
         )
         for slot in slots
     )
@@ -328,19 +335,26 @@ def settlement_page_markup(
                 page_has_free,
                 page_has_tier,
                 True,
+                total_payable >= 100,
             )
             if page["leading"]
             else ""
         )
         values = "".join(
-            group_cells(row["values"].get(slot["key"], empty_summary()), slot["showFree"], slot["showTiered"], True)
+            group_cells(
+                row["values"].get(slot["key"], empty_summary()),
+                slot["showFree"],
+                slot["showTiered"],
+                True,
+                slot["needsWideAmount"],
+            )
             if slot
             else f'<td colspan="{GROUP_UNITS}" class="group-empty-cell"></td>'
             for slot in slots
         )
         detail_rows.append(f"<tr><td>{h(row['date'])}</td>{leading_values}{values}</tr>")
     total_values = "".join(
-        group_cells(summaries[slot["key"]], slot["showFree"], slot["showTiered"], True)
+        group_cells(summaries[slot["key"]], slot["showFree"], slot["showTiered"], True, slot["needsWideAmount"])
         if slot
         else f'<td colspan="{GROUP_UNITS}" class="group-empty-cell"></td>'
         for slot in slots
@@ -351,6 +365,7 @@ def settlement_page_markup(
             page_has_free,
             page_has_tier,
             True,
+            total_payable >= 100,
         )
         if page["leading"]
         else ""
@@ -375,7 +390,7 @@ def settlement_page_markup(
 <div class="note-line">说明：{h(statement.get("notes") or "")}</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><div class="page-footer">第 {page_index + 1} / {total_pages} 页</div></main>"""
 
 
-def group_headers(count_label, show_free, show_tier):
+def group_headers(count_label, show_free, show_tier, needs_wide_amount=False):
     labels = (
         [count_label]
         + (["减免"] if show_free else [])
@@ -386,57 +401,67 @@ def group_headers(count_label, show_free, show_tier):
     return (
         "".join(
             f'<th colspan="{span}">{h(label)}</th>'
-            for label, span in zip(labels, split_units(len(labels)), strict=False)
+            for label, span in zip(labels, group_field_spans(show_free, show_tier, needs_wide_amount), strict=False)
         )
         if labels
         else f'<th colspan="{GROUP_UNITS}"></th>'
     )
 
 
-def group_cells(summary, show_free, show_tier, show_amount):
-    cells = [("num", number_text(summary.get("count")))]
+def group_cells(summary, show_free, show_tier, show_amount, needs_wide_amount=False):
+    # 有笼数（含沿用的笼数）或当天有统计记录时，减免/梯度列也显示数值；
+    # 未分配到减免/梯度的日期显示 0 而不是空，便于对账。
+    has_count = as_number(summary.get("count")) > 0 or bool(summary.get("hasRecord"))
+
+    def text_value(key):
+        value = as_number(summary.get(key))
+        if has_count:
+            return str(int(value)) if value.is_integer() else str(value)
+        return number_text(value)
+
+    cells = [("num", text_value("count"))]
     if show_free:
-        cells.append(("num", number_text(summary.get("free"))))
+        cells.append(("num", text_value("free")))
     if show_tier:
-        cells.append(("num", number_text(summary.get("tier"))))
+        cells.append(("num", text_value("tier")))
     if show_amount:
-        has_value = any(as_number(summary.get(key)) > 0 for key in ("count", "free", "tier", "amount"))
+        has_value = has_count or any(as_number(summary.get(key)) > 0 for key in ("count", "free", "tier", "amount"))
         cells.append(("money", f"{as_number(summary.get('amount')):.2f}" if has_value else ""))
     return "".join(
         f'<td colspan="{span}" class="{class_name}{"" if value else " group-empty-cell"}">{value}</td>'
-        for (class_name, value), span in zip(cells, split_units(len(cells)), strict=False)
+        for (class_name, value), span in zip(
+            cells, group_field_spans(show_free, show_tier, needs_wide_amount), strict=False
+        )
     )
 
 
-def split_units(parts):
-    if not parts:
-        return []
+def group_field_spans(show_free, show_tier, needs_wide_amount=False):
+    """伦理列子字段默认均分（四等分/三等分/二等分），保证同名字段在各列宽度一致；
+    当该列金额较大时给金额列多借 1 单位（从减免/梯度列扣），避免大额数字溢出。"""
+    parts = 1 + (1 if show_free else 0) + (1 if show_tier else 0) + 1
     base, remainder = divmod(GROUP_UNITS, parts)
-    units = [base + (1 if index < remainder else 0) for index in range(parts)]
-    # The last cell is the payable amount; give it one extra grid unit so large
-    # totals like 60922.00 do not overflow the column. Take the extra width from
-    # a middle column so the leading count column keeps enough room for large
-    # totals like 11328.
-    if parts >= 3 and units[-1] < GROUP_UNITS - parts + 1:
-        units[-1] += 1
+    spans = [base + (1 if index < remainder else 0) for index in range(parts)]
+    if needs_wide_amount and parts >= 3:
+        spans[-1] += 1
         for index in range(1, parts - 1):
-            if units[index] > 1:
-                units[index] -= 1
+            if spans[index] > 1:
+                spans[index] -= 1
                 break
-    return units
+    return spans
 
 
 def summary_for_column(key, rows):
     result = empty_summary()
     for row in rows:
         value = row["values"].get(key, empty_summary())
-        for field in result:
+        for field in ("count", "free", "tier", "support", "amount"):
             result[field] += as_number(value.get(field))
+        result["hasRecord"] = result["hasRecord"] or bool(value.get("hasRecord"))
     return result
 
 
 def empty_summary():
-    return {"count": 0, "free": 0, "tier": 0, "support": 0, "amount": 0}
+    return {"count": 0, "free": 0, "tier": 0, "support": 0, "amount": 0, "hasRecord": False}
 
 
 def statement_unit(statement, lines):

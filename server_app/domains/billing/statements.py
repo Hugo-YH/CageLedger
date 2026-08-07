@@ -104,7 +104,8 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             animal_count += state["animalCount"]
             cage_count += state["cageCount"]
             available_count = state["animalCount"] if profile["unit"] == "animal_day" else state["cageCount"]
-            if available_count:
+            has_record = bool(state["rowsByDate"].get(line_date))
+            if available_count or has_record:
                 sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
                 application = applications_by_iacuc.get(sheet_iacuc, {})
                 free_eligible = iacuc_free_allowance_eligible(application or sheet, line_date)
@@ -112,7 +113,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                 custom_segments = custom_billing_segments_for_day(sheet, line_date, available_count)
                 custom_count = sum(item["quantity"] for item in custom_segments)
                 standard_count = max(available_count - custom_count, 0)
-                if standard_count:
+                if standard_count or has_record:
                     breakdown.append(
                         quantity_sheet_breakdown_item(
                             sheet,

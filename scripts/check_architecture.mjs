@@ -45,6 +45,10 @@ const baselineHotspots = new Map([
     { ceiling: 477, reason: "existing cage workspace composition" },
   ],
   [
+    "src/react/print/settlement.ts",
+    { ceiling: 640, reason: "settlement print template with grouped column rendering and pagination" },
+  ],
+  [
     "src/react/features/intake/components/IntakePanels.tsx",
     { ceiling: 419, reason: "existing intake workspace composition" },
   ],

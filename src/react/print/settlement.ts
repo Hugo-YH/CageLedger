@@ -55,6 +55,7 @@ type SettlementColumn = {
   showTiered: boolean;
   span: number;
   label: string;
+  needsWideAmount: boolean;
 };
 
 type SettlementPageSlot = { column: SettlementColumn | null; summary: ColumnSummary };
@@ -68,6 +69,7 @@ type ColumnSummary = {
   support: number;
   amount: number;
   tier2Billable: number;
+  hasRecord: boolean;
 };
 
 type SettlementRow = {
@@ -95,6 +97,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
       showFree: summary.free > 0,
       showTiered: summary.tier2Billable > 0,
       span: 2 + (summary.free > 0 ? 1 : 0) + (summary.tier2Billable > 0 ? 1 : 0),
+      needsWideAmount: summary.amount >= 100,
     };
   });
   const pagedColumns = paginateColumns(columns);
@@ -136,10 +139,12 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
                   support: 0,
                   amount: row.totalAmount,
                   tier2Billable: row.totalTier2,
+                  hasRecord: false,
                 },
                 pageHasFree,
                 pageHasTier,
                 true,
+                totalPayable >= 100,
               )
             : "";
           const valueCells = resolvedSlots
@@ -149,6 +154,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
                 slot.column ? slot.column.showFree : false,
                 slot.column ? slot.column.showTiered : false,
                 true,
+                slot.column ? slot.column.needsWideAmount : false,
               ),
             )
             .join("");
@@ -162,6 +168,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             slot.column ? slot.column.showFree : false,
             slot.column ? slot.column.showTiered : false,
             true,
+            slot.column ? slot.column.needsWideAmount : false,
           ),
         )
         .join("");
@@ -179,6 +186,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             slot.column ? (slot.column.billingUnit === "animal_day" ? "数量" : "笼数") : "",
             slot.column ? slot.column.showFree : false,
             slot.column ? slot.column.showTiered : false,
+            slot.column ? slot.column.needsWideAmount : false,
           ),
         )
         .join("");
@@ -207,14 +215,23 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             unit === "animal_day" ? "数量" : unit === "mixed" ? "数量" : "笼数",
             pageHasFree,
             pageHasTier,
+            totalPayable >= 100,
           )
         : "";
       const leadingTotalsRowMarkup = page.showLeadingTotals
         ? renderGroupCells(
-            { count: totalCount, free: totalFree, support: 0, amount: totalPayable, tier2Billable: totalTier2 },
+            {
+              count: totalCount,
+              free: totalFree,
+              support: 0,
+              amount: totalPayable,
+              tier2Billable: totalTier2,
+              hasRecord: false,
+            },
             pageHasFree,
             pageHasTier,
             true,
+            totalPayable >= 100,
           )
         : "";
       return `<main class="document document-page${pageIndex < totalPages - 1 ? " document-page-break" : ""}"><section class="header"><div class="header-grid"><div class="header-main"><h1>${title}</h1><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div></div></section>
@@ -273,7 +290,10 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
   const iacucOrder = new Map(
     (statement.iacucs || []).map((iacuc, index) => [normalizeIacuc(iacuc), index] as const).filter((entry) => entry[0]),
   );
-  const columns = new Map<string, Omit<SettlementColumn, "showFree" | "showTiered" | "span" | "label">>();
+  const columns = new Map<
+    string,
+    Omit<SettlementColumn, "showFree" | "showTiered" | "span" | "label" | "needsWideAmount">
+  >();
   lines.forEach((line) =>
     (line.iacucBreakdown || []).forEach((raw) => {
       const item = raw as Breakdown;
@@ -322,6 +342,7 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
       showTiered: false,
       span: 2,
       label: `${baseLabel}${suffix}`,
+      needsWideAmount: false,
     };
   });
 }
@@ -334,6 +355,7 @@ function summarizeColumns(columns: SettlementColumn[], rows: SettlementRow[]) {
     support: 0,
     amount: 0,
     tier2Billable: 0,
+    hasRecord: false,
   }));
   const byKey = new Map(totals.map((item) => [item.key, item]));
   rows.forEach((row) =>
@@ -346,6 +368,7 @@ function summarizeColumns(columns: SettlementColumn[], rows: SettlementRow[]) {
       current.support += item.support;
       current.amount += item.amount;
       current.tier2Billable += item.tier2Billable;
+      current.hasRecord = current.hasRecord || item.hasRecord;
     }),
   );
   return totals.map((item) => ({
@@ -358,6 +381,7 @@ function renderGroupHeaders(
   countLabel: string,
   showFree: boolean,
   showTiered: boolean,
+  needsWideAmount = false,
   freeLabel = "减免",
   tierLabel = "梯度",
   amountLabel = "缴纳（元）",
@@ -368,29 +392,47 @@ function renderGroupHeaders(
     showTiered ? escapeHtml(tierLabel) : "",
     countLabel ? escapeHtml(amountLabel) : "",
   ].filter(Boolean);
-  return renderGroupedHeaderCells(labels);
+  return renderGroupedHeaderCells(labels, showFree, showTiered, needsWideAmount);
 }
 
-function renderGroupCells(summary: ColumnSummary, showFree: boolean, showTiered: boolean, showAmount: boolean) {
-  const hasValue = summary.count > 0 || summary.free > 0 || summary.tier2Billable > 0 || summary.amount > 0;
+function renderGroupCells(
+  summary: ColumnSummary,
+  showFree: boolean,
+  showTiered: boolean,
+  showAmount: boolean,
+  needsWideAmount = false,
+) {
+  const hasValue =
+    summary.hasRecord || summary.count > 0 || summary.free > 0 || summary.tier2Billable > 0 || summary.amount > 0;
+  // 有笼数（含沿用的笼数）或当天有统计记录时，减免/梯度列也显示数值；
+  // 未分配到减免/梯度的日期显示 0 而不是空，便于对账。
+  const hasCount = summary.count > 0 || summary.hasRecord;
+  const countValue = hasCount ? String(summary.count) : "";
+  const freeValue = hasCount ? String(summary.free) : "";
+  const tierValue = hasCount ? String(summary.tier2Billable) : "";
   const cells = [
-    { className: "num", value: numberText(summary.count) },
-    ...(showFree ? [{ className: "num", value: numberText(summary.free) }] : []),
-    ...(showTiered ? [{ className: "num", value: numberText(summary.tier2Billable) }] : []),
+    { className: "num", value: countValue },
+    ...(showFree ? [{ className: "num", value: freeValue }] : []),
+    ...(showTiered ? [{ className: "num", value: tierValue }] : []),
     ...(showAmount ? [{ className: "money", value: hasValue ? money(summary.amount) : "" }] : []),
   ];
-  return renderGroupedValueCells(cells);
+  return renderGroupedValueCells(cells, showFree, showTiered, needsWideAmount);
 }
 
-function renderGroupedHeaderCells(labels: string[]) {
+function renderGroupedHeaderCells(labels: string[], showFree: boolean, showTiered: boolean, needsWideAmount: boolean) {
   if (!labels.length) return `<th colspan="${GROUP_GRID_UNITS}" class="group-empty-cell"></th>`;
-  const spans = splitGroupUnits(labels.length);
+  const spans = groupFieldSpans(showFree, showTiered, needsWideAmount);
   return labels.map((label, index) => `<th colspan="${spans[index]}">${label}</th>`).join("");
 }
 
-function renderGroupedValueCells(cells: Array<{ className: string; value: string }>) {
+function renderGroupedValueCells(
+  cells: Array<{ className: string; value: string }>,
+  showFree: boolean,
+  showTiered: boolean,
+  needsWideAmount: boolean,
+) {
   if (!cells.length) return `<td colspan="${GROUP_GRID_UNITS}" class="group-empty-cell"></td>`;
-  const spans = splitGroupUnits(cells.length);
+  const spans = groupFieldSpans(showFree, showTiered, needsWideAmount);
   return cells
     .map(
       (cell, index) =>
@@ -399,24 +441,23 @@ function renderGroupedValueCells(cells: Array<{ className: string; value: string
     .join("");
 }
 
-function splitGroupUnits(parts: number) {
+// 伦理列子字段默认均分（四等分/三等分/二等分），保证同名字段在各列宽度一致；
+// 当该列金额较大时给金额列多借 1 单位（从减免/梯度列扣），避免大额数字溢出。
+function groupFieldSpans(showFree: boolean, showTiered: boolean, needsWideAmount: boolean) {
+  const parts = 1 + (showFree ? 1 : 0) + (showTiered ? 1 : 0) + 1;
   const base = Math.floor(GROUP_GRID_UNITS / parts);
   const remainder = GROUP_GRID_UNITS % parts;
-  const units = Array.from({ length: parts }, (_, index) => base + (index < remainder ? 1 : 0));
-  // The last cell is the payable amount; give it one extra grid unit so large
-  // totals like 60922.00 do not overflow the column. Take the extra width from
-  // a middle column so the leading count column keeps enough room for large
-  // totals like 11328.
-  if (parts >= 3 && units[units.length - 1] < GROUP_GRID_UNITS - parts + 1) {
-    units[units.length - 1] += 1;
-    for (let index = 1; index < units.length - 1; index += 1) {
-      if (units[index] > 1) {
-        units[index] -= 1;
+  const spans = Array.from({ length: parts }, (_, index) => base + (index < remainder ? 1 : 0));
+  if (needsWideAmount && parts >= 3) {
+    spans[spans.length - 1] += 1;
+    for (let index = 1; index < spans.length - 1; index += 1) {
+      if (spans[index] > 1) {
+        spans[index] -= 1;
         break;
       }
     }
   }
-  return units;
+  return spans;
 }
 
 function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit: string) {
@@ -442,6 +483,7 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
       current.support += Number(item.supportAmount || 0);
       current.amount += Number(item.payableAmount ?? item.amount ?? 0);
       current.tier2Billable += Number(item.tier2BillableCages || 0);
+      current.hasRecord = true;
       perColumn.set(columnKey, current);
     }
     return {
@@ -574,5 +616,5 @@ function resolveUnit(statement: BillingStatement, lines: BillingStatementLine[])
 }
 
 function emptySummary(): ColumnSummary {
-  return { count: 0, free: 0, support: 0, amount: 0, tier2Billable: 0 };
+  return { count: 0, free: 0, support: 0, amount: 0, tier2Billable: 0, hasRecord: false };
 }
