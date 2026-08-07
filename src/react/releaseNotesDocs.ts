@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-beta19",
+    build: "150",
+    releasedAt: "2026-08-07",
+    title: "数量统计表 IACUC 负责人历史提示与录入体验优化",
+    items: [
+      "录入 IACUC 自动带出后，若该伦理号最近一次历史统计表的结算负责人与 IACUC 登记不一致，在项目负责人输入框上方弹气泡提醒，支持一键带入上个月的负责人",
+      "IACUC 带出即时化：输入值命中已知伦理号立即填充项目名称、项目负责人、实验负责人、支撑经费，不再等待失焦；清空 IACUC 同步清空关联字段",
+      "输入性能优化：IACUC 联想搜索增加 250ms 防抖，历史负责人查询仅在伦理号识别后查询一次，失焦时自动按完整号码补查",
+      "「按项目负责人结算」标题移入卡片头，与「结算与报销台账」标题风格统一",
+    ],
+  },
+  {
     version: "1.0.0-beta18",
     build: "148",
     releasedAt: "2026-08-06",
