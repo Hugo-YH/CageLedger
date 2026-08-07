@@ -1,6 +1,12 @@
 import { Alert, Button, Card, Checkbox, Empty, Modal, Space, Tooltip, Typography, type TableProps } from "antd";
 import { Pager } from "../../../components/WorkspaceUi";
-import { DownloadOutlined, EyeOutlined, PlayCircleOutlined, PrinterOutlined } from "@ant-design/icons";
+import {
+  DownloadOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  PlayCircleOutlined,
+  PrinterOutlined,
+} from "@ant-design/icons";
 import { useState } from "react";
 
 import type {
