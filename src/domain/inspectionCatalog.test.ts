@@ -135,7 +135,7 @@ describe("node form conversion", () => {
   it("round-trips form values back to the original node", () => {
     const values = nodeToFormValues(original);
     expect(values.scoringCriteria).toHaveLength(3);
-    expect(values.subOptions[0].nameCn).toBe("苍白");
+    expect(values.subOptions?.[0].nameCn).toBe("苍白");
     const rebuilt = formValuesToNode(values, original);
     expect(rebuilt.name).toBe(original.name);
     expect(rebuilt.config?.scoringCriteria?.["1"].levelEn).toBe("Severe");
@@ -143,11 +143,15 @@ describe("node form conversion", () => {
     expect(rebuilt.config?.referenceImages?.[0].url).toBe("/downloads/images/swell.jpg");
   });
 
-  it("removes subOptions when inputType leaves severity_with_options", () => {
+  it("preserves legacy scoring config when the binary form omits scoring fields", () => {
     const values = nodeToFormValues(original);
-    values.inputType = "score";
+    delete values.inputType;
+    delete values.scoringCriteria;
+    delete values.subOptions;
     const rebuilt = formValuesToNode(values, original);
-    expect(rebuilt.config?.subOptions).toBeUndefined();
+    expect(rebuilt.inputType).toBe("severity_with_options");
+    expect(rebuilt.config?.subOptions?.[0].id).toBe("pale");
+    expect(rebuilt.config?.scoringCriteria?.["1"].levelEn).toBe("Severe");
   });
 
   it("drops empty suggestion measure and images", () => {

@@ -71,7 +71,7 @@ export function InspectionStandards({
                 <Button size="small" onClick={() => setVersionsOpen(true)}>
                   版本历史
                 </Button>
-                <Button size="small" type="primary" ghost onClick={() => setEditing(true)}>
+                <Button size="small" type="primary" onClick={() => setEditing(true)}>
                   编辑目录
                 </Button>
               </Space>

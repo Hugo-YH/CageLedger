@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Button, Segmented, Select } from "antd";
+import { Button, Select } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
-import type { CageRoom, CageSlotStatus, RoomBootstrapResponse } from "../../api/contracts";
+import type { CageRoom, RoomBootstrapResponse } from "../../api/contracts";
 import { currentOccupancy } from "../../../domain/cages";
 import {
   BatchSlotEditor,
@@ -25,7 +25,6 @@ export function CagesView() {
   const racks = (data?.racks || []).filter((rack) => rack.roomId === selectedRoomId);
   const [rackId, setRackId] = useState("");
   const selectedRack = racks.find((rack) => rack.id === rackId) || racks[0];
-  const [filter, setFilter] = useState<"all" | CageSlotStatus>("all");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
@@ -34,7 +33,6 @@ export function CagesView() {
   const [tasksOpen, setTasksOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const slots = (data?.slots || []).filter((slot) => slot.rackId === selectedRack?.id);
-  const visibleSlots = filter === "all" ? slots : slots.filter((slot) => slot.status === filter);
   const selectedSlot = slots.find((slot) => slot.id === selectedSlotId) || null;
   const occupancies = data?.occupancies || [];
   const tasks = (data?.placementTasks || []).filter(
@@ -58,7 +56,27 @@ export function CagesView() {
   return (
     <section className="workspace-view cage-workspace react-cage-view" data-feature="cages">
       <WorkspaceToolbar
-        actions={<ActionButton onClick={() => setTasksOpen(true)}>待进驻 {tasks.length}</ActionButton>}
+        actions={
+          <>
+            <ActionButton onClick={() => setTasksOpen(true)}>待进驻 {tasks.length}</ActionButton>
+            <ActionButton
+              tone="primary"
+              onClick={() => {
+                setBatchMode((value) => !value);
+                setSelectedSlotIds([]);
+                setSelectedSlotId("");
+              }}
+            >
+              多选录入{selectedSlotIds.length ? ` (${selectedSlotIds.length})` : ""}
+            </ActionButton>
+            {batchMode ? (
+              <>
+                <Button onClick={() => setSelectedSlotIds(slots.map((slot) => slot.id))}>全选当前</Button>
+                <Button onClick={() => setSelectedSlotIds([])}>清空选择</Button>
+              </>
+            ) : null}
+          </>
+        }
         toolbar={
           <>
             <label className="workspace-toolbar-field" htmlFor="cages-room-select">
@@ -93,7 +111,7 @@ export function CagesView() {
             <div className="panel-head">
               <div className="panel-title-line">
                 <h2>动态笼位图</h2>
-                <p>{visibleSlots.length} 个笼位</p>
+                <p>{slots.length} 个笼位</p>
               </div>
             </div>
             <div className="legend">
@@ -102,36 +120,6 @@ export function CagesView() {
               <Legend tone="active" label="在用" />
               <Legend tone="period-open" label="未填结束日期" />
               <Legend tone="period-overdue" label="超期饲养" />
-            </div>
-            <div className="filter-row" role="group" aria-label="笼位状态筛选">
-              <Segmented
-                options={(["all", "active", "reserved", "empty"] as const).map((value) => ({
-                  label: { all: "全部", active: "在用", reserved: "已预约", empty: "空" }[value],
-                  value,
-                }))}
-                value={filter}
-                onChange={setFilter}
-              />
-              <Button
-                type={batchMode ? "primary" : "default"}
-                onClick={() => {
-                  setBatchMode((value) => !value);
-                  setSelectedSlotIds([]);
-                  setSelectedSlotId("");
-                }}
-              >
-                多选录入{selectedSlotIds.length ? ` (${selectedSlotIds.length})` : ""}
-              </Button>
-              {batchMode ? (
-                <>
-                  <Button size="small" onClick={() => setSelectedSlotIds(visibleSlots.map((slot) => slot.id))}>
-                    全选当前
-                  </Button>
-                  <Button size="small" onClick={() => setSelectedSlotIds([])}>
-                    清空选择
-                  </Button>
-                </>
-              ) : null}
             </div>
             {notice ? (
               <div className="react-inline-notice" role="status">
@@ -145,7 +133,7 @@ export function CagesView() {
                 rack={selectedRack}
                 roomName={selectedRoom?.name || ""}
                 roomSpecies={selectedRoom?.defaultSpecies || ""}
-                slots={visibleSlots}
+                slots={slots}
                 occupancies={occupancies}
                 selectedSlotId={selectedSlotId}
                 selectedSlotIds={selectedSlotIds}
@@ -225,7 +213,6 @@ export function CagesView() {
           onSelect={(task) => {
             setSelectedTaskId(task.id);
             setTasksOpen(false);
-            setFilter("empty");
             setNotice("已选择待进驻任务，请在笼位图中选择空笼位。");
           }}
           onClose={() => setTasksOpen(false)}

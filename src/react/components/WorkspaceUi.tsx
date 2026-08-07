@@ -61,11 +61,13 @@ export function AsyncActionButton({
 export function ModalShell({
   ariaLabel,
   className = "",
+  width = "min(1120px, calc(100vw - 32px))",
   children,
   onClose,
 }: {
   ariaLabel: string;
   className?: string;
+  width?: number | string;
   children: ReactNode;
   onClose: () => void;
 }) {
@@ -93,7 +95,7 @@ export function ModalShell({
       open
       rootClassName={`app-modal-root ${className}`.trim()}
       title={<span className="app-visually-hidden">{ariaLabel}</span>}
-      width="min(1120px, calc(100vw - 32px))"
+      width={width}
     >
       <section aria-label={ariaLabel} className={`modal-shell ${className}`.trim()} data-ui="modal" ref={shellRef}>
         {children}

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Card, Segmented, Typography } from "antd";
+import { Card, Segmented, Space, Typography } from "antd";
+import { FileTextOutlined } from "@ant-design/icons";
 
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
@@ -50,6 +51,17 @@ export function BillingView({
       ) : null}
       {mode === "settlement" ? (
         <>
+          <div className="settlement-page-title">
+            <Space size={8}>
+              <FileTextOutlined />
+              <Typography.Title level={2} style={{ margin: 0 }}>
+                项目负责人结算
+              </Typography.Title>
+            </Space>
+            <Typography.Paragraph type="secondary" className="settlement-page-description">
+              同一负责人、同一月份下的多个伦理号自动合表。
+            </Typography.Paragraph>
+          </div>
           <Card className="settlement-source-card" size="small" title="结算数据来源">
             <Segmented
               block

@@ -32,8 +32,8 @@ export interface InspectionNodeFormValues {
   inputType?: "score" | "severity" | "severity_with_options";
   sortOrder: number;
   suggestionMeasure?: string;
-  scoringCriteria: InspectionScoringRow[];
-  subOptions: InspectionSubOptionRow[];
+  scoringCriteria?: InspectionScoringRow[];
+  subOptions?: InspectionSubOptionRow[];
   referenceImages: InspectionReferenceImageRow[];
 }
 
@@ -212,32 +212,36 @@ export function formValuesToNode(
   original: InspectionCatalogNode,
 ): InspectionCatalogNode {
   const originalConfig: InspectionCatalogNode["config"] = original.config || {};
-  const criteria: Record<string, { level: string; levelEn?: string; description?: string; descriptionEn?: string }> =
-    {};
-  for (const row of values.scoringCriteria) {
-    const key = String(row.key || "").trim();
-    if (!key) continue;
-    const existing = originalConfig.scoringCriteria?.[key];
-    criteria[key] = {
-      ...(existing || {}),
-      level: row.level || "",
-      description: row.description || existing?.description || "",
-    };
-  }
   const config: Record<string, unknown> = { ...originalConfig };
-  if (Object.keys(criteria).length) config.scoringCriteria = criteria;
-  else delete config.scoringCriteria;
-  if (values.inputType === "severity_with_options") {
-    config.subOptions = values.subOptions
-      .filter((option) => String(option.id || "").trim() && String(option.nameCn || "").trim())
-      .map((option) => ({
-        id: option.id.trim(),
-        nameCn: option.nameCn.trim(),
-        nameEn: option.nameEn?.trim() || "",
-        descriptionEn: option.descriptionEn?.trim() || "",
-      }));
-  } else {
-    delete config.subOptions;
+  if (values.scoringCriteria) {
+    const criteria: Record<string, { level: string; levelEn?: string; description?: string; descriptionEn?: string }> =
+      {};
+    for (const row of values.scoringCriteria) {
+      const key = String(row.key || "").trim();
+      if (!key) continue;
+      const existing = originalConfig.scoringCriteria?.[key];
+      criteria[key] = {
+        ...(existing || {}),
+        level: row.level || "",
+        description: row.description || existing?.description || "",
+      };
+    }
+    if (Object.keys(criteria).length) config.scoringCriteria = criteria;
+    else delete config.scoringCriteria;
+  }
+  if (values.subOptions) {
+    if (values.subOptions.length) {
+      config.subOptions = values.subOptions
+        .filter((option) => String(option.id || "").trim() && String(option.nameCn || "").trim())
+        .map((option) => ({
+          id: option.id.trim(),
+          nameCn: option.nameCn.trim(),
+          nameEn: option.nameEn?.trim() || "",
+          descriptionEn: option.descriptionEn?.trim() || "",
+        }));
+    } else {
+      delete config.subOptions;
+    }
   }
   if (String(values.suggestionMeasure || "").trim()) {
     config.suggestionMeasure = String(values.suggestionMeasure || "").trim();
@@ -254,7 +258,7 @@ export function formValuesToNode(
     name: String(values.name || "").trim(),
     description: String(values.description || "").trim() || undefined,
     sortOrder: Number(values.sortOrder) || 0,
-    inputType: original.nodeType === "ITEM" ? values.inputType : undefined,
+    inputType: original.inputType,
     config,
   };
 }

@@ -1,5 +1,5 @@
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
-import { animalAgeText, animalSexLabel, cageCode, occupancyPeriodTone, slotPosition } from "../../../../domain/cages";
+import { animalAgeText, animalSexLabel, cageCode, occupancyPeriodTone } from "../../../../domain/cages";
 
 export function CageSlotButton({
   slot,
@@ -21,6 +21,7 @@ export function CageSlotButton({
   onClick: () => void;
 }) {
   const tone = occupancyPeriodTone(occupancy, today);
+  const dotTone = tone || (occupancy?.status === "reserved" ? "reserved" : occupancy ? "active" : "empty");
   const monkeySummary =
     occupancy && roomSpecies === "monkey"
       ? `${animalSexLabel(occupancy.animalSex)} · ${animalAgeText(occupancy.birthDate, today) || "年龄未填写"}`
@@ -32,6 +33,7 @@ export function CageSlotButton({
       aria-label={`${cageCode(slot, rack.index, roomName)} ${occupancy?.iacuc || "空"}${monkeySummary ? ` ${monkeySummary}` : ""}`}
       onClick={onClick}
     >
+      <i className={`slot-status-dot ${dotTone}`} aria-hidden="true" />
       <span className="slot-code">{cageCode(slot, rack.index, roomName)}</span>
       {occupancy ? (
         <>
@@ -45,7 +47,6 @@ export function CageSlotButton({
       ) : (
         <strong className="slot-empty-text">空</strong>
       )}
-      <span className="slot-position">{slotPosition(slot)}</span>
     </button>
   );
 }
