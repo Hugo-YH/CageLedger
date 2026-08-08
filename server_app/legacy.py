@@ -145,6 +145,11 @@ from server_app.domains.billing.candidates import (
     list_settlement_candidates,
     update_settlement_candidate_snapshot_from_statement,
 )
+from server_app.domains.dashboard_overview import (
+    dashboard_overview_payload,
+    default_overview_month,
+    invalidate_dashboard_overview_cache,
+)
 from server_app.domains.iacuc import (
     normalize_application_amount,
     normalize_application_date,
@@ -3323,7 +3328,7 @@ def save_principal_identity(conn, payload, actor, pi_name):
         item,
     )
     write_audit_events(conn, [event])
-    invalidate_data_cache("principal_identities")
+    invalidate_data_cache("principal_identities", "principal_types_by_pi")
     invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
     return item, merge_audit_logs([], [event])
 
@@ -3341,6 +3346,7 @@ def invalidate_quantity_sheet_candidate_snapshots(conn, sheets_or_keys):
         if month and pi_name:
             keys.append((month, pi_name))
     invalidate_settlement_candidate_snapshots(conn, keys, "quantity_sheet", now_iso())
+    invalidate_dashboard_overview_cache()
 
 
 def invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name):
@@ -3349,6 +3355,7 @@ def invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name):
 
 def invalidate_all_quantity_sheet_candidate_snapshots(conn):
     mark_all_billing_candidate_snapshots_stale(conn, "quantity_sheet", now_iso())
+    invalidate_dashboard_overview_cache()
 
 
 def application_payload(item, imported_at):
@@ -5100,6 +5107,17 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 room_id = clean_text(query.get("roomId", [""])[0])
                 self.send_json(read_bootstrap_state(conn, user, scope, room_id))
             return
+        if path == "/api/dashboard/overview":
+            user = self.require_user()
+            if not user:
+                return
+            with connect_db() as conn:
+                query = parse_qs(urlparse(self.path).query)
+                month = clean_text(query.get("month", [""])[0])
+                if not month:
+                    month = default_overview_month()
+                self.send_json(dashboard_overview_payload(conn, month))
+            return
         if path == "/api/animal-inspection-catalog":
             user = self.require_user()
             if not user:
@@ -5934,7 +5952,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 invalidate_all_quantity_sheet_candidate_snapshots(conn)
                 write_audit_events(conn, [event])
                 conn.commit()
-            invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities")
+            invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi")
             invalidate_data_cache_prefixes(
                 "bootstrap_summary::",
                 "billing_occupancies::",

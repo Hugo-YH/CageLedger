@@ -27,14 +27,18 @@ const baselineHotspots = new Map([
   [
     "server_app/legacy.py",
     {
-      ceiling: 7080,
+      ceiling: 7100,
       reason:
-        "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, documentation static routing, transitional domain dispatch, slim admin/IACUC routes, animal-inspection catalog routes, and quantity-sheet pi-history lookup",
+        "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, dashboard overview route, documentation static routing, transitional domain dispatch, slim admin/IACUC routes, animal-inspection catalog routes, and quantity-sheet pi-history lookup",
     },
   ],
   [
     "src/styles/features/animal-management.css",
     { ceiling: 1927, reason: "animal management workspace, inspection entry/lists and catalog editor styles" },
+  ],
+  [
+    "src/styles/features/antd-system.css",
+    { ceiling: 1880, reason: "antd overrides including dashboard overview charts and room cards" },
   ],
   [
     "server_app/domains/animal_management/service.py",

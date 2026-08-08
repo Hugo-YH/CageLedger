@@ -2,6 +2,7 @@ export const queryKeys = {
   session: ["session"] as const,
   bootstrap: (scope: string, roomId = "") => ["bootstrap", scope, roomId] as const,
   cageRoom: (roomId: string) => ["bootstrap", "room", roomId] as const,
+  dashboardOverview: (month?: string) => ["dashboard-overview", month ?? "default"] as const,
   intakeRoot: ["intake"] as const,
   intake: (filters: Record<string, unknown>) => ["intake", "list", filters] as const,
   quantitySheets: (filters: Record<string, unknown>) => ["quantity-sheets", filters] as const,

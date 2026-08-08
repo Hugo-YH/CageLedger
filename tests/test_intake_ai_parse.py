@@ -29,7 +29,7 @@ class IntakeAiParseNormalizationTest(unittest.TestCase):
         self.assertEqual(result["roomName"], "8101")
         self.assertEqual(result["intakeDate"], "2026-05-13")
         self.assertEqual(result["husbandryDays"], 30)
-        self.assertEqual(result["strainStandard"], "C57BL/6")
+        self.assertEqual(result["strainStandard"], "C57BL/6J")
         self.assertEqual(result["supplier"], "广东南模")
 
     def test_keeps_explicit_iacuc_and_cleans_fields(self):
@@ -116,15 +116,26 @@ class IntakeAiParseMessageTest(unittest.TestCase):
         self.assertEqual(result["iacuc"], "Z2025050")
         self.assertEqual(result["quantity"], 70)
         self.assertEqual(result["intakeDate"], "2026-05-13")
-        self.assertEqual(result["strainStandard"], "C57BL/6")
+        self.assertEqual(result["strainStandard"], "C57BL/6J")
         self.assertEqual(usage["total_tokens"], 160)
 
 
 class StrainStandardTest(unittest.TestCase):
     def test_mgi_standard_names(self):
         cases = {
-            "c57": "C57BL/6",
+            "c57": "C57BL/6J",
             "c57bl/6j": "C57BL/6J",
+            "C57/B6J": "C57BL/6J",
+            "C57BL/6JGpt": "C57BL/6J",
+            "c57bl/6jGpt，3w": "C57BL/6J",
+            "C57BL/6J，40只": "C57BL/6J",
+            "3w": "C57BL/6J",
+            "c57小鼠": "C57BL/6J",
+            "c57bl/6小鼠": "C57BL/6",
+            "转基因小鼠": "基因工程小鼠",
+            "基因鼠": "基因工程小鼠",
+            "c57基因小鼠": "基因工程小鼠",
+            "基因工程小鼠": "基因工程小鼠",
             "C57BL/6N小鼠": "C57BL/6N",
             "balb/c": "BALB/c",
             "BALB/c-nu": "BALB/c裸鼠",

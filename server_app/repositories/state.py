@@ -34,6 +34,9 @@ def read_cached_state(conn, empty_state_factory):
 
 
 def read_applications_by_iacuc(conn, normalize_iacuc_number):
+    cached = cache_get("applications_by_iacuc")
+    if cached is not None:
+        return cached
     rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
     applications = {}
     for row in rows:
@@ -41,4 +44,4 @@ def read_applications_by_iacuc(conn, normalize_iacuc_number):
         key = normalize_iacuc_number(item.get("iacuc", ""))
         if key and key not in applications:
             applications[key] = item
-    return applications
+    return cache_set("applications_by_iacuc", applications)

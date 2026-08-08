@@ -23,7 +23,7 @@ describe("intake message parser", () => {
     expect(result.intakeDate).toBe("2026-05-13");
     expect(result.finalCardCount).toBe(14);
     expect(result.supplier).toBe("广东南模");
-    expect(result.strainStandard).toBe("C57BL/6");
+    expect(result.strainStandard).toBe("C57BL/6J");
     expect(result.strainRaw).toBe("c57");
   });
 
@@ -44,8 +44,18 @@ describe("intake message parser", () => {
 
   it("standardizes MGI strain names from the shared alias table", async () => {
     const cases: Array<[string, string]> = [
-      ["c57", "C57BL/6"],
+      ["c57", "C57BL/6J"],
       ["c57bl/6j", "C57BL/6J"],
+      ["C57/B6J", "C57BL/6J"],
+      ["C57BL/6JGpt", "C57BL/6J"],
+      ["c57bl/6jGpt，3w", "C57BL/6J"],
+      ["3w", "C57BL/6J"],
+      ["c57小鼠", "C57BL/6J"],
+      ["c57bl/6小鼠", "C57BL/6"],
+      ["转基因小鼠", "基因工程小鼠"],
+      ["基因鼠", "基因工程小鼠"],
+      ["c57基因小鼠", "基因工程小鼠"],
+      ["基因工程小鼠", "基因工程小鼠"],
       ["C57BL/6N小鼠", "C57BL/6N"],
       ["balb/c", "BALB/c"],
       ["BALB/c-nu", "BALB/c裸鼠"],

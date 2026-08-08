@@ -1,53 +1,83 @@
 import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
-import { Badge, Button, Card, Col, Progress, Row, Skeleton, Statistic, Tag, Typography } from "antd";
+import { Area, Rose } from "@ant-design/plots";
+import { Badge, Button, Card, Col, Progress, Row, Select, Skeleton, Statistic, Tag, Typography } from "antd";
+import { useMemo, useState } from "react";
 
-import type { BootstrapResponse } from "../../api/contracts";
-import { useBootstrap } from "../../api/bootstrap";
+import type { RoomOverview } from "../../api/dashboardOverview";
+import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
+import { useDashboardOverview } from "../../api/dashboardOverview";
 import { PageState } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 
-export function DashboardView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
-  const query = useBootstrap("summary");
-  if (query.isPending) return <DashboardSkeleton />;
-  if (query.isError || !query.data) return <DashboardError retry={() => query.refetch()} />;
-  return <DashboardContent data={query.data} navigate={navigate} />;
+const ROOM_PALETTE = ["#3872ff", "#52c41a", "#faad14", "#eb2f96", "#722ed1", "#13c2c2", "#fa541c"];
+const STRAIN_COLORS = ["#5B8FF9", "#5AD8A6", "#5D7092", "#F6BD16", "#E8684A", "#6DC8EC", "#9270CA", "#FF9D4D"];
+
+type RoomAreaDatum = { day: string; cages: number; roomName?: string };
+
+function formatYuan(value: number) {
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
-function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigate: (view: WorkspaceView) => void }) {
-  const summary = data.dashboardSummary || {};
-  const value = (key: string) => Number(summary[key] || 0);
-  const total = value("total");
-  const occupied = value("active") + value("reserved");
-  const occupiedPct = percent(occupied, total);
-  const facilities = data.facilitySummaries;
-  const roomsById = new Map(data.rooms.map((room) => [String(room.id || ""), room]));
+function hexToRgba(hex: string, alpha: number) {
+  const value = Number.parseInt(hex.slice(1), 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+export function DashboardView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
+  const [month, setMonth] = useState<string | undefined>(undefined);
+  const overview = useDashboardOverview(month);
+  if (overview.isPending) return <DashboardSkeleton />;
+  if (overview.isError || !overview.data) return <DashboardError retry={() => overview.refetch()} />;
+  return <DashboardContent data={overview.data} month={month} onMonthChange={setMonth} navigate={navigate} />;
+}
+
+function DashboardContent({
+  data,
+  month,
+  onMonthChange,
+  navigate,
+}: {
+  data: DashboardOverviewResponse;
+  month?: string;
+  onMonthChange: (month?: string) => void;
+  navigate: (view: WorkspaceView) => void;
+}) {
+  const { availableMonths, intake, rooms, pi } = data;
+  const currentMonth = month === "all" ? "历史合计" : month || data.month;
   const tasks = [
     {
       label: "待接收批次",
-      value: value("intakePendingCount"),
+      value: intake.batches,
       view: "intake-batches" as WorkspaceView,
       icon: <InboxOutlined />,
       tone: "processing",
     },
     {
-      label: "待进驻任务",
-      value: value("openPlacementTaskCount"),
-      view: "cages" as WorkspaceView,
+      label: "上月饲养间",
+      value: rooms.length,
+      view: "quantity-sheet-entry" as WorkspaceView,
       icon: <ApartmentOutlined />,
       tone: "warning",
     },
     {
-      label: "本月待办流程",
-      value: value("currentMonthWorkflowTodoCount"),
-      view: "workflow-center" as WorkspaceView,
+      label: "结算课题组",
+      value: pi.length,
+      view: "billing-settlement-candidates" as WorkspaceView,
       icon: <ClockCircleOutlined />,
       tone: "default",
     },
     {
-      label: "异常项",
-      value: value("exceptionCount"),
-      view: "workflow-center" as WorkspaceView,
+      label: "上月接收批次",
+      value: intake.trend.reduce((sum, item) => sum + item.batches, 0),
+      view: "intake-batches" as WorkspaceView,
       icon: <ExclamationCircleOutlined />,
       tone: "error",
     },
@@ -66,19 +96,23 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
           </Tag>
         </div>
         <Typography.Paragraph className="workspace-summary" type="secondary">
-          接收、入驻、巡检、结算与核销的日常运营概览。
+          接收、饲养与结算的运营概览，数据来自笼卡管理、数量统计表与项目负责人结算。
         </Typography.Paragraph>
       </div>
       <div className="workspace-body dashboard-workspace-body ant-dashboard-body">
-        <Row gutter={[16, 16]}>
-          <DashboardStatistic label="总笼位" value={total} />
-          <DashboardStatistic label="在用" status="success" value={value("active")} />
-          <DashboardStatistic label="已预约" status="processing" value={value("reserved")} />
-          <DashboardStatistic label="空笼位" value={value("empty")} />
-          <DashboardStatistic label="未填结束日期" status="warning" value={value("periodOpen")} />
-          <DashboardStatistic label="超期饲养" status="error" value={value("periodOverdue")} />
-        </Row>
-
+        <div className="ant-dashboard-month-bar">
+          <Select
+            aria-label="选择统计月份"
+            options={[
+              { value: "all", label: "历史合计" },
+              ...availableMonths.map((value) => ({ value, label: `${value.slice(0, 4)} 年 ${value.slice(5)} 月` })),
+            ]}
+            value={month ?? data.month}
+            style={{ width: 160 }}
+            onChange={(value) => onMonthChange(value)}
+          />
+          <Typography.Text type="secondary">当前统计月份：{currentMonth}</Typography.Text>
+        </div>
         <Card className="ant-dashboard-section" size="small" title="待办任务">
           <Row gutter={[0, 12]}>
             {tasks.map((task) => (
@@ -106,160 +140,279 @@ function DashboardContent({ data, navigate }: { data: BootstrapResponse; navigat
 
         <Row gutter={[16, 16]}>
           <Col lg={14} xs={24}>
-            <Card className="ant-dashboard-section" size="small" title="设施运营摘要">
+            <Card className="ant-dashboard-section" size="small" title="接收动物统计">
               <Row gutter={[16, 16]}>
-                {["zhujiang", "bioisland"].map((facility) => (
-                  <Col key={facility} md={12} xs={24}>
-                    <FacilitySummary facility={facility} item={facilities.find((item) => item.facility === facility)} />
-                  </Col>
-                ))}
+                <Col span={12}>
+                  <Statistic title="接收批次" value={intake.batches} />
+                </Col>
+                <Col span={12}>
+                  <Statistic title="接收只数" value={intake.animals} />
+                </Col>
               </Row>
+              <IntakeTrend items={intake.trend} unit={intake.trendUnit} />
             </Card>
           </Col>
           <Col lg={10} xs={24}>
-            <Card className="ant-dashboard-section" size="small" title="笼位状态分布">
-              <CageStatusDistribution
-                active={value("active")}
-                empty={value("empty")}
-                reserved={value("reserved")}
-                total={total}
-                usedPercent={occupiedPct}
-              />
+            <Card className="ant-dashboard-section" size="small" title="品系分布">
+              <StrainDistribution items={intake.strains} />
             </Card>
           </Col>
         </Row>
 
-        <Card className="ant-dashboard-section" size="small" title="饲养间使用情况">
-          <div className="ant-dashboard-room-list" role="list">
-            {data.roomSummaries.map((summary) => {
-              const room = roomsById.get(summary.roomId);
-              const usage = percent(summary.activeCount + summary.reservedCount, summary.slotCount);
-              return (
-                <div className="ant-dashboard-room-list-item" key={summary.roomId} role="listitem">
-                  <div>
-                    <Typography.Text strong>{String(room?.name || summary.roomName || summary.roomId)}</Typography.Text>
-                    <Typography.Paragraph type="secondary">
-                      {String(room?.area || "未设置区域")} · 总笼位 {summary.slotCount} · 在用 {summary.activeCount} ·
-                      已预约 {summary.reservedCount}
-                    </Typography.Paragraph>
-                  </div>
-                  <Progress
-                    aria-label={`${String(room?.name || summary.roomName || summary.roomId)} 使用率`}
-                    percent={usage}
-                    size="small"
-                    style={{ minWidth: 144 }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+        <RoomOverviewCard rooms={rooms} />
+
+        <Card className="ant-dashboard-section" size="small" title="饲养费统计">
+          <PiFeeChart items={pi} />
         </Card>
       </div>
     </section>
   );
 }
 
-function DashboardStatistic({
-  label,
-  value,
-  status,
-}: {
-  label: string;
-  value: number;
-  status?: "success" | "processing" | "warning" | "error";
-}) {
-  return (
-    <Col flex="1 1 160px">
-      <Card className={`ant-dashboard-statistic ${status ? `is-${status}` : ""}`} size="small">
-        <Statistic title={label} value={value} />
-      </Card>
-    </Col>
-  );
-}
-
-function FacilitySummary({ facility, item = {} }: { facility: string; item?: Record<string, unknown> }) {
-  const number = (key: string) => Number(item[key] || 0);
-  const title = facility === "bioisland" ? "生物岛设施" : "珠江新城设施";
-  return (
-    <Card size="small" title={title} extra={<Tag>{number("roomCount")} 个饲养间</Tag>}>
-      <Row gutter={12}>
-        <Col span={8}>
-          <Statistic title="在养笼数" value={number("activeCageCount")} />
-        </Col>
-        <Col span={8}>
-          <Statistic title="在养只数" value={number("activeAnimalCount")} />
-        </Col>
-        <Col span={8}>
-          <Statistic title="待进驻" value={number("openPlacementTaskCount")} />
-        </Col>
-      </Row>
-    </Card>
-  );
-}
-
-function CageStatusDistribution({
-  active,
-  empty,
-  reserved,
-  total,
-  usedPercent,
-}: {
-  active: number;
-  empty: number;
-  reserved: number;
-  total: number;
-  usedPercent: number;
-}) {
-  const segments = [
-    { label: "在用", value: active, color: "var(--app-dashboard-active)" },
-    { label: "已预约", value: reserved, color: "var(--app-dashboard-reserved)" },
-    { label: "空笼位", value: empty, color: "var(--app-dashboard-empty)" },
-  ];
-
-  return (
-    <div className="ant-dashboard-status">
-      <div className="ant-dashboard-status-head">
-        <Statistic title="笼位使用率" suffix="%" value={usedPercent} />
-        <Typography.Text type="secondary">共 {total} 个笼位</Typography.Text>
+function PiFeeChart({ items }: { items: Array<{ pi: string; amount: number; iacucCount: number }> }) {
+  const data = items.slice(0, 10);
+  const maxAmount = Math.max(...data.map((item) => item.amount), 1);
+  const renderRow = (item: (typeof data)[number]) => (
+    <div className="ant-dashboard-pi-row" key={item.pi}>
+      <div className="ant-dashboard-pi-row-head">
+        <Typography.Text strong>
+          {data.indexOf(item) + 1}. {item.pi}
+        </Typography.Text>
+        <Typography.Text className="ant-dashboard-pi-amount">{formatYuan(item.amount)}</Typography.Text>
       </div>
-      <div
-        aria-label={`笼位状态分布：在用 ${active} 笼，已预约 ${reserved} 笼，空笼位 ${empty} 笼`}
-        className="ant-dashboard-status-bar"
-        role="img"
-      >
-        {segments.map((segment) => (
-          <span
-            aria-hidden="true"
-            className="ant-dashboard-status-segment"
-            key={segment.label}
-            style={{ backgroundColor: segment.color, width: `${percent(segment.value, total)}%` }}
-            title={`${segment.label} ${segment.value} 笼`}
-          />
-        ))}
-      </div>
-      <div className="ant-dashboard-status-legend" role="list">
-        {segments.map((segment) => (
-          <StatusLine
-            color={segment.color}
-            key={segment.label}
-            label={segment.label}
-            total={total}
-            value={segment.value}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatusLine({ color, label, value, total }: { color: string; label: string; value: number; total: number }) {
-  return (
-    <div className="ant-dashboard-status-line" role="listitem">
-      <Badge color={color} text={label} />
-      <Typography.Text type="secondary">
-        {value} 笼 · {percent(value, total)}%
+      <Progress
+        percent={Math.max(Math.round((item.amount / maxAmount) * 100), 0)}
+        showInfo={false}
+        strokeColor={{ from: "#0958d9", to: "#68b2ff" }}
+        trailColor="rgba(9, 88, 217, 0.08)"
+        size="small"
+      />
+      <Typography.Text type="secondary" className="ant-dashboard-pi-sub">
+        {item.iacucCount} 个伦理号
       </Typography.Text>
     </div>
+  );
+  return (
+    <div className="ant-dashboard-pi-grid">
+      <Row gutter={[24, 8]}>
+        <Col xs={24} lg={12}>
+          {data.slice(0, 5).map(renderRow)}
+        </Col>
+        <Col xs={24} lg={12}>
+          {data.slice(5, 10).map(renderRow)}
+        </Col>
+      </Row>
+    </div>
+  );
+}
+
+function IntakeTrend({
+  items,
+  unit,
+}: {
+  items: Array<{ month?: string; day?: number; batches: number; animals: number }>;
+  unit: "day" | "month";
+}) {
+  const data = items.map((item) => ({
+    label: unit === "month" ? (item.month || "").slice(2) : `${item.day ?? 0}日`,
+    animals: item.animals,
+    batches: item.batches,
+  }));
+  return (
+    <div className="ant-dashboard-trend">
+      <Area
+        data={data}
+        xField="label"
+        yField="animals"
+        height={180}
+        axis={{
+          x: { title: false, labelAutoRotate: false, labelFormatter: (v: string) => v.replace("日", "") },
+          y: { title: false },
+        }}
+        style={{
+          shape: "smooth",
+          fill: () =>
+            `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
+        }}
+        tooltip={{
+          title: "label",
+          items: [
+            (datum: { animals: number }) => ({
+              name: "接收只数",
+              value: datum.animals,
+            }),
+          ],
+        }}
+        scale={{ y: { nice: true } }}
+        legend={false}
+      />
+      <Typography.Text type="secondary" className="ant-dashboard-trend-caption">
+        {unit === "month" ? "近 6 个月接收只数变化" : "当月每日接收只数变化"}
+      </Typography.Text>
+    </div>
+  );
+}
+
+function StrainDistribution({ items }: { items: Array<{ strain: string; animals: number }> }) {
+  const total = items.reduce((sum, item) => sum + item.animals, 0);
+  const sorted = [...items].sort((a, b) => b.animals - a.animals);
+  const top = sorted.slice(0, 5);
+  const otherAnimals = sorted.slice(5).reduce((sum, item) => sum + item.animals, 0);
+  const data = [
+    ...top.map((item) => ({
+      type: item.strain,
+      value: Math.log1p(item.animals),
+      animals: item.animals,
+      percent: total ? (item.animals / total) * 100 : 0,
+    })),
+    ...(otherAnimals > 0
+      ? [
+          {
+            type: "其他",
+            value: Math.log1p(otherAnimals),
+            animals: otherAnimals,
+            percent: total ? (otherAnimals / total) * 100 : 0,
+          },
+        ]
+      : []),
+  ];
+  const colorOf = (type: string) => {
+    const index = data.findIndex((item) => item.type === type);
+    return type === "其他" ? "#8C8C8C" : STRAIN_COLORS[index % STRAIN_COLORS.length];
+  };
+  return (
+    <div className="ant-dashboard-pie">
+      <Rose
+        data={data}
+        xField="type"
+        yField="value"
+        colorField="type"
+        radius={0.9}
+        style={{
+          inset: 2,
+          radius: 8,
+          fill: (datum: { type: string }) => {
+            const color = colorOf(datum.type);
+            return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
+          },
+        }}
+        axis={false}
+        height={280}
+        scale={{
+          color: {
+            range: data.map((item) => colorOf(item.type)),
+          },
+        }}
+        label={{
+          text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
+          position: "outside",
+          fontSize: 10,
+        }}
+        legend={{
+          color: {
+            position: "bottom",
+            layout: { justifyContent: "center" },
+            labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
+          },
+        }}
+        tooltip={{
+          title: "type",
+          items: [
+            (datum: { animals: number; percent: number }) => ({
+              name: "接收只数",
+              value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
+            }),
+          ],
+        }}
+      />
+    </div>
+  );
+}
+
+function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
+  const [selected, setSelected] = useState("__all__");
+  const options = useMemo(
+    () => [
+      { value: "__all__", label: "全部饲养间" },
+      ...rooms.map((room) => ({ value: room.roomName, label: room.roomName })),
+    ],
+    [rooms],
+  );
+  const trendUnit = rooms[0]?.trendUnit ?? "day";
+  const chartData = useMemo(() => {
+    const suffix = trendUnit === "month" ? "月" : "日";
+    if (selected === "__all__") {
+      return rooms.flatMap((room) =>
+        room.trend.map((point) => ({ day: `${point.day}${suffix}`, cages: point.cages, roomName: room.roomName })),
+      );
+    }
+    const room = rooms.find((item) => item.roomName === selected);
+    return (room?.trend || []).map((point) => ({ day: `${point.day}${suffix}`, cages: point.cages }));
+  }, [rooms, selected, trendUnit]);
+  const room = rooms.find((item) => item.roomName === selected);
+  const totalCageDays =
+    selected === "__all__" ? rooms.reduce((sum, item) => sum + item.cageDays, 0) : room?.cageDays || 0;
+  const palette = useMemo(() => rooms.map((_, index) => ROOM_PALETTE[index % ROOM_PALETTE.length]), [rooms]);
+  const selectedColor = room ? ROOM_PALETTE[rooms.indexOf(room) % ROOM_PALETTE.length] : "#3872ff";
+  const colorOf = (roomName?: string) => {
+    const index = rooms.findIndex((item) => item.roomName === roomName);
+    return index >= 0 ? ROOM_PALETTE[index % ROOM_PALETTE.length] : ROOM_PALETTE[0];
+  };
+
+  return (
+    <Card className="ant-dashboard-section" size="small" title="饲养间笼位统计">
+      <div className="ant-dashboard-room-toolbar">
+        <Select
+          aria-label="选择饲养间"
+          options={options}
+          value={selected}
+          style={{ width: 180 }}
+          onChange={setSelected}
+        />
+        <Typography.Text type="secondary">总笼日 {totalCageDays}</Typography.Text>
+      </div>
+      <div className="ant-dashboard-room-area">
+        <Area
+          data={chartData}
+          xField="day"
+          yField="cages"
+          colorField={selected === "__all__" ? "roomName" : undefined}
+          stack={selected === "__all__"}
+          scale={selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } }}
+          height={220}
+          axis={{
+            x: {
+              title: false,
+              labelAutoRotate: false,
+              labelFormatter: (v: string) => v.replace("日", ""),
+            },
+            y: { title: false },
+          }}
+          style={{
+            shape: "smooth",
+            fill: (seriesData: RoomAreaDatum[]) => {
+              const roomName = seriesData[0]?.roomName;
+              const color = selected === "__all__" ? colorOf(roomName) : selectedColor;
+              return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
+            },
+          }}
+          line={selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } }}
+          tooltip={{
+            title: "day",
+            items:
+              selected === "__all__"
+                ? [{ field: "cages", name: "笼位" }]
+                : [
+                    (datum: RoomAreaDatum) => ({
+                      name: selected,
+                      value: datum.cages,
+                    }),
+                  ],
+          }}
+          legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
+        />
+      </div>
+    </Card>
   );
 }
 
@@ -273,8 +426,4 @@ function DashboardSkeleton() {
 
 function DashboardError({ retry }: { retry: () => void }) {
   return <PageState detail="运营数据加载失败，请检查服务连接后重新加载。" retry={retry} title="运营数据加载失败" />;
-}
-
-function percent(value: number, total: number) {
-  return total ? Math.round((value / total) * 100) : 0;
 }
