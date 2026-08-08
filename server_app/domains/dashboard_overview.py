@@ -39,12 +39,13 @@ def invalidate_dashboard_overview_cache():
 
 def dashboard_overview_payload(conn, month: str, rooms=None):
     month = clean_text(month)
-    cache_key_value = cache_key("dashboard_overview", month=month)
+    rooms = rooms if rooms is not None else _read_rooms(conn)
+    room_ids = ",".join(sorted(clean_text(room.get("id", "")) for room in rooms))
+    cache_key_value = cache_key("dashboard_overview", month=month, rooms=room_ids)
     cached = cache_get(cache_key_value)
     if cached is not None:
         return cached
 
-    rooms = rooms if rooms is not None else _read_rooms(conn)
     room_by_id = {clean_text(room.get("id", "")): room for room in rooms}
     room_by_name = {clean_text(room.get("name", "")): room for room in rooms}
 
@@ -82,7 +83,18 @@ def _read_rooms(conn):
 
 
 def _intake_overview(conn, month):
-    rows = conn.execute("SELECT payload FROM intake_batches ORDER BY COALESCE(intake_date, '')").fetchall()
+    if month == "all":
+        rows = conn.execute("SELECT payload FROM intake_batches ORDER BY COALESCE(intake_date, '')").fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT payload
+            FROM intake_batches
+            WHERE substr(COALESCE(intake_date, ''), 1, 7) = ?
+            ORDER BY COALESCE(intake_date, '')
+            """,
+            (month,),
+        ).fetchall()
     batches = [json.loads(row["payload"]) for row in rows]
 
     by_month = defaultdict(lambda: {"batches": 0, "animals": 0})

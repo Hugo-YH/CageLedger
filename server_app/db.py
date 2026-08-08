@@ -21,6 +21,8 @@ def connect_db():
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-80000")
+    conn.execute("PRAGMA mmap_size=268435456")
     return conn
 
 
@@ -42,6 +44,8 @@ def ensure_database_ready():
             conn.execute("PRAGMA busy_timeout=5000")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA temp_store=MEMORY")
+            conn.execute("PRAGMA cache_size=-80000")
+            conn.execute("PRAGMA mmap_size=268435456")
             SCHEMA_INITIALIZER(conn)
             conn.execute("PRAGMA optimize")
             conn.commit()

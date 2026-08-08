@@ -1666,7 +1666,11 @@ def write_state(state, actor, skip_permission=False):
         conn.commit()
     invalidate_data_cache("assembled_state", "principal_identities")
     invalidate_data_cache_prefixes(
-        "bootstrap_summary::", "billing_occupancies::", "quantity_sheets::", "billing_workflows::"
+        "bootstrap_summary::",
+        "billing_occupancies::",
+        "quantity_sheets::",
+        "billing_workflows::",
+        "dashboard_overview::",
     )
     return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
 
@@ -1759,7 +1763,11 @@ def write_infrastructure_entity_state(collection, method, item_id, payload, acto
         conn.commit()
     invalidate_data_cache("assembled_state")
     invalidate_data_cache_prefixes(
-        "bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::"
+        "bootstrap_summary::",
+        "billing_occupancies::",
+        "intake_batches::",
+        "placement_tasks::",
+        "dashboard_overview::",
     )
     response = {
         "item": item,
@@ -1823,7 +1831,11 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec):
 
     invalidate_data_cache("assembled_state")
     invalidate_data_cache_prefixes(
-        "bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::"
+        "bootstrap_summary::",
+        "billing_occupancies::",
+        "intake_batches::",
+        "placement_tasks::",
+        "dashboard_overview::",
     )
     response = {
         "item": item,
@@ -1917,7 +1929,11 @@ def persist_intake_receipt_confirmation(batch_id, body, actor):
         conn.commit()
     invalidate_data_cache("assembled_state")
     invalidate_data_cache_prefixes(
-        "bootstrap_summary::", "billing_occupancies::", "intake_batches::", "placement_tasks::"
+        "bootstrap_summary::",
+        "billing_occupancies::",
+        "intake_batches::",
+        "placement_tasks::",
+        "dashboard_overview::",
     )
     log_perf("intake_batch.confirm", started_at, tasks=len(tasks))
     return {
@@ -2178,7 +2194,9 @@ def write_infrastructure_state(payload, actor):
         conn.commit()
 
     invalidate_data_cache("assembled_state")
-    invalidate_data_cache_prefixes("bootstrap_summary::", "billing_occupancies::", "quantity_sheets::")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::", "billing_occupancies::", "quantity_sheets::", "dashboard_overview::"
+    )
     return {
         "rooms": created_rooms,
         "roomUpdates": updated_rooms,
