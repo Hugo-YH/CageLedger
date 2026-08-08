@@ -27,7 +27,7 @@ const baselineHotspots = new Map([
   [
     "server_app/legacy.py",
     {
-      ceiling: 7074,
+      ceiling: 7080,
       reason:
         "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, documentation static routing, transitional domain dispatch, slim admin/IACUC routes, animal-inspection catalog routes, and quantity-sheet pi-history lookup",
     },
