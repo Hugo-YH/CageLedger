@@ -81,7 +81,7 @@ def replace_experiment_applications(conn, items, imported_at, application_payloa
                 dump_json(normalized),
             ),
         )
-    invalidate_data_cache("iacuc_index", "principal_identities")
+    invalidate_data_cache("iacuc_index", "principal_identities", "principal_types_by_pi", "applications_by_iacuc")
     invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
 
 

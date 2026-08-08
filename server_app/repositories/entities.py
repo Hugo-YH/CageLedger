@@ -34,10 +34,13 @@ def list_distinct_principal_names(conn):
 
 
 def read_principal_type_by_pi(conn):
+    cached = cache_get("principal_types_by_pi")
+    if cached is not None:
+        return cached
     rows = conn.execute(
         "SELECT pi, principal_type FROM principal_identities WHERE TRIM(COALESCE(pi, '')) != ''"
     ).fetchall()
-    return {row["pi"]: row["principal_type"] for row in rows}
+    return cache_set("principal_types_by_pi", {row["pi"]: row["principal_type"] for row in rows})
 
 
 def list_audit_events_page(conn, filters, filtered_where):

@@ -3323,7 +3323,7 @@ def save_principal_identity(conn, payload, actor, pi_name):
         item,
     )
     write_audit_events(conn, [event])
-    invalidate_data_cache("principal_identities")
+    invalidate_data_cache("principal_identities", "principal_types_by_pi")
     invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
     return item, merge_audit_logs([], [event])
 
@@ -5929,7 +5929,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 invalidate_all_quantity_sheet_candidate_snapshots(conn)
                 write_audit_events(conn, [event])
                 conn.commit()
-            invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities")
+            invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi")
             invalidate_data_cache_prefixes(
                 "bootstrap_summary::",
                 "billing_occupancies::",
