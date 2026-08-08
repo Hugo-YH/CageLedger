@@ -7,6 +7,7 @@ import mgiStrainAliases from "../../server_app/resources/intake/mgi-strain-alias
 const validStatuses = new Set<IntakeBatchStatus>(["draft", "pending_print", "printed", "received"]);
 const strainSeparatorPattern = /[\s\-_/\\.,;:·（）()【】[\]<>]+/g;
 const strainTrailingMousePattern = /(小鼠|小白鼠|mouse|mice)$/;
+const strainNoteSeparatorPattern = /[，,、；;]/;
 
 export function normalizeStrainKey(raw: string) {
   return String(raw || "")
@@ -48,14 +49,22 @@ async function strainIndex() {
 }
 
 export async function standardizeStrain(raw: string): Promise<string> {
-  const key = normalizeStrainKey(raw);
-  if (!key) return "";
+  const text = String(raw || "").trim();
+  if (!text) return "";
   const aliases = strainAliases();
-  if (aliases[key]) return aliases[key];
-  const stripped = key.replace(strainTrailingMousePattern, "");
-  if (aliases[stripped]) return aliases[stripped];
   const index = await strainIndex();
-  return index[key] || index[stripped] || "";
+  const firstSegment = text.split(strainNoteSeparatorPattern, 1)[0]?.trim();
+  const candidates = firstSegment && firstSegment !== text ? [firstSegment, text] : [text];
+  for (const candidate of candidates) {
+    const key = normalizeStrainKey(candidate);
+    if (!key) continue;
+    if (aliases[key]) return aliases[key];
+    const stripped = key.replace(strainTrailingMousePattern, "");
+    if (aliases[stripped]) return aliases[stripped];
+    const indexName = index[key] || index[stripped];
+    if (indexName) return indexName;
+  }
+  return "";
 }
 
 const supplierShortNames: Array<[string, string]> = [

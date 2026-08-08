@@ -1,8 +1,8 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "1.0.0-beta19",
-  "build": 150,
+  "version": "1.0.0-beta20",
+  "build": 152,
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "6.3.2",
+    "@ant-design/plots": "^2.6.8",
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-virtual": "^3.14.4",
     "antd": "6.5.2",
