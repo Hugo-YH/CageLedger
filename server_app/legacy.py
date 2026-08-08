@@ -218,6 +218,9 @@ from server_app.repositories.billing import (
     delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
 )
 from server_app.repositories.billing import (
+    find_latest_quantity_sheet_pi as find_latest_quantity_sheet_pi_repository,
+)
+from server_app.repositories.billing import (
     get_billing_version as get_billing_version_repository,
 )
 from server_app.repositories.billing import (
@@ -5328,6 +5331,19 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             column = clean_text(query.get("column", [""])[0])
             with connect_db() as conn:
                 self.send_json(list_quantity_sheet_filter_options(conn, self.list_filters(), column))
+            return
+        if path == "/api/quantity-sheets/pi-history":
+            user = self.require_user()
+            if not user:
+                return
+            query = parse_qs(urlparse(self.path).query)
+            iacuc = clean_text(query.get("iacuc", [""])[0]).upper()
+            before_month = clean_text(query.get("beforeMonth", [""])[0])
+            if not iacuc or not before_month:
+                self.send_json({"error": "缺少 iacuc 或 beforeMonth 参数"}, HTTPStatus.BAD_REQUEST)
+                return
+            with connect_db() as conn:
+                self.send_json({"item": find_latest_quantity_sheet_pi_repository(conn, iacuc, before_month)})
             return
         if path == "/api/quantity-sheet-rooms":
             if not self.require_user():

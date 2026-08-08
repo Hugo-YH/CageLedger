@@ -50,18 +50,20 @@ export function BillingView({
         </section>
       ) : null}
       {mode === "settlement" ? (
-        <>
-          <div className="settlement-page-title">
+        <Card
+          className="settlement-candidate-card"
+          title={
             <Space size={8}>
               <FileTextOutlined />
               <Typography.Title level={2} style={{ margin: 0 }}>
                 项目负责人结算
               </Typography.Title>
             </Space>
-            <Typography.Paragraph type="secondary" className="settlement-page-description">
-              同一负责人、同一月份下的多个伦理号自动合表。
-            </Typography.Paragraph>
-          </div>
+          }
+        >
+          <Typography.Paragraph className="settlement-card-description" type="secondary">
+            同一负责人、同一月份下的多个伦理号自动合表。
+          </Typography.Paragraph>
           <Card className="settlement-source-card" size="small" title="结算数据来源">
             <Segmented
               block
@@ -77,7 +79,7 @@ export function BillingView({
             </Typography.Paragraph>
           </Card>
           <SettlementCandidateList source={source} />
-        </>
+        </Card>
       ) : null}
       {mode === "monthly-summary" && user.role === "admin" ? <MonthlyBillingSummary /> : null}
     </div>

@@ -34,6 +34,18 @@ export function useQuantitySheets(params: QuantitySheetListParams) {
   });
 }
 
+export function useQuantitySheetPiHistory(iacuc: string, beforeMonth: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.quantitySheetPiHistory(iacuc.trim().toUpperCase(), beforeMonth),
+    queryFn: () =>
+      requestJson<{ item: { month: string; pi: string } | null }>(
+        `/api/quantity-sheets/pi-history?iacuc=${encodeURIComponent(iacuc.trim().toUpperCase())}&beforeMonth=${encodeURIComponent(beforeMonth)}`,
+      ),
+    enabled: enabled && Boolean(iacuc.trim()) && Boolean(beforeMonth),
+    staleTime: 60 * 1000,
+  });
+}
+
 export function listAllQuantitySheets(params: QuantitySheetListParams) {
   return loadAllPages((offset, limit) => listQuantitySheets({ ...params, offset, limit }));
 }

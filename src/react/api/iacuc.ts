@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { IacucExpiryItem, IacucIndexItem } from "./contracts";
 import { requestJson } from "./client";
@@ -18,11 +19,17 @@ export function fetchIacucSearch(query: string, limit = 20) {
 }
 
 export function useIacucSearch(query: string, limit = 20) {
-  const q = query.trim().toUpperCase();
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const q = debouncedQuery.trim().toUpperCase();
   return useQuery({
     queryKey: queryKeys.iacucSearch(q, limit),
     queryFn: () => fetchIacucSearch(q, limit),
     enabled: Boolean(q),
     staleTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
   });
 }
