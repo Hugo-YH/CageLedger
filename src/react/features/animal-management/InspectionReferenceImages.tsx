@@ -58,6 +58,7 @@ export function InspectionReferenceImages({
               width={56}
               height={56}
               src={displayUrl}
+              alt={row.desc || "参考图"}
               preview={{ src: displayUrl }}
               fallback="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Crect width='100%25' height='100%25' fill='%23f0f2f5'/%3E%3C/svg%3E"
             />

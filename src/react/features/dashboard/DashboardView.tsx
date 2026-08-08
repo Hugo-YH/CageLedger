@@ -184,7 +184,7 @@ function PiFeeChart({ items }: { items: Array<{ pi: string; amount: number; iacu
         percent={Math.max(Math.round((item.amount / maxAmount) * 100), 0)}
         showInfo={false}
         strokeColor={{ from: "#0958d9", to: "#68b2ff" }}
-        trailColor="rgba(9, 88, 217, 0.08)"
+        railColor="rgba(9, 88, 217, 0.08)"
         size="small"
       />
       <Typography.Text type="secondary" className="ant-dashboard-pi-sub">

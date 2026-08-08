@@ -31,7 +31,7 @@ export function InspectionNodeForm({
       open
       onClose={onClose}
       size={isMobile ? "100%" : 640}
-      destroyOnClose
+      destroyOnHidden
       title={
         <Space>
           <Typography.Text strong>{isNew ? "新增条目" : node.name}</Typography.Text>
