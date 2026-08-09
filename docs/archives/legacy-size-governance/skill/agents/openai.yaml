@@ -1,0 +1,4 @@
+interface:
+  display_name: "Legacy Size Governance"
+  short_description: "Safely shrink server_app legacy compatibility code."
+  default_prompt: "Extract a low-risk legacy compatibility concern while preserving API contracts and quality gates."

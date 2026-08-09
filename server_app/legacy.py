@@ -63,9 +63,6 @@ from server_app.domains.animal_management import (
     catalog_payload as animal_inspection_catalog_payload,
 )
 from server_app.domains.animal_management import (
-    create_or_update_inspection as save_animal_inspection,
-)
-from server_app.domains.animal_management import (
     ensure_catalog as ensure_animal_inspection_catalog,
 )
 from server_app.domains.animal_management import (
@@ -76,27 +73,6 @@ from server_app.domains.animal_management import (
 )
 from server_app.domains.animal_management import (
     get_inspection as get_animal_inspection,
-)
-from server_app.domains.animal_management import (
-    list_findings as list_animal_inspection_findings,
-)
-from server_app.domains.animal_management import (
-    list_inspections as list_animal_inspections,
-)
-from server_app.domains.animal_management import (
-    resolve_finding as resolve_animal_inspection_finding,
-)
-from server_app.domains.animal_management import (
-    submit_inspection as submit_animal_inspection,
-)
-from server_app.domains.animal_management import (
-    update_finding as update_animal_inspection_finding,
-)
-from server_app.domains.animal_management.catalog_draft import (
-    get_draft as get_animal_inspection_catalog_draft,
-)
-from server_app.domains.animal_management.catalog_draft import (
-    list_catalog_versions as list_animal_inspection_catalog_versions,
 )
 from server_app.domains.animal_management.catalog_draft import (
     publish_draft as publish_animal_inspection_catalog_draft,
@@ -433,10 +409,12 @@ from server_app.services.reimbursement import (
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso, today_iso
 from server_app.shared.concurrency import StaleWriteError, require_current_version
 from server_app.static import send_documentation_asset, send_frontend_asset
-from server_app.web import CageLedgerHttpHandler, JsonResponse, Router
+from server_app.web import CageLedgerHttpHandler, JsonResponse, Router, route_matchers
+from server_app.web import animal_inspection as animal_inspection_web
 from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
+from server_app.web.multipart import parse_multipart_upload
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
     download_pdf_export_job,
@@ -5031,43 +5009,6 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note=""):
     return update_workflow_status_service(conn, workflow_id, next_status, actor, note, billing_workflow_service_deps())
 
 
-def parse_multipart_upload(content_type, raw):
-    if "multipart/form-data" not in content_type:
-        raise ValueError("请使用 multipart/form-data 上传文件")
-    boundary = multipart_boundary(content_type)
-    delimiter = b"--" + boundary
-    for part in raw.split(delimiter):
-        part = part.strip(b"\r\n")
-        if not part or part == b"--" or b"\r\n\r\n" not in part:
-            continue
-        header_blob, body = part.split(b"\r\n\r\n", 1)
-        headers = header_blob.decode("utf-8", errors="replace")
-        disposition = next(
-            (line for line in headers.split("\r\n") if line.lower().startswith("content-disposition:")), ""
-        )
-        if 'name="file"' not in disposition:
-            continue
-        filename = multipart_filename(disposition)
-        return filename, body.rstrip(b"\r\n")
-    raise ValueError("没有找到上传字段 file")
-
-
-def multipart_boundary(content_type):
-    for segment in content_type.split(";"):
-        segment = segment.strip()
-        if segment.startswith("boundary="):
-            value = segment.split("=", 1)[1].strip()
-            if value.startswith('"') and value.endswith('"'):
-                value = value[1:-1]
-            return value.encode("utf-8")
-    raise ValueError("上传请求缺少 multipart boundary")
-
-
-def multipart_filename(disposition):
-    match = re.search(r'filename="([^"]*)"', disposition)
-    return match.group(1) if match else ""
-
-
 API_ROUTER = Router()
 API_ROUTER.add(
     "GET", r"/api/health", lambda h, p: JsonResponse({"ok": True, "database": str(DB_PATH), "system": system_info()})
@@ -5136,46 +5077,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                     month = default_overview_month()
                 self.send_json(dashboard_overview_payload(conn, month))
             return
-        if path == "/api/animal-inspection-catalog":
-            user = self.require_user()
-            if not user:
-                return
-            with connect_db() as conn:
-                self.send_json(animal_inspection_catalog_payload(conn, user))
-            return
-        if path == "/api/animal-inspection-catalog/draft":
-            user = self.require_user()
-            if not user:
-                return
-            if user["role"] != "admin":
-                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-                return
-            with connect_db() as conn:
-                self.send_json(get_animal_inspection_catalog_draft(conn, image_root=ANIMAL_INSPECTION_IMAGES_PATH))
-            return
-        if path == "/api/animal-inspection-catalog/versions":
-            user = self.require_user()
-            if not user:
-                return
-            if user["role"] != "admin":
-                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-                return
-            with connect_db() as conn:
-                self.send_json(list_animal_inspection_catalog_versions(conn))
-            return
-        if path == "/api/animal-inspections":
-            user = self.require_user()
-            if not user:
-                return
-            with connect_db() as conn:
-                self.send_json(list_animal_inspections(conn, user, self.animal_inspection_filters()))
-            return
-        if path == "/api/animal-inspection-findings":
-            user = self.require_user()
-            if not user:
-                return
-            with connect_db() as conn:
-                self.send_json(list_animal_inspection_findings(conn, user, self.animal_inspection_filters()))
+        if animal_inspection_web.handle_get(self, path):
             return
         if path == "/api/reimbursement-ledger/obligations":
             user = self.require_user()
@@ -6352,20 +6254,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
 
     def handle_animal_inspection_save(self, inspection_id):
-        user = self.require_user()
-        if not user:
-            return
-        try:
-            body = self.read_json_body()
-            with connect_db() as conn:
-                payload = save_animal_inspection(conn, user, inspection_id, body)
-            self.send_json(payload, HTTPStatus.OK if inspection_id else HTTPStatus.CREATED)
-        except LookupError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        except ValueError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        animal_inspection_web.save_inspection(self, inspection_id)
 
     def handle_reimbursement_claim_save(self, claim_id):
         user = self.require_user()
@@ -6463,18 +6352,7 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def handle_animal_inspection_submit(self, inspection_id):
-        user = self.require_user()
-        if not user:
-            return
-        try:
-            with connect_db() as conn:
-                self.send_json(submit_animal_inspection(conn, user, inspection_id))
-        except LookupError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        except ValueError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        animal_inspection_web.submit_inspection_record(self, inspection_id)
 
     def handle_animal_inspection_attachment(self, inspection_id, finding_id):
         user = self.require_user()
@@ -6495,48 +6373,13 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def handle_animal_inspection_finding_update(self, finding_id):
-        user = self.require_user()
-        if not user:
-            return
-        try:
-            with connect_db() as conn:
-                self.send_json(update_animal_inspection_finding(conn, user, finding_id, self.read_json_body()))
-        except LookupError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        except ValueError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        animal_inspection_web.update_finding_record(self, finding_id)
 
     def handle_animal_inspection_finding_recheck(self, finding_id):
-        user = self.require_user()
-        if not user:
-            return
-        try:
-            body = self.read_json_body()
-            body["status"] = "pending_recheck"
-            with connect_db() as conn:
-                self.send_json(update_animal_inspection_finding(conn, user, finding_id, body))
-        except LookupError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        except ValueError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        animal_inspection_web.update_finding_record(self, finding_id, recheck=True)
 
     def handle_animal_inspection_finding_resolve(self, finding_id):
-        user = self.require_user()
-        if not user:
-            return
-        try:
-            with connect_db() as conn:
-                self.send_json(resolve_animal_inspection_finding(conn, user, finding_id, self.read_json_body()))
-        except LookupError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        except ValueError as exc:
-            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        animal_inspection_web.update_finding_record(self, finding_id, resolve=True)
 
     def current_user(self):
         with connect_db() as conn:
@@ -6656,116 +6499,51 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         return None, None
 
     def animal_inspection_route(self, path):
-        prefix = "/api/animal-inspections/"
-        if not path.startswith(prefix):
-            return None
-        value = unquote(path[len(prefix) :])
-        return value if value and "/" not in value else None
+        return route_matchers.animal_inspection_route(path)
 
     def reimbursement_claim_route(self, path):
-        prefix = "/api/reimbursement-ledger/claims/"
-        if not path.startswith(prefix):
-            return None
-        value = unquote(path[len(prefix) :])
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_claim_route(path)
 
     def reimbursement_obligation_route(self, path):
-        prefix = "/api/reimbursement-ledger/obligations/"
-        if not path.startswith(prefix):
-            return None
-        value = unquote(path[len(prefix) :])
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_obligation_route(path)
 
     def reimbursement_attachment_route(self, path):
-        prefix = "/api/reimbursement-ledger/attachments/"
-        value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_attachment_route(path)
 
     def reimbursement_claim_attachment_upload_route(self, path):
-        prefix = "/api/reimbursement-ledger/claims/"
-        suffix = "/attachments"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_claim_attachment_upload_route(path)
 
     def reimbursement_claim_allocation_route(self, path):
-        prefix = "/api/reimbursement-ledger/claims/"
-        suffix = "/allocations"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_claim_allocation_route(path)
 
     def reimbursement_allocation_action_route(self, path, action):
-        prefix = "/api/reimbursement-ledger/allocations/"
-        suffix = f"/{action}"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_allocation_action_route(path, action)
 
     def reimbursement_legacy_migration_route(self, path):
-        prefix = "/api/reimbursement-ledger/legacy-records/"
-        suffix = "/migrate"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.reimbursement_legacy_migration_route(path)
 
     def animal_inspection_submit_route(self, path):
-        prefix = "/api/animal-inspections/"
-        suffix = "/submit"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.animal_inspection_submit_route(path)
 
     def animal_inspection_pdf_route(self, path):
-        prefix = "/api/animal-inspections/"
-        suffix = "/export-pdf"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.animal_inspection_pdf_route(path)
 
     def animal_inspection_attachment_upload_route(self, path):
-        prefix = "/api/animal-inspections/"
-        suffix = "/attachments"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None, None
-        inspection_id = unquote(path[len(prefix) : -len(suffix)])
         query = parse_qs(urlparse(self.path).query)
         finding_id = clean_text(query.get("findingId", [""])[0])
-        return (
-            (inspection_id, finding_id) if inspection_id and "/" not in inspection_id and finding_id else (None, None)
-        )
+        return route_matchers.animal_inspection_attachment_upload_route(path, finding_id)
 
     def animal_inspection_attachment_route(self, path):
-        prefix = "/api/animal-inspection-attachments/"
-        value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
-        return value if value and "/" not in value else None
+        return route_matchers.animal_inspection_attachment_route(path)
 
     def animal_inspection_reference_route(self, path):
-        prefix = "/api/animal-inspection-reference/"
-        value = unquote(path[len(prefix) :]) if path.startswith(prefix) else ""
-        return value if value and "/" not in value else None
+        return route_matchers.animal_inspection_reference_route(path)
 
     def catalog_version_restore_route(self, path):
-        prefix = "/api/animal-inspection-catalog/versions/"
-        suffix = "/restore"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.catalog_version_restore_route(path)
 
     def animal_inspection_finding_action_route(self, path, action):
-        prefix = "/api/animal-inspection-findings/"
-        suffix = f"/{action}"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        value = unquote(path[len(prefix) : -len(suffix)])
-        return value if value and "/" not in value else None
+        return route_matchers.animal_inspection_finding_action_route(path, action)
 
     def animal_inspection_filters(self):
         query = parse_qs(urlparse(self.path).query)
@@ -6785,98 +6563,34 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         return None, None
 
     def user_route(self, path):
-        prefix = "/api/users/"
-        if not path.startswith(prefix):
-            return None
-        user_id = unquote(path[len(prefix) :])
-        if "/" in user_id or not user_id:
-            return None
-        return user_id
+        return route_matchers.user_route(path)
 
     def quantity_sheet_route(self, path):
-        prefix = "/api/quantity-sheets/"
-        if not path.startswith(prefix):
-            return None
-        sheet_id = unquote(path[len(prefix) :])
-        if "/" in sheet_id or not sheet_id:
-            return None
-        return sheet_id
+        return route_matchers.quantity_sheet_route(path)
 
     def billing_statement_route(self, path):
-        prefix = "/api/billing-statements/"
-        if not path.startswith(prefix):
-            return None
-        statement_id = unquote(path[len(prefix) :])
-        if "/" in statement_id or not statement_id:
-            return None
-        return statement_id
+        return route_matchers.billing_statement_route(path)
 
     def principal_identity_route(self, path):
-        prefix = "/api/principal-identities/"
-        if not path.startswith(prefix):
-            return None
-        pi_name = unquote(path[len(prefix) :])
-        if "/" in pi_name or not pi_name:
-            return None
-        return pi_name
+        return route_matchers.principal_identity_route(path)
 
     def billing_workflow_route(self, path):
-        prefix = "/api/billing-workflows/"
-        if not path.startswith(prefix):
-            return None
-        workflow_id = unquote(path[len(prefix) :])
-        if "/" in workflow_id or not workflow_id:
-            return None
-        return workflow_id
+        return route_matchers.billing_workflow_route(path)
 
     def billing_workflow_lines_route(self, path):
-        prefix = "/api/billing-workflows/"
-        suffix = "/lines"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        workflow_id = unquote(path[len(prefix) : -len(suffix)])
-        if "/" in workflow_id or not workflow_id:
-            return None
-        return workflow_id
+        return route_matchers.billing_workflow_lines_route(path)
 
     def reimbursement_record_route(self, path):
-        prefix = "/api/reimbursement-records/"
-        if not path.startswith(prefix):
-            return None
-        record_id = unquote(path[len(prefix) :])
-        if "/" in record_id or not record_id:
-            return None
-        return record_id
+        return route_matchers.reimbursement_record_route(path)
 
     def intake_batch_confirm_route(self, path):
-        prefix = "/api/intake-batches/"
-        suffix = "/confirm-receipt"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        batch_id = unquote(path[len(prefix) : -len(suffix)])
-        if "/" in batch_id or not batch_id:
-            return None
-        return batch_id
+        return route_matchers.intake_batch_confirm_route(path)
 
     def placement_task_action_route(self, path, action):
-        prefix = "/api/placement-tasks/"
-        suffix = f"/{action}"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        task_id = unquote(path[len(prefix) : -len(suffix)])
-        if "/" in task_id or not task_id:
-            return None
-        return task_id
+        return route_matchers.placement_task_action_route(path, action)
 
     def quantity_sheet_generate_route(self, path):
-        prefix = "/api/quantity-sheets/"
-        suffix = "/generate-statement"
-        if not path.startswith(prefix) or not path.endswith(suffix):
-            return None
-        sheet_id = unquote(path[len(prefix) : -len(suffix)])
-        if "/" in sheet_id or not sheet_id:
-            return None
-        return sheet_id
+        return route_matchers.quantity_sheet_generate_route(path)
 
     def handle_entity_write(self, method, endpoint, item_id):
         user = self.require_user()
