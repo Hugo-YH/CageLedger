@@ -64,6 +64,7 @@ export function SlotStatusSelect({
         options={SLOT_STATUS_OPTIONS}
         style={{ width: "100%" }}
         value={value}
+        virtual={false}
         onChange={onChange}
       />
     </label>
@@ -84,6 +85,7 @@ export function SexSelect({ id, value, onChange }: { id: string; value: string; 
         ]}
         style={{ width: "100%" }}
         value={value}
+        virtual={false}
         onChange={onChange}
       />
     </label>
