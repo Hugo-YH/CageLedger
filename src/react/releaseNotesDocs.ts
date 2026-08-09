@@ -3,6 +3,20 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-rc4",
+    build: "154",
+    releasedAt: "2026-08-09",
+    title: "公测版整合：运营工作台、录入体验与性能优化",
+    items: [
+      "总览页升级为真实业务数据运营工作台：接收动物统计（批次、只数、品系分布）、饲养间笼位统计（逐日笼位与月度笼日）、饲养费统计（按项目负责人结算口径）；月份选择器支持「历史合计」与具体月份切换，品系分布按标准化别名聚合",
+      "数量统计表录入优化：IACUC 带出即时化、历史结算负责人气泡提示一键带入、联想搜索防抖与失焦补查",
+      "笼位管理界面按 Ant Design 设计规范重设计：状态配色统一为功能色、笼位固定尺寸、弹窗按内容定宽",
+      "性能优化：仪表盘图表按需加载（懒加载块由 1.5MB 降至 23KB）、仪表盘聚合按月下推 SQL、SQLite 页缓存与 mmap 调优、结算候选生成缓存加速",
+      "修复与合规：迁移 antd 弃用 API（Select 搜索、Drawer 销毁、Progress 轨道色），补全巡检参考图可访问性；恢复小数据集 Select 显式关闭虚拟滚动",
+      "工程：拆分 legacy web 适配器模块，降低单体入口复杂度",
+    ],
+  },
+  {
     version: "1.0.0-beta20",
     build: "152",
     releasedAt: "2026-08-08",
