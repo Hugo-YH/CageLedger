@@ -52,7 +52,6 @@ export async function standardizeStrain(raw: string): Promise<string> {
   const text = String(raw || "").trim();
   if (!text) return "";
   const aliases = strainAliases();
-  const index = await strainIndex();
   const firstSegment = text.split(strainNoteSeparatorPattern, 1)[0]?.trim();
   const candidates = firstSegment && firstSegment !== text ? [firstSegment, text] : [text];
   for (const candidate of candidates) {
@@ -61,6 +60,12 @@ export async function standardizeStrain(raw: string): Promise<string> {
     if (aliases[key]) return aliases[key];
     const stripped = key.replace(strainTrailingMousePattern, "");
     if (aliases[stripped]) return aliases[stripped];
+  }
+  const index = await strainIndex();
+  for (const candidate of candidates) {
+    const key = normalizeStrainKey(candidate);
+    if (!key) continue;
+    const stripped = key.replace(strainTrailingMousePattern, "");
     const indexName = index[key] || index[stripped];
     if (indexName) return indexName;
   }

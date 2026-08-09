@@ -1,10 +1,6 @@
 import { Button, Checkbox, Input, Popover, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
-import { useEffect, useState } from "react";
-import { useContext } from "react";
-// antd 6.5.2 的 TableMeasureRowContext 只有 default 导出；antd lint 的
-// "use named imports" 规则对该模块不适用，保留 default 导入。
-import TableMeasureRowContext from "antd/es/table/TableMeasureRowContext";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface TableFilterOption {
   value: string;
@@ -36,7 +32,14 @@ export function FilterableColumnTitle({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState(values);
-  const inMeasureRow = useContext(TableMeasureRowContext);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const [inMeasureRow, setInMeasureRow] = useState(false);
+
+  useLayoutEffect(() => {
+    const nextInMeasureRow = Boolean(rootRef.current?.closest(".ant-table-measure-row"));
+    setInMeasureRow((current) => (current === nextInMeasureRow ? current : nextInMeasureRow));
+  }, []);
+
   useEffect(() => {
     onOpenChange?.(open);
   }, [onOpenChange, open]);
@@ -44,7 +47,11 @@ export function FilterableColumnTitle({
   // antd clones header titles into an aria-hidden measure row for width
   // tracking; keep that clone inert instead of duplicating focusable controls.
   if (inMeasureRow) {
-    return <span className="filterable-column-title">{label}</span>;
+    return (
+      <span className="filterable-column-title" ref={rootRef}>
+        {label}
+      </span>
+    );
   }
 
   const visibleOptions = options.filter((option) =>
@@ -103,7 +110,10 @@ export function FilterableColumnTitle({
   );
 
   return (
-    <span className={`filterable-column-title ${values.length ? "is-filtered" : ""} ${open ? "is-filter-open" : ""}`}>
+    <span
+      className={`filterable-column-title ${values.length ? "is-filtered" : ""} ${open ? "is-filter-open" : ""}`}
+      ref={rootRef}
+    >
       <Button
         className="table-sort-button"
         size="small"

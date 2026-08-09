@@ -846,6 +846,12 @@
   margin-bottom: 0;
 }
 
+.ant-dashboard-chart-loading {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
 .ant-dashboard-trend,
 .ant-dashboard-strain-list {
   display: grid;

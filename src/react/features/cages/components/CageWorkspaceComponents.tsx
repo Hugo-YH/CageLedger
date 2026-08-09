@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Empty, Input } from "antd";
 
@@ -32,7 +32,27 @@ export function VirtualRack({
   onSelect: (slot: CageSlot) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const rows = Array.from(new Set(slots.map((slot) => slot.row))).sort((a, b) => a - b);
+  const { rows, slotsByRow } = useMemo(() => {
+    const nextSlotsByRow = new Map<number, CageSlot[]>();
+    for (const slot of slots) {
+      const rowSlots = nextSlotsByRow.get(slot.row);
+      if (rowSlots) rowSlots.push(slot);
+      else nextSlotsByRow.set(slot.row, [slot]);
+    }
+    const nextRows = [...nextSlotsByRow.keys()].sort((a, b) => a - b);
+    for (const rowSlots of nextSlotsByRow.values()) rowSlots.sort((a, b) => a.col - b.col);
+    return { rows: nextRows, slotsByRow: nextSlotsByRow };
+  }, [slots]);
+  const occupancyBySlotId = useMemo(
+    () =>
+      new Map(
+        occupancies
+          .filter((item) => item.status === "active" || item.status === "reserved")
+          .map((item) => [item.slotId, item]),
+      ),
+    [occupancies],
+  );
+  const selectedSlotIdSet = useMemo(() => new Set(selectedSlotIds), [selectedSlotIds]);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -44,6 +64,7 @@ export function VirtualRack({
       <div className="react-rack-virtual" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const row = rows[virtualRow.index];
+          const rowSlots = slotsByRow.get(row) || [];
           return (
             <div
               className={`react-rack-row ${roomSpecies === "monkey" ? "monkey-rack-row" : ""}`}
@@ -53,22 +74,19 @@ export function VirtualRack({
                 gridTemplateColumns: `repeat(${rack.cols}, var(--cage-slot-size, 120px))`,
               }}
             >
-              {slots
-                .filter((slot) => slot.row === row)
-                .sort((a, b) => a.col - b.col)
-                .map((slot) => (
-                  <CageSlotButton
-                    key={slot.id}
-                    slot={slot}
-                    rack={rack}
-                    roomName={roomName}
-                    roomSpecies={roomSpecies}
-                    occupancy={currentOccupancy(slot.id, occupancies)}
-                    selected={slot.id === selectedSlotId || selectedSlotIds.includes(slot.id)}
-                    today={today}
-                    onClick={() => onSelect(slot)}
-                  />
-                ))}
+              {rowSlots.map((slot) => (
+                <CageSlotButton
+                  key={slot.id}
+                  slot={slot}
+                  rack={rack}
+                  roomName={roomName}
+                  roomSpecies={roomSpecies}
+                  occupancy={occupancyBySlotId.get(slot.id) || null}
+                  selected={slot.id === selectedSlotId || selectedSlotIdSet.has(slot.id)}
+                  today={today}
+                  onClick={() => onSelect(slot)}
+                />
+              ))}
             </div>
           );
         })}

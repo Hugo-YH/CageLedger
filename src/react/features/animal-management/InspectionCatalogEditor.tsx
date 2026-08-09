@@ -294,8 +294,7 @@ export function InspectionCatalogEditor({
               placeholder="选择条目归属的分类"
               onChange={setAddParentCode}
               options={parentOptions}
-              showSearch
-              optionFilterProp="label"
+              showSearch={{ optionFilterProp: "label" }}
             />
           </Form.Item>
         </Form>

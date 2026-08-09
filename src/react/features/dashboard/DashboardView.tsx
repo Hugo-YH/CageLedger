@@ -1,7 +1,6 @@
 import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
-import { Area, Rose } from "@ant-design/plots";
 import { Badge, Button, Card, Col, Progress, Row, Select, Skeleton, Statistic, Tag, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
@@ -9,6 +8,24 @@ import { useDashboardOverview } from "../../api/dashboardOverview";
 import { PageState } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
+
+// @ant-design/plots 体积较大，拆为独立懒加载块：仅图表卡实际渲染时下载。
+const AreaChart = lazy(() => import("@ant-design/plots").then((module) => ({ default: module.Area })));
+const RoseChart = lazy(() => import("@ant-design/plots").then((module) => ({ default: module.Rose })));
+
+function ChartBoundary({ height, children }: { height: number; children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div aria-busy="true" className="ant-dashboard-chart-loading" style={{ height }}>
+          <Skeleton active paragraph={{ rows: 3, width: "100%" }} title={false} />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  );
+}
 
 const ROOM_PALETTE = ["#3872ff", "#52c41a", "#faad14", "#eb2f96", "#722ed1", "#13c2c2", "#fa541c"];
 const STRAIN_COLORS = ["#5B8FF9", "#5AD8A6", "#5D7092", "#F6BD16", "#E8684A", "#6DC8EC", "#9270CA", "#FF9D4D"];
@@ -184,7 +201,7 @@ function PiFeeChart({ items }: { items: Array<{ pi: string; amount: number; iacu
         percent={Math.max(Math.round((item.amount / maxAmount) * 100), 0)}
         showInfo={false}
         strokeColor={{ from: "#0958d9", to: "#68b2ff" }}
-        trailColor="rgba(9, 88, 217, 0.08)"
+        railColor="rgba(9, 88, 217, 0.08)"
         size="small"
       />
       <Typography.Text type="secondary" className="ant-dashboard-pi-sub">
@@ -220,32 +237,34 @@ function IntakeTrend({
   }));
   return (
     <div className="ant-dashboard-trend">
-      <Area
-        data={data}
-        xField="label"
-        yField="animals"
-        height={180}
-        axis={{
-          x: { title: false, labelAutoRotate: false, labelFormatter: (v: string) => v.replace("日", "") },
-          y: { title: false },
-        }}
-        style={{
-          shape: "smooth",
-          fill: () =>
-            `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
-        }}
-        tooltip={{
-          title: "label",
-          items: [
-            (datum: { animals: number }) => ({
-              name: "接收只数",
-              value: datum.animals,
-            }),
-          ],
-        }}
-        scale={{ y: { nice: true } }}
-        legend={false}
-      />
+      <ChartBoundary height={180}>
+        <AreaChart
+          data={data}
+          xField="label"
+          yField="animals"
+          height={180}
+          axis={{
+            x: { title: false, labelAutoRotate: false, labelFormatter: (v: string) => v.replace("日", "") },
+            y: { title: false },
+          }}
+          style={{
+            shape: "smooth",
+            fill: () =>
+              `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
+          }}
+          tooltip={{
+            title: "label",
+            items: [
+              (datum: { animals: number }) => ({
+                name: "接收只数",
+                value: datum.animals,
+              }),
+            ],
+          }}
+          scale={{ y: { nice: true } }}
+          legend={false}
+        />
+      </ChartBoundary>
       <Typography.Text type="secondary" className="ant-dashboard-trend-caption">
         {unit === "month" ? "近 6 个月接收只数变化" : "当月每日接收只数变化"}
       </Typography.Text>
@@ -282,49 +301,51 @@ function StrainDistribution({ items }: { items: Array<{ strain: string; animals:
   };
   return (
     <div className="ant-dashboard-pie">
-      <Rose
-        data={data}
-        xField="type"
-        yField="value"
-        colorField="type"
-        radius={0.9}
-        style={{
-          inset: 2,
-          radius: 8,
-          fill: (datum: { type: string }) => {
-            const color = colorOf(datum.type);
-            return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
-          },
-        }}
-        axis={false}
-        height={280}
-        scale={{
-          color: {
-            range: data.map((item) => colorOf(item.type)),
-          },
-        }}
-        label={{
-          text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
-          position: "outside",
-          fontSize: 10,
-        }}
-        legend={{
-          color: {
-            position: "bottom",
-            layout: { justifyContent: "center" },
-            labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
-          },
-        }}
-        tooltip={{
-          title: "type",
-          items: [
-            (datum: { animals: number; percent: number }) => ({
-              name: "接收只数",
-              value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
-            }),
-          ],
-        }}
-      />
+      <ChartBoundary height={280}>
+        <RoseChart
+          data={data}
+          xField="type"
+          yField="value"
+          colorField="type"
+          radius={0.9}
+          style={{
+            inset: 2,
+            radius: 8,
+            fill: (datum: { type: string }) => {
+              const color = colorOf(datum.type);
+              return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
+            },
+          }}
+          axis={false}
+          height={280}
+          scale={{
+            color: {
+              range: data.map((item) => colorOf(item.type)),
+            },
+          }}
+          label={{
+            text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
+            position: "outside",
+            fontSize: 10,
+          }}
+          legend={{
+            color: {
+              position: "bottom",
+              layout: { justifyContent: "center" },
+              labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
+            },
+          }}
+          tooltip={{
+            title: "type",
+            items: [
+              (datum: { animals: number; percent: number }) => ({
+                name: "接收只数",
+                value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
+              }),
+            ],
+          }}
+        />
+      </ChartBoundary>
     </div>
   );
 }
@@ -372,45 +393,47 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
         <Typography.Text type="secondary">总笼日 {totalCageDays}</Typography.Text>
       </div>
       <div className="ant-dashboard-room-area">
-        <Area
-          data={chartData}
-          xField="day"
-          yField="cages"
-          colorField={selected === "__all__" ? "roomName" : undefined}
-          stack={selected === "__all__"}
-          scale={selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } }}
-          height={220}
-          axis={{
-            x: {
-              title: false,
-              labelAutoRotate: false,
-              labelFormatter: (v: string) => v.replace("日", ""),
-            },
-            y: { title: false },
-          }}
-          style={{
-            shape: "smooth",
-            fill: (seriesData: RoomAreaDatum[]) => {
-              const roomName = seriesData[0]?.roomName;
-              const color = selected === "__all__" ? colorOf(roomName) : selectedColor;
-              return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
-            },
-          }}
-          line={selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } }}
-          tooltip={{
-            title: "day",
-            items:
-              selected === "__all__"
-                ? [{ field: "cages", name: "笼位" }]
-                : [
-                    (datum: RoomAreaDatum) => ({
-                      name: selected,
-                      value: datum.cages,
-                    }),
-                  ],
-          }}
-          legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
-        />
+        <ChartBoundary height={220}>
+          <AreaChart
+            data={chartData}
+            xField="day"
+            yField="cages"
+            colorField={selected === "__all__" ? "roomName" : undefined}
+            stack={selected === "__all__"}
+            scale={selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } }}
+            height={220}
+            axis={{
+              x: {
+                title: false,
+                labelAutoRotate: false,
+                labelFormatter: (v: string) => v.replace("日", ""),
+              },
+              y: { title: false },
+            }}
+            style={{
+              shape: "smooth",
+              fill: (seriesData: RoomAreaDatum[]) => {
+                const roomName = seriesData[0]?.roomName;
+                const color = selected === "__all__" ? colorOf(roomName) : selectedColor;
+                return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
+              },
+            }}
+            line={selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } }}
+            tooltip={{
+              title: "day",
+              items:
+                selected === "__all__"
+                  ? [{ field: "cages", name: "笼位" }]
+                  : [
+                      (datum: RoomAreaDatum) => ({
+                        name: selected,
+                        value: datum.cages,
+                      }),
+                    ],
+            }}
+            legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
+          />
+        </ChartBoundary>
       </div>
     </Card>
   );

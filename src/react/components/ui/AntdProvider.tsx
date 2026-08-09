@@ -54,7 +54,6 @@ export function AntdProvider({ children }: PropsWithChildren) {
         Card: { borderRadiusLG: 8 },
         Drawer: { borderRadiusLG: 8 },
         Modal: { borderRadiusLG: 8 },
-        Table: { headerBg: resolvedTheme === "dark" ? "#1f1f1f" : "#fafafa" },
       },
     }),
     [reducedMotion, resolvedTheme],
