@@ -1,14 +1,21 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Button, Result } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "./api/client";
 import { queryKeys } from "./api/queryKeys";
 import { useSession } from "./api/session";
-import { LoginView } from "./features/auth/LoginView";
-import { ProjectHome } from "./features/project-home/ProjectHome";
-import { PublicScanView } from "./features/scanner/PublicScanView";
-import { ReactWorkspace } from "./features/shell/ReactWorkspace";
+
+const LoginView = lazy(() => import("./features/auth/LoginView").then((module) => ({ default: module.LoginView })));
+const ProjectHome = lazy(() =>
+  import("./features/project-home/ProjectHome").then((module) => ({ default: module.ProjectHome })),
+);
+const PublicScanView = lazy(() =>
+  import("./features/scanner/PublicScanView").then((module) => ({ default: module.PublicScanView })),
+);
+const ReactWorkspace = lazy(() =>
+  import("./features/shell/ReactWorkspace").then((module) => ({ default: module.ReactWorkspace })),
+);
 
 function LoadingScreen() {
   return (
@@ -23,9 +30,11 @@ function LoadingScreen() {
 }
 
 export function App() {
-  if (isPublicScanRoute()) return <PublicScanView />;
-  if (isProjectHomeRoute()) return <ProjectHome />;
-  return <AuthenticatedApp />;
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      {isPublicScanRoute() ? <PublicScanView /> : isProjectHomeRoute() ? <ProjectHome /> : <AuthenticatedApp />}
+    </Suspense>
+  );
 }
 
 function AuthenticatedApp() {

@@ -408,7 +408,6 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                     ...rooms.map((room) => ({ value: room.id, label: room.name })),
                   ]}
                   value={draft.roomId}
-                  virtual={false}
                   onChange={chooseRoom}
                 />
               </label>

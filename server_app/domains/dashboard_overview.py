@@ -86,14 +86,17 @@ def _intake_overview(conn, month):
     if month == "all":
         rows = conn.execute("SELECT payload FROM intake_batches ORDER BY COALESCE(intake_date, '')").fetchall()
     else:
+        year, month_number = _split_month(month)
+        next_year = year + 1 if month_number == 12 else year
+        next_month = 1 if month_number == 12 else month_number + 1
         rows = conn.execute(
             """
             SELECT payload
             FROM intake_batches
-            WHERE substr(COALESCE(intake_date, ''), 1, 7) = ?
-            ORDER BY COALESCE(intake_date, '')
+            WHERE intake_date >= ? AND intake_date < ?
+            ORDER BY intake_date
             """,
-            (month,),
+            (f"{year:04d}-{month_number:02d}-01", f"{next_year:04d}-{next_month:02d}-01"),
         ).fetchall()
     batches = [json.loads(row["payload"]) for row in rows]
 
