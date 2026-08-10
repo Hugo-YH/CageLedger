@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.0-rc5",
+    build: "155",
+    releasedAt: "2026-08-10",
+    title: "公测版合并：结算工作流与数据归档基础",
+    items: [
+      "合并 beta21 的数据目录、IACUC 索引归档入口、批量接收与批量打印、Dashboard 性能优化与静态资源 gzip",
+      "项目负责人结算列表增加结算状态、登记人员筛选、流程撤回、邮件通知模板、批量 PDF/Excel 导出与预览打印",
+      "报销台账补充附件、核销与删除流程回归；巡检和报销附件统一纳入文件目录管理",
+      "保持 RC4 的运营 Dashboard、笼位管理 Ant Design 适配、IACUC 录入提示与 legacy HTTP 适配拆分",
+    ],
+  },
+  {
     version: "1.0.0-rc4",
     build: "154",
     releasedAt: "2026-08-09",
