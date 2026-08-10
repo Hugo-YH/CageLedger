@@ -229,7 +229,7 @@
   left: 16px;
   width: 2px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 9999px;
   background: color-mix(in srgb, var(--ant-color-primary) 16%, var(--app-border));
 }
 

@@ -19,7 +19,4 @@ services:
       - CAGELEDGER_UPDATE_CHECK_ENABLED=${CAGELEDGER_UPDATE_CHECK_ENABLED:-false}
       - CAGELEDGER_GITEA_TOKEN=${CAGELEDGER_GITEA_TOKEN:-}
     volumes:
-      - cageledger-data:/app/data
-
-volumes:
-  cageledger-data:
+      - ./data:/app/data

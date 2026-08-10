@@ -5,6 +5,7 @@ import unittest
 from server_app.domains.reimbursement_ledger.service import (
     confirm_allocation,
     create_allocation,
+    delete_claim,
     get_claim,
     list_obligations,
     reverse_allocation,
@@ -92,6 +93,55 @@ class ReimbursementLedgerTests(unittest.TestCase):
         self.assertEqual({item["sourcePi"] for item in allocations}, {"张教授", "李教授"})
         self.assertEqual(detail["fundingOwner"], "王经费负责人")
         self.assertEqual(detail["unallocatedAmount"], 0)
+
+    def test_delete_claim_removes_claim_and_draft_allocations(self):
+        claim = save_claim(
+            self.conn,
+            ROOM_ADMIN,
+            None,
+            {
+                "documentNumber": "BXD-DELETE-1",
+                "fundingLines": [{"fundBookNo": "F-01", "fundingOwner": "王经费负责人", "reimbursementAmount": 100}],
+            },
+        )["item"]
+        line_id = claim["fundingLines"][0]["id"]
+        obligation = self._obligations()[0]
+        create_allocation(
+            self.conn,
+            ROOM_ADMIN,
+            {"claimId": claim["id"], "fundingLineId": line_id, "obligationId": obligation["id"], "amount": 60},
+        )
+        result = delete_claim(self.conn, ROOM_ADMIN, claim["id"])
+        self.assertTrue(result["ok"])
+        with self.assertRaises(LookupError):
+            get_claim(self.conn, ROOM_ADMIN, claim["id"])
+        remaining = self.conn.execute(
+            "SELECT COUNT(*) FROM reimbursement_allocations WHERE obligation_id = ?", (obligation["id"],)
+        ).fetchone()[0]
+        self.assertEqual(remaining, 0)
+        self.conn.rollback()
+
+    def test_delete_claim_rejects_confirmed_allocations(self):
+        claim = save_claim(
+            self.conn,
+            ROOM_ADMIN,
+            None,
+            {
+                "documentNumber": "BXD-DELETE-2",
+                "fundingLines": [{"fundBookNo": "F-02", "fundingOwner": "王经费负责人", "reimbursementAmount": 100}],
+            },
+        )["item"]
+        line_id = claim["fundingLines"][0]["id"]
+        obligation = self._obligations()[0]
+        allocation = create_allocation(
+            self.conn,
+            ROOM_ADMIN,
+            {"claimId": claim["id"], "fundingLineId": line_id, "obligationId": obligation["id"], "amount": 60},
+        )["item"]
+        confirm_allocation(self.conn, ADMIN, allocation["id"])
+        with self.assertRaises(ValueError):
+            delete_claim(self.conn, ROOM_ADMIN, claim["id"])
+        self.conn.rollback()
 
     def test_confirmed_amount_cannot_exceed_funding_line_or_receivable(self):
         claim = save_claim(

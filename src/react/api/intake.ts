@@ -72,6 +72,30 @@ export function useConfirmIntakeBatch() {
   });
 }
 
+export function useMarkIntakeBatchesPrinted() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      requestJson<{ items: IntakeBatch[] }>("/api/intake-batches/mark-printed", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+  });
+}
+
+export function useConfirmIntakeBatchesReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, actualReceiptDate }: { ids: string[]; actualReceiptDate: string }) =>
+      requestJson<{ batches: IntakeBatch[] }>("/api/intake-batches/confirm-receipt", {
+        method: "POST",
+        body: JSON.stringify({ ids, actualReceiptDate }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+  });
+}
+
 export async function aiParseIntakeMessage(rawMessage: string, roomNames: string[]) {
   return requestJson<{
     item: Partial<IntakeBatch>;
@@ -79,5 +103,12 @@ export async function aiParseIntakeMessage(rawMessage: string, roomNames: string
   }>("/api/intake/ai-parse", {
     method: "POST",
     body: JSON.stringify({ rawMessage, roomNames }),
+  });
+}
+
+export function standardizeIntakeStrain(strain: string) {
+  return requestJson<{ item: string }>("/api/intake/standardize-strain", {
+    method: "POST",
+    body: JSON.stringify({ strain }),
   });
 }

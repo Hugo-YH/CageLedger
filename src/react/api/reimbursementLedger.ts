@@ -97,6 +97,19 @@ export function useSaveReimbursementClaim() {
   });
 }
 
+export function useDeleteReimbursementClaim() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (claimId: string) =>
+      requestJson<{ ok: true }>(`/api/reimbursement-ledger/claims/${encodeURIComponent(claimId)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      void invalidateLedger(client);
+    },
+  });
+}
+
 export function useCreateReimbursementAllocation() {
   const client = useQueryClient();
   return useMutation({

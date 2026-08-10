@@ -159,6 +159,9 @@ from server_app.domains.reimbursement_ledger import (
     create_allocation as create_reimbursement_allocation,
 )
 from server_app.domains.reimbursement_ledger import (
+    delete_claim as delete_reimbursement_claim,
+)
+from server_app.domains.reimbursement_ledger import (
     get_attachment as get_reimbursement_attachment,
 )
 from server_app.domains.reimbursement_ledger import (
@@ -413,6 +416,7 @@ from server_app.web import CageLedgerHttpHandler, JsonResponse, Router, download
 from server_app.web import animal_inspection as animal_inspection_web
 from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler
+from server_app.web.intake_strain import intake_strain_standardize_handler
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.multipart import parse_multipart_upload
 from server_app.web.pdf_exports import (
@@ -1921,6 +1925,125 @@ def persist_intake_receipt_confirmation(batch_id, body, actor):
         "updatedAt": updated_at,
         "auditLogs": merge_audit_logs([], events),
         "perf": write_perf_summary(started_at, rows_changed=1 + len(tasks), tasks=len(tasks)),
+    }
+
+
+def intake_batch_action_ids(body):
+    raw_ids = body.get("ids")
+    if not isinstance(raw_ids, list):
+        raise ValueError("请选择待处理批次")
+    ids = []
+    for raw_id in raw_ids:
+        batch_id = clean_text(raw_id)
+        if batch_id and batch_id not in ids:
+            ids.append(batch_id)
+    if not ids:
+        raise ValueError("请选择待处理批次")
+    return ids
+
+
+def persist_intake_batches_mark_printed(body, actor):
+    started_at = time.perf_counter()
+    batch_ids = intake_batch_action_ids(body)
+    updated_at = datetime.now(UTC).isoformat()
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        batches_by_id = {batch.get("id"): batch for batch in state.get("intakeBatches", [])}
+        missing_ids = [batch_id for batch_id in batch_ids if batch_id not in batches_by_id]
+        if missing_ids:
+            raise LookupError("待接收批次不存在")
+        batches = [
+            batches_by_id[batch_id]
+            for batch_id in batch_ids
+            if batches_by_id[batch_id].get("status") in ("draft", "pending_print")
+        ]
+        for batch in batches:
+            batch["status"] = "printed"
+            batch["updatedAt"] = updated_at
+        validate_state_write_permission(conn, actor, old_state, state)
+        events = build_audit_events(actor, old_state, state, updated_at)
+        for batch in batches:
+            upsert_intake_batch_repository(conn, batch)
+        write_audit_events(conn, events)
+        conn.commit()
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::",
+        "billing_occupancies::",
+        "intake_batches::",
+        "placement_tasks::",
+        "dashboard_overview::",
+    )
+    log_perf("intake_batch.mark_printed", started_at, batches=len(batches))
+    return {
+        "items": batches,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(started_at, rows_changed=len(batches), batches=len(batches)),
+    }
+
+
+def persist_intake_receipt_confirmations(body, actor):
+    started_at = time.perf_counter()
+    batch_ids = intake_batch_action_ids(body)
+    actual_receipt_date = clean_text(body.get("actualReceiptDate"))
+    if not actual_receipt_date:
+        raise ValueError("实际接收日期不能为空")
+    updated_at = datetime.now(UTC).isoformat()
+    with connect_db() as conn:
+        old_state = assemble_state(conn) or empty_state()
+        state = json.loads(json.dumps(old_state))
+        batches_by_id = {batch.get("id"): batch for batch in state.get("intakeBatches", [])}
+        missing_ids = [batch_id for batch_id in batch_ids if batch_id not in batches_by_id]
+        if missing_ids:
+            raise LookupError("待接收批次不存在")
+        batches = [
+            batches_by_id[batch_id]
+            for batch_id in batch_ids
+            if batches_by_id[batch_id].get("status") == "printed"
+            and max(as_int(batches_by_id[batch_id].get("remainingCardCount")) or 0, 0) > 0
+        ]
+        receipts = []
+        tasks = []
+        for batch in batches:
+            confirmed_batch, receipt, batch_tasks = confirm_intake_receipt(
+                state,
+                batch["id"],
+                {
+                    "actualReceiptDate": actual_receipt_date,
+                    "cardCount": max(as_int(batch.get("remainingCardCount")) or 0, 0),
+                },
+                actor,
+            )
+            receipts.append(receipt)
+            tasks.extend(batch_tasks)
+            batch = confirmed_batch
+        events = build_audit_events(actor, old_state, state, updated_at)
+        for batch in batches:
+            upsert_intake_batch_repository(conn, batch)
+        for task in tasks:
+            upsert_placement_task_repository(conn, task)
+        write_audit_events(conn, events)
+        conn.commit()
+    invalidate_data_cache("assembled_state")
+    invalidate_data_cache_prefixes(
+        "bootstrap_summary::",
+        "billing_occupancies::",
+        "intake_batches::",
+        "placement_tasks::",
+        "dashboard_overview::",
+    )
+    log_perf("intake_batch.confirm_many", started_at, batches=len(batches), tasks=len(tasks))
+    return {
+        "batches": batches,
+        "receipts": receipts,
+        "tasks": tasks,
+        "updatedAt": updated_at,
+        "auditLogs": merge_audit_logs([], events),
+        "perf": write_perf_summary(
+            started_at, rows_changed=len(batches) + len(tasks), batches=len(batches), tasks=len(tasks)
+        ),
     }
 
 
@@ -3436,6 +3559,25 @@ def get_quantity_sheet(conn, sheet_id):
     if not row:
         raise LookupError("数量统计表不存在")
     return row
+
+
+def quantity_sheet_print_items(conn, body, actor):
+    raw_ids = body.get("ids")
+    if not isinstance(raw_ids, list):
+        raise ValueError("请选择数量统计表")
+    sheet_ids = []
+    for raw_id in raw_ids:
+        sheet_id = clean_text(raw_id)
+        if sheet_id and sheet_id not in sheet_ids:
+            sheet_ids.append(sheet_id)
+    if not sheet_ids:
+        raise ValueError("请选择数量统计表")
+    items = []
+    for sheet_id in sheet_ids:
+        sheet = get_quantity_sheet(conn, sheet_id)
+        validate_quantity_sheet_permission(actor, sheet)
+        items.append(sheet)
+    return items
 
 
 def get_current_billing_statement(conn, statement_id):
@@ -5017,6 +5159,7 @@ API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
+API_ROUTER.add("POST", r"/api/intake/standardize-strain", intake_strain_standardize_handler)
 
 
 def current_session_response(handler, params):
@@ -5630,6 +5773,15 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if path == "/api/quantity-sheets":
             self.handle_quantity_sheet_save(None)
             return
+        if path == "/api/quantity-sheets/print-data":
+            self.handle_quantity_sheet_print_data()
+            return
+        if path == "/api/intake-batches/mark-printed":
+            self.handle_intake_batches_mark_printed()
+            return
+        if path == "/api/intake-batches/confirm-receipt":
+            self.handle_intake_batches_confirm_receipt()
+            return
         batch_id = self.intake_batch_confirm_route(path)
         if batch_id:
             self.handle_intake_batch_confirm(batch_id)
@@ -5773,6 +5925,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         workflow_id = self.billing_workflow_route(path)
         if workflow_id:
             self.handle_billing_workflow_delete(workflow_id)
+            return
+        claim_id = self.reimbursement_claim_route(path)
+        if claim_id:
+            self.handle_reimbursement_claim_delete(claim_id)
             return
         reimbursement_id = self.reimbursement_record_route(path)
         if reimbursement_id:
@@ -6128,7 +6284,12 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
+            invalidate_data_cache_prefixes(
+                "billing_workflows::",
+                "billing_statements::",
+                "reimbursement_records::",
+                "quantity_sheets::settlement_candidates::",
+            )
             self.send_json(
                 {
                     "ok": True,
@@ -6271,6 +6432,21 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json(payload, HTTPStatus.OK if claim_id else HTTPStatus.CREATED)
         except sqlite3.IntegrityError:
             self.send_json({"error": "报销单号已存在"}, HTTPStatus.CONFLICT)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_claim_delete(self, claim_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                payload = delete_reimbursement_claim(conn, user, claim_id)
+            self.send_json(payload)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:
@@ -6689,6 +6865,21 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+    def handle_quantity_sheet_print_data(self):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            with connect_db() as conn:
+                self.send_json({"items": quantity_sheet_print_items(conn, body, user)})
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
     def handle_quantity_sheet_delete(self, sheet_id):
         user = self.require_user()
         if not user:
@@ -6737,6 +6928,32 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         try:
             body = self.read_json_body()
             self.send_json(persist_intake_receipt_confirmation(batch_id, body, user), HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_intake_batches_mark_printed(self):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            self.send_json(persist_intake_batches_mark_printed(body, user))
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_intake_batches_confirm_receipt(self):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            body = self.read_json_body()
+            self.send_json(persist_intake_receipt_confirmations(body, user), HTTPStatus.CREATED)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:

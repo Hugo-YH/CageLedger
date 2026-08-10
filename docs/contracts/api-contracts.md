@@ -57,6 +57,9 @@
 | `PUT`    | `/api/intake-batches/{id}`                 | `{ item, expectedUpdatedAt }`                            | `{ item, placementTasks?, auditLogs? }` |
 | `DELETE` | `/api/intake-batches/{id}`                 | 空                                                       | 删除结果与受影响任务                    |
 | `POST`   | `/api/intake-batches/{id}/confirm-receipt` | `{ actualReceiptDate, cardCount }`                       | 批次、接收记录、任务和审计              |
+| `POST`   | `/api/intake-batches/mark-printed`         | `{ ids }`                                                | 批量标记为已打印                        |
+| `POST`   | `/api/intake-batches/confirm-receipt`      | `{ ids, actualReceiptDate }`                             | 批量确认剩余笼卡接收并生成待进驻任务    |
+| `POST`   | `/api/quantity-sheets/print-data`          | `{ ids }`                                                | 批量读取打印所需的完整统计表            |
 | `GET`    | `/api/placement-tasks`                     | 分页和状态筛选                                           | 分页任务                                |
 | `POST`   | `/api/placement-tasks/{id}/reserve`        | `{ slotId }`                                             | `{ task, occupancy, affectedSlots? }`   |
 | `POST`   | `/api/placement-tasks/{id}/move-in`        | `{ actualMoveInDate }`                                   | `{ task, occupancy, affectedSlots? }`   |
@@ -135,6 +138,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | ---------------- | ---------------------------------- | ---------------------------------------------------------------------------------- |
 | `GET` / `POST`   | `/api/users`                       | 管理账号                                                                           |
 | `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                                                                     |
+| `POST`           | `/api/intake/standardize-strain`   | 服务端 MGI 品系标准化，登录权限                                                    |
 | `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                                                                    |
 | `GET`            | `/api/iacuc-index/expiry`          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用                           |
 | `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源                                                               |

@@ -351,6 +351,18 @@ def build_candidate_conn():
             source_fingerprint TEXT NOT NULL,
             PRIMARY KEY (source_type, month, pi)
         );
+        CREATE TABLE billing_workflows (
+            id TEXT PRIMARY KEY,
+            business_key TEXT UNIQUE,
+            iacuc TEXT NOT NULL,
+            month TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            workflow_status TEXT NOT NULL DEFAULT 'statement_generated',
+            current_version_id TEXT,
+            current_version_no INTEGER,
+            latest_event_at TEXT,
+            payload TEXT NOT NULL
+        );
         """
     )
     return conn
@@ -381,6 +393,63 @@ def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc, manager=""):
             json.dumps(payload, ensure_ascii=False),
         ),
     )
+
+    def test_candidate_list_reports_initiated_settlement_workflow(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-07", "李教授", "Z3")
+            seed_quantity_sheet(conn, "sheet-2", "2026-06", "张教授", "Z2")
+            conn.execute(
+                """
+                INSERT INTO billing_workflows (
+                    id, business_key, iacuc, month, source_type, workflow_status, payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "wf-1",
+                    "pi|pi::李教授|2026-07|pi_merged_quantity_sheet",
+                    "pi::李教授",
+                    "2026-07",
+                    "pi_merged_quantity_sheet",
+                    "statement_generated",
+                    "{}",
+                ),
+            )
+
+            def calculate(month, pi_name):
+                return {"iacucs": [f"{pi_name}-{month}"], "totalAmount": 123}
+
+            result = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "month",
+                    "sortDir": "desc",
+                    "columnFilters": {},
+                },
+                calculate,
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+            by_pi = {item["pi"]: item for item in result["items"]}
+            self.assertTrue(by_pi["李教授"]["hasWorkflow"])
+            self.assertFalse(by_pi["张教授"]["hasWorkflow"])
+
+            filtered = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "month",
+                    "sortDir": "desc",
+                    "columnFilters": {"workflow": ["已发起"]},
+                },
+                calculate,
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+            self.assertEqual([item["pi"] for item in filtered["items"]], ["李教授"])
 
 
 if __name__ == "__main__":

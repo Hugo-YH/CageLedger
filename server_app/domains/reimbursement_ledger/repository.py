@@ -277,6 +277,34 @@ def upsert_allocation(conn, item):
     )
 
 
+def delete_claim(conn, claim_id):
+    """删除报销单及其经费明细、附件、分摊，并刷新受影响结算应收的余额。"""
+    obligation_ids = [
+        row["obligation_id"]
+        for row in conn.execute(
+            """
+            SELECT DISTINCT allocations.obligation_id AS obligation_id
+            FROM reimbursement_allocations AS allocations
+            JOIN reimbursement_claim_funding_lines AS lines ON lines.id = allocations.funding_line_id
+            WHERE lines.claim_id = ?
+            """,
+            (claim_id,),
+        ).fetchall()
+    ]
+    conn.execute(
+        """
+        DELETE FROM reimbursement_allocations
+        WHERE funding_line_id IN (SELECT id FROM reimbursement_claim_funding_lines WHERE claim_id = ?)
+        """,
+        (claim_id,),
+    )
+    conn.execute("DELETE FROM reimbursement_claim_funding_lines WHERE claim_id = ?", (claim_id,))
+    conn.execute("DELETE FROM reimbursement_claim_attachments WHERE claim_id = ?", (claim_id,))
+    conn.execute("DELETE FROM reimbursement_claims WHERE id = ?", (claim_id,))
+    for obligation_id in obligation_ids:
+        refresh_obligation_balance(conn, obligation_id)
+
+
 def refresh_line_balance(conn, line_id):
     row = funding_line_row(conn, line_id)
     allocated = confirmed_amount_for_line(conn, line_id)

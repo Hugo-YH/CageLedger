@@ -29,7 +29,7 @@ IACUC 索引是系统自动回填项目、负责人和结算快照的基础数�
 
 1. 保存上传前的项目快照和审计记录
 2. 以最新 CSV 重建 SQLite 中的 `experiment_applications`
-3. 生成兼容索引文件 `data/iacuc-index.json`
+3. 生成兼容索引文件 `data/indexes/iacuc/index.json`
 4. 同步笼卡、占用、数量统计表和结算数据中的派生项目字段
 5. 保留历史业务主键、金额、数量和状态链
 

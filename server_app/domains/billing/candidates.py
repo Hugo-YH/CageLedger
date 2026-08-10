@@ -195,4 +195,7 @@ def _public_candidate(item, manager=""):
         "manager": manager or "",
         "totalAmount": item.get("totalAmount"),
         "error": item.get("error", ""),
+        "hasWorkflow": bool(item.get("hasWorkflow")),
+        "workflowId": item.get("workflowId", ""),
+        "workflowStatus": item.get("workflowStatus", ""),
     }

@@ -17,6 +17,19 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
     ],
   },
   {
+    version: "1.0.0-beta21",
+    build: "153",
+    releasedAt: "2026-08-10",
+    title: "数据归档基础与运营性能优化",
+    items: [
+      "运行数据目录按数据库、索引、附件、缓存、备份、导入、归档和失败文件分层；Docker Compose 继续将宿主机 `./data` 映射到容器 `/app/data`",
+      "旧版数据目录在首次启动时自动迁移至规范位置，并保留可恢复的迁移备份；IACUC 索引文件为群晖定时复制与系统内转换流程预留 inbox、archive 和 failed 目录",
+      "待接收批次支持一次性标记已打印、批量确认接收；数量统计表批量打印改为单次读取完整数据",
+      "Dashboard 增加按月饲养间索引、60 秒聚合缓存、图表模块预取和构建期 gzip 静态资源，保持 Ant Design 图表的交互能力",
+      "巡检与报销附件迁入统一文件目录；IACUC 品系标准化改为服务端统一处理；修复收起导航栏时品牌图标与展开按钮重叠",
+    ],
+  },
+  {
     version: "1.0.0-beta20",
     build: "152",
     releasedAt: "2026-08-08",

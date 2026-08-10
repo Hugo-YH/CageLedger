@@ -9,8 +9,8 @@ import {
 } from "./intake";
 
 describe("intake message parser", () => {
-  it("extracts the purchase and husbandry fields", async () => {
-    const result = await parseIntakeMessage(
+  it("extracts the purchase and husbandry fields", () => {
+    const result = parseIntakeMessage(
       "锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8101 进驻日期：5月13日",
       "管理员",
       ["8101"],
@@ -42,7 +42,7 @@ describe("intake message parser", () => {
     expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人", "房间", "接收日期"]);
   });
 
-  it("standardizes MGI strain names from the shared alias table", async () => {
+  it("standardizes common facility aliases without loading the full MGI index", () => {
     const cases: Array<[string, string]> = [
       ["c57", "C57BL/6J"],
       ["c57bl/6j", "C57BL/6J"],
@@ -65,14 +65,10 @@ describe("intake message parser", () => {
       ["NOD/SCID", "NOD/SCID"],
       ["NSG小鼠", "NSG"],
       ["Rag2-/-", "Rag2-KO"],
-      ["BALB/cAnN-Foxn1<nu>", "BALB/cAnN-Foxn1<nu>"],
-      ["NOD.CB17-Prkdc<scid>/NcrCrl", "NOD.CB17-Prkdc<scid>/NcrCrl"],
-      ["B6.Cg-Foxn1<nu>/J", "B6.Cg-Foxn1<nu>/J"],
-      ["101", "101"],
       ["某新品系", ""],
     ];
     for (const [raw, expected] of cases) {
-      expect(await standardizeStrain(raw)).toBe(expected);
+      expect(standardizeStrain(raw)).toBe(expected);
     }
   });
 

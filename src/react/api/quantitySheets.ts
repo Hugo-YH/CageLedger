@@ -69,6 +69,13 @@ export function useQuantitySheetDetail(id: string) {
   });
 }
 
+export function fetchQuantitySheetsForPrint(ids: string[]) {
+  return requestJson<{ items: QuantitySheet[] }>("/api/quantity-sheets/print-data", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export function useSaveQuantitySheet() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -102,6 +109,7 @@ export function useDeleteQuantitySheet() {
 }
 
 export function useGenerateBillingStatement() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       pi,
@@ -118,5 +126,10 @@ export function useGenerateBillingStatement() {
         method: "POST",
         body: JSON.stringify({ pi, month, sourceType, status: "draft", persist }),
       }),
+    onSuccess: (_data, variables) => {
+      if (!variables.persist) return;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot });
+    },
   });
 }

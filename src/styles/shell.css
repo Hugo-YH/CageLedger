@@ -1194,7 +1194,7 @@ h3 {
   top: 50%;
   right: 8px;
   padding: 4px;
-  border-radius: 999px;
+  border-radius: 9999px;
   background: color-mix(in srgb, var(--green) 14%, transparent);
   color: var(--success-line);
   font-size: 12px;

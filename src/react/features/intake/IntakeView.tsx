@@ -5,11 +5,13 @@ import { useState } from "react";
 import { useBootstrap } from "../../api/bootstrap";
 import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
 import {
-  listAllIntakeBatches,
   aiParseIntakeMessage,
-  useConfirmIntakeBatch,
+  listAllIntakeBatches,
+  standardizeIntakeStrain,
+  useConfirmIntakeBatchesReceipt,
   useDeleteIntakeBatch,
   useIntakeBatches,
+  useMarkIntakeBatchesPrinted,
   useSaveIntakeBatch,
 } from "../../api/intake";
 import { fetchIacucSearch } from "../../api/iacuc";
@@ -64,7 +66,8 @@ export function IntakeView({
   const list = useIntakeBatches(params);
   const save = useSaveIntakeBatch();
   const remove = useDeleteIntakeBatch();
-  const confirmReceipt = useConfirmIntakeBatch();
+  const markBatchesPrinted = useMarkIntakeBatchesPrinted();
+  const confirmBatchesReceipt = useConfirmIntakeBatchesReceipt();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
 
@@ -73,7 +76,11 @@ export function IntakeView({
   }
 
   async function parseMessage() {
-    const parsed = await parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
+    let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
+    if (parsed.strainRaw && parsed.strainStandard === parsed.strainRaw) {
+      const result = await standardizeIntakeStrain(parsed.strainRaw);
+      parsed = { ...parsed, strainStandard: result.item || parsed.strainStandard };
+    }
     const info = await applyParsedMessage(parsed);
     setNotice(recognitionNotice(info));
   }
@@ -174,12 +181,8 @@ export function IntakeView({
 
   async function markPrinted(targets: IntakeBatch[]) {
     const printable = targets.filter((item) => item.status === "pending_print" || item.status === "draft");
-    for (const item of printable) {
-      await save.mutateAsync({
-        item: { ...item, status: "printed" },
-        exists: true,
-      });
-    }
+    if (!printable.length) return;
+    await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
     setNotice(`已标记 ${printable.length} 个批次为已打印。`);
   }
 
@@ -218,9 +221,8 @@ export function IntakeView({
   async function receive(targets: IntakeBatch[]) {
     const today = new Date().toISOString().slice(0, 10);
     const printable = targets.filter((item) => item.status === "printed" && item.remainingCardCount > 0);
-    for (const item of printable) {
-      await confirmReceipt.mutateAsync({ id: item.id, actualReceiptDate: today, cardCount: item.remainingCardCount });
-    }
+    if (!printable.length) return;
+    await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id), actualReceiptDate: today });
     setNotice(`已确认接收 ${printable.length} 个批次。`);
   }
 

@@ -111,8 +111,11 @@
 }
 
 .ant-shell-collapsed .ant-brand {
+  min-height: 96px;
+  flex-direction: column;
+  gap: 4px;
   justify-content: center;
-  padding-inline: 0;
+  padding: 8px 0;
 }
 
 .ant-shell-collapsed .ant-brand-copy,
@@ -121,8 +124,8 @@
 }
 
 .ant-shell-collapsed .ant-sidebar-collapse {
-  top: 10px;
-  right: 6px;
+  position: static;
+  flex: 0 0 auto;
 }
 
 .ant-main-menu {
@@ -905,7 +908,7 @@
 }
 
 .ant-dashboard-pi-row {
-  padding: 10px 8px;
+  padding: 12px 8px;
   border-radius: 8px;
   transition: background-color 0.2s ease;
 }
@@ -1235,7 +1238,7 @@
   min-height: 22px !important;
   height: 22px !important;
   padding: 0 !important;
-  border-radius: 100px !important;
+  border-radius: 9999px !important;
   font-size: 0 !important;
   line-height: 22px !important;
 }

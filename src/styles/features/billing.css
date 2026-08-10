@@ -1419,6 +1419,62 @@ th {
   gap: 12px;
 }
 
+.app-modal-root.settlement-notice-modal .settlement-notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+
+  /* 给右上角关闭 X 让位，避免"复制并确认"与其重叠 */
+  padding-right: 48px;
+}
+
+.app-modal-root.settlement-notice-modal .settlement-notice-subject {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-modal-root.settlement-notice-modal .settlement-notice-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text);
+}
+
+.app-modal-root.settlement-preview-modal .settlement-preview-toolbar {
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-raised);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface-strong);
+  background: var(--surface);
+}
+
+.app-modal-root.settlement-preview-modal .settlement-preview-toolbar-context {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-modal-root.settlement-preview-modal .settlement-preview-toolbar-actions {
+  margin-left: auto;
+}
+
 .app-modal-root.settlement-preview-modal .settlement-preview {
   height: min(68vh, 780px);
   overflow: auto;

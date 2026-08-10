@@ -22,6 +22,8 @@ from server_app.domains.billing.profiles import billing_profile_for_room
 from server_app.domains.intake.strain_standard import standardize_strain
 from server_app.shared import as_int, clean_text
 
+DASHBOARD_CACHE_TTL_SECONDS = 60
+
 
 def default_overview_month():
     today = date.today()
@@ -60,7 +62,7 @@ def dashboard_overview_payload(conn, month: str, rooms=None):
         "rooms": rooms_overview,
         "pi": pi_overview,
     }
-    return cache_set(cache_key_value, payload)
+    return cache_set(cache_key_value, payload, ttl_seconds=DASHBOARD_CACHE_TTL_SECONDS)
 
 
 def _available_months(conn):

@@ -25,6 +25,7 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc_month ON quantity_sheets(iacuc, month DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_pi_month ON quantity_sheets(pi, month DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_room_month ON quantity_sheets(room_name, month DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month_room ON quantity_sheets(month, room_name)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_status ON intake_batches(status)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_intake_date ON intake_batches(intake_date)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_iacuc ON intake_batches(iacuc)",

@@ -121,6 +121,95 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(context.exception.code, 400)
         self.assertEqual(json.load(context.exception), {"error": "结算月份格式应为 YYYY-MM"})
 
+    def test_intake_batch_actions_process_multiple_batches_in_one_request(self):
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.opener,
+        )
+        room_name = "P2 批量接收房间"
+        request_json(
+            self.base_url,
+            "/api/rooms",
+            method="POST",
+            body={"item": {"id": "room-p2-bulk", "name": room_name}},
+            opener=self.opener,
+        )
+        batch_ids = ["batch-p2-bulk-1", "batch-p2-bulk-2"]
+        for index, batch_id in enumerate(batch_ids, start=1):
+            request_json(
+                self.base_url,
+                "/api/intake-batches",
+                method="POST",
+                body={
+                    "item": {
+                        "id": batch_id,
+                        "batchNo": f"P2-{index}",
+                        "supplier": "测试供应商",
+                        "iacuc": "Z2026001",
+                        "pi": "测试负责人",
+                        "owner": "测试实验员",
+                        "roomName": room_name,
+                        "intakeDate": "2026-08-10",
+                        "status": "draft",
+                        "quantity": 2,
+                        "finalCardCount": 2,
+                        "remainingCardCount": 2,
+                        "receipts": [],
+                    }
+                },
+                opener=self.opener,
+            )
+        status, printed, _ = request_json(
+            self.base_url,
+            "/api/intake-batches/mark-printed",
+            method="POST",
+            body={"ids": batch_ids},
+            opener=self.opener,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual([item["status"] for item in printed["items"]], ["printed", "printed"])
+        status, received, _ = request_json(
+            self.base_url,
+            "/api/intake-batches/confirm-receipt",
+            method="POST",
+            body={"ids": batch_ids, "actualReceiptDate": "2026-08-10"},
+            opener=self.opener,
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual([item["status"] for item in received["batches"]], ["received", "received"])
+        self.assertEqual(len(received["tasks"]), 4)
+        sheet_ids = ["sheet-p2-bulk-1", "sheet-p2-bulk-2"]
+        for index, sheet_id in enumerate(sheet_ids, start=1):
+            request_json(
+                self.base_url,
+                "/api/quantity-sheets",
+                method="POST",
+                body={
+                    "sheet": {
+                        "id": sheet_id,
+                        "month": "2026-08",
+                        "iacuc": f"Z20260{index:02d}",
+                        "roomId": "room-p2-bulk",
+                        "roomName": room_name,
+                        "pi": "测试负责人",
+                        "rows": [],
+                    }
+                },
+                opener=self.opener,
+            )
+        status, print_data, _ = request_json(
+            self.base_url,
+            "/api/quantity-sheets/print-data",
+            method="POST",
+            body={"ids": sheet_ids},
+            opener=self.opener,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual([item["id"] for item in print_data["items"]], sheet_ids)
+
 
 def available_port():
     with socket.socket() as candidate:

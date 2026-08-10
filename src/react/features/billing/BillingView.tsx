@@ -78,7 +78,7 @@ export function BillingView({
               数量统计表按已保存月度台账结算；动态笼位图仍处于调试阶段。
             </Typography.Paragraph>
           </Card>
-          <SettlementCandidateList source={source} />
+          <SettlementCandidateList source={source} user={user} />
         </Card>
       ) : null}
       {mode === "monthly-summary" && user.role === "admin" ? <MonthlyBillingSummary /> : null}

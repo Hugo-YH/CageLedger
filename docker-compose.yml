@@ -16,7 +16,4 @@ services:
       - CAGELEDGER_GITEA_TOKEN=${CAGELEDGER_GITEA_TOKEN:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
     volumes:
-      - cageledger-data:/app/data
-
-volumes:
-  cageledger-data:
+      - ./data:/app/data

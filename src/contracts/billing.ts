@@ -54,12 +54,15 @@ export interface SettlementCandidate {
   manager: string;
   totalAmount: number | null;
   error?: string;
+  hasWorkflow?: boolean;
+  workflowId?: string;
+  workflowStatus?: string;
 }
 
 export interface SettlementCandidateListParams {
   limit: number;
   offset: number;
-  sortKey?: "month" | "pi" | "iacuc" | "manager" | "amount";
+  sortKey?: "month" | "pi" | "iacuc" | "manager" | "amount" | "workflow";
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
 }

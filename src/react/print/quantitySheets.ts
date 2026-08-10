@@ -96,6 +96,8 @@ function fillCalendarPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | n
   const showAnimalBalances = sheet.billingUnit === "animal_day" || sheet.animalDetailEnabled;
   let animalCount = Number(sheet.initialAnimalCount || 0);
   let cageCount = Number(sheet.initialCageCount || 0);
+  // 按只计费房间只录只数时笼数为空，打印不补 0：只有显式录入笼数才输出笼数列。
+  let cageCountEntered = Number(sheet.initialCageCount || 0) > 0;
   let balanceStarted = animalCount > 0 || cageCount > 0;
   return rows.map((row, dayIndex) => {
     if (dayIndex >= days) return null;
@@ -104,7 +106,12 @@ function fillCalendarPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | n
         row.animalCount == null
           ? Math.max(animalCount + Number(row.addedCount || 0) - Number(row.removedCount || 0), 0)
           : Number(row.animalCount);
-      cageCount = row.cageCount == null ? cageCount : Number(row.cageCount);
+      if (row.cageCount != null) {
+        cageCount = Number(row.cageCount);
+        cageCountEntered = true;
+      } else if (!showAnimalBalances) {
+        // 按笼计费房间延续上一行结余笼数。
+      }
       balanceStarted =
         balanceStarted ||
         Boolean(row.addedCount || row.removedCount || row.animalCount != null || row.cageCount != null);
@@ -115,7 +122,7 @@ function fillCalendarPage(sheet: QuantitySheet, rows: Array<QuantitySheetRow | n
       rawDateInput: `${sheet.month}-${String(dayIndex + 1).padStart(2, "0")}`,
       // Printouts are a complete monthly ledger, so blank dates carry forward the latest balance.
       animalCount: showAnimalBalances && balanceStarted ? animalCount : null,
-      cageCount: balanceStarted ? cageCount : null,
+      cageCount: balanceStarted && (!showAnimalBalances || cageCountEntered) ? cageCount : null,
       handler: "",
     };
   });
