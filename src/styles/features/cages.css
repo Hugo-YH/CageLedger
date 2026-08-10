@@ -60,7 +60,7 @@
 .status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 9999px;
 }
 
 .status-dot.empty,
@@ -230,7 +230,7 @@
   right: 10px;
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 9999px;
   background: var(--line-strong);
 }
 

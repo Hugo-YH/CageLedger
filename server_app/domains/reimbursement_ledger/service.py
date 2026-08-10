@@ -1,6 +1,7 @@
 import hashlib
 import json
 import mimetypes
+import shutil
 
 from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
@@ -36,6 +37,9 @@ from .repository import (
 )
 from .repository import (
     confirmed_amount_for_obligation as _confirmed_amount_for_obligation,
+)
+from .repository import (
+    delete_claim as _delete_claim,
 )
 from .repository import (
     funding_line_row as _funding_line_row,
@@ -215,6 +219,38 @@ def save_claim(conn, actor, claim_id, payload):
     write_audit_events(conn, [event])
     conn.commit()
     return {"item": _claim_payload(conn, refreshed, True), "auditLogs": merge_audit_logs([], [event])}
+
+
+def delete_claim(conn, actor, claim_id):
+    _require_authenticated(actor)
+    existing = _claim_row(conn, claim_id)
+    if not existing:
+        raise LookupError("报销单不存在")
+    _require_claim_view(actor, existing)
+    if _claim_has_confirmed_allocations(conn, claim_id):
+        raise ValueError("存在已确认核销的报销单不能删除，请先在核销中心撤销分摊后再删除")
+    now = now_iso()
+    document_number = existing["document_number"]
+    snapshot = _claim_payload(conn, existing, True)
+    _delete_claim(conn, claim_id)
+    try:
+        shutil.rmtree(REIMBURSEMENT_ATTACHMENTS_PATH / claim_id, ignore_errors=True)
+    except OSError:
+        pass
+    event = audit_event(
+        actor,
+        "reimbursement_ledger.claim_deleted",
+        "reimbursement_claim",
+        claim_id,
+        f"{actor['displayName']} 删除报销单 {document_number}",
+        [],
+        now,
+        snapshot,
+        None,
+    )
+    write_audit_events(conn, [event])
+    conn.commit()
+    return {"ok": True, "auditLogs": merge_audit_logs([], [event])}
 
 
 def create_allocation(conn, actor, payload):

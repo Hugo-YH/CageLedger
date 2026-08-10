@@ -1,52 +1,32 @@
-import { Alert, Button, Checkbox, Empty, Modal, Space, Tooltip, Typography, type TableProps } from "antd";
+import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Tooltip, Typography, type TableProps } from "antd";
 import { Pager } from "../../../components/WorkspaceUi";
-import { DownloadOutlined, EyeOutlined, PlayCircleOutlined, PrinterOutlined } from "@ant-design/icons";
+import { DownloadOutlined, EyeOutlined, PlayCircleOutlined, UndoOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
 import type {
   BillingStatementResponse,
+  SessionUser,
   SettlementCandidate,
   SettlementCandidateListParams,
 } from "../../../api/contracts";
 import { listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
-import { useColumnFilterOptions } from "../../../api/filterOptions";
+import { useDeleteBillingWorkflow } from "../../../api/workflows";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
-import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { DataTable } from "../../../components/ui";
-import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { usePdfExport } from "../hooks/usePdfExport";
+import { BatchStartConfirmModal } from "./BatchStartConfirmModal";
+import { SettlementPreviewModal } from "./SettlementPreviewModal";
+import { SettlementColumnTitle } from "./SettlementColumnTitle";
+import { SettlementNoticeModal } from "./SettlementNoticeModal";
+import { buildSettlementNoticeEmail, type SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 
-function SettlementColumnTitle({
-  column,
-  label,
-  params,
-  values,
-  onSort,
-  onFilter,
+export function SettlementCandidateList({
+  source,
+  user,
 }: {
-  column: string;
-  label: string;
-  params: SettlementCandidateListParams;
-  values: string[];
-  onSort: () => void;
-  onFilter: (values: string[]) => void;
+  source: "quantity_sheet" | "cage_map";
+  user: SessionUser;
 }) {
-  const [open, setOpen] = useState(false);
-  const options = useColumnFilterOptions("settlement-candidates", column, params.columnFilters, open);
-  return (
-    <FilterableColumnTitle
-      label={label}
-      loading={options.isFetching}
-      options={options.data?.items || []}
-      values={values}
-      onFilter={onFilter}
-      onOpenChange={setOpen}
-      onSort={onSort}
-    />
-  );
-}
-
-export function SettlementCandidateList({ source }: { source: "quantity_sheet" | "cage_map" }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<{
@@ -57,6 +37,10 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   const [selectedCandidates, setSelectedCandidates] = useState<SettlementCandidate[]>([]);
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
   const [result, setResult] = useState<BillingStatementResponse | null>(null);
+  const [noticeEmail, setNoticeEmail] = useState<{
+    candidate: SettlementCandidate;
+    email: SettlementNoticeEmail;
+  } | null>(null);
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
@@ -78,9 +62,40 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
   };
   const list = useSettlementCandidates(params, source === "quantity_sheet");
   const generate = useGenerateBillingStatement();
+  const withdrawWorkflow = useDeleteBillingWorkflow();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+  async function toggleAllFiltered() {
+    if (allFilteredSelected) {
+      setSelectedCandidates([]);
+      setAllFilteredSelected(false);
+      return;
+    }
+    setSelectingAll(true);
+    setAllFilteredSelected(true);
+    setNotice("");
+    try {
+      const candidates = await listAllSettlementCandidates(params);
+      setSelectedCandidates(candidates.filter((candidate) => candidate.totalAmount != null));
+      setAllFilteredSelected(true);
+    } catch (error) {
+      setAllFilteredSelected(false);
+      showNotice(error instanceof Error ? error.message : "无法读取全部结算项", "error");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
+  function toggleCandidate(candidate: SettlementCandidate, checked: boolean) {
+    setAllFilteredSelected(false);
+    setSelectedCandidates((current) =>
+      checked
+        ? [...current.filter((item) => item.id !== candidate.id), candidate]
+        : current.filter((item) => item.id !== candidate.id),
+    );
+  }
+
   const columns: TableProps<SettlementCandidate>["columns"] = [
     {
       key: "selection",
@@ -107,6 +122,7 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         { key: "month", label: "结算月份", width: 120 },
         { key: "pi", label: "项目负责人姓名", width: 160 },
         { key: "iacuc", label: "IACUC", width: 300 },
+        { key: "workflow", label: "结算状态", width: 110 },
         { key: "amount", label: "金额", width: 150 },
       ] as const
     ).map(({ key, label, width }) => ({
@@ -140,6 +156,9 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           const text = candidate.iacucs.join("、") || candidate.error || "待检查";
           return <span title={text}>{candidate.iacucs.join("、") || "待检查"}</span>;
         }
+        if (key === "workflow") {
+          return candidate.hasWorkflow ? <Tag color="processing">已发起</Tag> : <Tag>未发起</Tag>;
+        }
         if (key === "amount") {
           return candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`;
         }
@@ -149,25 +168,52 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     {
       key: "actions",
       title: "操作",
-      width: 150,
+      width: 190,
       render: (_, candidate) => {
         const action = (
-          <Button
-            icon={<EyeOutlined aria-hidden />}
-            loading={generate.isPending}
-            size="small"
-            disabled={candidate.totalAmount == null}
-            onClick={() => void generateFor(candidate, false)}
-          >
-            预览结算单
-          </Button>
+          <Space size={4} wrap>
+            <Button
+              icon={<EyeOutlined aria-hidden />}
+              loading={generate.isPending}
+              size="small"
+              disabled={candidate.totalAmount == null}
+              onClick={() => void generateFor(candidate, false)}
+            >
+              预览结算单
+            </Button>
+            {candidate.hasWorkflow && candidate.workflowStatus === "statement_generated" ? (
+              <Popconfirm
+                description="撤回后该负责人本月将回到未发起状态，可重新发起结算。"
+                okButtonProps={{ danger: true }}
+                okText="撤回"
+                title="撤回该结算流程？"
+                onConfirm={() => void withdrawFor(candidate)}
+              >
+                <Button danger icon={<UndoOutlined aria-hidden />} loading={withdrawWorkflow.isPending} size="small">
+                  撤回
+                </Button>
+              </Popconfirm>
+            ) : null}
+          </Space>
         );
         return candidate.error ? <Tooltip title={candidate.error}>{action}</Tooltip> : action;
       },
     },
   ];
 
-  async function generateFor(candidate: SettlementCandidate, persist: boolean) {
+  async function withdrawFor(candidate: SettlementCandidate) {
+    if (!candidate.workflowId) return;
+    try {
+      await withdrawWorkflow.mutateAsync(candidate.workflowId);
+      setSelected(null);
+      setResult(null);
+      showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，可重新发起。`, "success");
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "撤回结算流程失败", "error");
+    }
+  }
+
+  async function generateFor(candidate: SettlementCandidate, persist: boolean): Promise<boolean> {
     try {
       const response = await generate.mutateAsync({
         month: candidate.month,
@@ -178,9 +224,43 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
       setSelected(candidate);
       setResult(response);
       showNotice(persist ? "结算流程已创建，可到结算与报销台账继续处理。" : "结算预览已生成。", "success");
+      return true;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
+      return false;
+    }
+  }
+
+  async function prepareNoticeEmail(candidate: SettlementCandidate) {
+    try {
+      const response = await generate.mutateAsync({
+        month: candidate.month,
+        pi: candidate.pi,
+        sourceType: source,
+        persist: false,
+      });
+      setSelected(candidate);
+      setResult(response);
+      if (!response.statement) return;
+      setNoticeEmail({
+        candidate,
+        email: buildSettlementNoticeEmail({
+          month: response.statement.month,
+          totalAmount: response.statement.totalAmount,
+          staffName: user.displayName,
+          staffPhone: user.phone,
+        }),
+      });
+      showNotice("请复制通知邮件并确认发起结算流程。", "info");
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
     }
+  }
+
+  async function confirmNoticeEmail() {
+    if (!noticeEmail) return;
+    const ok = await generateFor(noticeEmail.candidate, true);
+    if (ok) setNoticeEmail(null);
   }
 
   async function exportCandidates(candidates: SettlementCandidate[]) {
@@ -232,36 +312,6 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
     );
   }
 
-  async function toggleAllFiltered() {
-    if (allFilteredSelected) {
-      setSelectedCandidates([]);
-      setAllFilteredSelected(false);
-      return;
-    }
-    setSelectingAll(true);
-    setAllFilteredSelected(true);
-    setNotice("");
-    try {
-      const candidates = await listAllSettlementCandidates(params);
-      setSelectedCandidates(candidates.filter((candidate) => candidate.totalAmount != null));
-      setAllFilteredSelected(true);
-    } catch (error) {
-      setAllFilteredSelected(false);
-      showNotice(error instanceof Error ? error.message : "无法读取全部结算项", "error");
-    } finally {
-      setSelectingAll(false);
-    }
-  }
-
-  function toggleCandidate(candidate: SettlementCandidate, checked: boolean) {
-    setAllFilteredSelected(false);
-    setSelectedCandidates((current) =>
-      checked
-        ? [...current.filter((item) => item.id !== candidate.id), candidate]
-        : current.filter((item) => item.id !== candidate.id),
-    );
-  }
-
   if (source === "cage_map") {
     return (
       <Empty
@@ -300,15 +350,23 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
           >
             {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
           </Button>
-          <Button
-            icon={<PlayCircleOutlined aria-hidden />}
-            loading={batchStarting}
-            type="primary"
-            disabled={!selectedCandidates.length || selectingAll}
-            onClick={() => setBatchConfirmOpen(true)}
+          <Tooltip
+            title={selectedCandidates.every((item) => item.hasWorkflow) ? "所选结算项均已发起结算流程" : undefined}
           >
-            {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
-          </Button>
+            <span>
+              <Button
+                icon={<PlayCircleOutlined aria-hidden />}
+                loading={batchStarting}
+                type="primary"
+                disabled={
+                  !selectedCandidates.length || selectingAll || selectedCandidates.every((item) => item.hasWorkflow)
+                }
+                onClick={() => setBatchConfirmOpen(true)}
+              >
+                {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
+              </Button>
+            </span>
+          </Tooltip>
         </Space>
       </div>
       <div
@@ -338,67 +396,36 @@ export function SettlementCandidateList({ source }: { source: "quantity_sheet" |
         pages={pages}
         total={total}
       />
-      <Modal
-        cancelButtonProps={{ disabled: batchStarting }}
-        cancelText="取消"
-        confirmLoading={batchStarting}
-        okText={`发起 ${selectedCandidates.length} 个流程`}
+      <BatchStartConfirmModal
+        count={selectedCandidates.length}
         open={batchConfirmOpen}
-        title="批量发起结算流程"
+        pending={batchStarting}
         onCancel={() => {
           if (!batchStarting) setBatchConfirmOpen(false);
         }}
-        onOk={() => void startSelectedCandidates()}
-      >
-        <Typography.Paragraph>
-          将为已选的 {selectedCandidates.length}{" "}
-          个项目负责人结算项创建结算流程。系统会按顺序处理，每项保留独立的结算版本和审计记录。
-        </Typography.Paragraph>
-      </Modal>
+        onConfirm={() => void startSelectedCandidates()}
+      />
       {selected && result ? (
-        <Modal
-          rootClassName="app-modal-root settlement-preview-modal"
-          footer={
-            <Space wrap>
-              <Button icon={<PrinterOutlined aria-hidden />} onClick={() => openSettlementPrint(result)}>
-                打印结算单
-              </Button>
-              <Button
-                icon={<DownloadOutlined aria-hidden />}
-                loading={pdfExport.isExporting}
-                onClick={() => void exportCandidates([selected])}
-              >
-                导出 PDF
-              </Button>
-              <Button
-                icon={<PlayCircleOutlined aria-hidden />}
-                loading={generate.isPending}
-                type="primary"
-                onClick={() => void generateFor(selected, true)}
-              >
-                发起结算流程
-              </Button>
-              <Button onClick={() => setSelected(null)}>关闭</Button>
-            </Space>
-          }
-          open
-          title={`${selected.pi} · ${selected.month}`}
-          width={1200}
-          onCancel={() => setSelected(null)}
-        >
-          <Typography.Paragraph type="secondary">{selected.iacucs.join("、")}</Typography.Paragraph>
-          {notice ? (
-            <Alert
-              title={notice}
-              role="status"
-              showIcon
-              type={noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info"}
-            />
-          ) : null}
-          <div className="settlement-preview settlement-document-preview">
-            <iframe title="结算单预览" srcDoc={settlementStatementHtml(result, false)} />
-          </div>
-        </Modal>
+        <SettlementPreviewModal
+          generatePending={generate.isPending}
+          hasWorkflow={Boolean(selected.hasWorkflow)}
+          notice={notice}
+          noticeKind={noticeKind}
+          pdfExporting={pdfExport.isExporting}
+          result={result}
+          selected={selected}
+          onClose={() => setSelected(null)}
+          onExportPdf={() => void exportCandidates([selected])}
+          onStartSettlement={() => void prepareNoticeEmail(selected)}
+        />
+      ) : null}
+      {noticeEmail ? (
+        <SettlementNoticeModal
+          email={noticeEmail.email}
+          pending={generate.isPending}
+          onCancel={() => setNoticeEmail(null)}
+          onConfirm={() => void confirmNoticeEmail()}
+        />
       ) : null}
     </>
   );

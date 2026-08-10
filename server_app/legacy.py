@@ -159,6 +159,9 @@ from server_app.domains.reimbursement_ledger import (
     create_allocation as create_reimbursement_allocation,
 )
 from server_app.domains.reimbursement_ledger import (
+    delete_claim as delete_reimbursement_claim,
+)
+from server_app.domains.reimbursement_ledger import (
     get_attachment as get_reimbursement_attachment,
 )
 from server_app.domains.reimbursement_ledger import (
@@ -5769,6 +5772,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if workflow_id:
             self.handle_billing_workflow_delete(workflow_id)
             return
+        claim_id = self.reimbursement_claim_route(path)
+        if claim_id:
+            self.handle_reimbursement_claim_delete(claim_id)
+            return
         reimbursement_id = self.reimbursement_record_route(path)
         if reimbursement_id:
             self.handle_reimbursement_record_delete(reimbursement_id)
@@ -6123,7 +6130,12 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
+            invalidate_data_cache_prefixes(
+                "billing_workflows::",
+                "billing_statements::",
+                "reimbursement_records::",
+                "quantity_sheets::settlement_candidates::",
+            )
             self.send_json(
                 {
                     "ok": True,
@@ -6266,6 +6278,21 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json(payload, HTTPStatus.OK if claim_id else HTTPStatus.CREATED)
         except sqlite3.IntegrityError:
             self.send_json({"error": "报销单号已存在"}, HTTPStatus.CONFLICT)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_reimbursement_claim_delete(self, claim_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                payload = delete_reimbursement_claim(conn, user, claim_id)
+            self.send_json(payload)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:

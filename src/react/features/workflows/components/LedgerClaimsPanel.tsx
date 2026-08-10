@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Button, Empty, Tag } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import { App, Button, Empty, Popconfirm, Space, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import type { ReimbursementClaim, SessionUser } from "../../../api/contracts";
-import { useReimbursementClaims } from "../../../api/reimbursementLedger";
+import { useDeleteReimbursementClaim, useReimbursementClaims } from "../../../api/reimbursementLedger";
 import { DataTable } from "../../../components/ui";
 import { LedgerColumnTitle, QueryFeedback } from "./LedgerListShared";
 import { claimStatusLabels, moneyColumn } from "./ledgerListModel";
@@ -14,8 +15,23 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const params = { ...PAGE, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
+  const { message } = App.useApp();
   const query = useReimbursementClaims(params);
+  const deleteClaim = useDeleteReimbursementClaim();
+  const [deletingId, setDeletingId] = useState("");
   const items = query.data?.items || [];
+
+  async function deleteFor(claimId: string) {
+    setDeletingId(claimId);
+    try {
+      await deleteClaim.mutateAsync(claimId);
+      message.success("报销单已删除");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "删除报销单失败");
+    } finally {
+      setDeletingId("");
+    }
+  }
 
   function toggleSort(key: string) {
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
@@ -73,9 +89,22 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
       title: "操作",
       fixed: "right",
       render: (_, item) => (
-        <Button size="small" onClick={() => onOpen(item.id)}>
-          详情
-        </Button>
+        <Space size={4}>
+          <Button size="small" onClick={() => onOpen(item.id)}>
+            详情
+          </Button>
+          <Popconfirm
+            description="删除后报销单及其附件、核销分摊一并移除；已确认核销的报销单需先撤销分摊。"
+            okButtonProps={{ danger: true }}
+            okText="删除"
+            title="删除该报销单？"
+            onConfirm={() => void deleteFor(item.id)}
+          >
+            <Button danger icon={<DeleteOutlined aria-hidden />} loading={deletingId === item.id} size="small">
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

@@ -152,6 +152,108 @@ describe("print templates", () => {
     expect(html).not.toContain('2026.6.2</td><td></td><td></td><td class="num">0</td>');
   });
 
+  it("leaves cage balances blank for animal-day sheets that only record animal balances", () => {
+    const sheet = {
+      id: "animal-day-sheet",
+      month: "2026-07",
+      roomId: "room-monkey",
+      roomName: "猴饲养间1",
+      manager: "登记人员",
+      roomManager: "房间管理员",
+      iacuc: "Z-MONKEY",
+      pi: "张教授",
+      owner: "陈老师",
+      project: "项目",
+      contact: "",
+      funding: "",
+      preferredFreeCages: null,
+      freeCagePriority: null,
+      tierCagePriority: null,
+      fullExemption: false,
+      customBillingEnabled: false,
+      customUnitPrice: null,
+      customBillingSegments: [],
+      billingUnit: "animal_day",
+      animalDetailEnabled: true,
+      initialAnimalCount: 0,
+      initialCageCount: 0,
+      pageCount: 1,
+      rows: [
+        {
+          id: "qrow-1",
+          date: "2026-07-01",
+          rawDateInput: "2026-07-01",
+          addedCount: null,
+          addedType: "",
+          transferInFromIacuc: "",
+          removedCount: null,
+          removedType: "",
+          transferOutToIacuc: "",
+          animalCount: 50,
+          cageCount: null,
+          handler: "",
+          balanceSource: "manual",
+          notes: "",
+        },
+      ],
+      updatedAt: "2026-07-01T00:00:00Z",
+    } as QuantitySheet;
+    const html = quantitySheetPagesMarkup([sheet]);
+    // 按只计费房间只录只数：结余总数 50、结余笼数留空，不补 0。
+    expect(html).toContain('2026.7.2</td><td></td><td></td><td class="num">50</td><td class="num"></td>');
+    expect(html).not.toContain('2026.7.2</td><td></td><td></td><td class="num">50</td><td class="num">0</td>');
+  });
+
+  it("prints entered cage balances for animal-day sheets that record cage counts", () => {
+    const sheet = {
+      id: "animal-day-cage-sheet",
+      month: "2026-07",
+      roomId: "room-monkey",
+      roomName: "猴饲养间1",
+      manager: "登记人员",
+      roomManager: "房间管理员",
+      iacuc: "Z-MONKEY",
+      pi: "张教授",
+      owner: "陈老师",
+      project: "项目",
+      contact: "",
+      funding: "",
+      preferredFreeCages: null,
+      freeCagePriority: null,
+      tierCagePriority: null,
+      fullExemption: false,
+      customBillingEnabled: false,
+      customUnitPrice: null,
+      customBillingSegments: [],
+      billingUnit: "animal_day",
+      animalDetailEnabled: true,
+      initialAnimalCount: 0,
+      initialCageCount: 0,
+      pageCount: 1,
+      rows: [
+        {
+          id: "qrow-1",
+          date: "2026-07-01",
+          rawDateInput: "2026-07-01",
+          addedCount: null,
+          addedType: "",
+          transferInFromIacuc: "",
+          removedCount: null,
+          removedType: "",
+          transferOutToIacuc: "",
+          animalCount: 50,
+          cageCount: 3,
+          handler: "",
+          balanceSource: "manual",
+          notes: "",
+        },
+      ],
+      updatedAt: "2026-07-01T00:00:00Z",
+    } as QuantitySheet;
+    const html = quantitySheetPagesMarkup([sheet]);
+    expect(html).toContain('2026.7.2</td><td></td><td></td><td class="num">50</td><td class="num">3</td>');
+  });
+
   it("adds custom-billing details as a dedicated quantity-sheet appendix", () => {
     const sheet = {
       id: "custom-sheet",

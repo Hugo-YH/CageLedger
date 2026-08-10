@@ -10,6 +10,43 @@ SETTLEMENT_CANDIDATE_LIST_COLUMNS = {
     },
 }
 
+
+def _workflow_source_type(source_type):
+    # 按项目负责人结算流程在 billing_workflows 中的 source_type 前缀。
+    return f"pi_merged_{source_type}"
+
+
+def workflow_exists_sql(source_type):
+    """候选是否已发起按 PI 结算（billing_workflows 存在对应流程）。"""
+    return (
+        f"EXISTS (SELECT 1 FROM billing_workflows w WHERE w.source_type = '{_workflow_source_type(source_type)}' "
+        "AND w.month = billing_candidate_snapshots.month "
+        "AND w.iacuc = 'pi::' || billing_candidate_snapshots.pi)"
+    )
+
+
+def _workflow_scalar_sql(source_type, column):
+    return (
+        f"(SELECT w.{column} FROM billing_workflows w "
+        f"WHERE w.source_type = '{_workflow_source_type(source_type)}' "
+        "AND w.month = billing_candidate_snapshots.month "
+        "AND w.iacuc = 'pi::' || billing_candidate_snapshots.pi LIMIT 1)"
+    )
+
+
+def workflow_id_sql(source_type):
+    return _workflow_scalar_sql(source_type, "id")
+
+
+def workflow_status_sql(source_type):
+    return _workflow_scalar_sql(source_type, "workflow_status")
+
+
+def workflow_column_expr(source_type):
+    """结算状态列的聚合表达式，用于列表筛选与筛选选项。"""
+    return f"CASE WHEN {workflow_exists_sql(source_type)} THEN '已发起' ELSE '未发起' END"
+
+
 # Bump when quantity-sheet settlement rules change so persisted list snapshots are recalculated after deployment.
 QUANTITY_SETTLEMENT_CALCULATION_VERSION = "2026-07-10-iacuc-date-normalization"
 
@@ -131,7 +168,18 @@ def list_billing_candidate_snapshot_keys(conn, *, source_type, filters=None, sta
     )
     rows = conn.execute(
         f"""
-        SELECT month, pi, iacucs_json, total_amount, error_message, is_stale, updated_at, source_fingerprint
+        SELECT
+            month,
+            pi,
+            iacucs_json,
+            total_amount,
+            error_message,
+            is_stale,
+            updated_at,
+            source_fingerprint,
+            {workflow_exists_sql(source_type)} AS has_workflow,
+            {workflow_id_sql(source_type)} AS workflow_id,
+            {workflow_status_sql(source_type)} AS workflow_status
         FROM billing_candidate_snapshots
         WHERE {where}
         ORDER BY month DESC, pi COLLATE NOCASE
@@ -157,7 +205,10 @@ def list_billing_candidate_snapshots_page(conn, source_type, filters):
             error_message,
             is_stale,
             updated_at,
-            source_fingerprint
+            source_fingerprint,
+            {workflow_exists_sql(source_type)} AS has_workflow,
+            {workflow_id_sql(source_type)} AS workflow_id,
+            {workflow_status_sql(source_type)} AS workflow_status
         FROM billing_candidate_snapshots
         WHERE {where}
         ORDER BY {order_by}
@@ -182,11 +233,32 @@ def list_billing_candidate_filter_options(conn, source_type, filters):
         "pi": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "pi"),
         "iacuc": list_billing_candidate_iacuc_filter_options(conn, source_type, filters),
         "amount": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "amount"),
+        "workflow": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "workflow"),
     }
     return items
 
 
 def list_billing_candidate_scalar_filter_options(conn, source_type, filters, column):
+    if column == "workflow":
+        where, params = billing_candidate_snapshot_where(
+            source_type=source_type, filters=filters, exclude_column=column
+        )
+        rows = conn.execute(
+            f"""
+            SELECT {workflow_column_expr(source_type)} AS value, COUNT(*) AS count
+            FROM billing_candidate_snapshots
+            WHERE {where}
+            GROUP BY value
+            ORDER BY value COLLATE NOCASE
+            LIMIT 500
+            """,
+            params,
+        ).fetchall()
+        return [
+            {"value": row["value"], "label": row["value"], "count": row["count"]}
+            for row in rows
+            if row["value"] not in (None, "")
+        ]
     spec = SETTLEMENT_CANDIDATE_LIST_COLUMNS.get(column)
     if not spec:
         return []
@@ -232,8 +304,19 @@ def list_billing_candidate_iacuc_filter_options(conn, source_type, filters):
 
 def get_billing_candidate_snapshot(conn, month, pi, source_type):
     row = conn.execute(
-        """
-        SELECT month, pi, iacucs_json, total_amount, error_message, is_stale, updated_at, source_fingerprint
+        f"""
+        SELECT
+            month,
+            pi,
+            iacucs_json,
+            total_amount,
+            error_message,
+            is_stale,
+            updated_at,
+            source_fingerprint,
+            {workflow_exists_sql(source_type)} AS has_workflow,
+            {workflow_id_sql(source_type)} AS workflow_id,
+            {workflow_status_sql(source_type)} AS workflow_status
         FROM billing_candidate_snapshots
         WHERE month = ? AND pi = ? AND source_type = ?
         """,
@@ -393,6 +476,11 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
             )
             params.extend(cleaned)
             continue
+        if column == "workflow":
+            placeholders = ", ".join("?" for _ in cleaned)
+            where_parts.append(f"COALESCE({workflow_column_expr(source_type)}, '') IN ({placeholders})")
+            params.extend(cleaned)
+            continue
         spec = SETTLEMENT_CANDIDATE_LIST_COLUMNS.get(column)
         if not spec:
             continue
@@ -413,6 +501,8 @@ def billing_candidate_snapshot_order_by(filters):
         return f"iacucs_text {sort_dir}, month DESC, pi COLLATE NOCASE, rowid DESC"
     if sort_key == "amount":
         return f"total_amount IS NULL ASC, total_amount {sort_dir}, month DESC, pi COLLATE NOCASE, rowid DESC"
+    if sort_key == "workflow":
+        return f"has_workflow {sort_dir}, month DESC, pi COLLATE NOCASE, rowid DESC"
     return f"month {sort_dir}, pi COLLATE NOCASE, rowid DESC"
 
 
@@ -428,6 +518,9 @@ def billing_candidate_snapshot_row(row):
         "totalAmount": None if row["total_amount"] is None else float(row["total_amount"]),
         "error": row["error_message"] or "",
         "isStale": bool(row["is_stale"]),
+        "hasWorkflow": bool(row["has_workflow"]),
+        "workflowId": row["workflow_id"] or "",
+        "workflowStatus": row["workflow_status"] or "",
         "updatedAt": row["updated_at"] or "",
         "sourceFingerprint": row["source_fingerprint"] or "",
     }

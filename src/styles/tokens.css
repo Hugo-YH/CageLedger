@@ -227,12 +227,12 @@
 
 *::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
-  border-radius: 999px;
+  border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-thumb {
   border: 2px solid var(--scrollbar-track);
-  border-radius: 999px;
+  border-radius: 9999px;
   background: var(--scrollbar-thumb);
 }
 

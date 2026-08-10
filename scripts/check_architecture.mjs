@@ -45,6 +45,13 @@ const baselineHotspots = new Map([
     { ceiling: 772, reason: "initial inspection record, finding, attachment, and audit service composition" },
   ],
   [
+    "server_app/domains/reimbursement_ledger/service.py",
+    {
+      ceiling: 780,
+      reason: "reimbursement ledger claim save/delete, allocation, attachment and obligation service composition",
+    },
+  ],
+  [
     "src/react/features/shell/ReactWorkspace.tsx",
     { ceiling: 648, reason: "transitional navigation shell while feature navigation is progressively extracted" },
   ],

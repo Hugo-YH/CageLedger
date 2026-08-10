@@ -80,3 +80,17 @@ export function useAdvanceWorkflow() {
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
   });
 }
+
+export function useDeleteBillingWorkflow() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (workflowId: string) =>
+      requestJson<{ ok: true }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+      void client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+    },
+  });
+}

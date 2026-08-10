@@ -102,6 +102,7 @@ export function useDeleteQuantitySheet() {
 }
 
 export function useGenerateBillingStatement() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       pi,
@@ -118,5 +119,10 @@ export function useGenerateBillingStatement() {
         method: "POST",
         body: JSON.stringify({ pi, month, sourceType, status: "draft", persist }),
       }),
+    onSuccess: (_data, variables) => {
+      if (!variables.persist) return;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot });
+    },
   });
 }
