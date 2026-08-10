@@ -33,9 +33,9 @@ import { billingSidebarItems, isWorkspaceView } from "./workspaceNavigation";
 const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({ default: module.IntakeView })));
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
 const CagesView = lazy(() => import("../cages/CagesView").then((module) => ({ default: module.CagesView })));
-const DashboardView = lazy(() =>
-  import("../dashboard/DashboardView").then((module) => ({ default: module.DashboardView })),
-);
+const loadDashboardView = () => import("../dashboard/DashboardView");
+const loadDashboardCharts = () => import("@ant-design/plots");
+const DashboardView = lazy(() => loadDashboardView().then((module) => ({ default: module.DashboardView })));
 const MobileNavigation = lazy(() =>
   import("./MobileNavigation").then((module) => ({ default: module.MobileNavigation })),
 );
@@ -68,6 +68,11 @@ const iconFor: Record<NavIcon, ReactNode> = {
   users: <TeamOutlined />,
 };
 
+function preloadDashboard() {
+  void loadDashboardView();
+  void loadDashboardCharts();
+}
+
 export function ReactWorkspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
   const dispatch = useUiDispatch();
@@ -89,6 +94,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   ];
 
   function navigate(view: WorkspaceView) {
+    if (view === "dashboard") preloadDashboard();
     persistWorkspaceView(view);
     dispatch({ type: "navigate", view });
     dispatch({ type: "set-settings", expanded: false });
@@ -106,7 +112,11 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
 
   const items: MenuProps["items"] = [
     item("project-home", "主页", <HomeOutlined />),
-    item("dashboard", "总览", <DashboardOutlined />),
+    {
+      key: "dashboard",
+      icon: <DashboardOutlined />,
+      label: <span onPointerEnter={preloadDashboard}>总览</span>,
+    },
     {
       key: "intake",
       icon: <TagsOutlined />,

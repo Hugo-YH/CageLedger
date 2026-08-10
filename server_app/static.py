@@ -27,12 +27,27 @@ def _send_static_file(handler, target: Path) -> bool:
         handler.end_headers()
         return True
 
-    cache_key = (str(target), stat.st_mtime_ns, stat.st_size, encoding)
+    compressed_target = target.with_name(f"{target.name}.gz")
+    use_precompressed = (
+        use_gzip and compressed_target.is_file() and compressed_target.stat().st_mtime_ns >= stat.st_mtime_ns
+    )
+    compressed_stat = compressed_target.stat() if use_precompressed else None
+    cache_key = (
+        str(target),
+        stat.st_mtime_ns,
+        stat.st_size,
+        encoding,
+        compressed_stat.st_mtime_ns if compressed_stat else None,
+        compressed_stat.st_size if compressed_stat else None,
+    )
     with STATIC_CACHE_LOCK:
         body = STATIC_CACHE.get(cache_key)
     if body is None:
-        raw = target.read_bytes()
-        body = gzip.compress(raw, compresslevel=6) if use_gzip else raw
+        if use_precompressed:
+            body = compressed_target.read_bytes()
+        else:
+            raw = target.read_bytes()
+            body = gzip.compress(raw, compresslevel=6) if use_gzip else raw
         with STATIC_CACHE_LOCK:
             if len(STATIC_CACHE) >= 64:
                 STATIC_CACHE.clear()
@@ -60,7 +75,7 @@ def _send_static_file(handler, target: Path) -> bool:
 def send_frontend_asset(handler, root: Path) -> bool:
     request_path = unquote(urlparse(handler.path).path)
     relative = request_path.lstrip("/")
-    if not relative or relative.endswith("/"):
+    if not relative or relative.endswith("/") or relative.endswith(".gz"):
         return False
     try:
         target = (root / relative).resolve()

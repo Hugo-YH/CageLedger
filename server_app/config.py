@@ -3,19 +3,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST_PATH = ROOT / "web-dist"
-DB_PATH = Path(os.environ.get("CAGELEDGER_DB", ROOT / "data" / "cageledger.sqlite"))
-PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DB_PATH.parent / "pdf-cache"))
+_configured_db_path = os.environ.get("CAGELEDGER_DB", "").strip()
+DATA_ROOT = Path(
+    os.environ.get("CAGELEDGER_DATA_ROOT", _configured_db_path and Path(_configured_db_path).parent or ROOT / "data")
+)
+DB_PATH = Path(_configured_db_path or DATA_ROOT / "database" / "cageledger.sqlite")
+PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DATA_ROOT / "cache" / "pdf"))
 ANIMAL_INSPECTION_ATTACHMENTS_PATH = Path(
-    os.environ.get("CAGELEDGER_ANIMAL_INSPECTION_ATTACHMENTS", DB_PATH.parent / "animal-inspection-attachments")
+    os.environ.get(
+        "CAGELEDGER_ANIMAL_INSPECTION_ATTACHMENTS", DATA_ROOT / "files" / "animal-inspections" / "attachments"
+    )
 )
 ANIMAL_INSPECTION_IMAGES_PATH = Path(
-    os.environ.get("CAGELEDGER_ANIMAL_INSPECTION_IMAGES", DB_PATH.parent / "animal-inspection-images")
+    os.environ.get(
+        "CAGELEDGER_ANIMAL_INSPECTION_IMAGES", DATA_ROOT / "files" / "animal-inspections" / "reference-images"
+    )
 )
 REIMBURSEMENT_ATTACHMENTS_PATH = Path(
-    os.environ.get("CAGELEDGER_REIMBURSEMENT_ATTACHMENTS", DB_PATH.parent / "reimbursement-attachments")
+    os.environ.get("CAGELEDGER_REIMBURSEMENT_ATTACHMENTS", DATA_ROOT / "files" / "reimbursements" / "attachments")
 )
 ANIMAL_INSPECTION_CATALOG_PATH = ROOT / "server_app" / "resources" / "animal_inspection" / "v1"
-IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DB_PATH.parent / "iacuc-index.json"))
+IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DATA_ROOT / "indexes" / "iacuc" / "index.json"))
 LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
 HOST = os.environ.get("CAGELEDGER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))

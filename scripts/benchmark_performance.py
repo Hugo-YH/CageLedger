@@ -60,6 +60,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_quantity_sheets_iacuc_month ON quantity_sheets(iacuc, month DESC);
         CREATE INDEX idx_quantity_sheets_pi_month ON quantity_sheets(pi, month DESC);
         CREATE INDEX idx_quantity_sheets_room_month ON quantity_sheets(room_name, month DESC);
+        CREATE INDEX idx_quantity_sheets_month_room ON quantity_sheets(month, room_name);
         CREATE INDEX idx_intake_batches_status_date ON intake_batches(status, intake_date DESC);
         CREATE INDEX idx_intake_batches_pi_date ON intake_batches(pi, intake_date DESC);
         CREATE INDEX idx_intake_batches_owner_date ON intake_batches(owner, intake_date DESC);
@@ -175,6 +176,10 @@ QUERIES = {
         (),
     ),
     "quantity_filter_options": ("SELECT pi, COUNT(*) FROM quantity_sheets GROUP BY pi ORDER BY pi LIMIT 500", ()),
+    "dashboard_rooms_month": (
+        "SELECT month, room_name, payload FROM quantity_sheets WHERE month = ? ORDER BY room_name",
+        ("2026-07",),
+    ),
     "intake_status": (
         "SELECT id FROM intake_batches WHERE status = ? ORDER BY intake_date DESC LIMIT 20",
         ("received",),

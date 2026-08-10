@@ -2,6 +2,7 @@ import sqlite3
 import threading
 
 from .config import DB_PATH
+from .storage_layout import ensure_storage_layout
 
 DB_INIT_LOCK = threading.Lock()
 DB_READY = False
@@ -35,6 +36,7 @@ def ensure_database_ready():
     with DB_INIT_LOCK:
         if DB_READY:
             return
+        ensure_storage_layout()
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
         try:

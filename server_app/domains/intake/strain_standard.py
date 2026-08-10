@@ -63,7 +63,6 @@ def standardize_strain(raw: str) -> str:
     if not text:
         return ""
     alias_map = _alias_map_cached()
-    index_map = _index_map_cached()
     segments = _NOTE_SEPARATOR_RE.split(text, maxsplit=1)
     candidates = [text]
     if len(segments) > 1 and segments[0].strip():
@@ -77,6 +76,12 @@ def standardize_strain(raw: str) -> str:
         stripped = _TRAILING_MOUSE_RE.sub("", key)
         if stripped in alias_map:
             return alias_map[stripped]
+    index_map = _index_map_cached()
+    for candidate in candidates:
+        key = normalize_strain_key(candidate)
+        if not key:
+            continue
+        stripped = _TRAILING_MOUSE_RE.sub("", key)
         index_name = index_map.get(key) or index_map.get(stripped)
         if index_name:
             return index_name

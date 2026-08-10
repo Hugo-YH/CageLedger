@@ -58,6 +58,9 @@ graph LR
 | `GET` / `POST`   | `/api/intake-batches`                      | 分页查询或新建批次       |
 | `PUT` / `DELETE` | `/api/intake-batches/{id}`                 | 编辑或删除批次           |
 | `POST`           | `/api/intake-batches/{id}/confirm-receipt` | 确认接收并生成待进驻任务 |
+| `POST`           | `/api/intake-batches/mark-printed`         | 批量标记为已打印         |
+| `POST`           | `/api/intake-batches/confirm-receipt`      | 批量确认接收并生成任务   |
+| `POST`           | `/api/quantity-sheets/print-data`          | 批量读取统计表打印数据   |
 | `GET`            | `/api/placement-tasks`                     | 分页查询待进驻任务       |
 | `POST`           | `/api/placement-tasks/{id}/reserve`        | 预留笼位                 |
 | `POST`           | `/api/placement-tasks/{id}/move-in`        | 正式入驻                 |
@@ -121,6 +124,7 @@ graph LR
 | ---------------- | ------------------------------------ | ---------------------- |
 | `GET` / `POST`   | `/api/users`                         | 账号查询和创建         |
 | `PUT` / `DELETE` | `/api/users/{id}`                    | 账号维护               |
+| `POST`           | `/api/intake/standardize-strain`     | 服务端 MGI 品系标准化  |
 | `GET`            | `/api/iacuc-index`                   | 完整项目索引           |
 | `GET`            | `/api/iacuc-index/status`            | 索引状态               |
 | `POST`           | `/api/iacuc-index/upload`            | CSV 上传和派生数据同步 |

@@ -9,7 +9,7 @@
 - 前端入口是 `index.html`、`src/main.tsx` 和 `src/react/App.tsx`。
 - 后端使用 Python 标准库 HTTP 服务，入口是 `server.py`。
 - 后端分层位于 `server_app/repositories/` 和 `server_app/services/`。
-- 默认存储是 SQLite，运行库位于 `data/cageledger.sqlite`。
+- 默认存储是 SQLite，运行库位于 `data/database/cageledger.sqlite`。
 - 生产前端构建到 `web-dist/`，Python 服务统一提供页面和 `/api`。
 
 ## 2. 安装、启动与验证

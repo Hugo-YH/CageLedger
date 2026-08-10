@@ -2,9 +2,9 @@ import { Button, Checkbox, Flex, Modal, Pagination, Space, Tag, Typography, type
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
-import { requestJson } from "../../../api/client";
 import { useIacucExpiry } from "../../../api/iacuc";
 import {
+  fetchQuantitySheetsForPrint,
   useDeleteQuantitySheet,
   listAllQuantitySheets,
   useQuantityFilterOptions,
@@ -27,6 +27,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const [editId, setEditId] = useState("");
   const [deleteId, setDeleteId] = useState("");
   const [exportError, setExportError] = useState("");
+  const [printPending, setPrintPending] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
   const params: QuantitySheetListParams = {
@@ -163,14 +164,16 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   }, [detail.data, editId, onEdit]);
 
   async function printSelected() {
-    const sheets = await Promise.all(
-      selected.map((id) =>
-        requestJson<{ item: QuantitySheet }>(`/api/quantity-sheets/${encodeURIComponent(id)}`).then(
-          (response) => response.item,
-        ),
-      ),
-    );
-    openQuantitySheetsPrint(sheets);
+    setExportError("");
+    setPrintPending(true);
+    try {
+      const { items: sheets } = await fetchQuantitySheetsForPrint(selected);
+      openQuantitySheetsPrint(sheets);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "无法加载待打印统计表");
+    } finally {
+      setPrintPending(false);
+    }
   }
 
   async function exportSelected() {
@@ -190,8 +193,12 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         </div>
         <div className="workspace-toolbar-actions">
           <Space className="workspace-toolbar-action-group">
-            <ActionButton disabled={!selected.length || selectingAll} onClick={() => void printSelected()}>
-              打印数量统计表
+            <ActionButton
+              disabled={!selected.length || selectingAll || printPending}
+              loading={printPending}
+              onClick={() => void printSelected()}
+            >
+              {printPending ? "正在准备打印…" : "打印数量统计表"}
             </ActionButton>
             <ActionButton
               disabled={!selected.length || pdfExport.isExporting || selectingAll}

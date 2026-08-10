@@ -69,6 +69,13 @@ export function useQuantitySheetDetail(id: string) {
   });
 }
 
+export function fetchQuantitySheetsForPrint(ids: string[]) {
+  return requestJson<{ items: QuantitySheet[] }>("/api/quantity-sheets/print-data", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export function useSaveQuantitySheet() {
   const queryClient = useQueryClient();
   return useMutation({

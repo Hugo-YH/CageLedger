@@ -111,8 +111,11 @@
 }
 
 .ant-shell-collapsed .ant-brand {
+  min-height: 96px;
+  flex-direction: column;
+  gap: 4px;
   justify-content: center;
-  padding-inline: 0;
+  padding: 8px 0;
 }
 
 .ant-shell-collapsed .ant-brand-copy,
@@ -121,8 +124,8 @@
 }
 
 .ant-shell-collapsed .ant-sidebar-collapse {
-  top: 10px;
-  right: 6px;
+  position: static;
+  flex: 0 0 auto;
 }
 
 .ant-main-menu {
