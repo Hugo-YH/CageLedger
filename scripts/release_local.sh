@@ -106,6 +106,14 @@ if [[ "$RELEASE_BRANCH" == "rc" ]] && [[ "$VERSION" =~ -rc[0-9]+$ ]]; then
   run bash scripts/check_rc_merged.sh
 fi
 
+if [[ ! "$VERSION" =~ -(beta|rc)[0-9]+$ ]]; then
+  if [[ "$RELEASE_BRANCH" != "main" ]]; then
+    echo "正式版本只能从 main 分支发布。当前分支：${RELEASE_BRANCH}" >&2
+    exit 1
+  fi
+  run bash scripts/check_stable_release_ready.sh
+fi
+
 if [[ -n "${CAGELEDGER_PYTHON_BIN:-}" ]]; then
   PYTHON_BIN_DIR="$(dirname "$CAGELEDGER_PYTHON_BIN")"
   export PATH="$PYTHON_BIN_DIR:$PATH"

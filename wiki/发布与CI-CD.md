@@ -29,12 +29,12 @@ Git tag 与容器镜像 tag 只带版本号：Git tag 使用 `v<version>`（例�
 - `build` 为纯数字构建号，从最早记录 `0.2.0（Build 1）` 起按发布顺序逐次递增，带后缀的小版本（如 `0.5.16a`、`0.5.16b`）各占一个 build；系统统一显示为 `a.b.c（Build N）`。
 - 版本唯一源 `package.json`（含 `build` 字段）；发布脚本从更新记录推导下一个 build 并写入 `package.json`，`/api/health` 与 `/api/system/info` 返回 `build` 与 `revisionShort`。
 - 未显式指定版本时，发布脚本按 `--bump`（支持 `beta|rc|patch|minor|major`，默认 `beta`）从最近 `v*` tag 自动推导下一个版本，并自动打标签与推送。
-- `--bump patch` 从 `-betaN` / `-rcN` 预发布转正式时保留 `a.b.c` 并去掉后缀（例如 `1.0.0-rc1` → `1.0.0`）；从正式版本继续补丁则 `a.b.c` 加一（例如 `1.0.0` → `1.0.1`）。
+- `--bump patch` 从 `-betaN` / `-rcN` 预发布转正式时保留 `a.b.c` 并去掉后缀；正式版从 `main` 发布，并要求当前 `main` 已包含 `origin/rc`。从正式版本继续补丁时 `a.b.c` 加一。
 - 显示规则：支持括号的位置显示 `a.b.c（Build N）`（例如 `1.0.0-beta7（Build 135）`）；软件包 tag 只带版本号。
 
 ## 发布前准备
 
-1. 拉取远端并处理本地改动。
+1. 拉取远端并处理本地改动；正式版先将已验证 `rc` 快进到 `main`。
 2. 在 `wiki/更新日志.md` 增加独立版本记录和更新时间，再执行 `npm run release:notes:sync` 生成系统内更新记录。
 3. 同步受影响的 `wiki/` 和 `docs/contracts/`。
 4. 确认 `package.json` 中仍是发布前版本，版本脚本统一修改。
@@ -93,7 +93,7 @@ Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea �
 
 ## 发布结果检查
 
-- `git tag --list 'vX.Y.Z'` 存在新 tag。
+- `git tag --list 'vX.Y.Z'` 存在新 tag，且正式 tag 的提交位于 `main`。
 - Gitea Release 显示对应版本和离线包。
 - `git.cellnucle.us/hugo/cageledger:X.Y.Z` 可以拉取。
 - `git.cellnucle.us/hugo/cageledger:latest` 与最新正式版本具有相同的 `amd64`、`arm64` manifest。

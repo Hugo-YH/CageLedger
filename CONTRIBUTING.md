@@ -97,8 +97,9 @@ Gitea Pull Request 运行轻量质量门禁：格式、lint、类型、Vitest、
 
 ## 发布
 
-1. 在 `src/react/releaseNotesCurrent.ts` 增加版本、日期和时间。
-2. 运行 `npm run release:local -- --version X.Y.Z --push`。
-3. 检查 commit、`vX.Y.Z` tag、Gitea Release 和容器镜像。
+1. 在 `wiki/更新日志.md` 增加版本、日期和面向使用者的说明，再运行 `npm run release:notes:sync`。
+2. 正式版本在 `main` 上发布，预发布经 `beta → rc → main` 推进。
+3. 运行 `npm run release:local -- --version X.Y.Z --push`。
+4. 检查 commit、`vX.Y.Z` tag、Gitea Release 和容器镜像。
 
 版本号由 `package.json` 管理，`scripts/set_version.mjs` 同步其他文件。已有 tag 保持不可变。
