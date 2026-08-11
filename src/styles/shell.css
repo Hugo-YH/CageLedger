@@ -103,7 +103,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--danger);
-  color: #fff;
+  color: var(--text-inverse);
   padding: 8px 16px;
   display: inline-flex;
   align-items: center;
@@ -1182,7 +1182,7 @@ h3 {
     color-mix(in srgb, var(--green) 30%, transparent),
     color-mix(in srgb, var(--green) 14%, transparent)
   );
-  color: #fff;
+  color: var(--text-inverse);
   box-shadow:
     inset 3px 0 0 var(--success-line),
     inset 0 0 0 1px color-mix(in srgb, var(--success-line) 16%, transparent);

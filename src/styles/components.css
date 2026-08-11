@@ -1191,12 +1191,12 @@
   box-shadow: 0 0 0 2px var(--ant-color-primary-border-hover);
 }
 
-.app-data-table .ant-table-tbody > tr > td {
+[data-ui="data-table"].app-data-table .ant-table-tbody > tr > td {
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.app-data-table .ant-table-thead > tr > th {
+[data-ui="data-table"].app-data-table .ant-table-thead > tr > th {
   text-align: left !important;
 }
 

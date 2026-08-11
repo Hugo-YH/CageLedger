@@ -261,7 +261,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--text-inverse);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;

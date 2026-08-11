@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.4",
+    build: "160",
+    releasedAt: "2026-08-11",
+    title: "Ant Design 设计基线与无障碍整改",
+    items: [
+      "全系统工作台、文档站和设计契约统一采用 Ant Design 官方蓝 `#1677ff`、4px 间距、14px 正文、32px 控件和官方动效 Token；白字操作与正文链接使用官方深色阶保证 WCAG AA 对比度",
+      "新增可复现的 `npm run check:antd-design` 门禁，整合本地 `antd doctor`、`antd usage`、`antd lint` 与主题契约检查，当前审查结果为零弃用、零无障碍、零性能告警",
+      "数量统计与笼位表单恢复 Select 默认虚拟滚动；浏览器回归改用键盘选择协议，覆盖虚拟列表、桌面与移动端交互",
+      "清理样式层遗留颜色与未作用域 Ant 表格选择器，文档主题复用应用品牌 Token；历史青绿色记录增加迁移注释并保留追溯信息",
+    ],
+  },
+  {
     version: "1.0.3",
     build: "159",
     releasedAt: "2026-08-11",
@@ -1204,6 +1216,7 @@ export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
       "统一面板、工具栏、按钮、表格和分页密度，保持青绿色主色并提升页面扫描效率",
       "待进驻动物提示改为右下角淡黄色气泡，默认收起，点击气泡后展开列表",
     ],
+    note: "迁移注释：本条记录反映 0.5.2a 的历史视觉阶段。当前系统以 Ant Design 官方蓝色 `#1677ff` 为主色基线；历史记录保留用于追溯。",
   },
   {
     version: "0.5.2",

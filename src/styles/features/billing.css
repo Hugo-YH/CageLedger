@@ -449,7 +449,7 @@ th {
   padding: 8px;
   border-radius: var(--ant-border-radius, 6px);
   background: var(--backdrop);
-  color: #fff;
+  color: var(--text-inverse);
   text-align: center;
 }
 

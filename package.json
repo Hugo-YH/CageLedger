@@ -1,8 +1,8 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "1.0.3",
-  "build": 159,
+  "version": "1.0.4",
+  "build": 160,
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
@@ -27,6 +27,7 @@
     "check:architecture": "node scripts/check_architecture.mjs",
     "check:ui-contract": "node scripts/check_ui_contract.mjs",
     "check:style-ownership": "node scripts/check_style_ownership.mjs",
+    "check:antd-design": "node scripts/check_antd_design.mjs",
     "format": "prettier --write . && node scripts/run_python.mjs -m ruff format .",
     "format:check": "prettier --check . && node scripts/run_python.mjs -m ruff format --check .",
     "lint": "npm run lint:ts && npm run lint:css && npm run lint:md && npm run lint:python && npm run lint:shell",
@@ -35,7 +36,7 @@
     "lint:md": "markdownlint-cli2",
     "lint:python": "node scripts/run_python.mjs -m ruff check .",
     "lint:shell": "bash -n scripts/*.sh && shellcheck scripts/*.sh",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:python && npm run check:architecture -- --enforce && npm run check:ui-contract && npm run check:style-ownership && npm run check:docs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:python && npm run check:architecture -- --enforce && npm run check:ui-contract && npm run check:style-ownership && npm run check:antd-design && npm run check:docs",
     "verify:full": "npm run check && npm run build && npm run test:e2e",
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
@@ -55,6 +56,7 @@
     "react-resizable": "^4.0.2"
   },
   "devDependencies": {
+    "@ant-design/cli": "^6.6.0",
     "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.61.1",

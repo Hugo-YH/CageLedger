@@ -46,6 +46,19 @@ test("dashboard follows the system dark theme contract", async ({ page }, testIn
   await attachViewport(page, testInfo, "dashboard-dark-1280");
 });
 
+test("primary actions and selected navigation use the official Ant Design blue", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+
+  await expect(page.locator("html")).toHaveCSS("--primary", "#1677ff");
+  await expect(page.locator("html")).toHaveCSS("--button-primary", "#1677ff");
+  await page.getByRole("menuitem", { name: /笼位管理/ }).click();
+  await expect(page.getByRole("heading", { name: "动态笼位图", exact: true, level: 2 })).toBeVisible();
+});
+
 test("certificate download card remains usable across supported viewports", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/app");

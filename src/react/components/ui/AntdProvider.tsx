@@ -21,14 +21,14 @@ export function AntdProvider({ children }: PropsWithChildren) {
     () => ({
       algorithm: resolvedTheme === "dark" ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
       token: {
-        // The darker primary keeps white text at WCAG AA contrast on compact controls.
-        colorPrimary: "#0958d9",
+        // Ant Design v6 official blue seed; components derive accessible hover and active palettes.
+        colorPrimary: "#1677ff",
         colorInfo: "#0958d9",
         colorSuccess: "#389e0d",
         colorWarning: "#d48806",
         colorError: "#cf1322",
         colorLink: "#0958d9",
-        colorLinkHover: "#0958d9",
+        colorLinkHover: "#1677ff",
         // Dashboard labels and descriptions remain readable on neutral surfaces.
         colorTextSecondary: "#595959",
         colorTextDescription: "#595959",
@@ -49,10 +49,25 @@ export function AntdProvider({ children }: PropsWithChildren) {
           borderRadius: 6,
           defaultColor: "#262626",
           defaultBorderColor: "#d9d9d9",
+          // Solid controls keep the official blue seed for branding and use blue-7 with white text for AA contrast.
+          colorPrimary: "var(--primary-control)",
+          colorPrimaryHover: "var(--primary-control-hover)",
+          colorPrimaryActive: "var(--primary-control-active)",
+          dangerColor: "var(--danger-text)",
           fontWeight: 400,
         },
         Card: { borderRadiusLG: 8 },
         Drawer: { borderRadiusLG: 8 },
+        Menu: {
+          darkItemSelectedBg: "#0958d9",
+          darkItemSelectedColor: "#fff",
+        },
+        Tabs: {
+          inkBarColor: "var(--primary)",
+          itemActiveColor: "var(--primary-text)",
+          itemHoverColor: "var(--primary-text)",
+          itemSelectedColor: "var(--primary-text)",
+        },
         Modal: { borderRadiusLG: 8 },
       },
     }),

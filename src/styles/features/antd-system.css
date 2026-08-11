@@ -1,14 +1,14 @@
 :root {
-  --app-page-bg: #f5f5f5;
+  --app-page-bg: var(--bg);
   --app-surface: var(--surface);
   --app-surface-subtle: var(--surface-soft);
   --app-border: var(--surface-strong);
-  --app-text: #1f1f1f;
+  --app-text: var(--text);
   --app-text-secondary: var(--muted);
-  --app-primary: #0958d9;
-  --app-success: #389e0d;
-  --app-warning: #d48806;
-  --app-error: #cf1322;
+  --app-primary: var(--primary-text);
+  --app-success: var(--green);
+  --app-warning: var(--amber);
+  --app-error: var(--danger);
   --app-shadow: 0 1px 2px rgb(0 0 0 / 3%);
   --app-shadow-overlay: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%);
   --app-z-layout: 10;
@@ -16,19 +16,25 @@
   --app-dashboard-active: var(--app-primary);
   --app-dashboard-reserved: #722ed1;
   --app-dashboard-empty: var(--app-border);
+  --app-sider-bg: #001529;
+  --app-on-sider: var(--text-inverse);
+  --app-processing-bg: var(--primary-soft);
+  --app-warning-bg: var(--warning-soft);
+  --app-error-bg: var(--danger-soft);
+  --app-primary-hover-bg: color-mix(in srgb, var(--app-primary) 5%, transparent);
 }
 
 :root[data-theme="dark"] {
-  --app-page-bg: #141414;
-  --app-surface: #1f1f1f;
-  --app-surface-subtle: #262626;
-  --app-border: #303030;
-  --app-text: rgb(255 255 255 / 88%);
-  --app-text-secondary: rgb(255 255 255 / 65%);
-  --app-primary: #69b1ff;
-  --app-success: #95de64;
-  --app-warning: #ffc53d;
-  --app-error: #ff7875;
+  --app-page-bg: var(--bg);
+  --app-surface: var(--surface);
+  --app-surface-subtle: var(--surface-soft);
+  --app-border: var(--surface-strong);
+  --app-text: var(--text);
+  --app-text-secondary: var(--muted);
+  --app-primary: var(--primary-text);
+  --app-success: var(--green);
+  --app-warning: var(--amber);
+  --app-error: var(--danger);
   --app-dashboard-reserved: #b37feb;
 }
 
@@ -52,7 +58,7 @@
   height: 100dvh;
   overflow: hidden;
   border-right: 1px solid rgb(255 255 255 / 10%);
-  background: #001529 !important;
+  background: var(--app-sider-bg) !important;
 }
 
 .ant-sidebar .ant-layout-sider-children {
@@ -69,7 +75,7 @@
   min-height: 64px;
   gap: 8px;
   padding: 12px 16px;
-  color: #fff;
+  color: var(--app-on-sider);
 }
 
 .ant-brand img {
@@ -425,7 +431,7 @@
 .ant-workspace button.flow-button {
   border-color: var(--ant-color-primary);
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--text-inverse);
 }
 
 .ant-workspace button.secondary,
@@ -723,17 +729,17 @@
 }
 
 .ant-dashboard-task.is-processing .ant-dashboard-task-icon {
-  background: #e6f4ff;
+  background: var(--app-processing-bg);
   color: var(--app-primary);
 }
 
 .ant-dashboard-task.is-warning .ant-dashboard-task-icon {
-  background: #fffbe6;
+  background: var(--app-warning-bg);
   color: var(--app-warning);
 }
 
 .ant-dashboard-task.is-error .ant-dashboard-task-icon {
-  background: #fff2f0;
+  background: var(--app-error-bg);
   color: var(--app-error);
 }
 
@@ -910,11 +916,11 @@
 .ant-dashboard-pi-row {
   padding: 12px 8px;
   border-radius: 8px;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--motion-base) var(--ease-standard);
 }
 
 .ant-dashboard-pi-row:hover {
-  background: rgb(9 88 217 / 5%);
+  background: var(--app-primary-hover-bg);
 }
 
 .ant-dashboard-pi-row-head {

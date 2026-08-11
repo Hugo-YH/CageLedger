@@ -74,6 +74,13 @@ export async function openSavedQuantitySheets(page: Page) {
   await openNavigationEntry(page, "饲养费管理", "已保存数量统计表");
 }
 
+/** Select from Ant's virtual list using its keyboard contract instead of a recycled option node. */
+export async function selectAntOptionByKeyboard(page: Page, combobox: Locator, downCount = 1) {
+  await combobox.click();
+  for (let index = 0; index < downCount; index += 1) await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+}
+
 export async function openWorkflowCenter(page: Page) {
   await openNavigationEntry(page, "饲养费管理", "结算与报销台账");
 }

@@ -6,6 +6,7 @@ import {
   openQuantityEntry,
   openSettingsView,
   openWorkflowCenter,
+  selectAntOptionByKeyboard,
   test,
 } from "./fixtures";
 
@@ -53,8 +54,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByRole("button", { name: "批量编辑", exact: true })).toBeVisible();
   await openQuantityEntry(page);
   await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true, level: 2 })).toBeVisible();
-  await page.getByRole("combobox", { name: "房间号", exact: true }).click();
-  await page.locator(".ant-select-dropdown:visible").getByRole("option", { name: "8014", exact: true }).click();
+  await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间号", exact: true }));
   await expect(
     page.locator("#quantity-sheet-room").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("8014");

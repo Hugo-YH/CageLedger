@@ -9,7 +9,7 @@
 
 ## 视觉与交互
 
-- 主操作使用 `primary`；常规操作使用默认按钮；低频操作使用 text/link；破坏性操作使用 danger。
+- 主操作使用 `primary`；常规操作使用默认按钮；低频操作使用 text/link；破坏性操作使用 danger。主色种子为 `#1677ff`，白字主按钮与正文链接采用 Ant 官方深色阶保证 AA 对比度。
 - 控件高度采用 Ant 默认 `32px`，紧凑操作使用 `24px`，强调操作使用 `40px`。
 - 颜色、阴影、圆角、层级与动效通过 Ant Theme 和 `src/styles/tokens.css` 的语义 Token 提供。
 - Tooltip 用于简短说明；Popver 用于可点击说明；Modal 和 Drawer 用于完整任务。
@@ -18,7 +18,7 @@
 ## 响应式与动效
 
 - `761px` 以上使用桌面 Ant Layout；`760px` 以下使用 antd-mobile TabBar 与 Popup。
-- 动效使用 transform 和 opacity：按压 120ms、浮层 160ms、Drawer/Modal 220ms。
+- 动效使用 transform 和 opacity：按压 100ms、浮层 200ms、Drawer/Modal 300ms，对应 Ant Design 的 `motionDurationFast`、`motionDurationMid`、`motionDurationSlow`。
 - `prefers-reduced-motion` 下保留状态色与透明度，移除位移与缩放。
 
 ## 布局归属与改动流程
@@ -47,5 +47,5 @@
 
 ## 质量门禁
 
-- `npm run check:ui-contract` 校验适配层、文档、`transition: all` 与未登记高 z-index。
+- `npm run check:ui-contract` 校验适配层、文档、`transition: all` 与未登记高 z-index；`npm run check:antd-design` 执行本地 `antd doctor`、`antd usage`、`antd lint` 并输出机器可读报告。
 - 新页面和公共组件通过 `npm run check`、键盘导航、浅色/深色与移动端截图验收。

@@ -503,7 +503,7 @@ svg {
 }
 
 .nav-toggle:hover {
-  color: #fff;
+  color: var(--text-inverse);
   background: var(--text-strong);
   border-color: rgb(255 255 255 / 18%);
 }
@@ -588,7 +588,7 @@ svg {
 
 .nav-child:hover,
 .nav-child.active {
-  color: #fff;
+  color: var(--text-inverse);
   background: rgb(255 255 255 / 8%);
 }
 
@@ -708,7 +708,7 @@ svg {
 
 .settings-drawer-head strong {
   font-size: 14px;
-  color: #fff;
+  color: var(--text-inverse);
 }
 
 .settings-drawer-head span {
@@ -752,7 +752,7 @@ svg {
 
 .settings-drawer-item span {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-inverse);
 }
 
 .settings-drawer-item small {
@@ -842,7 +842,7 @@ svg {
 .nav-item.active,
 .nav-item:hover {
   background: var(--text-strong);
-  color: #fff;
+  color: var(--text-inverse);
   box-shadow: inset 3px 0 0 var(--line-strong);
 }
 
@@ -861,7 +861,7 @@ svg {
 }
 
 .sidebar-account strong {
-  color: #fff;
+  color: var(--text-inverse);
   font-size: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
