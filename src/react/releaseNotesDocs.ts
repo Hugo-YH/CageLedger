@@ -3,6 +3,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.2",
+    build: "157",
+    releasedAt: "2026-08-11",
+    title: "修复与体验",
+    items: [
+      "修复结算通知邮件「复制并确认」在内网 HTTP 环境无法复制到剪贴板的问题：非安全上下文自动回退到兼容复制方式，复制失败时给出明确提示",
+    ],
+  },
+  {
     version: "1.0.1",
     build: "156",
     releasedAt: "2026-08-10",

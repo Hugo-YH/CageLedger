@@ -338,13 +338,54 @@ test("发起结算流程 generates the notification email template", async ({ pa
   expect(overlap.missing).toBe(false);
   if (overlap.missing) throw new Error("未找到按钮或关闭 X");
   expect(overlap.buttonRight!).toBeLessThanOrEqual(overlap.closeLeft!);
+  const subject = await noticeModal.locator(".settlement-notice-subject").innerText();
   const body = await noticeBody.innerText();
   expect(body).toContain("应交总额为");
   expect(body).toContain("材料接收点：珠江新城办公室8009");
   expect(body).toContain("系统管理员");
 
   // 复制并确认：复制邮件内容并发起结算流程
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await noticeModal.getByRole("button", { name: "复制并确认" }).click();
   await expect(noticeModal).toHaveCount(0, { timeout: 10_000 });
   await expect(noticeRow).toContainText("已发起", { timeout: 10_000 });
+  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboardText).toBe(`${subject}\n\n${body}`);
+  await page.locator(".settlement-preview-modal .ant-modal-close").click();
+
+  // 内网 HTTP（非安全上下文）没有 Clipboard API：撤回流程后模拟该环境，
+  // 验证回退复制路径仍然把邮件内容写入剪贴板。
+  await noticeRow.getByRole("button", { name: "撤回" }).click();
+  await page.locator(".ant-popconfirm").getByRole("button", { name: "撤回", exact: true }).click();
+  await expect(noticeRow).toContainText("未发起");
+  await page.addInitScript(() => {
+    const clipboard = navigator.clipboard;
+    Object.defineProperty(window, "__clipboardRead", {
+      configurable: true,
+      value: () => clipboard?.readText(),
+    });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+  });
+  await page.reload();
+  await openBillingNavigation(page);
+  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
+  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  const fallbackRow = page.getByRole("row", { name: /E2E 邮件通知负责人/ });
+  await expect(fallbackRow).toBeVisible();
+  await fallbackRow.getByRole("button", { name: "预览结算单" }).click();
+  await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" }).click();
+  const fallbackModal = page.locator(".settlement-notice-modal");
+  await expect(fallbackModal.locator(".settlement-notice-body")).toBeVisible({ timeout: 10_000 });
+  const fallbackSubject = await fallbackModal.locator(".settlement-notice-subject").innerText();
+  const fallbackBody = await fallbackModal.locator(".settlement-notice-body").innerText();
+  await fallbackModal.getByRole("button", { name: "复制并确认" }).click();
+  await expect(fallbackModal).toHaveCount(0, { timeout: 10_000 });
+  await expect(fallbackRow).toContainText("已发起", { timeout: 10_000 });
+  const fallbackClipboard = await page.evaluate(() =>
+    (window as unknown as { __clipboardRead?: () => Promise<string> }).__clipboardRead?.(),
+  );
+  expect(fallbackClipboard).toBe(`${fallbackSubject}\n\n${fallbackBody}`);
 });

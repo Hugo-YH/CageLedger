@@ -1,7 +1,8 @@
 import { CopyOutlined } from "@ant-design/icons";
-import { Button, Modal, Typography } from "antd";
+import { App, Button, Modal, Typography } from "antd";
 
 import type { SettlementNoticeEmail } from "../../../../domain/settlementNotice";
+import { copyTextToClipboard } from "../../../utils/clipboard";
 
 export function SettlementNoticeModal({
   email,
@@ -14,11 +15,14 @@ export function SettlementNoticeModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { message } = App.useApp();
+
   async function copyAndConfirm() {
-    try {
-      await navigator.clipboard.writeText(`${email.subject}\n\n${email.body}`);
-    } catch {
-      // 剪贴板不可用时仍允许发起结算流程。
+    const copied = await copyTextToClipboard(`${email.subject}\n\n${email.body}`);
+    if (copied) {
+      message.success("邮件内容已复制");
+    } else {
+      message.warning("复制失败，请手动复制邮件正文；结算流程仍会继续发起。");
     }
     onConfirm();
   }
