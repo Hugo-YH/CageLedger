@@ -1,6 +1,6 @@
 import type { Page, TestInfo } from "@playwright/test";
 
-import { expect, openQuantityEntry, test } from "./fixtures";
+import { expect, openQuantityEntry, openSettingsView, test } from "./fixtures";
 
 test("quantity workspace keeps its desktop and mobile layout contract", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -44,6 +44,33 @@ test("dashboard follows the system dark theme contract", async ({ page }, testIn
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await attachViewport(page, testInfo, "dashboard-dark-1280");
+});
+
+test("certificate download card remains usable across supported viewports", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await openSettingsView(page, "关于系统");
+
+  const download = page.getByRole("link", { name: "下载 CageLedger 证书", exact: true });
+  for (const viewport of [
+    { name: "1280", width: 1280, height: 900 },
+    { name: "1180", width: 1180, height: 820 },
+    { name: "760", width: 760, height: 900 },
+    { name: "landscape", width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await expect(download).toBeVisible();
+    expect(
+      await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+    ).toMatchObject({ clientWidth: viewport.width, scrollWidth: viewport.width });
+    await attachViewport(page, testInfo, `certificate-${viewport.name}`);
+  }
 });
 
 async function attachViewport(page: Page, testInfo: TestInfo, name: string) {

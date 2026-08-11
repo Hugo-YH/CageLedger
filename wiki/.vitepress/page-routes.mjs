@@ -13,6 +13,7 @@ export const pageRoutes = {
   "结算与报销.md": "guide/settlement-and-reimbursement.md",
   "常见问题.md": "guide/faq.md",
   "部署与运行.md": "operations/deployment.md",
+  "HTTPS与证书.md": "operations/https-and-certificate.md",
   "系统配置.md": "operations/configuration.md",
   "环境变量.md": "operations/environment.md",
   "账号与权限.md": "operations/accounts-and-permissions.md",

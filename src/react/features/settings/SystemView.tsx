@@ -1,3 +1,4 @@
+import { DownloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Alert, Button, Card, Descriptions, Divider, Flex, Segmented, Skeleton, Space, Tag, Typography } from "antd";
 
@@ -7,6 +8,10 @@ import { PageState } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
+
+const CERTIFICATE_DOWNLOAD_URL = "/docs/cageledger.crt";
+const CERTIFICATE_FINGERPRINT =
+  "A4:6A:89:6F:68:17:C4:A5:45:55:77:5F:1B:F7:8B:A4:75:D7:82:68:5D:3B:92:60:A4:B7:1F:BE:BE:8C:B2:2E";
 
 export function SystemView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const isMobile = useIsMobileLayout();
@@ -160,6 +165,42 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
           <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
           <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
         </Descriptions>
+      </Card>
+      <Card title={<CardTitle>HTTPS 访问证书</CardTitle>}>
+        <Space orientation="vertical" size={16} style={{ display: "flex" }}>
+          <Alert
+            description="在受控客户端安装此证书后，可通过群晖反向代理的 HTTPS 地址使用剪贴板、摄像头等浏览器安全能力。"
+            icon={<SafetyCertificateOutlined aria-hidden />}
+            title="内网客户端受信任根证书"
+            showIcon
+            type="info"
+          />
+          <Descriptions column={{ xs: 1, sm: 2 }} layout="vertical" size="small">
+            <Descriptions.Item label="适用地址">
+              <Typography.Text code>https://10.100.47.47</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="有效期">2026-08-11 至 2036-08-08</Descriptions.Item>
+            <Descriptions.Item label="SHA-256 指纹" span="filled">
+              <Typography.Text code style={{ overflowWrap: "anywhere" }}>
+                {CERTIFICATE_FINGERPRINT}
+              </Typography.Text>
+            </Descriptions.Item>
+          </Descriptions>
+          <Flex gap={8} wrap>
+            <Button
+              download="cageledger.crt"
+              href={CERTIFICATE_DOWNLOAD_URL}
+              icon={<DownloadOutlined aria-hidden />}
+              type="primary"
+            >
+              下载 CageLedger 证书
+            </Button>
+            <Button href="/docs/operations/https-and-certificate">查看各设备安装说明</Button>
+          </Flex>
+          <Typography.Text type="secondary">
+            下载文件只包含公开证书。群晖反向代理使用的私钥应保存在 DSM 证书管理中。
+          </Typography.Text>
+        </Space>
       </Card>
       <Card title={<CardTitle>界面外观</CardTitle>}>
         <Space orientation="vertical" size={8} style={{ display: "flex", maxWidth: 420 }}>

@@ -17,7 +17,8 @@ web-dist
 docs-dist
 /.vitepress/
 wiki/.vitepress/cache/
-wiki/public/
+wiki/public/*
+!wiki/public/cageledger.crt
 *.local
 .env
 .env.*

@@ -3,6 +3,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.3",
+    build: "159",
+    releasedAt: "2026-08-11",
+    title: "HTTPS 与部署",
+    items: [
+      "系统设置新增 HTTPS 访问证书下载入口，并补充 Windows、macOS、iPhone/iPad、Android、Linux 与群晖 DSM 的证书安装和反向代理配置文档",
+    ],
+  },
+  {
     version: "1.0.2",
     build: "157",
     releasedAt: "2026-08-11",

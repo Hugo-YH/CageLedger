@@ -139,6 +139,7 @@ export default defineConfig({
           text: "部署与运维",
           items: [
             { text: "部署与运行", link: "/operations/deployment" },
+            { text: "HTTPS 与证书", link: "/operations/https-and-certificate" },
             { text: "系统配置", link: "/operations/configuration" },
             { text: "环境变量", link: "/operations/environment" },
             { text: "账号与权限", link: "/operations/accounts-and-permissions" },

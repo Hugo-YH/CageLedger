@@ -79,6 +79,16 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "操作记录", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "关于系统");
   await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
+  const certificateDownload = page.getByRole("link", { name: "下载 CageLedger 证书", exact: true });
+  await expect(certificateDownload).toHaveAttribute("href", "/docs/cageledger.crt");
+  await expect(certificateDownload).toHaveAttribute("download", "cageledger.crt");
+  const certificateResponse = await page.request.get("/docs/cageledger.crt");
+  expect(certificateResponse.ok()).toBe(true);
+  expect(await certificateResponse.text()).toContain("-----BEGIN CERTIFICATE-----");
+  await expect(page.getByRole("link", { name: "查看各设备安装说明", exact: true })).toHaveAttribute(
+    "href",
+    "/docs/operations/https-and-certificate",
+  );
   await page.getByRole("button", { name: "隐藏导航栏", exact: true }).click();
   await expect(page.locator(".ant-shell")).toHaveClass(/ant-shell-collapsed/);
   await expect(page.getByRole("button", { name: "展开导航栏", exact: true })).toBeVisible();
