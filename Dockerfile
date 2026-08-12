@@ -31,7 +31,9 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
 
 COPY requirements.txt ./
 COPY scripts/retry_command.sh ./scripts/retry_command.sh
-RUN bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
+RUN bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    -r requirements.txt
 
 COPY server.py package.json LICENSE NOTICE ./
 COPY server_app ./server_app
