@@ -1987,9 +1987,6 @@ def persist_intake_batches_mark_printed(body, actor):
 def persist_intake_receipt_confirmations(body, actor):
     started_at = time.perf_counter()
     batch_ids = intake_batch_action_ids(body)
-    actual_receipt_date = clean_text(body.get("actualReceiptDate"))
-    if not actual_receipt_date:
-        raise ValueError("实际接收日期不能为空")
     updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
         old_state = assemble_state(conn) or empty_state()
@@ -1999,39 +1996,14 @@ def persist_intake_receipt_confirmations(body, actor):
         if missing_ids:
             raise LookupError("待接收批次不存在")
         batches = [
-            batches_by_id[batch_id]
-            for batch_id in batch_ids
-            if batches_by_id[batch_id].get("status") == "printed"
-            and max(as_int(batches_by_id[batch_id].get("remainingCardCount")) or 0, 0) > 0
+            batches_by_id[batch_id] for batch_id in batch_ids if batches_by_id[batch_id].get("status") == "printed"
         ]
-        receipts = []
-        tasks = []
         for batch in batches:
-            confirmed_total = sum(
-                max(as_int(receipt.get("cardCount")) or 0, 0) for receipt in (batch.get("receipts") or [])
-            )
-            final_count = max(as_int(batch.get("finalCardCount")) or 0, 0)
-            card_count = min(
-                max(as_int(batch.get("remainingCardCount")) or 0, 0),
-                max(final_count - confirmed_total, 0),
-            )
-            confirmed_batch, receipt, batch_tasks = confirm_intake_receipt(
-                state,
-                batch["id"],
-                {
-                    "actualReceiptDate": actual_receipt_date,
-                    "cardCount": card_count,
-                },
-                actor,
-            )
-            receipts.append(receipt)
-            tasks.extend(batch_tasks)
-            batch = confirmed_batch
+            batch["status"] = "received"
+            batch["updatedAt"] = updated_at
         events = build_audit_events(actor, old_state, state, updated_at)
         for batch in batches:
             upsert_intake_batch_repository(conn, batch)
-        for task in tasks:
-            upsert_placement_task_repository(conn, task)
         write_audit_events(conn, events)
         conn.commit()
     invalidate_data_cache("assembled_state")
@@ -2042,16 +2014,14 @@ def persist_intake_receipt_confirmations(body, actor):
         "placement_tasks::",
         "dashboard_overview::",
     )
-    log_perf("intake_batch.confirm_many", started_at, batches=len(batches), tasks=len(tasks))
+    log_perf("intake_batch.confirm_many", started_at, batches=len(batches), tasks=0)
     return {
         "batches": batches,
-        "receipts": receipts,
-        "tasks": tasks,
+        "receipts": [],
+        "tasks": [],
         "updatedAt": updated_at,
         "auditLogs": merge_audit_logs([], events),
-        "perf": write_perf_summary(
-            started_at, rows_changed=len(batches) + len(tasks), batches=len(batches), tasks=len(tasks)
-        ),
+        "perf": write_perf_summary(started_at, rows_changed=len(batches), batches=len(batches), tasks=0),
     }
 
 

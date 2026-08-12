@@ -243,10 +243,9 @@ export function IntakeView({
   }
 
   async function receive(targets: IntakeBatch[]) {
-    const today = new Date().toISOString().slice(0, 10);
-    const printable = targets.filter((item) => item.status === "printed" && item.remainingCardCount > 0);
+    const printable = targets.filter((item) => item.status === "printed");
     if (!printable.length) {
-      setBulkNotice("选中的批次需先打印且剩余笼卡数大于 0，才能标记已接收。");
+      setBulkNotice("选中的批次均未处于已打印状态，无需标记已接收。");
       setBulkNoticeKind("info");
       return;
     }
@@ -254,7 +253,7 @@ export function IntakeView({
     setBulkNotice(`正在标记 ${printable.length} 个批次为已接收…`);
     setBulkNoticeKind("info");
     try {
-      await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id), actualReceiptDate: today });
+      await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id) });
       const skipped = targets.length - printable.length;
       setBulkNotice(
         skipped

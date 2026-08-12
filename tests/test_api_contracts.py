@@ -180,7 +180,7 @@ class ApiContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 201)
         self.assertEqual([item["status"] for item in received["batches"]], ["received", "received"])
-        self.assertEqual(len(received["tasks"]), 4)
+        self.assertEqual(len(received["tasks"]), 0)
         sheet_ids = ["sheet-p2-bulk-1", "sheet-p2-bulk-2"]
         for index, sheet_id in enumerate(sheet_ids, start=1):
             request_json(
