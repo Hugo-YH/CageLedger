@@ -2007,12 +2007,20 @@ def persist_intake_receipt_confirmations(body, actor):
         receipts = []
         tasks = []
         for batch in batches:
+            confirmed_total = sum(
+                max(as_int(receipt.get("cardCount")) or 0, 0) for receipt in (batch.get("receipts") or [])
+            )
+            final_count = max(as_int(batch.get("finalCardCount")) or 0, 0)
+            card_count = min(
+                max(as_int(batch.get("remainingCardCount")) or 0, 0),
+                max(final_count - confirmed_total, 0),
+            )
             confirmed_batch, receipt, batch_tasks = confirm_intake_receipt(
                 state,
                 batch["id"],
                 {
                     "actualReceiptDate": actual_receipt_date,
-                    "cardCount": max(as_int(batch.get("remainingCardCount")) or 0, 0),
+                    "cardCount": card_count,
                 },
                 actor,
             )
@@ -2500,12 +2508,7 @@ def reconcile_intake_batch_update(state, old_item, item):
         0,
     )
     next_item["confirmedCardCount"] = confirmed_count
-    next_item["remainingCardCount"] = max(
-        as_int(next_item.get("remainingCardCount"))
-        if next_item.get("remainingCardCount") not in (None, "")
-        else final_count - confirmed_count,
-        0,
-    )
+    next_item["remainingCardCount"] = max(final_count - confirmed_count, 0)
 
     old_status = clean_text(old_item.get("status", ""))
     new_status = clean_text(next_item.get("status", ""))
