@@ -1,0 +1,218 @@
+import { MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { Alert, Button, Flex, Form, Input, InputNumber, Modal, Space, Switch, Tag, Typography, Upload } from "antd";
+import { useState } from "react";
+
+import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
+import { uploadWorkflowAttachment, useAdvanceWorkflow } from "../../../api/workflows";
+
+interface RegistrationValues {
+  reimbursementForms?: Array<{ formNo: string; amount?: number }>;
+  signedStatementReturned?: boolean;
+  reimbursementFormReturned?: boolean;
+}
+
+function RegistrationSwitch({
+  checked,
+  label,
+  onChange,
+  returnedLabel,
+  unreturnedLabel,
+}: {
+  checked?: boolean;
+  label: string;
+  onChange?: (checked: boolean) => void;
+  returnedLabel: string;
+  unreturnedLabel: string;
+}) {
+  return (
+    <Space size={8}>
+      <Switch aria-label={label} checked={checked} onChange={onChange} />
+      <span>{label}</span>
+      <Tag color={checked ? "success" : "default"}>{checked ? returnedLabel : unreturnedLabel}</Tag>
+    </Space>
+  );
+}
+
+export function WorkflowRegistrationModal({
+  target,
+  onCancel,
+  onRegistered,
+}: {
+  target: BillingWorkflow | null;
+  onCancel: () => void;
+  onRegistered: () => void;
+}) {
+  const advance = useAdvanceWorkflow();
+  const [form] = Form.useForm<RegistrationValues>();
+  const signedStatementReturned = Form.useWatch("signedStatementReturned", form);
+  const reimbursementFormReturned = Form.useWatch("reimbursementFormReturned", form);
+  const reimbursementForms = Form.useWatch("reimbursementForms", form);
+  const [settlementAttachment, setSettlementAttachment] = useState<BillingWorkflowAttachment | null>(null);
+  const [reimbursementAttachment, setReimbursementAttachment] = useState<BillingWorkflowAttachment | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const hasPayableAmount = Number(target?.totalAmount || 0) > 0;
+
+  function resetAttachments() {
+    setSettlementAttachment(null);
+    setReimbursementAttachment(null);
+  }
+
+  async function submitRegistration() {
+    if (!target) return;
+    const values = await form.validateFields();
+    await advance.mutateAsync({
+      workflowId: target.id,
+      toStatus: "statement_archived",
+      registration: {
+        reimbursementForms: (values.reimbursementForms || [])
+          .filter((entry) => entry.formNo.trim())
+          .map((entry) => ({ formNo: entry.formNo, amount: Number(entry.amount) || 0 })),
+        signedStatementReturned: Boolean(values.signedStatementReturned),
+        reimbursementFormReturned: Boolean(values.reimbursementFormReturned),
+      },
+    });
+    onRegistered();
+  }
+
+  async function handleUpload(kind: "settlement" | "reimbursement", file: File) {
+    if (!target) return;
+    setUploading(true);
+    try {
+      const attachment = await uploadWorkflowAttachment(target.id, kind, file);
+      if (kind === "settlement") setSettlementAttachment(attachment ?? null);
+      else setReimbursementAttachment(attachment ?? null);
+    } finally {
+      setUploading(false);
+    }
+    return false;
+  }
+
+  const attachmentField = (
+    label: string,
+    attachment: BillingWorkflowAttachment | null,
+    kind: "settlement" | "reimbursement",
+  ) => (
+    <Flex vertical gap={4}>
+      <Space>
+        <Upload
+          accept=".pdf,.jpg,.jpeg,.png"
+          maxCount={1}
+          showUploadList={false}
+          beforeUpload={(file) => handleUpload(kind, file)}
+        >
+          <Button icon={<UploadOutlined aria-hidden />} loading={uploading} size="small">
+            上传扫描件
+          </Button>
+        </Upload>
+        {attachment ? <Typography.Text type="secondary">{attachment.originalName}</Typography.Text> : null}
+      </Space>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        {label}
+      </Typography.Text>
+    </Flex>
+  );
+
+  return (
+    <Modal
+      cancelText="取消"
+      confirmLoading={advance.isPending}
+      destroyOnHidden
+      okText="登记并归档"
+      open={Boolean(target)}
+      title={`交回登记 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
+      width={640}
+      afterClose={resetAttachments}
+      onCancel={onCancel}
+      onOk={() => void form.submit()}
+    >
+      <Form
+        form={form}
+        initialValues={{ reimbursementForms: [{ formNo: "", amount: undefined }] }}
+        layout="vertical"
+        onFinish={() => void submitRegistration()}
+      >
+        <Form.Item name="signedStatementReturned" valuePropName="checked">
+          <RegistrationSwitch label="饲养费结算单" returnedLabel="已交回" unreturnedLabel="未交回" />
+        </Form.Item>
+        {signedStatementReturned ? (
+          <Form.Item label="饲养费结算单扫描件">
+            {attachmentField("非必填", settlementAttachment, "settlement")}
+          </Form.Item>
+        ) : null}
+        {hasPayableAmount ? (
+          <>
+            <Form.Item name="reimbursementFormReturned" valuePropName="checked">
+              <RegistrationSwitch label="报销单" returnedLabel="已交回" unreturnedLabel="未交回" />
+            </Form.Item>
+            {reimbursementFormReturned ? (
+              <>
+                <Flex gap={8} style={{ marginBottom: 8 }}>
+                  <Typography.Text type="secondary" style={{ width: 220 }}>
+                    报销单号
+                  </Typography.Text>
+                  <Typography.Text type="secondary" style={{ width: 140 }}>
+                    金额（元）
+                  </Typography.Text>
+                </Flex>
+                <Form.List
+                  name="reimbursementForms"
+                  rules={[
+                    {
+                      validator: (_, value: Array<{ formNo: string; amount?: number }> | undefined) => {
+                        if (!(value || []).length) throw new Error("请填写报销单号和金额");
+                      },
+                    },
+                  ]}
+                >
+                  {(fields, { add, remove }) => (
+                    <>
+                      {fields.map(({ key, name, ...restField }) => (
+                        <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
+                          <Form.Item
+                            {...restField}
+                            name={[name, "formNo"]}
+                            rules={[{ required: true, message: "请填写报销单号" }]}
+                          >
+                            <Input placeholder="报销单号" style={{ width: 220 }} />
+                          </Form.Item>
+                          <Form.Item
+                            {...restField}
+                            name={[name, "amount"]}
+                            rules={[{ required: true, message: "请填写金额" }]}
+                          >
+                            <InputNumber min={0} precision={2} placeholder="金额（元）" style={{ width: 140 }} />
+                          </Form.Item>
+                          <MinusCircleOutlined
+                            aria-label={`删除第 ${name + 1} 行报销单`}
+                            onClick={() => remove(name)}
+                            role="button"
+                          />
+                        </Space>
+                      ))}
+                      {reimbursementFormReturned && !(reimbursementForms || []).length ? (
+                        <Alert showIcon style={{ marginBottom: 8 }} title="请填写报销单号和金额" type="error" />
+                      ) : null}
+                      <Form.Item>
+                        <Button
+                          block
+                          icon={<PlusOutlined aria-hidden />}
+                          type="dashed"
+                          onClick={() => add({ formNo: "", amount: undefined })}
+                        >
+                          添加报销单号
+                        </Button>
+                      </Form.Item>
+                    </>
+                  )}
+                </Form.List>
+                <Form.Item label="报销单扫描件" style={{ marginTop: 12 }}>
+                  {attachmentField("非必填", reimbursementAttachment, "reimbursement")}
+                </Form.Item>
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </Form>
+    </Modal>
+  );
+}

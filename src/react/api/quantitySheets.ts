@@ -124,7 +124,7 @@ export function useGenerateBillingStatement() {
     }) =>
       requestJson<BillingStatementResponse>("/api/billing-statements/generate-by-pi", {
         method: "POST",
-        body: JSON.stringify({ pi, month, sourceType, status: "draft", persist }),
+        body: JSON.stringify({ pi, month, sourceType, status: "draft", persist, initiate: persist }),
       }),
     onSuccess: (_data, variables) => {
       if (!variables.persist) return;

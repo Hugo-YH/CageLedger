@@ -281,7 +281,7 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "billing-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
   if (view === "billing-monthly-summary" && user.role === "admin")
     return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
-  if (view === "workflow-center") return <WorkflowCenterView user={user} />;
+  if (view === "workflow-center") return <WorkflowCenterView />;
   if (view === "rooms") return <RoomsView user={user} />;
   if (view === "users") return <UsersView currentUser={user} />;
   if (view === "data") return <DataView user={user} />;

@@ -310,6 +310,25 @@ def initialize_base_schema(
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS billing_workflow_attachments (
+            id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'settlement',
+            original_name TEXT NOT NULL,
+            stored_name TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            sha256 TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            created_by_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            FOREIGN KEY(workflow_id) REFERENCES billing_workflows(id) ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS reimbursement_records (
             id TEXT PRIMARY KEY,
             business_key TEXT NOT NULL UNIQUE,

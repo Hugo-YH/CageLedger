@@ -13,6 +13,55 @@ export interface ReimbursementListParams {
   onlyUnpaid?: boolean;
 }
 
+export interface BillingWorkflowAttachment {
+  id: string;
+  workflowId: string;
+  kind: "settlement" | "reimbursement";
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface BillingWorkflow {
+  id: string;
+  businessKey: string;
+  iacuc: string;
+  iacucs: string[];
+  month: string;
+  sourceType: string;
+  workflowStatus: string;
+  pi: string;
+  project: string;
+  owner: string;
+  manager: string;
+  totalAmount: number;
+  totalCageDays: number;
+  generatedAt: string;
+  sentAt: string;
+  signedReturnedAt: string;
+  registeredAt: string;
+  archivedAt: string;
+  signedStatementReturned?: boolean;
+  reimbursementFormReturned?: boolean;
+  reimbursementFormNos?: string[];
+  reimbursementForms?: Array<{ formNo: string; amount: number }>;
+  receivedAmount?: number;
+  attachments?: BillingWorkflowAttachment[];
+  registeredBy?: { id: string; username: string; displayName: string };
+  latestEventAt: string;
+}
+
+export interface WorkflowListParams {
+  limit: number;
+  offset: number;
+  status?: string;
+  month?: string;
+  sortKey?: string;
+  sortDir?: "asc" | "desc";
+  columnFilters?: Record<string, string[]>;
+}
+
 function listUrl(params: ReimbursementListParams) {
   const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.status && params.status !== "all") query.set("status", params.status);
@@ -65,20 +114,92 @@ export function useDeleteReimbursement() {
   return useMutation({
     mutationFn: (id: string) =>
       requestJson<{ ok: true }>(`/api/reimbursement-records/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+      void client.invalidateQueries({ queryKey: ["billing-workflows"] });
+      void client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+    },
   });
 }
 
 export function useAdvanceWorkflow() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { workflowId: string; toStatus: string; note?: string }) =>
+    mutationFn: (payload: {
+      workflowId: string;
+      toStatus: string;
+      note?: string;
+      registration?: {
+        reimbursementForms?: Array<{ formNo: string; amount: number }>;
+        signedStatementReturned?: boolean;
+        reimbursementFormReturned?: boolean;
+      };
+    }) =>
       requestJson<Record<string, unknown>>("/api/billing-workflows/advance", {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+      void client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+      void client.invalidateQueries({ queryKey: ["billing-workflows"] });
+    },
   });
+}
+
+export function useBillingWorkflows(params: WorkflowListParams) {
+  return useQuery({
+    queryKey: queryKeys.workflows({ ...params }),
+    queryFn: () =>
+      requestJson<PagedResponse<BillingWorkflow>>(`/api/billing-workflows?${billingWorkflowSearch(params).toString()}`),
+  });
+}
+
+function billingWorkflowSearch(params: WorkflowListParams) {
+  const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
+  if (params.status) query.set("status", params.status);
+  if (params.month) query.set("month", params.month);
+  if (params.sortKey) query.set("sortKey", params.sortKey);
+  if (params.sortDir) query.set("sortDir", params.sortDir);
+  if (params.columnFilters && Object.keys(params.columnFilters).length) {
+    query.set("columnFilters", JSON.stringify(params.columnFilters));
+  }
+  return query;
+}
+
+export async function fetchAllBillingWorkflows(params: WorkflowListParams) {
+  const limit = 100;
+  const firstPage = await requestJson<PagedResponse<BillingWorkflow>>(
+    `/api/billing-workflows?${billingWorkflowSearch({ ...params, limit, offset: 0 }).toString()}`,
+  );
+  const items = [...firstPage.items];
+  const total = firstPage.page.total;
+
+  for (let offset = limit; offset < total; offset += limit) {
+    const nextPage = await requestJson<PagedResponse<BillingWorkflow>>(
+      `/api/billing-workflows?${billingWorkflowSearch({ ...params, limit, offset }).toString()}`,
+    );
+    items.push(...nextPage.items);
+  }
+
+  return items;
+}
+
+export async function uploadWorkflowAttachment(workflowId: string, kind: "settlement" | "reimbursement", file: File) {
+  const form = new FormData();
+  form.set("file", file);
+  const response = await fetch(
+    `/api/billing-workflows/${encodeURIComponent(workflowId)}/attachments?kind=${encodeURIComponent(kind)}`,
+    {
+      method: "POST",
+      body: form,
+      credentials: "same-origin",
+      cache: "no-store",
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as { item?: BillingWorkflowAttachment; error?: string };
+  if (!response.ok) throw new Error(payload.error || `上传失败 (${response.status})`);
+  return payload.item;
 }
 
 export function useDeleteBillingWorkflow() {
@@ -90,6 +211,7 @@ export function useDeleteBillingWorkflow() {
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+      void client.invalidateQueries({ queryKey: ["billing-workflows"] });
       void client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
     },
   });

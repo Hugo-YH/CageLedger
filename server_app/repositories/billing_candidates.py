@@ -47,7 +47,14 @@ def workflow_status_sql(source_type):
 
 def workflow_column_expr(source_type):
     """结算状态列的聚合表达式，用于列表筛选与筛选选项。"""
-    return f"CASE WHEN {workflow_exists_sql(source_type)} THEN '已发起' ELSE '未发起' END"
+    return (
+        "CASE "
+        f"WHEN NOT {workflow_exists_sql(source_type)} THEN '未发起' "
+        f"WHEN {workflow_status_sql(source_type)} = 'statement_generated' THEN '已生成' "
+        f"WHEN {workflow_status_sql(source_type)} = 'statement_sent' THEN '已发起' "
+        f"WHEN {workflow_status_sql(source_type)} = 'statement_archived' THEN '已归档' "
+        "ELSE '已发起' END"
+    )
 
 
 # Bump when quantity-sheet settlement rules change so persisted list snapshots are recalculated after deployment.

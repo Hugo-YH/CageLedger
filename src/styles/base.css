@@ -1228,8 +1228,8 @@ textarea {
   font-family: inherit;
 }
 
-button,
-[role="button"] {
+button:not(.ant-switch),
+[role="button"]:not(.ant-switch) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1248,12 +1248,12 @@ button,
   }
 }
 
-button:not(:disabled):active,
-[role="button"]:not([aria-disabled="true"]):active {
+button:not(.ant-switch, :disabled):active,
+[role="button"]:not(.ant-switch, [aria-disabled="true"]):active {
   transform: scale(0.97);
 }
 
-button:focus-visible,
+button:not(.ant-switch):focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,

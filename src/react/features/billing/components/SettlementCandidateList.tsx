@@ -1,5 +1,4 @@
-import { DownloadOutlined, EyeOutlined, FileTextOutlined, PlayCircleOutlined, UndoOutlined } from "@ant-design/icons";
-import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Tooltip, Typography, type TableProps } from "antd";
+import { Alert, Empty, Space, Typography } from "antd";
 import { useState } from "react";
 
 import { buildSettlementNoticeEmail, type SettlementNoticeEmail } from "../../../../domain/settlementNotice";
@@ -10,15 +9,17 @@ import type {
   SettlementCandidateListParams,
 } from "../../../api/contracts";
 import { exportSettlementXlsx, listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
-import { useDeleteBillingWorkflow } from "../../../api/workflows";
+import { useAdvanceWorkflow, useDeleteBillingWorkflow } from "../../../api/workflows";
 import { Pager } from "../../../components/WorkspaceUi";
 import { DataTable } from "../../../components/ui";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
 import { BatchStartConfirmModal } from "./BatchStartConfirmModal";
-import { SettlementColumnTitle } from "./SettlementColumnTitle";
+import { BatchWithdrawConfirmModal } from "./BatchWithdrawConfirmModal";
+import { SettlementBatchToolbar } from "./SettlementBatchToolbar";
 import { SettlementNoticeModal } from "./SettlementNoticeModal";
 import { SettlementPreviewModal } from "./SettlementPreviewModal";
+import { buildSettlementColumns } from "./settlementCandidateColumns";
 
 export function SettlementCandidateList({
   source,
@@ -45,6 +46,8 @@ export function SettlementCandidateList({
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchStarting, setBatchStarting] = useState(false);
+  const [batchWithdrawOpen, setBatchWithdrawOpen] = useState(false);
+  const [batchWithdrawing, setBatchWithdrawing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
   const [xlsxExporting, setXlsxExporting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
@@ -66,6 +69,7 @@ export function SettlementCandidateList({
   const list = useSettlementCandidates(params, source === "quantity_sheet");
   const generate = useGenerateBillingStatement();
   const withdrawWorkflow = useDeleteBillingWorkflow();
+  const advanceWorkflow = useAdvanceWorkflow();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
@@ -100,108 +104,31 @@ export function SettlementCandidateList({
     );
   }
 
-  const columns: TableProps<SettlementCandidate>["columns"] = [
-    {
-      key: "selection",
-      title: (
-        <Checkbox
-          aria-label="全选当前筛选结果结算项"
-          checked={total > 0 && allFilteredSelected}
-          disabled={selectingAll || !total}
-          onChange={() => void toggleAllFiltered()}
-        />
-      ),
-      width: 40,
-      render: (_, candidate) => (
-        <Checkbox
-          aria-label={`选择 ${candidate.pi} ${candidate.month} 结算项`}
-          checked={selectedCandidates.some((item) => item.id === candidate.id)}
-          disabled={candidate.totalAmount == null}
-          onChange={(event) => toggleCandidate(candidate, event.target.checked)}
-        />
-      ),
+  const columns = buildSettlementColumns({
+    allFilteredSelected,
+    filters,
+    params,
+    previewing: generate.isPending,
+    selectedCandidates,
+    selectingAll,
+    total,
+    onFilter: (column, values) => {
+      setFilters((current) => ({ ...current, [column]: values }));
+      setSelectedCandidates([]);
+      setAllFilteredSelected(false);
+      setPage(1);
     },
-    ...(
-      [
-        { key: "month", label: "结算月份", width: 120 },
-        { key: "pi", label: "项目负责人姓名", width: 160 },
-        { key: "iacuc", label: "IACUC", width: 300 },
-        { key: "manager", label: "登记人员", width: 150 },
-        { key: "workflow", label: "结算状态", width: 110 },
-        { key: "amount", label: "金额", width: 150 },
-      ] as const
-    ).map(({ key, label, width }) => ({
-      key,
-      dataIndex: key === "amount" ? "totalAmount" : key,
-      width,
-      align: key === "amount" ? ("right" as const) : undefined,
-      title: (
-        <SettlementColumnTitle
-          column={key}
-          label={label}
-          params={params}
-          values={filters[key] || []}
-          onFilter={(values) => {
-            setFilters((current) => ({ ...current, [key]: values }));
-            setSelectedCandidates([]);
-            setAllFilteredSelected(false);
-            setPage(1);
-          }}
-          onSort={() => {
-            setSort((current) => ({
-              key,
-              dir: current.key === key && current.dir === "asc" ? "desc" : "asc",
-            }));
-            setPage(1);
-          }}
-        />
-      ),
-      render: (_: unknown, candidate: SettlementCandidate) => {
-        if (key === "iacuc") {
-          const text = candidate.iacucs.join("、") || candidate.error || "待检查";
-          return <span title={text}>{candidate.iacucs.join("、") || "待检查"}</span>;
-        }
-        if (key === "manager") return candidate.manager || "-";
-        if (key === "workflow") return candidate.hasWorkflow ? <Tag color="processing">已发起</Tag> : <Tag>未发起</Tag>;
-        if (key === "amount") return candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`;
-        return candidate[key];
-      },
-    })),
-    {
-      key: "actions",
-      title: "操作",
-      width: 190,
-      render: (_, candidate) => {
-        const action = (
-          <Space size={4} wrap>
-            <Button
-              icon={<EyeOutlined aria-hidden />}
-              loading={generate.isPending}
-              size="small"
-              disabled={candidate.totalAmount == null}
-              onClick={() => void generateFor(candidate, false)}
-            >
-              预览结算单
-            </Button>
-            {candidate.hasWorkflow && candidate.workflowStatus === "statement_generated" ? (
-              <Popconfirm
-                description="撤回后该负责人本月将回到未发起状态，可重新发起结算。"
-                okButtonProps={{ danger: true }}
-                okText="撤回"
-                title="撤回该结算流程？"
-                onConfirm={() => void withdrawFor(candidate)}
-              >
-                <Button danger icon={<UndoOutlined aria-hidden />} loading={withdrawWorkflow.isPending} size="small">
-                  撤回
-                </Button>
-              </Popconfirm>
-            ) : null}
-          </Space>
-        );
-        return candidate.error ? <Tooltip title={candidate.error}>{action}</Tooltip> : action;
-      },
+    onPreview: (candidate) => void generateFor(candidate, false),
+    onSort: (column) => {
+      setSort((current) => ({
+        key: column as SettlementCandidateListParams["sortKey"],
+        dir: current.key === column && current.dir === "asc" ? "desc" : "asc",
+      }));
+      setPage(1);
     },
-  ];
+    onToggle: (candidate, checked) => toggleCandidate(candidate, checked),
+    onToggleAll: () => void toggleAllFiltered(),
+  });
 
   async function withdrawFor(candidate: SettlementCandidate) {
     if (!candidate.workflowId) return;
@@ -210,6 +137,22 @@ export function SettlementCandidateList({
       setSelected(null);
       setResult(null);
       showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，可重新发起。`, "success");
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "撤回结算流程失败", "error");
+    }
+  }
+
+  async function revertFor(candidate: SettlementCandidate) {
+    if (!candidate.workflowId) return;
+    try {
+      await advanceWorkflow.mutateAsync({
+        workflowId: candidate.workflowId,
+        toStatus: "statement_generated",
+        note: "撤回已发起结算流程，退回已生成",
+      });
+      setSelected(null);
+      setResult(null);
+      showNotice(`${candidate.pi} ${candidate.month} 的结算流程已退回已生成状态。`, "success");
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "撤回结算流程失败", "error");
     }
@@ -225,7 +168,7 @@ export function SettlementCandidateList({
       });
       setSelected(candidate);
       setResult(response);
-      showNotice(persist ? "结算流程已创建，可到结算与报销台账继续处理。" : "结算预览已生成。", "success");
+      showNotice(persist ? "结算流程已发起，可到结算与报销台账继续处理。" : "结算预览已生成。", "success");
       return true;
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
@@ -295,7 +238,8 @@ export function SettlementCandidateList({
 
   async function startSelectedCandidates() {
     const candidates = selectedCandidates.filter(
-      (candidate) => candidate.totalAmount != null && !candidate.hasWorkflow,
+      (candidate) =>
+        candidate.totalAmount != null && (!candidate.hasWorkflow || candidate.workflowStatus === "statement_generated"),
     );
     if (!candidates.length) return;
     setBatchStarting(true);
@@ -325,6 +269,53 @@ export function SettlementCandidateList({
     );
   }
 
+  async function withdrawSelectedCandidates() {
+    const candidates = selectedCandidates.filter(
+      (candidate) =>
+        candidate.hasWorkflow &&
+        (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent"),
+    );
+    if (!candidates.length) return;
+    setBatchWithdrawing(true);
+    setBatchProgress({ completed: 0, total: candidates.length });
+    setNotice("");
+    const completedIds: string[] = [];
+    const failures: string[] = [];
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      if (!candidate.workflowId) {
+        failures.push(`${candidate.pi}（缺少流程编号）`);
+        setBatchProgress((current) => ({ ...current, completed: current.completed + 1 }));
+        continue;
+      }
+      try {
+        if (candidate.workflowStatus === "statement_generated") {
+          await withdrawWorkflow.mutateAsync(candidate.workflowId);
+        } else {
+          await advanceWorkflow.mutateAsync({
+            workflowId: candidate.workflowId,
+            toStatus: "statement_generated",
+            note: "批量撤回已发起结算流程",
+          });
+        }
+        completedIds.push(candidate.id);
+      } catch (error) {
+        failures.push(`${candidate.pi}（${error instanceof Error ? error.message : "撤回失败"}）`);
+      }
+      setBatchProgress((current) => ({ ...current, completed: current.completed + 1 }));
+    }
+    setSelectedCandidates((current) => current.filter((candidate) => !completedIds.includes(candidate.id)));
+    setAllFilteredSelected(false);
+    setBatchWithdrawing(false);
+    setBatchWithdrawOpen(false);
+    showNotice(
+      failures.length
+        ? `已撤回 ${completedIds.length} 个结算流程；${failures.length} 个未完成：${failures.join("、")}`
+        : `已撤回 ${completedIds.length} 个结算流程，可重新发起结算。`,
+      failures.length ? "error" : "success",
+    );
+  }
+
   if (source === "cage_map") {
     return (
       <Empty
@@ -340,10 +331,17 @@ export function SettlementCandidateList({
     );
   }
 
-  const allSelectedHaveWorkflow = selectedCandidates.length > 0 && selectedCandidates.every((item) => item.hasWorkflow);
+  const allSelectedNonInitiative =
+    selectedCandidates.length > 0 &&
+    selectedCandidates.every((item) => item.hasWorkflow && item.workflowStatus !== "statement_generated");
+  const withdrawableSelected = selectedCandidates.filter(
+    (candidate) =>
+      candidate.hasWorkflow &&
+      (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent"),
+  );
   return (
     <>
-      {notice || pdfExport.isExporting || xlsxExporting || batchStarting ? (
+      {notice || pdfExport.isExporting || xlsxExporting || batchStarting || batchWithdrawing ? (
         <Alert
           title={
             notice ||
@@ -353,49 +351,30 @@ export function SettlementCandidateList({
                 ? "正在导出 Excel，完成后自动下载…"
                 : batchStarting
                   ? `正在发起结算 ${batchProgress.completed}/${batchProgress.total}`
-                  : "")
+                  : batchWithdrawing
+                    ? `正在撤回结算流程 ${batchProgress.completed}/${batchProgress.total}`
+                    : "")
           }
           role="status"
           showIcon
           type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
         />
       ) : null}
-      <div className="settlement-action-bar" aria-label="结算批量操作">
-        <Typography.Text type={selectedCandidates.length ? undefined : "secondary"}>
-          {selectingAll ? `正在选择全部 ${total} 项` : `已选 ${selectedCandidates.length} 项`}
-        </Typography.Text>
-        <Space wrap>
-          <Button
-            icon={<DownloadOutlined aria-hidden />}
-            loading={pdfExport.isExporting}
-            disabled={!selectedCandidates.length || selectingAll}
-            onClick={() => void exportCandidates(selectedCandidates)}
-          >
-            {selectedCandidates.length > 1 ? "批量导出 PDF" : "导出 PDF"}
-          </Button>
-          <Button
-            icon={<FileTextOutlined aria-hidden />}
-            loading={xlsxExporting}
-            disabled={!selectedCandidates.length || selectingAll}
-            onClick={() => void exportCandidatesXlsx(selectedCandidates)}
-          >
-            {selectedCandidates.length > 1 ? "批量导出 Excel" : "导出 Excel"}
-          </Button>
-          <Tooltip title={allSelectedHaveWorkflow ? "所选结算项均已发起结算流程" : undefined}>
-            <span>
-              <Button
-                icon={<PlayCircleOutlined aria-hidden />}
-                loading={batchStarting}
-                type="primary"
-                disabled={!selectedCandidates.length || selectingAll || allSelectedHaveWorkflow}
-                onClick={() => setBatchConfirmOpen(true)}
-              >
-                {selectedCandidates.length > 1 ? "批量发起结算" : "发起结算流程"}
-              </Button>
-            </span>
-          </Tooltip>
-        </Space>
-      </div>
+      <SettlementBatchToolbar
+        allSelectedNonInitiative={allSelectedNonInitiative}
+        batchStarting={batchStarting}
+        batchWithdrawing={batchWithdrawing}
+        pdfExporting={pdfExport.isExporting}
+        selectedCount={selectedCandidates.length}
+        selectingAll={selectingAll}
+        total={total}
+        withdrawableCount={withdrawableSelected.length}
+        xlsxExporting={xlsxExporting}
+        onExportPdf={() => void exportCandidates(selectedCandidates)}
+        onExportXlsx={() => void exportCandidatesXlsx(selectedCandidates)}
+        onInitiate={() => setBatchConfirmOpen(true)}
+        onWithdraw={() => setBatchWithdrawOpen(true)}
+      />
       <div
         className="ant-table-region settlement-candidate-list"
         role="region"
@@ -432,10 +411,22 @@ export function SettlementCandidateList({
         }}
         onConfirm={() => void startSelectedCandidates()}
       />
+      <BatchWithdrawConfirmModal
+        count={withdrawableSelected.length}
+        open={batchWithdrawOpen}
+        pending={batchWithdrawing}
+        onCancel={() => {
+          if (!batchWithdrawing) setBatchWithdrawOpen(false);
+        }}
+        onConfirm={() => void withdrawSelectedCandidates()}
+      />
       {selected && result ? (
         <SettlementPreviewModal
           generatePending={generate.isPending}
           hasWorkflow={Boolean(selected.hasWorkflow)}
+          revertPending={advanceWorkflow.isPending}
+          workflowStatus={selected.workflowStatus}
+          withdrawPending={withdrawWorkflow.isPending}
           notice={notice}
           noticeKind={noticeKind}
           pdfExporting={pdfExport.isExporting}
@@ -443,7 +434,9 @@ export function SettlementCandidateList({
           selected={selected}
           onClose={() => setSelected(null)}
           onExportPdf={() => void exportCandidates([selected])}
+          onRevert={() => void revertFor(selected)}
           onStartSettlement={() => void prepareNoticeEmail(selected)}
+          onWithdraw={() => void withdrawFor(selected)}
         />
       ) : null}
       {noticeEmail ? (

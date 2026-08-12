@@ -1,6 +1,6 @@
 import { Modal, Typography } from "antd";
 
-export function BatchStartConfirmModal({
+export function BatchWithdrawConfirmModal({
   count,
   open,
   pending,
@@ -18,15 +18,16 @@ export function BatchStartConfirmModal({
       cancelButtonProps={{ disabled: pending }}
       cancelText="取消"
       confirmLoading={pending}
-      okText={`发起 ${count} 个流程`}
+      okButtonProps={{ danger: true }}
+      okText={`撤回 ${count} 个流程`}
       open={open}
-      title="批量发起结算流程"
+      title="批量撤回结算流程"
       onCancel={onCancel}
       onOk={onConfirm}
     >
       <Typography.Paragraph>
         将为已选的 {count}{" "}
-        个项目负责人结算项创建并发起结算流程（进入“已发起”状态）。系统会按顺序处理，每项保留独立的结算版本和审计记录。
+        个结算流程执行撤回：“已生成”的撤回后回到未发起状态，“已发起”的退回已生成状态。系统会按顺序处理，每项保留独立的审计记录。
       </Typography.Paragraph>
     </Modal>
   );

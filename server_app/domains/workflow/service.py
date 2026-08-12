@@ -206,17 +206,24 @@ def save_billing_statement_workflow(conn, statement, lines, actor, note, deps):
     return workflow_payload, version_payload, statement, lines, events
 
 
-def update_workflow_status(conn, workflow_id, next_status, actor, note, deps):
+def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, registration=None):
     workflow = deps["get_billing_workflow"](conn, workflow_id)
     if not workflow:
         raise LookupError("结算流程不存在")
     current_status = workflow.get("workflowStatus", deps["WORKFLOW_STATUS_GENERATED"])
-    allowed = {
-        deps["WORKFLOW_STATUS_GENERATED"]: deps["WORKFLOW_STATUS_SENT"],
-        deps["WORKFLOW_STATUS_SENT"]: deps["WORKFLOW_STATUS_SIGNED"],
-        deps["WORKFLOW_STATUS_SIGNED"]: deps["WORKFLOW_STATUS_FINANCE"],
+    allowed_transitions = {
+        (deps["WORKFLOW_STATUS_GENERATED"], deps["WORKFLOW_STATUS_SENT"]),
+        (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_ARCHIVED"]),
+        (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_GENERATED"]),
+        (deps["WORKFLOW_STATUS_ARCHIVED"], deps["WORKFLOW_STATUS_SENT"]),
     }
-    if allowed.get(current_status) != next_status:
+    if (current_status, next_status) not in allowed_transitions:
+        if current_status in (
+            deps.get("WORKFLOW_STATUS_SIGNED", "statement_signed_returned"),
+            deps.get("WORKFLOW_STATUS_FINANCE", "submitted_to_finance"),
+            deps.get("WORKFLOW_STATUS_ARCHIVED", "statement_archived"),
+        ):
+            raise ValueError("该流程已结束，仅可查看留档")
         raise ValueError("当前流程状态不允许执行该操作")
 
     version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
@@ -227,10 +234,44 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps):
     statement["workflowStatus"] = next_status
     if next_status == deps["WORKFLOW_STATUS_SENT"]:
         statement["sentAt"] = at
-    elif next_status == deps["WORKFLOW_STATUS_SIGNED"]:
+        if current_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
+            statement["revertedAt"] = at
+            statement["revertedBy"] = {
+                "id": actor.get("id", ""),
+                "username": actor.get("username", ""),
+                "displayName": actor.get("displayName", ""),
+            }
+    elif next_status == deps["WORKFLOW_STATUS_GENERATED"] and current_status == deps["WORKFLOW_STATUS_SENT"]:
+        statement["revertedAt"] = at
+        statement["revertedBy"] = {
+            "id": actor.get("id", ""),
+            "username": actor.get("username", ""),
+            "displayName": actor.get("displayName", ""),
+        }
+    elif next_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
         statement["signedReturnedAt"] = at
-    elif next_status == deps["WORKFLOW_STATUS_FINANCE"]:
-        statement["submittedToFinanceAt"] = at
+        statement["archivedAt"] = at
+        registration = registration or {}
+        reimbursement_forms = []
+        for entry in registration.get("reimbursementForms") or []:
+            form_no = deps["clean_text"](entry.get("formNo", ""))
+            amount = max(deps["as_int"](entry.get("amount")) or 0, 0)
+            if form_no:
+                reimbursement_forms.append({"formNo": form_no, "amount": amount})
+        statement["signedStatementReturned"] = bool(registration.get("signedStatementReturned"))
+        statement["reimbursementFormReturned"] = bool(registration.get("reimbursementFormReturned"))
+        if statement["reimbursementFormReturned"] and not reimbursement_forms:
+            raise ValueError("交回报销单时必须填写报销单号和金额")
+        statement["reimbursementForms"] = reimbursement_forms
+        statement["reimbursementFormNos"] = [entry["formNo"] for entry in reimbursement_forms]
+        statement["receivedAmount"] = sum(entry["amount"] for entry in reimbursement_forms)
+        statement["attachments"] = list(registration.get("attachments") or [])
+        statement["registeredBy"] = {
+            "id": actor.get("id", ""),
+            "username": actor.get("username", ""),
+            "displayName": actor.get("displayName", ""),
+        }
+        statement["registeredAt"] = at
     updated_version = deps["build_version_payload"](
         statement,
         workflow_id,
@@ -253,15 +294,20 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps):
         at,
     )
     deps["update_billing_workflow"](conn, updated_workflow)
+    if next_status == deps["WORKFLOW_STATUS_SENT"] and current_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
+        event_type = "statement_archived_reverted"
+    elif next_status == deps["WORKFLOW_STATUS_GENERATED"] and current_status == deps["WORKFLOW_STATUS_SENT"]:
+        event_type = "statement_sent_reverted"
+    else:
+        event_type = {
+            deps["WORKFLOW_STATUS_SENT"]: "statement_sent",
+            deps["WORKFLOW_STATUS_ARCHIVED"]: "statement_registered_archived",
+        }[next_status]
     event = deps["build_workflow_event_payload"](
         deps["new_id"]("wevt"),
         workflow_id,
         updated_version["id"],
-        {
-            deps["WORKFLOW_STATUS_SENT"]: "statement_sent",
-            deps["WORKFLOW_STATUS_SIGNED"]: "statement_signed_returned",
-            deps["WORKFLOW_STATUS_FINANCE"]: "submitted_to_finance",
-        }[next_status],
+        event_type,
         current_status,
         next_status,
         actor,

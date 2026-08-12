@@ -34,6 +34,7 @@ from server_app.config import (
     IACUC_INDEX_PATH,
     LEGACY_IACUC_INDEX_PATH,
     PORT,
+    REIMBURSEMENT_ATTACHMENTS_PATH,
     SESSION_COOKIE,
     frontend_root,
 )
@@ -439,6 +440,7 @@ WORKFLOW_STATUS_GENERATED = "statement_generated"
 WORKFLOW_STATUS_SENT = "statement_sent"
 WORKFLOW_STATUS_SIGNED = "statement_signed_returned"
 WORKFLOW_STATUS_FINANCE = "submitted_to_finance"
+WORKFLOW_STATUS_ARCHIVED = "statement_archived"
 REIMBURSEMENT_MIGRATION_KEY = "reimbursementRecordMigrationDone"
 WORKFLOW_STATUSES = (
     WORKFLOW_STATUS_IN_FEEDING,
@@ -2623,10 +2625,13 @@ def billing_workflow_service_deps():
         "WORKFLOW_STATUS_GENERATED": WORKFLOW_STATUS_GENERATED,
         "WORKFLOW_STATUS_SENT": WORKFLOW_STATUS_SENT,
         "WORKFLOW_STATUS_SIGNED": WORKFLOW_STATUS_SIGNED,
+        "WORKFLOW_STATUS_ARCHIVED": WORKFLOW_STATUS_ARCHIVED,
+        "as_int": as_int,
         "billing_workflow_business_key": billing_workflow_business_key,
         "build_version_payload": build_version_payload,
         "build_workflow_event_payload": build_workflow_event_payload,
         "build_workflow_payload": build_workflow_payload,
+        "clean_text": clean_text,
         "enrich_statement_for_workflow": enrich_statement_for_workflow,
         "get_billing_version": get_billing_version,
         "get_billing_workflow": get_billing_workflow,
@@ -4303,21 +4308,44 @@ def generate_billing_statement_by_pi(conn, payload, actor):
         actor,
         f"按 PI 合表生成 {pi_name} {month} 饲养费结算单",
     )
+    initiate = bool(payload.get("initiate"))
+    if initiate:
+        workflow, version, sent_event = update_workflow_status(
+            conn, workflow["id"], WORKFLOW_STATUS_SENT, actor, f"按 PI 合表发起 {pi_name} {month} 结算流程"
+        )
+        statement = version["statement"]
+        workflow_events.append(sent_event)
     upsert_reimbursement_record_from_statement(conn, workflow, statement, lines, detail_context, "workflow")
     recalculate_reimbursement_accumulations(conn, pi_name)
+    action = "按 PI 合表生成并发起" if initiate else "按 PI 合表生成"
     event = audit_event(
         actor,
         "billing_statement.generated_by_pi",
         "billing_workflow",
         workflow["id"],
-        f"{actor['displayName']} 按 PI 合表生成 {pi_name} {month} 饲养费结算单",
+        f"{actor['displayName']} {action} {pi_name} {month} 饲养费结算单",
         [],
         generated_at,
         None,
         {"workflow": workflow, "version": version},
     )
-    write_audit_events(conn, [event])
-    return statement, lines, merge_audit_logs([], [event])
+    audits = [event]
+    if initiate:
+        audits.append(
+            audit_event(
+                actor,
+                "billing_workflow.statement_sent",
+                "billing_workflow",
+                workflow["id"],
+                f"{actor['displayName']} 发起 {pi_name} {month} 结算流程",
+                [],
+                sent_event["at"],
+                None,
+                {"workflow": workflow, "version": version, "event": sent_event},
+            )
+        )
+    write_audit_events(conn, audits)
+    return statement, lines, merge_audit_logs([], audits)
 
 
 def read_principal_type_by_pi(conn):
@@ -4431,8 +4459,10 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
         "sentAt": statement.get("sentAt", ""),
         "signedReturnedAt": statement.get("signedReturnedAt", ""),
         "submittedToFinanceAt": statement.get("submittedToFinanceAt", ""),
+        "registeredAt": statement.get("registeredAt", ""),
+        "archivedAt": statement.get("archivedAt", ""),
     }
-    return {
+    workflow_payload = {
         "id": workflow_id,
         "businessKey": billing_workflow_business_key(scope_type, scope_key, month, source_type),
         "scopeType": scope_type,
@@ -4450,10 +4480,20 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
         "project": statement.get("project", ""),
         "owner": statement.get("owner", ""),
         "funding": statement.get("funding", ""),
+        "manager": statement.get("manager", ""),
         "totalAmount": statement.get("totalAmount", 0),
         "totalCageDays": statement.get("totalCageDays", 0),
         **timestamps,
     }
+    if statement.get("signedStatementReturned") is not None:
+        workflow_payload["signedStatementReturned"] = bool(statement.get("signedStatementReturned"))
+        workflow_payload["reimbursementFormReturned"] = bool(statement.get("reimbursementFormReturned"))
+        workflow_payload["reimbursementFormNos"] = list(statement.get("reimbursementFormNos") or [])
+        workflow_payload["reimbursementForms"] = list(statement.get("reimbursementForms") or [])
+        workflow_payload["receivedAmount"] = statement.get("receivedAmount", 0)
+        workflow_payload["attachments"] = list(statement.get("attachments") or [])
+        workflow_payload["registeredBy"] = statement.get("registeredBy", {})
+    return workflow_payload
 
 
 def build_workflow_event_payload(
@@ -5120,8 +5160,120 @@ def insert_billing_workflow_event(conn, payload):
     insert_billing_workflow_event_repository(conn, payload)
 
 
-def update_workflow_status(conn, workflow_id, next_status, actor, note=""):
-    return update_workflow_status_service(conn, workflow_id, next_status, actor, note, billing_workflow_service_deps())
+def update_workflow_status(conn, workflow_id, next_status, actor, note="", registration=None):
+    if next_status == WORKFLOW_STATUS_ARCHIVED and registration is not None:
+        rows = conn.execute(
+            """SELECT id, kind, original_name, mime_type, size_bytes, created_by_name, created_at
+               FROM billing_workflow_attachments WHERE workflow_id = ? ORDER BY created_at""",
+            (workflow_id,),
+        ).fetchall()
+        registration = dict(registration)
+        registration["attachments"] = [
+            {
+                "id": row["id"],
+                "kind": row["kind"],
+                "originalName": row["original_name"],
+                "mimeType": row["mime_type"],
+                "sizeBytes": row["size_bytes"],
+                "createdByName": row["created_by_name"],
+                "createdAt": row["created_at"],
+            }
+            for row in rows
+        ]
+    return update_workflow_status_service(
+        conn, workflow_id, next_status, actor, note, billing_workflow_service_deps(), registration
+    )
+
+
+def add_billing_workflow_attachment(conn, actor, workflow_id, kind, filename, body, content_type):
+    workflow = get_billing_workflow(conn, workflow_id)
+    if not workflow:
+        raise LookupError("结算流程不存在")
+    if kind not in ("settlement", "reimbursement"):
+        raise ValueError("附件类型仅支持 settlement 或 reimbursement")
+    if not filename or not body:
+        raise ValueError("附件文件不能为空")
+    if len(body) > 30 * 1024 * 1024:
+        raise ValueError("单个附件不能超过 30 MiB")
+    mime_type, _ = mimetypes.guess_type(filename or "")
+    if mime_type not in ("application/pdf", "image/jpeg", "image/png"):
+        raise ValueError("仅支持 PDF、JPEG 或 PNG 附件")
+    digest = hashlib.sha256(body).hexdigest()
+    attachment_id = new_id("bwf-att")
+    suffix = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}[mime_type]
+    stored_name = f"{attachment_id}{suffix}"
+    target = REIMBURSEMENT_ATTACHMENTS_PATH / "workflows" / workflow_id / stored_name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(body)
+    now = now_iso()
+    item = {
+        "id": attachment_id,
+        "workflowId": workflow_id,
+        "kind": kind,
+        "originalName": clean_text(filename) or stored_name,
+        "storedName": stored_name,
+        "mimeType": mime_type,
+        "sizeBytes": len(body),
+        "sha256": digest,
+        "createdBy": actor.get("id", ""),
+        "createdByName": actor.get("displayName", ""),
+        "createdAt": now,
+    }
+    conn.execute(
+        """INSERT INTO billing_workflow_attachments
+           (id, workflow_id, kind, original_name, stored_name, mime_type, size_bytes, sha256,
+            created_by, created_by_name, created_at, payload)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            item["id"],
+            item["workflowId"],
+            item["kind"],
+            item["originalName"],
+            item["storedName"],
+            item["mimeType"],
+            item["sizeBytes"],
+            item["sha256"],
+            item["createdBy"],
+            item["createdByName"],
+            item["createdAt"],
+            json.dumps(item, ensure_ascii=False),
+        ),
+    )
+    event = audit_event(
+        actor,
+        "billing_workflow.attachment_uploaded",
+        "billing_workflow_attachment",
+        attachment_id,
+        f"{actor['displayName']} 上传结算流程附件 {item['originalName']}",
+        [],
+        now,
+        None,
+        item,
+    )
+    write_audit_events(conn, [event])
+    conn.commit()
+    return {"item": item, "auditLogs": merge_audit_logs([], [event])}
+
+
+def get_billing_workflow_attachment(conn, actor, attachment_id):
+    row = conn.execute("SELECT * FROM billing_workflow_attachments WHERE id = ?", (attachment_id,)).fetchone()
+    if not row:
+        raise LookupError("结算流程附件不存在")
+    item = {
+        "id": row["id"],
+        "workflowId": row["workflow_id"],
+        "kind": row["kind"],
+        "originalName": row["original_name"],
+        "storedName": row["stored_name"],
+        "mimeType": row["mime_type"],
+        "sizeBytes": row["size_bytes"],
+        "createdByName": row["created_by_name"],
+        "createdAt": row["created_at"],
+    }
+    target = REIMBURSEMENT_ATTACHMENTS_PATH / "workflows" / item["workflowId"] / item["storedName"]
+    if not target.is_file():
+        raise LookupError("结算流程附件文件不存在")
+    return item, target.read_bytes()
 
 
 API_ROUTER = Router()
@@ -5240,6 +5392,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             except PermissionError as exc:
                 self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+            return
+        attachment_id = self.billing_workflow_attachment_download_route(path)
+        if attachment_id:
+            self.handle_billing_workflow_attachment_download(attachment_id)
             return
         claim_id = self.reimbursement_claim_route(path)
         if claim_id:
@@ -5730,6 +5886,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if path == "/api/billing-workflows/advance":
             self.handle_billing_workflow_advance()
             return
+        workflow_id = self.billing_workflow_attachment_upload_route(path)
+        if workflow_id:
+            self.handle_billing_workflow_attachment_upload(workflow_id)
+            return
         if path == "/api/reimbursement-records/import-monthly":
             self.handle_reimbursement_monthly_import()
             return
@@ -6185,8 +6345,11 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             workflow_id = clean_text(body.get("workflowId", ""))
             to_status = clean_text(body.get("toStatus", ""))
             note = clean_text(body.get("note", ""))
+            registration = body.get("registration") if isinstance(body.get("registration"), dict) else None
             with connect_db() as conn:
-                workflow, version, event = update_workflow_status(conn, workflow_id, to_status, user, note)
+                workflow, version, event = update_workflow_status(
+                    conn, workflow_id, to_status, user, note, registration
+                )
                 reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
                 if reimbursement:
                     reimbursement["workflowStatus"] = workflow.get("workflowStatus", "")
@@ -6206,7 +6369,12 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 )
                 write_audit_events(conn, [audit])
                 conn.commit()
-            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
+            invalidate_data_cache_prefixes(
+                "billing_workflows::",
+                "billing_statements::",
+                "reimbursement_records::",
+                "quantity_sheets::settlement_candidates::",
+            )
             self.send_json(
                 {
                     "workflow": workflow,
@@ -6426,6 +6594,44 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_billing_workflow_attachment_upload(self, workflow_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            filename, body = parse_multipart_upload(self.headers.get("Content-Type", ""), self.read_raw_body())
+            query = parse_qs(urlparse(self.path).query)
+            kind = clean_text(query.get("kind", [""])[0])
+            with connect_db() as conn:
+                payload = add_billing_workflow_attachment(
+                    conn, user, workflow_id, kind, filename, body, self.headers.get("Content-Type", "")
+                )
+            self.send_json(payload, HTTPStatus.CREATED)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_billing_workflow_attachment_download(self, attachment_id):
+        user = self.require_user()
+        if not user:
+            return
+        try:
+            with connect_db() as conn:
+                attachment, body = get_billing_workflow_attachment(conn, user, attachment_id)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", attachment["mimeType"])
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
 
     def handle_reimbursement_claim_attachment(self, claim_id):
         user = self.require_user()
@@ -6666,6 +6872,12 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def reimbursement_claim_attachment_upload_route(self, path):
         return route_matchers.reimbursement_claim_attachment_upload_route(path)
+
+    def billing_workflow_attachment_upload_route(self, path):
+        return route_matchers.billing_workflow_attachment_upload_route(path)
+
+    def billing_workflow_attachment_download_route(self, path):
+        return route_matchers.billing_workflow_attachment_download_route(path)
 
     def reimbursement_claim_allocation_route(self, path):
         return route_matchers.reimbursement_claim_allocation_route(path)

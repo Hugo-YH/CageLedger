@@ -394,27 +394,45 @@ def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc, manager=""):
         ),
     )
 
-    def test_candidate_list_reports_initiated_settlement_workflow(self):
+    def test_candidate_list_reports_settlement_workflow_status(self):
         with build_candidate_conn() as conn:
             seed_quantity_sheet(conn, "sheet-1", "2026-07", "李教授", "Z3")
             seed_quantity_sheet(conn, "sheet-2", "2026-06", "张教授", "Z2")
-            conn.execute(
-                """
-                INSERT INTO billing_workflows (
-                    id, business_key, iacuc, month, source_type, workflow_status, payload
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+            seed_quantity_sheet(conn, "sheet-3", "2026-05", "王教授", "Z1")
+            workflows = [
                 (
                     "wf-1",
                     "pi|pi::李教授|2026-07|pi_merged_quantity_sheet",
                     "pi::李教授",
                     "2026-07",
-                    "pi_merged_quantity_sheet",
-                    "statement_generated",
-                    "{}",
+                    "statement_sent",
                 ),
-            )
+                (
+                    "wf-2",
+                    "pi|pi::王教授|2026-05|pi_merged_quantity_sheet",
+                    "pi::王教授",
+                    "2026-05",
+                    "statement_generated",
+                ),
+            ]
+            for workflow_id, business_key, iacuc, month, workflow_status in workflows:
+                conn.execute(
+                    """
+                    INSERT INTO billing_workflows (
+                        id, business_key, iacuc, month, source_type, workflow_status, payload
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        workflow_id,
+                        business_key,
+                        iacuc,
+                        month,
+                        "pi_merged_quantity_sheet",
+                        workflow_status,
+                        "{}",
+                    ),
+                )
 
             def calculate(month, pi_name):
                 return {"iacucs": [f"{pi_name}-{month}"], "totalAmount": 123}
@@ -434,9 +452,11 @@ def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc, manager=""):
             )
             by_pi = {item["pi"]: item for item in result["items"]}
             self.assertTrue(by_pi["李教授"]["hasWorkflow"])
+            self.assertEqual(by_pi["李教授"]["workflowStatus"], "statement_sent")
+            self.assertEqual(by_pi["王教授"]["workflowStatus"], "statement_generated")
             self.assertFalse(by_pi["张教授"]["hasWorkflow"])
 
-            filtered = list_settlement_candidates(
+            filtered_sent = list_settlement_candidates(
                 conn,
                 {
                     "limit": 10,
@@ -449,7 +469,22 @@ def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc, manager=""):
                 "quantity_sheet",
                 "2026-07-01T00:00:00Z",
             )
-            self.assertEqual([item["pi"] for item in filtered["items"]], ["李教授"])
+            self.assertEqual([item["pi"] for item in filtered_sent["items"]], ["李教授"])
+
+            filtered_generated = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "month",
+                    "sortDir": "desc",
+                    "columnFilters": {"workflow": ["已生成"]},
+                },
+                calculate,
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+            self.assertEqual([item["pi"] for item in filtered_generated["items"]], ["王教授"])
 
 
 if __name__ == "__main__":

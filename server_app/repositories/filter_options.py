@@ -20,6 +20,7 @@ from server_app.repositories.billing_candidates import (
     list_billing_candidate_manager_filter_options,
     list_billing_candidate_scalar_filter_options,
 )
+from server_app.repositories.billing_workflows import list_billing_workflow_filter_options
 from server_app.repositories.entities import list_intake_batch_filter_options
 from server_app.repositories.quantity_sheets import list_quantity_sheet_filter_options
 from server_app.shared import clean_text
@@ -61,6 +62,8 @@ def route_column_filter_options(handler, path):
             else:
                 items = list_billing_candidate_scalar_filter_options(conn, "quantity_sheet", filters, column)
             handler.send_json({"items": items})
+        elif list_name == "billing-workflows":
+            handler.send_json({"items": list_billing_workflow_filter_options(conn, filters, column)})
         elif list_name == "reimbursement-obligations":
             handler.send_json(
                 list_column_options(

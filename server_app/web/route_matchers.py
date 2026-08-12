@@ -21,6 +21,14 @@ def reimbursement_claim_attachment_upload_route(path):
     return _between(path, "/api/reimbursement-ledger/claims/", "/attachments")
 
 
+def billing_workflow_attachment_upload_route(path):
+    return _between(path, "/api/billing-workflows/", "/attachments")
+
+
+def billing_workflow_attachment_download_route(path):
+    return _between(path, "/api/billing-workflows/attachments/", "")
+
+
 def reimbursement_claim_allocation_route(path):
     return _between(path, "/api/reimbursement-ledger/claims/", "/allocations")
 
