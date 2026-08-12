@@ -14,6 +14,10 @@ export function IntakeBatchList({
   loading,
   selectingAll,
   allFilteredSelected,
+  bulkNotice,
+  bulkNoticeKind,
+  markingPrinted,
+  markingReceived,
   page,
   pageSize,
   params,
@@ -36,6 +40,10 @@ export function IntakeBatchList({
   loading: boolean;
   selectingAll: boolean;
   allFilteredSelected: boolean;
+  bulkNotice: string;
+  bulkNoticeKind: "success" | "error" | "info";
+  markingPrinted: boolean;
+  markingReceived: boolean;
   page: number;
   pageSize: number;
   params: IntakeListParams;
@@ -141,6 +149,9 @@ export function IntakeBatchList({
       }
       title="待接收批次列表"
     >
+      {bulkNotice ? (
+        <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
+      ) : null}
       {selectedItems.length ? (
         <Alert
           className="intake-bulk-alert"
@@ -151,8 +162,20 @@ export function IntakeBatchList({
                 <Button type="primary" onClick={() => onPrint(selectedItems)}>
                   打印笼卡
                 </Button>
-                <Button onClick={() => onMarkPrinted(selectedItems)}>标记已打印</Button>
-                <Button onClick={() => onReceive(selectedItems)}>确认接收</Button>
+                <Button
+                  disabled={markingPrinted || markingReceived}
+                  loading={markingPrinted}
+                  onClick={() => onMarkPrinted(selectedItems)}
+                >
+                  标记已打印
+                </Button>
+                <Button
+                  disabled={markingPrinted || markingReceived}
+                  loading={markingReceived}
+                  onClick={() => onReceive(selectedItems)}
+                >
+                  标记已接收
+                </Button>
               </Space>
             </Flex>
           }

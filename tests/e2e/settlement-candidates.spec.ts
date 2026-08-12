@@ -347,6 +347,8 @@ test("发起结算流程 generates the notification email template", async ({ pa
   // 复制并确认：复制邮件内容并发起结算流程
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await noticeModal.getByRole("button", { name: "复制并确认" }).click();
+  await expect(noticeModal.getByRole("button", { name: "我已复制，确认发起流程" })).toBeVisible();
+  await noticeModal.getByRole("button", { name: "我已复制，确认发起流程" }).click();
   await expect(noticeModal).toHaveCount(0, { timeout: 10_000 });
   await expect(noticeRow).toContainText("已发起", { timeout: 10_000 });
   const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
@@ -382,10 +384,48 @@ test("发起结算流程 generates the notification email template", async ({ pa
   const fallbackSubject = await fallbackModal.locator(".settlement-notice-subject").innerText();
   const fallbackBody = await fallbackModal.locator(".settlement-notice-body").innerText();
   await fallbackModal.getByRole("button", { name: "复制并确认" }).click();
+  await expect(fallbackModal.getByRole("button", { name: "我已复制，确认发起流程" })).toBeVisible();
+  await fallbackModal.getByRole("button", { name: "我已复制，确认发起流程" }).click();
   await expect(fallbackModal).toHaveCount(0, { timeout: 10_000 });
   await expect(fallbackRow).toContainText("已发起", { timeout: 10_000 });
   const fallbackClipboard = await page.evaluate(() =>
     (window as unknown as { __clipboardRead?: () => Promise<string> }).__clipboardRead?.(),
   );
   expect(fallbackClipboard).toBe(`${fallbackSubject}\n\n${fallbackBody}`);
+  await page.locator(".settlement-preview-modal .ant-modal-close").click();
+
+  // 浏览器或安全软件完全拦截程序化复制：自动复制失败时应全选正文并引导手动复制，
+  // 弹窗保持打开，确认按钮变为「已复制，确认发起流程」。
+  await fallbackRow.getByRole("button", { name: "撤回" }).click();
+  await page.locator(".ant-popconfirm").getByRole("button", { name: "撤回", exact: true }).click();
+  await expect(fallbackRow).toContainText("未发起");
+  await page.addInitScript(() => {
+    const clipboard = navigator.clipboard;
+    Object.defineProperty(window, "__clipboardRead", {
+      configurable: true,
+      value: () => clipboard?.readText(),
+    });
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    Object.defineProperty(document, "execCommand", { configurable: true, value: () => false });
+  });
+  await page.reload();
+  await openBillingNavigation(page);
+  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
+  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  const manualRow = page.getByRole("row", { name: /E2E 邮件通知负责人/ });
+  await expect(manualRow).toBeVisible();
+  await manualRow.getByRole("button", { name: "预览结算单" }).click();
+  await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" }).click();
+  const manualModal = page.locator(".settlement-notice-modal");
+  await expect(manualModal.locator(".settlement-notice-body")).toBeVisible({ timeout: 10_000 });
+  await manualModal.getByRole("button", { name: "复制并确认" }).click();
+  await expect(manualModal.locator(".settlement-notice-copy-hint")).toBeVisible();
+  await expect(manualModal.getByRole("button", { name: "我已复制，确认发起流程" })).toBeVisible();
+  await expect(manualModal).toHaveCount(1);
+  await manualModal.getByRole("button", { name: "我已复制，确认发起流程" }).click();
+  await expect(manualModal).toHaveCount(0, { timeout: 10_000 });
+  await expect(manualRow).toContainText("已发起", { timeout: 10_000 });
 });

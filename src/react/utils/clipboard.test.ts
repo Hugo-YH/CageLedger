@@ -32,11 +32,13 @@ describe("copyTextToClipboard", () => {
 
   it("falls back to execCommand when Clipboard API is unavailable", async () => {
     const execCommand = vi.fn().mockReturnValue(true);
+    const focus = vi.spyOn(HTMLTextAreaElement.prototype, "focus").mockImplementation(() => {});
     setClipboardApi(undefined);
     setExecCommand(execCommand);
 
     await expect(copyTextToClipboard("邮件内容")).resolves.toBe(true);
     expect(execCommand).toHaveBeenCalledWith("copy");
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector("textarea")).toBeNull();
   });
 

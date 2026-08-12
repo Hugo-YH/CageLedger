@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.5",
+    build: "165",
+    releasedAt: "2026-08-12",
+    title: "批量操作进度反馈与结算通知复制流程优化",
+    items: [
+      "待接收批次列表批量「标记已打印」「标记已接收」增加按钮 loading 与结果提示，选中项不满足条件时明确说明原因（未打印或剩余笼卡数为 0 的批次会跳过并计数）",
+      "已保存数量统计表批量导出 PDF、按项目负责人结算批量导出 PDF/Excel 统一进度反馈：按钮显示「正在导出 x/y」，页面 Alert 与右下角通知同步展示生成进度，完成后自动下载",
+      "按项目负责人结算批量发起流程增加逐项进度（「正在发起结算 x/y」），完成后汇总成功与失败明细",
+      "结算通知弹窗改为「复制并确认 → 全选正文 → 粘贴验证后确认发起」流程，适配内网 HTTP 与终端管控下剪贴板写入被拦截的场景",
+      "剪贴板复制兼容性修复：iOS/Safari 隐藏元素无法选中导致复制失败、Firefox 需要先聚焦再选中的问题一并处理",
+    ],
+  },
+  {
     version: "1.0.4",
     build: "160",
     releasedAt: "2026-08-11",

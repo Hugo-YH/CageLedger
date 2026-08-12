@@ -1,4 +1,4 @@
-import { Button, Checkbox, Flex, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
+import { Alert, Button, Checkbox, Flex, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -216,9 +216,19 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         </div>
       </div>
       {pdfExport.isExporting || exportError ? (
-        <div className="react-inline-notice" role="status" aria-live="polite">
-          {exportError || "PDF 正在后台生成，完成后会自动下载。"}
-        </div>
+        <Alert
+          role="status"
+          showIcon
+          title={
+            exportError ||
+            `PDF 正在后台生成，完成后会自动下载。${
+              pdfExport.job && pdfExport.job.total > 1
+                ? `（${exportProgress(pdfExport.job?.completed, pdfExport.job?.total)}）`
+                : ""
+            }`
+          }
+          type={exportError ? "error" : "info"}
+        />
       ) : null}
       <div className="panel-head">
         <div className="panel-title-line">

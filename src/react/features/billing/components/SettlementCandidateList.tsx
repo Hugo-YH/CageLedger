@@ -45,6 +45,7 @@ export function SettlementCandidateList({
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchStarting, setBatchStarting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
   const [xlsxExporting, setXlsxExporting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
@@ -280,6 +281,7 @@ export function SettlementCandidateList({
     setXlsxExporting(true);
     setNotice("");
     try {
+      showNotice(`正在导出 ${candidates.length > 1 ? `${candidates.length} 份` : ""}Excel…`, "info");
       const filename = await exportSettlementXlsx(
         candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
       );
@@ -297,16 +299,19 @@ export function SettlementCandidateList({
     );
     if (!candidates.length) return;
     setBatchStarting(true);
+    setBatchProgress({ completed: 0, total: candidates.length });
     setNotice("");
     const completedIds: string[] = [];
     const failures: string[] = [];
-    for (const candidate of candidates) {
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
       try {
         await generate.mutateAsync({ month: candidate.month, pi: candidate.pi, sourceType: source, persist: true });
         completedIds.push(candidate.id);
       } catch (error) {
         failures.push(`${candidate.pi}（${error instanceof Error ? error.message : "生成失败"}）`);
       }
+      setBatchProgress((current) => ({ ...current, completed: current.completed + 1 }));
     }
     setSelectedCandidates((current) => current.filter((candidate) => !completedIds.includes(candidate.id)));
     setAllFilteredSelected(false);
@@ -338,9 +343,18 @@ export function SettlementCandidateList({
   const allSelectedHaveWorkflow = selectedCandidates.length > 0 && selectedCandidates.every((item) => item.hasWorkflow);
   return (
     <>
-      {notice || pdfExport.isExporting ? (
+      {notice || pdfExport.isExporting || xlsxExporting || batchStarting ? (
         <Alert
-          title={notice || settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)}
+          title={
+            notice ||
+            (pdfExport.isExporting
+              ? settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)
+              : xlsxExporting
+                ? "正在导出 Excel，完成后自动下载…"
+                : batchStarting
+                  ? `正在发起结算 ${batchProgress.completed}/${batchProgress.total}`
+                  : "")
+          }
           role="status"
           showIcon
           type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}

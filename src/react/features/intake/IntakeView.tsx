@@ -55,6 +55,10 @@ export function IntakeView({
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
   const [notice, setNotice] = useState("");
+  const [bulkNotice, setBulkNotice] = useState("");
+  const [bulkNoticeKind, setBulkNoticeKind] = useState<"success" | "error" | "info">("info");
+  const [markingPrinted, setMarkingPrinted] = useState(false);
+  const [markingReceived, setMarkingReceived] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
   const params: IntakeListParams = {
     limit: pageSize,
@@ -181,9 +185,29 @@ export function IntakeView({
 
   async function markPrinted(targets: IntakeBatch[]) {
     const printable = targets.filter((item) => item.status === "pending_print" || item.status === "draft");
-    if (!printable.length) return;
-    await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
-    setNotice(`已标记 ${printable.length} 个批次为已打印。`);
+    if (!printable.length) {
+      setBulkNotice("选中的批次均未处于待打印状态，无需标记已打印。");
+      setBulkNoticeKind("info");
+      return;
+    }
+    setMarkingPrinted(true);
+    setBulkNotice(`正在标记 ${printable.length} 个批次为已打印…`);
+    setBulkNoticeKind("info");
+    try {
+      await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
+      const skipped = targets.length - printable.length;
+      setBulkNotice(
+        skipped
+          ? `已标记 ${printable.length} 个批次为已打印；${skipped} 个已打印批次跳过。`
+          : `已标记 ${printable.length} 个批次为已打印。`,
+      );
+      setBulkNoticeKind("success");
+    } catch (error) {
+      setBulkNotice(error instanceof Error ? error.message : "标记已打印失败");
+      setBulkNoticeKind("error");
+    } finally {
+      setMarkingPrinted(false);
+    }
   }
 
   async function printCurrentBatch() {
@@ -221,9 +245,29 @@ export function IntakeView({
   async function receive(targets: IntakeBatch[]) {
     const today = new Date().toISOString().slice(0, 10);
     const printable = targets.filter((item) => item.status === "printed" && item.remainingCardCount > 0);
-    if (!printable.length) return;
-    await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id), actualReceiptDate: today });
-    setNotice(`已确认接收 ${printable.length} 个批次。`);
+    if (!printable.length) {
+      setBulkNotice("选中的批次需先打印且剩余笼卡数大于 0，才能标记已接收。");
+      setBulkNoticeKind("info");
+      return;
+    }
+    setMarkingReceived(true);
+    setBulkNotice(`正在标记 ${printable.length} 个批次为已接收…`);
+    setBulkNoticeKind("info");
+    try {
+      await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id), actualReceiptDate: today });
+      const skipped = targets.length - printable.length;
+      setBulkNotice(
+        skipped
+          ? `已标记 ${printable.length} 个批次为已接收；${skipped} 个未打印批次跳过。`
+          : `已标记 ${printable.length} 个批次为已接收。`,
+      );
+      setBulkNoticeKind("success");
+    } catch (error) {
+      setBulkNotice(error instanceof Error ? error.message : "标记已接收失败");
+      setBulkNoticeKind("error");
+    } finally {
+      setMarkingReceived(false);
+    }
   }
 
   function toggleSort(key: string) {
@@ -327,6 +371,10 @@ export function IntakeView({
               loading={list.isFetching}
               selectingAll={selectingAll}
               allFilteredSelected={allFilteredSelected}
+              bulkNotice={bulkNotice}
+              bulkNoticeKind={bulkNoticeKind}
+              markingPrinted={markingPrinted}
+              markingReceived={markingReceived}
               page={page}
               pageSize={pageSize}
               params={params}
