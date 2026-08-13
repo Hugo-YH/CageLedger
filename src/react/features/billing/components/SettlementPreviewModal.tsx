@@ -13,11 +13,9 @@ export function SettlementPreviewModal({
   pdfExporting,
   hasWorkflow,
   workflowStatus,
-  withdrawPending,
   revertPending,
   onClose,
   onExportPdf,
-  onWithdraw,
   onRevert,
   onStartSettlement,
 }: {
@@ -29,16 +27,14 @@ export function SettlementPreviewModal({
   pdfExporting: boolean;
   hasWorkflow: boolean;
   workflowStatus?: string;
-  withdrawPending: boolean;
   revertPending: boolean;
   onClose: () => void;
   onExportPdf: () => void;
-  onWithdraw: () => void;
   onRevert: () => void;
   onStartSettlement: () => void;
 }) {
   const canInitiate = !hasWorkflow || workflowStatus === "statement_generated";
-  const canWithdraw = hasWorkflow && (workflowStatus === "statement_generated" || workflowStatus === "statement_sent");
+  const canWithdraw = hasWorkflow && workflowStatus === "statement_sent";
   const workflowActionLabel = canInitiate
     ? "发起结算流程"
     : {
@@ -94,17 +90,13 @@ export function SettlementPreviewModal({
           </Tooltip>
           {canWithdraw ? (
             <Popconfirm
-              description={
-                workflowStatus === "statement_generated"
-                  ? "撤回后该负责人本月将回到未发起状态，可重新发起结算。"
-                  : "撤回后该结算流程退回已生成状态，可重新发起结算。"
-              }
+              description="撤回后该结算流程退回已生成状态，可重新发起结算。"
               okButtonProps={{ danger: true }}
               okText="撤回"
-              title={workflowStatus === "statement_generated" ? "撤回该结算流程？" : "撤回该已发起的结算流程？"}
-              onConfirm={workflowStatus === "statement_generated" ? onWithdraw : onRevert}
+              title="将该流程撤回？"
+              onConfirm={onRevert}
             >
-              <Button danger icon={<UndoOutlined aria-hidden />} loading={withdrawPending || revertPending}>
+              <Button danger icon={<UndoOutlined aria-hidden />} loading={revertPending}>
                 撤回
               </Button>
             </Popconfirm>

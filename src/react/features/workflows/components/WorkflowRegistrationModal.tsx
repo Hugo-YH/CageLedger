@@ -60,13 +60,16 @@ export function WorkflowRegistrationModal({
   async function submitRegistration() {
     if (!target) return;
     const values = await form.validateFields();
+    const reimbursementForms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
+    if (values.reimbursementFormReturned && !reimbursementForms.length) return;
     await advance.mutateAsync({
       workflowId: target.id,
       toStatus: "statement_archived",
       registration: {
-        reimbursementForms: (values.reimbursementForms || [])
-          .filter((entry) => entry.formNo.trim())
-          .map((entry) => ({ formNo: entry.formNo, amount: Number(entry.amount) || 0 })),
+        reimbursementForms: reimbursementForms.map((entry) => ({
+          formNo: entry.formNo,
+          amount: Number(entry.amount) || 0,
+        })),
         signedStatementReturned: Boolean(values.signedStatementReturned),
         reimbursementFormReturned: Boolean(values.reimbursementFormReturned),
       },
@@ -154,16 +157,7 @@ export function WorkflowRegistrationModal({
                     金额（元）
                   </Typography.Text>
                 </Flex>
-                <Form.List
-                  name="reimbursementForms"
-                  rules={[
-                    {
-                      validator: (_, value: Array<{ formNo: string; amount?: number }> | undefined) => {
-                        if (!(value || []).length) throw new Error("请填写报销单号和金额");
-                      },
-                    },
-                  ]}
-                >
+                <Form.List name="reimbursementForms">
                   {(fields, { add, remove }) => (
                     <>
                       {fields.map(({ key, name, ...restField }) => (

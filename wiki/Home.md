@@ -10,7 +10,7 @@
 | 接收动物、打印笼卡和安排入驻       | [笼卡管理](/guide/cage-cards) → [笼位与房间管理](/guide/rooms-and-cages)                    |
 | 执行房间动物巡检和异常处置         | [动物巡检](/guide/animal-inspection)                                                        |
 | 填写数量统计表、生成结算和月度汇总 | [数量统计表](/guide/quantity-sheets) → [饲养费核算](/guide/billing)                         |
-| 管理结算应收、报销单和核销分摊     | [结算与报销](/guide/settlement-and-reimbursement)                                           |
+| 交回登记、归档与补录报销单         | [结算与报销](/guide/settlement-and-reimbursement)                                           |
 | 部署、备份或排查运行问题           | [部署与运行](/operations/deployment) → [故障排查](/operations/troubleshooting)              |
 | 维护代码、接口和发布制品           | [本地开发](/development/local-development) → [测试与质量](/development/testing-and-quality) |
 

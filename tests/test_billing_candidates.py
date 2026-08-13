@@ -486,6 +486,51 @@ def seed_quantity_sheet(conn, sheet_id, month, pi_name, iacuc, manager=""):
             )
             self.assertEqual([item["pi"] for item in filtered_generated["items"]], ["王教授"])
 
+    def test_candidate_list_excludes_archived_workflow(self):
+        with build_candidate_conn() as conn:
+            seed_quantity_sheet(conn, "sheet-1", "2026-07", "李教授", "Z3")
+            conn.execute(
+                """
+                INSERT INTO billing_workflows (
+                    id, business_key, iacuc, month, source_type, workflow_status, payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "wf-1",
+                    "pi|pi::李教授|2026-07|pi_merged_quantity_sheet",
+                    "pi::李教授",
+                    "2026-07",
+                    "pi_merged_quantity_sheet",
+                    "statement_archived",
+                    "{}",
+                ),
+            )
+
+            def calculate(month, pi_name):
+                return {"iacucs": [f"{pi_name}-{month}"], "totalAmount": 123}
+
+            result = list_settlement_candidates(
+                conn,
+                {
+                    "limit": 10,
+                    "offset": 0,
+                    "sortKey": "month",
+                    "sortDir": "desc",
+                    "columnFilters": {},
+                },
+                calculate,
+                "quantity_sheet",
+                "2026-07-01T00:00:00Z",
+            )
+            self.assertEqual(result["items"], [])
+            statuses = list_billing_candidate_filter_options(
+                conn,
+                "quantity_sheet",
+                {"limit": 10, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+            )["workflow"]
+            self.assertEqual(statuses, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -53,7 +53,6 @@ export function AntdProvider({ children }: PropsWithChildren) {
           colorPrimary: "var(--primary-control)",
           colorPrimaryHover: "var(--primary-control-hover)",
           colorPrimaryActive: "var(--primary-control-active)",
-          dangerColor: "var(--danger-text)",
           fontWeight: 400,
         },
         Card: { borderRadiusLG: 8 },

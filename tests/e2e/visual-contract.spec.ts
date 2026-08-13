@@ -12,7 +12,7 @@ test("quantity workspace keeps its desktop and mobile layout contract", async ({
 
   const editor = page.locator(".quantity-entry-panel");
   const entryTable = page.locator(".quantity-entry-table");
-  await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true })).toBeVisible();
   await expect(editor).toBeVisible();
   await expect(entryTable).toBeVisible();
   await expect(entryTable.locator("thead th")).toHaveCount(10);

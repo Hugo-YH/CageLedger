@@ -53,7 +53,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
   await expect(page.getByRole("button", { name: "批量编辑", exact: true })).toBeVisible();
   await openQuantityEntry(page);
-  await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true, level: 2 })).toBeVisible();
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间号", exact: true }));
   await expect(
     page.locator("#quantity-sheet-room").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
@@ -63,7 +63,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await page.getByLabel("第 1 行增加类型", { exact: true }).selectOption("购入");
   await expect(page.getByLabel("第 1 行结余总数", { exact: true })).toHaveAttribute("placeholder", "10");
   await openWorkflowCenter(page);
-  await expect(page.getByRole("heading", { name: "核销工作台", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
   const billingMenu = await openBillingNavigation(page);
   await billingMenu.getByRole("menuitem", { name: /月度饲养费汇总/ }).click();
   await expect(page.getByRole("heading", { name: "月度饲养费汇总", exact: true, level: 2 })).toBeVisible();

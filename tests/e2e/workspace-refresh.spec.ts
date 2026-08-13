@@ -12,5 +12,5 @@ test("restores the active workspace after a browser refresh", async ({ page }) =
   );
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true })).toBeVisible({ timeout: 15_000 });
 });

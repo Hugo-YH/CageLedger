@@ -35,12 +35,10 @@ export function isWorkspaceView(value: string): value is WorkspaceView {
 
 export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSidebarItem[] {
   const items: BillingSidebarItem[] = [
-    { section: "核算数据" },
-    { view: "billing-cage-map", label: "动态笼位图（自动）", description: "按真实占用时间线自动核算", icon: "grid" },
     { section: "数量统计表" },
     {
       view: "billing-quantity-entry",
-      label: "数量统计表（录入）",
+      label: "录入数量统计表",
       description: "按伦理号和房间录入月度变化",
       icon: "calculator",
     },
@@ -53,11 +51,11 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
     { section: "结算管理" },
     {
       view: "billing-settlement",
-      label: "按项目负责人结算",
+      label: "结算管理",
       description: "自动合并负责人名下伦理并出单",
       icon: "calculator",
     },
-    { view: "workflow-center", label: "结算与报销台账", description: "跟踪结算流程、报销和累计未缴", icon: "refresh" },
+    { view: "workflow-center", label: "单据跟踪", description: "跟踪结算流程、报销和累计未缴", icon: "refresh" },
   ];
   if (canExportMonthlySummary) {
     items.push({

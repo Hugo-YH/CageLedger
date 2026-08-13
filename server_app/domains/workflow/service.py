@@ -234,6 +234,11 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
     statement["workflowStatus"] = next_status
     if next_status == deps["WORKFLOW_STATUS_SENT"]:
         statement["sentAt"] = at
+        statement["sentBy"] = {
+            "id": actor.get("id", ""),
+            "username": actor.get("username", ""),
+            "displayName": actor.get("displayName", ""),
+        }
         if current_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
             statement["revertedAt"] = at
             statement["revertedBy"] = {
@@ -314,6 +319,75 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
         at,
         "manual",
         note,
+    )
+    deps["insert_billing_workflow_event"](conn, event)
+    return updated_workflow, updated_version, event
+
+
+def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor, note, deps):
+    workflow = deps["get_billing_workflow"](conn, workflow_id)
+    if not workflow:
+        raise LookupError("结算流程不存在")
+    if workflow.get("workflowStatus", "") != deps["WORKFLOW_STATUS_ARCHIVED"]:
+        raise ValueError("仅已归档流程可以补录报销单")
+    version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
+    if not version:
+        raise LookupError("当前有效结算单不存在")
+    forms = []
+    for entry in reimbursement_forms or []:
+        form_no = deps["clean_text"](entry.get("formNo", ""))
+        amount = max(deps["as_int"](entry.get("amount")) or 0, 0)
+        if form_no:
+            forms.append({"formNo": form_no, "amount": amount})
+    if not forms:
+        raise ValueError("请填写报销单号和金额")
+    statement = dict(version.get("statement") or {})
+    merged_forms = list(statement.get("reimbursementForms") or []) + forms
+    at = deps["now_iso"]()
+    statement["workflowStatus"] = deps["WORKFLOW_STATUS_ARCHIVED"]
+    statement["reimbursementForms"] = merged_forms
+    statement["reimbursementFormNos"] = [entry["formNo"] for entry in merged_forms]
+    statement["reimbursementFormReturned"] = True
+    statement["receivedAmount"] = sum(entry["amount"] for entry in merged_forms)
+    statement["reimbursementRecordedAt"] = at
+    statement["reimbursementRecordedBy"] = {
+        "id": actor.get("id", ""),
+        "username": actor.get("username", ""),
+        "displayName": actor.get("displayName", ""),
+    }
+    updated_version = deps["build_version_payload"](
+        statement,
+        workflow_id,
+        version.get("versionNo", 1),
+        version.get("versionStatus", deps["VERSION_STATUS_ACTIVE"]),
+        deps["WORKFLOW_STATUS_ARCHIVED"],
+        version.get("generatedAt", at),
+        version.get("voidedAt", ""),
+        version.get("voidedBy", ""),
+        version.get("voidReason", ""),
+    )
+    deps["update_billing_version"](conn, updated_version)
+    updated_workflow = deps["build_workflow_payload"](
+        workflow_id,
+        workflow.get("iacuc", ""),
+        workflow.get("month", ""),
+        workflow.get("sourceType", ""),
+        deps["WORKFLOW_STATUS_ARCHIVED"],
+        updated_version,
+        at,
+    )
+    deps["update_billing_workflow"](conn, updated_workflow)
+    event = deps["build_workflow_event_payload"](
+        deps["new_id"]("wevt"),
+        workflow_id,
+        updated_version["id"],
+        "statement_reimbursement_recorded",
+        deps["WORKFLOW_STATUS_ARCHIVED"],
+        deps["WORKFLOW_STATUS_ARCHIVED"],
+        actor,
+        at,
+        "manual",
+        note or "补录报销单",
     )
     deps["insert_billing_workflow_event"](conn, event)
     return updated_workflow, updated_version, event

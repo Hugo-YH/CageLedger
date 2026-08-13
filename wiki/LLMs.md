@@ -1,6 +1,6 @@
 # CageLedger 文档
 
-> CageLedger 是实验动物中心的笼卡、笼位、动物巡检、数量统计、饲养费结算和报销核销系统。本文件面向 AI 助手与自动化工具，提供文档入口、事实来源和维护边界；面向人的使用说明位于[文档首页](/)，同内容的规范导航文件位于 [llms.txt](/llms.txt)。
+> CageLedger 是实验动物中心的笼卡、笼位、动物巡检、数量统计、饲养费结算和单据跟踪系统。本文件面向 AI 助手与自动化工具，提供文档入口、事实来源和维护边界；面向人的使用说明位于[文档首页](/)，同内容的规范导航文件位于 [llms.txt](/llms.txt)。
 
 系统前端采用 React、TypeScript、Vite、TanStack Query 与 Ant Design，后端采用 Python 标准库 HTTP 服务与 SQLite。文档站由 VitePress 生成，每个页面都可通过在原 URL 后追加 `.md` 获取 Markdown 原文，例如 [/guide/getting-started.md](/guide/getting-started.md)。
 

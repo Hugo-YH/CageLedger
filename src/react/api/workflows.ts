@@ -23,6 +23,18 @@ export interface BillingWorkflowAttachment {
   createdAt: string;
 }
 
+export interface BillingWorkflowEvent {
+  id: string;
+  workflowId: string;
+  versionId: string;
+  eventType: string;
+  fromStatus: string;
+  toStatus: string;
+  at: string;
+  actor: { id: string; username: string; displayName: string };
+  note: string;
+}
+
 export interface BillingWorkflow {
   id: string;
   businessKey: string;
@@ -31,6 +43,7 @@ export interface BillingWorkflow {
   month: string;
   sourceType: string;
   workflowStatus: string;
+  currentVersionNo?: number;
   pi: string;
   project: string;
   owner: string;
@@ -39,6 +52,8 @@ export interface BillingWorkflow {
   totalCageDays: number;
   generatedAt: string;
   sentAt: string;
+  sentBy?: { id: string; username: string; displayName: string };
+  sheetUpdatedAt?: string;
   signedReturnedAt: string;
   registeredAt: string;
   archivedAt: string;
@@ -49,6 +64,8 @@ export interface BillingWorkflow {
   receivedAmount?: number;
   attachments?: BillingWorkflowAttachment[];
   registeredBy?: { id: string; username: string; displayName: string };
+  reimbursementRecordedAt?: string;
+  reimbursementRecordedBy?: { id: string; username: string; displayName: string };
   latestEventAt: string;
 }
 
@@ -185,6 +202,14 @@ export async function fetchAllBillingWorkflows(params: WorkflowListParams) {
   return items;
 }
 
+export async function fetchWorkflowDetail(workflowId: string) {
+  return requestJson<{
+    workflow: BillingWorkflow;
+    versions: unknown[];
+    events: BillingWorkflowEvent[];
+  }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`);
+}
+
 export async function uploadWorkflowAttachment(workflowId: string, kind: "settlement" | "reimbursement", file: File) {
   const form = new FormData();
   form.set("file", file);
@@ -215,4 +240,18 @@ export function useDeleteBillingWorkflow() {
       void client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
     },
   });
+}
+
+export async function recordWorkflowReimbursement(
+  workflowId: string,
+  reimbursementForms: Array<{ formNo: string; amount: number }>,
+) {
+  const payload = await requestJson<Record<string, unknown>>(
+    `/api/billing-workflows/${encodeURIComponent(workflowId)}/reimbursement-forms`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reimbursementForms }),
+    },
+  );
+  return payload;
 }

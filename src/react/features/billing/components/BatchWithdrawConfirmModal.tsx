@@ -27,7 +27,7 @@ export function BatchWithdrawConfirmModal({
     >
       <Typography.Paragraph>
         将为已选的 {count}{" "}
-        个结算流程执行撤回：“已生成”的撤回后回到未发起状态，“已发起”的退回已生成状态。系统会按顺序处理，每项保留独立的审计记录。
+        个结算流程执行撤回：“已生成”的撤销后将删除该结算流程，回到未发起（无流程）状态；“已发起”的撤回将退回已生成状态。系统会按顺序处理，每项保留独立的审计记录。
       </Typography.Paragraph>
     </Modal>
   );

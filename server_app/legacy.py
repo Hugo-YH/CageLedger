@@ -377,6 +377,9 @@ from server_app.repositories.state import (
     read_cached_state as read_cached_state_repository,
 )
 from server_app.services.billing import (
+    record_archived_reimbursement as record_archived_reimbursement_service,
+)
+from server_app.services.billing import (
     save_billing_statement_workflow as save_billing_statement_workflow_service,
 )
 from server_app.services.billing import (
@@ -3923,6 +3926,10 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor):
         "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
         "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
         "totalAmount": lines[-1]["cumulative"] if lines else 0,
+        "sheetUpdatedAt": max(
+            (clean_text(item.get("updatedAt", "")) for item in sheets if clean_text(item.get("updatedAt", ""))),
+            default="",
+        ),
         "notes": notes,
         "status": status,
         "generatedAt": generated_at,
@@ -4247,6 +4254,7 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
             "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
             "totalAmount": cumulative,
+            "sheetUpdatedAt": "",
             "status": status,
             "generatedAt": generated_at,
             "lockedAt": generated_at if status == "locked" else "",
@@ -4290,6 +4298,10 @@ def generate_billing_statement_by_pi(conn, payload, actor):
             "totalTier2CageDays": sum(line.get("tier2BillableCages", 0) for line in lines),
             "totalAnimalDays": sum(line.get("animalCount", 0) for line in lines),
             "totalAmount": lines[-1]["cumulative"] if lines else 0,
+            "sheetUpdatedAt": max(
+                (clean_text(item.get("updatedAt", "")) for item in sheets if clean_text(item.get("updatedAt", ""))),
+                default="",
+            ),
             "notes": notes,
             "status": status,
             "generatedAt": generated_at,
@@ -4462,6 +4474,10 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
         "registeredAt": statement.get("registeredAt", ""),
         "archivedAt": statement.get("archivedAt", ""),
     }
+    if statement.get("sentBy"):
+        timestamps["sentBy"] = statement["sentBy"]
+    if statement.get("sheetUpdatedAt"):
+        timestamps["sheetUpdatedAt"] = statement["sheetUpdatedAt"]
     workflow_payload = {
         "id": workflow_id,
         "businessKey": billing_workflow_business_key(scope_type, scope_key, month, source_type),
@@ -5185,6 +5201,17 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note="", regis
     )
 
 
+def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor, note=""):
+    return record_archived_reimbursement_service(
+        conn,
+        workflow_id,
+        reimbursement_forms,
+        actor,
+        note,
+        billing_workflow_service_deps(),
+    )
+
+
 def add_billing_workflow_attachment(conn, actor, workflow_id, kind, filename, body, content_type):
     workflow = get_billing_workflow(conn, workflow_id)
     if not workflow:
@@ -5886,6 +5913,10 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         if path == "/api/billing-workflows/advance":
             self.handle_billing_workflow_advance()
             return
+        workflow_id = self.billing_workflow_reimbursement_recording_route(path)
+        if workflow_id:
+            self.handle_billing_workflow_reimbursement_recording(workflow_id)
+            return
         workflow_id = self.billing_workflow_attachment_upload_route(path)
         if workflow_id:
             self.handle_billing_workflow_attachment_upload(workflow_id)
@@ -6362,6 +6393,65 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                     "billing_workflow",
                     workflow_id,
                     f"{user['displayName']} 更新 {workflow.get('iacuc', '')} {workflow.get('month', '')} 结算流程状态",
+                    [],
+                    event["at"],
+                    None,
+                    {"workflow": workflow, "version": version, "event": event},
+                )
+                write_audit_events(conn, [audit])
+                conn.commit()
+            invalidate_data_cache_prefixes(
+                "billing_workflows::",
+                "billing_statements::",
+                "reimbursement_records::",
+                "quantity_sheets::settlement_candidates::",
+            )
+            self.send_json(
+                {
+                    "workflow": workflow,
+                    "event": event,
+                    "reimbursementItem": reimbursement_record_list_item(reimbursement) if reimbursement else None,
+                    "auditLogs": merge_audit_logs([], [audit]),
+                }
+            )
+        except LookupError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def handle_billing_workflow_reimbursement_recording(self, workflow_id):
+        user = self.require_user()
+        if not user:
+            return
+        if user["role"] != "admin":
+            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            body = self.read_json_body()
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            with connect_db() as conn:
+                workflow, version, event = record_archived_reimbursement(
+                    conn,
+                    workflow_id,
+                    body.get("reimbursementForms") if isinstance(body.get("reimbursementForms"), list) else [],
+                    user,
+                    clean_text(body.get("note", "")),
+                )
+                reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
+                if reimbursement:
+                    reimbursement["workflowStatus"] = workflow.get("workflowStatus", "")
+                    reimbursement["latestEventAt"] = workflow.get("latestEventAt", "") or event.get("at", "")
+                    reimbursement["updatedAt"] = now_iso()
+                    upsert_reimbursement_record(conn, reimbursement)
+                audit = audit_event(
+                    user,
+                    "billing_workflow.reimbursement_recorded",
+                    "billing_workflow",
+                    workflow_id,
+                    f"{user['displayName']} 为 {workflow.get('iacuc', '')} {workflow.get('month', '')} 结算流程补录报销单",
                     [],
                     event["at"],
                     None,
@@ -6875,6 +6965,9 @@ class CageLedgerHandler(CageLedgerHttpHandler):
 
     def billing_workflow_attachment_upload_route(self, path):
         return route_matchers.billing_workflow_attachment_upload_route(path)
+
+    def billing_workflow_reimbursement_recording_route(self, path):
+        return route_matchers.billing_workflow_reimbursement_recording_route(path)
 
     def billing_workflow_attachment_download_route(self, path):
         return route_matchers.billing_workflow_attachment_download_route(path)

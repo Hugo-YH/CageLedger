@@ -62,8 +62,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
@@ -114,8 +114,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await confirmDialog.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "已发起 2 个结算流程" })).toBeVisible();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算与报销台账/ }).click();
-  await expect(page.getByRole("heading", { name: "核销工作台", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /单据跟踪/ }).click();
+  await expect(page.getByRole("heading", { name: "单据跟踪", exact: true })).toBeVisible();
   const workflowRow = page.getByRole("row", { name: /E2E 批量负责人/ });
   await expect(workflowRow).toContainText("已发起");
   await expect(workflowRow).not.toContainText("已生成");
@@ -161,8 +161,8 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
 
   await expect(page.getByRole("row", { name: /E2E 已发起负责人/ })).toContainText("已生成");
   await expect(page.getByRole("row", { name: /E2E 未发起负责人/ })).toContainText("未发起");
@@ -191,7 +191,7 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
   await expect(page.getByRole("row", { name: /E2E 已发起负责人/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /E2E 未发起负责人/ })).toHaveCount(0);
 
-  // 清空筛选后在预览弹窗中撤回已生成的流程，行回到"未发起"
+  // 清空筛选后已生成的流程预览弹窗不显示撤销/撤回，通过列表批量撤回删除
   await page.getByRole("button", { name: "筛选结算状态", exact: true }).click();
   await page.locator(".table-filter-panel:visible").getByRole("button", { name: "清空", exact: true }).click();
   await page.locator(".table-filter-panel:visible").getByRole("button", { name: "应用", exact: true }).click();
@@ -201,9 +201,17 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
     .getByRole("button", { name: "预览结算单" })
     .click();
   const previewModal = page.locator(".settlement-preview-modal");
-  await expect(previewModal.getByRole("button", { name: "撤回", exact: true })).toBeVisible();
-  await previewModal.getByRole("button", { name: "撤回", exact: true }).click();
-  await page.locator(".ant-popconfirm").getByRole("button", { name: "撤回", exact: true }).click();
+  await expect(previewModal.getByRole("button", { name: /撤销|撤回/ })).toHaveCount(0);
+  await previewModal.locator(".ant-modal-close").click();
+  await page
+    .getByRole("row", { name: /E2E 已发起负责人/ })
+    .getByRole("checkbox", { name: `选择 E2E 已发起负责人 ${month} 结算项` })
+    .check();
+  await page.getByLabel("结算批量操作").getByRole("button", { name: "撤回", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "批量撤回结算流程", exact: true })
+    .getByRole("button", { name: "撤回 1 个流程", exact: true })
+    .click();
   await expect(page.getByRole("row", { name: /E2E 已发起负责人/ })).toContainText("未发起", { timeout: 10_000 });
 });
 
@@ -255,8 +263,8 @@ test("项目负责人结算列表可撤回已发起流程退回已生成", async
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
 
   const row = page.getByRole("row", { name: new RegExp(pi) });
   await expect(row).toContainText("已发起");
@@ -308,8 +316,8 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
 
   for (const pi of ["E2E 批量撤回负责人 1", "E2E 批量撤回负责人 2"]) {
     const row = page.getByRole("row", { name: new RegExp(pi) });
@@ -361,8 +369,8 @@ test("settlement preview toolbar keeps long IACUC lists inside the toolbar", asy
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
   await page
     .getByRole("row", { name: /E2E 多伦理号负责人/ })
     .getByRole("button", { name: "预览结算单" })
@@ -430,16 +438,16 @@ test("发起结算流程 generates the notification email template", async ({ pa
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
   const noticeRow = page.getByRole("row", { name: /E2E 邮件通知负责人/ });
   await expect(noticeRow).toBeVisible();
   // 重试场景：上一次运行留下的流程已是“已发起”，通过接口清理后回到未发起
   await cleanupWorkflow(page, "E2E 邮件通知负责人");
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /E2E 邮件通知负责人/ })).toContainText("未发起");
   await noticeRow.getByRole("button", { name: "预览结算单" }).click();
   await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({
@@ -473,86 +481,17 @@ test("发起结算流程 generates the notification email template", async ({ pa
   expect(body).toContain("材料接收点：珠江新城办公室8009");
   expect(body).toContain("系统管理员");
 
-  // 复制并确认：复制邮件内容并发起结算流程
+  // 复制并确认：一次点击完成复制、发起、关闭弹窗
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await noticeModal.getByRole("button", { name: "复制并确认" }).click();
-  await expect(noticeModal.getByRole("button", { name: "我已复制，确认发起流程" })).toBeVisible();
-  await noticeModal.getByRole("button", { name: "我已复制，确认发起流程" }).click();
   await expect(noticeModal).toHaveCount(0, { timeout: 10_000 });
   await expect(noticeRow).toContainText("已发起", { timeout: 10_000 });
   const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
   expect(clipboardText).toBe(`${subject}\n\n${body}`);
+  // 发起后预览弹窗按钮立即变灰，无需退出重进
+  await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "已发起结算流程" })).toBeVisible();
+  await expect(
+    page.locator(".settlement-preview-modal").getByRole("button", { name: "已发起结算流程" }),
+  ).toBeDisabled();
   await page.locator(".settlement-preview-modal .ant-modal-close").click();
-
-  // 内网 HTTP（非安全上下文）没有 Clipboard API：清理流程后模拟该环境，
-  // 验证回退复制路径仍然把邮件内容写入剪贴板。
-  await cleanupWorkflow(page, "E2E 邮件通知负责人");
-  await page.reload();
-  await page.addInitScript(() => {
-    const clipboard = navigator.clipboard;
-    Object.defineProperty(window, "__clipboardRead", {
-      configurable: true,
-      value: () => clipboard?.readText(),
-    });
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
-  });
-  await page.reload();
-  await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
-  const fallbackRow = page.getByRole("row", { name: /E2E 邮件通知负责人/ });
-  await expect(fallbackRow).toBeVisible();
-  await fallbackRow.getByRole("button", { name: "预览结算单" }).click();
-  await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({
-    timeout: 20_000,
-  });
-  await page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" }).click();
-  const fallbackModal = page.locator(".settlement-notice-modal");
-  await expect(fallbackModal.locator(".settlement-notice-body")).toBeVisible({ timeout: 10_000 });
-  const fallbackSubject = await fallbackModal.locator(".settlement-notice-subject").innerText();
-  const fallbackBody = await fallbackModal.locator(".settlement-notice-body").innerText();
-  await fallbackModal.getByRole("button", { name: "复制并确认" }).click();
-  await expect(fallbackModal.getByRole("button", { name: "我已复制，确认发起流程" })).toBeVisible();
-  await fallbackModal.getByRole("button", { name: "我已复制，确认发起流程" }).click();
-  await expect(fallbackModal).toHaveCount(0, { timeout: 10_000 });
-  await expect(fallbackRow).toContainText("已发起", { timeout: 10_000 });
-  const fallbackClipboard = await page.evaluate(() =>
-    (window as unknown as { __clipboardRead?: () => Promise<string> }).__clipboardRead?.(),
-  );
-  expect(fallbackClipboard).toBe(`${fallbackSubject}\n\n${fallbackBody}`);
-  await page.locator(".settlement-preview-modal .ant-modal-close").click();
-
-  // 浏览器或安全软件完全拦截程序化复制：清理流程后模拟该环境，
-  // 自动复制失败时应全选正文并引导手动复制，确认按钮变为「已复制，确认发起流程」。
-  await cleanupWorkflow(page, "E2E 邮件通知负责人");
-  await page.reload();
-  await page.addInitScript(() => {
-    const clipboard = navigator.clipboard;
-    Object.defineProperty(window, "__clipboardRead", {
-      configurable: true,
-      value: () => clipboard?.readText(),
-    });
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
-    Object.defineProperty(document, "execCommand", { configurable: true, value: () => false });
-  });
-  await page.reload();
-  await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /按项目负责人结算/ }).click();
-  await expect(page.getByRole("heading", { name: "项目负责人结算", exact: true })).toBeVisible();
-  const manualRow = page.getByRole("row", { name: /E2E 邮件通知负责人/ });
-  await expect(manualRow).toBeVisible();
-  await manualRow.getByRole("button", { name: "预览结算单" }).click();
-  await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({
-    timeout: 20_000,
-  });
-  await page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" }).click();
-  const manualModal = page.locator(".settlement-notice-modal");
-  await expect(manualModal.locator(".settlement-notice-body")).toBeVisible({ timeout: 10_000 });
-  await manualModal.getByRole("button", { name: "复制并确认" }).click();
-  await expect(manualModal.locator(".settlement-notice-copy-hint")).toBeVisible();
-  await expect(manualModal.getByRole("button", { name: "我已复制，确认发起流程" })).toBeVisible();
-  await expect(manualModal).toHaveCount(1);
-  await manualModal.getByRole("button", { name: "我已复制，确认发起流程" }).click();
-  await expect(manualModal).toHaveCount(0, { timeout: 10_000 });
-  await expect(manualRow).toContainText("已发起", { timeout: 10_000 });
 });

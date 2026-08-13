@@ -1,13 +1,15 @@
-import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
+import { Button, Empty, Popconfirm, Space, Tag, Typography } from "antd";
+import { UndoOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
-import type { BillingWorkflow } from "../../../api/workflows";
-import { fetchAllBillingWorkflows, useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
+import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflows";
+import { fetchWorkflowDetail, useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
 import { DataTable } from "../../../components/ui";
 import { formatDateTime, Pager } from "../../../components/WorkspaceUi";
 import { QueryFeedback } from "./LedgerListShared";
 import { WorkflowColumnTitle } from "./WorkflowColumnTitle";
 import { WorkflowDetailModal } from "./WorkflowDetailModal";
+import { WorkflowReimbursementRecordingModal } from "./WorkflowReimbursementRecordingModal";
 import { WorkflowRegistrationModal } from "./WorkflowRegistrationModal";
 
 const workflowStatusMeta: Record<string, { label: string; color: string }> = {
@@ -32,92 +34,32 @@ export function BillingWorkflowPanel() {
   });
   const advance = useAdvanceWorkflow();
   const [registerTarget, setRegisterTarget] = useState<BillingWorkflow | null>(null);
-  const [detailTarget, setDetailTarget] = useState<BillingWorkflow | null>(null);
-  const [selectedStartable, setSelectedStartable] = useState<BillingWorkflow[]>([]);
-  const [selectingAll, setSelectingAll] = useState(false);
-  const [batchStarting, setBatchStarting] = useState(false);
-  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
-  const [batchNotice, setBatchNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(null);
+  const [detailTarget, setDetailTarget] = useState<{
+    workflow: BillingWorkflow;
+    events: BillingWorkflowEvent[];
+  } | null>(null);
+  const [recordingTarget, setRecordingTarget] = useState<BillingWorkflow | null>(null);
   const items = query.data?.items || [];
   const total = query.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
-  const startableItems = items.filter((item) => item.workflowStatus === "statement_generated");
-  const allStartableSelected =
-    startableItems.length > 0 &&
-    startableItems.every((item) => selectedStartable.some((selected) => selected.id === item.id));
 
   function toggleSort(key: string) {
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
-    setSelectedStartable([]);
     setPage(1);
   }
 
   function applyFilter(key: string, values: string[]) {
     setFilters((current) => ({ ...current, [key]: values }));
-    setSelectedStartable([]);
     setPage(1);
   }
 
-  function toggleSelected(item: BillingWorkflow, checked: boolean) {
-    setSelectedStartable((current) =>
-      checked
-        ? current.some((selected) => selected.id === item.id)
-          ? current
-          : [...current, item]
-        : current.filter((selected) => selected.id !== item.id),
-    );
-  }
-
-  async function toggleAllStartable() {
-    if (allStartableSelected) {
-      const currentIds = new Set(startableItems.map((item) => item.id));
-      setSelectedStartable((current) => current.filter((item) => !currentIds.has(item.id)));
-      return;
-    }
-    setSelectingAll(true);
+  async function openDetail(item: BillingWorkflow) {
     try {
-      const all = await fetchAllBillingWorkflows({
-        limit: 100,
-        offset: 0,
-        sortKey: sort.key,
-        sortDir: sort.dir,
-        columnFilters: filters,
-      });
-      setSelectedStartable(all.filter((item) => item.workflowStatus === "statement_generated"));
-    } finally {
-      setSelectingAll(false);
+      const detail = await fetchWorkflowDetail(item.id);
+      setDetailTarget({ workflow: detail.workflow, events: detail.events });
+    } catch {
+      // 详情加载失败时保持列表可用，不弹错误弹窗。
     }
-  }
-
-  async function startSelected() {
-    const targets = selectedStartable.filter((item) => item.workflowStatus === "statement_generated");
-    if (!targets.length) return;
-    setBatchStarting(true);
-    setBatchProgress({ completed: 0, total: targets.length });
-    setBatchNotice({ kind: "info", text: `正在发起结算流程 ${0}/${targets.length}…` });
-    const failures: string[] = [];
-    for (let index = 0; index < targets.length; index += 1) {
-      const target = targets[index];
-      try {
-        await advance.mutateAsync({
-          workflowId: target.id,
-          toStatus: "statement_sent",
-          note: "批量发起结算流程",
-        });
-      } catch (error) {
-        failures.push(`${target.pi}（${error instanceof Error ? error.message : "发起失败"}）`);
-      }
-      setBatchProgress((current) => ({ ...current, completed: current.completed + 1 }));
-    }
-    setSelectedStartable([]);
-    setBatchStarting(false);
-    setBatchNotice({
-      kind: failures.length ? "error" : "success",
-      text: failures.length
-        ? `已发起 ${targets.length - failures.length} 条结算流程；${failures.length} 条未完成：${failures.join("、")}`
-        : `已发起 ${targets.length} 条结算流程。`,
-    });
-    void query.refetch();
   }
 
   function columnTitle(column: string, label: string, filterColumn = column) {
@@ -134,26 +76,6 @@ export function BillingWorkflowPanel() {
   }
 
   const columns = [
-    {
-      key: "selection",
-      title: (
-        <Checkbox
-          aria-label="全选当前筛选结果可发起的结算流程"
-          checked={allStartableSelected}
-          disabled={!startableItems.length || batchStarting || selectingAll}
-          onChange={() => void toggleAllStartable()}
-        />
-      ),
-      width: 44,
-      render: (_: unknown, item: BillingWorkflow) => (
-        <Checkbox
-          aria-label={`选择 ${item.pi} ${item.month} 结算流程`}
-          checked={selectedStartable.some((selected) => selected.id === item.id)}
-          disabled={item.workflowStatus !== "statement_generated" || batchStarting}
-          onChange={(event) => toggleSelected(item, event.target.checked)}
-        />
-      ),
-    },
     { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 110 },
     { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 180 },
     {
@@ -178,12 +100,22 @@ export function BillingWorkflowPanel() {
     {
       key: "workflowStatus",
       title: columnTitle("workflowStatus", "状态", "status"),
-      width: 110,
-      render: (_: unknown, item: BillingWorkflow) => (
-        <Tag color={workflowStatusMeta[item.workflowStatus]?.color || "default"}>
-          {workflowStatusMeta[item.workflowStatus]?.label || item.workflowStatus}
-        </Tag>
-      ),
+      width: 170,
+      render: (_: unknown, item: BillingWorkflow) =>
+        item.workflowStatus === "statement_archived" ? (
+          <Space size={4} wrap>
+            <Tag color={item.signedStatementReturned ? "success" : "default"}>
+              {item.signedStatementReturned ? "结算单 ✅ 已交回" : "结算单 未交回"}
+            </Tag>
+            <Tag color={item.reimbursementFormReturned ? "success" : "default"}>
+              {item.reimbursementFormReturned ? "报销单 ✅ 已交回" : "报销单 未交回"}
+            </Tag>
+          </Space>
+        ) : (
+          <Tag color={workflowStatusMeta[item.workflowStatus]?.color || "default"}>
+            {workflowStatusMeta[item.workflowStatus]?.label || item.workflowStatus}
+          </Tag>
+        ),
     },
     {
       key: "latestEventAt",
@@ -205,23 +137,23 @@ export function BillingWorkflowPanel() {
           return (
             <Space size={4}>
               <Button type="primary" size="small" onClick={() => setRegisterTarget(item)}>
-                交回登记
+                登记
               </Button>
               <Popconfirm
                 title="将该流程退回已生成？"
-                description="流程回到已生成状态，可在按项目负责人结算或此处重新发起。"
+                description="流程回到已生成状态，可在结算管理或此处重新发起。"
                 okText="撤回"
                 cancelText="取消"
                 onConfirm={async () => {
                   await advance.mutateAsync({
                     workflowId: item.id,
                     toStatus: "statement_generated",
-                    note: "撤回已发起流程，退回已生成",
+                    note: "撤回，退回已生成",
                   });
                   void query.refetch();
                 }}
               >
-                <Button danger size="small">
+                <Button danger icon={<UndoOutlined aria-hidden />} size="small">
                   撤回
                 </Button>
               </Popconfirm>
@@ -231,25 +163,30 @@ export function BillingWorkflowPanel() {
         if (item.workflowStatus === "statement_archived") {
           return (
             <Space size={4}>
-              <Button size="small" onClick={() => setDetailTarget(item)}>
-                查看留档
+              <Button size="small" onClick={() => void openDetail(item)}>
+                查看归档
               </Button>
+              {!item.reimbursementFormReturned ? (
+                <Button size="small" onClick={() => setRecordingTarget(item)}>
+                  补录
+                </Button>
+              ) : null}
               <Popconfirm
-                title="将该流程改回已发起？"
-                description="流程回到等待交回登记状态，原留档信息保留，重新登记后覆盖。"
-                okText="改回已发起"
+                title="将该流程撤回？"
+                description="流程回到等待交回登记状态，原归档信息保留，重新登记后覆盖。"
+                okText="撤回"
                 cancelText="取消"
                 onConfirm={async () => {
                   await advance.mutateAsync({
                     workflowId: item.id,
                     toStatus: "statement_sent",
-                    note: "撤回归档，改回已发起",
+                    note: "撤回，退回已发起",
                   });
                   void query.refetch();
                 }}
               >
-                <Button danger size="small">
-                  改回已发起
+                <Button danger icon={<UndoOutlined aria-hidden />} size="small">
+                  撤回
                 </Button>
               </Popconfirm>
             </Space>
@@ -264,42 +201,7 @@ export function BillingWorkflowPanel() {
     <section className="ledger-section" aria-label="结算流程列表">
       <div className="ledger-toolbar">
         <Tag color="blue">{total} 条结算流程</Tag>
-        {selectingAll ? <Typography.Text type="secondary">正在选择全部可发起的结算流程…</Typography.Text> : null}
-        {selectedStartable.length ? (
-          <Space>
-            <Typography.Text type="secondary">已选 {selectedStartable.length} 条可发起</Typography.Text>
-            <Popconfirm
-              title={`批量发起 ${selectedStartable.length} 条结算流程？`}
-              description="已生成的结算流程将进入已发起状态，等待课题组交回单据。"
-              okText="批量发起"
-              cancelText="取消"
-              onConfirm={() => void startSelected()}
-            >
-              <Button type="primary" loading={batchStarting}>
-                批量发起
-              </Button>
-            </Popconfirm>
-          </Space>
-        ) : null}
       </div>
-      {batchNotice ? (
-        <Alert
-          className="ledger-batch-notice"
-          role="status"
-          showIcon
-          title={batchNotice.text}
-          type={batchNotice.kind}
-        />
-      ) : null}
-      {batchStarting ? (
-        <Alert
-          className="ledger-batch-notice"
-          role="status"
-          showIcon
-          title={`正在发起结算流程 ${batchProgress.completed}/${batchProgress.total}…`}
-          type="info"
-        />
-      ) : null}
       <QueryFeedback
         error={query.isError}
         errorText="结算流程加载失败"
@@ -340,6 +242,14 @@ export function BillingWorkflowPanel() {
         }}
       />
       <WorkflowDetailModal target={detailTarget} onCancel={() => setDetailTarget(null)} />
+      <WorkflowReimbursementRecordingModal
+        target={recordingTarget}
+        onCancel={() => setRecordingTarget(null)}
+        onRecorded={() => {
+          setRecordingTarget(null);
+          void query.refetch();
+        }}
+      />
     </section>
   );
 }

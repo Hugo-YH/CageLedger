@@ -37,11 +37,11 @@ test("core workspaces and dialogs retain accessible semantics", async ({ page })
   await expectNoSeriousViolations(page);
 
   await openQuantityEntry(page);
-  await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true, level: 2 })).toBeVisible();
   await expectNoSeriousViolations(page);
 
   await openWorkflowCenter(page);
-  await expect(page.getByRole("heading", { name: "核销工作台", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
   await expectNoSeriousViolations(page);
 
   await openSettingsView(page, "房间管理");

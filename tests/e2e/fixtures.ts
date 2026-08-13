@@ -67,7 +67,7 @@ export async function openIntakeEntry(page: Page) {
 }
 
 export async function openQuantityEntry(page: Page) {
-  await openNavigationEntry(page, "饲养费管理", "数量统计表（录入）");
+  await openNavigationEntry(page, "饲养费管理", "录入数量统计表");
 }
 
 export async function openSavedQuantitySheets(page: Page) {
@@ -82,7 +82,7 @@ export async function selectAntOptionByKeyboard(page: Page, combobox: Locator, d
 }
 
 export async function openWorkflowCenter(page: Page) {
-  await openNavigationEntry(page, "饲养费管理", "结算与报销台账");
+  await openNavigationEntry(page, "饲养费管理", "单据跟踪");
 }
 
 export async function openBillingNavigation(page: Page) {

@@ -39,10 +39,13 @@ def get_billing_workflow_detail(conn, workflow_id):
             json_extract(workflows.payload, '$.project') AS project,
             json_extract(workflows.payload, '$.owner') AS owner,
             json_extract(workflows.payload, '$.funding') AS funding,
+            json_extract(workflows.payload, '$.manager') AS manager,
             json_extract(workflows.payload, '$.totalAmount') AS total_amount,
             json_extract(workflows.payload, '$.totalCageDays') AS total_cage_days,
             json_extract(workflows.payload, '$.generatedAt') AS generated_at,
             json_extract(workflows.payload, '$.sentAt') AS sent_at,
+            json_extract(workflows.payload, '$.sentBy') AS sent_by,
+            json_extract(workflows.payload, '$.sheetUpdatedAt') AS sheet_updated_at,
             json_extract(workflows.payload, '$.signedReturnedAt') AS signed_returned_at,
             json_extract(workflows.payload, '$.submittedToFinanceAt') AS submitted_to_finance_at,
             json_extract(workflows.payload, '$.registeredAt') AS registered_at,
@@ -89,34 +92,56 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
     clauses = []
     params = []
     column_filters = filters.get("columnFilters") or {}
-    month = clean_text(filters.get("month", "")) or (column_filters.get("month") or [""])[0]
-    if month:
-        clauses.append("month = ?")
-        params.append(month)
-    status = clean_text(filters.get("status", "")) or (column_filters.get("status") or [""])[0]
-    if status == "todo":
-        clauses.append("workflow_status <> ?")
-        params.append(workflow_status_finance)
-    elif status == "done":
-        clauses.append("workflow_status = ?")
-        params.append(workflow_status_finance)
-    elif status and status != "all":
-        clauses.append("workflow_status = ?")
-        params.append(status)
+    month_values = column_filters.get("month") or []
+    if month_values:
+        placeholders = ", ".join("?" for _ in month_values)
+        clauses.append(f"month IN ({placeholders})")
+        params.extend(month_values)
+    else:
+        month = clean_text(filters.get("month", ""))
+        if month:
+            clauses.append("month = ?")
+            params.append(month)
+    status_values = column_filters.get("status") or []
+    if status_values:
+        placeholders = ", ".join("?" for _ in status_values)
+        clauses.append(f"workflow_status IN ({placeholders})")
+        params.extend(status_values)
+    else:
+        status = clean_text(filters.get("status", ""))
+        if status == "todo":
+            clauses.append("workflow_status <> ?")
+            params.append(workflow_status_finance)
+        elif status == "done":
+            clauses.append("workflow_status = ?")
+            params.append(workflow_status_finance)
+        elif status and status != "all":
+            clauses.append("workflow_status = ?")
+            params.append(status)
+        else:
+            # 核销工作台只展示已发起之后的阶段，已生成在按项目负责人结算处理。
+            clauses.append("workflow_status <> 'statement_generated'")
     if clean_text(filters.get("sourceType", "")):
         clauses.append("source_type = ?")
         params.append(filters["sourceType"])
     if clean_text(filters.get("iacuc", "")):
         clauses.append("iacuc = ?")
         params.append(filters["iacuc"])
-    pi = clean_text(filters.get("pi", "")) or (column_filters.get("pi") or [""])[0]
-    if pi:
-        clauses.append("json_extract(payload, '$.pi') = ?")
-        params.append(pi)
-    manager = (column_filters.get("manager") or [""])[0]
-    if manager:
-        clauses.append("json_extract(payload, '$.manager') = ?")
-        params.append(manager)
+    pi_values = column_filters.get("pi") or []
+    if pi_values:
+        placeholders = ", ".join("?" for _ in pi_values)
+        clauses.append(f"json_extract(payload, '$.pi') IN ({placeholders})")
+        params.extend(pi_values)
+    else:
+        pi = clean_text(filters.get("pi", ""))
+        if pi:
+            clauses.append("json_extract(payload, '$.pi') = ?")
+            params.append(pi)
+    manager_values = column_filters.get("manager") or []
+    if manager_values:
+        placeholders = ", ".join("?" for _ in manager_values)
+        clauses.append(f"json_extract(payload, '$.manager') IN ({placeholders})")
+        params.extend(manager_values)
     iacuc_filters = column_filters.get("iacuc") or []
     if iacuc_filters:
         placeholders = ", ".join("?" for _ in iacuc_filters)
@@ -130,13 +155,13 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         "billing_workflows",
         limit=filters["limit"],
         offset=filters["offset"],
-        status=status,
-        month=month,
+        status=tuple(status_values),
+        month=tuple(month_values),
         source_type=clean_text(filters.get("sourceType", "")),
         iacuc=clean_text(filters.get("iacuc", "")),
-        pi=pi,
-        manager=manager,
-        iacuc_filters=iacuc_filters,
+        pi=tuple(pi_values),
+        manager=tuple(manager_values),
+        iacuc_filters=tuple(iacuc_filters),
         sort_key=filters.get("sortKey", ""),
         sort_dir=filters.get("sortDir", ""),
     )
@@ -171,6 +196,8 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
             json_extract(payload, '$.totalCageDays') AS total_cage_days,
             json_extract(payload, '$.generatedAt') AS generated_at,
             json_extract(payload, '$.sentAt') AS sent_at,
+            json_extract(payload, '$.sentBy') AS sent_by,
+            json_extract(payload, '$.sheetUpdatedAt') AS sheet_updated_at,
             json_extract(payload, '$.signedReturnedAt') AS signed_returned_at,
             json_extract(payload, '$.submittedToFinanceAt') AS submitted_to_finance_at,
             json_extract(payload, '$.registeredAt') AS registered_at,
@@ -232,7 +259,8 @@ def list_billing_workflow_filter_options(conn, filters, column):
                        ELSE workflow_status
                    END AS label,
                    COUNT(*) AS count
-            FROM billing_workflows{where_clause}
+            FROM billing_workflows
+            {where_clause + " AND " if where_clause else "WHERE "}workflow_status <> 'statement_generated'
             GROUP BY value, label
             ORDER BY value COLLATE NOCASE
             """,
@@ -328,6 +356,8 @@ def billing_workflow_list_row(row):
         "totalCageDays": row["total_cage_days"] or 0,
         "generatedAt": row["generated_at"] or "",
         "sentAt": row["sent_at"] or "",
+        "sentBy": json.loads(row["sent_by"]) if row["sent_by"] else {},
+        "sheetUpdatedAt": row["sheet_updated_at"] or "",
         "signedReturnedAt": row["signed_returned_at"] or "",
         "submittedToFinanceAt": row["submitted_to_finance_at"] or "",
         "registeredAt": row["registered_at"] or "",
@@ -364,6 +394,8 @@ def billing_workflow_list_item(workflow):
         "totalCageDays": workflow.get("totalCageDays", 0),
         "generatedAt": workflow.get("generatedAt", ""),
         "sentAt": workflow.get("sentAt", ""),
+        "sentBy": workflow.get("sentBy", {}),
+        "sheetUpdatedAt": workflow.get("sheetUpdatedAt", ""),
         "signedReturnedAt": workflow.get("signedReturnedAt", ""),
         "submittedToFinanceAt": workflow.get("submittedToFinanceAt", ""),
         "registeredAt": workflow.get("registeredAt", ""),

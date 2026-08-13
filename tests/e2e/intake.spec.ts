@@ -25,7 +25,7 @@ test("intake workspace remains operable at the mobile breakpoint", async ({ page
   await expect(page.getByRole("heading", { name: "动态笼位图", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "房间", exact: true })).toBeVisible();
   await openQuantityEntry(page);
-  await expect(page.getByRole("heading", { name: "数量统计表（录入）", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "保存统计表", exact: true })).toBeVisible();
 });
 
@@ -91,7 +91,7 @@ test("landscape phone opens submenus after a desktop navigation collapse", async
   await page.getByRole("button", { name: "展开导航栏", exact: true }).click();
   const billingMenu = await openBillingNavigation(page);
   await expect(billingMenu).toBeVisible();
-  await expect(billingMenu.getByRole("menuitem", { name: /数量统计表（录入）/ })).toBeVisible();
+  await expect(billingMenu.getByRole("menuitem", { name: /录入数量统计表/ })).toBeVisible();
 });
 
 test("marking a saved batch as printed keeps its server version", async ({ page }) => {

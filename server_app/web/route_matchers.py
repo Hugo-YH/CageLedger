@@ -25,6 +25,10 @@ def billing_workflow_attachment_upload_route(path):
     return _between(path, "/api/billing-workflows/", "/attachments")
 
 
+def billing_workflow_reimbursement_recording_route(path):
+    return _between(path, "/api/billing-workflows/", "/reimbursement-forms")
+
+
 def billing_workflow_attachment_download_route(path):
     return _between(path, "/api/billing-workflows/attachments/", "")
 

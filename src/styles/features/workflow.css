@@ -3,6 +3,14 @@
   min-inline-size: 0;
 }
 
+.workflow-timeline {
+  margin-top: 8px;
+}
+
+.workflow-timeline .ant-timeline-item-rail {
+  border-inline-start-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
 @media (width <= 760px) {
   [data-feature="workflow"] .ant-table-wrapper {
     overflow-x: auto;

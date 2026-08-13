@@ -349,7 +349,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       >
         <div className="panel-head">
           <div className="panel-title-line">
-            <h2>数量统计表（录入）</h2>
+            <h2>录入数量统计表</h2>
           </div>
           {headActions ? <div className="panel-head-actions">{headActions}</div> : null}
         </div>

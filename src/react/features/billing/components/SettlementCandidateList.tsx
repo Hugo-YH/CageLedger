@@ -130,29 +130,17 @@ export function SettlementCandidateList({
     onToggleAll: () => void toggleAllFiltered(),
   });
 
-  async function withdrawFor(candidate: SettlementCandidate) {
-    if (!candidate.workflowId) return;
-    try {
-      await withdrawWorkflow.mutateAsync(candidate.workflowId);
-      setSelected(null);
-      setResult(null);
-      showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，可重新发起。`, "success");
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "撤回结算流程失败", "error");
-    }
-  }
-
   async function revertFor(candidate: SettlementCandidate) {
     if (!candidate.workflowId) return;
     try {
       await advanceWorkflow.mutateAsync({
         workflowId: candidate.workflowId,
         toStatus: "statement_generated",
-        note: "撤回已发起结算流程，退回已生成",
+        note: "退回已生成",
       });
       setSelected(null);
       setResult(null);
-      showNotice(`${candidate.pi} ${candidate.month} 的结算流程已退回已生成状态。`, "success");
+      showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，退回已生成状态。`, "success");
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "撤回结算流程失败", "error");
     }
@@ -168,7 +156,7 @@ export function SettlementCandidateList({
       });
       setSelected(candidate);
       setResult(response);
-      showNotice(persist ? "结算流程已发起，可到结算与报销台账继续处理。" : "结算预览已生成。", "success");
+      showNotice(persist ? "结算流程已发起，可到单据跟踪继续处理。" : "结算预览已生成。", "success");
       return true;
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
@@ -205,7 +193,13 @@ export function SettlementCandidateList({
   async function confirmNoticeEmail() {
     if (!noticeEmail) return;
     const ok = await generateFor(noticeEmail.candidate, true);
-    if (ok) setNoticeEmail(null);
+    if (ok) {
+      setNoticeEmail(null);
+      // 预览弹窗立即反映已发起状态，无需退出重新进入。
+      setSelected((current) =>
+        current ? { ...current, hasWorkflow: true, workflowStatus: "statement_sent" } : current,
+      );
+    }
   }
 
   async function exportCandidates(candidates: SettlementCandidate[]) {
@@ -264,7 +258,7 @@ export function SettlementCandidateList({
     showNotice(
       failures.length
         ? `已发起 ${completedIds.length} 个结算流程；${failures.length} 个未完成：${failures.join("、")}`
-        : `已发起 ${completedIds.length} 个结算流程，可到结算与报销台账继续处理。`,
+        : `已发起 ${completedIds.length} 个结算流程，可到单据跟踪继续处理。`,
       failures.length ? "error" : "success",
     );
   }
@@ -295,7 +289,7 @@ export function SettlementCandidateList({
           await advanceWorkflow.mutateAsync({
             workflowId: candidate.workflowId,
             toStatus: "statement_generated",
-            note: "批量撤回已发起结算流程",
+            note: "批量撤回，退回已生成",
           });
         }
         completedIds.push(candidate.id);
@@ -323,7 +317,7 @@ export function SettlementCandidateList({
         description={
           <Space orientation="vertical" size={4}>
             <Typography.Text strong>动态笼位图结算正在调试</Typography.Text>
-            <Typography.Text type="secondary">请切换到“数量统计表（录入）”查看项目负责人结算候选列表。</Typography.Text>
+            <Typography.Text type="secondary">请切换到“录入数量统计表”查看结算管理候选列表。</Typography.Text>
           </Space>
         }
         image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -375,12 +369,7 @@ export function SettlementCandidateList({
         onInitiate={() => setBatchConfirmOpen(true)}
         onWithdraw={() => setBatchWithdrawOpen(true)}
       />
-      <div
-        className="ant-table-region settlement-candidate-list"
-        role="region"
-        tabIndex={0}
-        aria-label="项目负责人结算列表"
-      >
+      <div className="ant-table-region settlement-candidate-list" role="region" tabIndex={0} aria-label="结算管理列表">
         <DataTable
           columns={columns}
           dataSource={items}
@@ -426,7 +415,6 @@ export function SettlementCandidateList({
           hasWorkflow={Boolean(selected.hasWorkflow)}
           revertPending={advanceWorkflow.isPending}
           workflowStatus={selected.workflowStatus}
-          withdrawPending={withdrawWorkflow.isPending}
           notice={notice}
           noticeKind={noticeKind}
           pdfExporting={pdfExport.isExporting}
@@ -436,7 +424,6 @@ export function SettlementCandidateList({
           onExportPdf={() => void exportCandidates([selected])}
           onRevert={() => void revertFor(selected)}
           onStartSettlement={() => void prepareNoticeEmail(selected)}
-          onWithdraw={() => void withdrawFor(selected)}
         />
       ) : null}
       {noticeEmail ? (
