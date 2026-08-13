@@ -8,6 +8,7 @@ from server_app.shared import clean_text
 GROUP_UNITS = 12
 LEFT_COLUMN_DAYS = 15
 PRINT_ROWS = 16
+SPECIES_ORDER = {"小鼠": 0, "大鼠": 1, "豚鼠": 2, "兔": 3, "猴": 4, "猪": 5, "犬": 6, "动物": 7}
 
 
 def render_quantity_sheet_pdf(sheet):
@@ -168,8 +169,8 @@ def billing_statement_html(statement, lines):
     summaries = {column["key"]: summary_for_column(column["key"], modeled) for column in columns}
     for column in columns:
         summary = summaries[column["key"]]
-        column["showFree"] = summary["free"] > 0
-        column["showTiered"] = summary["tier"] > 0
+        column["showFree"] = column["species"] == "小鼠" and summary["free"] > 0
+        column["showTiered"] = column["species"] == "小鼠" and summary["tier"] > 0
         column["needsWideAmount"] = as_number(summary["amount"]) >= 100
     pages = settlement_pages(columns)
     total_count = display_total_count(statement, unit, summaries.values())
@@ -224,9 +225,9 @@ def statement_columns(statement, lines):
     sorted_columns = sorted(
         columns.values(),
         key=lambda item: (
+            SPECIES_ORDER.get(item["species"], len(SPECIES_ORDER)),
             order.get(item["iacuc"], 10**9),
             item["iacuc"],
-            item["species"],
             item["unit"],
             item["unitPrice"],
         ),
@@ -243,7 +244,7 @@ def statement_columns(statement, lines):
 
 
 def _statement_column_label(item):
-    return item["iacuc"] if item["species"] == "小鼠" else f"{item['iacuc']}（{item['species']}）"
+    return item["iacuc"]
 
 
 def statement_row(line, columns, unit):
@@ -273,7 +274,7 @@ def statement_row(line, columns, unit):
 
 def settlement_pages(columns):
     first = columns[:4]
-    pages = [{"slots": first + [None] * (4 - len(first)), "leading": True}]
+    pages = [{"slots": first + [None] * (4 - len(first)), "leading": any(item["species"] == "小鼠" for item in first)}]
     rest = columns[4:]
     for index in range(0, len(rest), 5):
         chunk = rest[index : index + 5]
@@ -285,18 +286,18 @@ def settlement_page_markup(
     statement, rows, page, summaries, unit, total_count, total_free, total_tier, total_payable, page_index, total_pages
 ):
     slots = page["slots"]
-    page_has_free = (total_free > 0 if page["leading"] else False) or any(
+    mouse_summaries = [summaries[slot["key"]] for slot in slots if slot and slot["species"] == "小鼠"]
+    mouse_total_count = sum(item["count"] for item in mouse_summaries)
+    mouse_total_free = sum(item["free"] for item in mouse_summaries)
+    mouse_total_tier = sum(item["tier"] for item in mouse_summaries)
+    mouse_total_payable = sum(item["amount"] for item in mouse_summaries)
+    page_has_free = (mouse_total_free > 0 if page["leading"] else False) or any(
         slot and summaries[slot["key"]]["free"] > 0 for slot in slots
     )
-    page_has_tier = (total_tier > 0 if page["leading"] else False) or any(
+    page_has_tier = (mouse_total_tier > 0 if page["leading"] else False) or any(
         slot and summaries[slot["key"]]["tier"] > 0 for slot in slots
     )
-    title_suffix = (
-        f"（减免{number_text(statement.get('freeCageAllowance'))}笼）"
-        if unit == "cage_day" and as_number(statement.get("freeCageAllowance")) > 0
-        else ""
-    )
-    title = f"{h(statement.get('pi') or '-')}课题组实验动物饲养费核算汇总表{title_suffix}"
+    title = f"{h(statement.get('pi') or '-')}课题组实验动物饲养费核算汇总表"
     all_iacucs = "、".join(dict.fromkeys(slot["iacuc"] for slot in slots if slot))
     full = "、".join(dict.fromkeys(slot["iacuc"] for slot in slots if slot and slot["fullExemption"]))
     leading_cols = "".join('<col class="col-group">' for _ in range(GROUP_UNITS)) if page["leading"] else ""
@@ -308,10 +309,9 @@ def settlement_page_markup(
         for slot in slots
     )
     leading_header = f'<th colspan="{GROUP_UNITS}">汇总</th>' if page["leading"] else ""
+    species_headers = species_group_headers(slots, page["leading"])
     leading_sub = (
-        group_headers(unit_label(unit, total=False), page_has_free, page_has_tier, total_payable >= 100)
-        if page["leading"]
-        else ""
+        group_headers("笼数", page_has_free, page_has_tier, mouse_total_payable >= 100) if page["leading"] else ""
     )
     sub_headers = "".join(
         group_headers(
@@ -327,15 +327,23 @@ def settlement_page_markup(
         leading_values = (
             group_cells(
                 {
-                    "count": row["totalCount"],
-                    "free": row["totalFree"],
-                    "tier": row["totalTier"],
-                    "amount": row["totalAmount"],
+                    "count": sum(
+                        row["values"][slot["key"]]["count"] for slot in slots if slot and slot["species"] == "小鼠"
+                    ),
+                    "free": sum(
+                        row["values"][slot["key"]]["free"] for slot in slots if slot and slot["species"] == "小鼠"
+                    ),
+                    "tier": sum(
+                        row["values"][slot["key"]]["tier"] for slot in slots if slot and slot["species"] == "小鼠"
+                    ),
+                    "amount": sum(
+                        row["values"][slot["key"]]["amount"] for slot in slots if slot and slot["species"] == "小鼠"
+                    ),
                 },
                 page_has_free,
                 page_has_tier,
                 True,
-                total_payable >= 100,
+                mouse_total_payable >= 100,
             )
             if page["leading"]
             else ""
@@ -361,11 +369,16 @@ def settlement_page_markup(
     )
     leading_totals = (
         group_cells(
-            {"count": total_count, "free": total_free, "tier": total_tier, "amount": total_payable},
+            {
+                "count": mouse_total_count,
+                "free": mouse_total_free,
+                "tier": mouse_total_tier,
+                "amount": mouse_total_payable,
+            },
             page_has_free,
             page_has_tier,
             True,
-            total_payable >= 100,
+            mouse_total_payable >= 100,
         )
         if page["leading"]
         else ""
@@ -386,8 +399,28 @@ def settlement_page_markup(
     return f"""<main class="document {"document-page-break" if page_index < total_pages - 1 else ""}">
 <section class="header"><div class="header-grid"><div class="header-main"><h1>{title}</h1><div class="meta"><div>单据编号：{document_number}</div><div>结算月份：{h(statement.get("month"))}</div><div>项目负责人：{h(statement.get("pi"))}</div></div></div></div></section>
 <table class="meta-table"><tbody><tr><td>出具科室：实验动物中心</td><td>计费单位：{unit_display(unit)}</td><td colspan="2">实验负责人：{h(statement.get("owner") or "-")}</td></tr><tr><td colspan="4">IACUC 编号：{h(all_iacucs or "-")} {f"　全额减免：{h(full)}" if full else ""}</td></tr><tr><td colspan="4">支撑经费：{h(statement.get("funding") or "-")}</td></tr></tbody></table>
-<table class="summary-table"><colgroup><col class="col-date">{leading_cols}{columns_cols}</colgroup><thead><tr><th class="date-column" rowspan="2">日期</th>{leading_header}{headers}</tr><tr>{leading_sub}{sub_headers}</tr></thead><tbody>{"".join(detail_rows)}</tbody><tfoot><tr><td class="row-label">单项合计</td>{leading_totals}{total_values}</tr><tr>{leading_summary}{meta_summary}</tr></tfoot></table>
+<table class="summary-table"><colgroup><col class="col-date">{leading_cols}{columns_cols}</colgroup><thead><tr><th class="date-column" rowspan="3">日期</th>{species_headers}</tr><tr>{leading_header}{headers}</tr><tr>{leading_sub}{sub_headers}</tr></thead><tbody>{"".join(detail_rows)}</tbody><tfoot><tr><td class="row-label">单项合计</td>{leading_totals}{total_values}</tr><tr>{leading_summary}{meta_summary}</tr></tfoot></table>
 <div class="note-line">说明：{h(statement.get("notes") or "")}</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><div class="page-footer">第 {page_index + 1} / {total_pages} 页</div></main>"""
+
+
+def species_group_headers(slots, has_mouse_summary):
+    groups = []
+    for slot in slots:
+        species = slot["species"] if slot else ""
+        if groups and groups[-1]["species"] == species:
+            groups[-1]["span"] += GROUP_UNITS
+        else:
+            groups.append({"species": species, "span": GROUP_UNITS})
+    if has_mouse_summary and groups and groups[0]["species"] == "小鼠":
+        groups[0]["span"] += GROUP_UNITS
+    elif has_mouse_summary:
+        groups.insert(0, {"species": "小鼠", "span": GROUP_UNITS})
+    return "".join(
+        f'<th colspan="{group["span"]}" class="column-empty"></th>'
+        if not group["species"]
+        else f'<th colspan="{group["span"]}">{h(group["species"])}</th>'
+        for group in groups
+    )
 
 
 def group_headers(count_label, show_free, show_tier, needs_wide_amount=False):
@@ -583,7 +616,7 @@ def quantity_styles():
 
 
 def settlement_styles():
-    return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td,.custom-billing-table th,.custom-billing-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(2) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.custom-billing-details{padding-top:10mm;break-inside:avoid;page-break-inside:avoid}.custom-billing-details h1{justify-content:flex-start}.custom-billing-details p{margin:4px 0}.custom-billing-table th{background:#f1f5f4}.custom-billing-table td{height:8mm;word-break:break-word}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{padding:2px 3px}.summary-table thead tr:nth-child(2) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
+    return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td,.custom-billing-table th,.custom-billing-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(3) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.custom-billing-details{padding-top:10mm;break-inside:avoid;page-break-inside:avoid}.custom-billing-details h1{justify-content:flex-start}.custom-billing-details p{margin:4px 0}.custom-billing-table th{background:#f1f5f4}.custom-billing-table td{height:8mm;word-break:break-word}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{padding:2px 3px}.summary-table thead tr:nth-child(3) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
 
 
 def document_html(title, styles, body):

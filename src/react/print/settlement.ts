@@ -1,16 +1,15 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
 import { customBillingDetailsMarkup } from "./settlementCustomBilling";
 import {
-  columnBaseLabel,
   displayUnitLabel,
   documentNumberFor,
   escapeHtml,
   money,
   normalizeIacuc,
-  numberText,
   resolveDisplayLineCount,
-  resolveDisplayTotalCount,
+  compareSettlementSpecies,
   settlementPrintStyles,
+  settlementSpeciesHeaders,
   settlementStatementDocumentTitle,
   speciesLabelFor,
 } from "./settlementSupport";
@@ -94,22 +93,15 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
     const summary = totalsByKey.get(column.key) || emptySummary();
     return {
       ...column,
-      showFree: summary.free > 0,
-      showTiered: summary.tier2Billable > 0,
+      showFree: column.speciesLabel === "小鼠" && summary.free > 0,
+      showTiered: column.speciesLabel === "小鼠" && summary.tier2Billable > 0,
       span: 2 + (summary.free > 0 ? 1 : 0) + (summary.tier2Billable > 0 ? 1 : 0),
       needsWideAmount: summary.amount >= 100,
     };
   });
   const pagedColumns = paginateColumns(columns);
   const documentNumber = statement.documentNumber || documentNumberFor(statement);
-  const titleSuffix =
-    unit === "cage_day" && Number(statement.freeCageAllowance || 0) > 0
-      ? `（减免${numberText(statement.freeCageAllowance)}笼）`
-      : "";
-  const title = `${escapeHtml(statement.pi || "-")}课题组实验动物饲养费核算汇总表${titleSuffix}`;
-  const totalCount = resolveDisplayTotalCount(statement, unit, totals);
-  const totalFree = Number(statement.totalFreeCageDays || 0);
-  const totalTier2 = Number(statement.totalTier2CageDays || 0);
+  const title = `${escapeHtml(statement.pi || "-")}课题组实验动物饲养费核算汇总表`;
   const totalPayable = totals.reduce((sum, item) => sum + item.amount, 0);
   const allIacucs = [...new Set(columns.map((column) => column.iacuc))];
   const fullExemptionIacucs = [
@@ -124,27 +116,51 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         summary: slot.column ? totals.find((item) => item.key === slot.column?.key) || emptySummary() : emptySummary(),
       }));
       const pageHasFree = page.showLeadingTotals
-        ? totalFree > 0 || resolvedSlots.some((slot) => slot.summary.free > 0)
+        ? resolvedSlots.filter((slot) => slot.column?.speciesLabel === "小鼠").some((slot) => slot.summary.free > 0)
         : resolvedSlots.some((slot) => slot.summary.free > 0);
       const pageHasTier = page.showLeadingTotals
-        ? totalTier2 > 0 || resolvedSlots.some((slot) => slot.summary.tier2Billable > 0)
+        ? resolvedSlots
+            .filter((slot) => slot.column?.speciesLabel === "小鼠")
+            .some((slot) => slot.summary.tier2Billable > 0)
         : resolvedSlots.some((slot) => slot.summary.tier2Billable > 0);
+      const mouseSlots = resolvedSlots.filter((slot) => slot.column?.speciesLabel === "小鼠");
+      const mouseTotals = mouseSlots.reduce(
+        (summary, slot) => ({
+          count: summary.count + slot.summary.count,
+          free: summary.free + slot.summary.free,
+          amount: summary.amount + slot.summary.amount,
+          tier2Billable: summary.tier2Billable + slot.summary.tier2Billable,
+        }),
+        { count: 0, free: 0, amount: 0, tier2Billable: 0 },
+      );
       const detailRows = model
         .map((row) => {
           const leadingCells = page.showLeadingTotals
             ? renderGroupCells(
                 {
-                  count: row.totalCount,
-                  free: row.totalFree,
+                  count: mouseSlots.reduce(
+                    (sum, slot) => sum + (slot.column ? row.perColumn.get(slot.column.key)?.count || 0 : 0),
+                    0,
+                  ),
+                  free: mouseSlots.reduce(
+                    (sum, slot) => sum + (slot.column ? row.perColumn.get(slot.column.key)?.free || 0 : 0),
+                    0,
+                  ),
                   support: 0,
-                  amount: row.totalAmount,
-                  tier2Billable: row.totalTier2,
+                  amount: mouseSlots.reduce(
+                    (sum, slot) => sum + (slot.column ? row.perColumn.get(slot.column.key)?.amount || 0 : 0),
+                    0,
+                  ),
+                  tier2Billable: mouseSlots.reduce(
+                    (sum, slot) => sum + (slot.column ? row.perColumn.get(slot.column.key)?.tier2Billable || 0 : 0),
+                    0,
+                  ),
                   hasRecord: false,
                 },
                 pageHasFree,
                 pageHasTier,
                 true,
-                totalPayable >= 100,
+                mouseTotals.amount >= 100,
               )
             : "";
           const valueCells = resolvedSlots
@@ -180,6 +196,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
           )}</th>`;
         })
         .join("");
+      const speciesMarkup = settlementSpeciesHeaders(resolvedSlots, page.showLeadingTotals, GROUP_GRID_UNITS);
       const subColumns = resolvedSlots
         .map((slot) =>
           renderGroupHeaders(
@@ -211,27 +228,22 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         : "";
       const leadingHeaderMarkup = page.showLeadingTotals ? `<th colspan="${GROUP_GRID_UNITS}">汇总</th>` : "";
       const leadingSubHeaderMarkup = page.showLeadingTotals
-        ? renderGroupHeaders(
-            unit === "animal_day" ? "数量" : unit === "mixed" ? "数量" : "笼数",
-            pageHasFree,
-            pageHasTier,
-            totalPayable >= 100,
-          )
+        ? renderGroupHeaders("笼数", pageHasFree, pageHasTier, mouseTotals.amount >= 100)
         : "";
       const leadingTotalsRowMarkup = page.showLeadingTotals
         ? renderGroupCells(
             {
-              count: totalCount,
-              free: totalFree,
+              count: mouseTotals.count,
+              free: mouseTotals.free,
               support: 0,
-              amount: totalPayable,
-              tier2Billable: totalTier2,
+              amount: mouseTotals.amount,
+              tier2Billable: mouseTotals.tier2Billable,
               hasRecord: false,
             },
             pageHasFree,
             pageHasTier,
             true,
-            totalPayable >= 100,
+            mouseTotals.amount >= 100,
           )
         : "";
       return `<main class="document document-page${pageIndex < totalPages - 1 ? " document-page-break" : ""}"><section class="header"><div class="header-grid"><div class="header-main"><h1>${title}</h1><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div></div></section>
@@ -240,7 +252,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         .map(() => Array.from({ length: GROUP_GRID_UNITS }, () => '<col class="col-group" />').join(""))
         .join(
           "",
-        )}</colgroup><thead><tr><th class="date-column" rowspan="2">日期</th>${leadingHeaderMarkup}${columnsMarkup}</tr><tr>${leadingSubHeaderMarkup}${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td>${leadingTotalsRowMarkup}${detailTotals}</tr>${summaryRow}</tfoot></table>${footerBlock}${pageFooter}</main>`;
+        )}</colgroup><thead><tr><th class="date-column" rowspan="3">日期</th>${speciesMarkup}</tr><tr>${leadingHeaderMarkup}${columnsMarkup}</tr><tr>${leadingSubHeaderMarkup}${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td>${leadingTotalsRowMarkup}${detailTotals}</tr>${summaryRow}</tfoot></table>${footerBlock}${pageFooter}</main>`;
     })
     .join("");
   return `${statementPages}${customBillingDetailsMarkup(lines)}`;
@@ -264,7 +276,7 @@ function paginateColumns(columns: SettlementColumn[]) {
   const firstPageSlots = columns.slice(0, 4);
   pages.push({
     slots: padPageSlots(firstPageSlots),
-    showLeadingTotals: true,
+    showLeadingTotals: firstPageSlots.some((column) => column.speciesLabel === "小鼠"),
   });
   const rest = columns.slice(4);
   for (let index = 0; index < Math.max(rest.length, 1); index += 5) {
@@ -314,14 +326,14 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
     }),
   );
   const sorted = [...columns.values()].sort((left, right) => {
+    const speciesSort = compareSettlementSpecies(left.speciesLabel, right.speciesLabel);
+    if (speciesSort) return speciesSort;
     const iacucSort =
       (iacucOrder.get(left.iacuc) ?? Number.MAX_SAFE_INTEGER) -
       (iacucOrder.get(right.iacuc) ?? Number.MAX_SAFE_INTEGER);
     if (iacucSort) return iacucSort;
     const iacucTextSort = left.iacuc.localeCompare(right.iacuc, "zh-CN");
     if (iacucTextSort) return iacucTextSort;
-    const speciesSort = left.speciesLabel.localeCompare(right.speciesLabel, "zh-CN");
-    if (speciesSort) return speciesSort;
     const unitSort = left.billingUnit.localeCompare(right.billingUnit, "zh-CN");
     if (unitSort) return unitSort;
     if (left.unitPrice !== right.unitPrice) return left.unitPrice - right.unitPrice;
@@ -329,11 +341,11 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
   });
   const duplicateCounts = new Map<string, number>();
   sorted.forEach((column) => {
-    const baseLabel = columnBaseLabel(column);
+    const baseLabel = column.iacuc;
     duplicateCounts.set(baseLabel, (duplicateCounts.get(baseLabel) || 0) + 1);
   });
   return sorted.map((column) => {
-    const baseLabel = columnBaseLabel(column);
+    const baseLabel = column.iacuc;
     const hasDuplicate = (duplicateCounts.get(baseLabel) || 0) > 1;
     const suffix = hasDuplicate ? ` / ¥${money(column.unitPrice)}` : "";
     return {

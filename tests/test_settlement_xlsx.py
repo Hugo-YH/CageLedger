@@ -112,7 +112,7 @@ class SettlementXlsxTests(unittest.TestCase):
         )
         worksheet = workbook["李教授 2026-07 结算单"]
 
-        self.assertIn("李教授", str(worksheet["A1"].value))
+        self.assertEqual(worksheet["A1"].value, "李教授课题组实验动物饲养费核算汇总表")
         amount_formula_cells = [
             cell
             for row in worksheet.iter_rows()
@@ -169,6 +169,60 @@ class SettlementXlsxTests(unittest.TestCase):
         # 自定义金额已包含在每日列金额中，应付总计不得再加自定义合计（避免重复计入）
         self.assertNotIn("+", str(payable_cell.value))
         self.assertIn("自定义收费明细", str(worksheet.cell(payable_label.row + 2, 1).value))
+
+    def test_groups_iacuc_columns_by_species_and_limits_summary_to_mice(self):
+        statement, lines = sample_entry()
+        lines[0]["iacucBreakdown"].extend(
+            [
+                standard_item(
+                    "R1",
+                    3,
+                    0,
+                    0,
+                    0,
+                    species="rat",
+                    billingItem="rat_standard",
+                    billingUnit="cage_day",
+                    statementTiered=False,
+                    statementFreeAllowance=False,
+                    tiered=False,
+                    freeAllowance=False,
+                ),
+                standard_item(
+                    "M1",
+                    2,
+                    0,
+                    0,
+                    0,
+                    species="monkey",
+                    billingItem="monkey",
+                    billingUnit="animal_day",
+                    animalCount=2,
+                    cageCount=0,
+                    statementTiered=False,
+                    statementFreeAllowance=False,
+                    tiered=False,
+                    freeAllowance=False,
+                ),
+            ]
+        )
+        statement["iacucs"] = ["R1", "Z2", "M1", "Z1"]
+        workbook = load_workbook(io.BytesIO(build_settlement_workbook([(statement, lines)])))
+        worksheet = workbook["李教授 2026-07 结算单"]
+
+        self.assertEqual(worksheet["B7"].value, "小鼠")
+        self.assertEqual(worksheet["L7"].value, "大鼠")
+        self.assertEqual(worksheet["N7"].value, "猴")
+        self.assertEqual(worksheet["B8"].value, "汇总")
+        self.assertEqual(worksheet["L8"].value, "R1")
+        self.assertEqual(worksheet["N8"].value, "M1")
+        self.assertEqual(worksheet["L9"].value, "笼数")
+        self.assertEqual(worksheet["M9"].value, "缴纳（元）")
+        self.assertEqual(worksheet["N9"].value, "数量")
+        self.assertEqual(worksheet["O9"].value, "缴纳（元）")
+        self.assertNotIn(
+            "减免", [worksheet["L9"].value, worksheet["M9"].value, worksheet["N9"].value, worksheet["O9"].value]
+        )
 
 
 if __name__ == "__main__":

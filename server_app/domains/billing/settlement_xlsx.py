@@ -26,6 +26,16 @@ _MONEY_FORMAT = "#,##0.00"
 _INTEGER_FORMAT = "0"
 
 _UNIT_LABELS = {"cage_day": "笼/天", "animal_day": "只/天", "mixed": "混合"}
+_SPECIES_ORDER = {"mouse": 0, "rat": 1, "guinea_pig": 2, "rabbit": 3, "monkey": 4, "pig": 5, "dog": 6}
+_SPECIES_LABELS = {
+    "mouse": "小鼠",
+    "rat": "大鼠",
+    "guinea_pig": "豚鼠",
+    "rabbit": "兔",
+    "monkey": "猴",
+    "pig": "猪",
+    "dog": "犬",
+}
 
 
 def _as_int(value):
@@ -91,7 +101,15 @@ def _statement_columns(statement, lines):
             for column in columns:
                 if column["key"] == key:
                     column["hasCustom"] = True
-    columns.sort(key=lambda column: iacuc_order.get(column["iacuc"], 10**9))
+    columns.sort(
+        key=lambda column: (
+            _SPECIES_ORDER.get(column["species"], len(_SPECIES_ORDER)),
+            iacuc_order.get(column["iacuc"], 10**9),
+            column["iacuc"],
+            column["unit"],
+            column["basePrice"],
+        )
+    )
     return columns
 
 
@@ -244,6 +262,10 @@ def _count_label(unit):
     return "笼数"
 
 
+def _species_label(value):
+    return _SPECIES_LABELS.get(str(value or "").strip().lower(), str(value or "动物"))
+
+
 def _leading_count_label(unit):
     if unit == "animal_day":
         return "总数量"
@@ -282,22 +304,23 @@ def _write_statement_sheet(worksheet, statement, lines):
             totals[key]["amount"] += cell["amount"]
     for column in columns:
         summary = totals[column["key"]]
-        column["showFree"] = summary["free"] > 0
-        column["showTier"] = summary["tier2"] > 0
-    leading_free = any(column["showFree"] for column in columns)
-    leading_tier = any(column["showTier"] for column in columns)
+        column["showFree"] = column["species"] == "mouse" and summary["free"] > 0
+        column["showTier"] = column["species"] == "mouse" and summary["tier2"] > 0
+    mouse_columns = [column for column in columns if column["species"] == "mouse"]
+    leading_free = any(column["showFree"] for column in mouse_columns)
+    leading_tier = any(column["showTier"] for column in mouse_columns)
+    has_mouse_summary = bool(mouse_columns)
     unit = str(statement.get("billingUnit") or "cage_day")
 
     row = 1
     title = f"{statement.get('pi') or '-'}课题组实验动物饲养费核算汇总表"
-    if unit == "cage_day" and _as_int(statement.get("freeCageAllowance")) > 0:
-        title = f"{title}（减免{statement.get('freeCageAllowance')}笼）"
 
-    # 计算总列数：日期 + 汇总块(2~4) + 各列组(2~4)
-    leading_width = 2 + (1 if leading_free else 0) + (1 if leading_tier else 0)
-    total_columns = (
+    # 计算总列数：日期 + 小鼠汇总块（仅小鼠） + 各品系 IACUC 分列。
+    leading_width = (2 + (1 if leading_free else 0) + (1 if leading_tier else 0)) if has_mouse_summary else 0
+    table_columns = (
         1 + leading_width + sum(2 + (1 if c["showFree"] else 0) + (1 if c["showTier"] else 0) for c in columns)
     )
+    total_columns = max(table_columns, 8)
 
     worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=total_columns)
     title_cell = worksheet.cell(row, 1, title)
@@ -405,16 +428,18 @@ def _write_statement_sheet(worksheet, statement, lines):
 
     # 计算各列实际位置
     current = 2
-    leading = {"count": current}
-    current += 1
-    if leading_free:
-        leading["free"] = current
+    leading = {}
+    if has_mouse_summary:
+        leading["count"] = current
         current += 1
-    if leading_tier:
-        leading["tier"] = current
+        if leading_free:
+            leading["free"] = current
+            current += 1
+        if leading_tier:
+            leading["tier"] = current
+            current += 1
+        leading["amount"] = current
         current += 1
-    leading["amount"] = current
-    current += 1
     positions = []
     for column in columns:
         position = {"count": current}
@@ -429,63 +454,85 @@ def _write_statement_sheet(worksheet, statement, lines):
         current += 1
         positions.append(position)
 
-    header_group_row = row
-    header_sub_row = row + 1
-    first_data_row = row + 2
+    header_species_row = row
+    header_group_row = row + 1
+    header_sub_row = row + 2
+    first_data_row = row + 3
     last_data_row = first_data_row + max(len(rows) - 1, 0)
 
-    worksheet.merge_cells(start_row=header_group_row, start_column=1, end_row=header_sub_row, end_column=1)
-    date_header = worksheet.cell(header_group_row, 1, "日期")
+    worksheet.merge_cells(start_row=header_species_row, start_column=1, end_row=header_sub_row, end_column=1)
+    date_header = worksheet.cell(header_species_row, 1, "日期")
     date_header.font = _HEADER_FONT
     date_header.fill = _HEADER_FILL
     date_header.alignment = Alignment(horizontal="center", vertical="center")
     date_header.border = _BORDER
-    worksheet.cell(header_sub_row, 1).border = _BORDER
-    worksheet.cell(header_sub_row, 1).fill = _HEADER_FILL
+    for header_row in (header_group_row, header_sub_row):
+        worksheet.cell(header_row, 1).border = _BORDER
+        worksheet.cell(header_row, 1).fill = _HEADER_FILL
 
-    leading_start = leading["count"]
-    leading_end = leading["amount"]
-    worksheet.merge_cells(
-        start_row=header_group_row,
-        start_column=leading_start,
-        end_row=header_group_row,
-        end_column=leading_end,
-    )
-    leading_header = worksheet.cell(header_group_row, leading_start, "汇总")
-    leading_header.font = _HEADER_FONT
-    leading_header.fill = _HEADER_FILL
-    leading_header.alignment = Alignment(horizontal="center", vertical="center")
-    for column_index in range(leading_start, leading_end + 1):
-        worksheet.cell(header_group_row, column_index).border = _BORDER
-        worksheet.cell(header_group_row, column_index).fill = _HEADER_FILL
-    leading_sub = [
-        (leading["count"], _leading_count_label(unit)),
-    ]
-    if leading_free:
-        leading_sub.append((leading["free"], "减免总笼数" if unit == "cage_day" else "减免总数量"))
-    if leading_tier:
-        leading_sub.append((leading["tier"], "阶梯总笼数" if unit == "cage_day" else "阶梯总数量"))
-    leading_sub.append((leading["amount"], "金额"))
-    for column_index, label in leading_sub:
-        cell = worksheet.cell(header_sub_row, column_index, label)
+    species_ranges = []
+    for column, position in zip(columns, positions, strict=True):
+        start = position["count"]
+        end = position["amount"]
+        if species_ranges and species_ranges[-1]["species"] == column["species"]:
+            species_ranges[-1]["end"] = end
+        else:
+            species_ranges.append({"species": column["species"], "start": start, "end": end})
+    if has_mouse_summary:
+        species_ranges[0]["start"] = leading["count"]
+    for item in species_ranges:
+        worksheet.merge_cells(
+            start_row=header_species_row,
+            start_column=item["start"],
+            end_row=header_species_row,
+            end_column=item["end"],
+        )
+        cell = worksheet.cell(header_species_row, item["start"], _species_label(item["species"]))
         cell.font = _HEADER_FONT
         cell.fill = _HEADER_FILL
         cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = _BORDER
+        for column_index in range(item["start"], item["end"] + 1):
+            worksheet.cell(header_species_row, column_index).border = _BORDER
+            worksheet.cell(header_species_row, column_index).fill = _HEADER_FILL
+
+    if has_mouse_summary:
+        leading_start = leading["count"]
+        leading_end = leading["amount"]
+        worksheet.merge_cells(
+            start_row=header_group_row,
+            start_column=leading_start,
+            end_row=header_group_row,
+            end_column=leading_end,
+        )
+        leading_header = worksheet.cell(header_group_row, leading_start, "汇总")
+        leading_header.font = _HEADER_FONT
+        leading_header.fill = _HEADER_FILL
+        leading_header.alignment = Alignment(horizontal="center", vertical="center")
+        for column_index in range(leading_start, leading_end + 1):
+            worksheet.cell(header_group_row, column_index).border = _BORDER
+            worksheet.cell(header_group_row, column_index).fill = _HEADER_FILL
+        leading_sub = [(leading["count"], _leading_count_label("cage_day"))]
+        if leading_free:
+            leading_sub.append((leading["free"], "减免总笼数"))
+        if leading_tier:
+            leading_sub.append((leading["tier"], "阶梯总笼数"))
+        leading_sub.append((leading["amount"], "缴纳（元）"))
+        for column_index, label in leading_sub:
+            cell = worksheet.cell(header_sub_row, column_index, label)
+            cell.font = _HEADER_FONT
+            cell.fill = _HEADER_FILL
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = _BORDER
 
     base_counts = {}
     for column in columns:
         base = str(column["iacuc"] or "-")
-        if column["species"] and column["species"] != "mouse":
-            base = f"{base}（{column['species']}）"
         base_counts[base] = base_counts.get(base, 0) + 1
 
     for group_index, column in enumerate(columns):
         start = positions[group_index]["count"]
         end = positions[group_index]["amount"]
         label = str(column["iacuc"] or "-")
-        if column["species"] and column["species"] != "mouse":
-            label = f"{label}（{column['species']}）"
         if base_counts[label] > 1:
             label = f"{label} / ¥{column['basePrice']:.2f}"
         if column["showTier"]:
@@ -507,7 +554,7 @@ def _write_statement_sheet(worksheet, statement, lines):
             sub_headers.append("减免")
         if column["showTier"]:
             sub_headers.append("阶梯")
-        sub_headers.append("金额")
+        sub_headers.append("缴纳（元）")
         for sub_index, sub_label in enumerate(sub_headers):
             cell = worksheet.cell(header_sub_row, start + sub_index, sub_label)
             cell.font = _HEADER_FONT
@@ -521,10 +568,10 @@ def _write_statement_sheet(worksheet, statement, lines):
         date_cell.font = _BODY_FONT
         date_cell.border = _BORDER
         date_cell.alignment = Alignment(horizontal="center", vertical="center")
-        count_refs = []
-        free_refs = []
-        tier_refs = []
-        amount_refs = []
+        mouse_count_refs = []
+        mouse_free_refs = []
+        mouse_tier_refs = []
+        mouse_amount_refs = []
         for group_index, column in enumerate(columns):
             position = positions[group_index]
             cell = day["perColumn"].get(column["key"], {"count": 0, "free": 0, "tier1": 0, "tier2": 0, "amount": 0.0})
@@ -533,21 +580,24 @@ def _write_statement_sheet(worksheet, statement, lines):
             count_cell.border = _BORDER
             count_cell.number_format = _INTEGER_FORMAT
             count_cell.alignment = Alignment(horizontal="center", vertical="center")
-            count_refs.append(position["count"])
+            if column["species"] == "mouse":
+                mouse_count_refs.append(position["count"])
             if column["showFree"]:
                 free_cell = worksheet.cell(data_row, position["free"], cell["free"])
                 free_cell.font = _BODY_FONT
                 free_cell.border = _BORDER
                 free_cell.number_format = _INTEGER_FORMAT
                 free_cell.alignment = Alignment(horizontal="center", vertical="center")
-                free_refs.append(position["free"])
+                if column["species"] == "mouse":
+                    mouse_free_refs.append(position["free"])
             if column["showTier"]:
                 tier_cell = worksheet.cell(data_row, position["tier"], cell["tier2"])
                 tier_cell.font = _BODY_FONT
                 tier_cell.border = _BORDER
                 tier_cell.number_format = _INTEGER_FORMAT
                 tier_cell.alignment = Alignment(horizontal="center", vertical="center")
-                tier_refs.append(position["tier"])
+                if column["species"] == "mouse":
+                    mouse_tier_refs.append(position["tier"])
             amount_cell = worksheet.cell(data_row, position["amount"])
             if column["hasCustom"]:
                 amount_cell.value = cell["amount"]
@@ -563,33 +613,35 @@ def _write_statement_sheet(worksheet, statement, lines):
             amount_cell.font = _BODY_FONT
             amount_cell.border = _BORDER
             amount_cell.number_format = _MONEY_FORMAT
-            amount_refs.append(position["amount"])
+            if column["species"] == "mouse":
+                mouse_amount_refs.append(position["amount"])
 
         def ref_list(cells, current_row=data_row):
             return "+".join(f"{get_column_letter(cell)}{current_row}" for cell in cells)
 
-        leading_count_cell = worksheet.cell(data_row, leading["count"], f"={ref_list(count_refs)}")
-        leading_count_cell.font = _BODY_FONT
-        leading_count_cell.border = _BORDER
-        leading_count_cell.number_format = _INTEGER_FORMAT
-        leading_count_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if leading_free:
-            cell = worksheet.cell(data_row, leading["free"], f"={ref_list(free_refs)}")
-            cell.font = _BODY_FONT
-            cell.border = _BORDER
-            cell.number_format = _INTEGER_FORMAT
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-        if leading_tier:
-            cell = worksheet.cell(data_row, leading["tier"], f"={ref_list(tier_refs)}")
-            cell.font = _BODY_FONT
-            cell.border = _BORDER
-            cell.number_format = _INTEGER_FORMAT
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-        leading_amount_cell = worksheet.cell(data_row, leading["amount"], f"={ref_list(amount_refs)}")
-        leading_amount_cell.font = _BODY_FONT
-        leading_amount_cell.border = _BORDER
-        leading_amount_cell.number_format = _MONEY_FORMAT
-        leading_amount_cell.alignment = Alignment(horizontal="center", vertical="center")
+        if has_mouse_summary:
+            leading_count_cell = worksheet.cell(data_row, leading["count"], f"={ref_list(mouse_count_refs)}")
+            leading_count_cell.font = _BODY_FONT
+            leading_count_cell.border = _BORDER
+            leading_count_cell.number_format = _INTEGER_FORMAT
+            leading_count_cell.alignment = Alignment(horizontal="center", vertical="center")
+            if leading_free:
+                cell = worksheet.cell(data_row, leading["free"], f"={ref_list(mouse_free_refs)}")
+                cell.font = _BODY_FONT
+                cell.border = _BORDER
+                cell.number_format = _INTEGER_FORMAT
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            if leading_tier:
+                cell = worksheet.cell(data_row, leading["tier"], f"={ref_list(mouse_tier_refs)}")
+                cell.font = _BODY_FONT
+                cell.border = _BORDER
+                cell.number_format = _INTEGER_FORMAT
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            leading_amount_cell = worksheet.cell(data_row, leading["amount"], f"={ref_list(mouse_amount_refs)}")
+            leading_amount_cell.font = _BODY_FONT
+            leading_amount_cell.border = _BORDER
+            leading_amount_cell.number_format = _MONEY_FORMAT
+            leading_amount_cell.alignment = Alignment(horizontal="center", vertical="center")
 
     totals_row = last_data_row + 1
     summary_label = worksheet.cell(totals_row, 1, "单项合计")
@@ -606,12 +658,13 @@ def _write_statement_sheet(worksheet, statement, lines):
         cell.number_format = number_format
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    sum_cell(totals_row, leading["count"], _INTEGER_FORMAT)
-    if leading_free:
-        sum_cell(totals_row, leading["free"], _INTEGER_FORMAT)
-    if leading_tier:
-        sum_cell(totals_row, leading["tier"], _INTEGER_FORMAT)
-    sum_cell(totals_row, leading["amount"], _MONEY_FORMAT)
+    if has_mouse_summary:
+        sum_cell(totals_row, leading["count"], _INTEGER_FORMAT)
+        if leading_free:
+            sum_cell(totals_row, leading["free"], _INTEGER_FORMAT)
+        if leading_tier:
+            sum_cell(totals_row, leading["tier"], _INTEGER_FORMAT)
+        sum_cell(totals_row, leading["amount"], _MONEY_FORMAT)
     for position in positions:
         for field in ("count", "free", "tier"):
             if field in position:
@@ -619,23 +672,27 @@ def _write_statement_sheet(worksheet, statement, lines):
         sum_cell(totals_row, position["amount"], _MONEY_FORMAT)
 
     payable_row = totals_row + 1
-    worksheet.merge_cells(start_row=payable_row, start_column=1, end_row=payable_row, end_column=leading["amount"] - 1)
+    payable_amount_column = leading["amount"] if has_mouse_summary else positions[0]["amount"]
+    worksheet.merge_cells(
+        start_row=payable_row, start_column=1, end_row=payable_row, end_column=payable_amount_column - 1
+    )
     payable_label = worksheet.cell(payable_row, 1, "本月待缴纳饲养费总计（元）")
     payable_label.font = _HEADER_FONT
     payable_label.fill = _TOTAL_FILL
     payable_label.alignment = Alignment(horizontal="right", vertical="center")
-    for column_index in range(1, leading["amount"]):
+    for column_index in range(1, payable_amount_column):
         worksheet.cell(payable_row, column_index).border = _BORDER
         worksheet.cell(payable_row, column_index).fill = _TOTAL_FILL
-    payable_cell = worksheet.cell(payable_row, leading["amount"])
-    payable_cell.value = f"=SUM({get_column_letter(leading['amount'])}{first_data_row}:{get_column_letter(leading['amount'])}{last_data_row})"
+    payable_cell = worksheet.cell(payable_row, payable_amount_column)
+    amount_columns = [position["amount"] for position in positions]
+    payable_cell.value = f"=SUM({','.join(f'{get_column_letter(column)}{totals_row}' for column in amount_columns)})"
     payable_cell.font = _HEADER_FONT
     payable_cell.fill = _TOTAL_FILL
     payable_cell.border = _BORDER
     payable_cell.number_format = _MONEY_FORMAT
     payable_cell.alignment = Alignment(horizontal="center", vertical="center")
-    worksheet.cell(payable_row, leading["amount"] + 1).border = _BORDER
-    worksheet.cell(payable_row, leading["amount"] + 1).fill = _TOTAL_FILL
+    worksheet.cell(payable_row, payable_amount_column + 1).border = _BORDER
+    worksheet.cell(payable_row, payable_amount_column + 1).fill = _TOTAL_FILL
 
     _write_custom_appendix(worksheet, custom_rows, payable_row + 2)
 
@@ -655,6 +712,6 @@ def _write_statement_sheet(worksheet, statement, lines):
     worksheet.column_dimensions["A"].width = 12
     for column_index in range(2, total_columns + 1):
         worksheet.column_dimensions[get_column_letter(column_index)].width = 9
-    worksheet.column_dimensions[get_column_letter(leading["amount"])].width = 12
+    worksheet.column_dimensions[get_column_letter(payable_amount_column)].width = 12
     for position in positions:
         worksheet.column_dimensions[get_column_letter(position["amount"])].width = 12

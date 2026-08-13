@@ -89,6 +89,59 @@ class PdfExportTests(unittest.TestCase):
             self.assertEqual(archive.namelist(), ["张教授.pdf", "张教授 (2).pdf"])
             self.assertTrue(archive.read("张教授.pdf").startswith(b"%PDF"))
 
+    def test_settlement_html_groups_iacucs_under_species_headers(self):
+        statement = {
+            "id": "species-summary",
+            "month": "2026-06",
+            "pi": "张教授",
+            "sourceType": "pi_merged_quantity_sheet",
+            "billingUnit": "mixed",
+            "iacucs": ["R1", "Z1", "M1"],
+        }
+        lines = [
+            {
+                "date": "2026-06-01",
+                "animalCount": 1,
+                "cageCount": 8,
+                "amount": 58.5,
+                "iacucBreakdown": [
+                    {
+                        "iacuc": "R1",
+                        "species": "rat",
+                        "cageCount": 2,
+                        "payableAmount": 17,
+                        "billingUnit": "cage_day",
+                        "unitPrice": 8.5,
+                    },
+                    {
+                        "iacuc": "Z1",
+                        "species": "mouse",
+                        "cageCount": 6,
+                        "freeCages": 2,
+                        "payableAmount": 18,
+                        "billingUnit": "cage_day",
+                        "unitPrice": 4.5,
+                    },
+                    {
+                        "iacuc": "M1",
+                        "species": "monkey",
+                        "animalCount": 1,
+                        "payableAmount": 23.5,
+                        "billingUnit": "animal_day",
+                        "unitPrice": 23.5,
+                    },
+                ],
+            }
+        ]
+        html = billing_statement_html(statement, lines)
+        self.assertIn("<h1>张教授课题组实验动物饲养费核算汇总表</h1>", html)
+        self.assertIn('rowspan="3">日期', html)
+        self.assertIn('colspan="24">小鼠', html)
+        self.assertIn('colspan="12">大鼠', html)
+        self.assertIn('colspan="12">猴', html)
+        self.assertIn('colspan="12">汇总', html)
+        self.assertIn('colspan="6">数量', html)
+
     def test_custom_billing_details_are_rendered_in_quantity_and_settlement_documents(self):
         sheet = {
             "id": "custom-sheet",

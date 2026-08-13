@@ -351,8 +351,8 @@ describe("print templates", () => {
       ],
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
-    expect(html).toContain("Z1（全额减免）");
-    expect(html).toContain("Z1（猴）");
+    expect(html).toContain("Z1 / ¥4.50（全额减免）");
+    expect(html).toContain("Z1 / ¥13.00");
     expect(html).toContain("Z2");
     expect(html).toContain("48.00");
     expect(html).toContain('<td colspan="4" class="money">0.00</td>');
@@ -427,9 +427,69 @@ describe("print templates", () => {
       '<th colspan="3">笼数</th><th colspan="2">减免</th><th colspan="3">梯度</th><th colspan="4">缴纳（元）</th>',
     );
     expect(html).toContain(
-      '<td colspan="2" class="num">5</td><td colspan="3" class="num">0</td><td colspan="4" class="money">770.00</td>',
+      '<td colspan="2" class="num">5</td><td colspan="3" class="num">5</td><td colspan="4" class="money">770.00</td>',
     );
     expect(html).not.toContain("梯度笼数");
+  });
+
+  it("groups settlement IACUC columns by species and limits summary fields to mice", () => {
+    const result = {
+      statement: {
+        id: "s-species",
+        month: "2026-06",
+        iacuc: "pi::张教授",
+        iacucs: ["R1", "Z1", "M1"],
+        project: "项目",
+        pi: "张教授",
+        owner: "陈老师",
+        funding: "",
+        sourceType: "pi_merged_quantity_sheet",
+        billingUnit: "mixed",
+        totalCageDays: 8,
+        totalAnimalDays: 1,
+        totalFreeCageDays: 2,
+        totalBillableCageDays: 6,
+        totalAmount: 58.5,
+      },
+      lines: [
+        {
+          date: "2026-06-01",
+          animalCount: 1,
+          cageCount: 8,
+          freeCages: 2,
+          billableCages: 6,
+          amount: 58.5,
+          cumulative: 58.5,
+          iacucBreakdown: [
+            { iacuc: "R1", species: "rat", cageCount: 2, payableAmount: 17, billingUnit: "cage_day", unitPrice: 8.5 },
+            {
+              iacuc: "Z1",
+              species: "mouse",
+              cageCount: 6,
+              freeCages: 2,
+              payableAmount: 18,
+              billingUnit: "cage_day",
+              unitPrice: 4.5,
+            },
+            {
+              iacuc: "M1",
+              species: "monkey",
+              animalCount: 1,
+              payableAmount: 23.5,
+              billingUnit: "animal_day",
+              unitPrice: 23.5,
+            },
+          ],
+        },
+      ],
+    } as BillingStatementResponse;
+    const html = settlementStatementHtml(result, false);
+    expect(html).toContain('<th colspan="24">小鼠</th>');
+    expect(html).toContain('<th colspan="12">大鼠</th>');
+    expect(html).toContain('<th colspan="12">猴</th>');
+    expect(html).toContain('<th colspan="12">汇总</th>');
+    expect(html).toContain('<th colspan="6">笼数</th><th colspan="6">缴纳（元）</th>');
+    expect(html).toContain('<th colspan="6">数量</th><th colspan="6">缴纳（元）</th>');
   });
 
   it("shows billable tier cages in the summary column and iacuc columns", () => {

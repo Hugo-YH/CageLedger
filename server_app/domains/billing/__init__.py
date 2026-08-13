@@ -52,6 +52,7 @@ from .profiles import (
     room_has_manual_billing_profile,
 )
 from .statements import (
+    distinct_funding_text,
     pi_for_iacuc,
     quantity_sheet_free_allowance_notes,
     quantity_sheet_statement_lines,
@@ -85,6 +86,7 @@ __all__ = [
     "custom_billing_quantity_for_day",
     "custom_billing_segments_for_day",
     "dates_in_month",
+    "distinct_funding_text",
     "flat_daily_charge",
     "free_cage_allocation_sort_key",
     "free_cages_for_principal_type",

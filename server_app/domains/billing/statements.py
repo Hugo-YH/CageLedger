@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta
 
 from server_app.domains.iacuc import normalize_application_date, normalize_iacuc_number
@@ -306,6 +307,26 @@ def statement_application_snapshot(iacuc, applications_by_iacuc, occupancies):
     return {}
 
 
+def distinct_funding_text(values):
+    result = []
+    seen_text = set()
+    seen_number_groups = set()
+    for value in values:
+        for entry in re.split(r"[、；;]+", clean_text(value)):
+            text = clean_text(entry)
+            if not text:
+                continue
+            number_groups = tuple(re.findall(r"\d+", text))
+            if number_groups and number_groups in seen_number_groups:
+                continue
+            if not number_groups and text in seen_text:
+                continue
+            result.append(text)
+            seen_text.add(text)
+            seen_number_groups.add(number_groups)
+    return "、".join(result)
+
+
 def statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies):
     projects = []
     owners = []
@@ -324,5 +345,5 @@ def statement_pi_snapshot(pi_name, applications_by_iacuc, occupancies):
         "project": "、".join(sorted({value for value in projects if value})),
         "pi": pi_name,
         "owner": "、".join(sorted({value for value in owners if value})),
-        "funding": "、".join(sorted({value for value in fundings if value})),
+        "funding": distinct_funding_text(fundings),
     }
