@@ -1,4 +1,4 @@
-import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
+import { Alert, Button, Checkbox, Empty, Input, Modal, Popconfirm, Space, Tag, Typography } from "antd";
 import { LockOutlined, UndoOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
@@ -6,7 +6,7 @@ import type { SessionUser } from "../../../api/contracts";
 import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflows";
 import { fetchWorkflowDetail, useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
 import { DataTable } from "../../../components/ui";
-import { formatDateTime, Pager } from "../../../components/WorkspaceUi";
+import { Pager } from "../../../components/WorkspaceUi";
 import { QueryFeedback } from "./LedgerListShared";
 import { WorkflowColumnTitle } from "./WorkflowColumnTitle";
 import { WorkflowDetailModal } from "./WorkflowDetailModal";
@@ -41,6 +41,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     events: BillingWorkflowEvent[];
   } | null>(null);
   const [recordingTarget, setRecordingTarget] = useState<BillingWorkflow | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<{ workflow: BillingWorkflow; toStatus: string } | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
   const [selectedLockable, setSelectedLockable] = useState<string[]>([]);
   const [batchLocking, setBatchLocking] = useState(false);
   const [batchLockNotice, setBatchLockNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(
@@ -186,17 +188,20 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       render: (_: unknown, item: BillingWorkflow) => {
         const showSubStatuses =
           item.workflowStatus === "statement_archived" || item.workflowStatus === "statement_locked";
+        const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
         return (
           <Space size={4} wrap>
             {item.workflowStatus === "statement_locked" ? <Tag color="purple">已锁定</Tag> : null}
             {showSubStatuses ? (
               <>
                 <Tag color={item.signedStatementReturned ? "success" : "default"}>
-                  {item.signedStatementReturned ? "结算单 ✅ 已交回" : "结算单 未交回"}
+                  {item.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
                 </Tag>
-                <Tag color={item.reimbursementFormReturned ? "success" : "default"}>
-                  {item.reimbursementFormReturned ? "报销单 ✅ 已交回" : "报销单 未交回"}
-                </Tag>
+                {reimbursementRequired ? (
+                  <Tag color={item.reimbursementFormReturned ? "blue" : "default"}>
+                    {item.reimbursementFormReturned ? "报销单 已交回" : "报销单 未交回"}
+                  </Tag>
+                ) : null}
               </>
             ) : (
               <Tag color={workflowStatusMeta[item.workflowStatus]?.color || "default"}>
@@ -208,55 +213,36 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       },
     },
     {
-      key: "latestEventAt",
-      title: columnTitle("latestEventAt", "最新时间"),
-      width: 170,
-      render: (_: unknown, item: BillingWorkflow) => {
-        const at =
-          item.archivedAt || item.signedReturnedAt || item.sentAt || item.generatedAt || item.latestEventAt || "";
-        return at ? formatDateTime(at) : "-";
-      },
-    },
-    {
       key: "actions",
       title: "操作",
       fixed: "right" as const,
       width: 220,
       render: (_: unknown, item: BillingWorkflow) => {
+        const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
         if (item.workflowStatus === "statement_sent") {
           return (
             <Space size={4}>
               <Button type="primary" size="small" onClick={() => setRegisterTarget(item)}>
                 登记
               </Button>
-              <Popconfirm
-                title="将该流程退回已生成？"
-                description="流程回到已生成状态，可在结算管理或此处重新发起。"
-                okText="撤回"
-                cancelText="取消"
-                onConfirm={async () => {
-                  await advance.mutateAsync({
-                    workflowId: item.id,
-                    toStatus: "statement_generated",
-                    note: "撤回，退回已生成",
-                  });
-                  void query.refetch();
-                }}
+              <Button
+                danger
+                icon={<UndoOutlined aria-hidden />}
+                size="small"
+                onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_generated" })}
               >
-                <Button danger icon={<UndoOutlined aria-hidden />} size="small">
-                  撤回
-                </Button>
-              </Popconfirm>
+                撤回
+              </Button>
             </Space>
           );
         }
         if (item.workflowStatus === "statement_archived") {
           return (
-            <Space size={4}>
-              <Button size="small" onClick={() => void openDetail(item)}>
+            <Space className="workflow-row-actions" size={4}>
+              <Button size="small" type="primary" onClick={() => void openDetail(item)}>
                 查看归档
               </Button>
-              {!item.reimbursementFormReturned ? (
+              {reimbursementRequired && !item.reimbursementFormReturned ? (
                 <Button size="small" onClick={() => setRecordingTarget(item)}>
                   补录
                 </Button>
@@ -281,34 +267,25 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   </Button>
                 </Popconfirm>
               ) : null}
-              <Popconfirm
-                title="将该流程撤回？"
-                description="流程回到等待交回登记状态，原归档信息保留，重新登记后覆盖。"
-                okText="撤回"
-                cancelText="取消"
-                onConfirm={async () => {
-                  await advance.mutateAsync({
-                    workflowId: item.id,
-                    toStatus: "statement_sent",
-                    note: "撤回，退回已发起",
-                  });
-                  void query.refetch();
-                }}
+              <Button
+                danger
+                icon={<UndoOutlined aria-hidden />}
+                size="small"
+                type="text"
+                onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_sent" })}
               >
-                <Button danger icon={<UndoOutlined aria-hidden />} size="small">
-                  撤回
-                </Button>
-              </Popconfirm>
+                撤回
+              </Button>
             </Space>
           );
         }
         if (item.workflowStatus === "statement_locked") {
           return (
-            <Space size={4}>
-              <Button size="small" onClick={() => void openDetail(item)}>
+            <Space className="workflow-row-actions" size={4}>
+              <Button size="small" type="primary" onClick={() => void openDetail(item)}>
                 查看归档
               </Button>
-              {user.billingLockAllowed && !item.reimbursementFormReturned ? (
+              {user.billingLockAllowed && reimbursementRequired && !item.reimbursementFormReturned ? (
                 <Button size="small" onClick={() => setRecordingTarget(item)}>
                   补录
                 </Button>
@@ -419,6 +396,49 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           void query.refetch();
         }}
       />
+      <Modal
+        cancelText="取消"
+        confirmLoading={advance.isPending}
+        okButtonProps={{ danger: true, disabled: !revokeReason.trim() }}
+        okText="确认撤回"
+        open={Boolean(revokeTarget)}
+        title="撤回结算流程"
+        onCancel={() => {
+          setRevokeTarget(null);
+          setRevokeReason("");
+        }}
+        onOk={() => {
+          if (!revokeTarget || !revokeReason.trim()) return;
+          void advance
+            .mutateAsync({
+              workflowId: revokeTarget.workflow.id,
+              toStatus: revokeTarget.toStatus,
+              note: revokeReason.trim(),
+            })
+            .then(() => {
+              setRevokeTarget(null);
+              setRevokeReason("");
+              void query.refetch();
+            });
+        }}
+      >
+        <Typography.Paragraph type="secondary">
+          {revokeTarget?.toStatus === "statement_generated"
+            ? "流程将退回已生成状态，可重新发起。"
+            : "流程将退回等待交回登记状态，原归档信息保留。"}
+        </Typography.Paragraph>
+        <label htmlFor="workflow-revoke-reason">
+          撤回原因
+          <Input.TextArea
+            id="workflow-revoke-reason"
+            maxLength={500}
+            placeholder="请填写撤回原因"
+            rows={3}
+            value={revokeReason}
+            onChange={(event) => setRevokeReason(event.target.value)}
+          />
+        </label>
+      </Modal>
     </section>
   );
 }

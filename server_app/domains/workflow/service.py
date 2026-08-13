@@ -1,3 +1,10 @@
+def _reimbursement_required(statement, deps):
+    try:
+        return (deps["as_float"](statement.get("totalAmount")) or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def save_billing_statement_workflow(conn, statement, lines, actor, note, deps):
     source_type = deps["normalize_workflow_source"](statement.get("sourceType", ""))
     scope_type, scope_key = deps["workflow_scope_for_statement"](statement)
@@ -228,6 +235,11 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
         ):
             raise ValueError("该流程已结束或已锁定，仅可查看归档")
         raise ValueError("当前流程状态不允许执行该操作")
+    if (current_status, next_status) in {
+        (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_GENERATED"]),
+        (deps["WORKFLOW_STATUS_ARCHIVED"], deps["WORKFLOW_STATUS_SENT"]),
+    } and not deps["clean_text"](note):
+        raise ValueError("撤回结算流程时请填写撤回原因")
 
     version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
     if not version:
@@ -271,17 +283,31 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
             statement.pop("unlockedAt", None)
             statement.pop("unlockedBy", None)
             registration = registration or {}
+            if not registration.get("signedStatementReturned"):
+                raise ValueError("交回登记时请确认已交回饲养费结算单")
             reimbursement_forms = []
             for entry in registration.get("reimbursementForms") or []:
                 form_no = deps["clean_text"](entry.get("formNo", ""))
                 amount = max(deps["as_int"](entry.get("amount")) or 0, 0)
                 if form_no:
                     reimbursement_forms.append({"formNo": form_no, "amount": amount})
+            reimbursement_required = _reimbursement_required(statement, deps)
+            if not reimbursement_required and (registration.get("reimbursementFormReturned") or reimbursement_forms):
+                raise ValueError("结算金额为 0，无需交回报销单")
             statement["signedStatementReturned"] = bool(registration.get("signedStatementReturned"))
-            statement["reimbursementFormReturned"] = bool(registration.get("reimbursementFormReturned"))
+            statement["signedStatementNote"] = deps["clean_text"](registration.get("signedStatementNote", ""))
+            statement["reimbursementRequired"] = reimbursement_required
+            statement["reimbursementFormReturned"] = reimbursement_required and bool(
+                registration.get("reimbursementFormReturned")
+            )
             if statement["reimbursementFormReturned"] and not reimbursement_forms:
                 raise ValueError("交回报销单时必须填写报销单号和金额")
             statement["reimbursementForms"] = reimbursement_forms
+            statement["reimbursementFormNote"] = (
+                deps["clean_text"](registration.get("reimbursementFormNote", ""))
+                if statement["reimbursementFormReturned"]
+                else ""
+            )
             statement["reimbursementFormNos"] = [entry["formNo"] for entry in reimbursement_forms]
             statement["receivedAmount"] = sum(entry["amount"] for entry in reimbursement_forms)
             statement["attachments"] = list(registration.get("attachments") or [])
@@ -344,6 +370,9 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
         "manual",
         note,
     )
+    if event_type == "statement_registered_archived":
+        event["signedStatementNote"] = statement.get("signedStatementNote", "")
+        event["reimbursementFormNote"] = statement.get("reimbursementFormNote", "")
     deps["insert_billing_workflow_event"](conn, event)
     return updated_workflow, updated_version, event
 
@@ -360,6 +389,9 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
     version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
     if not version:
         raise LookupError("当前有效结算单不存在")
+    statement = dict(version.get("statement") or {})
+    if not _reimbursement_required(statement, deps):
+        raise ValueError("结算金额为 0，无需交回报销单")
     forms = []
     for entry in reimbursement_forms or []:
         form_no = deps["clean_text"](entry.get("formNo", ""))
@@ -368,13 +400,13 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
             forms.append({"formNo": form_no, "amount": amount})
     if not forms:
         raise ValueError("请填写报销单号和金额")
-    statement = dict(version.get("statement") or {})
     merged_forms = list(statement.get("reimbursementForms") or []) + forms
     at = deps["now_iso"]()
     statement["workflowStatus"] = deps["WORKFLOW_STATUS_ARCHIVED"]
     statement["reimbursementForms"] = merged_forms
     statement["reimbursementFormNos"] = [entry["formNo"] for entry in merged_forms]
     statement["reimbursementFormReturned"] = True
+    statement["reimbursementRequired"] = True
     statement["receivedAmount"] = sum(entry["amount"] for entry in merged_forms)
     statement["reimbursementRecordedAt"] = at
     statement["reimbursementRecordedBy"] = {

@@ -2,6 +2,7 @@ import json
 import sqlite3
 import unittest
 
+from server_app.cache import invalidate_data_cache_prefixes
 from server_app.legacy import (
     get_billing_workflow_detail,
     initialize_schema,
@@ -160,6 +161,11 @@ class BillingWorkflowListTests(unittest.TestCase):
         self.assertEqual(event["eventType"], "statement_sent_reverted")
         self.assertEqual(version["statement"]["revertedBy"]["displayName"], "系统管理员")
 
+    def test_reverting_workflow_requires_reason(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        with self.assertRaisesRegex(ValueError, "请填写撤回原因"):
+            update_workflow_status(self.conn, "wf-1", "statement_generated", ADMIN, "")
+
     def test_advance_to_sent_records_sent_by(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_generated")
         workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_sent", ADMIN, "发起结算流程")
@@ -178,7 +184,10 @@ class BillingWorkflowListTests(unittest.TestCase):
             ADMIN,
             "交回登记并归档",
             {
+                "signedStatementReturned": True,
+                "signedStatementNote": "结算单备注",
                 "reimbursementFormReturned": True,
+                "reimbursementFormNote": "报销单备注",
                 "reimbursementForms": [
                     {"formNo": "BX-001", "amount": 100},
                     {"formNo": "BX-002", "amount": 50},
@@ -188,8 +197,24 @@ class BillingWorkflowListTests(unittest.TestCase):
         statement = version["statement"]
         self.assertEqual(statement["workflowStatus"], "statement_archived")
         self.assertEqual(statement["receivedAmount"], 150)
+        self.assertEqual(statement["signedStatementNote"], "结算单备注")
+        self.assertEqual(statement["reimbursementFormNote"], "报销单备注")
+        self.assertEqual(event["signedStatementNote"], "结算单备注")
+        self.assertEqual(event["reimbursementFormNote"], "报销单备注")
         self.assertEqual([entry["formNo"] for entry in statement["reimbursementForms"]], ["BX-001", "BX-002"])
         self.assertEqual(event["eventType"], "statement_registered_archived")
+
+    def test_archived_registration_requires_signed_statement(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        with self.assertRaisesRegex(ValueError, "请确认已交回饲养费结算单"):
+            update_workflow_status(
+                self.conn,
+                "wf-1",
+                "statement_archived",
+                ADMIN,
+                "空交回登记",
+                {},
+            )
 
     def test_archived_workflow_can_record_missing_reimbursement(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_archived")
@@ -208,6 +233,30 @@ class BillingWorkflowListTests(unittest.TestCase):
         self.assertEqual(statement["receivedAmount"], 120)
         self.assertEqual(event["eventType"], "statement_reimbursement_recorded")
         self.assertEqual(statement["reimbursementRecordedBy"]["displayName"], "系统管理员")
+
+    def test_zero_amount_workflow_does_not_require_or_accept_reimbursement(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 0, "statement_sent")
+        workflow, version, _ = update_workflow_status(
+            self.conn,
+            "wf-1",
+            "statement_archived",
+            ADMIN,
+            "零金额交回登记",
+            {"signedStatementReturned": True},
+        )
+        self.assertFalse(workflow["reimbursementRequired"])
+        self.assertFalse(version["statement"]["reimbursementRequired"])
+        self.assertFalse(version["statement"]["reimbursementFormReturned"])
+        invalidate_data_cache_prefixes("billing_workflows::")
+        listed = self._list()["items"]
+        self.assertFalse(listed[0]["reimbursementRequired"])
+        with self.assertRaisesRegex(ValueError, "无需交回报销单"):
+            record_archived_reimbursement(
+                self.conn,
+                "wf-1",
+                [{"formNo": "BX-ZERO", "amount": 0}],
+                ADMIN,
+            )
 
     def test_reimbursement_recording_rejects_active_workflow(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")

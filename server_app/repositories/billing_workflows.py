@@ -54,7 +54,9 @@ def get_billing_workflow_detail(conn, workflow_id):
             json_extract(workflows.payload, '$.reimbursementFormNos') AS reimbursement_form_nos_json,
             json_extract(workflows.payload, '$.reimbursementForms') AS reimbursement_forms_json,
             json_extract(workflows.payload, '$.signedStatementReturned') AS signed_statement_returned,
+            json_extract(workflows.payload, '$.signedStatementNote') AS signed_statement_note,
             json_extract(workflows.payload, '$.reimbursementFormReturned') AS reimbursement_form_returned,
+            json_extract(workflows.payload, '$.reimbursementFormNote') AS reimbursement_form_note,
             json_extract(workflows.payload, '$.registeredBy') AS registered_by_json,
             json_extract(workflows.payload, '$.attachments') AS attachments_json,
             versions.id AS cv_id,
@@ -206,7 +208,9 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
             json_extract(payload, '$.reimbursementFormNos') AS reimbursement_form_nos_json,
             json_extract(payload, '$.reimbursementForms') AS reimbursement_forms_json,
             json_extract(payload, '$.signedStatementReturned') AS signed_statement_returned,
+            json_extract(payload, '$.signedStatementNote') AS signed_statement_note,
             json_extract(payload, '$.reimbursementFormReturned') AS reimbursement_form_returned,
+            json_extract(payload, '$.reimbursementFormNote') AS reimbursement_form_note,
             json_extract(payload, '$.registeredBy') AS registered_by_json,
             json_extract(payload, '$.attachments') AS attachments_json
         FROM billing_workflows{where_clause}
@@ -334,6 +338,10 @@ def _billing_workflow_filter_where(filters, exclude_column=""):
     return " AND ".join(clauses), params
 
 
+def reimbursement_required(total_amount):
+    return float(total_amount or 0) > 0
+
+
 def billing_workflow_list_row(row):
     return {
         "id": row["id"] or "",
@@ -354,6 +362,7 @@ def billing_workflow_list_row(row):
         "funding": row["funding"] or "",
         "manager": row["manager"] or "",
         "totalAmount": row["total_amount"] or 0,
+        "reimbursementRequired": reimbursement_required(row["total_amount"]),
         "totalCageDays": row["total_cage_days"] or 0,
         "generatedAt": row["generated_at"] or "",
         "sentAt": row["sent_at"] or "",
@@ -367,7 +376,9 @@ def billing_workflow_list_row(row):
         "reimbursementFormNos": _load_json_array(row["reimbursement_form_nos_json"]),
         "reimbursementForms": _load_json_array(row["reimbursement_forms_json"]),
         "signedStatementReturned": bool(row["signed_statement_returned"]),
+        "signedStatementNote": row["signed_statement_note"] or "",
         "reimbursementFormReturned": bool(row["reimbursement_form_returned"]),
+        "reimbursementFormNote": row["reimbursement_form_note"] or "",
         "registeredBy": json.loads(row["registered_by_json"]) if row["registered_by_json"] else {},
         "attachments": _load_json_array(row["attachments_json"]),
     }
@@ -392,6 +403,7 @@ def billing_workflow_list_item(workflow):
         "owner": workflow.get("owner", ""),
         "funding": workflow.get("funding", ""),
         "totalAmount": workflow.get("totalAmount", 0),
+        "reimbursementRequired": reimbursement_required(workflow.get("totalAmount")),
         "totalCageDays": workflow.get("totalCageDays", 0),
         "generatedAt": workflow.get("generatedAt", ""),
         "sentAt": workflow.get("sentAt", ""),
@@ -405,7 +417,9 @@ def billing_workflow_list_item(workflow):
         "reimbursementFormNos": workflow.get("reimbursementFormNos", []),
         "reimbursementForms": workflow.get("reimbursementForms", []),
         "signedStatementReturned": bool(workflow.get("signedStatementReturned")),
+        "signedStatementNote": workflow.get("signedStatementNote", ""),
         "reimbursementFormReturned": bool(workflow.get("reimbursementFormReturned")),
+        "reimbursementFormNote": workflow.get("reimbursementFormNote", ""),
         "registeredBy": workflow.get("registeredBy", {}),
         "attachments": workflow.get("attachments", []),
     }
@@ -504,7 +518,9 @@ def list_billing_workflow_events(conn, workflow_id):
             json_extract(payload, '$.actor.id') AS actor_id,
             json_extract(payload, '$.actor.username') AS actor_username,
             json_extract(payload, '$.actor.displayName') AS actor_display_name,
-            json_extract(payload, '$.note') AS note
+            json_extract(payload, '$.note') AS note,
+            json_extract(payload, '$.signedStatementNote') AS signed_statement_note,
+            json_extract(payload, '$.reimbursementFormNote') AS reimbursement_form_note
         FROM billing_workflow_events
         WHERE workflow_id = ?
         ORDER BY at DESC, rowid DESC
@@ -529,6 +545,8 @@ def billing_workflow_event_list_item(event):
             "displayName": (event.get("actor") or {}).get("displayName", ""),
         },
         "note": event.get("note", ""),
+        "signedStatementNote": event.get("signedStatementNote", ""),
+        "reimbursementFormNote": event.get("reimbursementFormNote", ""),
     }
 
 
@@ -547,6 +565,8 @@ def billing_workflow_event_row(row):
             "displayName": row["actor_display_name"] or "",
         },
         "note": row["note"] or "",
+        "signedStatementNote": row["signed_statement_note"] or "",
+        "reimbursementFormNote": row["reimbursement_form_note"] or "",
     }
 
 

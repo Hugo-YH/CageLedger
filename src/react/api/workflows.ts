@@ -33,6 +33,8 @@ export interface BillingWorkflowEvent {
   at: string;
   actor: { id: string; username: string; displayName: string };
   note: string;
+  signedStatementNote?: string;
+  reimbursementFormNote?: string;
 }
 
 export interface BillingWorkflow {
@@ -49,6 +51,7 @@ export interface BillingWorkflow {
   owner: string;
   manager: string;
   totalAmount: number;
+  reimbursementRequired?: boolean;
   totalCageDays: number;
   generatedAt: string;
   sentAt: string;
@@ -58,7 +61,9 @@ export interface BillingWorkflow {
   registeredAt: string;
   archivedAt: string;
   signedStatementReturned?: boolean;
+  signedStatementNote?: string;
   reimbursementFormReturned?: boolean;
+  reimbursementFormNote?: string;
   reimbursementFormNos?: string[];
   reimbursementForms?: Array<{ formNo: string; amount: number }>;
   receivedAmount?: number;
@@ -149,7 +154,9 @@ export function useAdvanceWorkflow() {
       registration?: {
         reimbursementForms?: Array<{ formNo: string; amount: number }>;
         signedStatementReturned?: boolean;
+        signedStatementNote?: string;
         reimbursementFormReturned?: boolean;
+        reimbursementFormNote?: string;
       };
     }) =>
       requestJson<Record<string, unknown>>("/api/billing-workflows/advance", {

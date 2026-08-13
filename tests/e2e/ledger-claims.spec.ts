@@ -100,7 +100,9 @@ test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", a
     .getByRole("row", { name: /E2E 台账负责人 1/ })
     .getByRole("button", { name: "撤回", exact: true })
     .click();
-  await page.locator(".ant-popconfirm").getByRole("button", { name: "撤回", exact: true }).click();
+  const revokeModal = page.getByRole("dialog").filter({ hasText: "撤回结算流程" });
+  await revokeModal.getByLabel("撤回原因").fill("测试撤回已发起流程");
+  await revokeModal.getByRole("button", { name: "确认撤回" }).click();
   // 退回已生成后该流程不再出现在单据跟踪（已生成阶段由结算管理处理）
   await expect(page.getByRole("row", { name: /E2E 台账负责人 1/ })).toHaveCount(0, { timeout: 10_000 });
   await expect(page.getByRole("row", { name: /E2E 台账负责人 2/ })).toContainText("已发起");
@@ -154,7 +156,7 @@ test("已归档流程可补录报销单并更新状态标签", async ({ page }) 
   await expect(modal.locator('button:has-text("上传扫描件")')).toBeVisible();
   await modal.getByRole("button", { name: "登记并归档" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
-  await expect(row).toContainText("结算单 ✅ 已交回", { timeout: 10_000 });
+  await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
   await expect(row).toContainText("报销单 未交回");
 
   await row.getByRole("button", { name: "补录" }).click();
@@ -163,11 +165,11 @@ test("已归档流程可补录报销单并更新状态标签", async ({ page }) 
   await recording.locator('input[placeholder="金额（元）"]').first().fill("120");
   await recording.getByRole("button", { name: "保存补录" }).click();
   await expect(recording).toHaveCount(0, { timeout: 10_000 });
-  await expect(row).toContainText("报销单 ✅ 已交回", { timeout: 10_000 });
+  await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
 
   await row.getByRole("button", { name: "查看归档" }).click();
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
-  await expect(detail).toContainText("报销单 ✅ 已交回");
+  await expect(detail).toContainText("报销单 已交回");
   await expect(detail).toContainText("BX-LATE-001");
   await expect(detail).toContainText("补录报销单");
   await expect(detail).toContainText("发起结算流程");
@@ -223,11 +225,14 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await modal.getByRole("switch", { name: "饲养费结算单" }).click();
   await modal.getByRole("button", { name: "登记并归档" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
-  await expect(row).toContainText("结算单 ✅ 已交回", { timeout: 10_000 });
+  await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
 
   // 撤回已归档流程
   await row.getByRole("button", { name: "撤回" }).click();
-  await page.locator(".ant-popconfirm").getByRole("button", { name: "撤回", exact: true }).click();
+  const revokeModal = page.getByRole("dialog").filter({ hasText: "撤回结算流程" });
+  await expect(revokeModal.getByRole("button", { name: "确认撤回" })).toBeDisabled();
+  await revokeModal.getByLabel("撤回原因").fill("发现登记信息有误");
+  await revokeModal.getByRole("button", { name: "确认撤回" }).click();
   await expect(row).toContainText("已发起", { timeout: 10_000 });
 
   // 第二次交回登记：交回结算单和报销单
@@ -235,21 +240,28 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
   await modal.getByRole("switch", { name: "饲养费结算单" }).click();
   await modal.getByRole("switch", { name: "报销单" }).click();
+  await modal.getByLabel("饲养费结算单备注").fill("结算单已由项目组交回");
+  await modal.getByLabel("报销单备注").fill("报销单材料齐全");
   await modal.locator('input[placeholder="报销单号"]').first().fill("BX-RE-001");
   await modal.locator('input[placeholder="金额（元）"]').first().fill("60");
   await modal.getByRole("button", { name: "登记并归档" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
-  await expect(row).toContainText("报销单 ✅ 已交回", { timeout: 10_000 });
+  await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
 
   // 主时间轴只保留生效环节，历史记录默认折叠
   await row.getByRole("button", { name: "查看归档" }).click();
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
   await expect(detail.getByText("结算单/报销单交回")).toHaveCount(1);
   await expect(detail).toContainText("BX-RE-001");
-  await expect(detail.getByText("历史记录（2 条）")).toBeVisible();
-  await detail.getByText("历史记录（2 条）").click();
+  await expect(detail).toContainText("结算单备注：结算单已由项目组交回");
+  await expect(detail).toContainText("报销单备注：报销单材料齐全");
+  const history = detail.getByText("历史修改（2 条）");
+  await expect(history).toBeVisible();
+  await history.click();
   await expect(detail.getByText("结算单/报销单交回")).toHaveCount(2);
+  await expect(detail.locator(".workflow-timeline")).toHaveCount(1);
   await expect(detail.getByText("撤回", { exact: true })).toBeVisible();
+  await expect(detail).toContainText("撤回原因：发现登记信息有误");
   await detail.locator(".ant-modal-close").click();
 });
 
@@ -310,8 +322,18 @@ test("结算金额为 0 的交回登记不显示报销单开关", async ({ page 
   await expect(zeroModal.locator(".ant-switch").first()).toHaveAttribute("aria-checked", "false");
   await expect(zeroModal.locator('input[placeholder*="无需交费"]')).toHaveCount(0);
   await expect(zeroModal.getByText("报销单", { exact: true })).toHaveCount(0);
-  await zeroModal.getByRole("button", { name: "取消" }).click();
+  await zeroModal.getByRole("button", { name: "登记并归档" }).click();
+  await expect(zeroModal.getByText("请确认已交回饲养费结算单")).toBeVisible();
+  await zeroModal.getByRole("switch", { name: "饲养费结算单" }).click();
+  await zeroModal.getByRole("button", { name: "登记并归档" }).click();
   await expect(zeroModal).toHaveCount(0);
+  await expect(zeroRow.getByText("报销单", { exact: false })).toHaveCount(0);
+  await expect(zeroRow.getByRole("button", { name: "补录" })).toHaveCount(0);
+  await zeroRow.getByRole("button", { name: "查看归档" }).click();
+  const zeroDetail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  await expect(zeroDetail.getByText("报销单", { exact: false })).toHaveCount(0);
+  await expect(zeroDetail.getByText("报销单号", { exact: false })).toHaveCount(0);
+  await zeroDetail.locator(".ant-modal-close").click();
 
   const paidRow = page.getByRole("row", { name: /E2E 正数结算负责人/ });
   await expect(paidRow).toContainText("已发起");
@@ -375,7 +397,7 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
     await modal.getByRole("switch", { name: "饲养费结算单" }).click();
     await modal.getByRole("button", { name: "登记并归档" }).click();
     await expect(modal).toHaveCount(0, { timeout: 10_000 });
-    await expect(row).toContainText("结算单 ✅ 已交回", { timeout: 10_000 });
+    await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
   }
 
   // 全选批量锁定
@@ -394,6 +416,17 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
   await lockedRow.getByRole("button", { name: "解锁" }).click();
   await page.locator(".ant-popconfirm").getByRole("button", { name: "解锁", exact: true }).click();
   await expect(lockedRow).not.toContainText("已锁定", { timeout: 10_000 });
-  await expect(lockedRow).toContainText("结算单 ✅ 已交回");
+  await expect(lockedRow).toContainText("结算单 已交回");
   await expect(page.getByRole("row", { name: new RegExp(pis[1]) })).toContainText("已锁定");
+
+  await lockedRow.getByRole("button", { name: "查看归档" }).click();
+  const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  const history = detail.getByText(/历史修改（2 条）/);
+  await expect(history).toBeVisible();
+  await history.click();
+  await expect(detail.getByText("解锁", { exact: true })).toBeVisible();
+  await expect(detail.getByText("说明：锁定结算流程", { exact: true })).toHaveCount(0);
+  await expect(detail.getByText("说明：解锁结算流程", { exact: true })).toHaveCount(0);
+  await expect(detail.getByText("撤回原因：撤回，退回已发起", { exact: true })).toHaveCount(0);
+  await expect(detail.getByText(/说明：按 PI 合表发起/)).toHaveCount(0);
 });

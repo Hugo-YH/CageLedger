@@ -8,7 +8,9 @@ import { uploadWorkflowAttachment, useAdvanceWorkflow } from "../../../api/workf
 interface RegistrationValues {
   reimbursementForms?: Array<{ formNo: string; amount?: number }>;
   signedStatementReturned?: boolean;
+  signedStatementNote?: string;
   reimbursementFormReturned?: boolean;
+  reimbursementFormNote?: string;
 }
 
 function RegistrationSwitch({
@@ -75,7 +77,9 @@ export function WorkflowRegistrationModal({
           amount: Number(entry.amount) || 0,
         })),
         signedStatementReturned: Boolean(values.signedStatementReturned),
+        signedStatementNote: values.signedStatementNote?.trim() || "",
         reimbursementFormReturned: Boolean(values.reimbursementFormReturned),
+        reimbursementFormNote: values.reimbursementFormNote?.trim() || "",
       },
     });
     onRegistered();
@@ -138,13 +142,27 @@ export function WorkflowRegistrationModal({
         layout="vertical"
         onFinish={() => void submitRegistration()}
       >
-        <Form.Item name="signedStatementReturned" valuePropName="checked">
+        <Form.Item
+          name="signedStatementReturned"
+          rules={[
+            {
+              validator: (_, value) =>
+                value ? Promise.resolve() : Promise.reject(new Error("请确认已交回饲养费结算单")),
+            },
+          ]}
+          valuePropName="checked"
+        >
           <RegistrationSwitch label="饲养费结算单" returnedLabel="已交回" unreturnedLabel="未交回" />
         </Form.Item>
         {signedStatementReturned ? (
-          <Form.Item label="饲养费结算单扫描件">
-            {attachmentField("非必填", settlementAttachment, "settlement")}
-          </Form.Item>
+          <>
+            <Form.Item label="饲养费结算单扫描件">
+              {attachmentField("非必填", settlementAttachment, "settlement")}
+            </Form.Item>
+            <Form.Item label="饲养费结算单备注" name="signedStatementNote">
+              <Input.TextArea maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
+            </Form.Item>
+          </>
         ) : null}
         {hasPayableAmount ? (
           <>
@@ -205,6 +223,9 @@ export function WorkflowRegistrationModal({
                 </Form.List>
                 <Form.Item label="报销单扫描件" style={{ marginTop: 12 }}>
                   {attachmentField("非必填", reimbursementAttachment, "reimbursement")}
+                </Form.Item>
+                <Form.Item label="报销单备注" name="reimbursementFormNote">
+                  <Input.TextArea maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
                 </Form.Item>
               </>
             ) : null}

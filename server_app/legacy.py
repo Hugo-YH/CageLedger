@@ -2634,6 +2634,7 @@ def billing_workflow_service_deps():
         "WORKFLOW_STATUS_SIGNED": WORKFLOW_STATUS_SIGNED,
         "WORKFLOW_STATUS_ARCHIVED": WORKFLOW_STATUS_ARCHIVED,
         "WORKFLOW_STATUS_LOCKED": WORKFLOW_STATUS_LOCKED,
+        "as_float": as_float,
         "as_int": as_int,
         "billing_workflow_business_key": billing_workflow_business_key,
         "build_version_payload": build_version_payload,
@@ -4504,11 +4505,14 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
         "manager": statement.get("manager", ""),
         "totalAmount": statement.get("totalAmount", 0),
         "totalCageDays": statement.get("totalCageDays", 0),
+        "reimbursementRequired": (as_float(statement.get("totalAmount")) or 0) > 0,
         **timestamps,
     }
     if statement.get("signedStatementReturned") is not None:
         workflow_payload["signedStatementReturned"] = bool(statement.get("signedStatementReturned"))
+        workflow_payload["signedStatementNote"] = statement.get("signedStatementNote", "")
         workflow_payload["reimbursementFormReturned"] = bool(statement.get("reimbursementFormReturned"))
+        workflow_payload["reimbursementFormNote"] = statement.get("reimbursementFormNote", "")
         workflow_payload["reimbursementFormNos"] = list(statement.get("reimbursementFormNos") or [])
         workflow_payload["reimbursementForms"] = list(statement.get("reimbursementForms") or [])
         workflow_payload["receivedAmount"] = statement.get("receivedAmount", 0)
