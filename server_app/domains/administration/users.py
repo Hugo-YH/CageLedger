@@ -22,6 +22,7 @@ def create_user(conn, payload):
     phone = str(payload.get("phone", "")).strip()
     role = payload.get("role", "room_admin")
     room_ids = payload.get("roomIds", [])
+    billing_lock_allowed = 1 if payload.get("billingLockAllowed") else 0
     if not username or not password:
         raise ValueError("用户名和密码不能为空")
     if role not in ("admin", "room_admin"):
@@ -41,6 +42,7 @@ def create_user(conn, payload):
             "password_hash": hash_password(password),
             "role": role,
             "room_ids": dump_json(room_ids),
+            "billing_lock_allowed": billing_lock_allowed,
             "active": 1,
             "created_at": now,
             "updated_at": now,
@@ -70,6 +72,7 @@ def update_user(conn, actor, user_id, payload):
             phone,
             row["role"],
             dump_json(json.loads(row["room_ids"] or "[]")),
+            bool(row["billing_lock_allowed"]),
             now,
         )
         conn.commit()
@@ -80,6 +83,7 @@ def update_user(conn, actor, user_id, payload):
     password = str(payload.get("password", ""))
     role = payload.get("role", row["role"])
     room_ids = payload.get("roomIds", json.loads(row["room_ids"] or "[]"))
+    billing_lock_allowed = 1 if payload.get("billingLockAllowed", bool(row["billing_lock_allowed"])) else 0
 
     if not username:
         raise ValueError("用户名不能为空")
@@ -91,10 +95,29 @@ def update_user(conn, actor, user_id, payload):
     now = now_iso()
     if password:
         update_user_with_password(
-            conn, user_id, username, display_name, phone, hash_password(password), role, dump_json(room_ids), now
+            conn,
+            user_id,
+            username,
+            display_name,
+            phone,
+            hash_password(password),
+            role,
+            dump_json(room_ids),
+            billing_lock_allowed,
+            now,
         )
     else:
-        update_user_without_password(conn, user_id, username, display_name, phone, role, dump_json(room_ids), now)
+        update_user_without_password(
+            conn,
+            user_id,
+            username,
+            display_name,
+            phone,
+            role,
+            dump_json(room_ids),
+            billing_lock_allowed,
+            now,
+        )
     delete_sessions_by_user_id(conn, user_id)
     conn.commit()
     row = get_user_by_id(conn, user_id)

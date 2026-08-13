@@ -36,13 +36,17 @@ export function WorkflowDetailModal({
     statement_archived_reverted: { label: "撤回", personLabel: "操作人" },
     statement_sent_reverted: { label: "撤回", personLabel: "操作人" },
     statement_reimbursement_recorded: { label: "补录报销单", personLabel: "补录人" },
+    statement_locked: { label: "锁定", personLabel: "操作人" },
+    statement_unlocked: { label: "解锁", personLabel: "操作人" },
   };
   const allEvents = (target?.events || [])
     .filter((event) => eventMeta[event.eventType])
     .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const lastSent = [...allEvents].reverse().find((event) => event.eventType === "statement_sent");
   const lastRegistered = [...allEvents].reverse().find((event) => event.eventType === "statement_registered_archived");
-  const effectiveIds = new Set([lastSent?.id, lastRegistered?.id].filter(Boolean));
+  const lastLocked = [...allEvents].reverse().find((event) => event.eventType === "statement_locked");
+  const lastUnlocked = [...allEvents].reverse().find((event) => event.eventType === "statement_unlocked");
+  const effectiveIds = new Set([lastSent?.id, lastRegistered?.id, lastLocked?.id, lastUnlocked?.id].filter(Boolean));
   const historyEvents = allEvents.filter((event) => !effectiveIds.has(event.id));
 
   const items = [

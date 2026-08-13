@@ -507,13 +507,13 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
     working_filters = filters or {}
     where_parts = ["billing_candidate_snapshots.source_type = ?"]
     params = [source_type]
-    # 按项目负责人结算只展示已生成-已发起阶段；已归档流程在核销工作台处理。
+    # 按项目负责人结算只展示已生成-已发起阶段；已归档/已锁定流程在单据跟踪处理。
     where_parts.append(
         "NOT EXISTS (SELECT 1 FROM billing_workflows w "
         "WHERE w.source_type = 'pi_merged_quantity_sheet' "
         "AND w.month = billing_candidate_snapshots.month "
         "AND w.iacuc = 'pi::' || billing_candidate_snapshots.pi "
-        "AND w.workflow_status = 'statement_archived')"
+        "AND w.workflow_status IN ('statement_archived', 'statement_locked'))"
     )
     for column, values in (working_filters.get("columnFilters") or {}).items():
         cleaned = [str(value).strip() for value in values if str(value).strip()]

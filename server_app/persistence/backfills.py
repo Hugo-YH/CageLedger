@@ -22,6 +22,13 @@ def ensure_users_phone_column(conn):
         conn.execute("ALTER TABLE users ADD COLUMN phone TEXT")
 
 
+def ensure_users_billing_lock_column(conn):
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "billing_lock_allowed" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN billing_lock_allowed INTEGER NOT NULL DEFAULT 0")
+    conn.execute("UPDATE users SET billing_lock_allowed = 1 WHERE role = 'admin' AND billing_lock_allowed = 0")
+
+
 def backfill_quantity_sheet_staff(conn, room_ids=None):
     ensure_animal_inspection_finding_location_schema(conn)
     room_filter = {clean_text(item) for item in (room_ids or []) if clean_text(item)}

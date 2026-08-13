@@ -7,6 +7,7 @@ export interface SessionUser {
   phone: string;
   role: UserRole;
   roomIds: string[];
+  billingLockAllowed?: boolean;
   active: boolean;
   updatedAt: string;
 }

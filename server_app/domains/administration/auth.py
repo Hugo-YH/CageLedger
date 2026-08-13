@@ -32,6 +32,7 @@ def ensure_default_admin(conn):
             "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
             "role": "admin",
             "room_ids": "[]",
+            "billing_lock_allowed": 1,
             "active": 1,
             "created_at": now,
             "updated_at": now,
@@ -103,6 +104,7 @@ def sanitize_user(row):
         "phone": row["phone"] or "",
         "role": row["role"],
         "roomIds": json.loads(row["room_ids"] or "[]"),
+        "billingLockAllowed": bool(row["billing_lock_allowed"]),
         "active": bool(row["active"]),
         "updatedAt": row["updated_at"],
     }

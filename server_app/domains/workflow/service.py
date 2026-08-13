@@ -216,14 +216,17 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
         (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_ARCHIVED"]),
         (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_GENERATED"]),
         (deps["WORKFLOW_STATUS_ARCHIVED"], deps["WORKFLOW_STATUS_SENT"]),
+        (deps["WORKFLOW_STATUS_ARCHIVED"], deps["WORKFLOW_STATUS_LOCKED"]),
+        (deps["WORKFLOW_STATUS_LOCKED"], deps["WORKFLOW_STATUS_ARCHIVED"]),
     }
     if (current_status, next_status) not in allowed_transitions:
         if current_status in (
             deps.get("WORKFLOW_STATUS_SIGNED", "statement_signed_returned"),
             deps.get("WORKFLOW_STATUS_FINANCE", "submitted_to_finance"),
             deps.get("WORKFLOW_STATUS_ARCHIVED", "statement_archived"),
+            deps.get("WORKFLOW_STATUS_LOCKED", "statement_locked"),
         ):
-            raise ValueError("该流程已结束，仅可查看留档")
+            raise ValueError("该流程已结束或已锁定，仅可查看归档")
         raise ValueError("当前流程状态不允许执行该操作")
 
     version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
@@ -256,27 +259,45 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
     elif next_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
         statement["signedReturnedAt"] = at
         statement["archivedAt"] = at
-        registration = registration or {}
-        reimbursement_forms = []
-        for entry in registration.get("reimbursementForms") or []:
-            form_no = deps["clean_text"](entry.get("formNo", ""))
-            amount = max(deps["as_int"](entry.get("amount")) or 0, 0)
-            if form_no:
-                reimbursement_forms.append({"formNo": form_no, "amount": amount})
-        statement["signedStatementReturned"] = bool(registration.get("signedStatementReturned"))
-        statement["reimbursementFormReturned"] = bool(registration.get("reimbursementFormReturned"))
-        if statement["reimbursementFormReturned"] and not reimbursement_forms:
-            raise ValueError("交回报销单时必须填写报销单号和金额")
-        statement["reimbursementForms"] = reimbursement_forms
-        statement["reimbursementFormNos"] = [entry["formNo"] for entry in reimbursement_forms]
-        statement["receivedAmount"] = sum(entry["amount"] for entry in reimbursement_forms)
-        statement["attachments"] = list(registration.get("attachments") or [])
-        statement["registeredBy"] = {
+        if current_status == deps["WORKFLOW_STATUS_LOCKED"]:
+            # 解锁：保留已归档登记信息，仅记录解锁人/时间。
+            statement["unlockedAt"] = at
+            statement["unlockedBy"] = {
+                "id": actor.get("id", ""),
+                "username": actor.get("username", ""),
+                "displayName": actor.get("displayName", ""),
+            }
+        else:
+            statement.pop("unlockedAt", None)
+            statement.pop("unlockedBy", None)
+            registration = registration or {}
+            reimbursement_forms = []
+            for entry in registration.get("reimbursementForms") or []:
+                form_no = deps["clean_text"](entry.get("formNo", ""))
+                amount = max(deps["as_int"](entry.get("amount")) or 0, 0)
+                if form_no:
+                    reimbursement_forms.append({"formNo": form_no, "amount": amount})
+            statement["signedStatementReturned"] = bool(registration.get("signedStatementReturned"))
+            statement["reimbursementFormReturned"] = bool(registration.get("reimbursementFormReturned"))
+            if statement["reimbursementFormReturned"] and not reimbursement_forms:
+                raise ValueError("交回报销单时必须填写报销单号和金额")
+            statement["reimbursementForms"] = reimbursement_forms
+            statement["reimbursementFormNos"] = [entry["formNo"] for entry in reimbursement_forms]
+            statement["receivedAmount"] = sum(entry["amount"] for entry in reimbursement_forms)
+            statement["attachments"] = list(registration.get("attachments") or [])
+            statement["registeredBy"] = {
+                "id": actor.get("id", ""),
+                "username": actor.get("username", ""),
+                "displayName": actor.get("displayName", ""),
+            }
+            statement["registeredAt"] = at
+    elif next_status == deps["WORKFLOW_STATUS_LOCKED"]:
+        statement["lockedAt"] = at
+        statement["lockedBy"] = {
             "id": actor.get("id", ""),
             "username": actor.get("username", ""),
             "displayName": actor.get("displayName", ""),
         }
-        statement["registeredAt"] = at
     updated_version = deps["build_version_payload"](
         statement,
         workflow_id,
@@ -303,10 +324,13 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
         event_type = "statement_archived_reverted"
     elif next_status == deps["WORKFLOW_STATUS_GENERATED"] and current_status == deps["WORKFLOW_STATUS_SENT"]:
         event_type = "statement_sent_reverted"
+    elif next_status == deps["WORKFLOW_STATUS_ARCHIVED"] and current_status == deps["WORKFLOW_STATUS_LOCKED"]:
+        event_type = "statement_unlocked"
     else:
         event_type = {
             deps["WORKFLOW_STATUS_SENT"]: "statement_sent",
             deps["WORKFLOW_STATUS_ARCHIVED"]: "statement_registered_archived",
+            deps["WORKFLOW_STATUS_LOCKED"]: "statement_locked",
         }[next_status]
     event = deps["build_workflow_event_payload"](
         deps["new_id"]("wevt"),
@@ -328,8 +352,11 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
     workflow = deps["get_billing_workflow"](conn, workflow_id)
     if not workflow:
         raise LookupError("结算流程不存在")
-    if workflow.get("workflowStatus", "") != deps["WORKFLOW_STATUS_ARCHIVED"]:
-        raise ValueError("仅已归档流程可以补录报销单")
+    if workflow.get("workflowStatus", "") not in (
+        deps["WORKFLOW_STATUS_ARCHIVED"],
+        deps["WORKFLOW_STATUS_LOCKED"],
+    ):
+        raise ValueError("仅已归档或已锁定流程可以补录报销单")
     version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
     if not version:
         raise LookupError("当前有效结算单不存在")

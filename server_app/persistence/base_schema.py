@@ -492,6 +492,7 @@ def initialize_base_schema(
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL,
             room_ids TEXT NOT NULL,
+            billing_lock_allowed INTEGER NOT NULL DEFAULT 0,
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL

@@ -219,6 +219,35 @@ class BillingWorkflowListTests(unittest.TestCase):
                 ADMIN,
             )
 
+    def test_archived_workflow_can_lock_and_unlock(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_archived")
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "锁定流程")
+        statement = version["statement"]
+        self.assertEqual(workflow["workflowStatus"], "statement_locked")
+        self.assertEqual(statement["lockedBy"]["displayName"], "系统管理员")
+        self.assertTrue(statement["lockedAt"])
+        self.assertEqual(event["eventType"], "statement_locked")
+
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_archived", ADMIN, "解锁流程")
+        statement = version["statement"]
+        self.assertEqual(workflow["workflowStatus"], "statement_archived")
+        self.assertEqual(statement["unlockedBy"]["displayName"], "系统管理员")
+        self.assertTrue(statement["unlockedAt"])
+        self.assertEqual(event["eventType"], "statement_unlocked")
+
+    def test_locked_workflow_is_terminal_without_unlock(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_locked")
+        with self.assertRaises(ValueError):
+            update_workflow_status(self.conn, "wf-1", "statement_sent", ADMIN, "撤回")
+        with self.assertRaises(ValueError):
+            update_workflow_status(self.conn, "wf-1", "statement_generated", ADMIN, "撤回")
+
+    def test_filter_options_include_locked(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_locked")
+        statuses = list_billing_workflow_filter_options(self.conn, {"columnFilters": {}}, "status")
+        labels = {item["value"]: item["label"] for item in statuses}
+        self.assertEqual(labels["statement_locked"], "已锁定")
+
 
 if __name__ == "__main__":
     unittest.main()

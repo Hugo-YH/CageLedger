@@ -1,6 +1,6 @@
 import { MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Input, InputNumber, Modal, Space, Switch, Tag, Typography, Upload } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
 import { uploadWorkflowAttachment, useAdvanceWorkflow } from "../../../api/workflows";
@@ -51,6 +51,10 @@ export function WorkflowRegistrationModal({
   const [reimbursementAttachment, setReimbursementAttachment] = useState<BillingWorkflowAttachment | null>(null);
   const [uploading, setUploading] = useState(false);
   const hasPayableAmount = Number(target?.totalAmount || 0) > 0;
+
+  useEffect(() => {
+    if (target) form.resetFields();
+  }, [form, target]);
 
   function resetAttachments() {
     setSettlementAttachment(null);

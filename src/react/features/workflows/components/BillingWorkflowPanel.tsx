@@ -1,7 +1,8 @@
-import { Button, Empty, Popconfirm, Space, Tag, Typography } from "antd";
-import { UndoOutlined } from "@ant-design/icons";
+import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
+import { LockOutlined, UndoOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
+import type { SessionUser } from "../../../api/contracts";
 import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflows";
 import { fetchWorkflowDetail, useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
 import { DataTable } from "../../../components/ui";
@@ -16,11 +17,12 @@ const workflowStatusMeta: Record<string, { label: string; color: string }> = {
   statement_generated: { label: "已生成", color: "gold" },
   statement_sent: { label: "已发起", color: "blue" },
   statement_archived: { label: "已归档", color: "green" },
+  statement_locked: { label: "已锁定", color: "purple" },
   statement_signed_returned: { label: "已交回登记（历史）", color: "default" },
   submitted_to_finance: { label: "已提交财务（历史）", color: "default" },
 };
 
-export function BillingWorkflowPanel() {
+export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
@@ -39,9 +41,65 @@ export function BillingWorkflowPanel() {
     events: BillingWorkflowEvent[];
   } | null>(null);
   const [recordingTarget, setRecordingTarget] = useState<BillingWorkflow | null>(null);
+  const [selectedLockable, setSelectedLockable] = useState<string[]>([]);
+  const [batchLocking, setBatchLocking] = useState(false);
+  const [batchLockNotice, setBatchLockNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(
+    null,
+  );
   const items = query.data?.items || [];
   const total = query.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const lockableItems = items.filter((item) => item.workflowStatus === "statement_archived");
+  const allLockableSelected =
+    lockableItems.length > 0 && lockableItems.every((item) => selectedLockable.includes(item.id));
+
+  function toggleLockable(item: BillingWorkflow, checked: boolean) {
+    setSelectedLockable((current) =>
+      checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id),
+    );
+  }
+
+  function toggleAllLockable() {
+    setSelectedLockable((current) => {
+      if (allLockableSelected) {
+        const currentIds = new Set(lockableItems.map((item) => item.id));
+        return current.filter((id) => !currentIds.has(id));
+      }
+      return [...new Set([...current, ...lockableItems.map((item) => item.id)])];
+    });
+  }
+
+  async function lockSelected() {
+    const targets = items.filter(
+      (item) => item.workflowStatus === "statement_archived" && selectedLockable.includes(item.id),
+    );
+    if (!targets.length) return;
+    setBatchLocking(true);
+    setBatchLockNotice({ kind: "info", text: `正在锁定结算流程 ${0}/${targets.length}…` });
+    const failures: string[] = [];
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index];
+      try {
+        await advance.mutateAsync({
+          workflowId: target.id,
+          toStatus: "statement_locked",
+          note: "批量锁定结算流程",
+        });
+      } catch (error) {
+        failures.push(`${target.pi}（${error instanceof Error ? error.message : "锁定失败"}）`);
+      }
+      setBatchLockNotice({ kind: "info", text: `正在锁定结算流程 ${index + 1}/${targets.length}…` });
+    }
+    setSelectedLockable([]);
+    setBatchLocking(false);
+    setBatchLockNotice({
+      kind: failures.length ? "error" : "success",
+      text: failures.length
+        ? `已锁定 ${targets.length - failures.length} 条结算流程；${failures.length} 条未完成：${failures.join("、")}`
+        : `已锁定 ${targets.length} 条结算流程。`,
+    });
+    void query.refetch();
+  }
 
   function toggleSort(key: string) {
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
@@ -76,6 +134,30 @@ export function BillingWorkflowPanel() {
   }
 
   const columns = [
+    ...(user.billingLockAllowed
+      ? [
+          {
+            key: "selection",
+            title: (
+              <Checkbox
+                aria-label="全选当前页可锁定的结算流程"
+                checked={allLockableSelected}
+                disabled={!lockableItems.length || batchLocking}
+                onChange={toggleAllLockable}
+              />
+            ),
+            width: 44,
+            render: (_: unknown, item: BillingWorkflow) => (
+              <Checkbox
+                aria-label={`选择 ${item.pi} ${item.month} 结算流程`}
+                checked={selectedLockable.includes(item.id)}
+                disabled={item.workflowStatus !== "statement_archived" || batchLocking}
+                onChange={(event) => toggleLockable(item, event.target.checked)}
+              />
+            ),
+          },
+        ]
+      : []),
     { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 110 },
     { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 180 },
     {
@@ -101,21 +183,29 @@ export function BillingWorkflowPanel() {
       key: "workflowStatus",
       title: columnTitle("workflowStatus", "状态", "status"),
       width: 170,
-      render: (_: unknown, item: BillingWorkflow) =>
-        item.workflowStatus === "statement_archived" ? (
+      render: (_: unknown, item: BillingWorkflow) => {
+        const showSubStatuses =
+          item.workflowStatus === "statement_archived" || item.workflowStatus === "statement_locked";
+        return (
           <Space size={4} wrap>
-            <Tag color={item.signedStatementReturned ? "success" : "default"}>
-              {item.signedStatementReturned ? "结算单 ✅ 已交回" : "结算单 未交回"}
-            </Tag>
-            <Tag color={item.reimbursementFormReturned ? "success" : "default"}>
-              {item.reimbursementFormReturned ? "报销单 ✅ 已交回" : "报销单 未交回"}
-            </Tag>
+            {item.workflowStatus === "statement_locked" ? <Tag color="purple">已锁定</Tag> : null}
+            {showSubStatuses ? (
+              <>
+                <Tag color={item.signedStatementReturned ? "success" : "default"}>
+                  {item.signedStatementReturned ? "结算单 ✅ 已交回" : "结算单 未交回"}
+                </Tag>
+                <Tag color={item.reimbursementFormReturned ? "success" : "default"}>
+                  {item.reimbursementFormReturned ? "报销单 ✅ 已交回" : "报销单 未交回"}
+                </Tag>
+              </>
+            ) : (
+              <Tag color={workflowStatusMeta[item.workflowStatus]?.color || "default"}>
+                {workflowStatusMeta[item.workflowStatus]?.label || item.workflowStatus}
+              </Tag>
+            )}
           </Space>
-        ) : (
-          <Tag color={workflowStatusMeta[item.workflowStatus]?.color || "default"}>
-            {workflowStatusMeta[item.workflowStatus]?.label || item.workflowStatus}
-          </Tag>
-        ),
+        );
+      },
     },
     {
       key: "latestEventAt",
@@ -171,6 +261,26 @@ export function BillingWorkflowPanel() {
                   补录
                 </Button>
               ) : null}
+              {user.billingLockAllowed ? (
+                <Popconfirm
+                  title="锁定该结算流程？"
+                  description="锁定后流程进入终态，仅授权账号可补录或解锁，解锁前不允许撤回/撤销。"
+                  okText="锁定"
+                  cancelText="取消"
+                  onConfirm={async () => {
+                    await advance.mutateAsync({
+                      workflowId: item.id,
+                      toStatus: "statement_locked",
+                      note: "锁定结算流程",
+                    });
+                    void query.refetch();
+                  }}
+                >
+                  <Button icon={<LockOutlined aria-hidden />} size="small">
+                    锁定
+                  </Button>
+                </Popconfirm>
+              ) : null}
               <Popconfirm
                 title="将该流程撤回？"
                 description="流程回到等待交回登记状态，原归档信息保留，重新登记后覆盖。"
@@ -192,6 +302,40 @@ export function BillingWorkflowPanel() {
             </Space>
           );
         }
+        if (item.workflowStatus === "statement_locked") {
+          return (
+            <Space size={4}>
+              <Button size="small" onClick={() => void openDetail(item)}>
+                查看归档
+              </Button>
+              {user.billingLockAllowed && !item.reimbursementFormReturned ? (
+                <Button size="small" onClick={() => setRecordingTarget(item)}>
+                  补录
+                </Button>
+              ) : null}
+              {user.billingLockAllowed ? (
+                <Popconfirm
+                  title="解锁该结算流程？"
+                  description="解锁后回到已归档状态，可继续撤回、补录或重新锁定。"
+                  okText="解锁"
+                  cancelText="取消"
+                  onConfirm={async () => {
+                    await advance.mutateAsync({
+                      workflowId: item.id,
+                      toStatus: "statement_archived",
+                      note: "解锁结算流程",
+                    });
+                    void query.refetch();
+                  }}
+                >
+                  <Button icon={<LockOutlined aria-hidden />} size="small">
+                    解锁
+                  </Button>
+                </Popconfirm>
+              ) : null}
+            </Space>
+          );
+        }
         return <Typography.Text type="secondary">待发起</Typography.Text>;
       },
     },
@@ -201,7 +345,32 @@ export function BillingWorkflowPanel() {
     <section className="ledger-section" aria-label="结算流程列表">
       <div className="ledger-toolbar">
         <Tag color="blue">{total} 条结算流程</Tag>
+        {user.billingLockAllowed && selectedLockable.length ? (
+          <Space>
+            <Typography.Text type="secondary">已选 {selectedLockable.length} 条可锁定</Typography.Text>
+            <Popconfirm
+              title={`批量锁定 ${selectedLockable.length} 条结算流程？`}
+              description="锁定后进入终态，解锁前不允许撤回/撤销；仅授权账号可补录或解锁。"
+              okText="批量锁定"
+              cancelText="取消"
+              onConfirm={() => void lockSelected()}
+            >
+              <Button icon={<LockOutlined aria-hidden />} loading={batchLocking} type="primary">
+                批量锁定
+              </Button>
+            </Popconfirm>
+          </Space>
+        ) : null}
       </div>
+      {batchLockNotice ? (
+        <Alert
+          className="ledger-batch-notice"
+          role="status"
+          showIcon
+          title={batchLockNotice.text}
+          type={batchLockNotice.kind}
+        />
+      ) : null}
       <QueryFeedback
         error={query.isError}
         errorText="结算流程加载失败"

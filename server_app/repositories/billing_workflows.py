@@ -256,6 +256,7 @@ def list_billing_workflow_filter_options(conn, filters, column):
                        WHEN 'statement_generated' THEN '已生成'
                        WHEN 'statement_sent' THEN '已发起'
                        WHEN 'statement_archived' THEN '已归档'
+                       WHEN 'statement_locked' THEN '已锁定'
                        ELSE workflow_status
                    END AS label,
                    COUNT(*) AS count

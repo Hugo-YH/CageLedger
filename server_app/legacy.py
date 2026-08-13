@@ -444,6 +444,7 @@ WORKFLOW_STATUS_SENT = "statement_sent"
 WORKFLOW_STATUS_SIGNED = "statement_signed_returned"
 WORKFLOW_STATUS_FINANCE = "submitted_to_finance"
 WORKFLOW_STATUS_ARCHIVED = "statement_archived"
+WORKFLOW_STATUS_LOCKED = "statement_locked"
 REIMBURSEMENT_MIGRATION_KEY = "reimbursementRecordMigrationDone"
 WORKFLOW_STATUSES = (
     WORKFLOW_STATUS_IN_FEEDING,
@@ -451,6 +452,8 @@ WORKFLOW_STATUSES = (
     WORKFLOW_STATUS_SENT,
     WORKFLOW_STATUS_SIGNED,
     WORKFLOW_STATUS_FINANCE,
+    WORKFLOW_STATUS_ARCHIVED,
+    WORKFLOW_STATUS_LOCKED,
 )
 VERSION_STATUS_ACTIVE = "active"
 VERSION_STATUS_VOIDED = "voided"
@@ -542,6 +545,7 @@ def migrate_schema(conn):
     migrate_reimbursement_record_schema(conn)
     backfills.backfill_quantity_sheet_staff(conn)
     backfills.ensure_users_phone_column(conn)
+    backfills.ensure_users_billing_lock_column(conn)
 
 
 def ensure_experiment_applications_duplicate_schema(conn):
@@ -2629,6 +2633,7 @@ def billing_workflow_service_deps():
         "WORKFLOW_STATUS_SENT": WORKFLOW_STATUS_SENT,
         "WORKFLOW_STATUS_SIGNED": WORKFLOW_STATUS_SIGNED,
         "WORKFLOW_STATUS_ARCHIVED": WORKFLOW_STATUS_ARCHIVED,
+        "WORKFLOW_STATUS_LOCKED": WORKFLOW_STATUS_LOCKED,
         "as_int": as_int,
         "billing_workflow_business_key": billing_workflow_business_key,
         "build_version_payload": build_version_payload,
@@ -6368,9 +6373,6 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         user = self.require_user()
         if not user:
             return
-        if user["role"] != "admin":
-            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-            return
         try:
             body = self.read_json_body()
             workflow_id = clean_text(body.get("workflowId", ""))
@@ -6378,6 +6380,19 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             note = clean_text(body.get("note", ""))
             registration = body.get("registration") if isinstance(body.get("registration"), dict) else None
             with connect_db() as conn:
+                current = get_billing_workflow(conn, workflow_id)
+                if not current:
+                    raise LookupError("结算流程不存在")
+                is_lock_operation = to_status == WORKFLOW_STATUS_LOCKED or (
+                    to_status == WORKFLOW_STATUS_ARCHIVED and current.get("workflowStatus") == WORKFLOW_STATUS_LOCKED
+                )
+                if is_lock_operation:
+                    if not user.get("billingLockAllowed"):
+                        self.send_json({"error": "需要结算锁定授权"}, HTTPStatus.FORBIDDEN)
+                        return
+                elif user["role"] != "admin":
+                    self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                    return
                 workflow, version, event = update_workflow_status(
                     conn, workflow_id, to_status, user, note, registration
                 )
@@ -6423,9 +6438,6 @@ class CageLedgerHandler(CageLedgerHttpHandler):
         user = self.require_user()
         if not user:
             return
-        if user["role"] != "admin":
-            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-            return
         try:
             body = self.read_json_body()
         except ValueError as exc:
@@ -6433,6 +6445,16 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             return
         try:
             with connect_db() as conn:
+                current = get_billing_workflow(conn, workflow_id)
+                if not current:
+                    raise LookupError("结算流程不存在")
+                if current.get("workflowStatus") == WORKFLOW_STATUS_LOCKED:
+                    if not user.get("billingLockAllowed"):
+                        self.send_json({"error": "已锁定流程补录需要结算锁定授权"}, HTTPStatus.FORBIDDEN)
+                        return
+                elif user["role"] != "admin":
+                    self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                    return
                 workflow, version, event = record_archived_reimbursement(
                     conn,
                     workflow_id,
@@ -6487,6 +6509,9 @@ class CageLedgerHandler(CageLedgerHttpHandler):
             return
         try:
             with connect_db() as conn:
+                existing = get_billing_workflow(conn, workflow_id)
+                if existing and existing.get("workflowStatus") == WORKFLOW_STATUS_LOCKED:
+                    raise ValueError("已锁定流程不允许撤销，请先解锁")
                 workflow = delete_billing_workflow(conn, workflow_id)
                 reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
                 deleted_reimbursement_id = ""

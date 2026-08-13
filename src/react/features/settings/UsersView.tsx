@@ -13,6 +13,7 @@ const emptyDraft = {
   password: "",
   role: "room_admin" as UserRole,
   roomIds: [] as string[],
+  billingLockAllowed: false,
 };
 type UserDraft = typeof emptyDraft;
 
@@ -197,6 +198,7 @@ function userDraft(user: ManagedUser): UserDraft {
     password: "",
     role: user.role,
     roomIds: [...user.roomIds],
+    billingLockAllowed: Boolean(user.billingLockAllowed),
   };
 }
 
@@ -269,6 +271,14 @@ function UserFields({
       ) : (
         <p className="muted">系统管理员默认访问全部饲养间。</p>
       )}
+      <Form.Item label="结算流程锁定权限">
+        <Checkbox
+          checked={draft.billingLockAllowed}
+          onChange={(event) => update("billingLockAllowed", event.target.checked)}
+        >
+          允许锁定、解锁结算流程，并可为已锁定流程补录报销单
+        </Checkbox>
+      </Form.Item>
     </Form>
   );
 }
