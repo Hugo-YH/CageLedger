@@ -34,7 +34,6 @@ const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
 const CagesView = lazy(() => import("../cages/CagesView").then((module) => ({ default: module.CagesView })));
 const loadDashboardView = () => import("../dashboard/DashboardView");
-const loadDashboardCharts = () => import("@ant-design/plots");
 const DashboardView = lazy(() => loadDashboardView().then((module) => ({ default: module.DashboardView })));
 const MobileNavigation = lazy(() =>
   import("./MobileNavigation").then((module) => ({ default: module.MobileNavigation })),
@@ -70,7 +69,6 @@ const iconFor: Record<NavIcon, ReactNode> = {
 
 function preloadDashboard() {
   void loadDashboardView();
-  void loadDashboardCharts();
 }
 
 export function ReactWorkspace({ user }: { user: SessionUser }) {

@@ -42,8 +42,9 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E负责人");
   await page.getByLabel("第 1 行结余笼数", { exact: true }).fill("2");
   await page.getByRole("button", { name: "保存统计表", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "确认保存数量统计表", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "确认保存", exact: true }).click();
+  const confirmDialog = page.getByRole("dialog", { name: "确认保存数量统计表", exact: true });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "确认保存", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("统计表已保存");
   await expect(page.getByRole("combobox", { name: "房间号", exact: true })).toHaveValue("");
   await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");

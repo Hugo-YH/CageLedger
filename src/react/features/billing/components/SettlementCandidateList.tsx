@@ -74,7 +74,7 @@ export function SettlementCandidateList({
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
 
-  if (list.isPending) return <PageSkeleton label="结算管理" variant="table" />;
+  if (list.isPending) return <PageSkeleton embedded label="结算管理" variant="table" />;
 
   async function toggleAllFiltered() {
     if (allFilteredSelected) {

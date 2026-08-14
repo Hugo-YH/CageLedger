@@ -5,13 +5,13 @@ import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
 import { useDashboardOverview } from "../../api/dashboardOverview";
-import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
+import { PageState } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 
 // @ant-design/plots 体积较大，拆为独立懒加载块：仅图表卡实际渲染时下载。
-const AreaChart = lazy(() => import("@ant-design/plots").then((module) => ({ default: module.Area })));
-const RoseChart = lazy(() => import("@ant-design/plots").then((module) => ({ default: module.Rose })));
+const AreaChart = lazy(() => import("@ant-design/plots/es/components/area"));
+const RoseChart = lazy(() => import("@ant-design/plots/es/components/rose"));
 
 function ChartBoundary({ height, children }: { height: number; children: ReactNode }) {
   return (
@@ -441,9 +441,68 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
 
 function DashboardSkeleton() {
   return (
-    <section className="workspace-view dashboard-view">
-      <PageSkeleton label="运营总览" rows={6} variant="detail" />
+    <section
+      aria-busy="true"
+      aria-label="运营总览正在加载"
+      className="workspace-view dashboard-view ant-dashboard-view"
+      data-ui="page-skeleton"
+      role="status"
+    >
+      <span className="app-visually-hidden">运营总览正在加载</span>
+      <div aria-hidden="true" className="dashboard-hero dashboard-skeleton-hero">
+        <Skeleton.Input active size="small" style={{ width: 72 }} />
+        <div className="workspace-title-line">
+          <Skeleton.Input active size="large" style={{ width: 360 }} />
+          <Skeleton.Button active size="small" />
+        </div>
+        <Skeleton active paragraph={{ rows: 1, width: "48%" }} title={false} />
+      </div>
+      <div aria-hidden="true" className="workspace-body dashboard-workspace-body ant-dashboard-body">
+        <div className="ant-dashboard-month-bar">
+          <Skeleton.Input active size="medium" style={{ width: 160 }} />
+          <Skeleton.Input active size="small" style={{ width: 132 }} />
+        </div>
+        <Card
+          className="ant-dashboard-section"
+          size="small"
+          title={<Skeleton.Input active size="small" style={{ width: 72 }} />}
+        >
+          <Row gutter={[0, 12]}>
+            {Array.from({ length: 4 }, (_, index) => (
+              <Col key={index} lg={6} md={12} sm={12} xs={24}>
+                <div className="ant-dashboard-task dashboard-skeleton-task">
+                  <Skeleton.Avatar active shape="square" size="medium" />
+                  <Skeleton active paragraph={{ rows: 1, width: ["72%"] }} title={false} />
+                  <Skeleton.Button active size="small" />
+                </div>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+        <Row gutter={[16, 16]}>
+          <Col lg={14} xs={24}>
+            <DashboardSkeletonCard chart />
+          </Col>
+          <Col lg={10} xs={24}>
+            <DashboardSkeletonCard chart />
+          </Col>
+        </Row>
+        <DashboardSkeletonCard chart />
+        <DashboardSkeletonCard chart />
+      </div>
     </section>
+  );
+}
+
+function DashboardSkeletonCard({ chart = false }: { chart?: boolean }) {
+  return (
+    <Card
+      className="ant-dashboard-section dashboard-skeleton-card"
+      size="small"
+      title={<Skeleton.Input active size="small" style={{ width: 96 }} />}
+    >
+      <Skeleton active paragraph={{ rows: chart ? 5 : 3, width: "100%" }} title={chart ? false : { width: "42%" }} />
+    </Card>
   );
 }
 

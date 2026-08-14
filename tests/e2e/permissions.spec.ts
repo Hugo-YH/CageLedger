@@ -19,7 +19,7 @@ test("admin can create infrastructure and manage a room account", async ({ page 
   await page.getByLabel("登录名", { exact: true }).fill("e2e_room_admin");
   await page.getByLabel("显示姓名", { exact: true }).fill("E2E 房间管理员");
   await page.getByLabel("初始密码", { exact: true }).fill("e2e-password");
-  await page.getByLabel(roomName, { exact: true }).check();
+  await page.locator(".settings-room-access-group .ant-checkbox-wrapper").filter({ hasText: roomName }).click();
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
   const userItem = page.locator(".settings-user-collapse .ant-collapse-item").filter({ hasText: "E2E 房间管理员" });
   await expect(userItem).toBeVisible();

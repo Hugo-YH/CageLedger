@@ -772,6 +772,28 @@
   line-height: 22px;
 }
 
+.dashboard-skeleton-hero .ant-skeleton {
+  margin-top: 8px;
+}
+
+.dashboard-skeleton-task {
+  min-height: 64px;
+  cursor: default;
+}
+
+.dashboard-skeleton-task .ant-skeleton {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-skeleton-task .ant-skeleton-paragraph {
+  margin-block: 0;
+}
+
+.dashboard-skeleton-card .ant-card-body {
+  min-height: 170px;
+}
+
 .ant-dashboard-task:hover {
   background: var(--app-surface-subtle);
 }

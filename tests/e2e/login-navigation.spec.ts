@@ -60,7 +60,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   ).toContainText("8014");
   await page.getByRole("switch", { name: "动物数量", exact: true }).click();
   await page.getByLabel("第 1 行增加", { exact: true }).fill("10");
-  await page.getByLabel("第 1 行增加类型", { exact: true }).selectOption("购入");
+  await selectAntOptionByKeyboard(page, page.getByLabel("第 1 行增加类型", { exact: true }));
   await expect(page.getByLabel("第 1 行结余总数", { exact: true })).toHaveAttribute("placeholder", "10");
   await openWorkflowCenter(page);
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();

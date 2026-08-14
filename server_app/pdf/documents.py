@@ -1,7 +1,7 @@
-import calendar
 from html import escape
 
 from server_app.domains.billing.custom_billing import normalize_custom_billing_segments
+from server_app.pdf.formatting import day_index, days_in_month, format_date, month_label, normalize_iacuc
 from server_app.pdf.renderer import html_to_pdf
 from server_app.pdf.settlement_notes import settlement_note_markup
 from server_app.shared import clean_text
@@ -214,9 +214,9 @@ def statement_columns(statement, lines):
                 continue
             key = breakdown_key(item)
             if key in columns:
-                columns[key]["hasTieredCharge"] = columns[key]["hasTieredCharge"] or as_number(
-                    item.get("tier2BillableCages")
-                ) > 0
+                columns[key]["hasTieredCharge"] = (
+                    columns[key]["hasTieredCharge"] or as_number(item.get("tier2BillableCages")) > 0
+                )
                 continue
             columns[key] = {
                 "key": key,
@@ -656,41 +656,6 @@ def format_quantity_change(count, change_type, transfer, transfer_type):
     )
     suffix = f" {transfer}" if change_type == transfer_type and transfer else ""
     return f"{number_text(value)}（{short}{suffix}）" if short else number_text(value)
-
-
-def days_in_month(month):
-    try:
-        year, value = [int(part) for part in str(month).split("-", 1)]
-        return calendar.monthrange(year, value)[1]
-    except (TypeError, ValueError):
-        return 31
-
-
-def day_index(value, month):
-    text = str(value or "")
-    if not text.startswith(f"{month}-"):
-        return -1
-    try:
-        day = int(text.rsplit("-", 1)[1])
-        return day - 1 if 1 <= day <= days_in_month(month) else -1
-    except ValueError:
-        return -1
-
-
-def format_date(value):
-    parts = str(value or "").split("-")
-    if len(parts) == 3 and all(part.isdigit() for part in parts):
-        return f"{int(parts[0])}.{int(parts[1])}.{int(parts[2])}"
-    return h(value)
-
-
-def month_label(value):
-    text = str(value or "")
-    return f"{text[:4]}年{text[5:7]}月" if len(text) >= 7 else "未命名月份"
-
-
-def normalize_iacuc(value):
-    return str(value or "").strip().upper()
 
 
 def clean_filename(value):

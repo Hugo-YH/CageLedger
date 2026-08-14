@@ -7,7 +7,6 @@ import {
   escapeHtml,
   money,
   normalizeIacuc,
-  resolveDisplayLineCount,
   compareSettlementSpecies,
   settlementPrintStyles,
   settlementSpeciesHeaders,
@@ -75,9 +74,6 @@ type ColumnSummary = {
 
 type SettlementRow = {
   date: string;
-  totalCount: number;
-  totalFree: number;
-  totalTier2: number;
   perColumn: Map<string, ColumnSummary>;
 };
 
@@ -88,7 +84,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   );
   const unit = resolveUnit(statement, lines);
   const rawColumns = collectColumns(statement, lines);
-  const model = lines.map((line) => modelLine(line, rawColumns, unit));
+  const model = lines.map((line) => modelLine(line, rawColumns));
   const totals = summarizeColumns(rawColumns, model);
   const totalsByKey = new Map(totals.map((item) => [item.key, item]));
   const columns = rawColumns.map((column) => {
@@ -485,7 +481,7 @@ function groupFieldSpans(showFree: boolean, showTiered: boolean, needsWideAmount
   return spans;
 }
 
-function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit: string) {
+function modelLine(line: BillingStatementLine, columns: SettlementColumn[]) {
   const perColumn = new Map(columns.map((column) => [column.key, emptySummary()]));
   const explicitBreakdown = (line.iacucBreakdown || []).filter((raw) => {
     const item = raw as Breakdown;
@@ -513,10 +509,6 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
     }
     return {
       date: line.date,
-      totalCount: resolveDisplayLineCount(line, unit, [...perColumn.values()]),
-      totalFree: Number(line.freeCages || 0),
-      totalTier2: Number(line.tier2BillableCages || 0),
-      totalAmount: Number(line.amount || 0),
       perColumn,
     };
   }
@@ -592,10 +584,6 @@ function modelLine(line: BillingStatementLine, columns: SettlementColumn[], unit
 
   return {
     date: line.date,
-    totalCount: resolveDisplayLineCount(line, unit, [...perColumn.values()]),
-    totalFree: Number(line.freeCages || 0),
-    totalTier2: Number(line.tier2BillableCages || 0),
-    totalAmount: Number(line.amount || 0),
     perColumn,
   };
 }

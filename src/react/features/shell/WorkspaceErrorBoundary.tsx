@@ -3,7 +3,7 @@ import { Button } from "antd";
 
 import { clearUiStorage } from "../../state/uiStorage";
 import type { WorkspaceView } from "../../state/ui";
-import { PageSkeleton } from "../../components/WorkspaceUi";
+import { PageSkeleton } from "../../components/PageSkeleton";
 
 const CHUNK_RECOVERY_KEY = "cageledger.workspace.chunk-recovery-at";
 const CHUNK_RECOVERY_WINDOW_MS = 30_000;

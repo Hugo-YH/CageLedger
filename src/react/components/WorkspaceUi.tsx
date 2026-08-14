@@ -1,8 +1,10 @@
-import { Button, Empty, Flex, Modal, Pagination, Skeleton, Space, Typography } from "antd";
+import { Button, Empty, Flex, Modal, Pagination, Space, Typography } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 import { type ReactNode, useEffect, useRef } from "react";
 
 import { ActionButton, CommandBar, type ActionButtonProps, type ActionTone } from "./ui";
+
+export { PageSkeleton } from "./PageSkeleton";
 
 export function WorkspaceToolbar({ toolbar, actions }: { toolbar?: ReactNode; actions?: ReactNode }) {
   return toolbar || actions ? (
@@ -19,66 +21,6 @@ export function PageState({ title, detail, retry }: { title: string; detail?: st
     <div className="empty-state" role="status" aria-live="polite">
       <Empty description={detail || title}>{retry ? <Button onClick={retry}>重新加载</Button> : null}</Empty>
     </div>
-  );
-}
-
-type PageSkeletonVariant = "page" | "table" | "detail" | "form";
-
-const skeletonRows = ["92%", "100%", "84%", "96%", "72%", "90%"];
-
-/** Shared first-load placeholder for lazy workspace views and remote page data. */
-export function PageSkeleton({
-  label = "页面内容",
-  variant = "page",
-  rows = 5,
-  compact = false,
-}: {
-  label?: string;
-  variant?: PageSkeletonVariant;
-  rows?: number;
-  compact?: boolean;
-}) {
-  const visibleRows = skeletonRows.slice(0, Math.max(1, Math.min(rows, skeletonRows.length)));
-  const isTable = variant === "table";
-  const isDetail = variant === "detail";
-
-  return (
-    <section
-      aria-busy="true"
-      aria-label={`${label}正在加载`}
-      aria-live="polite"
-      className={`page-skeleton page-skeleton-${variant}${compact ? " is-compact" : ""}`}
-      data-ui="page-skeleton"
-      role="status"
-    >
-      <span className="app-visually-hidden">{label}正在加载</span>
-      <div className="page-skeleton-heading">
-        <Skeleton.Input active block size="large" />
-        <Skeleton.Button active size="medium" />
-      </div>
-      {isTable ? (
-        <div className="page-skeleton-table" aria-hidden="true">
-          <div className="page-skeleton-table-head">
-            {Array.from({ length: 5 }, (_, index) => (
-              <Skeleton.Input active block key={index} size="small" />
-            ))}
-          </div>
-          {Array.from({ length: rows }, (_, index) => (
-            <div className="page-skeleton-table-row" key={index}>
-              {Array.from({ length: 5 }, (_, cellIndex) => (
-                <Skeleton.Input active block key={cellIndex} size="small" />
-              ))}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Skeleton
-          active
-          paragraph={{ rows: isDetail ? Math.max(rows, 6) : rows, width: visibleRows }}
-          title={{ width: isDetail ? "44%" : "32%" }}
-        />
-      )}
-    </section>
   );
 }
 
