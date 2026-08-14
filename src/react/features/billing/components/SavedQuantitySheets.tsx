@@ -13,6 +13,7 @@ import {
 } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { ActionButton, DataTable } from "../../../components/ui";
+import { PageSkeleton } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
 
@@ -46,6 +47,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   const iacucExpiryByCode = new Map(
     (iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
   );
+  const initialLoading = list.isPending;
   const toggleAllFiltered = async () => {
     if (allFilteredSelected) {
       setSelected([]);
@@ -184,6 +186,8 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       setExportError(error instanceof Error ? error.message : "PDF 导出失败");
     }
   }
+
+  if (initialLoading) return <PageSkeleton label="已保存数量统计表" variant="table" />;
 
   return (
     <section className="panel quantity-saved-panel">
@@ -391,7 +395,11 @@ function QuantityPreviewModal({
           {exportError || "PDF 正在后台生成，完成后会自动下载。"}
         </div>
       ) : null}
-      {loading || !sheet ? <div className="empty-state">正在加载...</div> : <QuantityPreview sheet={sheet} />}
+      {loading || !sheet ? (
+        <PageSkeleton compact label="数量统计表预览" rows={4} variant="detail" />
+      ) : (
+        <QuantityPreview sheet={sheet} />
+      )}
     </Modal>
   );
 }

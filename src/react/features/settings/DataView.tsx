@@ -8,7 +8,7 @@ import type { ColumnsType } from "antd/es/table";
 import { uploadFile, useIacucStatus, usePrincipalIdentities, useSavePrincipalIdentity } from "../../api/administration";
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
-import { formatDateTime, PageState, Pager } from "../../components/WorkspaceUi";
+import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 import { DataTable } from "../../components/ui";
 
 const principalTypeOptions = [
@@ -104,7 +104,7 @@ export function DataView({ user }: { user: SessionUser }) {
           >
             <Typography.Paragraph type="secondary">负责人身份决定每日免费笼数额度。</Typography.Paragraph>
             {identities.isPending ? (
-              <PageState title="正在加载负责人身份..." />
+              <PageSkeleton compact label="负责人身份" rows={4} variant="table" />
             ) : identities.isError ? (
               <PageState title="负责人身份加载失败" retry={() => identities.refetch()} />
             ) : (
@@ -136,7 +136,7 @@ export function DataView({ user }: { user: SessionUser }) {
           <aside className="settings-side-stack">
             <Card size="small" title="IACUC 索引">
               {status.isPending ? (
-                <PageState title="正在读取索引状态..." />
+                <PageSkeleton compact label="索引状态" rows={3} variant="detail" />
               ) : (
                 <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                   <Statistic title="已索引记录" value={status.data?.count || 0} suffix="条" />

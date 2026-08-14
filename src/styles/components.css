@@ -515,20 +515,11 @@
   border-top: 1px dashed color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
-.quantity-change-type-trigger:hover,
-.quantity-change-type-trigger:focus-visible,
-.quantity-change-type-option:hover,
-.quantity-change-type-option.selected {
-  color: var(--brand-strong);
-  background: var(--success-soft);
-}
-
 .quantity-change-editor .iacuc-lookup {
   grid-column: 1 / -1;
 }
 
-.quantity-change-type-warning,
-.quantity-change-editor.missing-type select,
+.quantity-change-editor.missing-type .ant-select-selector,
 .quantity-change-editor.missing-transfer .iacuc-lookup input {
   border-color: var(--amber);
   background: var(--surface-soft);
@@ -1212,12 +1203,76 @@
   color: var(--text);
 }
 
+[data-ui="page-skeleton"] {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-ui="page-skeleton"].page-skeleton-page,
+[data-ui="page-skeleton"].page-skeleton-detail,
+[data-ui="page-skeleton"].page-skeleton-form {
+  min-height: 320px;
+}
+
+[data-ui="page-skeleton"].is-compact {
+  min-height: 0;
+  padding: 16px;
+}
+
+.page-skeleton-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+[data-ui="page-skeleton"] .page-skeleton-heading .ant-skeleton-input {
+  width: min(280px, 52vw);
+}
+
+[data-ui="page-skeleton"] .page-skeleton-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-panel);
+}
+
+.page-skeleton-table-head,
+.page-skeleton-table-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 0.8fr;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.page-skeleton-table-head {
+  background: var(--surface-soft);
+}
+
+.page-skeleton-table-row + .page-skeleton-table-row {
+  border-top: 1px solid var(--card-border);
+}
+
+[data-ui="page-skeleton"] .page-skeleton-table .ant-skeleton-input {
+  width: 100%;
+}
+
 .form-notice[role="status"] {
   border-left: 3px solid var(--primary);
 }
 
 /* Shared mobile layout adjustments (migrated from responsive.css). */
 @media (width <= 760px) {
+  [data-ui="page-skeleton"] {
+    padding: 16px;
+  }
+
   .table-wrap {
     max-width: calc(100vw - 24px);
   }

@@ -1,5 +1,5 @@
 import type { CageRoom, QuantitySheet, QuantitySheetRow } from "../../../api/contracts";
-import { AsyncActionButton, ModalShell } from "../../../components/WorkspaceUi";
+import { Button, Modal, Space } from "antd";
 import { roomBillingProfile } from "../../../../domain/quantitySheets";
 
 export function ConfirmSave({
@@ -18,14 +18,23 @@ export function ConfirmSave({
   const filled = sheet.rows.filter(hasRowContent).length;
   const profile = roomBillingProfile(room);
   return (
-    <ModalShell ariaLabel="确认保存数量统计表" className="quantity-save-confirm" onClose={onCancel}>
-      <div className="modal-shell-head">
-        <div>
-          <span className="workspace-kicker">保存前核对</span>
-          <h2>确认保存数量统计表</h2>
-        </div>
-      </div>
-      <div className="modal-shell-body">
+    <Modal
+      centered
+      className="quantity-save-confirm"
+      footer={
+        <Space>
+          <Button onClick={onCancel}>取消</Button>
+          <Button loading={pending} type="primary" onClick={onConfirm}>
+            {pending ? "正在保存…" : "确认保存"}
+          </Button>
+        </Space>
+      }
+      open
+      title="确认保存数量统计表"
+      onCancel={onCancel}
+    >
+      <div className="quantity-save-confirm-kicker">保存前核对</div>
+      <div className="quantity-save-confirm-content">
         <div className="quantity-confirm-profile">
           <div>
             <strong>{room?.name || "未选择房间"}</strong>
@@ -70,21 +79,7 @@ export function ConfirmSave({
           </div>
         </dl>
       </div>
-      <div className="modal-shell-actions">
-        <button className="secondary" type="button" onClick={onCancel}>
-          取消
-        </button>
-        <AsyncActionButton
-          className="primary"
-          type="button"
-          pending={pending}
-          pendingLabel="正在保存…"
-          onClick={onConfirm}
-        >
-          确认保存
-        </AsyncActionButton>
-      </div>
-    </ModalShell>
+    </Modal>
   );
 }
 

@@ -64,7 +64,7 @@
   border: 1px solid var(--vp-c-border);
   border-collapse: separate;
   border-spacing: 0;
-  border-radius: var(--cl-radius-control);
+  border-radius: var(--cl-radius-card);
 }
 
 .VPDoc .vp-doc tr {
@@ -94,6 +94,21 @@
 .VPDoc .vp-doc code,
 .VPDoc .vp-doc div[class*="language-"] {
   border-radius: var(--cl-radius-control);
+}
+
+.VPDoc .vp-doc :is(button, .VPButton) {
+  min-height: 32px;
+  border-radius: var(--cl-radius-control);
+  transition:
+    background-color var(--cl-motion-base) var(--cl-ease-out),
+    border-color var(--cl-motion-base) var(--cl-ease-out),
+    color var(--cl-motion-base) var(--cl-ease-out),
+    box-shadow var(--cl-motion-base) var(--cl-ease-out);
+}
+
+.VPDoc .vp-doc :is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cl-brand-1) 42%, transparent);
+  outline-offset: 2px;
 }
 
 .VPDoc .vp-doc div[class*="language-"] {

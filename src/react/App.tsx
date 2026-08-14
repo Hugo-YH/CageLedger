@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Button, Result } from "antd";
+import { Button, Result, Skeleton } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "./api/client";
@@ -23,7 +23,8 @@ function LoadingScreen() {
       <img src="/cageledger-icon.svg" alt="" />
       <div>
         <strong>CageLedger</strong>
-        <span>正在加载实验室运营台...</span>
+        <span className="app-visually-hidden">正在加载实验室运营台</span>
+        <Skeleton active paragraph={{ rows: 1, width: "160px" }} title={false} />
       </div>
     </main>
   );

@@ -4,7 +4,7 @@ import { Button, Form, Input, Select, Upload } from "antd";
 import { uploadFile, usePrincipalIdentities } from "../../../api/administration";
 import { useReimbursementClaim, useSaveReimbursementClaim } from "../../../api/reimbursementLedger";
 import type { ReimbursementClaim, ReimbursementFundingLine, SessionUser } from "../../../api/contracts";
-import { formatMoney, ModalShell, PageState } from "../../../components/WorkspaceUi";
+import { formatMoney, ModalShell, PageSkeleton } from "../../../components/WorkspaceUi";
 
 const claimStatusLabels: Record<string, string> = {
   pending_submission: "待提交",
@@ -73,7 +73,9 @@ export function ReimbursementClaimDialog({
         </Button>
       </div>
       <div className="modal-shell-body reimbursement-claim-body">
-        {detail.isPending && effectiveClaimId ? <PageState title="正在加载报销单..." /> : null}
+        {detail.isPending && effectiveClaimId ? (
+          <PageSkeleton compact label="报销单" rows={3} variant="detail" />
+        ) : null}
         <Form className="form-grid" layout="vertical">
           <Form.Item label="报销单号">
             <Input

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Spin, Typography } from "antd";
+import { Alert, Button } from "antd";
 
 import { useColumnFilterOptions } from "../../../api/filterOptions";
 import type { LedgerListParams } from "../../../api/reimbursementLedger";
 import { FilterableColumnTitle, type TableFilterOption } from "../../../components/FilterableTableHeader";
+import { PageSkeleton } from "../../../components/WorkspaceUi";
 
 export function QueryFeedback({
   loading,
@@ -20,12 +21,7 @@ export function QueryFeedback({
   retry: () => void;
 }) {
   if (loading) {
-    return (
-      <div className="ledger-loading" role="status">
-        <Spin size="small" />
-        <Typography.Text type="secondary">{loadingText}</Typography.Text>
-      </div>
-    );
+    return <PageSkeleton label={loadingText.replace("正在", "").replace("...", "")} rows={5} variant="table" />;
   }
   if (error) {
     return (

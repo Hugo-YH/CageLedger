@@ -3,6 +3,7 @@ import { Button } from "antd";
 
 import { clearUiStorage } from "../../state/uiStorage";
 import type { WorkspaceView } from "../../state/ui";
+import { PageSkeleton } from "../../components/WorkspaceUi";
 
 const CHUNK_RECOVERY_KEY = "cageledger.workspace.chunk-recovery-at";
 const CHUNK_RECOVERY_WINDOW_MS = 30_000;
@@ -10,9 +11,7 @@ const CHUNK_RECOVERY_WINDOW_MS = 30_000;
 export function WorkspaceLoading() {
   return (
     <section className="workspace-view">
-      <div className="empty-state" aria-busy="true">
-        <strong>正在加载业务工作区...</strong>
-      </div>
+      <PageSkeleton label="业务工作区" variant="page" />
     </section>
   );
 }

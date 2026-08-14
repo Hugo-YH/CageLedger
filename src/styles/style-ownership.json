@@ -21,16 +21,24 @@
   "stylesheets": {
     "src/styles/brand-tokens.css": { "owner": "shared-brand", "status": "complete" },
     "src/styles/tokens.css": { "owner": "application-tokens", "status": "complete" },
-    "src/styles/base.css": { "owner": "element-baseline", "status": "in-progress" },
-    "src/styles/shell.css": { "owner": "application-shell", "status": "in-progress" },
-    "src/styles/components.css": { "owner": "shared-components", "status": "in-progress" },
-    "src/styles/features/modal.css": { "owner": "modal", "status": "in-progress" },
-    "src/styles/features/antd-system.css": { "owner": "antd-theme", "status": "in-progress" },
-    "src/styles/features/intake.css": { "owner": "intake", "status": "in-progress" },
-    "src/styles/features/billing.css": { "owner": "billing", "status": "in-progress" },
+    "src/styles/base.css": { "owner": "element-baseline", "status": "complete" },
+    "src/styles/shell.css": { "owner": "application-shell", "status": "complete" },
+    "src/styles/components.css": {
+      "owner": "shared-components",
+      "status": "complete",
+      "selectorPrefixes": [".quantity-change-editor", ".quantity-change-type-warning"]
+    },
+    "src/styles/features/modal.css": { "owner": "modal", "status": "complete" },
+    "src/styles/features/antd-system.css": { "owner": "antd-theme", "status": "complete" },
+    "src/styles/features/intake.css": { "owner": "intake", "status": "complete" },
+    "src/styles/features/billing.css": {
+      "owner": "billing",
+      "status": "complete",
+      "selectorPrefixes": [".react-quantity-layout"]
+    },
     "src/styles/features/animal-management.css": {
       "owner": "animal-management",
-      "status": "in-progress",
+      "status": "complete",
       "selectorPrefixes": [".inspection-"],
       "scopeRoots": [
         "[data-feature=\"animal-management\"]",
@@ -40,9 +48,13 @@
         ".inspection-image-dialog"
       ]
     },
-    "src/styles/features/cages.css": { "owner": "cages", "status": "in-progress" },
-    "src/styles/features/workflow.css": { "owner": "workflow", "status": "in-progress" },
-    "src/styles/features/administration.css": { "owner": "administration", "status": "in-progress" },
+    "src/styles/features/cages.css": { "owner": "cages", "status": "complete" },
+    "src/styles/features/workflow.css": {
+      "owner": "workflow",
+      "status": "complete",
+      "scopeRoots": ["[data-feature=\"workflow\"]", ".workflow-detail-modal"]
+    },
+    "src/styles/features/administration.css": { "owner": "administration", "status": "complete" },
     "src/styles/features/project-home.css": {
       "owner": "project-home",
       "status": "in-progress",
@@ -56,28 +68,28 @@
       "owner": "src/styles/shell.css",
       "allowedPrefixes": ["[data-ui='app-shell']", ".ant-shell"],
       "breakpoints": ["desktop", "1180px", "760px", "landscape"],
-      "status": "in-progress"
+      "status": "complete"
     },
     "sidebar": {
       "root": "[data-ui='sidebar']",
       "owner": "src/styles/shell.css",
       "allowedPrefixes": ["[data-ui='sidebar']", ".ant-sidebar"],
       "breakpoints": ["desktop", "1180px", "760px", "landscape"],
-      "status": "in-progress"
+      "status": "complete"
     },
     "command-bar": {
       "root": "[data-ui='workspace-toolbar']",
       "owner": "src/styles/components.css",
       "allowedPrefixes": ["[data-ui='command-bar']", "[data-ui='workspace-toolbar']", ".app-command-bar"],
       "breakpoints": ["desktop", "760px"],
-      "status": "in-progress"
+      "status": "complete"
     },
     "data-table": {
       "root": "[data-ui='data-table']",
       "owner": "src/styles/components.css",
       "allowedPrefixes": ["[data-ui='data-table']"],
       "breakpoints": ["desktop", "1180px", "760px"],
-      "status": "in-progress"
+      "status": "complete"
     },
     "modal": {
       "root": "[data-ui='modal']",
@@ -85,7 +97,14 @@
       "allowedPrefixes": ["[data-ui='modal']", ".app-modal-root"],
       "portalRoots": [".app-modal-root"],
       "breakpoints": ["desktop", "760px"],
-      "status": "in-progress"
+      "status": "complete"
+    },
+    "page-skeleton": {
+      "root": "[data-ui='page-skeleton']",
+      "owner": "src/styles/components.css",
+      "allowedPrefixes": ["[data-ui='page-skeleton']", ".page-skeleton"],
+      "breakpoints": ["desktop", "1180px", "760px", "landscape"],
+      "status": "complete"
     },
     "mobile-navigation": {
       "root": "[data-ui='mobile-navigation']",

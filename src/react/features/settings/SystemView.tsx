@@ -4,7 +4,7 @@ import { Alert, Button, Card, Descriptions, Divider, Flex, Segmented, Skeleton, 
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemEnvironment, useSystemInfo, useSystemUpdate } from "../../api/administration";
-import { PageState } from "../../components/WorkspaceUi";
+import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
@@ -24,7 +24,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   if (info.isPending)
     return (
       <section className="workspace-view">
-        <PageState title="正在加载系统信息..." />
+        <PageSkeleton label="系统信息" variant="detail" />
       </section>
     );
   if (info.isError || !info.data)

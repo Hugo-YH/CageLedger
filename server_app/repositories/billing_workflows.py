@@ -50,6 +50,7 @@ def get_billing_workflow_detail(conn, workflow_id):
             json_extract(workflows.payload, '$.submittedToFinanceAt') AS submitted_to_finance_at,
             json_extract(workflows.payload, '$.registeredAt') AS registered_at,
             json_extract(workflows.payload, '$.archivedAt') AS archived_at,
+            json_extract(workflows.payload, '$.lockedFromStatus') AS locked_from_status,
             json_extract(workflows.payload, '$.receivedAmount') AS received_amount,
             json_extract(workflows.payload, '$.reimbursementFormNos') AS reimbursement_form_nos_json,
             json_extract(workflows.payload, '$.reimbursementForms') AS reimbursement_forms_json,
@@ -204,6 +205,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
             json_extract(payload, '$.submittedToFinanceAt') AS submitted_to_finance_at,
             json_extract(payload, '$.registeredAt') AS registered_at,
             json_extract(payload, '$.archivedAt') AS archived_at,
+            json_extract(payload, '$.lockedFromStatus') AS locked_from_status,
             json_extract(payload, '$.receivedAmount') AS received_amount,
             json_extract(payload, '$.reimbursementFormNos') AS reimbursement_form_nos_json,
             json_extract(payload, '$.reimbursementForms') AS reimbursement_forms_json,
@@ -372,6 +374,7 @@ def billing_workflow_list_row(row):
         "submittedToFinanceAt": row["submitted_to_finance_at"] or "",
         "registeredAt": row["registered_at"] or "",
         "archivedAt": row["archived_at"] or "",
+        "lockedFromStatus": row["locked_from_status"] or "",
         "receivedAmount": row["received_amount"] or 0,
         "reimbursementFormNos": _load_json_array(row["reimbursement_form_nos_json"]),
         "reimbursementForms": _load_json_array(row["reimbursement_forms_json"]),
@@ -413,6 +416,7 @@ def billing_workflow_list_item(workflow):
         "submittedToFinanceAt": workflow.get("submittedToFinanceAt", ""),
         "registeredAt": workflow.get("registeredAt", ""),
         "archivedAt": workflow.get("archivedAt", ""),
+        "lockedFromStatus": workflow.get("lockedFromStatus", ""),
         "receivedAmount": workflow.get("receivedAmount", 0),
         "reimbursementFormNos": workflow.get("reimbursementFormNos", []),
         "reimbursementForms": workflow.get("reimbursementForms", []),
@@ -698,20 +702,16 @@ def delete_billing_workflow_tree(conn, workflow_id):
 
 
 def _load_json_array(value):
-    if not value:
-        return []
     try:
-        parsed = json.loads(value)
+        parsed = json.loads(value) if value else []
     except (TypeError, json.JSONDecodeError):
         return []
     return parsed if isinstance(parsed, list) else []
 
 
 def _load_json_object(value):
-    if not value:
-        return {}
     try:
-        parsed = json.loads(value)
+        parsed = json.loads(value) if value else {}
     except (TypeError, json.JSONDecodeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}

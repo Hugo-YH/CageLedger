@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ant Design UI Audit"
+  short_description: "审查并维护 CageLedger 的 Ant Design 组件、样式与无障碍契约。"
+  default_prompt: "使用 CageLedger 的 Ant Design UI 审计技能，检查并修复指定页面的组件、样式归属、无障碍与响应式问题。"

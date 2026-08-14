@@ -51,7 +51,9 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   const items = query.data?.items || [];
   const total = query.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
-  const lockableItems = items.filter((item) => item.workflowStatus === "statement_archived");
+  const lockableItems = items.filter(
+    (item) => item.workflowStatus === "statement_sent" || item.workflowStatus === "statement_archived",
+  );
   const allLockableSelected =
     lockableItems.length > 0 && lockableItems.every((item) => selectedLockable.includes(item.id));
 
@@ -73,7 +75,9 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
 
   async function lockSelected() {
     const targets = items.filter(
-      (item) => item.workflowStatus === "statement_archived" && selectedLockable.includes(item.id),
+      (item) =>
+        (item.workflowStatus === "statement_sent" || item.workflowStatus === "statement_archived") &&
+        selectedLockable.includes(item.id),
     );
     if (!targets.length) return;
     setBatchLocking(true);
@@ -153,7 +157,10 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
               <Checkbox
                 aria-label={`选择 ${item.pi} ${item.month} 结算流程`}
                 checked={selectedLockable.includes(item.id)}
-                disabled={item.workflowStatus !== "statement_archived" || batchLocking}
+                disabled={
+                  (item.workflowStatus !== "statement_sent" && item.workflowStatus !== "statement_archived") ||
+                  batchLocking
+                }
                 onChange={(event) => toggleLockable(item, event.target.checked)}
               />
             ),
@@ -233,6 +240,26 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
               >
                 撤回
               </Button>
+              {user.billingLockAllowed ? (
+                <Popconfirm
+                  title="锁定该结算流程？"
+                  description="锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
+                  okText="锁定"
+                  cancelText="取消"
+                  onConfirm={async () => {
+                    await advance.mutateAsync({
+                      workflowId: item.id,
+                      toStatus: "statement_locked",
+                      note: "锁定结算流程",
+                    });
+                    void query.refetch();
+                  }}
+                >
+                  <Button icon={<LockOutlined aria-hidden />} size="small">
+                    锁定
+                  </Button>
+                </Popconfirm>
+              ) : null}
             </Space>
           );
         }
@@ -250,7 +277,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
               {user.billingLockAllowed ? (
                 <Popconfirm
                   title="锁定该结算流程？"
-                  description="锁定后流程进入终态，仅授权账号可补录或解锁，解锁前不允许撤回/撤销。"
+                  description="锁定后流程进入只读，仅授权账号可补录或解锁。"
                   okText="锁定"
                   cancelText="取消"
                   onConfirm={async () => {
@@ -280,6 +307,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           );
         }
         if (item.workflowStatus === "statement_locked") {
+          const unlockStatus = item.signedStatementReturned ? "statement_archived" : "statement_sent";
+          const unlockStatusLabel = unlockStatus === "statement_archived" ? "已归档" : "已发起";
           return (
             <Space className="workflow-row-actions" size={4}>
               <Button size="small" type="primary" onClick={() => void openDetail(item)}>
@@ -293,13 +322,13 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
               {user.billingLockAllowed ? (
                 <Popconfirm
                   title="解锁该结算流程？"
-                  description="解锁后回到已归档状态，可继续撤回、补录或重新锁定。"
+                  description={`解锁后依据结算单交回状态回到${unlockStatusLabel}，已补录信息会保留。`}
                   okText="解锁"
                   cancelText="取消"
                   onConfirm={async () => {
                     await advance.mutateAsync({
                       workflowId: item.id,
-                      toStatus: "statement_archived",
+                      toStatus: unlockStatus,
                       note: "解锁结算流程",
                     });
                     void query.refetch();
@@ -327,7 +356,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
             <Typography.Text type="secondary">已选 {selectedLockable.length} 条可锁定</Typography.Text>
             <Popconfirm
               title={`批量锁定 ${selectedLockable.length} 条结算流程？`}
-              description="锁定后进入终态，解锁前不允许撤回/撤销；仅授权账号可补录或解锁。"
+              description="锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
               okText="批量锁定"
               cancelText="取消"
               onConfirm={() => void lockSelected()}

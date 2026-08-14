@@ -7,7 +7,7 @@
   margin: 0;
 }
 
-.workflow-timeline .ant-timeline-item-rail {
+.workflow-detail-modal .workflow-timeline .ant-timeline-item-rail {
   border-inline-start-color: color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
@@ -15,7 +15,7 @@
   padding: 20px 24px 24px;
 }
 
-.workflow-history-trigger.ant-btn {
+.workflow-detail-modal .workflow-history-trigger.ant-btn {
   height: 24px;
   padding: 0 8px;
   border: 1px solid var(--line);
@@ -26,7 +26,7 @@
   line-height: 20px;
 }
 
-.workflow-history-trigger.ant-btn:hover {
+.workflow-detail-modal .workflow-history-trigger.ant-btn:hover {
   border-color: var(--line-strong);
   background: var(--surface-hover);
   color: var(--muted);

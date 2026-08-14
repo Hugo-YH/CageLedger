@@ -32,7 +32,7 @@ import {
   useResolveFinding,
   useUpdateFinding,
 } from "../../api/animalManagement";
-import { PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { DataTable } from "../../components/ui";
@@ -62,7 +62,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
     setOffset(0);
   }
 
-  if (query.isLoading) return <PageState title="正在加载巡检记录..." />;
+  if (query.isLoading) return <PageSkeleton label="巡检记录" variant="table" />;
   if (query.isError) return <PageState title="巡检记录加载失败" retry={() => void query.refetch()} />;
   const filters = (
     <Form className="inspection-list-filters" component={false} layout={isMobile ? "vertical" : "inline"}>
@@ -228,7 +228,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const query = useAnimalFindings({ limit: pageSize, offset, status });
   const page = query.data?.page || { offset: 0, limit: pageSize, total: 0 };
   const current = Math.floor(page.offset / page.limit) + 1;
-  if (query.isLoading) return <PageState title="正在加载异常处置项..." />;
+  if (query.isLoading) return <PageSkeleton label="异常处置项" variant="table" />;
   if (query.isError) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
   if (isMobile) {
     const findings = query.data?.items || [];
@@ -431,7 +431,7 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
       title="巡检记录详情"
       width={860}
     >
-      {query.isLoading ? <Typography.Text>正在加载巡检结论与处置记录...</Typography.Text> : null}
+      {query.isLoading ? <PageSkeleton compact label="巡检结论与处置记录" rows={4} variant="detail" /> : null}
       {query.isError || !query.data ? <Alert title="巡检记录详情加载失败" showIcon type="error" /> : null}
       {query.data ? (
         <Space className="inspection-detail-content" orientation="vertical" size={16} style={{ width: "100%" }}>

@@ -11,7 +11,7 @@ import {
   useSubmitAnimalInspection,
 } from "../../api/animalManagement";
 import { useBootstrap } from "../../api/bootstrap";
-import { AsyncActionButton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { AsyncActionButton, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { HelpTooltip } from "../../components/Tooltip";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
@@ -151,7 +151,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   }
 
   if (catalog.isLoading || bootstrap.isLoading || (draftId && detail.isLoading))
-    return <PageState title="正在加载巡检工作区..." />;
+    return <PageSkeleton label="巡检工作区" variant="form" />;
   if (catalog.isError || bootstrap.isError || detail.isError)
     return <PageState title="巡检工作区加载失败" retry={() => void catalog.refetch()} />;
 

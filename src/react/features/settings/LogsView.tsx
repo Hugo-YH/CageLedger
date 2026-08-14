@@ -4,7 +4,7 @@ import type { ColumnsType } from "antd/es/table";
 
 import { useAuditEvents } from "../../api/administration";
 import type { AuditEvent } from "../../api/contracts";
-import { formatDateTime, PageState, Pager } from "../../components/WorkspaceUi";
+import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 import { DataTable } from "../../components/ui";
 
 export function LogsView() {
@@ -48,7 +48,7 @@ export function LogsView() {
           }
         >
           {query.isPending ? (
-            <PageState title="正在加载操作日志..." />
+            <PageSkeleton label="操作日志" variant="table" />
           ) : query.isError ? (
             <PageState title="操作日志加载失败" retry={() => query.refetch()} />
           ) : (

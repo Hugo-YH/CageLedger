@@ -60,6 +60,7 @@ export interface BillingWorkflow {
   signedReturnedAt: string;
   registeredAt: string;
   archivedAt: string;
+  lockedFromStatus?: string;
   signedStatementReturned?: boolean;
   signedStatementNote?: string;
   reimbursementFormReturned?: boolean;

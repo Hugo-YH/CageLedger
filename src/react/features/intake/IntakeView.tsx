@@ -19,7 +19,7 @@ import { queryKeys } from "../../api/queryKeys";
 import { ActionButton } from "../../components/ui";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
-import { AsyncActionButton, ModalShell, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, PageSkeleton, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
   missingIntakeRequiredFields,
@@ -74,6 +74,15 @@ export function IntakeView({
   const confirmBatchesReceipt = useConfirmIntakeBatchesReceipt();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
+
+  if (bootstrap.isPending || (mode === "batches" && list.isPending)) {
+    return (
+      <PageSkeleton
+        label={mode === "entry" ? "笼卡接收" : "待接收批次"}
+        variant={mode === "entry" ? "form" : "table"}
+      />
+    );
+  }
 
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
     setDraft((current) => normalizeIntakeBatch({ ...current, [key]: value }, roomNames));

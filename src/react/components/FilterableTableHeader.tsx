@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, Popover, Space } from "antd";
+import { Button, Checkbox, Input, Popover, Skeleton, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -79,7 +79,7 @@ export function FilterableColumnTitle({
         onChange={(nextValues) => setPending(nextValues.map(String))}
       >
         {loading ? (
-          <p className="muted">正在加载筛选项...</p>
+          <Skeleton active paragraph={{ rows: 3 }} title={false} />
         ) : visibleOptions.length ? (
           visibleOptions.map((option) => (
             <Checkbox key={option.value} value={option.value}>

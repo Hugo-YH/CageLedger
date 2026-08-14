@@ -218,14 +218,28 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
     if not workflow:
         raise LookupError("结算流程不存在")
     current_status = workflow.get("workflowStatus", deps["WORKFLOW_STATUS_GENERATED"])
+    version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
+    if not version:
+        raise LookupError("当前有效结算单不存在")
+    statement = dict(version.get("statement") or {})
+    locked_from_status = statement.get("lockedFromStatus") or deps["WORKFLOW_STATUS_ARCHIVED"]
+    signed_statement_returned = statement.get("signedStatementReturned")
+    restore_status = (
+        deps["WORKFLOW_STATUS_ARCHIVED"]
+        if signed_statement_returned
+        or (signed_statement_returned is None and locked_from_status == deps["WORKFLOW_STATUS_ARCHIVED"])
+        else deps["WORKFLOW_STATUS_SENT"]
+    )
     allowed_transitions = {
         (deps["WORKFLOW_STATUS_GENERATED"], deps["WORKFLOW_STATUS_SENT"]),
         (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_ARCHIVED"]),
         (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_GENERATED"]),
+        (deps["WORKFLOW_STATUS_SENT"], deps["WORKFLOW_STATUS_LOCKED"]),
         (deps["WORKFLOW_STATUS_ARCHIVED"], deps["WORKFLOW_STATUS_SENT"]),
         (deps["WORKFLOW_STATUS_ARCHIVED"], deps["WORKFLOW_STATUS_LOCKED"]),
-        (deps["WORKFLOW_STATUS_LOCKED"], deps["WORKFLOW_STATUS_ARCHIVED"]),
     }
+    if current_status == deps["WORKFLOW_STATUS_LOCKED"] and next_status == restore_status:
+        allowed_transitions.add((current_status, next_status))
     if (current_status, next_status) not in allowed_transitions:
         if current_status in (
             deps.get("WORKFLOW_STATUS_SIGNED", "statement_signed_returned"),
@@ -241,19 +255,23 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
     } and not deps["clean_text"](note):
         raise ValueError("撤回结算流程时请填写撤回原因")
 
-    version = deps["get_billing_version"](conn, workflow.get("currentVersionId", ""))
-    if not version:
-        raise LookupError("当前有效结算单不存在")
-    statement = dict(version.get("statement") or {})
     at = deps["now_iso"]()
     statement["workflowStatus"] = next_status
     if next_status == deps["WORKFLOW_STATUS_SENT"]:
-        statement["sentAt"] = at
-        statement["sentBy"] = {
-            "id": actor.get("id", ""),
-            "username": actor.get("username", ""),
-            "displayName": actor.get("displayName", ""),
-        }
+        if current_status == deps["WORKFLOW_STATUS_LOCKED"]:
+            statement["unlockedAt"] = at
+            statement["unlockedBy"] = {
+                "id": actor.get("id", ""),
+                "username": actor.get("username", ""),
+                "displayName": actor.get("displayName", ""),
+            }
+        else:
+            statement["sentAt"] = at
+            statement["sentBy"] = {
+                "id": actor.get("id", ""),
+                "username": actor.get("username", ""),
+                "displayName": actor.get("displayName", ""),
+            }
         if current_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
             statement["revertedAt"] = at
             statement["revertedBy"] = {
@@ -269,10 +287,8 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
             "displayName": actor.get("displayName", ""),
         }
     elif next_status == deps["WORKFLOW_STATUS_ARCHIVED"]:
-        statement["signedReturnedAt"] = at
-        statement["archivedAt"] = at
         if current_status == deps["WORKFLOW_STATUS_LOCKED"]:
-            # 解锁：保留已归档登记信息，仅记录解锁人/时间。
+            # 解锁：保留单据登记信息，并恢复由结算单交回状态决定的流程阶段。
             statement["unlockedAt"] = at
             statement["unlockedBy"] = {
                 "id": actor.get("id", ""),
@@ -280,6 +296,8 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
                 "displayName": actor.get("displayName", ""),
             }
         else:
+            statement["signedReturnedAt"] = at
+            statement["archivedAt"] = at
             statement.pop("unlockedAt", None)
             statement.pop("unlockedBy", None)
             registration = registration or {}
@@ -318,6 +336,7 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
             }
             statement["registeredAt"] = at
     elif next_status == deps["WORKFLOW_STATUS_LOCKED"]:
+        statement["lockedFromStatus"] = current_status
         statement["lockedAt"] = at
         statement["lockedBy"] = {
             "id": actor.get("id", ""),
@@ -350,7 +369,10 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
         event_type = "statement_archived_reverted"
     elif next_status == deps["WORKFLOW_STATUS_GENERATED"] and current_status == deps["WORKFLOW_STATUS_SENT"]:
         event_type = "statement_sent_reverted"
-    elif next_status == deps["WORKFLOW_STATUS_ARCHIVED"] and current_status == deps["WORKFLOW_STATUS_LOCKED"]:
+    elif current_status == deps["WORKFLOW_STATUS_LOCKED"] and next_status in {
+        deps["WORKFLOW_STATUS_SENT"],
+        deps["WORKFLOW_STATUS_ARCHIVED"],
+    }:
         event_type = "statement_unlocked"
     else:
         event_type = {
@@ -381,7 +403,8 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
     workflow = deps["get_billing_workflow"](conn, workflow_id)
     if not workflow:
         raise LookupError("结算流程不存在")
-    if workflow.get("workflowStatus", "") not in (
+    current_status = workflow.get("workflowStatus", "")
+    if current_status not in (
         deps["WORKFLOW_STATUS_ARCHIVED"],
         deps["WORKFLOW_STATUS_LOCKED"],
     ):
@@ -402,7 +425,7 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
         raise ValueError("请填写报销单号和金额")
     merged_forms = list(statement.get("reimbursementForms") or []) + forms
     at = deps["now_iso"]()
-    statement["workflowStatus"] = deps["WORKFLOW_STATUS_ARCHIVED"]
+    statement["workflowStatus"] = current_status
     statement["reimbursementForms"] = merged_forms
     statement["reimbursementFormNos"] = [entry["formNo"] for entry in merged_forms]
     statement["reimbursementFormReturned"] = True
@@ -419,7 +442,7 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
         workflow_id,
         version.get("versionNo", 1),
         version.get("versionStatus", deps["VERSION_STATUS_ACTIVE"]),
-        deps["WORKFLOW_STATUS_ARCHIVED"],
+        current_status,
         version.get("generatedAt", at),
         version.get("voidedAt", ""),
         version.get("voidedBy", ""),
@@ -431,7 +454,7 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
         workflow.get("iacuc", ""),
         workflow.get("month", ""),
         workflow.get("sourceType", ""),
-        deps["WORKFLOW_STATUS_ARCHIVED"],
+        current_status,
         updated_version,
         at,
     )
@@ -441,8 +464,8 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
         workflow_id,
         updated_version["id"],
         "statement_reimbursement_recorded",
-        deps["WORKFLOW_STATUS_ARCHIVED"],
-        deps["WORKFLOW_STATUS_ARCHIVED"],
+        current_status,
+        current_status,
         actor,
         at,
         "manual",

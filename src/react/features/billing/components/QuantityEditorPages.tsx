@@ -1,5 +1,5 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Button } from "antd";
+import { Button, Input, Select, type InputRef } from "antd";
 
 import type { QuantitySheetRow } from "../../../api/contracts";
 
@@ -162,7 +162,7 @@ const QuantityEntryCells = memo(
       animals: Number(initial.animalCount || 0),
       cages: Number(initial.cageCount || 0),
     });
-    const pickerRef = useRef<HTMLInputElement>(null);
+    const pickerRef = useRef<InputRef>(null);
     useImperativeHandle(
       ref,
       () => ({
@@ -203,18 +203,20 @@ const QuantityEntryCells = memo(
           const rightOrder = QUANTITY_FIELD_ORDER[right.dataset.quantityField || ""] ?? 99;
           return leftOrder - rightOrder;
         });
-      const currentIndex = focusables.indexOf(event.currentTarget);
+      const current =
+        event.currentTarget.closest<HTMLElement>('[data-quantity-focusable="true"]') ?? event.currentTarget;
+      const currentIndex = focusables.indexOf(current);
       if (currentIndex < 0) return;
       const next = focusables[currentIndex + (event.shiftKey ? -1 : 1)];
       if (!next) return;
       event.preventDefault();
-      next.focus();
+      (next.querySelector<HTMLElement>("input, button") ?? next).focus();
     };
     return (
       <>
         <td className="quantity-date-cell">
           <div className="quantity-date-field">
-            <input
+            <Input
               name="rowDate"
               aria-label={`第 ${index + 1} 行日期`}
               type="text"
@@ -241,9 +243,9 @@ const QuantityEntryCells = memo(
               size="small"
               tabIndex={-1}
               type="text"
-              onClick={() => pickerRef.current?.showPicker()}
+              onClick={() => pickerRef.current?.input?.showPicker()}
             />
-            <input
+            <Input
               ref={pickerRef}
               className="quantity-date-picker-native"
               type="date"
@@ -258,7 +260,7 @@ const QuantityEntryCells = memo(
         </td>
         <td className="quantity-change-cell animal-detail-col">
           <div className="quantity-change-editor">
-            <input
+            <Input
               aria-label={`第 ${index + 1} 行增加`}
               type="number"
               min="0"
@@ -270,23 +272,25 @@ const QuantityEntryCells = memo(
               data-quantity-row={index}
               data-quantity-field="addedCount"
             />
-            <select
+            <Select
               aria-label={`第 ${index + 1} 行增加类型`}
+              className="quantity-type-select"
+              options={[
+                { label: "类型", value: "" },
+                { label: "购入", value: "购入" },
+                { label: "转入", value: "转入" },
+                { label: "分笼", value: "分笼" },
+              ]}
               value={row.addedType}
-              onChange={(event) => update("addedType", event.target.value)}
+              onChange={(value) => update("addedType", value)}
               onKeyDown={handleTab}
               data-quantity-focusable="true"
               data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
               data-quantity-row={index}
               data-quantity-field="addedType"
-            >
-              <option value="">类型</option>
-              <option>购入</option>
-              <option>转入</option>
-              <option>分笼</option>
-            </select>
+            />
             {row.addedType === "转入" ? (
-              <input
+              <Input
                 className="iacuc-lookup"
                 aria-label={`第 ${index + 1} 行转入伦理号`}
                 value={row.transferInFromIacuc}
@@ -302,7 +306,7 @@ const QuantityEntryCells = memo(
         </td>
         <td className="quantity-change-cell animal-detail-col">
           <div className="quantity-change-editor">
-            <input
+            <Input
               aria-label={`第 ${index + 1} 行减少`}
               type="number"
               min="0"
@@ -314,23 +318,25 @@ const QuantityEntryCells = memo(
               data-quantity-row={index}
               data-quantity-field="removedCount"
             />
-            <select
+            <Select
               aria-label={`第 ${index + 1} 行减少类型`}
+              className="quantity-type-select"
+              options={[
+                { label: "类型", value: "" },
+                { label: "取材", value: "取材" },
+                { label: "死亡", value: "死亡" },
+                { label: "转出", value: "转出" },
+              ]}
               value={row.removedType}
-              onChange={(event) => update("removedType", event.target.value)}
+              onChange={(value) => update("removedType", value)}
               onKeyDown={handleTab}
               data-quantity-focusable="true"
               data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
               data-quantity-row={index}
               data-quantity-field="removedType"
-            >
-              <option value="">类型</option>
-              <option>取材</option>
-              <option>死亡</option>
-              <option>转出</option>
-            </select>
+            />
             {row.removedType === "转出" ? (
-              <input
+              <Input
                 className="iacuc-lookup"
                 aria-label={`第 ${index + 1} 行转出伦理号`}
                 value={row.transferOutToIacuc}
@@ -345,7 +351,7 @@ const QuantityEntryCells = memo(
           </div>
         </td>
         <td className="animal-detail-col">
-          <input
+          <Input
             className="quantity-balance-input"
             aria-label={`第 ${index + 1} 行结余总数`}
             type="number"
@@ -361,7 +367,7 @@ const QuantityEntryCells = memo(
           />
         </td>
         <td>
-          <input
+          <Input
             className="quantity-balance-input"
             aria-label={`第 ${index + 1} 行结余笼数`}
             type="number"

@@ -1,3 +1,5 @@
+import { PageSkeleton } from "../../../components/WorkspaceUi";
+
 export function Legend({ tone, label }: { tone: string; label: string }) {
   return (
     <span className="legend-item">
@@ -8,11 +10,7 @@ export function Legend({ tone, label }: { tone: string; label: string }) {
 }
 
 export function CageLoading() {
-  return (
-    <div className="empty-state" aria-busy="true">
-      <h3>正在加载笼位信息...</h3>
-    </div>
-  );
+  return <PageSkeleton label="笼位信息" rows={6} variant="detail" />;
 }
 
 export function CageEmpty() {

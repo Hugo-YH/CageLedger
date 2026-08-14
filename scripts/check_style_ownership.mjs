@@ -51,7 +51,12 @@ for (const file of cssFiles) {
   const details = manifest.stylesheets[relative];
   if (!details) continue;
   const contents = await readFile(file, "utf8");
-  const antSelectors = collectRuleSelectors(contents).filter((selector) => selector.includes(".ant-"));
+  // A baseline selector such as `button:not(.ant-switch)` protects a native
+  // element from an inherited Ant rule. It is not an Ant component override.
+  const antSelectors = collectRuleSelectors(contents).filter((selector) => {
+    const componentSelector = selector.replace(/:not\([^)]*\.ant-[^)]+\)/g, "");
+    return componentSelector.includes(".ant-");
+  });
   if (antSelectors.length && relative !== manifest.antGlobalOwner && details.status !== "compatibility") {
     const portalRoots = Object.values(manifest.componentFamilies).flatMap((family) => family.portalRoots ?? []);
     const scopeRoots = details.scopeRoots ?? [];

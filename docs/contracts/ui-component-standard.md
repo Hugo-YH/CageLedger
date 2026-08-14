@@ -5,7 +5,7 @@
 - 桌面与平板端使用 `antd`；移动端使用 `antd-mobile`。
 - `src/react/components/ui/` 是页面使用的统一适配层。
 - 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceToolbar`、Ant `Form`、`Table`、`Card`、`Modal`、`Drawer`、`Empty` 与 `Result`。
-- 笼位图、数量台账网格、巡检评分、图表与打印模板可保留专用 DOM，通用操作、状态与浮层使用适配层。
+- 笼位图、数量台账网格、巡检评分、图表与打印模板可保留专用 DOM；数量台账中的输入、选择、日期与确认操作使用 Ant `Input`、`Select`、`DatePicker` 或 `Modal`，通用操作、状态与浮层使用适配层。
 
 ## 视觉与交互
 
@@ -14,6 +14,7 @@
 - 颜色、阴影、圆角、层级与动效通过 Ant Theme 和 `src/styles/tokens.css` 的语义 Token 提供。
 - Tooltip 用于简短说明；Popver 用于可点击说明；Modal 和 Drawer 用于完整任务。
 - 图标按钮提供 `aria-label` 和 Tooltip；表单错误与字段使用 `aria-describedby` 关联。
+- 首屏远程数据、路由懒加载和详情弹窗加载统一使用 `PageSkeleton` 与 Ant `Skeleton`。骨架屏提供 `role="status"`、`aria-busy="true"` 和明确加载名称；错误态继续使用 `PageState`，空态继续使用 `Empty`。
 
 ## 响应式与动效
 
@@ -47,5 +48,5 @@
 
 ## 质量门禁
 
-- `npm run check:ui-contract` 校验适配层、文档、`transition: all` 与未登记高 z-index；`npm run check:antd-design` 执行本地 `antd doctor`、`antd usage`、`antd lint` 并输出机器可读报告。
+- `npm run check:ui-contract` 校验适配层、文档、`transition: all` 与未登记高 z-index；`npm run check:style-ownership` 校验唯一样式归属、Ant 选择器边界与层级 Token；`npm run check:antd-design` 执行本地 `antd doctor`、`antd usage`、`antd lint` 并输出机器可读报告。
 - 新页面和公共组件通过 `npm run check`、键盘导航、浅色/深色与移动端截图验收。

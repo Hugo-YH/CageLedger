@@ -4,7 +4,7 @@ import { Button, Card, Checkbox, Collapse, Form, Input, Select, Space, Tag, Typo
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
 import { useDeleteUser, useSaveUser, useUsers } from "../../api/administration";
-import { ConfirmDialog, PageState } from "../../components/WorkspaceUi";
+import { ConfirmDialog, PageSkeleton, PageState } from "../../components/WorkspaceUi";
 
 const emptyDraft = {
   username: "",
@@ -37,7 +37,7 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
   if (users.isPending || bootstrap.isPending)
     return (
       <section className="workspace-view">
-        <PageState title="正在加载账号与房间..." />
+        <PageSkeleton label="账号与房间" variant="table" />
       </section>
     );
   if (users.isError || bootstrap.isError)

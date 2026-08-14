@@ -492,8 +492,8 @@ th {
   vertical-align: top;
 }
 
-.react-quantity-layout .quantity-entry-table input,
-.react-quantity-layout .quantity-entry-table select {
+.react-quantity-layout .quantity-entry-table .ant-input,
+.react-quantity-layout .quantity-entry-table .ant-select-selector {
   width: 100%;
   min-width: 0;
   min-height: 32px;
@@ -790,6 +790,18 @@ th {
 
 .quantity-save-confirm {
   width: min(620px, calc(100vw - 32px));
+}
+
+.quantity-save-confirm-kicker {
+  margin-bottom: 8px;
+  color: var(--text-subtle);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.quantity-save-confirm-content {
+  display: grid;
+  gap: 16px;
 }
 
 .quantity-confirm-profile {

@@ -4483,8 +4483,6 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
     }
     if statement.get("sentBy"):
         timestamps["sentBy"] = statement["sentBy"]
-    if statement.get("sheetUpdatedAt"):
-        timestamps["sheetUpdatedAt"] = statement["sheetUpdatedAt"]
     workflow_payload = {
         "id": workflow_id,
         "businessKey": billing_workflow_business_key(scope_type, scope_key, month, source_type),
@@ -4507,6 +4505,8 @@ def build_workflow_payload(workflow_id, iacuc, month, source_type, workflow_stat
         "totalAmount": statement.get("totalAmount", 0),
         "totalCageDays": statement.get("totalCageDays", 0),
         "reimbursementRequired": (as_float(statement.get("totalAmount")) or 0) > 0,
+        "lockedFromStatus": statement.get("lockedFromStatus", ""),
+        **({"sheetUpdatedAt": statement["sheetUpdatedAt"]} if statement.get("sheetUpdatedAt") else {}),
         **timestamps,
     }
     if statement.get("signedStatementReturned") is not None:
@@ -6388,8 +6388,8 @@ class CageLedgerHandler(CageLedgerHttpHandler):
                 current = get_billing_workflow(conn, workflow_id)
                 if not current:
                     raise LookupError("结算流程不存在")
-                is_lock_operation = to_status == WORKFLOW_STATUS_LOCKED or (
-                    to_status == WORKFLOW_STATUS_ARCHIVED and current.get("workflowStatus") == WORKFLOW_STATUS_LOCKED
+                is_lock_operation = (
+                    to_status == WORKFLOW_STATUS_LOCKED or current.get("workflowStatus") == WORKFLOW_STATUS_LOCKED
                 )
                 if is_lock_operation:
                     if not user.get("billingLockAllowed"):

@@ -3,7 +3,7 @@ import { Alert, Button, Card, Col, Descriptions, Row, Space, Tag, Typography } f
 
 import type { SessionUser } from "../../api/contracts";
 import { useAnimalInspectionCatalog, useAnimalInspectionCatalogDraft } from "../../api/animalManagement";
-import { PageState } from "../../components/WorkspaceUi";
+import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
@@ -24,11 +24,11 @@ export function InspectionStandards({
   const [versionsOpen, setVersionsOpen] = useState(false);
   const catalog = useAnimalInspectionCatalog();
   const draft = useAnimalInspectionCatalogDraft(isAdmin);
-  if (catalog.isLoading) return <PageState title="正在加载巡检标准..." />;
+  if (catalog.isLoading) return <PageSkeleton label="巡检标准" variant="detail" />;
   if (catalog.isError || !catalog.data)
     return <PageState title="巡检标准加载失败" retry={() => void catalog.refetch()} />;
   if (editing) {
-    if (draft.isLoading || !draft.data) return <PageState title="正在加载编辑草稿..." />;
+    if (draft.isLoading || !draft.data) return <PageSkeleton label="巡检编辑草稿" variant="form" />;
     const editor = <InspectionCatalogEditor draft={draft.data} onExit={() => setEditing(false)} />;
     if (isMobile) {
       return (

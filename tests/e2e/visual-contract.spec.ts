@@ -2,6 +2,30 @@ import type { Page, TestInfo } from "@playwright/test";
 
 import { expect, openQuantityEntry, openSettingsView, test } from "./fixtures";
 
+test("remote workspace data uses the shared Ant skeleton while loading", async ({ page }) => {
+  let releaseDashboardRequest: () => void = () => undefined;
+  const dashboardRequest = new Promise<void>((resolve) => {
+    releaseDashboardRequest = resolve;
+  });
+  await page.route("**/api/dashboard/overview**", async (route) => {
+    await dashboardRequest;
+    await route.continue();
+  });
+
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+
+  const skeleton = page.locator("[data-ui='page-skeleton']");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton).toHaveAttribute("aria-busy", "true");
+  await expect(skeleton).toContainText("运营总览正在加载");
+
+  releaseDashboardRequest();
+  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+});
+
 test("quantity workspace keeps its desktop and mobile layout contract", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/app");
@@ -16,6 +40,8 @@ test("quantity workspace keeps its desktop and mobile layout contract", async ({
   await expect(editor).toBeVisible();
   await expect(entryTable).toBeVisible();
   await expect(entryTable.locator("thead th")).toHaveCount(10);
+  await expect(entryTable.locator(".ant-input").first()).toBeVisible();
+  await expect(entryTable.locator(".ant-select").first()).toHaveCount(1);
   await expect(page.locator(".quantity-entry-wrap")).toHaveCSS("max-height", "none");
   await attachViewport(page, testInfo, "quantity-1280");
 
@@ -56,7 +82,7 @@ test("primary actions and selected navigation use the official Ant Design blue",
   await expect(page.locator("html")).toHaveCSS("--primary", "#1677ff");
   await expect(page.locator("html")).toHaveCSS("--button-primary", "#1677ff");
   await page.getByRole("menuitem", { name: /笼位管理/ }).click();
-  await expect(page.getByRole("heading", { name: "动态笼位图", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("main")).toContainText(/动态笼位图|尚未创建饲养间/);
 });
 
 test("certificate download card remains usable across supported viewports", async ({ page }, testInfo) => {

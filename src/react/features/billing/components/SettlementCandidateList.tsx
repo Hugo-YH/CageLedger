@@ -10,7 +10,7 @@ import type {
 } from "../../../api/contracts";
 import { exportSettlementXlsx, listAllSettlementCandidates, useSettlementCandidates } from "../../../api/billing";
 import { useAdvanceWorkflow, useDeleteBillingWorkflow } from "../../../api/workflows";
-import { Pager } from "../../../components/WorkspaceUi";
+import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
 import { DataTable } from "../../../components/ui";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
@@ -73,6 +73,8 @@ export function SettlementCandidateList({
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+
+  if (list.isPending) return <PageSkeleton label="结算管理" variant="table" />;
 
   async function toggleAllFiltered() {
     if (allFilteredSelected) {

@@ -12,7 +12,7 @@ import { useQuantitySheetPiHistory, useQuantitySheetRooms, useSaveQuantitySheet 
 import { queryKeys } from "../../api/queryKeys";
 import { Tooltip } from "../../components/Tooltip";
 import { ActionButton } from "../../components/ui";
-import { AsyncActionButton, ModalShell } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, PageSkeleton } from "../../components/WorkspaceUi";
 import {
   createQuantityRow,
   createQuantitySheet,
@@ -66,6 +66,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     draft.month,
     mode === "entry" && Boolean(iacucMatch),
   );
+  const initialLoading = mode === "entry" && (roomsQuery.isPending || identitiesQuery.isPending);
   const previousPi = piHistory.data?.item?.pi || "";
   const piHint =
     mode === "entry" &&
@@ -685,6 +686,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       </form>
     );
   }
+
+  if (initialLoading) return <PageSkeleton label="数量统计表" variant="form" />;
 
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">

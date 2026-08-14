@@ -234,6 +234,30 @@ class BillingWorkflowListTests(unittest.TestCase):
         self.assertEqual(event["eventType"], "statement_reimbursement_recorded")
         self.assertEqual(statement["reimbursementRecordedBy"]["displayName"], "系统管理员")
 
+    def test_locked_sent_workflow_keeps_reimbursement_when_unlocked(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "锁定流程")
+
+        workflow, version, event = record_archived_reimbursement(
+            self.conn,
+            "wf-1",
+            [{"formNo": "BX-LOCKED", "amount": 100}],
+            ADMIN,
+            "锁定后补录",
+        )
+
+        self.assertEqual(workflow["workflowStatus"], "statement_locked")
+        self.assertEqual(version["statement"]["workflowStatus"], "statement_locked")
+        self.assertEqual(event["fromStatus"], "statement_locked")
+        self.assertEqual(event["toStatus"], "statement_locked")
+        self.assertEqual(version["statement"]["reimbursementForms"], [{"formNo": "BX-LOCKED", "amount": 100}])
+
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_sent", ADMIN, "解锁后继续跟踪")
+        self.assertEqual(workflow["workflowStatus"], "statement_sent")
+        self.assertTrue(version["statement"]["reimbursementFormReturned"])
+        self.assertEqual(version["statement"]["reimbursementForms"], [{"formNo": "BX-LOCKED", "amount": 100}])
+        self.assertEqual(event["eventType"], "statement_unlocked")
+
     def test_zero_amount_workflow_does_not_require_or_accept_reimbursement(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 0, "statement_sent")
         workflow, version, _ = update_workflow_status(
@@ -281,6 +305,22 @@ class BillingWorkflowListTests(unittest.TestCase):
         statement = version["statement"]
         self.assertEqual(workflow["workflowStatus"], "statement_archived")
         self.assertEqual(statement["unlockedBy"]["displayName"], "系统管理员")
+        self.assertTrue(statement["unlockedAt"])
+        self.assertEqual(event["eventType"], "statement_unlocked")
+
+    def test_sent_workflow_can_lock_and_unlock_back_to_sent(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "锁定流程")
+        statement = version["statement"]
+        self.assertEqual(workflow["workflowStatus"], "statement_locked")
+        self.assertEqual(statement["lockedFromStatus"], "statement_sent")
+        self.assertFalse(statement.get("signedStatementReturned", False))
+        self.assertEqual(event["fromStatus"], "statement_sent")
+
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_sent", ADMIN, "解锁流程")
+        statement = version["statement"]
+        self.assertEqual(workflow["workflowStatus"], "statement_sent")
+        self.assertEqual(statement["workflowStatus"], "statement_sent")
         self.assertTrue(statement["unlockedAt"])
         self.assertEqual(event["eventType"], "statement_unlocked")
 

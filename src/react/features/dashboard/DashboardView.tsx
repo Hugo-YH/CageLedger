@@ -5,7 +5,7 @@ import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
 import { useDashboardOverview } from "../../api/dashboardOverview";
-import { PageState } from "../../components/WorkspaceUi";
+import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 
@@ -442,7 +442,7 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
 function DashboardSkeleton() {
   return (
     <section className="workspace-view dashboard-view">
-      <Skeleton active paragraph={{ rows: 12 }} title={{ width: "34%" }} />
+      <PageSkeleton label="运营总览" rows={6} variant="detail" />
     </section>
   );
 }

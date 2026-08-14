@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "antd";
 
 import { requestJson } from "../../api/client";
 
@@ -38,7 +39,10 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
           </div>
         </div>
         {details.isPending ? (
-          <div className="public-scan-state">正在读取笼卡信息...</div>
+          <div aria-busy="true" aria-label="笼卡信息正在加载" className="public-scan-state" role="status">
+            <span className="app-visually-hidden">笼卡信息正在加载</span>
+            <Skeleton active paragraph={{ rows: 5 }} title={{ width: "42%" }} />
+          </div>
         ) : details.error ? (
           <div className="public-scan-state error">
             <h1>未找到笼卡信息</h1>

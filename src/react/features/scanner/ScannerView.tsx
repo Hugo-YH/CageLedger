@@ -11,7 +11,7 @@ import {
   Form,
   Input,
   Result,
-  Spin,
+  Skeleton,
   Tag,
   Typography,
   type InputRef,
@@ -135,10 +135,10 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
         </Form>
       </form>
       {result.isFetching ? (
-        <Flex className="scanner-loading" align="center" gap={8} justify="center">
-          <Spin size="small" />
-          <Typography.Text type="secondary">正在查询笼卡信息...</Typography.Text>
-        </Flex>
+        <div aria-busy="true" aria-label="笼卡信息正在加载" className="scanner-loading" role="status">
+          <span className="app-visually-hidden">笼卡信息正在加载</span>
+          <Skeleton active paragraph={{ rows: 3 }} title={{ width: "36%" }} />
+        </div>
       ) : result.error ? (
         <Result
           extra={<Button onClick={() => void result.refetch()}>重新查询</Button>}

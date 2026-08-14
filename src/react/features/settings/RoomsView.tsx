@@ -4,7 +4,7 @@ import { Button, Card, Empty, Space, Tag, Typography } from "antd";
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
-import { ConfirmDialog, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
 
@@ -19,7 +19,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
   if (query.isPending)
     return (
       <section className="workspace-view">
-        <PageState title="正在加载基础设施..." />
+        <PageSkeleton label="基础设施" variant="detail" />
       </section>
     );
   if (query.isError || !query.data)

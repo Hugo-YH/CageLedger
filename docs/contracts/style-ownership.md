@@ -21,14 +21,14 @@
 
 ## 组件边界
 
-| 组件族   | 根标识                        | 唯一所有者          | 允许范围                 |
-| -------- | ----------------------------- | ------------------- | ------------------------ |
-| 应用壳   | `data-ui="app-shell"`         | `shell.css`         | 侧栏、工作区容器、安全区 |
-| 侧栏     | `data-ui="sidebar"`           | `shell.css`         | 桌面导航、移动导航切换   |
-| 命令栏   | `data-ui="workspace-toolbar"` | `components.css`    | 操作分组、sticky 行为    |
-| 表格     | `data-ui="data-table"`        | `ux-foundation.css` | 容器、横向滚动、分页     |
-| 弹窗     | `data-ui="modal"`             | `modal.css`         | 标题、正文、页脚与焦点   |
-| 移动导航 | `data-ui="mobile-navigation"` | `shell.css`         | TabBar、Sheet、安全区    |
+| 组件族   | 根标识                        | 唯一所有者       | 允许范围                 |
+| -------- | ----------------------------- | ---------------- | ------------------------ |
+| 应用壳   | `data-ui="app-shell"`         | `shell.css`      | 侧栏、工作区容器、安全区 |
+| 侧栏     | `data-ui="sidebar"`           | `shell.css`      | 桌面导航、移动导航切换   |
+| 命令栏   | `data-ui="workspace-toolbar"` | `components.css` | 操作分组、sticky 行为    |
+| 表格     | `data-ui="data-table"`        | `components.css` | 容器、横向滚动、分页     |
+| 弹窗     | `data-ui="modal"`             | `modal.css`      | 标题、正文、页脚与焦点   |
+| 移动导航 | `data-ui="mobile-navigation"` | `shell.css`      | TabBar、Sheet、安全区    |
 
 ## 修改流程
 
@@ -40,4 +40,4 @@
 
 ## Ant Design 边界
 
-`antd-system.css` 管理 ConfigProvider 对应 Token、全局可访问性修正和必要的 reset 补丁。业务域内的 `.ant-*` 选择器必须由对应的 `data-feature` 或 `data-ui` 根标识限定。新建的未登记全局 Ant 覆盖将由样式门禁阻止。
+`antd-system.css` 管理 ConfigProvider 对应 Token、全局可访问性修正和必要的 reset 补丁。业务域内的 `.ant-*` 选择器必须由对应的 `data-feature`、`data-ui` 或已登记的浮层根标识限定。样式门禁会阻止未登记的全局 Ant 覆盖；元素基线中的 `:not(.ant-*)` 保护规则不视为 Ant 组件覆盖。

@@ -1,7 +1,7 @@
 import { App, Button, Modal, Popconfirm, Space, Tag, Typography } from "antd";
 import { RollbackOutlined } from "@ant-design/icons";
 
-import { PageState } from "../../components/WorkspaceUi";
+import { PageSkeleton } from "../../components/WorkspaceUi";
 import { useAnimalInspectionCatalogVersions, useRestoreInspectionCatalogVersion } from "../../api/animalManagement";
 
 export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -32,7 +32,7 @@ export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean
       width={680}
     >
       {versions.isLoading ? (
-        <PageState title="正在加载版本..." />
+        <PageSkeleton compact label="巡检版本" rows={3} variant="detail" />
       ) : items.length === 0 ? (
         <Typography.Text type="secondary">暂无版本记录</Typography.Text>
       ) : (
