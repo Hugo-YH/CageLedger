@@ -87,7 +87,7 @@ def _statement_columns(statement, lines):
                     "unit": unit,
                     "basePrice": _as_money(item.get("statementUnitPrice", item.get("unitPrice"))),
                     "overagePrice": _as_money(item.get("statementOverageUnitPrice", item.get("overageUnitPrice"))),
-                    "tiered": bool(item.get("statementTiered", item.get("tiered"))),
+                    "tiered": bool(item["tiered"]) if "tiered" in item else bool(item.get("statementTiered")),
                     "freeAllowance": bool(item.get("statementFreeAllowance", item.get("freeAllowance"))),
                     "fullExemption": bool(item.get("statementFullExemption", item.get("fullExemption"))),
                     "hasCustom": False,
@@ -256,7 +256,7 @@ def build_settlement_workbook(entries):
 
 def _count_label(unit):
     if unit == "animal_day":
-        return "数量"
+        return "只数"
     if unit == "mixed":
         return "总量"
     return "笼数"

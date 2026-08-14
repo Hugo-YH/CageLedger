@@ -121,6 +121,10 @@ class PdfExportTests(unittest.TestCase):
                         "payableAmount": 18,
                         "billingUnit": "cage_day",
                         "unitPrice": 4.5,
+                        "statementOverageUnitPrice": 6.5,
+                        "statementTiered": True,
+                        "overageUnitPrice": 6.5,
+                        "tiered": True,
                     },
                     {
                         "iacuc": "M1",
@@ -140,7 +144,13 @@ class PdfExportTests(unittest.TestCase):
         self.assertIn('colspan="12">大鼠', html)
         self.assertIn('colspan="12">猴', html)
         self.assertIn('colspan="12">汇总', html)
-        self.assertIn('colspan="6">数量', html)
+        self.assertIn('colspan="6">只数', html)
+        self.assertIn("收费标准：", html)
+        self.assertIn("1）小鼠 4.5元/笼/日", html)
+        self.assertIn("2）大鼠 8.5元/笼/日", html)
+        self.assertIn("3）猴 23.5元/只/日", html)
+        self.assertNotIn("笼位数＞160", html)
+        self.assertNotIn("伦理到期提示：", html)
 
     def test_custom_billing_details_are_rendered_in_quantity_and_settlement_documents(self):
         sheet = {

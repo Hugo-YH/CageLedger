@@ -3,6 +3,7 @@ from html import escape
 
 from server_app.domains.billing.custom_billing import normalize_custom_billing_segments
 from server_app.pdf.renderer import html_to_pdf
+from server_app.pdf.settlement_notes import settlement_note_markup
 from server_app.shared import clean_text
 
 GROUP_UNITS = 12
@@ -177,6 +178,7 @@ def billing_statement_html(statement, lines):
     total_free = as_number(statement.get("totalFreeCageDays"))
     total_tier = as_number(statement.get("totalTier2CageDays"))
     total_payable = sum(summary["amount"] for summary in summaries.values())
+    note_markup = settlement_note_markup(statement, columns)
     result = []
     for index, page in enumerate(pages):
         result.append(
@@ -192,6 +194,7 @@ def billing_statement_html(statement, lines):
                 total_payable,
                 index,
                 len(pages),
+                note_markup,
             )
         )
     return document_html(
@@ -211,6 +214,9 @@ def statement_columns(statement, lines):
                 continue
             key = breakdown_key(item)
             if key in columns:
+                columns[key]["hasTieredCharge"] = columns[key]["hasTieredCharge"] or as_number(
+                    item.get("tier2BillableCages")
+                ) > 0
                 continue
             columns[key] = {
                 "key": key,
@@ -219,7 +225,8 @@ def statement_columns(statement, lines):
                 "unit": str(item.get("billingUnit") or ""),
                 "unitPrice": as_number(item.get("statementUnitPrice", item.get("unitPrice"))),
                 "overageUnitPrice": as_number(item.get("statementOverageUnitPrice", item.get("overageUnitPrice"))),
-                "tiered": bool(item.get("statementTiered", item.get("tiered"))),
+                "tiered": bool(item["tiered"]) if "tiered" in item else bool(item.get("statementTiered")),
+                "hasTieredCharge": as_number(item.get("tier2BillableCages")) > 0,
                 "fullExemption": bool(item.get("statementFullExemption", item.get("fullExemption"))),
             }
     sorted_columns = sorted(
@@ -283,7 +290,18 @@ def settlement_pages(columns):
 
 
 def settlement_page_markup(
-    statement, rows, page, summaries, unit, total_count, total_free, total_tier, total_payable, page_index, total_pages
+    statement,
+    rows,
+    page,
+    summaries,
+    unit,
+    total_count,
+    total_free,
+    total_tier,
+    total_payable,
+    page_index,
+    total_pages,
+    note_markup,
 ):
     slots = page["slots"]
     mouse_summaries = [summaries[slot["key"]] for slot in slots if slot and slot["species"] == "小鼠"]
@@ -315,7 +333,7 @@ def settlement_page_markup(
     )
     sub_headers = "".join(
         group_headers(
-            "" if not slot else ("数量" if slot["unit"] == "animal_day" else "笼数"),
+            "" if not slot else ("只数" if slot["unit"] == "animal_day" else "笼数"),
             slot["showFree"] if slot else False,
             slot["showTiered"] if slot else False,
             slot["needsWideAmount"] if slot else False,
@@ -400,7 +418,7 @@ def settlement_page_markup(
 <section class="header"><div class="header-grid"><div class="header-main"><h1>{title}</h1><div class="meta"><div>单据编号：{document_number}</div><div>结算月份：{h(statement.get("month"))}</div><div>项目负责人：{h(statement.get("pi"))}</div></div></div></div></section>
 <table class="meta-table"><tbody><tr><td>出具科室：实验动物中心</td><td>计费单位：{unit_display(unit)}</td><td colspan="2">实验负责人：{h(statement.get("owner") or "-")}</td></tr><tr><td colspan="4">IACUC 编号：{h(all_iacucs or "-")} {f"　全额减免：{h(full)}" if full else ""}</td></tr><tr><td colspan="4">支撑经费：{h(statement.get("funding") or "-")}</td></tr></tbody></table>
 <table class="summary-table"><colgroup><col class="col-date">{leading_cols}{columns_cols}</colgroup><thead><tr><th class="date-column" rowspan="3">日期</th>{species_headers}</tr><tr>{leading_header}{headers}</tr><tr>{leading_sub}{sub_headers}</tr></thead><tbody>{"".join(detail_rows)}</tbody><tfoot><tr><td class="row-label">单项合计</td>{leading_totals}{total_values}</tr><tr>{leading_summary}{meta_summary}</tr></tfoot></table>
-<div class="note-line">说明：{h(statement.get("notes") or "")}</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><div class="page-footer">第 {page_index + 1} / {total_pages} 页</div></main>"""
+{note_markup}<table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><div class="page-footer">第 {page_index + 1} / {total_pages} 页</div></main>"""
 
 
 def species_group_headers(slots, has_mouse_summary):
@@ -442,8 +460,6 @@ def group_headers(count_label, show_free, show_tier, needs_wide_amount=False):
 
 
 def group_cells(summary, show_free, show_tier, show_amount, needs_wide_amount=False):
-    # 有笼数（含沿用的笼数）或当天有统计记录时，减免/梯度列也显示数值；
-    # 未分配到减免/梯度的日期显示 0 而不是空，便于对账。
     has_count = as_number(summary.get("count")) > 0 or bool(summary.get("hasRecord"))
 
     def text_value(key):

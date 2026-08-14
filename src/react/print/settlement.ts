@@ -1,5 +1,6 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
 import { customBillingDetailsMarkup } from "./settlementCustomBilling";
+import { settlementNotesMarkup } from "./settlementNotes";
 import {
   displayUnitLabel,
   documentNumberFor,
@@ -48,6 +49,7 @@ type SettlementColumn = {
   unitPrice: number;
   overageUnitPrice: number;
   tiered: boolean;
+  hasTieredCharge: boolean;
   freeAllowance: boolean;
   fullExemption: boolean;
   showFree: boolean;
@@ -107,6 +109,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   const fullExemptionIacucs = [
     ...new Set(columns.filter((column) => column.fullExemption).map((column) => column.iacuc)),
   ];
+  const statementNotes = settlementNotesMarkup(columns, statement.notes);
   const totalPages = Math.max(pagedColumns.length, 1);
 
   const statementPages = pagedColumns
@@ -200,7 +203,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
       const subColumns = resolvedSlots
         .map((slot) =>
           renderGroupHeaders(
-            slot.column ? (slot.column.billingUnit === "animal_day" ? "数量" : "笼数") : "",
+            slot.column ? (slot.column.billingUnit === "animal_day" ? "只数" : "笼数") : "",
             slot.column ? slot.column.showFree : false,
             slot.column ? slot.column.showTiered : false,
             slot.column ? slot.column.needsWideAmount : false,
@@ -221,7 +224,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             : `<td colspan="${GROUP_GRID_UNITS}" class="meta-summary meta-summary-empty"></td>`,
         )
         .join("")}</tr>`;
-      const footerBlock = `<div class="note-line">说明：${escapeHtml(statement.notes || "")}</div><table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table>`;
+      const footerBlock = `${statementNotes}<table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table>`;
       const pageFooter = `<div class="page-footer">第 ${pageIndex + 1} / ${totalPages} 页</div>`;
       const leadingColMarkup = page.showLeadingTotals
         ? Array.from({ length: GROUP_GRID_UNITS }, () => '<col class="col-group" />').join("")
@@ -311,7 +314,12 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
       const item = raw as Breakdown;
       const iacuc = normalizeIacuc(item.iacuc);
       const key = breakdownColumnKey(item);
-      if (!iacuc || !key || columns.has(key)) return;
+      if (!iacuc || !key) return;
+      const existing = columns.get(key);
+      if (existing) {
+        existing.hasTieredCharge ||= Number(item.tier2BillableCages || 0) > 0;
+        return;
+      }
       columns.set(key, {
         key,
         iacuc,
@@ -319,7 +327,12 @@ function collectColumns(statement: BillingStatement, lines: BillingStatementLine
         billingUnit: String(item.billingUnit || ""),
         unitPrice: Number(item.statementUnitPrice ?? item.unitPrice ?? 0),
         overageUnitPrice: Number(item.statementOverageUnitPrice ?? item.overageUnitPrice ?? 0),
-        tiered: Boolean(item.statementTiered ?? item.tiered),
+        // A statement snapshots the standard mouse rate, while a line can opt
+        // out of tiered charging (for example, a custom billing segment).
+        // Use the effective line rule when it exists so its headers and note
+        // disclose the rate that was actually applied.
+        tiered: typeof item.tiered === "boolean" ? item.tiered : Boolean(item.statementTiered),
+        hasTieredCharge: Number(item.tier2BillableCages || 0) > 0,
         freeAllowance: Boolean(item.statementFreeAllowance ?? item.freeAllowance),
         fullExemption: Boolean(item.statementFullExemption ?? item.fullExemption),
       });

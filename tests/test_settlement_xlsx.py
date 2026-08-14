@@ -218,7 +218,7 @@ class SettlementXlsxTests(unittest.TestCase):
         self.assertEqual(worksheet["N8"].value, "M1")
         self.assertEqual(worksheet["L9"].value, "笼数")
         self.assertEqual(worksheet["M9"].value, "缴纳（元）")
-        self.assertEqual(worksheet["N9"].value, "数量")
+        self.assertEqual(worksheet["N9"].value, "只数")
         self.assertEqual(worksheet["O9"].value, "缴纳（元）")
         self.assertNotIn(
             "减免", [worksheet["L9"].value, worksheet["M9"].value, worksheet["N9"].value, worksheet["O9"].value]

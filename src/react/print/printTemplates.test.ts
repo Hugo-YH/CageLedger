@@ -429,6 +429,7 @@ describe("print templates", () => {
     expect(html).toContain(
       '<td colspan="2" class="num">5</td><td colspan="3" class="num">5</td><td colspan="4" class="money">770.00</td>',
     );
+    expect(html).toContain("笼位数≤160，4.5元/笼/日；笼位数＞160，7.25元/笼/日");
     expect(html).not.toContain("梯度笼数");
   });
 
@@ -470,6 +471,10 @@ describe("print templates", () => {
               payableAmount: 18,
               billingUnit: "cage_day",
               unitPrice: 4.5,
+              statementOverageUnitPrice: 6.5,
+              statementTiered: true,
+              overageUnitPrice: 6.5,
+              tiered: true,
             },
             {
               iacuc: "M1",
@@ -489,7 +494,13 @@ describe("print templates", () => {
     expect(html).toContain('<th colspan="12">猴</th>');
     expect(html).toContain('<th colspan="12">汇总</th>');
     expect(html).toContain('<th colspan="6">笼数</th><th colspan="6">缴纳（元）</th>');
-    expect(html).toContain('<th colspan="6">数量</th><th colspan="6">缴纳（元）</th>');
+    expect(html).toContain('<th colspan="6">只数</th><th colspan="6">缴纳（元）</th>');
+    expect(html).toContain("收费标准：");
+    expect(html).toContain("1）小鼠 4.5元/笼/日");
+    expect(html).toContain("2）大鼠 8.5元/笼/日");
+    expect(html).toContain("3）猴 23.5元/只/日");
+    expect(html).not.toContain("笼位数＞160");
+    expect(html).not.toContain("伦理到期提示：");
   });
 
   it("shows billable tier cages in the summary column and iacuc columns", () => {
@@ -645,7 +656,9 @@ describe("print templates", () => {
         },
       ],
     } as BillingStatementResponse;
-    expect(settlementStatementHtml(result, false)).toContain("Z1 将于 2026-06-15 到期，自 2026-06-16 起不参与减免");
+    const html = settlementStatementHtml(result, false);
+    expect(html).toContain("伦理到期提示：");
+    expect(html).toContain("Z1 将于 2026-06-15 到期，自 2026-06-16 起不参与减免");
   });
 
   it("hides unused allowance columns and keeps paid amounts explicit", () => {
