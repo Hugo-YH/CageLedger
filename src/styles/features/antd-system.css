@@ -289,19 +289,19 @@
 
 /* Legacy global input rules add extra height and padding. Restore Ant's
    standard control geometry so Input, Select and DatePicker align in grids. */
-.ant-workspace input:not([type="checkbox"], [type="radio"], [type="hidden"]),
-.ant-workspace textarea {
+:is(.ant-workspace, .app-modal-root.quantity-edit-modal) input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+:is(.ant-workspace, .app-modal-root.quantity-edit-modal) textarea {
   min-height: 0;
 }
 
-.ant-workspace input.ant-input {
+:is(.ant-workspace, .app-modal-root.quantity-edit-modal) input.ant-input {
   min-height: 32px;
   padding: 4px 12px;
   border-radius: var(--ant-border-radius, 6px);
   background: var(--app-surface);
 }
 
-.ant-workspace textarea.ant-input {
+:is(.ant-workspace, .app-modal-root.quantity-edit-modal) textarea.ant-input {
   padding: 4px 12px;
   border-radius: var(--ant-border-radius, 6px);
   background: var(--app-surface);
@@ -346,13 +346,13 @@
 
 /* Quantity-sheet fields still use the legacy grid, while their controls are
    Ant components. Keep labels above full-width controls like Form.Item. */
-.ant-workspace .quantity-ant-field {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field {
   display: grid;
   min-width: 0;
   gap: 8px;
 }
 
-.ant-workspace .quantity-ant-field > span {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field > span {
   display: flex;
   align-items: center;
   min-height: 22px;
@@ -363,13 +363,13 @@
   line-height: 22px;
 }
 
-.ant-workspace .quantity-ant-field-required > span::before {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field-required > span::before {
   margin-inline-end: -2px;
   color: var(--ant-color-error);
   content: "*";
 }
 
-.ant-workspace .quantity-field-source.ant-tag {
+:is(.ant-workspace, .app-modal-root) .quantity-field-source.ant-tag {
   margin: 0;
   padding-inline: 4px;
   border: 0;
@@ -381,37 +381,37 @@
   line-height: 18px;
 }
 
-.ant-workspace .quantity-auto-field .ant-input {
+:is(.ant-workspace, .app-modal-root) .quantity-auto-field .ant-input {
   background: var(--ant-color-fill-alter);
 }
 
-.ant-workspace .quantity-readonly-field .ant-input,
-.ant-workspace .quantity-readonly-field .readonly-field {
+:is(.ant-workspace, .app-modal-root) .quantity-readonly-field .ant-input,
+:is(.ant-workspace, .app-modal-root) .quantity-readonly-field .readonly-field {
   border-style: dashed;
   color: var(--ant-color-text-secondary);
   background: var(--ant-color-fill-quaternary);
   cursor: default;
 }
 
-.ant-workspace .quantity-ant-field .ant-select {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select {
   width: 100%;
 }
 
-.ant-workspace .quantity-ant-field .ant-picker {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-picker {
   width: 100%;
 }
 
-.ant-workspace .quantity-ant-field .ant-select-single {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single {
   height: 32px;
 }
 
-.ant-workspace .quantity-ant-field .ant-select-single .ant-select-selector {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single .ant-select-selector {
   height: 32px;
   padding-block: 0;
 }
 
-.ant-workspace .quantity-ant-field .ant-select-single .ant-select-selection-item,
-.ant-workspace .quantity-ant-field .ant-select-single .ant-select-selection-placeholder {
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single .ant-select-selection-item,
+:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single .ant-select-selection-placeholder {
   line-height: 30px;
 }
 

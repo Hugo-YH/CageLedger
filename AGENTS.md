@@ -74,6 +74,10 @@
 - 响应式布局使用组件专属断点规则。页面级组件不得被全局 `@media` 选择器重置为单列、固定宽度或独立间距。
 - 影响布局、表单、表格、导航、弹窗或浮层的改动必须验证桌面、1180px、760px 和手机横屏；目标组件在每个视口只保留一个有效布局来源。
 - UI 修改前运行 `npm run check:style-ownership` 并检索目标选择器、`data-ui` / `data-feature` 与媒体查询；修改后删除替代规则，记录截图与 computed style 证据。
+- 每次 UI 调整前执行 `npm run check:antd-design`，以本地 `@ant-design/cli design.md` 为设计基线；主色 `#1677ff`、4px 间距、14px 正文、6px 控件圆角、8px 容器圆角、32px 默认控件高度属于强制约束。
+- 修改同组表单控件时，必须在目标页面读取 DatePicker、Select、Input 与只读 Input 的 computed style。默认控件的外框高度统一为 `32px`；紧凑控件为 `24px`；强调控件为 `40px`。同一行控件只使用一个高度档位。
+- 弹窗、Drawer 等 Portal 组件必须检查 `.app-modal-root` 下的实际作用域，确认工作区样式能够覆盖其控件；滚动容器保持单一纵向所有者，表格或网格仅在需要时接管横向滚动。
+- Stylelint、TypeScript 与 CLI 用法检查用于静态门禁；布局结论以浏览器截图、四档视口和 computed style 为准。提交前执行 `npm run check` 与 `git diff --check`。
 
 ## 5. 后端规则
 
@@ -114,7 +118,7 @@
 ## 8. 修改与验证要求
 
 - 前端交互：运行 `npm run check`，再验证目标页面。
-- 样式与响应式：运行目标 CSS 的 Stylelint、`git diff --check`，并保存四档视口的浏览器截图或 Playwright 断言；检查 computed style、溢出和组件状态。
+- 样式与响应式：先运行 `npm run check:antd-design`，再运行目标 CSS 的 Stylelint、`git diff --check`；保存四档视口的浏览器截图或 Playwright 断言，记录同组控件高度、标签布局、溢出和组件状态。
 - API、权限、缓存或迁移：运行 `npm run check` 和 `npm run smoke:api`，再验证管理员与房间管理员路径。
 - 打印与 PDF：运行模板测试，并检查预览、打印页数、A4 尺寸和多页定位。
 - 大列表或性能：运行 `npm run benchmark`，检查分页、虚拟化和查询计划。

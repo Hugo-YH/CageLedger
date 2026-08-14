@@ -1,5 +1,4 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
-import { customBillingDetailsMarkup } from "./settlementCustomBilling";
 import { settlementNotesMarkup } from "./settlementNotes";
 import {
   displayUnitLabel,
@@ -105,7 +104,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   const fullExemptionIacucs = [
     ...new Set(columns.filter((column) => column.fullExemption).map((column) => column.iacuc)),
   ];
-  const statementNotes = settlementNotesMarkup(columns, statement.notes);
+  const statementNotes = settlementNotesMarkup(columns, statement.notes, lines);
   const totalPages = Math.max(pagedColumns.length, 1);
 
   const statementPages = pagedColumns
@@ -254,12 +253,12 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         )}</colgroup><thead><tr><th class="date-column" rowspan="3">日期</th>${speciesMarkup}</tr><tr>${leadingHeaderMarkup}${columnsMarkup}</tr><tr>${leadingSubHeaderMarkup}${subColumns}</tr></thead><tbody>${detailRows}</tbody><tfoot><tr><td class="row-label">单项合计</td>${leadingTotalsRowMarkup}${detailTotals}</tr>${summaryRow}</tfoot></table>${footerBlock}${pageFooter}</main>`;
     })
     .join("");
-  return `${statementPages}${customBillingDetailsMarkup(lines)}`;
+  return statementPages;
 }
 
 export function settlementStatementHtml(result: BillingStatementResponse, autoPrint = true) {
   const title = settlementStatementDocumentTitle(result);
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title><style>${settlementPrintStyles()}</style></head><body>${settlementStatementMarkup(result)}${autoPrint ? "<script>window.onload=()=>window.print()</script>" : ""}</body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title><style>${settlementPrintStyles()}.summary-table .summary-total-money{font-weight:800}.note-line .note-entry{line-height:1.35}.note-line .note-entry strong{font-weight:700}.note-line .note-detail{margin-left:0}</style></head><body>${settlementStatementMarkup(result)}${autoPrint ? "<script>window.onload=()=>window.print()</script>" : ""}</body></html>`;
 }
 
 export function openSettlementPrint(result: BillingStatementResponse) {

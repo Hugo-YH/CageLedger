@@ -468,11 +468,52 @@ th {
   gap: 16px;
 }
 
+.quantity-edit-modal {
+  --modal-width: 1180px;
+}
+
+.app-modal-root.quantity-edit-modal .ant-modal {
+  height: min(920px, calc(100dvh - 32px));
+  margin-block: 16px;
+}
+
+.app-modal-root.quantity-edit-modal .ant-modal-container {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-modal-root.quantity-edit-modal .ant-modal-body,
+.app-modal-root.quantity-edit-modal .modal-shell,
+.app-modal-root.quantity-edit-modal .modal-shell-body {
+  min-height: 0;
+}
+
+.app-modal-root.quantity-edit-modal .ant-modal-body {
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-modal-root.quantity-edit-modal .modal-shell {
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-modal-root.quantity-edit-modal .modal-shell-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .react-quantity-layout .quantity-entry-wrap {
   max-height: none;
   overflow: auto visible;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+}
+
+.quantity-edit-modal .quantity-entry-wrap {
+  overflow: auto hidden;
 }
 
 .react-quantity-layout .quantity-entry-table {

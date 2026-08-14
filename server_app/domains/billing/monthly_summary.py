@@ -1,7 +1,7 @@
 import io
 import re
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date
 
 try:
     from openpyxl import Workbook
@@ -103,7 +103,7 @@ def build_monthly_summary_rows(
                 current["supportAmount"] += float(item.get("supportAmount") or 0)
                 current["payableAmount"] += float(item.get("payableAmount") or 0)
                 expiry = clean_text(item.get("freeAllowanceExpiryDate"))
-                if expiry and (item.get("freeAllowance") or item.get("fullExemption")):
+                if expiry:
                     current["expiredAllowance"].setdefault(iacuc, (expiry, line.get("date", "")))
 
     if errors:
@@ -250,13 +250,10 @@ def _species_label(value):
 def _expired_allowance_note(items, month):
     month_start = date.fromisoformat(f"{month}-01")
     notes = []
-    for iacuc, (expiry, first_ineligible_date) in sorted((items or {}).items()):
+    for iacuc, (expiry, _first_ineligible_date) in sorted((items or {}).items()):
         expiry_date = _parse_date(expiry)
-        if expiry_date and expiry_date < month_start:
-            notes.append(f"{iacuc} 已于 {expiry} 到期，本月不参与减免")
-            continue
-        next_day = (expiry_date + timedelta(days=1)).isoformat() if expiry_date else first_ineligible_date
-        notes.append(f"{iacuc} 将于 {expiry} 到期，自 {next_day} 起不参与减免")
+        verb = "已于" if expiry_date and expiry_date < month_start else "将于"
+        notes.append(f"{iacuc} {verb} {expiry} 到期")
     return "；".join(notes)
 
 

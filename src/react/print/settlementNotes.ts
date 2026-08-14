@@ -1,4 +1,5 @@
-import { escapeHtml } from "./settlementSupport";
+import type { BillingStatementLine } from "../api/contracts";
+import { escapeHtml, money, normalizeIacuc, numberText } from "./settlementSupport";
 
 type SettlementNoteColumn = {
   speciesLabel: string;
@@ -9,25 +10,107 @@ type SettlementNoteColumn = {
   hasTieredCharge: boolean;
 };
 
-export function settlementNotesMarkup(columns: SettlementNoteColumn[], notes: string | undefined) {
+type CustomBillingBreakdown = {
+  iacuc?: string;
+  animalCount?: number;
+  cageCount?: number;
+  billingUnit?: string;
+  unitPrice?: number;
+  amount?: number;
+  payableAmount?: number;
+  customBilling?: boolean;
+  customBillingSegmentId?: string;
+  customBillingStartDate?: string;
+  customBillingEndDate?: string;
+  customBillingNote?: string;
+};
+
+export function settlementNotesMarkup(
+  columns: SettlementNoteColumn[],
+  notes: string | undefined,
+  lines: BillingStatementLine[] = [],
+) {
   const ratesBySpecies = new Map<string, SettlementNoteColumn[]>();
   columns.forEach((column) => {
     const entries = ratesBySpecies.get(column.speciesLabel) || [];
     entries.push(column);
     ratesBySpecies.set(column.speciesLabel, entries);
   });
-  const rateLines = [...ratesBySpecies.entries()].map(([species, entries], index, groups) => {
+  const rateEntries = [...ratesBySpecies.entries()].map(([species, entries], index, groups) => {
     const descriptors = [...new Set(entries.map(rateDescriptor))];
     const prefix = groups.length > 1 ? `${index + 1}）` : "";
-    return `<div>&nbsp;&nbsp;${prefix}${escapeHtml(species)} ${descriptors
-      .map((descriptor) => escapeHtml(descriptor))
-      .join("；")}</div>`;
+    return `${prefix}${species} ${descriptors.join("；")}`;
   });
+  const rateMarkup = rateEntries.length ? noteEntryMarkup("收费标准：", rateEntries.join("、")) : "";
+  const customMarkup = customBillingNoteMarkup(lines);
   const expiryNote = String(notes || "").trim();
-  const expiryMarkup = expiryNote
-    ? `<div><strong>伦理到期提示：</strong></div><div>${escapeHtml(expiryNote)}</div>`
-    : "";
-  return `<div class="note-line"><div><strong>收费标准：</strong></div>${rateLines.join("")}${expiryMarkup}</div>`;
+  const expiryMarkup = expiryNote ? noteEntryMarkup("伦理到期提示：", expiryNote) : "";
+  return `<div class="note-line">${rateMarkup}${customMarkup}${expiryMarkup}</div>`;
+}
+
+function customBillingNoteMarkup(lines: BillingStatementLine[]) {
+  const details = new Map<
+    string,
+    {
+      iacuc: string;
+      startDate: string;
+      endDate: string;
+      quantity: number;
+      unitPrice: number;
+      billingUnit: string;
+      note: string;
+      amount: number;
+    }
+  >();
+  lines.forEach((line) =>
+    (line.iacucBreakdown || []).forEach((raw) => {
+      const item = raw as CustomBillingBreakdown;
+      if (!item.customBilling) return;
+      const iacuc = normalizeIacuc(item.iacuc);
+      const startDate = String(item.customBillingStartDate || "");
+      const endDate = String(item.customBillingEndDate || "");
+      const unitPrice = Number(item.unitPrice || 0);
+      const billingUnit = String(item.billingUnit || "cage_day");
+      const note = String(item.customBillingNote || "");
+      const key = [iacuc, item.customBillingSegmentId || "", startDate, endDate, unitPrice, billingUnit, note].join(
+        "|",
+      );
+      const current = details.get(key) || {
+        iacuc,
+        startDate,
+        endDate,
+        quantity: Number(billingUnit === "animal_day" ? item.animalCount || 0 : item.cageCount || 0),
+        unitPrice,
+        billingUnit,
+        note,
+        amount: 0,
+      };
+      current.amount += Number(item.payableAmount ?? item.amount ?? 0);
+      details.set(key, current);
+    }),
+  );
+  if (!details.size) return "";
+  const linesMarkup = [...details.values()]
+    .sort((left, right) =>
+      `${left.iacuc}|${left.startDate}|${left.endDate}`.localeCompare(
+        `${right.iacuc}|${right.startDate}|${right.endDate}`,
+        "zh-CN",
+      ),
+    )
+    .map((item, index) => {
+      const unit = item.billingUnit === "animal_day" ? "只" : "笼";
+      const note = item.note ? `，${item.note}` : "";
+      return noteEntryMarkup(
+        index === 0 ? "自定义收费：" : "",
+        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，每日 ${numberText(item.quantity)}${unit}，${numberText(item.unitPrice)}元/${unit}/日，本期 ${money(item.amount)}元${note}`,
+      );
+    })
+    .join("");
+  return linesMarkup;
+}
+
+function noteEntryMarkup(title: string, detail: string) {
+  return `<div class="note-entry">${title ? `<strong>${escapeHtml(title)}</strong>` : ""}<span class="note-detail">${escapeHtml(detail)}</span></div>`;
 }
 
 function rateDescriptor(column: SettlementNoteColumn) {

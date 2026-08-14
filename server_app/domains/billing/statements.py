@@ -216,7 +216,7 @@ def quantity_sheet_free_allowance_notes(lines, generated_date=None):
         for item in line.get("iacucBreakdown", []):
             expiry_date = item.get("freeAllowanceExpiryDate", "")
             iacuc = normalize_iacuc_number(item.get("iacuc", ""))
-            if not expiry_date or not iacuc or not (item.get("freeAllowance") or item.get("fullExemption")):
+            if not expiry_date or not iacuc:
                 continue
             expired.setdefault(iacuc, (expiry_date, line.get("date", "")))
     if reference is None:
@@ -236,14 +236,9 @@ def quantity_sheet_free_allowance_notes(lines, generated_date=None):
 
 def _free_allowance_expiry_note(iacuc, expiry_date, first_ineligible_date, generated_date=None):
     expiry = _parse_iso_date(expiry_date)
-    first_ineligible = _parse_iso_date(first_ineligible_date)
     generated = _parse_iso_date(generated_date) if generated_date else date.today()
-    # 到期日早于结算月首行日期：整个结算月都不参与减免。
-    if expiry and first_ineligible and expiry + timedelta(days=1) < first_ineligible:
-        return f"{iacuc} 已于 {expiry_date} 到期，本月不参与减免"
-    next_day = (expiry + timedelta(days=1)).isoformat() if expiry else first_ineligible_date
     verb = "已于" if expiry and generated and expiry < generated else "将于"
-    return f"{iacuc} {verb} {expiry_date} 到期，自 {next_day} 起不参与减免"
+    return f"{iacuc} {verb} {expiry_date} 到期"
 
 
 def _parse_iso_date(value):

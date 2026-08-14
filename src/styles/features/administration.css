@@ -240,13 +240,11 @@
   --modal-width: 1060px;
 }
 
-.intake-edit-modal,
-.quantity-edit-modal {
+.intake-edit-modal {
   --modal-width: 1180px;
 }
 
-.intake-edit-modal .intake-entry-panel,
-.quantity-edit-modal .quantity-entry-panel {
+.intake-edit-modal .intake-entry-panel {
   border: 0;
   box-shadow: none;
   padding: 0;

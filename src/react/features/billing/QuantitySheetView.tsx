@@ -419,7 +419,6 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           <div className="field-cluster quantity-field-cluster">
             <div className="field-cluster-head">
               <strong>项目与伦理</strong>
-              <span>IACUC 是保存和结算主键</span>
             </div>
             <div className="field-cluster-body quantity-field-group quantity-field-group-project">
               <label className="field-required quantity-ant-field quantity-ant-field-required quantity-iacuc-field">

@@ -79,6 +79,7 @@ export function ModalShell({
   useEffect(() => {
     restoreTarget.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = requestAnimationFrame(() => {
+      shellRef.current?.querySelector<HTMLElement>(".modal-shell-body")?.scrollTo({ top: 0 });
       shellRef.current?.querySelector<HTMLElement>("button[aria-label='关闭']")?.focus();
     });
     return () => {

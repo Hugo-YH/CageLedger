@@ -164,7 +164,7 @@ export function SlotEditor({
       <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
         <div className="compact-form-row third">
           <SlotStatusSelect id="cage-slot-status" value={draft.status} onChange={(value) => update("status", value)} />
-          <Field label="笼盒编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />
+          <Field label="笼位编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />
           <Field
             label="动物数量"
             type="number"

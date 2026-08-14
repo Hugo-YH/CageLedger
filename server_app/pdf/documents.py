@@ -4,7 +4,6 @@ from server_app.domains.billing.custom_billing import normalize_custom_billing_s
 from server_app.pdf.formatting import day_index, days_in_month, format_date, month_label, normalize_iacuc
 from server_app.pdf.renderer import html_to_pdf
 from server_app.pdf.settlement_notes import settlement_note_markup
-from server_app.shared import clean_text
 
 GROUP_UNITS = 12
 LEFT_COLUMN_DAYS = 15
@@ -178,7 +177,7 @@ def billing_statement_html(statement, lines):
     total_free = as_number(statement.get("totalFreeCageDays"))
     total_tier = as_number(statement.get("totalTier2CageDays"))
     total_payable = sum(summary["amount"] for summary in summaries.values())
-    note_markup = settlement_note_markup(statement, columns)
+    note_markup = settlement_note_markup(statement, columns, lines)
     result = []
     for index, page in enumerate(pages):
         result.append(
@@ -199,8 +198,8 @@ def billing_statement_html(statement, lines):
         )
     return document_html(
         billing_statement_filename(statement).removesuffix(".pdf"),
-        settlement_styles(),
-        "".join(result) + billing_statement_custom_billing_details_markup(lines),
+        settlement_styles() + settlement_print_overrides(),
+        "".join(result),
     )
 
 
@@ -565,46 +564,6 @@ def breakdown_key(item):
     )
 
 
-def billing_statement_custom_billing_details_markup(lines):
-    details = {}
-    for line in lines or []:
-        for item in line.get("iacucBreakdown") or []:
-            if not item.get("customBilling"):
-                continue
-            key = (
-                normalize_iacuc(item.get("iacuc")),
-                clean_text(item.get("customBillingSegmentId", "")),
-                clean_text(item.get("customBillingStartDate", "")),
-                clean_text(item.get("customBillingEndDate", "")),
-                as_number(item.get("unitPrice")),
-                clean_text(item.get("customBillingNote", "")),
-                clean_text(item.get("billingUnit", "")),
-            )
-            current = details.setdefault(
-                key,
-                {
-                    "iacuc": key[0],
-                    "startDate": key[2],
-                    "endDate": key[3],
-                    "quantity": as_number(
-                        item.get("animalCount") if item.get("billingUnit") == "animal_day" else item.get("cageCount")
-                    ),
-                    "unitPrice": key[4],
-                    "note": key[5],
-                    "billingUnit": key[6],
-                    "amount": 0,
-                },
-            )
-            current["amount"] += as_number(item.get("payableAmount", item.get("amount")))
-    if not details:
-        return ""
-    rows = "".join(
-        f'<tr><td>{h(item["iacuc"])}</td><td>{h(format_date(item["startDate"]))}</td><td>{h(format_date(item["endDate"]))}</td><td class="num">{number_text(item["quantity"])}</td><td class="money">{item["unitPrice"]:.2f} / {"只/天" if item["billingUnit"] == "animal_day" else "笼/天"}</td><td class="money">{item["amount"]:.2f}</td><td>{h(item["note"] or "-")}</td></tr>'
-        for item in sorted(details.values(), key=lambda value: (value["iacuc"], value["startDate"], value["endDate"]))
-    )
-    return f"""<main class=\"document custom-billing-details\"><h1>自定义收费明细</h1><table class=\"custom-billing-table\"><thead><tr><th>IACUC</th><th>开始日期</th><th>结束日期</th><th>每日数量</th><th>单价</th><th>金额（元）</th><th>收费说明</th></tr></thead><tbody>{rows}</tbody></table></main>"""
-
-
 def species_label(item):
     species = str(item.get("species") or "").strip().lower()
     species_labels = {
@@ -633,6 +592,10 @@ def quantity_styles():
 
 def settlement_styles():
     return """@page{size:A4;margin:10mm}*{box-sizing:border-box}body{color:#111;font-family:"Arial","Helvetica Neue","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:8.4px;line-height:1.2;margin:0;background:#fff}.document{max-width:190mm;margin:0 auto}.document-page-break{page-break-after:always;break-after:page}.header{border:1px solid #000;padding:6px 8px}.header-grid{display:block}.header-main{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}h1{font-size:15px;line-height:1.1;margin:0 0 4px;display:flex;align-items:flex-end;justify-content:center;gap:8px;flex-wrap:wrap}.meta{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;gap:2px 10px;margin-top:4px}.meta-table,.summary-table,.sign-table,.custom-billing-table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:6px}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{border:1px solid #000;padding:3px 4px;vertical-align:middle}.meta-table td{text-align:left}.summary-table th,.summary-table td,.custom-billing-table th,.custom-billing-table td{text-align:center}.summary-table td:first-child,.summary-table .row-label,.summary-table .meta-summary,.sign-table td{text-align:left}.summary-table .date-column{text-align:center;white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table td:first-child{white-space:nowrap;width:16mm;min-width:16mm;max-width:16mm}.summary-table th{line-height:1.15}.summary-table thead th{white-space:nowrap;text-align:center;vertical-align:middle}.summary-table thead tr:nth-child(3) th{font-size:7.5px;line-height:1.05;padding:2px 1px}.summary-table tbody td{height:7mm}.summary-table tfoot td{font-weight:700}.summary-table .row-label-summary{line-height:1.3;white-space:normal}.summary-table .summary-total-money{vertical-align:middle;text-align:center}.summary-table .meta-summary{line-height:1.35;padding-top:5px;padding-bottom:5px;white-space:normal}.summary-table .meta-summary span{display:block}.summary-table .meta-summary-empty{background:#fff}.summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}.summary-table .col-group{width:1.526667%}.summary-table .column-empty{color:transparent}.summary-table .group-empty-cell{background:#fff}.note-line{border:1px solid #000;border-top:0;min-height:30px;padding:5px 6px}.sign-table td{height:12mm;vertical-align:top;padding-top:4px}.page-footer{margin-top:4px;text-align:center;font-size:9px;font-weight:700}.custom-billing-details{padding-top:10mm;break-inside:avoid;page-break-inside:avoid}.custom-billing-details h1{justify-content:flex-start}.custom-billing-details p{margin:4px 0}.custom-billing-table th{background:#f1f5f4}.custom-billing-table td{height:8mm;word-break:break-word}.num,.money{font-variant-numeric:tabular-nums}.money{white-space:nowrap}@media print{body{font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}.meta-table td,.summary-table th,.summary-table td,.sign-table td,.custom-billing-table th,.custom-billing-table td{padding:2px 3px}.summary-table thead tr:nth-child(3) th{font-size:7.1px;padding:1px 1px}.summary-table tbody td{height:6mm}.summary-table .meta-summary{padding-top:4px;padding-bottom:4px}}"""
+
+
+def settlement_print_overrides():
+    return """.summary-table .summary-total-money{font-weight:800}.note-line .note-entry{line-height:1.35}.note-line .note-entry strong{font-weight:700}.note-line .note-detail{margin-left:0}@media print{.summary-table{border-right:1px solid #000;border-spacing:0}.summary-table tr>:last-child{border-right:1px solid #000}.summary-table thead tr:nth-child(3) th{height:6.5mm;line-height:1.15;padding:1px}}"""
 
 
 def document_html(title, styles, body):

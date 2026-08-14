@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { BillingStatementResponse, IntakeBatch, QuantitySheet } from "../api/contracts";
+import type { BillingStatementLine, BillingStatementResponse, IntakeBatch, QuantitySheet } from "../api/contracts";
 import { intakeCardsPrintHtml } from "./intakeCards";
 import { quantitySheetPagesMarkup } from "./quantitySheets";
 import { qrCodeMatrix, qrCodeSvg } from "./qrCode";
 import { settlementStatementHtml } from "./settlement";
+import { settlementNotesMarkup } from "./settlementNotes";
 
 describe("print templates", () => {
   it("generates a scannable QR matrix for a cage card short code", () => {
@@ -368,6 +369,50 @@ describe("print templates", () => {
     expect(html).toContain("@page{size:A4;margin:10mm}");
   });
 
+  it("renders custom billing in settlement notes without a dedicated document page", () => {
+    const markup = settlementNotesMarkup(
+      [
+        {
+          speciesLabel: "兔",
+          billingUnit: "animal_day",
+          unitPrice: 12,
+          overageUnitPrice: 0,
+          tiered: false,
+          hasTieredCharge: false,
+        },
+      ],
+      "",
+      [
+        {
+          date: "2026-06-10",
+          animalCount: 5,
+          cageCount: 0,
+          freeCages: 0,
+          billableCages: 0,
+          amount: 60,
+          cumulative: 60,
+          iacucBreakdown: [
+            {
+              iacuc: "Z-RABBIT",
+              animalCount: 5,
+              billingUnit: "animal_day",
+              unitPrice: 12,
+              customBilling: true,
+              customBillingSegmentId: "special-feed",
+              customBillingStartDate: "2026-06-10",
+              customBillingEndDate: "2026-06-20",
+              customBillingNote: "特殊饲料",
+              payableAmount: 60,
+            },
+          ],
+        },
+      ] as BillingStatementLine[],
+    );
+    expect(markup).toContain("自定义收费：");
+    expect(markup).toContain("Z-RABBIT：2026-06-10 至 2026-06-20，每日 5只，12元/只/日，本期 60.00元，特殊饲料");
+    expect(markup).not.toContain("自定义收费明细");
+  });
+
   it("renders tiered iacuc columns with a dedicated tier column", () => {
     const result = {
       statement: {
@@ -496,9 +541,7 @@ describe("print templates", () => {
     expect(html).toContain('<th colspan="6">笼数</th><th colspan="6">缴纳（元）</th>');
     expect(html).toContain('<th colspan="6">只数</th><th colspan="6">缴纳（元）</th>');
     expect(html).toContain("收费标准：");
-    expect(html).toContain("1）小鼠 4.5元/笼/日");
-    expect(html).toContain("2）大鼠 8.5元/笼/日");
-    expect(html).toContain("3）猴 23.5元/只/日");
+    expect(html).toContain("1）小鼠 4.5元/笼/日、2）大鼠 8.5元/笼/日、3）猴 23.5元/只/日");
     expect(html).not.toContain("笼位数＞160");
     expect(html).not.toContain("伦理到期提示：");
   });

@@ -235,7 +235,7 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(lines[15]["iacucBreakdown"][0]["freeCages"], 0)
         self.assertEqual(
             server.quantity_sheet_free_allowance_notes(lines, generated_date="2026-06-01"),
-            "Z2026001 将于 2026-06-15 到期，自 2026-06-16 起不参与减免",
+            "Z2026001 将于 2026-06-15 到期",
         )
 
     def test_quantity_sheet_expiry_note_marks_full_month_ineligible(self):
@@ -253,7 +253,7 @@ class BusinessRuleParityTests(unittest.TestCase):
         ]
         self.assertEqual(
             server.quantity_sheet_free_allowance_notes(lines),
-            "Z2026002 已于 2025-12-31 到期，本月不参与减免",
+            "Z2026002 已于 2025-12-31 到期",
         )
 
     def test_quantity_sheet_expiry_note_skips_far_future_expiry(self):
@@ -273,7 +273,7 @@ class BusinessRuleParityTests(unittest.TestCase):
                     },
                     {
                         "iacuc": "Z-PAST",
-                        "freeAllowance": True,
+                        "billingUnit": "animal_day",
                         "freeAllowanceExpiryDate": "2026-06-30",
                     },
                 ],

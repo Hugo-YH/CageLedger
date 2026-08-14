@@ -97,6 +97,7 @@ class PdfExportTests(unittest.TestCase):
             "sourceType": "pi_merged_quantity_sheet",
             "billingUnit": "mixed",
             "iacucs": ["R1", "Z1", "M1"],
+            "notes": "Z1 将于 2026-07-01 到期。",
         }
         lines = [
             {
@@ -146,13 +147,15 @@ class PdfExportTests(unittest.TestCase):
         self.assertIn('colspan="12">汇总', html)
         self.assertIn('colspan="6">只数', html)
         self.assertIn("收费标准：", html)
-        self.assertIn("1）小鼠 4.5元/笼/日", html)
-        self.assertIn("2）大鼠 8.5元/笼/日", html)
-        self.assertIn("3）猴 23.5元/只/日", html)
+        self.assertEqual(html.count('class="note-detail"'), 2)
+        self.assertIn("伦理到期提示：", html)
+        self.assertIn("Z1 将于 2026-07-01 到期。", html)
+        self.assertIn("height:6.5mm", html)
+        self.assertIn(".summary-table tr>:last-child{border-right:1px solid #000}", html)
+        self.assertIn("1）小鼠 4.5元/笼/日、2）大鼠 8.5元/笼/日、3）猴 23.5元/只/日", html)
         self.assertNotIn("笼位数＞160", html)
-        self.assertNotIn("伦理到期提示：", html)
 
-    def test_custom_billing_details_are_rendered_in_quantity_and_settlement_documents(self):
+    def test_custom_billing_details_are_rendered_in_quantity_and_settlement_notes(self):
         sheet = {
             "id": "custom-sheet",
             "month": "2026-07",
@@ -194,5 +197,7 @@ class PdfExportTests(unittest.TestCase):
         ]
         self.assertIn("自定义收费明细", quantity_sheet_html(sheet))
         statement_html = billing_statement_html(statement, lines)
-        self.assertIn("自定义收费明细", statement_html)
+        self.assertIn("自定义收费：", statement_html)
         self.assertIn("特殊饲料", statement_html)
+        self.assertIn("每日 5只，12元/只/日，本期 60元", statement_html)
+        self.assertNotIn("<h1>自定义收费明细</h1>", statement_html)
