@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.9",
+    build: "172",
+    releasedAt: "2026-08-16",
+    title: "后端分层拆分与部署地址切换",
+    items: [
+      "完成 `server_app/legacy.py` 拆分：工作流动作、写入路由等迁移到独立模块，并补充 legacy 兼容回归测试，降低单体兼容入口的维护成本",
+      "代码与软件包推送地址从 VPS 穿透切换为 NAS 直连（Surge Ponte），容器镜像默认注册表同步调整；发布与 Wiki 同步流程自动跟随",
+    ],
+  },
+  {
     version: "1.0.8",
     build: "170",
     releasedAt: "2026-08-15",
