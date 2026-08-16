@@ -6,11 +6,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/publish_container_local.sh [--version 0.6.11] [--registry git.cellnucle.us] [--namespace hugo] [--image-name cageledger] [--base-image-name cageledger-base] [--export-offline-images] [--skip-base-sync]
+  bash scripts/publish_container_local.sh [--version 0.6.11] [--registry nas.sgdns:3333] [--namespace hugo] [--image-name cageledger] [--base-image-name cageledger-base] [--export-offline-images] [--skip-base-sync]
 
 Options:
   --version <ver>          Release version without leading v. Default: package.json version
-  --registry <host>        Registry host. Default: git.cellnucle.us
+  --registry <host>        Registry host. Default: nas.sgdns:3333
   --namespace <name>       Registry namespace. Default: hugo
   --image-name <name>      Application image name. Default: cageledger
   --base-image-name <name> Base image repo name. Default: cageledger-base
@@ -20,7 +20,7 @@ EOF
 }
 
 VERSION=""
-REGISTRY="${CAGELEDGER_REGISTRY:-git.cellnucle.us}"
+REGISTRY="${CAGELEDGER_REGISTRY:-nas.sgdns:3333}"
 NAMESPACE="${CAGELEDGER_IMAGE_NAMESPACE:-hugo}"
 IMAGE_NAME="${CAGELEDGER_IMAGE_NAME:-cageledger}"
 BASE_IMAGE_NAME="${CAGELEDGER_BASE_IMAGE_NAME:-cageledger-base}"

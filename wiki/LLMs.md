@@ -6,7 +6,7 @@
 
 ## 权威来源
 
-- [当前业务行为](https://git.cellnucle.us/hugo/cageledger)：`src/react/features/`、`server_app/services/`、`server_app/repositories/`
+- [当前业务行为](http://nas.sgdns:3333/hugo/cageledger)：`src/react/features/`、`server_app/services/`、`server_app/repositories/`
 - [API 与数据模型](/development/api-and-data-model.md)：`docs/contracts/api-contracts.md`
 - [前端状态与 UI 标准](/development/ui-component-standard.md)：`docs/contracts/frontend-state.md`
 - [测试与质量](/development/testing-and-quality.md)：`package.json`、`AGENTS.md`
@@ -56,9 +56,9 @@
 
 ## 可选
 
-- [仓库 Wiki 首页](https://git.cellnucle.us/hugo/cageledger/wiki)
-- [仓库源码与 Issue](https://git.cellnucle.us/hugo/cageledger)
-- [Gitea Releases](https://git.cellnucle.us/hugo/cageledger/releases)
+- [仓库 Wiki 首页](http://nas.sgdns:3333/hugo/cageledger/wiki)
+- [仓库源码与 Issue](http://nas.sgdns:3333/hugo/cageledger)
+- [Gitea Releases](http://nas.sgdns:3333/hugo/cageledger/releases)
 
 ## 约束
 

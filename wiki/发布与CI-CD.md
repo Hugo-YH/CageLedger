@@ -74,7 +74,7 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 
 1. 同步 `cageledger-base` 的多架构 tag
 2. 从干净的 tag 或 HEAD worktree 构建 `amd64` 和 `arm64`
-3. 推送 `git.cellnucle.us/hugo/cageledger:X.Y.Z`
+3. 推送 `nas.sgdns:3333/hugo/cageledger:X.Y.Z`
 4. 将已验证的 `X.Y.Z` 多架构 manifest 同步为 `latest`
 5. 导出 `dist/` 下的离线镜像 tar.gz
 
@@ -95,8 +95,8 @@ Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea �
 
 - `git tag --list 'vX.Y.Z'` 存在新 tag，且正式 tag 的提交位于 `main`。
 - Gitea Release 显示对应版本和离线包。
-- `git.cellnucle.us/hugo/cageledger:X.Y.Z` 可以拉取。
-- `git.cellnucle.us/hugo/cageledger:latest` 与最新正式版本具有相同的 `amd64`、`arm64` manifest。
+- `nas.sgdns:3333/hugo/cageledger:X.Y.Z` 可以拉取。
+- `nas.sgdns:3333/hugo/cageledger:latest` 与最新正式版本具有相同的 `amd64`、`arm64` manifest。
 - `/api/health` 返回对应版本和 revision。
 - 系统更新检查识别最新 Release。
 - `/docs/` 显示本次文档变更，Gitea Wiki 显示迁移入口。
