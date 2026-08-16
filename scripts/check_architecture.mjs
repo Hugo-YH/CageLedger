@@ -25,14 +25,6 @@ const sizePolicies = [
 ];
 const baselineHotspots = new Map([
   [
-    "server_app/legacy.py",
-    {
-      ceiling: 7350,
-      reason:
-        "legacy HTTP compatibility, settlement candidate snapshots, PDF export routes, dashboard overview route, billing workflow initiate/registration/reimbursement-recording and attachment routes, documentation static routing, transitional domain dispatch, slim admin/IACUC routes, animal-inspection catalog routes, and quantity-sheet pi-history lookup",
-    },
-  ],
-  [
     "src/styles/features/animal-management.css",
     { ceiling: 1927, reason: "animal management workspace, inspection entry/lists and catalog editor styles" },
   ],

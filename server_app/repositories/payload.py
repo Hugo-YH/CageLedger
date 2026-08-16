@@ -7,6 +7,10 @@ def dump_json(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def placeholders(values):
+    return ", ".join("?" for _ in values)
+
+
 def read_payloads(conn, table, order_by):
     rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {order_by}").fetchall()
     return [json.loads(row["payload"]) for row in rows]

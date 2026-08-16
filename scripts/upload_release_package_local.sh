@@ -55,7 +55,7 @@ fi
 
 cd "$ROOT"
 
-ORIGIN_URL="$(git remote get-url origin)"
+ORIGIN_URL="$(git remote get-url --push origin)"
 REPOSITORY="${CAGELEDGER_GITEA_REPOSITORY:-}"
 GITEA_URL="${CAGELEDGER_GITEA_URL:-}"
 
@@ -97,8 +97,9 @@ AUTH_ARGS=()
 if [[ -n "${CAGELEDGER_GITEA_TOKEN:-}" ]]; then
   AUTH_ARGS=(-H "Authorization: token ${CAGELEDGER_GITEA_TOKEN}")
 else
+  GITEA_PROTOCOL="$(printf '%s' "$GITEA_URL" | sed -E 's#^(https?)://.*#\1#')"
   GITEA_HOST="$(printf '%s' "$GITEA_URL" | sed -E 's#^https?://([^/]+).*#\1#')"
-  CREDENTIAL_INPUT=$'protocol=https\n'
+  CREDENTIAL_INPUT="protocol=${GITEA_PROTOCOL}"$'\n'
   CREDENTIAL_INPUT+="host=${GITEA_HOST}"$'\n'
   CREDENTIAL_INPUT+="path=${REPOSITORY}"$'\n\n'
   CREDENTIAL="$(printf '%s' "$CREDENTIAL_INPUT" | git credential fill)"

@@ -101,6 +101,25 @@ def insert_slot_record(conn, slot):
     )
 
 
+def update_slot_record(conn, slot):
+    conn.execute(
+        """
+        UPDATE cage_slots
+        SET rack_id = ?, row_no = ?, col_no = ?, code = ?, status = ?, payload = ?
+        WHERE id = ?
+        """,
+        (
+            slot.get("rackId"),
+            _as_int(slot.get("row")),
+            _as_int(slot.get("col")),
+            slot.get("code", ""),
+            slot.get("status", "empty"),
+            dump_json(slot),
+            slot.get("id"),
+        ),
+    )
+
+
 def delete_slot_record(conn, slot_id):
     conn.execute("DELETE FROM cage_slots WHERE id = ?", (slot_id,))
 

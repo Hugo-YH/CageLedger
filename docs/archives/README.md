@@ -8,3 +8,5 @@
 | CageLedger React Performance | 2026-06-27 至 2026-06-28 | 完成 React 19、Vite 8、TypeScript、数据查询和发布链性能升级 | [MASTER](./cageledger-react-performance/progress/MASTER.md) |
 | CageLedger Project Modularization | 2026-06-30 至 2026-07-01 | 完成后端领域、React 页面、CSS、脚本、测试和架构门禁拆分 | [MASTER](./project-modularization/progress/MASTER.md) |
 | legacy.py 尺寸治理 | 2026-08-09 | 提取 multipart 解析工具，恢复兼容入口尺寸门禁 | [MASTER](./legacy-size-governance/progress/MASTER.md) |
+| Ant Design UI 审计与整改 | 2026-08-14 至 2026-08-16 | 阶段 1 已完成，持续收敛项转入日常 UI 迭代 | [MASTER](./ant-design-ui-audit/progress/MASTER.md) |
+| legacy.py 持续拆分 | 2026-08-16 | 完成 persistence、state、业务事务、HTTP composition 与兼容入口拆分，legacy 收敛为 101 行 | [MASTER](./legacy-decomposition/progress/MASTER.md) |

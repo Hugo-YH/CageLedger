@@ -19,7 +19,7 @@ if [[ "${1:-}" = "-h" || "${1:-}" = "--help" ]]; then
   exit 0
 fi
 
-origin_url="$(git -C "$ROOT" remote get-url origin)"
+origin_url="$(git -C "$ROOT" remote get-url --push origin)"
 gitea_url="${CAGELEDGER_GITEA_URL:-}"
 repository="${CAGELEDGER_GITEA_REPOSITORY:-}"
 

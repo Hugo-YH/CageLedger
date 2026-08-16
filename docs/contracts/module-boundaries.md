@@ -91,7 +91,7 @@ graph TD
 
 ## 当前技术债边界
 
-- `server_app/legacy.py` 是迁移期 HTTP 兼容层；新增实现进入 `server_app/domains/`。
+- `server_app/legacy.py` 是显式兼容与进程装配层，保持在 250 行以内；HTTP adapters 位于 `server_app/web/`，业务事务位于对应 `server_app/domains/`，SQL 位于 `server_app/repositories/` 与 `server_app/persistence/`。
 - `src/styles/index.css` 固定导入顺序；新增规则归入对应层或业务域文件。
 - `src/react/api/contracts.ts` 保留兼容 re-export；新增类型进入 `src/contracts/<domain>.ts`。
 - `ENTITY_ENDPOINTS` 保留旧通用实体接口；新高频流程优先使用专用 service endpoint。

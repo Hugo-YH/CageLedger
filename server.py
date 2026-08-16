@@ -8,6 +8,7 @@ from server_app.domains import iacuc as _iacuc
 from server_app.domains import intake as _intake
 from server_app.domains import quantity as _quantity
 from server_app.domains import reimbursement as _reimbursement
+from server_app.domains import state as _state
 from server_app.domains import workflow as _workflow
 
 main = _legacy.main
@@ -20,6 +21,7 @@ _COMPATIBILITY_MODULES = (
     _intake,
     _quantity,
     _reimbursement,
+    _state,
     _workflow,
 )
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Legacy Decomposition"
+  short_description: "Safely split CageLedger legacy.py"
+  default_prompt: "Continue the tracked server_app/legacy.py decomposition from docs/progress/MASTER.md."
