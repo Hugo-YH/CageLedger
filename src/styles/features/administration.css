@@ -244,6 +244,39 @@
   --modal-width: 1180px;
 }
 
+.app-modal-root.intake-edit-modal .ant-modal {
+  height: min(920px, calc(100dvh - 32px));
+  margin-block: 16px;
+}
+
+.app-modal-root.intake-edit-modal .ant-modal-container {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-modal-root.intake-edit-modal .ant-modal-body,
+.app-modal-root.intake-edit-modal .modal-shell,
+.app-modal-root.intake-edit-modal .modal-shell-body {
+  min-height: 0;
+}
+
+.app-modal-root.intake-edit-modal .ant-modal-body {
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-modal-root.intake-edit-modal .modal-shell {
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-modal-root.intake-edit-modal .modal-shell-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .intake-edit-modal .intake-entry-panel {
   border: 0;
   box-shadow: none;

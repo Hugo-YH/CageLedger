@@ -36,6 +36,52 @@
   color: var(--muted);
 }
 
+.workflow-registration-card {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.workflow-registration-card + .workflow-registration-card {
+  margin-top: 12px;
+}
+
+.workflow-registration-status {
+  margin: 0;
+}
+
+.workflow-reimbursement-cards {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.workflow-reimbursement-card {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.workflow-reimbursement-card-title {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  margin-bottom: 4px;
+}
+
+.workflow-reimbursement-total {
+  margin: 4px 0 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line);
+  font-weight: 600;
+}
+
 @media (width <= 760px) {
   [data-feature="workflow"] .ant-table-wrapper {
     overflow-x: auto;

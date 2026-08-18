@@ -49,6 +49,7 @@ export interface BillingWorkflow {
   pi: string;
   project: string;
   owner: string;
+  funding: string;
   manager: string;
   totalAmount: number;
   reimbursementRequired?: boolean;
@@ -66,7 +67,7 @@ export interface BillingWorkflow {
   reimbursementFormReturned?: boolean;
   reimbursementFormNote?: string;
   reimbursementFormNos?: string[];
-  reimbursementForms?: Array<{ formNo: string; amount: number }>;
+  reimbursementForms?: Array<{ formNo: string; amount: number; fundingBookNo?: string }>;
   receivedAmount?: number;
   attachments?: BillingWorkflowAttachment[];
   registeredBy?: { id: string; username: string; displayName: string };
@@ -153,7 +154,7 @@ export function useAdvanceWorkflow() {
       toStatus: string;
       note?: string;
       registration?: {
-        reimbursementForms?: Array<{ formNo: string; amount: number }>;
+        reimbursementForms?: Array<{ formNo: string; amount: number; fundingBookNo?: string }>;
         signedStatementReturned?: boolean;
         signedStatementNote?: string;
         reimbursementFormReturned?: boolean;
@@ -252,7 +253,7 @@ export function useDeleteBillingWorkflow() {
 
 export async function recordWorkflowReimbursement(
   workflowId: string,
-  reimbursementForms: Array<{ formNo: string; amount: number }>,
+  reimbursementForms: Array<{ formNo: string; amount: number; fundingBookNo?: string }>,
 ) {
   const payload = await requestJson<Record<string, unknown>>(
     `/api/billing-workflows/${encodeURIComponent(workflowId)}/reimbursement-forms`,

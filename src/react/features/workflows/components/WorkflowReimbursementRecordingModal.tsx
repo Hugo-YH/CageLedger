@@ -1,12 +1,13 @@
 import { MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Form, Input, InputNumber, Modal, Space, Typography, Upload } from "antd";
-import { useEffect, useState } from "react";
+import { Alert, AutoComplete, Button, Flex, Form, Input, InputNumber, Modal, Space, Typography, Upload } from "antd";
+import { useEffect, useMemo, useState } from "react";
 
+import { buildFundingBookOptions } from "../../../../domain/fundingBookNo";
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
 import { recordWorkflowReimbursement, uploadWorkflowAttachment } from "../../../api/workflows";
 
 interface RecordingValues {
-  reimbursementForms?: Array<{ formNo: string; amount?: number }>;
+  reimbursementForms?: Array<{ formNo: string; amount?: number; fundingBookNo?: string }>;
 }
 
 export function WorkflowReimbursementRecordingModal({
@@ -23,6 +24,7 @@ export function WorkflowReimbursementRecordingModal({
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const fundingOptions = useMemo(() => buildFundingBookOptions(target?.funding || ""), [target?.funding]);
 
   useEffect(() => {
     if (target) {
@@ -48,7 +50,11 @@ export function WorkflowReimbursementRecordingModal({
       setSaving(true);
       await recordWorkflowReimbursement(
         target.id,
-        forms.map((entry) => ({ formNo: entry.formNo, amount: Number(entry.amount) || 0 })),
+        forms.map((entry) => ({
+          formNo: entry.formNo,
+          amount: Number(entry.amount) || 0,
+          fundingBookNo: entry.fundingBookNo?.trim() || "",
+        })),
       );
       onRecorded();
     } catch (error) {
@@ -89,12 +95,19 @@ export function WorkflowReimbursementRecordingModal({
         </Typography.Paragraph>
       ) : null}
       {formError ? <Alert showIcon style={{ marginBottom: 12 }} title={formError} type="error" /> : null}
-      <Form form={form} initialValues={{ reimbursementForms: [{ formNo: "", amount: undefined }] }} layout="vertical">
+      <Form
+        form={form}
+        initialValues={{ reimbursementForms: [{ formNo: "", amount: undefined, fundingBookNo: "" }] }}
+        layout="vertical"
+      >
         <Flex gap={8} style={{ marginBottom: 8 }}>
-          <Typography.Text type="secondary" style={{ width: 220 }}>
+          <Typography.Text type="secondary" style={{ width: 200 }}>
+            经费本编号
+          </Typography.Text>
+          <Typography.Text type="secondary" style={{ width: 200 }}>
             报销单号
           </Typography.Text>
-          <Typography.Text type="secondary" style={{ width: 140 }}>
+          <Typography.Text type="secondary" style={{ width: 120 }}>
             金额（元）
           </Typography.Text>
         </Flex>
@@ -103,15 +116,29 @@ export function WorkflowReimbursementRecordingModal({
             <>
               {fields.map(({ key, name, ...restField }) => (
                 <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
+                  <Form.Item {...restField} name={[name, "fundingBookNo"]}>
+                    <AutoComplete
+                      allowClear
+                      options={fundingOptions}
+                      placeholder="选择或输入经费本编号"
+                      style={{ width: 200 }}
+                    />
+                  </Form.Item>
                   <Form.Item
                     {...restField}
                     name={[name, "formNo"]}
                     rules={[{ required: true, message: "请填写报销单号" }]}
                   >
-                    <Input placeholder="报销单号" style={{ width: 220 }} />
+                    <Input placeholder="报销单号" style={{ width: 200 }} />
                   </Form.Item>
                   <Form.Item {...restField} name={[name, "amount"]} rules={[{ required: true, message: "请填写金额" }]}>
-                    <InputNumber min={0} precision={2} placeholder="金额（元）" style={{ width: 140 }} />
+                    <InputNumber
+                      controls={false}
+                      min={0}
+                      precision={2}
+                      placeholder="金额（元）"
+                      style={{ width: 120 }}
+                    />
                   </Form.Item>
                   <MinusCircleOutlined
                     aria-label={`删除第 ${name + 1} 行报销单`}
@@ -125,7 +152,7 @@ export function WorkflowReimbursementRecordingModal({
                   block
                   icon={<PlusOutlined aria-hidden />}
                   type="dashed"
-                  onClick={() => add({ formNo: "", amount: undefined })}
+                  onClick={() => add({ formNo: "", amount: undefined, fundingBookNo: "" })}
                 >
                   添加报销单号
                 </Button>

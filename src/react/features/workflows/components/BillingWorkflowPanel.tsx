@@ -7,6 +7,7 @@ import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflo
 import { fetchWorkflowDetail, useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
 import { DataTable } from "../../../components/ui";
 import { Pager } from "../../../components/WorkspaceUi";
+import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
 import { QueryFeedback } from "./LedgerListShared";
 import { WorkflowColumnTitle } from "./WorkflowColumnTitle";
 import { WorkflowDetailModal } from "./WorkflowDetailModal";
@@ -205,9 +206,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   {item.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
                 </Tag>
                 {reimbursementRequired ? (
-                  <Tag color={item.reimbursementFormReturned ? "blue" : "default"}>
-                    {item.reimbursementFormReturned ? "报销单 已交回" : "报销单 未交回"}
-                  </Tag>
+                  <Tag color={reimbursementReturnStatus(item).color}>{reimbursementReturnStatus(item).label}</Tag>
                 ) : null}
               </>
             ) : (

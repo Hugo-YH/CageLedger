@@ -2,6 +2,7 @@ import { DownloadOutlined } from "@ant-design/icons";
 import { Button, Flex, Modal, Tag, Timeline, Typography } from "antd";
 import { useEffect, useState } from "react";
 
+import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
 import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflows";
 import { formatDateTime, formatMoney } from "../../../components/WorkspaceUi";
 
@@ -15,6 +16,32 @@ function detailLine(label: string, value: string) {
       <Typography.Text type="secondary">{label}：</Typography.Text>
       {value || "-"}
     </div>
+  );
+}
+
+function registrationReturnedCards(workflow: BillingWorkflow) {
+  const forms = workflow.reimbursementForms || [];
+  if (!forms.length) {
+    return detailLine("报销单号", (workflow.reimbursementFormNos || []).join("、"));
+  }
+  return (
+    <>
+      <div className="workflow-reimbursement-cards">
+        {forms.map((entry, index) => (
+          <div className="workflow-reimbursement-card" key={`${entry.formNo}-${index}`}>
+            <Typography.Text strong className="workflow-reimbursement-card-title">
+              报销单 {index + 1}
+            </Typography.Text>
+            {detailLine("报销单号", entry.formNo)}
+            {entry.fundingBookNo ? detailLine("经费本编号", entry.fundingBookNo) : null}
+            {detailLine("金额（元）", formatMoney(Number(entry.amount || 0)))}
+          </div>
+        ))}
+      </div>
+      <div className="workflow-reimbursement-total">
+        {detailLine("总金额", formatMoney(Number(workflow.receivedAmount || 0)))}
+      </div>
+    </>
   );
 }
 
@@ -54,6 +81,7 @@ export function WorkflowDetailModal({
 
   const revised = Number(workflow?.currentVersionNo || 1) > 1;
   const reimbursementRequired = workflow?.reimbursementRequired ?? Number(workflow?.totalAmount || 0) > 0;
+  const reimbursementStatus = reimbursementReturnStatus(workflow || {});
   const eventMeta: Record<string, { label: string }> = {
     statement_sent: { label: "发起结算流程" },
     statement_registered_archived: { label: "结算单/报销单交回" },
@@ -134,28 +162,27 @@ export function WorkflowDetailModal({
                 : null}
               {event.eventType === "statement_registered_archived" ? (
                 <>
-                  <Flex gap={8} align="center" style={{ margin: "6px 0" }}>
-                    <Tag color={workflow?.signedStatementReturned ? "success" : "default"}>
-                      {workflow?.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
-                    </Tag>
-                    {reimbursementRequired ? (
-                      <Tag color={workflow?.reimbursementFormReturned ? "blue" : "default"}>
-                        {workflow?.reimbursementFormReturned ? "报销单 已交回" : "报销单 未交回"}
+                  <div className="workflow-registration-card">
+                    <div className="workflow-registration-status">
+                      <Tag color={workflow?.signedStatementReturned ? "success" : "default"}>
+                        {workflow?.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
                       </Tag>
-                    ) : null}
-                  </Flex>
-                  {workflow?.reimbursementFormReturned
-                    ? detailLine(
-                        "报销单号",
-                        workflow.reimbursementForms?.length
-                          ? workflow.reimbursementForms
-                              .map((entry) => `${entry.formNo}（${formatMoney(Number(entry.amount || 0))}）`)
-                              .join("、")
-                          : (workflow.reimbursementFormNos || []).join("、"),
-                      )
-                    : null}
-                  {workflow?.signedStatementNote ? detailLine("结算单备注", workflow.signedStatementNote) : null}
-                  {workflow?.reimbursementFormNote ? detailLine("报销单备注", workflow.reimbursementFormNote) : null}
+                    </div>
+                    {workflow?.signedStatementNote ? detailLine("备注", workflow.signedStatementNote) : null}
+                  </div>
+                  {reimbursementRequired ? (
+                    <div className="workflow-registration-card">
+                      <div className="workflow-registration-status">
+                        <Tag color={reimbursementStatus.color}>{reimbursementStatus.label}</Tag>
+                      </div>
+                      {workflow?.reimbursementFormReturned ? (
+                        <>
+                          {registrationReturnedCards(workflow)}
+                          {workflow?.reimbursementFormNote ? detailLine("备注", workflow.reimbursementFormNote) : null}
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </>
               ) : null}
             </>

@@ -297,8 +297,8 @@ def list_billing_workflow_filter_options(conn, filters, column):
         rows = conn.execute(
             f"""
             SELECT {expression} AS value, {expression} AS label, COUNT(*) AS count
-            FROM billing_workflows{where_clause}
-            WHERE {expression} IS NOT NULL AND {expression} != ''
+            FROM billing_workflows
+            {where_clause + " AND " if where_clause else "WHERE "}{expression} IS NOT NULL AND {expression} != ''
             GROUP BY value, label
             ORDER BY value COLLATE NOCASE
             LIMIT 500

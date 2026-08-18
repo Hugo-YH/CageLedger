@@ -151,6 +151,18 @@ class BillingWorkflowListTests(unittest.TestCase):
         managers = list_billing_workflow_filter_options(self.conn, {"columnFilters": {}}, "manager")
         self.assertEqual({item["value"] for item in managers}, {"李登记", "王登记"})
 
+    def test_filter_options_scalar_column_respects_existing_scalar_filter(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        self._insert_workflow("wf-2", "v-2", "2026-08", "李教授", "王登记", "Z2026002", 80, "statement_sent")
+
+        # 已按月份筛选后，再取“项目负责人”列的可选项，必须只返回该月份下的值，
+        # 而不是因为 WHERE 拼接错误返回空结果或抛出 SQL 语法错误。
+        pis = list_billing_workflow_filter_options(self.conn, {"columnFilters": {"month": ["2026-07"]}}, "pi")
+        self.assertEqual({item["value"] for item in pis}, {"张教授"})
+
+        managers = list_billing_workflow_filter_options(self.conn, {"columnFilters": {"month": ["2026-08"]}}, "manager")
+        self.assertEqual({item["value"] for item in managers}, {"王登记"})
+
     def test_sent_workflow_can_revert_to_generated(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
         workflow, version, event = update_workflow_status(
@@ -216,6 +228,27 @@ class BillingWorkflowListTests(unittest.TestCase):
                 {},
             )
 
+    def test_registration_persists_reimbursement_funding_book_no(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        workflow, version, _ = update_workflow_status(
+            self.conn,
+            "wf-1",
+            "statement_archived",
+            ADMIN,
+            "交回登记并归档",
+            {
+                "signedStatementReturned": True,
+                "reimbursementFormReturned": True,
+                "reimbursementForms": [
+                    {"formNo": "BX-001", "amount": 100, "fundingBookNo": "30309010012125"},
+                ],
+            },
+        )
+        self.assertEqual(
+            version["statement"]["reimbursementForms"],
+            [{"formNo": "BX-001", "amount": 100, "fundingBookNo": "30309010012125"}],
+        )
+
     def test_archived_workflow_can_record_missing_reimbursement(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_archived")
         workflow, version, event = record_archived_reimbursement(
@@ -250,12 +283,18 @@ class BillingWorkflowListTests(unittest.TestCase):
         self.assertEqual(version["statement"]["workflowStatus"], "statement_locked")
         self.assertEqual(event["fromStatus"], "statement_locked")
         self.assertEqual(event["toStatus"], "statement_locked")
-        self.assertEqual(version["statement"]["reimbursementForms"], [{"formNo": "BX-LOCKED", "amount": 100}])
+        self.assertEqual(
+            version["statement"]["reimbursementForms"],
+            [{"formNo": "BX-LOCKED", "amount": 100, "fundingBookNo": ""}],
+        )
 
         workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_sent", ADMIN, "解锁后继续跟踪")
         self.assertEqual(workflow["workflowStatus"], "statement_sent")
         self.assertTrue(version["statement"]["reimbursementFormReturned"])
-        self.assertEqual(version["statement"]["reimbursementForms"], [{"formNo": "BX-LOCKED", "amount": 100}])
+        self.assertEqual(
+            version["statement"]["reimbursementForms"],
+            [{"formNo": "BX-LOCKED", "amount": 100, "fundingBookNo": ""}],
+        )
         self.assertEqual(event["eventType"], "statement_unlocked")
 
     def test_zero_amount_workflow_does_not_require_or_accept_reimbursement(self):

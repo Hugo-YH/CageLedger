@@ -348,8 +348,9 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
             for entry in registration.get("reimbursementForms") or []:
                 form_no = deps.clean_text(entry.get("formNo", ""))
                 amount = max(deps.as_int(entry.get("amount")) or 0, 0)
+                funding_book_no = deps.clean_text(entry.get("fundingBookNo", ""))
                 if form_no:
-                    reimbursement_forms.append({"formNo": form_no, "amount": amount})
+                    reimbursement_forms.append({"formNo": form_no, "amount": amount, "fundingBookNo": funding_book_no})
             reimbursement_required = _reimbursement_required(statement, deps)
             if not reimbursement_required and (registration.get("reimbursementFormReturned") or reimbursement_forms):
                 raise ValueError("结算金额为 0，无需交回报销单")
@@ -460,8 +461,9 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
     for entry in reimbursement_forms or []:
         form_no = deps.clean_text(entry.get("formNo", ""))
         amount = max(deps.as_int(entry.get("amount")) or 0, 0)
+        funding_book_no = deps.clean_text(entry.get("fundingBookNo", ""))
         if form_no:
-            forms.append({"formNo": form_no, "amount": amount})
+            forms.append({"formNo": form_no, "amount": amount, "fundingBookNo": funding_book_no})
     if not forms:
         raise ValueError("请填写报销单号和金额")
     merged_forms = list(statement.get("reimbursementForms") or []) + forms
