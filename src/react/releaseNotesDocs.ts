@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.11",
+    build: "176",
+    releasedAt: "2026-08-18",
+    title: "交回登记体验优化：报销单号自动生成与控件统一",
+    items: [
+      "交回登记与补录报销单弹窗按当前年月自动生成报销单号前缀 `BXD1001YYYYMM000`，配“请核对并完善”说明提示，工作人员只需补充末尾三位编号",
+      "经费本编号下拉与报销单号、金额的列宽和控件高度统一，弹窗补充工作区样式作用域，提示图标与焦点样式保持一致",
+      "新增 `src/domain/reimbursementFormNo.ts` 纯函数并补单元测试，默认报销单号生成逻辑集中可复用",
+    ],
+  },
+  {
     version: "1.0.10",
     build: "175",
     releasedAt: "2026-08-18",
