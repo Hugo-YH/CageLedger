@@ -128,8 +128,8 @@
 
 ## 9. 发布与 Gitea
 
-- 正式上游：`http://nas.sgdns:3333/hugo/cageledger`。
-- 正式镜像：`nas.sgdns:3333/hugo/cageledger:<tag>`。
+- 正式上游：`http://ddns.cellnucle.us:3333/hugo/cageledger`。
+- 正式镜像：`ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
 - 正式版本出口：`v*` tag、Gitea Release 和同版本容器镜像。
 - 版本源头：`package.json`。
 - 版本同步：`scripts/set_version.mjs`。

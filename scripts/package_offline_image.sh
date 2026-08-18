@@ -6,12 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/package_offline_image.sh [--version 0.6.11] [--tag 0.6.11-abc1234] [--registry nas.sgdns:3333] [--namespace hugo] [--image-name cageledger]
+  bash scripts/package_offline_image.sh [--version 0.6.11] [--tag 0.6.11-abc1234] [--registry ddns.cellnucle.us:3333] [--namespace hugo] [--image-name cageledger]
 
 Options:
   --version <ver>     Image version without leading v. Default: package.json version
   --tag <tag>         Full image tag to export. Default: <version>
-  --registry <host>   Registry host. Default: nas.sgdns:3333
+  --registry <host>   Registry host. Default: ddns.cellnucle.us:3333
   --namespace <name>  Registry namespace. Default: hugo
   --image-name <name> Image name. Default: cageledger
 EOF
@@ -19,7 +19,7 @@ EOF
 
 VERSION=""
 IMAGE_TAG=""
-REGISTRY="${CAGELEDGER_REGISTRY:-nas.sgdns:3333}"
+REGISTRY="${CAGELEDGER_REGISTRY:-ddns.cellnucle.us:3333}"
 NAMESPACE="${CAGELEDGER_IMAGE_NAMESPACE:-hugo}"
 IMAGE_NAME="${CAGELEDGER_IMAGE_NAME:-cageledger}"
 
