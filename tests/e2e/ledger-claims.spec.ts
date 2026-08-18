@@ -184,7 +184,7 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
 
-  const pi = "E2E 重新登记负责人";
+  const pi = `E2E 重新登记负责人 ${Date.now()}`;
   await page.request.post("/api/quantity-sheets", {
     data: {
       sheet: {
@@ -235,10 +235,10 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await revokeModal.getByRole("button", { name: "确认撤回" }).click();
   await expect(row).toContainText("已发起", { timeout: 10_000 });
 
-  // 第二次交回登记：交回结算单和报销单
+  // 第二次交回登记：撤回后回填上次结算单交回状态，本次补交回报销单
   await row.getByRole("button", { name: "登记" }).click();
   modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
-  await modal.getByRole("switch", { name: "饲养费结算单" }).click();
+  await expect(modal.getByRole("switch", { name: "饲养费结算单" })).toBeChecked();
   await modal.getByRole("switch", { name: "报销单" }).click();
   await modal.getByLabel("饲养费结算单备注").fill("结算单已由项目组交回");
   await modal.getByLabel("报销单备注").fill("报销单材料齐全");
@@ -253,8 +253,8 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
   await expect(detail.getByText("结算单/报销单交回")).toHaveCount(1);
   await expect(detail).toContainText("BX-RE-001");
-  await expect(detail).toContainText("结算单备注：结算单已由项目组交回");
-  await expect(detail).toContainText("报销单备注：报销单材料齐全");
+  await expect(detail).toContainText("备注：结算单已由项目组交回");
+  await expect(detail).toContainText("备注：报销单材料齐全");
   const history = detail.getByText("历史修改（2 条）");
   await expect(history).toBeVisible();
   await history.click();
