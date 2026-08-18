@@ -249,6 +249,28 @@ class BillingWorkflowListTests(unittest.TestCase):
             [{"formNo": "BX-001", "amount": 100, "fundingBookNo": "30309010012125"}],
         )
 
+    def test_registration_preserves_decimal_reimbursement_amount(self):
+        self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
+        workflow, version, _ = update_workflow_status(
+            self.conn,
+            "wf-1",
+            "statement_archived",
+            ADMIN,
+            "交回登记并归档",
+            {
+                "signedStatementReturned": True,
+                "reimbursementFormReturned": True,
+                "reimbursementForms": [
+                    {"formNo": "BX-001", "amount": 500.5},
+                ],
+            },
+        )
+        self.assertEqual(
+            version["statement"]["reimbursementForms"],
+            [{"formNo": "BX-001", "amount": 500.5, "fundingBookNo": ""}],
+        )
+        self.assertEqual(version["statement"]["receivedAmount"], 500.5)
+
     def test_archived_workflow_can_record_missing_reimbursement(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_archived")
         workflow, version, event = record_archived_reimbursement(

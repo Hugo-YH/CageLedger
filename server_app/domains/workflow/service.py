@@ -347,7 +347,7 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
             reimbursement_forms = []
             for entry in registration.get("reimbursementForms") or []:
                 form_no = deps.clean_text(entry.get("formNo", ""))
-                amount = max(deps.as_int(entry.get("amount")) or 0, 0)
+                amount = max(deps.as_float(entry.get("amount")) or 0, 0)
                 funding_book_no = deps.clean_text(entry.get("fundingBookNo", ""))
                 if form_no:
                     reimbursement_forms.append({"formNo": form_no, "amount": amount, "fundingBookNo": funding_book_no})
@@ -460,7 +460,7 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
     forms = []
     for entry in reimbursement_forms or []:
         form_no = deps.clean_text(entry.get("formNo", ""))
-        amount = max(deps.as_int(entry.get("amount")) or 0, 0)
+        amount = max(deps.as_float(entry.get("amount")) or 0, 0)
         funding_book_no = deps.clean_text(entry.get("fundingBookNo", ""))
         if form_no:
             forms.append({"formNo": form_no, "amount": amount, "fundingBookNo": funding_book_no})
