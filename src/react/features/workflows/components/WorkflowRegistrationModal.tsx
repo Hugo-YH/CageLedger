@@ -1,4 +1,4 @@
-import { MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { InfoCircleOutlined, MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   Alert,
   AutoComplete,
@@ -11,12 +11,14 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
   Upload,
 } from "antd";
 import { useMemo, useState } from "react";
 
 import { buildFundingBookOptions } from "../../../../domain/fundingBookNo";
+import { defaultReimbursementFormNo } from "../../../../domain/reimbursementFormNo";
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
 import { uploadWorkflowAttachment, useAdvanceWorkflow } from "../../../api/workflows";
 
@@ -40,7 +42,13 @@ function registrationInitialValues(target: BillingWorkflow): RegistrationValues 
           formNo: entry.formNo,
           amount: entry.amount,
         }))
-      : [{ formNo: "", amount: Number(target.totalAmount || 0) || undefined, fundingBookNo: "" }],
+      : [
+          {
+            formNo: defaultReimbursementFormNo(),
+            amount: Number(target.totalAmount || 0) || undefined,
+            fundingBookNo: "",
+          },
+        ],
     reimbursementFormNote: target.reimbursementFormNote || "",
   };
 }
@@ -81,6 +89,7 @@ export function WorkflowRegistrationModal({
       destroyOnHidden
       footer={null}
       open={Boolean(target)}
+      rootClassName="app-modal-root workflow-registration-modal"
       title={`交回登记 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
       width={640}
       onCancel={onCancel}
@@ -211,6 +220,9 @@ function WorkflowRegistrationForm({
                 </Typography.Text>
                 <Typography.Text type="secondary" style={{ width: 200 }}>
                   报销单号
+                  <Tooltip title="已按本月自动生成 BXD1001YYYYMM000，请核对是否正确并完善报销单号">
+                    <InfoCircleOutlined aria-label="报销单号生成说明" style={{ marginInlineStart: 4 }} />
+                  </Tooltip>
                 </Typography.Text>
                 <Typography.Text type="secondary" style={{ width: 120 }}>
                   金额（元）
@@ -225,6 +237,7 @@ function WorkflowRegistrationForm({
                           <AutoComplete
                             allowClear
                             options={fundingOptions}
+                            popupMatchSelectWidth={false}
                             placeholder="选择或输入经费本编号"
                             style={{ width: 200 }}
                           />

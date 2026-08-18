@@ -15,6 +15,20 @@
   padding: 20px 24px 24px;
 }
 
+/* 交回登记与补录弹窗的表单控件统一为默认 32px 高度，
+   抵消全局 input min-height: 40px 造成的同行控件错位。 */
+.app-modal-root.workflow-registration-modal .ant-input,
+.app-modal-root.workflow-registration-modal .ant-input-number-input,
+.app-modal-root.workflow-reimbursement-recording-modal .ant-input,
+.app-modal-root.workflow-reimbursement-recording-modal .ant-input-number-input {
+  min-height: 32px;
+}
+
+.app-modal-root.workflow-registration-modal .ant-input-number,
+.app-modal-root.workflow-reimbursement-recording-modal .ant-input-number {
+  height: 32px;
+}
+
 .workflow-detail-modal .workflow-history-trigger.ant-btn {
   height: 24px;
   padding: 0 8px;

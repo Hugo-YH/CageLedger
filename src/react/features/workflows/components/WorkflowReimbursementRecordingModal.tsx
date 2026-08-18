@@ -1,8 +1,22 @@
-import { MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
-import { Alert, AutoComplete, Button, Flex, Form, Input, InputNumber, Modal, Space, Typography, Upload } from "antd";
+import { InfoCircleOutlined, MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  AutoComplete,
+  Button,
+  Flex,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Space,
+  Tooltip,
+  Typography,
+  Upload,
+} from "antd";
 import { useEffect, useMemo, useState } from "react";
 
 import { buildFundingBookOptions } from "../../../../domain/fundingBookNo";
+import { defaultReimbursementFormNo } from "../../../../domain/reimbursementFormNo";
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
 import { recordWorkflowReimbursement, uploadWorkflowAttachment } from "../../../api/workflows";
 
@@ -83,6 +97,7 @@ export function WorkflowReimbursementRecordingModal({
       destroyOnHidden
       okText="保存补录"
       open={Boolean(target)}
+      rootClassName="app-modal-root workflow-reimbursement-recording-modal"
       title={`补录报销单 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
       width={640}
       afterClose={reset}
@@ -97,7 +112,9 @@ export function WorkflowReimbursementRecordingModal({
       {formError ? <Alert showIcon style={{ marginBottom: 12 }} title={formError} type="error" /> : null}
       <Form
         form={form}
-        initialValues={{ reimbursementForms: [{ formNo: "", amount: undefined, fundingBookNo: "" }] }}
+        initialValues={{
+          reimbursementForms: [{ formNo: defaultReimbursementFormNo(), amount: undefined, fundingBookNo: "" }],
+        }}
         layout="vertical"
       >
         <Flex gap={8} style={{ marginBottom: 8 }}>
@@ -106,6 +123,9 @@ export function WorkflowReimbursementRecordingModal({
           </Typography.Text>
           <Typography.Text type="secondary" style={{ width: 200 }}>
             报销单号
+            <Tooltip title="已按本月自动生成 BXD1001YYYYMM000，请核对是否正确并完善报销单号">
+              <InfoCircleOutlined aria-label="报销单号生成说明" style={{ marginInlineStart: 4 }} />
+            </Tooltip>
           </Typography.Text>
           <Typography.Text type="secondary" style={{ width: 120 }}>
             金额（元）
@@ -120,6 +140,7 @@ export function WorkflowReimbursementRecordingModal({
                     <AutoComplete
                       allowClear
                       options={fundingOptions}
+                      popupMatchSelectWidth={false}
                       placeholder="选择或输入经费本编号"
                       style={{ width: 200 }}
                     />
