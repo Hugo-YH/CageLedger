@@ -37,6 +37,39 @@ SPECIES_LABELS = {
 }
 
 
+def build_pi_reimbursement_context(workflows):
+    """仅取单据跟踪交回登记/补录的报销单信息，无登记单时全部为空。"""
+    forms = []
+    notes = []
+    statement_returned = False
+    for workflow in workflows or []:
+        forms.extend(workflow.get("reimbursementForms") or [])
+        note = clean_text(workflow.get("reimbursementFormNote", ""))
+        if note and note not in notes:
+            notes.append(note)
+        if workflow.get("signedStatementReturned"):
+            statement_returned = True
+    if forms:
+        fund_book_nos = [
+            clean_text(entry.get("fundingBookNo", "")) for entry in forms if clean_text(entry.get("fundingBookNo", ""))
+        ]
+        form_nos = [clean_text(entry.get("formNo", "")) for entry in forms if clean_text(entry.get("formNo", ""))]
+        return {
+            "statementReturned": "已交回" if statement_returned else "",
+            "fundBookNo": "、".join(dict.fromkeys(fund_book_nos)),
+            "reimbursementFormNo": "、".join(dict.fromkeys(form_nos)),
+            "reimbursementAmount": round(sum(float(entry.get("amount") or 0) for entry in forms), 2),
+            "notes": "；".join(notes),
+        }
+    return {
+        "statementReturned": "",
+        "fundBookNo": "",
+        "reimbursementFormNo": "",
+        "reimbursementAmount": 0.0,
+        "notes": "",
+    }
+
+
 def build_monthly_summary_rows(
     month,
     sheets,
@@ -123,8 +156,11 @@ def build_monthly_summary_rows(
                 "amount": round(current["amount"], 2),
                 "supportAmount": round(current["supportAmount"], 2),
                 "payableAmount": round(current["payableAmount"], 2),
+                "statementReturned": clean_text(reimbursement.get("statementReturned", "")),
                 "fundBookNo": clean_text(reimbursement.get("fundBookNo", "")),
                 "reimbursementFormNo": clean_text(reimbursement.get("reimbursementFormNo", "")),
+                "reimbursementAmount": round(float(reimbursement.get("reimbursementAmount") or 0), 2),
+                "reimbursementNotes": clean_text(reimbursement.get("notes", "")),
                 "projectStartDate": normalize_application_date(application.get("projectStartDate", "")),
                 "projectEndDate": normalize_application_date(application.get("projectEndDate", "")),
                 "notes": _expired_allowance_note(current["expiredAllowance"], month),
@@ -142,7 +178,7 @@ def build_monthly_summary_xlsx(month, rows):
     worksheet = workbook.active
     worksheet.title = "Sheet1"
     worksheet.sheet_view.showGridLines = False
-    worksheet.merge_cells("A1:O1")
+    worksheet.merge_cells("A1:R1")
     worksheet["A1"] = f"{year}年{int(month_number)}月动物饲养费汇总"
     worksheet["A1"].font = Font(name="Microsoft YaHei", size=14, bold=True)
     worksheet["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -158,8 +194,11 @@ def build_monthly_summary_xlsx(month, rows):
         f"{int(month_number)}月1日至{_month_days(month)}日产生的饲养费（元）",
         "单位支持的饲养费（元）",
         "缴纳的饲养费（元）",
+        "结算单",
         "科研报销单经费本号",
         "科研报销单\n单号",
+        "报销金额（元）",
+        "报销备注",
         "实验开始时间",
         "实验结束时间",
         "备注",
@@ -176,7 +215,7 @@ def build_monthly_summary_xlsx(month, rows):
         cell.border = border
     worksheet.row_dimensions[2].height = 36
 
-    widths = [9, 13, 9, 13, 33.5, 16.25, 17, 17, 15, 18.5, 19.25, 13.25, 16, 24, 14]
+    widths = [9, 13, 9, 13, 33.5, 16.25, 17, 17, 15, 10, 18.5, 19.25, 15, 20, 13.25, 16, 24, 14]
     for index, width in enumerate(widths, start=1):
         worksheet.column_dimensions[_excel_column(index)].width = width
 
@@ -192,8 +231,11 @@ def build_monthly_summary_xlsx(month, rows):
             row["amount"],
             row["supportAmount"],
             f"=G{excel_row}-H{excel_row}",
+            row["statementReturned"],
             row["fundBookNo"],
             row["reimbursementFormNo"],
+            row["reimbursementAmount"],
+            row["reimbursementNotes"],
             row["projectStartDate"],
             row["projectEndDate"],
             row["notes"],
@@ -203,13 +245,13 @@ def build_monthly_summary_xlsx(month, rows):
             cell = worksheet.cell(excel_row, column, value)
             cell.font = Font(name="Microsoft YaHei", size=10)
             cell.border = border
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=column in (5, 6, 14, 15))
-            if column in (7, 8, 9):
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=column in (5, 6, 14, 17, 18))
+            if column in (7, 8, 9, 13):
                 cell.number_format = "0.00"
         worksheet.row_dimensions[excel_row].height = 24
 
     worksheet.freeze_panes = "A3"
-    worksheet.auto_filter.ref = f"A2:O{max(2, len(rows) + 2)}"
+    worksheet.auto_filter.ref = f"A2:R{max(2, len(rows) + 2)}"
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
     output = io.BytesIO()

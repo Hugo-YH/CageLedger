@@ -23,15 +23,12 @@ from server_app.domains.quantity.facade import (
     list_quantity_sheets_by_month,
     list_quantity_sheets_by_month_pi,
 )
-from server_app.domains.reimbursement.facade import (
-    get_reimbursement_record_by_key,
-)
 from server_app.domains.state.commands import write_state
 from server_app.domains.state.persistence import (
     read_applications_by_iacuc,
 )
-from server_app.services.reimbursement import (
-    reimbursement_business_key,
+from server_app.domains.workflow.facade import (
+    list_billing_workflows_by_month,
 )
 from server_app.shared import clean_text, now_iso
 from server_app.shared.concurrency import StaleWriteError
@@ -159,10 +156,9 @@ class WriteRoutesMixin:
                 self,
                 connect_db=connect_db,
                 list_quantity_sheets_by_month=list_quantity_sheets_by_month,
+                list_billing_workflows_by_month=list_billing_workflows_by_month,
                 read_rooms_for_quantity_sheets=app_ports().read_rooms_for_quantity_sheets,
                 read_principal_type_by_pi=app_ports().read_principal_type_by_pi,
-                get_reimbursement_record_by_key=get_reimbursement_record_by_key,
-                reimbursement_business_key=reimbursement_business_key,
                 read_applications_by_iacuc=read_applications_by_iacuc,
                 audit_event=audit_event,
                 write_audit_events=write_audit_events,

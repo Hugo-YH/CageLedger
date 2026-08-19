@@ -18,7 +18,7 @@ export function MonthlyBillingSummary() {
       const filename = await exportMonthlyBillingSummary(month);
       setNotice(`${filename} 已开始下载。`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "月度饲养费汇总导出失败");
+      setNotice(error instanceof Error ? error.message : "汇总导出失败");
     } finally {
       setExporting(false);
     }
@@ -31,7 +31,7 @@ export function MonthlyBillingSummary() {
         <Space size={8}>
           <FileExcelOutlined />
           <Typography.Title level={2} style={{ margin: 0 }}>
-            月度饲养费汇总
+            汇总导出
           </Typography.Title>
         </Space>
       }
@@ -70,7 +70,7 @@ export function MonthlyBillingSummary() {
         </Flex>
       </div>
       <Typography.Paragraph className="monthly-summary-hint" type="secondary">
-        伦理经费和实验日期来自 IACUC 索引；报销单经费本号与单号优先使用已登记台账。
+        伦理经费和实验日期来自 IACUC 索引；报销单经费本编号、单号、金额与备注仅使用单据跟踪已登记报销单。
       </Typography.Paragraph>
       {notice ? <Alert role="status" showIcon title={notice} type="success" /> : null}
     </Card>

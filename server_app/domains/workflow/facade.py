@@ -13,6 +13,9 @@ from server_app.repositories.billing_workflows import (
     list_billing_workflows,
 )
 from server_app.repositories.billing_workflows import (
+    list_billing_workflows_by_month as list_billing_workflows_by_month_repository,
+)
+from server_app.repositories.billing_workflows import (
     list_billing_workflows_page as list_page_repository,
 )
 from server_app.shared import clean_text
@@ -20,6 +23,10 @@ from server_app.shared import clean_text
 
 def list_billing_workflows_page(conn, filters, excluded_status):
     return list_page_repository(conn, filters, clean_text, excluded_status)
+
+
+def list_billing_workflows_by_month(conn, month):
+    return list_billing_workflows_by_month_repository(conn, month)
 
 
 def list_billing_workflow_lines(conn, workflow_id, version_id=""):
@@ -55,5 +62,6 @@ __all__ = [
     "list_billing_workflow_lines",
     "list_billing_workflow_versions",
     "list_billing_workflows",
+    "list_billing_workflows_by_month",
     "list_billing_workflows_page",
 ]

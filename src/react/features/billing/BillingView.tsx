@@ -86,6 +86,6 @@ function billingTitle(mode: BillingMode) {
   if (mode === "cage-map") return "动态笼位图结算";
   if (mode === "quantity-entry") return "录入数量统计表";
   if (mode === "quantity-saved") return "已保存数量统计表";
-  if (mode === "monthly-summary") return "月度饲养费汇总";
+  if (mode === "monthly-summary") return "汇总导出";
   return "结算管理";
 }

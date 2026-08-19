@@ -44,6 +44,13 @@ const baselineHotspots = new Map([
     },
   ],
   [
+    "server_app/repositories/billing_workflows.py",
+    {
+      ceiling: 733,
+      reason: "billing workflow payload persistence and list query repository composition",
+    },
+  ],
+  [
     "src/react/features/shell/ReactWorkspace.tsx",
     { ceiling: 648, reason: "transitional navigation shell while feature navigation is progressively extracted" },
   ],

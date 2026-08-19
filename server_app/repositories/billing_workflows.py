@@ -91,6 +91,21 @@ def list_billing_workflows(conn):
     return [json.loads(row["payload"]) for row in rows]
 
 
+def list_billing_workflows_by_month(conn, month):
+    rows = conn.execute(
+        """
+        SELECT payload
+        FROM billing_workflows
+        WHERE month = ?
+          AND json_extract(payload, '$.pi') IS NOT NULL
+          AND (json_extract(payload, '$.revertedAt') IS NULL OR json_extract(payload, '$.revertedAt') = '')
+        ORDER BY rowid DESC
+        """,
+        (month,),
+    ).fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
 def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finance):
     clauses = []
     params = []

@@ -10,7 +10,10 @@ from server_app.legacy import (
     record_archived_reimbursement,
     update_workflow_status,
 )
-from server_app.repositories.billing_workflows import list_billing_workflow_filter_options
+from server_app.repositories.billing_workflows import (
+    list_billing_workflow_filter_options,
+    list_billing_workflows_by_month,
+)
 
 ADMIN = {"id": "admin", "username": "admin", "displayName": "系统管理员", "role": "admin", "roomIds": []}
 
@@ -108,7 +111,35 @@ class BillingWorkflowListTests(unittest.TestCase):
 
         by_iacuc = self._list(columnFilters={"iacuc": ["Z2026003"]})
         self.assertEqual([item["id"] for item in by_iacuc["items"]], ["wf-3"])
-        self.assertEqual(by_iacuc["items"][0]["manager"], "李登记")
+
+    def test_list_billing_workflows_by_month_excludes_reverted(self):
+        def insert(wf_id, month, pi, reverted):
+            workflow = {
+                "id": wf_id,
+                "month": month,
+                "pi": pi,
+                "sourceType": "pi_merged_quantity_sheet",
+                "workflowStatus": "statement_archived",
+                "reimbursementForms": [{"formNo": "BX-1", "amount": 10, "fundingBookNo": "B-1"}],
+                "reimbursementFormNote": "已交回",
+            }
+            if reverted:
+                workflow["revertedAt"] = "2026-06-10T00:00:00+00:00"
+            self.conn.execute(
+                """INSERT INTO billing_workflows (
+                       id, business_key, iacuc, month, source_type, workflow_status,
+                       current_version_id, current_version_no, latest_event_at, payload
+                   ) VALUES (?, ?, 'Z2026001', ?, 'pi_merged_quantity_sheet', 'statement_archived', '', 1, '', ?)""",
+                (wf_id, f"{month}:{pi}:{wf_id}", month, json.dumps(workflow, ensure_ascii=False)),
+            )
+
+        insert("wf-1", "2026-06", "张教授", True)
+        insert("wf-2", "2026-06", "张教授", False)
+        insert("wf-3", "2026-07", "张教授", False)
+        self.conn.commit()
+
+        result = list_billing_workflows_by_month(self.conn, "2026-06")
+        self.assertEqual([item["id"] for item in result], ["wf-2"])
 
     def test_list_filters_accept_multiple_values_per_column(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_generated")

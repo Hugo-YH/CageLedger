@@ -1,3 +1,4 @@
+from collections import defaultdict
 from http import HTTPStatus
 
 from server_app.domains.billing.monthly_summary import (
@@ -5,6 +6,7 @@ from server_app.domains.billing.monthly_summary import (
     MONTH_PATTERN,
     build_monthly_summary_rows,
     build_monthly_summary_xlsx,
+    build_pi_reimbursement_context,
     monthly_summary_filename,
 )
 from server_app.http import send_download
@@ -15,10 +17,9 @@ def export_monthly_billing_summary(
     *,
     connect_db,
     list_quantity_sheets_by_month,
+    list_billing_workflows_by_month,
     read_rooms_for_quantity_sheets,
     read_principal_type_by_pi,
-    get_reimbursement_record_by_key,
-    reimbursement_business_key,
     read_applications_by_iacuc,
     audit_event,
     write_audit_events,
@@ -41,10 +42,13 @@ def export_monthly_billing_summary(
             if not sheets:
                 raise ValueError("该月份没有已保存的数量统计表")
             reimbursement_by_pi = {}
+            workflows_by_pi = defaultdict(list)
+            for workflow in list_billing_workflows_by_month(conn, month):
+                pi_name = clean_text(workflow.get("pi", ""))
+                if pi_name:
+                    workflows_by_pi[pi_name].append(workflow)
             for pi_name in {clean_text(item.get("pi", "")) for item in sheets if clean_text(item.get("pi", ""))}:
-                reimbursement_by_pi[pi_name] = (
-                    get_reimbursement_record_by_key(conn, reimbursement_business_key(month, pi_name)) or {}
-                )
+                reimbursement_by_pi[pi_name] = build_pi_reimbursement_context(workflows_by_pi.get(pi_name, []))
             rows = build_monthly_summary_rows(
                 month,
                 sheets,

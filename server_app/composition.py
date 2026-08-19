@@ -122,6 +122,9 @@ from server_app.domains.workflow.facade import (  # noqa: F401
     get_billing_workflow_detail as get_billing_workflow_detail,
 )
 from server_app.domains.workflow.facade import (
+    list_billing_workflows_by_month as list_billing_workflows_by_month_facade,
+)
+from server_app.domains.workflow.facade import (
     list_billing_workflows_page as list_billing_workflows_page_facade,
 )
 from server_app.repositories.billing import (
@@ -322,6 +325,10 @@ def generate_billing_statement_by_pi(conn, payload, actor):
 
 def list_billing_workflows_page(conn, filters):
     return list_billing_workflows_page_facade(conn, filters, WORKFLOW_STATUS_FINANCE)
+
+
+def list_billing_workflows_by_month(conn, month):
+    return list_billing_workflows_by_month_facade(conn, month)
 
 
 def list_billing_statement_lines_for_version(conn, version_id):

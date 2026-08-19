@@ -3,7 +3,11 @@ import unittest
 
 import openpyxl
 
-from server_app.domains.billing.monthly_summary import build_monthly_summary_rows, build_monthly_summary_xlsx
+from server_app.domains.billing.monthly_summary import (
+    build_monthly_summary_rows,
+    build_monthly_summary_xlsx,
+    build_pi_reimbursement_context,
+)
 
 
 class MonthlyBillingSummaryTests(unittest.TestCase):
@@ -128,6 +132,72 @@ class MonthlyBillingSummaryTests(unittest.TestCase):
             {},
         )
         self.assertEqual(rows[0]["notes"], "Z2026004 将于 2026-06-10 到期")
+
+    def test_pi_reimbursement_context_uses_workflow_forms_only(self):
+        workflows = [
+            {
+                "signedStatementReturned": True,
+                "reimbursementForms": [
+                    {"formNo": "报销-A", "amount": 120, "fundingBookNo": "本号-1"},
+                    {"formNo": "报销-B", "amount": 80, "fundingBookNo": "本号-1"},
+                ],
+                "reimbursementFormNote": "已交回",
+            }
+        ]
+        context = build_pi_reimbursement_context(workflows)
+        self.assertEqual(context["statementReturned"], "已交回")
+        self.assertEqual(context["fundBookNo"], "本号-1")
+        self.assertEqual(context["reimbursementFormNo"], "报销-A、报销-B")
+        self.assertEqual(context["reimbursementAmount"], 200)
+        self.assertEqual(context["notes"], "已交回")
+
+    def test_pi_reimbursement_context_empty_without_registered_forms(self):
+        context = build_pi_reimbursement_context([])
+        self.assertEqual(context["statementReturned"], "")
+        self.assertEqual(context["fundBookNo"], "")
+        self.assertEqual(context["reimbursementFormNo"], "")
+        self.assertEqual(context["reimbursementAmount"], 0.0)
+        self.assertEqual(context["notes"], "")
+
+    def test_pi_reimbursement_context_merges_notes_across_workflows(self):
+        context = build_pi_reimbursement_context(
+            [
+                {"reimbursementForms": [{"formNo": "报销-A", "amount": 10}], "reimbursementFormNote": "备注一"},
+                {"reimbursementForms": [{"formNo": "报销-B", "amount": 20}], "reimbursementFormNote": "备注二"},
+            ]
+        )
+        self.assertEqual(context["reimbursementFormNo"], "报销-A、报销-B")
+        self.assertEqual(context["reimbursementAmount"], 30)
+        self.assertEqual(context["notes"], "备注一；备注二")
+
+    def test_workbook_includes_reimbursement_amount_and_notes_columns(self):
+        rows = build_monthly_summary_rows(
+            "2026-06",
+            [sheet("sheet-zj", "Z2026001", "room-zj", "8101", 1)],
+            self.rooms,
+            self.applications,
+            {"张教授": "independent"},
+            {
+                "张教授": {
+                    "statementReturned": "已交回",
+                    "fundBookNo": "本号-01",
+                    "reimbursementFormNo": "报销-01",
+                    "reimbursementAmount": 12.34,
+                    "notes": "报销备注",
+                }
+            },
+        )
+        workbook = openpyxl.load_workbook(io.BytesIO(build_monthly_summary_xlsx("2026-06", rows)), data_only=False)
+        worksheet = workbook.active
+        self.assertEqual(worksheet["J2"].value, "结算单")
+        self.assertEqual(worksheet["J3"].value, "已交回")
+        self.assertEqual(worksheet["M2"].value, "报销金额（元）")
+        self.assertEqual(worksheet["N2"].value, "报销备注")
+        self.assertEqual(worksheet["M3"].value, 12.34)
+        self.assertEqual(worksheet["N3"].value, "报销备注")
+        self.assertEqual(worksheet["M3"].number_format, "0.00")
+        self.assertEqual({str(item) for item in worksheet.merged_cells.ranges}, {"A1:R1"})
+        self.assertEqual(worksheet.auto_filter.ref, "A2:R3")
 
 
 def sheet(sheet_id, iacuc, room_id, room_name, cages):

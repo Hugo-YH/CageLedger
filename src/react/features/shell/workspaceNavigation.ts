@@ -60,7 +60,7 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
   if (canExportMonthlySummary) {
     items.push({
       view: "billing-monthly-summary",
-      label: "月度饲养费汇总",
+      label: "汇总导出",
       description: "导出 IACUC 和设施维度的月度 Excel",
       icon: "book",
     });

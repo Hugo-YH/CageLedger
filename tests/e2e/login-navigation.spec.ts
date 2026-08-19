@@ -65,8 +65,8 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openWorkflowCenter(page);
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
   const billingMenu = await openBillingNavigation(page);
-  await billingMenu.getByRole("menuitem", { name: /月度饲养费汇总/ }).click();
-  await expect(page.getByRole("heading", { name: "月度饲养费汇总", exact: true, level: 2 })).toBeVisible();
+  await billingMenu.getByRole("menuitem", { name: /汇总导出/ }).click();
+  await expect(page.getByRole("heading", { name: "汇总导出", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByLabel("结算月份", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "导出月度汇总 Excel", exact: true })).toBeVisible();
   await openSettingsView(page, "房间管理");
