@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.15",
+    build: "180",
+    releasedAt: "2026-08-19",
+    title: "IACUC 汇总表自动同步与自动导入",
+    items: [
+      "新增群晖同步脚本 `scripts/sync_iacuc_summary_nas.sh`：检测「动物实验申请汇总表」内容变化（md5 指纹），变化后复制时间戳副本到 `data/inbox/iacuc/`，支持群晖任务计划单次执行或 `watch` 常驻，兼容 ARM",
+      "系统内置自动导入：启动后每 5 分钟扫描 `data/inbox/iacuc/` 最新汇总表（xlsx 或 csv），自动识别表头行并导入，走与手动上传一致的写入、派生字段同步、结算候选快照作废与审计链路",
+      "导入成功文件移入 `data/archive/iacuc/` 防重，审计事件 `iacuc_index.auto_imported`，可用环境变量控制开关与扫描间隔",
+    ],
+  },
+  {
     version: "1.0.14",
     build: "179",
     releasedAt: "2026-08-19",
