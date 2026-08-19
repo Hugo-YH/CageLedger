@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.14",
+    build: "179",
+    releasedAt: "2026-08-19",
+    title: "月度汇总导出修复",
+    items: [
+      "修复已交回但未登记报销单的结算单在导出 Excel 时“结算单”列不显示“已交回”的问题：交回状态独立于报销单表单判断，无报销单时保留“已交回”，经费本号、报销单号与金额保持为空",
+      "新增对应单元测试覆盖“已交回且无报销单”场景",
+    ],
+  },
+  {
     version: "1.0.13",
     build: "178",
     releasedAt: "2026-08-19",
