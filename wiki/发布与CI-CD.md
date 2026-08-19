@@ -80,11 +80,11 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 
 ## 凭据
 
-| 凭据                     | 类型              | 用途                                                               |
-| ------------------------ | ----------------- | ------------------------------------------------------------------ |
-| `CAGELEDGER_GITEA_TOKEN` | 本地环境变量      | 本地创建 Release、上传离线包和同步 Wiki；缺省时复用 Git HTTPS 凭据 |
+| 凭据                     | 类型                                        | 用途                                                                                                                  |
+| ------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `CAGELEDGER_GITEA_TOKEN` | 本地环境变量                                | 本地创建 Release、上传离线包和同步 Wiki；缺省时复用 Git HTTPS 凭据                                                    |
 | Git HTTPS 凭据文件       | `~/.git-cageledger-credentials`（权限 600） | 后台会话与代理执行 Git fetch/push；已配置 per-host `credential.http://ddns.cellnucle.us:3333.helper store --file=...` |
-| 容器仓库凭据             | Mac mini 本地凭据 | 本地发布多架构容器镜像                                             |
+| 容器仓库凭据             | Mac mini 本地凭据                           | 本地发布多架构容器镜像                                                                                                |
 
 Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea 保存 Git 代码、Wiki、Release 离线包和容器镜像，不运行 CI、打包、镜像校验或 Wiki 同步任务。
 
