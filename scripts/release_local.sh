@@ -182,6 +182,7 @@ if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>
 fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
+  # shellcheck disable=SC2016
   NEXT_BUILD="$(node -e '
 const fs = require("fs");
 const version = process.argv[1];
@@ -192,7 +193,7 @@ if (existing) { console.log(Number(existing[1])); process.exit(0); }
 const nums = [...src.matchAll(/^## .*（Build (\d+)）.*$/gm)].map((m) => Number(m[1]));
 if (nums.length === 0) process.exit(1);
 console.log(Math.max(...nums) + 1);
-')" "$VERSION" || exit 1
+' "$VERSION")" || exit 1
 else
   NEXT_BUILD="<auto>"
 fi

@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.13",
+    build: "178",
+    releasedAt: "2026-08-19",
+    title: "发布流程加固",
+    items: [
+      "构建号推导幂等：目标版本标题已带 build 号时原样复用，发布中断后重跑不会重复递增",
+      "容器发布依赖自动恢复：docker daemon 未运行时自动启动 colima",
+      "Git 远程诊断：后台会话凭据缺失或网络不可达时给出明确提示，不再误报分支状态",
+      "结算导航项增加稳定 `data-ui` 标识，e2e 断言不再依赖菜单文案",
+      "发布文档补充准备清单与常见失败处理",
+    ],
+  },
+  {
     version: "1.0.12",
     build: "177",
     releasedAt: "2026-08-19",
