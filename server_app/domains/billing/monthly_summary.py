@@ -49,24 +49,24 @@ def build_pi_reimbursement_context(workflows):
             notes.append(note)
         if workflow.get("signedStatementReturned"):
             statement_returned = True
-    if forms:
-        fund_book_nos = [
-            clean_text(entry.get("fundingBookNo", "")) for entry in forms if clean_text(entry.get("fundingBookNo", ""))
-        ]
-        form_nos = [clean_text(entry.get("formNo", "")) for entry in forms if clean_text(entry.get("formNo", ""))]
+    if not forms and not statement_returned and not notes:
         return {
-            "statementReturned": "已交回" if statement_returned else "",
-            "fundBookNo": "、".join(dict.fromkeys(fund_book_nos)),
-            "reimbursementFormNo": "、".join(dict.fromkeys(form_nos)),
-            "reimbursementAmount": round(sum(float(entry.get("amount") or 0) for entry in forms), 2),
-            "notes": "；".join(notes),
+            "statementReturned": "",
+            "fundBookNo": "",
+            "reimbursementFormNo": "",
+            "reimbursementAmount": 0.0,
+            "notes": "",
         }
+    fund_book_nos = [
+        clean_text(entry.get("fundingBookNo", "")) for entry in forms if clean_text(entry.get("fundingBookNo", ""))
+    ]
+    form_nos = [clean_text(entry.get("formNo", "")) for entry in forms if clean_text(entry.get("formNo", ""))]
     return {
-        "statementReturned": "",
-        "fundBookNo": "",
-        "reimbursementFormNo": "",
-        "reimbursementAmount": 0.0,
-        "notes": "",
+        "statementReturned": "已交回" if statement_returned else "",
+        "fundBookNo": "、".join(dict.fromkeys(fund_book_nos)),
+        "reimbursementFormNo": "、".join(dict.fromkeys(form_nos)),
+        "reimbursementAmount": round(sum(float(entry.get("amount") or 0) for entry in forms), 2),
+        "notes": "；".join(notes),
     }
 
 

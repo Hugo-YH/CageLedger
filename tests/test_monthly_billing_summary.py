@@ -159,6 +159,14 @@ class MonthlyBillingSummaryTests(unittest.TestCase):
         self.assertEqual(context["reimbursementAmount"], 0.0)
         self.assertEqual(context["notes"], "")
 
+    def test_pi_reimbursement_context_keeps_statement_returned_without_forms(self):
+        context = build_pi_reimbursement_context([{"signedStatementReturned": True}])
+        self.assertEqual(context["statementReturned"], "已交回")
+        self.assertEqual(context["fundBookNo"], "")
+        self.assertEqual(context["reimbursementFormNo"], "")
+        self.assertEqual(context["reimbursementAmount"], 0.0)
+        self.assertEqual(context["notes"], "")
+
     def test_pi_reimbursement_context_merges_notes_across_workflows(self):
         context = build_pi_reimbursement_context(
             [
