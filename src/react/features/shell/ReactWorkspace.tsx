@@ -144,7 +144,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
       children: billingSidebarItems(user.role === "admin").map((entry) =>
         entry.section
           ? { type: "group" as const, key: `billing-section-${entry.section}`, label: entry.section }
-          : item(entry.view!, entry.label!, iconFor[entry.icon!]),
+          : item(entry.view!, entry.label!, iconFor[entry.icon!], entry.dataUi),
       ),
     },
     {
@@ -257,8 +257,8 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   );
 }
 
-function item(key: string, label: string, icon: ReactNode): NonNullable<MenuProps["items"]>[number] {
-  return { key, label, icon };
+function item(key: string, label: string, icon: ReactNode, dataUi?: string): NonNullable<MenuProps["items"]>[number] {
+  return { key, label: dataUi ? <span data-ui={dataUi}>{label}</span> : label, icon };
 }
 
 function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (view: WorkspaceView) => void) {

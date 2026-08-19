@@ -65,7 +65,12 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openWorkflowCenter(page);
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
   const billingMenu = await openBillingNavigation(page);
-  await billingMenu.getByRole("menuitem", { name: /汇总导出/ }).click();
+  const useMobile = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
+  if (useMobile) {
+    await billingMenu.getByText("汇总导出", { exact: true }).click();
+  } else {
+    await billingMenu.locator('[data-ui="nav-billing-monthly-summary"]').click();
+  }
   await expect(page.getByRole("heading", { name: "汇总导出", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByLabel("结算月份", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "导出月度汇总 Excel", exact: true })).toBeVisible();

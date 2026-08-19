@@ -144,17 +144,35 @@ fi
 
 if [[ "$PUBLISH_CONTAINER" -eq 1 ]]; then
   command -v docker >/dev/null 2>&1 || {
-    echo "容器镜像发布需要 docker，请先安装并启动 Docker。" >&2
+    echo "容器镜像发布需要 docker，请先安装 Docker（colima 或 Docker Desktop）。" >&2
     exit 1
   }
+  if ! docker info >/dev/null 2>&1; then
+    if command -v colima >/dev/null 2>&1; then
+      echo "docker daemon 未运行，自动启动 colima..."
+      if ! colima start; then
+        echo "colima 启动失败，请检查 colima 状态后重试。" >&2
+        exit 1
+      fi
+    else
+      echo "docker daemon 未运行，请启动 Docker Desktop 后重试。" >&2
+      exit 1
+    fi
+  fi
   docker info >/dev/null 2>&1 || {
-    echo "docker daemon 未运行，请启动 Docker Desktop 后重试。" >&2
+    echo "docker daemon 仍不可用，请检查 colima/Docker 状态后重试。" >&2
     exit 1
   }
 fi
 
 if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
   echo "Local tag v${VERSION} already exists." >&2
+  exit 1
+fi
+
+if ! git ls-remote origin HEAD >/dev/null 2>&1; then
+  echo "无法访问 origin，请确认网络与 Git 凭据：" >&2
+  echo "  后台会话需配置 ~/.git-cageledger-credentials（权限 600）或设置 CAGELEDGER_GITEA_TOKEN。" >&2
   exit 1
 fi
 
@@ -166,11 +184,15 @@ fi
 if [[ "$DRY_RUN" -eq 0 ]]; then
   NEXT_BUILD="$(node -e '
 const fs = require("fs");
+const version = process.argv[1];
 const src = fs.readFileSync("wiki/更新日志.md", "utf8");
+const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const existing = src.match(new RegExp(`^##\\s+${escaped}（Build (\\d+)）`, "m"));
+if (existing) { console.log(Number(existing[1])); process.exit(0); }
 const nums = [...src.matchAll(/^## .*（Build (\d+)）.*$/gm)].map((m) => Number(m[1]));
 if (nums.length === 0) process.exit(1);
 console.log(Math.max(...nums) + 1);
-')" || exit 1
+')" "$VERSION" || exit 1
 else
   NEXT_BUILD="<auto>"
 fi

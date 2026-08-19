@@ -35,9 +35,11 @@ Git tag 与容器镜像 tag 只带版本号：Git tag 使用 `v<version>`（例�
 ## 发布前准备
 
 1. 拉取远端并处理本地改动；正式版先将已验证 `rc` 快进到 `main`。
-2. 在 `wiki/更新日志.md` 增加独立版本记录和更新时间，再执行 `npm run release:notes:sync` 生成系统内更新记录。
-3. 同步受影响的 `wiki/` 和 `docs/contracts/`。
-4. 确认 `package.json` 中仍是发布前版本，版本脚本统一修改。
+2. 在 `wiki/更新日志.md` 增加独立版本记录和更新时间。标题不要预写 build 号：脚本按当前最大 build 自动 +1；若标题已带 build 号则原样复用，保证中断后重跑幂等。再执行 `npm run release:notes:sync` 生成系统内更新记录。
+3. 涉及 UI 文案或导航结构变更时，同步检索并更新 e2e 断言（`rg '旧文案' tests/e2e`）。导航项优先使用稳定 `data-ui` 标识（例如 `nav-billing-monthly-summary`），避免文案改名触发 Playwright 失败。
+4. 同步受影响的 `wiki/` 和 `docs/contracts/`。
+5. 确认 `package.json` 中仍是发布前版本，版本脚本统一修改。
+6. 后台会话执行前确认 Git 凭据可用：`~/.git-cageledger-credentials`（权限 600）或 `CAGELEDGER_GITEA_TOKEN`。docker daemon 未运行时脚本会自动执行 `colima start`。
 
 ## 本地发布
 
@@ -95,6 +97,15 @@ Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea �
 ## 本地发布门禁
 
 发布脚本默认执行 `npm run verify:full`，覆盖基础质量检查、生产构建与完整 Playwright。Playwright 使用独立的 `5183/5184` 端口和临时 SQLite，不影响日常运行在 `5173/5174` 的服务。`--skip-full-verify` 用于同版本验证完成后的上传重试。Mac mini 继续执行 API 冒烟、PDF/打印验收和多架构镜像构建。
+
+## 常见失败与处理
+
+| 现象                                         | 原因                              | 处理                                                                                              |
+| -------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Git 报 `-25308` 或 `could not read Username` | 后台会话无法读取 macOS 登录钥匙串 | 配置 `~/.git-cageledger-credentials`（权限 600）或 `CAGELEDGER_GITEA_TOKEN`，脚本会给出诊断并退出 |
+| `docker daemon 未运行`                       | colima / Docker Desktop 未启动    | 脚本自动执行 `colima start`；失败时手动 `colima status` 与 `colima start` 后重试                  |
+| build 号跳号或重复                           | 更新日志标题预写了 build 号       | 脚本会复用标题已有 build 号；不要在发布前手写 build 号                                            |
+| Playwright 找不到菜单或按钮                  | UI 文案与 e2e 断言不同步          | 导航项改用 `data-ui` 稳定标识；其余文案同步更新断言后重跑                                         |
 
 ## 发布结果检查
 

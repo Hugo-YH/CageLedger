@@ -6,6 +6,7 @@ export type BillingSidebarItem = {
   label?: string;
   description?: string;
   icon?: "grid" | "calculator" | "book" | "refresh";
+  dataUi?: string;
 };
 
 export function isWorkspaceView(value: string): value is WorkspaceView {
@@ -41,12 +42,14 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
       label: "录入数量统计表",
       description: "按伦理号和房间录入月度变化",
       icon: "calculator",
+      dataUi: "nav-billing-quantity-entry",
     },
     {
       view: "billing-quantity-saved",
       label: "已保存数量统计表",
       description: "检索、预览和维护历史统计表",
       icon: "book",
+      dataUi: "nav-billing-quantity-saved",
     },
     { section: "结算管理" },
     {
@@ -54,8 +57,15 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
       label: "结算管理",
       description: "自动合并负责人名下伦理并出单",
       icon: "calculator",
+      dataUi: "nav-billing-settlement",
     },
-    { view: "workflow-center", label: "单据跟踪", description: "跟踪结算流程、报销和累计未缴", icon: "refresh" },
+    {
+      view: "workflow-center",
+      label: "单据跟踪",
+      description: "跟踪结算流程、报销和累计未缴",
+      icon: "refresh",
+      dataUi: "nav-workflow-center",
+    },
   ];
   if (canExportMonthlySummary) {
     items.push({
@@ -63,6 +73,7 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
       label: "汇总导出",
       description: "导出 IACUC 和设施维度的月度 Excel",
       icon: "book",
+      dataUi: "nav-billing-monthly-summary",
     });
   }
   return items;

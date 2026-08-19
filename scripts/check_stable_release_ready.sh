@@ -11,7 +11,11 @@ if [[ "$(git branch --show-current)" != "main" ]]; then
   exit 1
 fi
 
-git fetch origin main rc 2>/dev/null || git fetch origin 2>/dev/null
+if ! git fetch origin main rc 2>/dev/null && ! git fetch origin 2>/dev/null; then
+  echo "无法从 origin 获取分支，请确认网络与 Git 凭据：" >&2
+  echo "  后台会话需配置 ~/.git-cageledger-credentials（权限 600）或设置 CAGELEDGER_GITEA_TOKEN。" >&2
+  exit 1
+fi
 
 if ! git merge-base --is-ancestor origin/rc HEAD 2>/dev/null; then
   echo "main 缺少 origin/rc 的已验证提交，禁止发布正式版本。" >&2
