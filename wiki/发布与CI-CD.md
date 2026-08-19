@@ -83,9 +83,14 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 | 凭据                     | 类型              | 用途                                                               |
 | ------------------------ | ----------------- | ------------------------------------------------------------------ |
 | `CAGELEDGER_GITEA_TOKEN` | 本地环境变量      | 本地创建 Release、上传离线包和同步 Wiki；缺省时复用 Git HTTPS 凭据 |
+| Git HTTPS 凭据文件       | `~/.git-cageledger-credentials`（权限 600） | 后台会话与代理执行 Git fetch/push；已配置 per-host `credential.http://ddns.cellnucle.us:3333.helper store --file=...` |
 | 容器仓库凭据             | Mac mini 本地凭据 | 本地发布多架构容器镜像                                             |
 
 Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea 保存 Git 代码、Wiki、Release 离线包和容器镜像，不运行 CI、打包、镜像校验或 Wiki 同步任务。
+
+后台会话（`launchctl managername` 返回 `Background`）无法读取 macOS 登录钥匙串（`-25308`），
+因此代理或非交互终端执行发布前，确认 `~/.git-cageledger-credentials` 存在且权限为 600。
+容器镜像发布依赖 Docker 运行时：`colima status` 未运行时报错时先执行 `colima start`。
 
 ## 本地发布门禁
 
