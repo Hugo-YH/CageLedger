@@ -42,6 +42,29 @@ IACUC 索引是系统自动回填项目、负责人和结算快照的基础数�
 - 抽查项目开始、结束日期和延期项目
 - 在数量统计表和笼位录入两个入口各试一次
 
+## 自动导入
+
+系统启动后每 5 分钟扫描 `data/inbox/iacuc/`，取其中修改时间最新的汇总表（xlsx 或 csv）自动导入，成功后把文件移入 `data/archive/iacuc/`（文件名带时间戳），避免重复导入。
+
+群晖侧用 `scripts/sync_iacuc_summary_nas.sh` 监听「动物实验申请汇总表」内容变化，变化后复制一份到 `data/inbox/iacuc/`：
+
+```bash
+# 单次检查（群晖任务计划定时执行）
+bash scripts/sync_iacuc_summary_nas.sh once
+# 持续监听（每 60 秒检查一次）
+bash scripts/sync_iacuc_summary_nas.sh watch
+```
+
+导入逻辑与手动上传一致：写 `experiment_applications`、同步数量统计表等派生字段、作废结算候选快照并写审计事件 `iacuc_index.auto_imported`。xlsx 支持带标题行和空行的表，自动定位包含「动物伦理编号」等必填列的表头行。
+
+自动导入可用环境变量控制：
+
+| 环境变量                                        | 默认值  | 说明                                                  |
+| ----------------------------------------------- | ------- | ----------------------------------------------------- |
+| `CAGELEDGER_IACUC_AUTO_IMPORT_ENABLED`          | `1`     | 设为 `0` 关闭自动导入                                 |
+| `CAGELEDGER_IACUC_AUTO_IMPORT_INTERVAL_MINUTES` | `5`     | 扫描间隔分钟数，最小 0.5 分钟                         |
+| `CAGELEDGER_DATA_ROOT`                          | `data/` | 数据根目录，`inbox/iacuc` 与 `archive/iacuc` 位于其下 |
+
 ## 负责人身份
 
 数据管理还维护项目负责人身份、减免总额度和相关配置。IACUC 有效期决定该伦理当日是否可以参与减免，同一 PI 的其他有效伦理继续共享额度。
