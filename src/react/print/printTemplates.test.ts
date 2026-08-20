@@ -363,7 +363,7 @@ describe("print templates", () => {
     expect(html).toContain('class="sign-table"');
     expect(html).toContain("支撑经费：-");
     expect(html).not.toContain("结算单二维码");
-    expect(html).toContain("第 1 / 1 页");
+    expect(html).toContain("第1页 共1页");
     expect(html).toContain(".summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}");
     expect(html).toContain(".summary-table .col-group{width:1.526667%}");
     expect(html).toContain("@page{size:A4;margin:10mm}");
@@ -409,7 +409,7 @@ describe("print templates", () => {
       ] as BillingStatementLine[],
     );
     expect(markup).toContain("自定义收费：");
-    expect(markup).toContain("Z-RABBIT：2026-06-10 至 2026-06-20，每日 5只，12元/只/日，本期 60.00元，特殊饲料");
+    expect(markup).toContain("Z-RABBIT：2026-06-10 至 2026-06-20，每日5只，12元/只/日，本月共计60.00元。特殊饲料");
     expect(markup).not.toContain("自定义收费明细");
   });
 
@@ -809,8 +809,8 @@ describe("print templates", () => {
     const html = settlementStatementHtml(result, false);
     const pages = html.split('class="document document-page');
     expect(html.match(/class="document document-page/g)).toHaveLength(2);
-    expect(html).toContain("第 1 / 2 页");
-    expect(html).toContain("第 2 / 2 页");
+    expect(html).toContain("第1页 共2页");
+    expect(html).toContain("第2页 共2页");
     expect(html).toContain(">Z1<");
     expect(html).toContain(">Z4<");
     expect(html).toContain(">Z5<");

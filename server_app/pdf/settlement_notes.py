@@ -56,10 +56,10 @@ def custom_billing_note_markup(lines):
     for item in sorted(details.values(), key=lambda value: (value["iacuc"], value["startDate"], value["endDate"])):
         unit = "只" if item["billingUnit"] == "animal_day" else "笼"
         period = f"{item['startDate'] or '-'} 至 {item['endDate'] or '-'}"
-        note = f"，{item['note']}" if item["note"] else ""
+        note = f"。{item['note']}" if item["note"] else ""
         rows.append(
-            f"{item['iacuc']}：{period}，每日 {number_text(item['quantity'])}{unit}，"
-            f"{number_text(item['unitPrice'])}元/{unit}/日，本期 {number_text(item['amount'])}元{note}"
+            f"{item['iacuc']}：{period}，每日{number_text(item['quantity'])}{unit}，"
+            f"{number_text(item['unitPrice'])}元/{unit}/日，本月共计{number_text(item['amount'])}元{note}"
         )
     return "".join(note_entry_markup("自定义收费：" if index == 0 else "", row) for index, row in enumerate(rows))
 

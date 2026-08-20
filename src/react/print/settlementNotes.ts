@@ -99,10 +99,10 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
     )
     .map((item, index) => {
       const unit = item.billingUnit === "animal_day" ? "只" : "笼";
-      const note = item.note ? `，${item.note}` : "";
+      const note = item.note ? `。${item.note}` : "";
       return noteEntryMarkup(
         index === 0 ? "自定义收费：" : "",
-        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，每日 ${numberText(item.quantity)}${unit}，${numberText(item.unitPrice)}元/${unit}/日，本期 ${money(item.amount)}元${note}`,
+        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，每日${numberText(item.quantity)}${unit}，${numberText(item.unitPrice)}元/${unit}/日，本月共计${money(item.amount)}元${note}`,
       );
     })
     .join("");

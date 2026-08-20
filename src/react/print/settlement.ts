@@ -220,7 +220,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         )
         .join("")}</tr>`;
       const footerBlock = `${statementNotes}<table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table>`;
-      const pageFooter = `<div class="page-footer">第 ${pageIndex + 1} / ${totalPages} 页</div>`;
+      const pageFooter = `<div class="page-footer">第${pageIndex + 1}页 共${totalPages}页</div>`;
       const leadingColMarkup = page.showLeadingTotals
         ? Array.from({ length: GROUP_GRID_UNITS }, () => '<col class="col-group" />').join("")
         : "";

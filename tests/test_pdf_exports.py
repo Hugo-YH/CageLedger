@@ -199,5 +199,5 @@ class PdfExportTests(unittest.TestCase):
         statement_html = billing_statement_html(statement, lines)
         self.assertIn("自定义收费：", statement_html)
         self.assertIn("特殊饲料", statement_html)
-        self.assertIn("每日 5只，12元/只/日，本期 60元", statement_html)
+        self.assertIn("每日5只，12元/只/日，本月共计60元", statement_html)
         self.assertNotIn("<h1>自定义收费明细</h1>", statement_html)

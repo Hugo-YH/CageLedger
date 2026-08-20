@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.16",
+    build: "181",
+    releasedAt: "2026-08-20",
+    title: "饲养费核算汇总表文字优化",
+    items: [
+      "结算单页码格式由“第 1 / 3 页”改为“第1页 共3页”，前端预览与后端 PDF 导出模板同步",
+      "自定义饲养费明细文案调整：“每日 2只”改为“每日2只”，“本期 198.00元，”改为“本月共计198.00元。”，金额后的逗号改为句号，前端预览与后端 PDF 导出一致",
+    ],
+  },
+  {
     version: "1.0.15",
     build: "180",
     releasedAt: "2026-08-19",

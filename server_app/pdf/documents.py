@@ -417,7 +417,7 @@ def settlement_page_markup(
 <section class="header"><div class="header-grid"><div class="header-main"><h1>{title}</h1><div class="meta"><div>单据编号：{document_number}</div><div>结算月份：{h(statement.get("month"))}</div><div>项目负责人：{h(statement.get("pi"))}</div></div></div></div></section>
 <table class="meta-table"><tbody><tr><td>出具科室：实验动物中心</td><td>计费单位：{unit_display(unit)}</td><td colspan="2">实验负责人：{h(statement.get("owner") or "-")}</td></tr><tr><td colspan="4">IACUC 编号：{h(all_iacucs or "-")} {f"　全额减免：{h(full)}" if full else ""}</td></tr><tr><td colspan="4">支撑经费：{h(statement.get("funding") or "-")}</td></tr></tbody></table>
 <table class="summary-table"><colgroup><col class="col-date">{leading_cols}{columns_cols}</colgroup><thead><tr><th class="date-column" rowspan="3">日期</th>{species_headers}</tr><tr>{leading_header}{headers}</tr><tr>{leading_sub}{sub_headers}</tr></thead><tbody>{"".join(detail_rows)}</tbody><tfoot><tr><td class="row-label">单项合计</td>{leading_totals}{total_values}</tr><tr>{leading_summary}{meta_summary}</tr></tfoot></table>
-{note_markup}<table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><div class="page-footer">第 {page_index + 1} / {total_pages} 页</div></main>"""
+{note_markup}<table class="sign-table"><tbody><tr><td>项目负责人</td><td>实验负责人/经办人</td><td>日期</td></tr></tbody></table><div class="page-footer">第{page_index + 1}页 共{total_pages}页</div></main>"""
 
 
 def species_group_headers(slots, has_mouse_summary):
