@@ -395,6 +395,7 @@ describe("print templates", () => {
             {
               iacuc: "Z-RABBIT",
               animalCount: 5,
+              billingItem: "兔饲养费",
               billingUnit: "animal_day",
               unitPrice: 12,
               customBilling: true,
@@ -409,7 +410,7 @@ describe("print templates", () => {
       ] as BillingStatementLine[],
     );
     expect(markup).toContain("自定义收费：");
-    expect(markup).toContain("Z-RABBIT：2026-06-10 至 2026-06-20，每日5只，12元/只/日，本月共计60.00元。特殊饲料");
+    expect(markup).toContain("Z-RABBIT：2026-06-10 至 2026-06-20，每日5只兔，12元/只/日，本月共计60.00元。特殊饲料");
     expect(markup).not.toContain("自定义收费明细");
   });
 

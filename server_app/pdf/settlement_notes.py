@@ -1,5 +1,7 @@
 from html import escape
 
+from server_app.pdf.formatting import species_label
+
 
 def settlement_note_markup(statement, columns, lines=()):
     by_species = {}
@@ -45,6 +47,7 @@ def custom_billing_note_markup(lines):
                     ),
                     "unitPrice": key[4],
                     "billingUnit": billing_unit,
+                    "species": species_label(item),
                     "note": key[6],
                     "amount": 0,
                 },
@@ -57,8 +60,9 @@ def custom_billing_note_markup(lines):
         unit = "只" if item["billingUnit"] == "animal_day" else "笼"
         period = f"{item['startDate'] or '-'} 至 {item['endDate'] or '-'}"
         note = f"。{item['note']}" if item["note"] else ""
+        species_suffix = item["species"] if item["species"] else ""
         rows.append(
-            f"{item['iacuc']}：{period}，每日{number_text(item['quantity'])}{unit}，"
+            f"{item['iacuc']}：{period}，每日{number_text(item['quantity'])}{unit}{species_suffix}，"
             f"{number_text(item['unitPrice'])}元/{unit}/日，本月共计{number_text(item['amount'])}元{note}"
         )
     return "".join(note_entry_markup("自定义收费：" if index == 0 else "", row) for index, row in enumerate(rows))

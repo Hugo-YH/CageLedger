@@ -1,5 +1,5 @@
 import type { BillingStatementLine } from "../api/contracts";
-import { escapeHtml, money, normalizeIacuc, numberText } from "./settlementSupport";
+import { escapeHtml, money, normalizeIacuc, numberText, speciesLabelFor } from "./settlementSupport";
 
 type SettlementNoteColumn = {
   speciesLabel: string;
@@ -12,6 +12,8 @@ type SettlementNoteColumn = {
 
 type CustomBillingBreakdown = {
   iacuc?: string;
+  species?: string;
+  billingItem?: string;
   animalCount?: number;
   cageCount?: number;
   billingUnit?: string;
@@ -58,6 +60,7 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
       quantity: number;
       unitPrice: number;
       billingUnit: string;
+      species: string;
       note: string;
       amount: number;
     }
@@ -71,6 +74,7 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
       const endDate = String(item.customBillingEndDate || "");
       const unitPrice = Number(item.unitPrice || 0);
       const billingUnit = String(item.billingUnit || "cage_day");
+      const species = speciesLabelFor(item);
       const note = String(item.customBillingNote || "");
       const key = [iacuc, item.customBillingSegmentId || "", startDate, endDate, unitPrice, billingUnit, note].join(
         "|",
@@ -82,6 +86,7 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
         quantity: Number(billingUnit === "animal_day" ? item.animalCount || 0 : item.cageCount || 0),
         unitPrice,
         billingUnit,
+        species,
         note,
         amount: 0,
       };
@@ -102,7 +107,7 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
       const note = item.note ? `。${item.note}` : "";
       return noteEntryMarkup(
         index === 0 ? "自定义收费：" : "",
-        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，每日${numberText(item.quantity)}${unit}，${numberText(item.unitPrice)}元/${unit}/日，本月共计${money(item.amount)}元${note}`,
+        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，每日${numberText(item.quantity)}${unit}${item.species}，${numberText(item.unitPrice)}元/${unit}/日，本月共计${money(item.amount)}元${note}`,
       );
     })
     .join("");

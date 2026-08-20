@@ -3,6 +3,15 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.17",
+    build: "182",
+    releasedAt: "2026-08-20",
+    title: "饲养费核算汇总表自定义收费文案补充动物品种",
+    items: [
+      "自定义饲养费明细在每日数量后直接标注动物品种（与表头品种一致，不加重括号），例如“每日5只兔，12元/只/日”；前端预览与后端 PDF 导出模板同步，品种派生逻辑收敛到共享模块",
+    ],
+  },
+  {
     version: "1.0.16",
     build: "181",
     releasedAt: "2026-08-20",

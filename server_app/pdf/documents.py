@@ -1,7 +1,14 @@
 from html import escape
 
 from server_app.domains.billing.custom_billing import normalize_custom_billing_segments
-from server_app.pdf.formatting import day_index, days_in_month, format_date, month_label, normalize_iacuc
+from server_app.pdf.formatting import (
+    day_index,
+    days_in_month,
+    format_date,
+    month_label,
+    normalize_iacuc,
+    species_label,
+)
 from server_app.pdf.renderer import html_to_pdf
 from server_app.pdf.settlement_notes import settlement_note_markup
 
@@ -562,28 +569,6 @@ def breakdown_key(item):
             "1" if item.get("statementFullExemption", item.get("fullExemption")) else "0",
         ]
     )
-
-
-def species_label(item):
-    species = str(item.get("species") or "").strip().lower()
-    species_labels = {
-        "mouse": "小鼠",
-        "rat": "大鼠",
-        "guinea_pig": "豚鼠",
-        "rabbit": "兔",
-        "monkey": "猴",
-        "pig": "猪",
-        "dog": "犬",
-    }
-    if species in species_labels:
-        return species_labels[species]
-    label = str(item.get("billingItem") or "")
-    for species in ("小鼠", "大鼠", "豚鼠", "兔", "猴", "猪", "犬"):
-        if species in label:
-            return species
-    if item.get("billingUnit") == "animal_day":
-        return "动物"
-    return "小鼠" if as_number(item.get("unitPrice")) in {4.5, 6.5, 7.2, 13.5, 19.5, 21.6} else "动物"
 
 
 def quantity_styles():

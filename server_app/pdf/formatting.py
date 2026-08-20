@@ -36,6 +36,32 @@ def normalize_iacuc(value):
     return str(value or "").strip().upper()
 
 
+def species_label(item):
+    species = str(item.get("species") or "").strip().lower()
+    species_labels = {
+        "mouse": "小鼠",
+        "rat": "大鼠",
+        "guinea_pig": "豚鼠",
+        "rabbit": "兔",
+        "monkey": "猴",
+        "pig": "猪",
+        "dog": "犬",
+    }
+    if species in species_labels:
+        return species_labels[species]
+    label = str(item.get("billingItem") or "")
+    for species in ("小鼠", "大鼠", "豚鼠", "兔", "猴", "猪", "犬"):
+        if species in label:
+            return species
+    if item.get("billingUnit") == "animal_day":
+        return "动物"
+    try:
+        unit_price = float(item.get("unitPrice") or 0)
+    except (TypeError, ValueError):
+        unit_price = 0.0
+    return "小鼠" if unit_price in {4.5, 6.5, 7.2, 13.5, 19.5, 21.6} else "动物"
+
+
 def clean_filename(value):
     text = str(value or "").strip() or "未命名"
     return "".join("_" if char in '\\/:*?"<>|' else char for char in text)
