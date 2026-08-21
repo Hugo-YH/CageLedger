@@ -103,6 +103,7 @@ graph LR
 | ------------------------ | ---------------------------------------------------- | -------------------- |
 | `GET`                    | `/api/billing-workflows`                             | 结算流程列表         |
 | `GET`                    | `/api/billing-workflows/{id}`                        | 流程、版本和事件     |
+| `GET`                    | `/api/billing-workflows/{id}/funding-options`        | 最新经费本候选项     |
 | `GET`                    | `/api/billing-workflows/{id}/lines`                  | 指定版本逐日明细     |
 | `POST`                   | `/api/billing-workflows/advance`                     | 推进流程             |
 | `POST`                   | `/api/billing-workflows/{id}/reimbursement-forms`    | 已归档流程补录报销单 |

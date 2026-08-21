@@ -6,6 +6,12 @@ from server_app.cache import cache_get, cache_set, invalidate_data_cache, invali
 from .payload import dump_json
 
 
+def list_experiment_application_payloads(conn):
+    """Return the current imported application records in stable import order."""
+    rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
+    return [json.loads(row["payload"]) for row in rows]
+
+
 def read_iacuc_index(conn, iacuc_index_path, legacy_iacuc_index_path):
     cached = cache_get("iacuc_index")
     if cached is not None:

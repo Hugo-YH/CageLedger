@@ -76,6 +76,20 @@ export interface BillingWorkflow {
   latestEventAt: string;
 }
 
+export interface WorkflowFundingBookOption {
+  value: string;
+  label: string;
+  source: "fundCode" | "funding";
+  iacucs: string[];
+}
+
+export interface WorkflowFundingBookOptionsResponse {
+  items: WorkflowFundingBookOption[];
+  iacucs: string[];
+  piFundingBookNos: string[];
+  piFundingBookOptions: WorkflowFundingBookOption[];
+}
+
 export interface WorkflowListParams {
   limit: number;
   offset: number;
@@ -178,6 +192,19 @@ export function useBillingWorkflows(params: WorkflowListParams) {
     queryKey: queryKeys.workflows({ ...params }),
     queryFn: () =>
       requestJson<PagedResponse<BillingWorkflow>>(`/api/billing-workflows?${billingWorkflowSearch(params).toString()}`),
+  });
+}
+
+export function useWorkflowFundingBookOptions(workflowId: string) {
+  return useQuery({
+    queryKey: queryKeys.workflowFundingBookOptions(workflowId),
+    queryFn: () =>
+      requestJson<WorkflowFundingBookOptionsResponse>(
+        `/api/billing-workflows/${encodeURIComponent(workflowId)}/funding-options`,
+      ),
+    enabled: Boolean(workflowId),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 

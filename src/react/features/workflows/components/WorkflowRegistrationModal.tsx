@@ -15,12 +15,13 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { buildFundingBookOptions } from "../../../../domain/fundingBookNo";
+import { fundingBookRemark, reviewFundingBookNos, type FundingBookReference } from "../../../../domain/fundingBookNo";
 import { defaultReimbursementFormNo } from "../../../../domain/reimbursementFormNo";
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
-import { uploadWorkflowAttachment, useAdvanceWorkflow } from "../../../api/workflows";
+import { uploadWorkflowAttachment, useAdvanceWorkflow, useWorkflowFundingBookOptions } from "../../../api/workflows";
+import { FundingBookConfirmationModal } from "./FundingBookConfirmationModal";
 
 interface RegistrationValues {
   reimbursementForms?: Array<{ formNo: string; amount?: number; fundingBookNo?: string }>;
@@ -116,13 +117,35 @@ function WorkflowRegistrationForm({
   const [settlementAttachment, setSettlementAttachment] = useState<BillingWorkflowAttachment | null>(null);
   const [reimbursementAttachment, setReimbursementAttachment] = useState<BillingWorkflowAttachment | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [fundingBookReview, setFundingBookReview] = useState<{
+    otherProjectOptions: FundingBookReference[];
+    unknownFundingBookNos: string[];
+  }>({ otherProjectOptions: [], unknownFundingBookNos: [] });
   const hasPayableAmount = Number(target.totalAmount || 0) > 0;
-  const fundingOptions = useMemo(() => buildFundingBookOptions(target.funding || ""), [target.funding]);
+  const fundingBookOptions = useWorkflowFundingBookOptions(target.id);
+  const fundingOptions = fundingBookOptions.data?.items ?? [];
 
-  async function submitRegistration() {
+  async function submitRegistration(confirmed = false) {
     const values = await form.validateFields();
     const reimbursementForms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
     if (values.reimbursementFormReturned && !reimbursementForms.length) return;
+    const review = fundingBookOptions.data
+      ? reviewFundingBookNos(
+          reimbursementForms.map((entry) => entry.fundingBookNo),
+          fundingBookOptions.data.items.map((option) => option.value),
+          fundingBookOptions.data.piFundingBookOptions,
+        )
+      : { otherProjectOptions: [], unknownFundingBookNos: [] };
+    if (!confirmed && (review.otherProjectOptions.length || review.unknownFundingBookNos.length)) {
+      setFundingBookReview(review);
+      return;
+    }
+    setFundingBookReview({ otherProjectOptions: [], unknownFundingBookNos: [] });
+    const automaticRemarks = review.otherProjectOptions.map(fundingBookRemark);
+    const reimbursementFormNote = [values.reimbursementFormNote?.trim() || "", ...automaticRemarks]
+      .filter((value, index, entries) => value && entries.indexOf(value) === index)
+      .join("\n");
+    if (automaticRemarks.length) form.setFieldValue("reimbursementFormNote", reimbursementFormNote);
     await advance.mutateAsync({
       workflowId: target.id,
       toStatus: "statement_archived",
@@ -135,7 +158,7 @@ function WorkflowRegistrationForm({
         signedStatementReturned: Boolean(values.signedStatementReturned),
         signedStatementNote: values.signedStatementNote?.trim() || "",
         reimbursementFormReturned: Boolean(values.reimbursementFormReturned),
-        reimbursementFormNote: values.reimbursementFormNote?.trim() || "",
+        reimbursementFormNote,
       },
     });
     onRegistered();
@@ -214,6 +237,14 @@ function WorkflowRegistrationForm({
           </Form.Item>
           {reimbursementFormReturned ? (
             <>
+              {fundingBookOptions.isError ? (
+                <Alert
+                  showIcon
+                  style={{ marginTop: 8 }}
+                  title="无法读取最新版实验申请汇总表；可手动填写经费本编号。"
+                  type="warning"
+                />
+              ) : null}
               <Flex gap={8} style={{ marginBottom: 8 }}>
                 <Typography.Text type="secondary" style={{ width: 200 }}>
                   经费本编号
@@ -237,6 +268,7 @@ function WorkflowRegistrationForm({
                           <AutoComplete
                             allowClear
                             options={fundingOptions}
+                            notFoundContent={fundingBookOptions.isLoading ? "正在读取最新版实验申请汇总表…" : undefined}
                             popupMatchSelectWidth={false}
                             placeholder="选择或输入经费本编号"
                             style={{ width: 200 }}
@@ -301,6 +333,14 @@ function WorkflowRegistrationForm({
           登记并归档
         </Button>
       </Flex>
+      <FundingBookConfirmationModal
+        otherProjectFundingBooks={fundingBookReview.otherProjectOptions}
+        pending={advance.isPending}
+        pi={target.pi}
+        unknownFundingBookNos={fundingBookReview.unknownFundingBookNos}
+        onCancel={() => setFundingBookReview({ otherProjectOptions: [], unknownFundingBookNos: [] })}
+        onConfirm={() => void submitRegistration(true)}
+      />
     </Form>
   );
 }

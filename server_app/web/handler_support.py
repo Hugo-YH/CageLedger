@@ -189,6 +189,9 @@ class HandlerSupportMixin:
     def billing_workflow_reimbursement_recording_route(self, path):
         return route_matchers.billing_workflow_reimbursement_recording_route(path)
 
+    def billing_workflow_funding_options_route(self, path):
+        return route_matchers.billing_workflow_funding_options_route(path)
+
     def billing_workflow_attachment_download_route(self, path):
         return route_matchers.billing_workflow_attachment_download_route(path)
 

@@ -52,3 +52,43 @@ export function buildFundingBookOptions(fundingText: string): FundingBookOption[
   }
   return options;
 }
+
+export function unverifiedFundingBookNos(values: Array<string | undefined>, knownFundingBookNos: string[]): string[] {
+  const known = new Set(knownFundingBookNos.map((value) => value.trim()).filter(Boolean));
+  return [...new Set(values.map((value) => value?.trim() || "").filter((value) => value && !known.has(value)))];
+}
+
+export interface FundingBookReference {
+  value: string;
+  label: string;
+}
+
+/**
+ * 区分本月结算伦理可直接使用的经费本、同一负责人其他项目的经费本，及未登记的新经费本。
+ */
+export function reviewFundingBookNos(
+  values: Array<string | undefined>,
+  currentFundingBookNos: string[],
+  piFundingBookOptions: FundingBookReference[],
+) {
+  const current = new Set(currentFundingBookNos.map((value) => value.trim()).filter(Boolean));
+  const piOptions = new Map(
+    piFundingBookOptions.map((option) => [option.value.trim(), option] as const).filter(([value]) => Boolean(value)),
+  );
+  const otherProjectOptions: FundingBookReference[] = [];
+  const unknownFundingBookNos: string[] = [];
+  const seen = new Set<string>();
+  for (const rawValue of values) {
+    const value = rawValue?.trim() || "";
+    if (!value || seen.has(value) || current.has(value)) continue;
+    seen.add(value);
+    const piOption = piOptions.get(value);
+    if (piOption) otherProjectOptions.push(piOption);
+    else unknownFundingBookNos.push(value);
+  }
+  return { otherProjectOptions, unknownFundingBookNos };
+}
+
+export function fundingBookRemark(option: FundingBookReference): string {
+  return `${option.value} 为${option.label}的支撑经费`;
+}

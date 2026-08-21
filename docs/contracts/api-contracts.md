@@ -98,20 +98,21 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 ## 流程与报销台账
 
-| 方法     | 路径                                              | 请求或参数                                                     | 响应                                                                                                               |
-| -------- | ------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/api/billing-workflows`                          | 分页、排序、`columnFilters`（月份/状态/负责人/登记人员/IACUC） | 分页流程；未指定状态时默认排除已生成（单据跟踪只展示已发起之后）                                                   |
-| `GET`    | `/api/billing-workflows/{id}`                     | 空                                                             | `{ workflow, versions, events }`                                                                                   |
-| `GET`    | `/api/billing-workflows/{id}/lines`               | `versionId`                                                    | 指定版本明细                                                                                                       |
-| `POST`   | `/api/billing-workflows/advance`                  | `{ workflowId, toStatus, note?, registration? }`               | workflow、event、auditLogs；`registration` 含结算单/报销单交回开关、报销单号与金额，实收金额由后端按报销单自动汇总 |
-| `POST`   | `/api/billing-workflows/{id}/reimbursement-forms` | `{ reimbursementForms: [{ formNo, amount }] }`                 | 已归档流程补录报销单，追加到现有报销单并重算实收金额                                                               |
-| `DELETE` | `/api/billing-workflows/{id}`                     | 空                                                             | 删除结果和审计                                                                                                     |
-| `GET`    | `/api/reimbursement-records`                      | `status`、`month`、`pi`、`onlyUnpaid`、分页                    | 分页台账                                                                                                           |
-| `GET`    | `/api/reimbursement-records/{id}`                 | 空                                                             | item、workflow、versions、events、history                                                                          |
-| `PUT`    | `/api/reimbursement-records/{id}`                 | 台账可编辑字段                                                 | 更新后的完整详情                                                                                                   |
-| `DELETE` | `/api/reimbursement-records/{id}`                 | 空                                                             | `{ ok: true }`                                                                                                     |
-| `POST`   | `/api/reimbursement-records/import-monthly`       | Excel 文件                                                     | 导入摘要                                                                                                           |
-| `POST`   | `/api/reimbursement-records/import-arrears`       | Excel 文件                                                     | 导入摘要                                                                                                           |
+| 方法     | 路径                                              | 请求或参数                                                     | 响应                                                                                                                |
+| -------- | ------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/billing-workflows`                          | 分页、排序、`columnFilters`（月份/状态/负责人/登记人员/IACUC） | 分页流程；未指定状态时默认排除已生成（单据跟踪只展示已发起之后）                                                    |
+| `GET`    | `/api/billing-workflows/{id}`                     | 空                                                             | `{ workflow, versions, events }`                                                                                    |
+| `GET`    | `/api/billing-workflows/{id}/funding-options`     | 空                                                             | 关联 IACUC 最新经费本候选项、该 PI 全部已登记经费本号及其来源描述；优先独立 `fundCode`，否则从项目来源/支撑经费提取 |
+| `GET`    | `/api/billing-workflows/{id}/lines`               | `versionId`                                                    | 指定版本明细                                                                                                        |
+| `POST`   | `/api/billing-workflows/advance`                  | `{ workflowId, toStatus, note?, registration? }`               | workflow、event、auditLogs；`registration` 含结算单/报销单交回开关、报销单号与金额，实收金额由后端按报销单自动汇总  |
+| `POST`   | `/api/billing-workflows/{id}/reimbursement-forms` | `{ reimbursementForms: [{ formNo, amount }] }`                 | 已归档流程补录报销单，追加到现有报销单并重算实收金额                                                                |
+| `DELETE` | `/api/billing-workflows/{id}`                     | 空                                                             | 删除结果和审计                                                                                                      |
+| `GET`    | `/api/reimbursement-records`                      | `status`、`month`、`pi`、`onlyUnpaid`、分页                    | 分页台账                                                                                                            |
+| `GET`    | `/api/reimbursement-records/{id}`                 | 空                                                             | item、workflow、versions、events、history                                                                           |
+| `PUT`    | `/api/reimbursement-records/{id}`                 | 台账可编辑字段                                                 | 更新后的完整详情                                                                                                    |
+| `DELETE` | `/api/reimbursement-records/{id}`                 | 空                                                             | `{ ok: true }`                                                                                                      |
+| `POST`   | `/api/reimbursement-records/import-monthly`       | Excel 文件                                                     | 导入摘要                                                                                                            |
+| `POST`   | `/api/reimbursement-records/import-arrears`       | Excel 文件                                                     | 导入摘要                                                                                                            |
 
 ### 多对多核销台账
 

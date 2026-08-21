@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFundingBookOptions, extractFundingBookNo } from "./fundingBookNo";
+import {
+  buildFundingBookOptions,
+  extractFundingBookNo,
+  reviewFundingBookNos,
+  unverifiedFundingBookNos,
+} from "./fundingBookNo";
 
 describe("extractFundingBookNo", () => {
   it("提取显式标注的经费本编号", () => {
@@ -43,5 +48,24 @@ describe("extractFundingBookNo", () => {
       "国自然（经费本编号：30309010012125）、国家自然科学基金（经费本编号：30309010012125）",
     );
     expect(options).toEqual([{ value: "30309010012125", label: "国自然（经费本编号：30309010012125）" }]);
+  });
+
+  it("仅返回项目负责人记录中不存在的人工经费本号", () => {
+    expect(unverifiedFundingBookNos(["30309010012125", "MANUAL-1", "MANUAL-1", ""], ["30309010012125"])).toEqual([
+      "MANUAL-1",
+    ]);
+  });
+
+  it("区分本月伦理、同一负责人其他项目和未登记经费本", () => {
+    expect(
+      reviewFundingBookNos(
+        ["111", "222", "333", "444"],
+        ["111", "222"],
+        [{ value: "333", label: "C 项目（经费本编号：333）" }],
+      ),
+    ).toEqual({
+      otherProjectOptions: [{ value: "333", label: "C 项目（经费本编号：333）" }],
+      unknownFundingBookNos: ["444"],
+    });
   });
 });

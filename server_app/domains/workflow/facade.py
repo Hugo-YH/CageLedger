@@ -20,6 +20,8 @@ from server_app.repositories.billing_workflows import (
 )
 from server_app.shared import clean_text
 
+from .funding_options import current_funding_book_options
+
 
 def list_billing_workflows_page(conn, filters, excluded_status):
     return list_page_repository(conn, filters, clean_text, excluded_status)
@@ -53,6 +55,7 @@ def delete_billing_workflow(conn, workflow_id):
 
 __all__ = [
     "billing_workflow_detail_item",
+    "current_funding_book_options",
     "delete_billing_workflow",
     "get_billing_version",
     "get_billing_workflow",

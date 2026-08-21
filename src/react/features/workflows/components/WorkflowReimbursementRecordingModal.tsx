@@ -13,12 +13,17 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { buildFundingBookOptions } from "../../../../domain/fundingBookNo";
+import { unverifiedFundingBookNos } from "../../../../domain/fundingBookNo";
 import { defaultReimbursementFormNo } from "../../../../domain/reimbursementFormNo";
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
-import { recordWorkflowReimbursement, uploadWorkflowAttachment } from "../../../api/workflows";
+import {
+  recordWorkflowReimbursement,
+  uploadWorkflowAttachment,
+  useWorkflowFundingBookOptions,
+} from "../../../api/workflows";
+import { FundingBookConfirmationModal } from "./FundingBookConfirmationModal";
 
 interface RecordingValues {
   reimbursementForms?: Array<{ formNo: string; amount?: number; fundingBookNo?: string }>;
@@ -38,7 +43,9 @@ export function WorkflowReimbursementRecordingModal({
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const fundingOptions = useMemo(() => buildFundingBookOptions(target?.funding || ""), [target?.funding]);
+  const [unverifiedFundingBookNumbers, setUnverifiedFundingBookNumbers] = useState<string[]>([]);
+  const fundingBookOptions = useWorkflowFundingBookOptions(target?.id ?? "");
+  const fundingOptions = fundingBookOptions.data?.items ?? [];
 
   useEffect(() => {
     if (target) {
@@ -51,7 +58,7 @@ export function WorkflowReimbursementRecordingModal({
     setAttachment(null);
   }
 
-  async function submit() {
+  async function submit(confirmed = false) {
     if (!target) return;
     try {
       const values = await form.validateFields();
@@ -60,6 +67,17 @@ export function WorkflowReimbursementRecordingModal({
         setFormError("请填写报销单号和金额");
         return;
       }
+      const unverified = fundingBookOptions.data
+        ? unverifiedFundingBookNos(
+            forms.map((entry) => entry.fundingBookNo),
+            fundingBookOptions.data.piFundingBookNos,
+          )
+        : [];
+      if (!confirmed && unverified.length) {
+        setUnverifiedFundingBookNumbers(unverified);
+        return;
+      }
+      setUnverifiedFundingBookNumbers([]);
       setFormError("");
       setSaving(true);
       await recordWorkflowReimbursement(
@@ -109,6 +127,14 @@ export function WorkflowReimbursementRecordingModal({
           已登记报销单：{target.reimbursementForms.map((entry) => entry.formNo).join("、")}
         </Typography.Paragraph>
       ) : null}
+      {fundingBookOptions.isError ? (
+        <Alert
+          showIcon
+          style={{ marginTop: 8 }}
+          title="无法读取最新版实验申请汇总表；可手动填写经费本编号。"
+          type="warning"
+        />
+      ) : null}
       {formError ? <Alert showIcon style={{ marginBottom: 12 }} title={formError} type="error" /> : null}
       <Form
         form={form}
@@ -140,6 +166,7 @@ export function WorkflowReimbursementRecordingModal({
                     <AutoComplete
                       allowClear
                       options={fundingOptions}
+                      notFoundContent={fundingBookOptions.isLoading ? "正在读取最新版实验申请汇总表…" : undefined}
                       popupMatchSelectWidth={false}
                       placeholder="选择或输入经费本编号"
                       style={{ width: 200 }}
@@ -202,6 +229,14 @@ export function WorkflowReimbursementRecordingModal({
           </Flex>
         </Form.Item>
       </Form>
+      <FundingBookConfirmationModal
+        otherProjectFundingBooks={[]}
+        pending={saving}
+        pi={target?.pi ?? ""}
+        unknownFundingBookNos={unverifiedFundingBookNumbers}
+        onCancel={() => setUnverifiedFundingBookNumbers([])}
+        onConfirm={() => void submit(true)}
+      />
     </Modal>
   );
 }

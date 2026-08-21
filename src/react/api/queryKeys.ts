@@ -13,6 +13,8 @@ export const queryKeys = {
   settlementCandidatesRoot: ["billing-settlement-candidates"] as const,
   settlementCandidates: (filters: Record<string, unknown>) => ["billing-settlement-candidates", filters] as const,
   workflows: (filters: Record<string, unknown>) => ["billing-workflows", filters] as const,
+  workflowFundingBookOptions: (workflowId: string) =>
+    ["billing-workflows", workflowId, "funding-book-options"] as const,
   reimbursementRoot: ["reimbursement-records"] as const,
   reimbursements: (filters: Record<string, unknown>) => ["reimbursement-records", filters] as const,
   reimbursement: (id: string) => ["reimbursement-records", "detail", id] as const,

@@ -82,6 +82,7 @@ from server_app.domains.state.query import (
     filter_state_for_actor,
 )
 from server_app.domains.workflow.facade import (
+    current_funding_book_options,
     get_billing_workflow_detail,
     list_billing_workflow_events,
     list_billing_workflow_lines,
@@ -436,6 +437,17 @@ class ReadRoutesMixin:
                 return
             with connect_db() as conn:
                 self.send_json(list_reimbursement_records_page(conn, self.list_filters()))
+            return
+        workflow_id = self.billing_workflow_funding_options_route(path)
+        if workflow_id:
+            user = self.require_user()
+            if not user:
+                return
+            try:
+                with connect_db() as conn:
+                    self.send_json(current_funding_book_options(conn, workflow_id))
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             return
         workflow_id = self.billing_workflow_lines_route(path)
         if workflow_id:
