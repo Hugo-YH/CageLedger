@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.18",
+    build: "183",
+    releasedAt: "2026-08-21",
+    title: "报销登记经费本选项与最新申请同步",
+    items: [
+      "报销登记与交回登记时，经费本编号下拉选项改为读取最新导入的动物实验申请汇总表（新增 `GET /api/billing-workflows/{id}/funding-options` 接口），经费本号、支撑经费文案与归属伦理随最新申请实时同步，不再依赖流程内快照",
+      "登记的经费本号属于同一项目负责人其他项目的支撑经费时，弹窗列出说明并确认，确认后自动填写到报销单备注；未登记的新经费本号提示确认负责人是否新增支撑经费",
+      "无法读取最新版申请汇总表时给出明确警告，可手动填写经费本编号，不影响登记",
+      "经费本归属判断（可直接使用/同一负责人其他项目/未登记）收敛到共享纯函数并补单元测试",
+    ],
+  },
+  {
     version: "1.0.17",
     build: "182",
     releasedAt: "2026-08-20",
