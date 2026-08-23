@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.0.19",
+    build: "184",
+    releasedAt: "2026-08-23",
+    title: "经费本选项兜底与文档链接加固",
+    items: [
+      "报销登记经费本选项在项目负责人无支撑经费时改为直接复用已收集选项，保留经费本号、支撑经费文案与归属伦理的映射，不再退化为丢失信息的列表",
+      "巡检录入移动端模块选择器补充专用样式钩子，选择器在不同视口下保持正确布局",
+      "文档站“编辑此页”链接与编辑分支配置修复，默认从 `main` 分支直接编辑，文档索引 `llms.txt` 在开发与生产环境统一可用",
+    ],
+  },
+  {
     version: "1.0.18",
     build: "183",
     releasedAt: "2026-08-21",
