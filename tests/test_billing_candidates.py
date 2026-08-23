@@ -13,6 +13,7 @@ from server_app.domains.billing.candidates import (
 from server_app.repositories.billing_candidates import (
     QUANTITY_SETTLEMENT_CALCULATION_VERSION,
     billing_candidate_snapshot_registry_needs_sync,
+    billing_candidate_snapshot_where,
     get_billing_candidate_snapshot,
     list_billing_candidate_filter_options,
     list_billing_candidate_manager_filter_options,
@@ -26,14 +27,48 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
     def tearDown(self):
         invalidate_data_cache_prefixes("quantity_sheets::settlement_candidates::", "quantity_sheets::")
 
-    def test_schema_initialization_creates_candidate_snapshot_table(self):
+    def test_schema_initialization_creates_candidate_snapshot_tables(self):
         with sqlite3.connect(":memory:") as conn:
             conn.row_factory = sqlite3.Row
             server.initialize_schema(conn)
-            row = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'billing_candidate_snapshots'"
-            ).fetchone()
-            self.assertIsNotNone(row)
+            tables = {
+                row["name"]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
+                    ("billing_candidate_snapshots", "billing_candidate_snapshot_iacucs"),
+                )
+            }
+            self.assertEqual(tables, {"billing_candidate_snapshots", "billing_candidate_snapshot_iacucs"})
+
+    def test_iacuc_relation_is_kept_in_sync_and_used_for_filtering(self):
+        with build_candidate_conn() as conn:
+            upsert_billing_candidate_snapshot(
+                conn,
+                {
+                    "month": "2026-07",
+                    "pi": "李教授",
+                    "sourceType": "quantity_sheet",
+                    "iacucs": ["Z1", "Z2"],
+                    "totalAmount": 10,
+                    "error": "",
+                    "stale": False,
+                    "updatedAt": "2026-07-01T00:00:00Z",
+                    "sourceFingerprint": "test",
+                },
+            )
+            where, params = billing_candidate_snapshot_where(
+                source_type="quantity_sheet", filters={"columnFilters": {"iacuc": ["Z2"]}}
+            )
+            rows = conn.execute(f"SELECT pi FROM billing_candidate_snapshots WHERE {where}", params).fetchall()
+
+            self.assertEqual([row["pi"] for row in rows], ["李教授"])
+            self.assertEqual(
+                {
+                    row["iacuc"]
+                    for row in conn.execute("SELECT iacuc FROM billing_candidate_snapshot_iacucs").fetchall()
+                },
+                {"Z1", "Z2"},
+            )
 
     def test_default_candidate_page_refreshes_only_visible_stale_items(self):
         with build_candidate_conn() as conn:
@@ -350,6 +385,13 @@ def build_candidate_conn():
             updated_at TEXT NOT NULL,
             source_fingerprint TEXT NOT NULL,
             PRIMARY KEY (source_type, month, pi)
+        );
+        CREATE TABLE billing_candidate_snapshot_iacucs (
+            source_type TEXT NOT NULL,
+            month TEXT NOT NULL,
+            pi TEXT NOT NULL,
+            iacuc TEXT NOT NULL,
+            PRIMARY KEY (source_type, month, pi, iacuc)
         );
         CREATE TABLE billing_workflows (
             id TEXT PRIMARY KEY,

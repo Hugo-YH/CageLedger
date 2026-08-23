@@ -1,6 +1,6 @@
 import { Button, Popover, Tooltip as AntTooltip } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { type ReactNode, useId } from "react";
+import type { ReactNode } from "react";
 
 /**
  * Unified anchored help layer. Ant portals overlays to the document body and
@@ -33,11 +33,9 @@ export function Tooltip({
 }
 
 export function HelpTooltip({ children, label }: { children: ReactNode; label: string }) {
-  const id = useId();
   return (
     <Popover content={children} destroyOnHidden placement="bottom" title={label} trigger={["hover", "click"]}>
       <Button
-        aria-describedby={id}
         aria-label={label}
         className="inspection-help-trigger"
         icon={<QuestionCircleOutlined aria-hidden="true" />}

@@ -55,6 +55,39 @@ export interface SystemInfo {
   revisionShort: string;
 }
 
+export interface SystemLatencyMetrics {
+  sampleCount: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  maxMs: number | null;
+}
+
+export interface SystemPerformance {
+  uptimeSeconds: number;
+  requests: SystemLatencyMetrics & {
+    total: number;
+    slow: number;
+  };
+  cache: {
+    entries: number;
+    capacity: number;
+    hits: number;
+    misses: number;
+    expirations: number;
+    evictions: number;
+    hitRate: number | null;
+  };
+  database: SystemLatencyMetrics & {
+    operations: number;
+    slowOperations: number;
+    lockErrors: number;
+  };
+  thresholds: {
+    slowRequestMs: number;
+    slowDatabaseMs: number;
+  };
+}
+
 export interface SystemEnvironment {
   cpu: {
     model: string;
@@ -86,6 +119,7 @@ export interface SystemEnvironment {
     tables: number;
     path: string;
   };
+  performance: SystemPerformance;
 }
 
 export interface SystemUpdateStatus {

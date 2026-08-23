@@ -23,6 +23,7 @@ from server_app.domains.intake.strain_standard import standardize_strain
 from server_app.shared import as_int, clean_text
 
 DASHBOARD_CACHE_TTL_SECONDS = 60
+DASHBOARD_HISTORY_CACHE_TTL_SECONDS = 300
 
 
 def default_overview_month():
@@ -62,21 +63,24 @@ def dashboard_overview_payload(conn, month: str, rooms=None):
         "rooms": rooms_overview,
         "pi": pi_overview,
     }
-    return cache_set(cache_key_value, payload, ttl_seconds=DASHBOARD_CACHE_TTL_SECONDS)
+    ttl_seconds = DASHBOARD_HISTORY_CACHE_TTL_SECONDS if month == "all" else DASHBOARD_CACHE_TTL_SECONDS
+    return cache_set(cache_key_value, payload, ttl_seconds=ttl_seconds)
 
 
 def _available_months(conn):
-    months = set()
-    for row in conn.execute("SELECT DISTINCT month FROM quantity_sheets WHERE TRIM(COALESCE(month, '')) != ''"):
-        if row["month"]:
-            months.add(row["month"])
-    for row in conn.execute(
-        "SELECT DISTINCT intake_date FROM intake_batches WHERE TRIM(COALESCE(intake_date, '')) != ''"
-    ):
-        month = clean_text(row["intake_date"] or "")[:7]
-        if month:
-            months.add(month)
-    return sorted(months, reverse=True)
+    rows = conn.execute(
+        """
+        SELECT month
+        FROM quantity_sheets
+        WHERE TRIM(COALESCE(month, '')) != ''
+        UNION
+        SELECT substr(intake_date, 1, 7) AS month
+        FROM intake_batches
+        WHERE TRIM(COALESCE(intake_date, '')) != ''
+        ORDER BY month DESC
+        """
+    ).fetchall()
+    return [clean_text(row["month"]) for row in rows if clean_text(row["month"])]
 
 
 def _read_rooms(conn):

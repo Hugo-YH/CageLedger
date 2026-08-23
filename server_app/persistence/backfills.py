@@ -29,6 +29,22 @@ def ensure_users_billing_lock_column(conn):
     conn.execute("UPDATE users SET billing_lock_allowed = 1 WHERE role = 'admin' AND billing_lock_allowed = 0")
 
 
+def backfill_billing_candidate_snapshot_iacucs(conn):
+    rows = conn.execute("SELECT source_type, month, pi, iacucs_json FROM billing_candidate_snapshots").fetchall()
+    for row in rows:
+        try:
+            iacucs = json.loads(row["iacucs_json"] or "[]")
+        except (TypeError, ValueError):
+            iacucs = []
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO billing_candidate_snapshot_iacucs (source_type, month, pi, iacuc)
+            VALUES (?, ?, ?, ?)
+            """,
+            [(row["source_type"], row["month"], row["pi"], clean_text(iacuc)) for iacuc in iacucs if clean_text(iacuc)],
+        )
+
+
 def backfill_quantity_sheet_staff(conn, room_ids=None):
     ensure_animal_inspection_finding_location_schema(conn)
     room_filter = {clean_text(item) for item in (room_ids or []) if clean_text(item)}

@@ -34,10 +34,21 @@ const checks = [
   "/api/quantity-sheets?limit=5&offset=0",
   "/api/billing-workflows?limit=5&offset=0",
   "/api/principal-identities",
+  "/api/system/environment",
 ];
 
+let systemEnvironment = null;
 for (const path of checks) {
-  await request(path, { headers: authHeaders });
+  const result = await request(path, { headers: authHeaders });
+  if (path === "/api/system/environment") systemEnvironment = result.payload;
+}
+
+if (
+  !systemEnvironment?.performance?.cache ||
+  !systemEnvironment.performance.requests ||
+  !systemEnvironment.performance.database
+) {
+  throw new Error("/api/system/environment returned an incomplete performance snapshot");
 }
 
 console.log(

@@ -33,6 +33,8 @@ PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))
 MAX_BODY_BYTES = 32 * 1024 * 1024
 SESSION_COOKIE = "cageledger_session"
 SESSION_TTL_DAYS = 14
+SLOW_REQUEST_THRESHOLD_MS = float(os.environ.get("CAGELEDGER_SLOW_REQUEST_MS", "500"))
+SLOW_DATABASE_THRESHOLD_MS = float(os.environ.get("CAGELEDGER_SLOW_DATABASE_MS", "100"))
 
 
 def frontend_root():

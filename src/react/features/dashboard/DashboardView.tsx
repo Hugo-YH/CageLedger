@@ -1,6 +1,6 @@
 import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
 import { Badge, Button, Card, Col, Progress, Row, Select, Skeleton, Statistic, Tag, Typography } from "antd";
-import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
@@ -24,6 +24,42 @@ function ChartBoundary({ height, children }: { height: number; children: ReactNo
     >
       {children}
     </Suspense>
+  );
+}
+
+/** Loads the chart runtime only after its card enters the viewport. */
+function DeferredChart({ height, children }: { height: number; children: ReactNode }) {
+  const targetRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const target = targetRef.current;
+    if (!target || typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setIsVisible(true);
+        observer.disconnect();
+      },
+      { threshold: 0.01 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={targetRef}>
+      {isVisible ? (
+        <ChartBoundary height={height}>{children}</ChartBoundary>
+      ) : (
+        <div aria-busy="true" className="ant-dashboard-chart-loading" style={{ height }}>
+          <Skeleton active paragraph={{ rows: 3, width: "100%" }} title={false} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -237,7 +273,7 @@ function IntakeTrend({
   }));
   return (
     <div className="ant-dashboard-trend">
-      <ChartBoundary height={180}>
+      <DeferredChart height={180}>
         <AreaChart
           data={data}
           xField="label"
@@ -264,7 +300,7 @@ function IntakeTrend({
           scale={{ y: { nice: true } }}
           legend={false}
         />
-      </ChartBoundary>
+      </DeferredChart>
       <Typography.Text type="secondary" className="ant-dashboard-trend-caption">
         {unit === "month" ? "近 6 个月接收只数变化" : "当月每日接收只数变化"}
       </Typography.Text>
@@ -301,7 +337,7 @@ function StrainDistribution({ items }: { items: Array<{ strain: string; animals:
   };
   return (
     <div className="ant-dashboard-pie">
-      <ChartBoundary height={280}>
+      <DeferredChart height={280}>
         <RoseChart
           data={data}
           xField="type"
@@ -345,7 +381,7 @@ function StrainDistribution({ items }: { items: Array<{ strain: string; animals:
             ],
           }}
         />
-      </ChartBoundary>
+      </DeferredChart>
     </div>
   );
 }
@@ -393,7 +429,7 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
         <Typography.Text type="secondary">总笼日 {totalCageDays}</Typography.Text>
       </div>
       <div className="ant-dashboard-room-area">
-        <ChartBoundary height={220}>
+        <DeferredChart height={220}>
           <AreaChart
             data={chartData}
             xField="day"
@@ -433,7 +469,7 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
             }}
             legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
           />
-        </ChartBoundary>
+        </DeferredChart>
       </div>
     </Card>
   );

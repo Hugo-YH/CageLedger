@@ -1,4 +1,5 @@
 import json
+import re
 
 from server_app.cache import cache_get, cache_key, cache_set
 
@@ -108,9 +109,14 @@ def intake_batch_where(filters, filtered_where, exclude_column=""):
     )
     if status == "unprinted":
         where = " AND ".join([part for part in (where, "status IN ('draft', 'pending_print')") if part])
-    if filters.get("month"):
-        where = " AND ".join([part for part in (where, "intake_date LIKE ?") if part])
-        params = (*params, f"{filters['month']}%")
+    month = str(filters.get("month", "") or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}", month):
+        year, month_number = (int(part) for part in month.split("-", 1))
+        if 1 <= month_number <= 12:
+            next_year = year + 1 if month_number == 12 else year
+            next_month = 1 if month_number == 12 else month_number + 1
+            where = " AND ".join([part for part in (where, "intake_date >= ? AND intake_date < ?") if part])
+            params = (*params, f"{year:04d}-{month_number:02d}-01", f"{next_year:04d}-{next_month:02d}-01")
     where_parts = [where] if where else []
     next_params = list(params)
     for key, values in (filters.get("columnFilters") or {}).items():

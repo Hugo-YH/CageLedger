@@ -1,17 +1,42 @@
-import { DownloadOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
-import { useState } from "react";
-import { Alert, Button, Card, Descriptions, Divider, Flex, Segmented, Skeleton, Space, Tag, Typography } from "antd";
+import {
+  ApiOutlined,
+  BgColorsOutlined,
+  BookOutlined,
+  CodeOutlined,
+  DatabaseOutlined,
+  DownloadOutlined,
+  ReloadOutlined,
+  SafetyCertificateOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
+import { useState, type ReactNode } from "react";
+import { Alert, Button, Card, Flex, Progress, Segmented, Skeleton, Space, Statistic, Tag, Typography } from "antd";
 
-import type { SessionUser } from "../../api/contracts";
 import { useSystemEnvironment, useSystemInfo, useSystemUpdate } from "../../api/administration";
-import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
+import type { SessionUser, SystemEnvironment, SystemPerformance } from "../../api/contracts";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
+import {
+  cacheCapacityPercent,
+  cacheHealth,
+  cacheLookups,
+  databaseHealth,
+  formatCount,
+  formatDuration,
+  formatMilliseconds,
+  formatPercent,
+  requestHealth,
+  runtimeHealth,
+  type RuntimeHealth,
+} from "./systemStatus";
 
 const CERTIFICATE_DOWNLOAD_URL = "/docs/cageledger.crt";
-const CERTIFICATE_FINGERPRINT =
-  "A4:6A:89:6F:68:17:C4:A5:45:55:77:5F:1B:F7:8B:A4:75:D7:82:68:5D:3B:92:60:A4:B7:1F:BE:BE:8C:B2:2E";
+const REFRESH_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
 
 export function SystemView({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const isMobile = useIsMobileLayout();
@@ -21,227 +46,423 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   const environment = useSystemEnvironment(user.role === "admin");
   const [checkEnabled, setCheckEnabled] = useState(false);
   const update = useSystemUpdate(checkEnabled && user.role === "admin");
-  if (info.isPending)
-    return (
-      <section className="workspace-view">
-        <PageSkeleton label="系统信息" variant="detail" />
-      </section>
-    );
-  if (info.isError || !info.data)
-    return (
-      <section className="workspace-view">
-        <PageState title="系统信息加载失败" retry={() => info.refetch()} />
-      </section>
-    );
 
-  const data = info.data;
-  const hero = (
-    <Card className="system-hero-card">
-      <Flex align="center" gap={16} wrap>
-        <img alt="" src="/cageledger-icon.svg" style={{ borderRadius: 12, height: 56, width: 56 }} />
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            {data.title}
-          </Typography.Title>
-          <Tag color="blue" style={{ marginTop: 6 }}>
-            {data.version}
-            {data.build ? `（Build ${data.build}）` : ""}
-          </Tag>
-        </div>
-        <Space style={{ marginLeft: "auto" }} wrap>
-          <Button href="/docs/" type="link">
-            项目文档
-          </Button>
-          <Button href="/docs/releases/" type="link">
-            更新记录
-          </Button>
-          <Button href={data.repositoryUrl} rel="noreferrer" target="_blank" type="link">
-            Gitea 仓库
-          </Button>
-        </Space>
-      </Flex>
-      <Typography.Paragraph className="system-hero-description" type="secondary">
-        {data.description}
-      </Typography.Paragraph>
-    </Card>
-  );
   const content = (
-    <>
-      {hero}
-      <Card
-        className="system-status-card"
-        extra={
-          user.role === "admin" ? (
-            <Button
-              loading={update.isFetching}
-              onClick={() => {
-                setCheckEnabled(true);
-                if (checkEnabled) void update.refetch();
-              }}
-            >
-              检查更新
-            </Button>
-          ) : null
-        }
-        title={<CardTitle>系统状态</CardTitle>}
-      >
-        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
-          <Descriptions.Item label="当前版本">
-            <Typography.Text strong>
-              {data.version}
-              {data.build ? `（Build ${data.build}）` : ""}
-            </Typography.Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="代码版本">
-            <Typography.Text code>{data.revisionShort || "未设置"}</Typography.Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="所属单位">{`${data.organization} · ${data.department}`}</Descriptions.Item>
-          <Descriptions.Item label="开源协议">{data.license}</Descriptions.Item>
-        </Descriptions>
-        {user.role === "admin" ? (
-          <>
-            <Divider dashed style={{ margin: "16px 0" }} />
-            <Flex align="center" justify="space-between" style={{ marginBottom: 12 }}>
-              <Typography.Text strong>运行环境</Typography.Text>
-              <Space size={8}>
-                <Typography.Text type="secondary">容器视角 · 静态参数</Typography.Text>
-                <Button size="small" loading={environment.isFetching} onClick={() => void environment.refetch()}>
-                  刷新运行环境
-                </Button>
-              </Space>
-            </Flex>
-            {environment.isPending ? (
-              <Skeleton active paragraph={{ rows: 2 }} />
-            ) : environment.isError ? (
-              <Alert description={environment.error.message} showIcon title="运行环境信息获取失败" type="error" />
-            ) : environment.data ? (
-              <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
-                <Descriptions.Item label="CPU 型号">{environment.data.cpu.model || "未知"}</Descriptions.Item>
-                <Descriptions.Item label="CPU 架构">{environment.data.cpu.architecture}</Descriptions.Item>
-                <Descriptions.Item label="逻辑核心数">{`${environment.data.cpu.cores} 核`}</Descriptions.Item>
-                <Descriptions.Item label="负载（1/5/15 分钟）">
-                  {formatLoad(environment.data.cpu.load)}
-                </Descriptions.Item>
-                <Descriptions.Item label="内存总量">
-                  {formatBytes(environment.data.memory.totalBytes)}
-                </Descriptions.Item>
-                <Descriptions.Item label="操作系统">{environment.data.system.platform}</Descriptions.Item>
-                <Descriptions.Item label="内核版本">{environment.data.system.release}</Descriptions.Item>
-                <Descriptions.Item label="主机名">{environment.data.system.hostname}</Descriptions.Item>
-                <Descriptions.Item label="运行形态">
-                  {environment.data.system.container === "docker" ? "Docker 容器" : "本机进程"}
-                </Descriptions.Item>
-                <Descriptions.Item label="Python 版本">{environment.data.python.version}</Descriptions.Item>
-                <Descriptions.Item label="Python 实现">{environment.data.python.implementation}</Descriptions.Item>
-                <Descriptions.Item label="编译器">{environment.data.python.compiler}</Descriptions.Item>
-                <Descriptions.Item label="解释器路径">
-                  <Typography.Text code style={{ wordBreak: "break-all" }}>
-                    {environment.data.python.executable}
-                  </Typography.Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="64 位">{environment.data.python.bits64 ? "是" : "否"}</Descriptions.Item>
-                <Descriptions.Item label="数据库状态">
-                  {environment.data.database.ok ? <Tag color="success">正常</Tag> : <Tag color="error">异常</Tag>}
-                </Descriptions.Item>
-                <Descriptions.Item label="数据库文件">
-                  {formatBytes(environment.data.database.sizeBytes)}
-                </Descriptions.Item>
-                <Descriptions.Item label="WAL 模式">{environment.data.database.journalMode || "—"}</Descriptions.Item>
-                <Descriptions.Item label="数据表数量">{`${environment.data.database.tables} 张`}</Descriptions.Item>
-                <Descriptions.Item label="数据库路径">
-                  <Typography.Text code style={{ wordBreak: "break-all" }}>
-                    {environment.data.database.path}
-                  </Typography.Text>
-                </Descriptions.Item>
-              </Descriptions>
-            ) : null}
-          </>
-        ) : null}
-        {checkEnabled ? <UpdateCard update={update} /> : null}
-      </Card>
-      <Card title={<CardTitle>维护信息</CardTitle>}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} layout="vertical" size="small">
-          <Descriptions.Item label="开发维护">{data.developer}</Descriptions.Item>
-          <Descriptions.Item label="联系邮箱">{data.contactEmail}</Descriptions.Item>
-          <Descriptions.Item label="版权">{data.copyright}</Descriptions.Item>
-        </Descriptions>
-      </Card>
-      <Card title={<CardTitle>HTTPS 访问证书</CardTitle>}>
-        <Space orientation="vertical" size={16} style={{ display: "flex" }}>
-          <Alert
-            description="在受控客户端安装此证书后，可通过群晖反向代理的 HTTPS 地址使用剪贴板、摄像头等浏览器安全能力。"
-            icon={<SafetyCertificateOutlined aria-hidden />}
-            title="内网客户端受信任根证书"
-            showIcon
-            type="info"
-          />
-          <Descriptions column={{ xs: 1, sm: 2 }} layout="vertical" size="small">
-            <Descriptions.Item label="适用地址">
-              <Typography.Text code>https://10.100.47.47</Typography.Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="有效期">2026-08-11 至 2036-08-08</Descriptions.Item>
-            <Descriptions.Item label="SHA-256 指纹" span="filled">
-              <Typography.Text code style={{ overflowWrap: "anywhere" }}>
-                {CERTIFICATE_FINGERPRINT}
-              </Typography.Text>
-            </Descriptions.Item>
-          </Descriptions>
-          <Flex gap={8} wrap>
-            <Button
-              download="cageledger.crt"
-              href={CERTIFICATE_DOWNLOAD_URL}
-              icon={<DownloadOutlined aria-hidden />}
-              type="primary"
-            >
-              下载 CageLedger 证书
-            </Button>
-            <Button href="/docs/operations/https-and-certificate">查看各设备安装说明</Button>
-          </Flex>
-          <Typography.Text type="secondary">
-            下载文件只包含公开证书。群晖反向代理使用的私钥应保存在 DSM 证书管理中。
-          </Typography.Text>
-        </Space>
-      </Card>
-      <Card title={<CardTitle>界面外观</CardTitle>}>
-        <Space orientation="vertical" size={8} style={{ display: "flex", maxWidth: 420 }}>
-          <Typography.Text>显示模式</Typography.Text>
-          <Segmented
-            aria-label="显示模式"
-            block
-            onChange={(theme) => dispatch({ type: "set-theme", theme: theme as "system" | "light" | "dark" })}
-            options={[
-              { label: "跟随系统", value: "system" },
-              { label: "浅色", value: "light" },
-              { label: "深色", value: "dark" },
-            ]}
-            value={ui.theme}
-          />
-          <Typography.Text type="secondary">主题仅影响本设备界面，不影响业务数据与其他用户。</Typography.Text>
-        </Space>
-      </Card>
-    </>
+    <div className="system-status-page" data-feature="administration" data-ui="system-status-page">
+      <SystemMasthead
+        environment={environment.data}
+        info={info}
+        isAdmin={user.role === "admin"}
+        onCheckUpdate={() => {
+          if (checkEnabled) void update.refetch();
+          else setCheckEnabled(true);
+        }}
+        updateLoading={update.isFetching}
+      />
+      {checkEnabled ? <UpdateCard update={update} /> : null}
+      {user.role === "admin" ? (
+        <RuntimeDashboard environment={environment} />
+      ) : (
+        <Alert
+          description="当前账号可以查看版本、文档、客户端证书和本机界面设置。请求、缓存与 SQLite 运行指标仅向系统管理员开放。"
+          showIcon
+          title="运行指标由管理员维护"
+          type="info"
+        />
+      )}
+      <div className="system-tools-grid">
+        <ClientToolsCard />
+        <AppearanceCard onThemeChange={(theme) => dispatch({ type: "set-theme", theme })} theme={ui.theme} />
+      </div>
+    </div>
   );
+
   if (isMobile) {
     return (
-      <MobilePage onBack={() => navigate("rooms")} title="关于系统">
+      <MobilePage onBack={() => navigate("rooms")} title="关于系统" titleAsHeading={false}>
         {content}
       </MobilePage>
     );
   }
   return (
     <section className="workspace-view system-workspace" data-feature="administration">
-      <div className="workspace-body system-workspace-body">
-        <div className="system-layout">{content}</div>
+      <div className="workspace-body system-workspace-body">{content}</div>
+    </section>
+  );
+}
+
+function SystemMasthead({
+  environment,
+  info,
+  isAdmin,
+  onCheckUpdate,
+  updateLoading,
+}: {
+  environment?: SystemEnvironment;
+  info: ReturnType<typeof useSystemInfo>;
+  isAdmin: boolean;
+  onCheckUpdate: () => void;
+  updateLoading: boolean;
+}) {
+  const health = environment ? runtimeHealth(environment) : null;
+  return (
+    <Card className="system-masthead" variant="borderless">
+      <div className="system-masthead-main">
+        <div className="system-brand-mark" aria-hidden>
+          <img alt="" src="/cageledger-icon.svg" />
+        </div>
+        <div className="system-masthead-copy">
+          <Space size={8} wrap>
+            <Typography.Text className="system-eyebrow">CageLedger</Typography.Text>
+            {info.data ? (
+              <Tag color="blue">
+                {info.data.version}
+                {info.data.build ? ` · Build ${info.data.build}` : ""}
+              </Tag>
+            ) : null}
+            {isAdmin && health ? <HealthTag health={health} /> : null}
+          </Space>
+          <Typography.Title level={1}>系统状态</Typography.Title>
+          <Typography.Paragraph>
+            {isAdmin
+              ? "查看当前服务进程的请求、缓存与 SQLite 运行状态，并从异常信号直接定位需要处理的部分。"
+              : "查看 CageLedger 版本、使用文档、客户端证书与本机界面设置。"}
+          </Typography.Paragraph>
+        </div>
+        <Flex className="system-masthead-actions" gap={8} wrap>
+          {isAdmin ? (
+            <Button loading={updateLoading} onClick={onCheckUpdate}>
+              检查更新
+            </Button>
+          ) : null}
+          <Button href="/docs/" icon={<BookOutlined aria-hidden />}>
+            项目文档
+          </Button>
+          <Button href="/docs/releases/">更新记录</Button>
+          {info.data?.repositoryUrl ? (
+            <Button href={info.data.repositoryUrl} icon={<CodeOutlined aria-hidden />} rel="noreferrer" target="_blank">
+              Gitea 仓库
+            </Button>
+          ) : null}
+        </Flex>
+      </div>
+      {info.isPending ? (
+        <Skeleton active className="system-info-skeleton" paragraph={{ rows: 1 }} title={false} />
+      ) : null}
+      {info.isError ? (
+        <Alert
+          action={
+            <Button onClick={() => void info.refetch()} size="small">
+              重试
+            </Button>
+          }
+          description={info.error.message}
+          showIcon
+          title="版本信息暂时不可用"
+          type="warning"
+        />
+      ) : null}
+    </Card>
+  );
+}
+
+function RuntimeDashboard({ environment }: { environment: ReturnType<typeof useSystemEnvironment> }) {
+  if (environment.isPending) {
+    return (
+      <Card aria-busy="true" className="system-runtime-loading">
+        <Skeleton active paragraph={{ rows: 8 }} title={{ width: "34%" }} />
+      </Card>
+    );
+  }
+  if (environment.isError || !environment.data) {
+    return (
+      <Alert
+        action={
+          <Button loading={environment.isFetching} onClick={() => void environment.refetch()} size="small">
+            重新读取
+          </Button>
+        }
+        description={environment.error?.message || "未返回运行状态"}
+        showIcon
+        title="运行状态获取失败"
+        type="error"
+      />
+    );
+  }
+
+  const data = environment.data;
+  const performance = data.performance;
+  const overall = runtimeHealth(data);
+  const cache = cacheHealth(performance);
+  const requests = requestHealth(performance);
+  const database = databaseHealth(data);
+
+  return (
+    <section aria-labelledby="system-runtime-title" className="system-runtime-section">
+      <div className="system-section-heading">
+        <div>
+          <Typography.Title id="system-runtime-title" level={2}>
+            当前服务进程
+          </Typography.Title>
+          <Typography.Text type="secondary">自本次启动以来累计；延迟统计最多保留最近 512 个样本</Typography.Text>
+        </div>
+        <Flex align="center" gap={8} wrap>
+          <Typography.Text className="system-refresh-time" type="secondary">
+            更新于 {formatRefreshTime(environment.dataUpdatedAt)}
+          </Typography.Text>
+          <Button
+            icon={<ReloadOutlined aria-hidden />}
+            loading={environment.isFetching}
+            onClick={() => void environment.refetch()}
+          >
+            刷新状态
+          </Button>
+        </Flex>
+      </div>
+
+      <div aria-live="polite" className="system-pulse-strip">
+        <PulseTile health={overall} icon={<ThunderboltOutlined aria-hidden />} label="服务状态" value={overall.label} />
+        <PulseTile health={cache} label="缓存命中率" value={formatPercent(performance.cache.hitRate)} />
+        <PulseTile health={requests} label="HTTP P95" value={formatMilliseconds(performance.requests.p95Ms)} />
+        <PulseTile health={database} label="SQLite P95" value={formatMilliseconds(performance.database.p95Ms)} />
+        <PulseTile
+          health={{ detail: "本次进程", label: "运行时长", tone: "default" }}
+          label="运行时长"
+          value={formatDuration(performance.uptimeSeconds)}
+        />
+      </div>
+
+      <div className="system-diagnostics-grid">
+        <CacheCard performance={performance} />
+        <RequestCard performance={performance} />
+        <DatabaseCard environment={data} />
       </div>
     </section>
   );
 }
 
-function CardTitle({ children }: { children: string }) {
+function PulseTile({
+  health,
+  icon,
+  label,
+  value,
+}: {
+  health: RuntimeHealth;
+  icon?: ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <Typography.Title level={2} className="ant-card-section-title">
+    <div className="system-pulse-tile" data-tone={health.tone}>
+      <div className="system-pulse-label">
+        <span aria-hidden className="system-status-dot" />
+        {icon}
+        <span>{label}</span>
+      </div>
+      <strong>{value}</strong>
+      <span className="system-pulse-detail">{health.detail}</span>
+    </div>
+  );
+}
+
+function CacheCard({ performance }: { performance: SystemPerformance }) {
+  const health = cacheHealth(performance);
+  const capacity = cacheCapacityPercent(performance);
+  return (
+    <DiagnosticCard
+      extra={<HealthTag health={health} />}
+      icon={<ThunderboltOutlined aria-hidden />}
+      subtitle="命中率包含命中、未命中和过期读取"
+      title="数据缓存"
+    >
+      <Statistic title="命中率" value={formatPercent(performance.cache.hitRate)} />
+      <div className="system-capacity-block">
+        <Flex justify="space-between">
+          <Typography.Text type="secondary">缓存容量</Typography.Text>
+          <Typography.Text>{`${performance.cache.entries} / ${performance.cache.capacity}`}</Typography.Text>
+        </Flex>
+        <Progress aria-label="缓存容量占用" percent={capacity} showInfo={false} size="small" />
+      </div>
+      <MetricRows
+        items={[
+          ["缓存读取", formatCount(cacheLookups(performance))],
+          ["命中", formatCount(performance.cache.hits)],
+          ["未命中", formatCount(performance.cache.misses)],
+          ["过期", formatCount(performance.cache.expirations)],
+          ["容量淘汰", formatCount(performance.cache.evictions)],
+        ]}
+      />
+    </DiagnosticCard>
+  );
+}
+
+function RequestCard({ performance }: { performance: SystemPerformance }) {
+  const health = requestHealth(performance);
+  return (
+    <DiagnosticCard
+      extra={<HealthTag health={health} />}
+      icon={<ApiOutlined aria-hidden />}
+      subtitle="包含 API、页面和静态资源请求"
+      title="HTTP 请求"
+    >
+      <Statistic title="P95 响应时间" value={formatMilliseconds(performance.requests.p95Ms)} />
+      <MetricRows
+        items={[
+          ["请求总数", formatCount(performance.requests.total)],
+          ["延迟样本", formatCount(performance.requests.sampleCount)],
+          ["P50", formatMilliseconds(performance.requests.p50Ms)],
+          ["最大耗时", formatMilliseconds(performance.requests.maxMs)],
+          ["慢请求", formatCount(performance.requests.slow)],
+        ]}
+      />
+    </DiagnosticCard>
+  );
+}
+
+function DatabaseCard({ environment }: { environment: SystemEnvironment }) {
+  const health = databaseHealth(environment);
+  const { database, performance } = environment;
+  return (
+    <DiagnosticCard
+      extra={<HealthTag health={health} />}
+      icon={<DatabaseOutlined aria-hidden />}
+      subtitle="SQLite 连接操作与锁状态"
+      title="SQLite"
+    >
+      <Statistic title="P95 操作时间" value={formatMilliseconds(performance.database.p95Ms)} />
+      <MetricRows
+        items={[
+          ["操作总数", formatCount(performance.database.operations)],
+          ["P50", formatMilliseconds(performance.database.p50Ms)],
+          ["最大耗时", formatMilliseconds(performance.database.maxMs)],
+          ["慢操作", formatCount(performance.database.slowOperations)],
+          ["锁错误", formatCount(performance.database.lockErrors)],
+          ["数据库", `${database.journalMode || "未知模式"} · ${formatBytes(database.sizeBytes)}`],
+        ]}
+      />
+    </DiagnosticCard>
+  );
+}
+
+function DiagnosticCard({
+  children,
+  extra,
+  icon,
+  subtitle,
+  title,
+}: {
+  children: ReactNode;
+  extra: ReactNode;
+  icon: ReactNode;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <Card
+      className="system-diagnostic-card"
+      extra={extra}
+      title={<SectionTitle icon={icon} subtitle={subtitle} title={title} />}
+    >
       {children}
-    </Typography.Title>
+    </Card>
+  );
+}
+
+function MetricRows({ items }: { items: Array<[string, string]> }) {
+  return (
+    <dl className="system-metric-rows">
+      {items.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ClientToolsCard() {
+  return (
+    <Card
+      className="system-tool-card"
+      title={
+        <SectionTitle
+          icon={<SafetyCertificateOutlined aria-hidden />}
+          subtitle="启用内网 HTTPS 下的摄像头、剪贴板等安全能力"
+          title="客户端工具"
+        />
+      }
+    >
+      <Typography.Paragraph type="secondary">
+        仅在受控设备上安装 CageLedger 公开根证书。私钥保留在部署端证书管理中，不会包含在下载文件里。
+      </Typography.Paragraph>
+      <Flex gap={8} wrap>
+        <Button
+          download="cageledger.crt"
+          href={CERTIFICATE_DOWNLOAD_URL}
+          icon={<DownloadOutlined aria-hidden />}
+          type="primary"
+        >
+          下载客户端证书
+        </Button>
+        <Button href="/docs/operations/https-and-certificate">查看安装说明</Button>
+      </Flex>
+    </Card>
+  );
+}
+
+function AppearanceCard({
+  onThemeChange,
+  theme,
+}: {
+  onThemeChange: (theme: "system" | "light" | "dark") => void;
+  theme: "system" | "light" | "dark";
+}) {
+  return (
+    <Card
+      className="system-tool-card"
+      title={
+        <SectionTitle
+          icon={<BgColorsOutlined aria-hidden />}
+          subtitle="只影响当前设备，不改变业务数据"
+          title="本机外观"
+        />
+      }
+    >
+      <Segmented
+        aria-label="显示模式"
+        block
+        onChange={(value) => onThemeChange(value as "system" | "light" | "dark")}
+        options={[
+          { label: "跟随系统", value: "system" },
+          { label: "浅色", value: "light" },
+          { label: "深色", value: "dark" },
+        ]}
+        value={theme}
+      />
+    </Card>
+  );
+}
+
+function SectionTitle({ icon, subtitle, title }: { icon: ReactNode; subtitle: string; title: string }) {
+  return (
+    <div className="system-card-title">
+      <span aria-hidden className="system-card-icon">
+        {icon}
+      </span>
+      <span>
+        <Typography.Title level={2}>{title}</Typography.Title>
+        <Typography.Text type="secondary">{subtitle}</Typography.Text>
+      </span>
+    </div>
+  );
+}
+
+function HealthTag({ health }: { health: RuntimeHealth }) {
+  return (
+    <Tag className="system-health-tag" data-tone={health.tone} variant="filled">
+      {health.label}
+    </Tag>
   );
 }
 
@@ -255,35 +476,38 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
         : "当前已是最新版本";
   return (
     <Alert
-      className="system-update-alert"
+      action={
+        update.data?.latestUrl ? (
+          <Button href={update.data.latestUrl} rel="noreferrer" size="small" target="_blank">
+            查看发布页
+          </Button>
+        ) : undefined
+      }
       description={
-        <Space orientation="vertical" size={4}>
+        <Space orientation="vertical" size={2}>
           <Typography.Text>
             {update.data?.latestVersion ? `最新发布版 ${update.data.latestVersion}` : "尚未获取远端版本"}
           </Typography.Text>
-          {update.data?.latestMessage ? <Typography.Text>{update.data.latestMessage}</Typography.Text> : null}
-          {update.isError ? <Typography.Text type="danger">{update.error.message}</Typography.Text> : null}
-          {update.data?.latestUrl ? (
-            <a href={update.data.latestUrl} rel="noreferrer" target="_blank">
-              查看发布页
-            </a>
+          {update.data?.latestMessage ? (
+            <Typography.Text type="secondary">{update.data.latestMessage}</Typography.Text>
           ) : null}
+          {update.isError ? <Typography.Text type="danger">{update.error.message}</Typography.Text> : null}
         </Space>
       }
-      title={status}
       showIcon
+      title={status}
       type={update.isError ? "error" : update.data?.updateAvailable ? "warning" : "info"}
     />
   );
 }
 
 function formatBytes(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "未知";
+  if (value === null || !Number.isFinite(value)) return "大小未知";
   if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GiB`;
   return `${(value / 1024 ** 2).toFixed(0)} MiB`;
 }
 
-function formatLoad(load: [number | null, number | null, number | null]): string {
-  if (load.every((value) => value === null)) return "不可用";
-  return load.map((value) => (value === null ? "—" : value.toFixed(2))).join(" / ");
+function formatRefreshTime(timestamp: number): string {
+  if (!timestamp) return "尚未更新";
+  return REFRESH_TIME_FORMATTER.format(timestamp);
 }

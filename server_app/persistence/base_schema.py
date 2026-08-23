@@ -251,6 +251,20 @@ def initialize_base_schema(
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS billing_candidate_snapshot_iacucs (
+            source_type TEXT NOT NULL,
+            month TEXT NOT NULL,
+            pi TEXT NOT NULL,
+            iacuc TEXT NOT NULL,
+            PRIMARY KEY (source_type, month, pi, iacuc),
+            FOREIGN KEY(source_type, month, pi)
+                REFERENCES billing_candidate_snapshots(source_type, month, pi)
+                ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS billing_workflows (
             id TEXT PRIMARY KEY,
             business_key TEXT NOT NULL UNIQUE,

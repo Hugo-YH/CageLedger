@@ -3,9 +3,10 @@ import time
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
 
-from server_app.config import MAX_BODY_BYTES, frontend_root
+from server_app.config import MAX_BODY_BYTES, SLOW_REQUEST_THRESHOLD_MS, frontend_root
 from server_app.http import add_default_headers, send_download
 from server_app.http import send_json as send_json_response
+from server_app.performance import record_request
 
 
 class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
@@ -14,7 +15,25 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
 
     def handle_one_request(self):
         self._request_started_at = time.perf_counter()
-        super().handle_one_request()
+        self._response_status = 0
+        try:
+            super().handle_one_request()
+        finally:
+            if getattr(self, "requestline", ""):
+                elapsed_ms = (time.perf_counter() - self._request_started_at) * 1000
+                slow = elapsed_ms >= SLOW_REQUEST_THRESHOLD_MS
+                record_request(elapsed_ms, slow=slow)
+                if slow:
+                    method = getattr(self, "command", "")
+                    path = getattr(self, "path", "").split("?", 1)[0]
+                    print(
+                        f"[slow-request] {method} {path} {elapsed_ms:.1f}ms status={self._response_status or '-'}",
+                        flush=True,
+                    )
+
+    def send_response(self, code, message=None):
+        self._response_status = int(code)
+        super().send_response(code, message)
 
     def end_headers(self):
         add_default_headers(self)

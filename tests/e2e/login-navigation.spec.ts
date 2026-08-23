@@ -83,14 +83,15 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openSettingsView(page, "操作日志");
   await expect(page.getByRole("heading", { name: "操作记录", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "关于系统");
-  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
-  const certificateDownload = page.getByRole("link", { name: "下载 CageLedger 证书", exact: true });
+  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "当前服务进程", exact: true, level: 2 })).toBeVisible();
+  const certificateDownload = page.getByRole("link", { name: "下载客户端证书", exact: true });
   await expect(certificateDownload).toHaveAttribute("href", "/docs/cageledger.crt");
   await expect(certificateDownload).toHaveAttribute("download", "cageledger.crt");
   const certificateResponse = await page.request.get("/docs/cageledger.crt");
   expect(certificateResponse.ok()).toBe(true);
   expect(await certificateResponse.text()).toContain("-----BEGIN CERTIFICATE-----");
-  await expect(page.getByRole("link", { name: "查看各设备安装说明", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "查看安装说明", exact: true })).toHaveAttribute(
     "href",
     "/docs/operations/https-and-certificate",
   );

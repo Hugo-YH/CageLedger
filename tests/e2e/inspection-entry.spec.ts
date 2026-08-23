@@ -1,5 +1,30 @@
 import { expect, test } from "./fixtures";
 
+test("desktop inspection help buttons remain circular at supported widths", async ({ page }) => {
+  await page.setViewportSize({ width: 1362, height: 652 });
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("menuitem", { name: /动物管理/ }).click();
+  await page.getByRole("menuitem", { name: /动物巡检/ }).click();
+
+  const helpButton = page.getByRole("button", { name: "基础评估说明" });
+  await expect(helpButton).toBeVisible();
+
+  for (const viewport of [
+    { width: 1362, height: 652 },
+    { width: 1180, height: 800 },
+    { width: 761, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const box = await helpButton.boundingBox();
+    expect(box?.width).toBe(24);
+    expect(box?.height).toBe(24);
+    await expect(helpButton).toHaveCSS("border-radius", "50%");
+  }
+});
+
 test("mobile inspection module selector keeps long labels within its options", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");

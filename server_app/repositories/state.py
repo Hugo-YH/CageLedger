@@ -77,12 +77,12 @@ def read_slot_room_map(conn, slot_ids):
     return {row["slot_id"]: row["room_id"] for row in rows}
 
 
-def assemble_state(conn):
+def assemble_state(conn, *, include_audit_logs=True):
     if not any(
         table_has_rows(conn, table) for table in ("rooms", "racks", "cage_slots", "occupancies", "intake_batches")
     ):
         return None
-    return {
+    state = {
         "baseRate": read_setting(conn, "baseRate", 4.5),
         "billingMonth": read_setting(conn, "billingMonth", ""),
         "billingIacuc": read_setting(conn, "billingIacuc", ""),
@@ -94,15 +94,19 @@ def assemble_state(conn):
         "billingRules": read_payloads(conn, "billing_rules", "rowid"),
         "adjustments": read_payloads(conn, "billing_adjustments", "rowid"),
         "intakeBatches": read_payloads(conn, "intake_batches", "updated_at DESC, rowid DESC"),
-        "auditLogs": read_payloads(conn, "audit_logs", "at DESC, rowid DESC"),
     }
+    if include_audit_logs:
+        state["auditLogs"] = read_payloads(conn, "audit_logs", "at DESC, rowid DESC")
+    return state
 
 
 def read_cached_state(conn, empty_state_factory):
     cached = cache_get("assembled_state")
     if cached is not None:
         return cached
-    return cache_set("assembled_state", assemble_state(conn) or empty_state_factory())
+    # Bootstrap and entity reads never consume audit history. Avoid parsing an
+    # unbounded audit table whenever their shared cache is rebuilt.
+    return cache_set("assembled_state", assemble_state(conn, include_audit_logs=False) or empty_state_factory())
 
 
 def read_applications_by_iacuc(conn, normalize_iacuc_number):

@@ -110,7 +110,9 @@
   --warning-line: #ffe58f;
   --success-soft: #f6ffed;
   --success-line: #b7eb8f;
+  --success-text: #237804;
   --warning-soft: #fffbe6;
+  --warning-text: #ad6800;
   --todo-soft: #e6f4ff;
   --todo-line: #91caff;
   --todo-text: #0958d9;
@@ -217,7 +219,9 @@
   --danger-soft: #442927;
   --danger-line: #814a46;
   --success-soft: #16382a;
+  --success-text: #b7eb8f;
   --warning-soft: #423719;
+  --warning-text: #ffe58f;
   --shadow: 0 20px 54px rgb(0 0 0 / 28%);
   --shadow-soft: 0 10px 28px rgb(0 0 0 / 20%);
   --shadow-lift: 0 18px 38px rgb(0 0 0 / 28%);

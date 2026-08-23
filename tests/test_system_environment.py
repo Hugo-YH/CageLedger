@@ -47,7 +47,7 @@ class SystemEnvironmentParsingTests(unittest.TestCase):
         payload = system_environment()
         self.assertEqual(
             set(payload),
-            {"cpu", "memory", "system", "python", "database"},
+            {"cpu", "memory", "system", "python", "database", "performance"},
         )
         self.assertEqual(set(payload["cpu"]), {"model", "architecture", "cores", "load"})
         self.assertGreaterEqual(payload["cpu"]["cores"], 1)
@@ -65,6 +65,8 @@ class SystemEnvironmentParsingTests(unittest.TestCase):
         self.assertIsInstance(payload["python"]["bits64"], bool)
         self.assertEqual(set(payload["database"]), {"ok", "journalMode", "sizeBytes", "tables", "path"})
         self.assertIsInstance(payload["database"]["ok"], bool)
+        self.assertEqual(set(payload["performance"]), {"uptimeSeconds", "requests", "cache", "database", "thresholds"})
+        self.assertEqual(set(payload["performance"]["thresholds"]), {"slowRequestMs", "slowDatabaseMs"})
 
 
 class SystemEnvironmentApiTests(unittest.TestCase):
@@ -118,7 +120,7 @@ class SystemEnvironmentApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(
             set(payload),
-            {"cpu", "memory", "system", "python", "database"},
+            {"cpu", "memory", "system", "python", "database", "performance"},
         )
         self.assertEqual(set(payload["cpu"]), {"model", "architecture", "cores", "load"})
         self.assertEqual(len(payload["cpu"]["load"]), 3)
@@ -136,6 +138,8 @@ class SystemEnvironmentApiTests(unittest.TestCase):
         self.assertTrue(payload["database"]["journalMode"])
         self.assertGreaterEqual(payload["database"]["tables"], 0)
         self.assertIsNotNone(payload["database"]["sizeBytes"])
+        self.assertGreaterEqual(payload["performance"]["requests"]["total"], 1)
+        self.assertGreaterEqual(payload["performance"]["database"]["operations"], 1)
 
     def test_room_admin_is_rejected(self):
         request_json(

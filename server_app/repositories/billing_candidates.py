@@ -331,12 +331,15 @@ def list_billing_candidate_iacuc_filter_options(conn, source_type, filters):
     where, params = billing_candidate_snapshot_where(source_type=source_type, filters=filters, exclude_column="iacuc")
     rows = conn.execute(
         f"""
-        SELECT json_each.value AS value, COUNT(*) AS count
+        SELECT candidate_iacucs.iacuc AS value, COUNT(*) AS count
         FROM billing_candidate_snapshots
-        JOIN json_each(billing_candidate_snapshots.iacucs_json)
+        JOIN billing_candidate_snapshot_iacucs AS candidate_iacucs
+          ON candidate_iacucs.source_type = billing_candidate_snapshots.source_type
+         AND candidate_iacucs.month = billing_candidate_snapshots.month
+         AND candidate_iacucs.pi = billing_candidate_snapshots.pi
         WHERE {where}
-        GROUP BY json_each.value
-        ORDER BY json_each.value COLLATE NOCASE
+        GROUP BY candidate_iacucs.iacuc
+        ORDER BY candidate_iacucs.iacuc COLLATE NOCASE
         LIMIT 500
         """,
         params,
@@ -406,9 +409,24 @@ def upsert_billing_candidate_snapshot(conn, snapshot):
             snapshot.get("sourceFingerprint", ""),
         ),
     )
+    conn.execute(
+        "DELETE FROM billing_candidate_snapshot_iacucs WHERE source_type = ? AND month = ? AND pi = ?",
+        (snapshot["sourceType"], snapshot["month"], snapshot["pi"]),
+    )
+    conn.executemany(
+        """
+        INSERT INTO billing_candidate_snapshot_iacucs (source_type, month, pi, iacuc)
+        VALUES (?, ?, ?, ?)
+        """,
+        [(snapshot["sourceType"], snapshot["month"], snapshot["pi"], iacuc) for iacuc in iacucs],
+    )
 
 
 def delete_billing_candidate_snapshot(conn, month, pi, source_type):
+    conn.execute(
+        "DELETE FROM billing_candidate_snapshot_iacucs WHERE source_type = ? AND month = ? AND pi = ?",
+        (source_type, month, pi),
+    )
     conn.execute(
         "DELETE FROM billing_candidate_snapshots WHERE month = ? AND pi = ? AND source_type = ?",
         (month, pi, source_type),
@@ -532,9 +550,13 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
         if column == "iacuc":
             placeholders = ", ".join("?" for _ in cleaned)
             where_parts.append(
-                f"EXISTS (SELECT 1 FROM json_each(billing_candidate_snapshots.iacucs_json) WHERE json_each.value IN ({placeholders}))"
+                "(billing_candidate_snapshots.source_type, billing_candidate_snapshots.month, "
+                "billing_candidate_snapshots.pi) IN "
+                "(SELECT candidate_iacucs.source_type, candidate_iacucs.month, candidate_iacucs.pi "
+                "FROM billing_candidate_snapshot_iacucs candidate_iacucs "
+                f"WHERE candidate_iacucs.source_type = ? AND candidate_iacucs.iacuc IN ({placeholders}))"
             )
-            params.extend(cleaned)
+            params.extend([source_type, *cleaned])
             continue
         if column == "workflow":
             placeholders = ", ".join("?" for _ in cleaned)

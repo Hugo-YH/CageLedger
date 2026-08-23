@@ -56,7 +56,13 @@ def create_schema(conn: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL, source_fingerprint TEXT NOT NULL,
             PRIMARY KEY (source_type, month, pi)
         );
+        CREATE TABLE billing_candidate_snapshot_iacucs (
+            source_type TEXT NOT NULL, month TEXT NOT NULL, pi TEXT NOT NULL, iacuc TEXT NOT NULL,
+            PRIMARY KEY (source_type, month, pi, iacuc)
+        );
         CREATE INDEX idx_quantity_sheets_month_updated ON quantity_sheets(month DESC, updated_at DESC);
+        CREATE INDEX idx_quantity_sheets_month_iacuc_updated
+            ON quantity_sheets(month DESC, iacuc, updated_at DESC);
         CREATE INDEX idx_quantity_sheets_iacuc_month ON quantity_sheets(iacuc, month DESC);
         CREATE INDEX idx_quantity_sheets_pi_month ON quantity_sheets(pi, month DESC);
         CREATE INDEX idx_quantity_sheets_room_month ON quantity_sheets(room_name, month DESC);
@@ -70,6 +76,8 @@ def create_schema(conn: sqlite3.Connection) -> None:
             ON billing_candidate_snapshots(source_type, month DESC, pi COLLATE NOCASE);
         CREATE INDEX idx_billing_candidate_snapshots_source_amount
             ON billing_candidate_snapshots(source_type, total_amount DESC, month DESC, pi COLLATE NOCASE);
+        CREATE INDEX idx_billing_candidate_snapshot_iacucs_lookup
+            ON billing_candidate_snapshot_iacucs(source_type, iacuc, month DESC, pi COLLATE NOCASE);
         """
     )
 
@@ -111,6 +119,22 @@ def populate(conn: sqlite3.Connection, slots: int, records: int) -> None:
                 f"candidate-{index}",
             )
             for index in range(candidate_count)
+        ),
+    )
+    conn.executemany(
+        """
+        INSERT INTO billing_candidate_snapshot_iacucs (source_type, month, pi, iacuc)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            (
+                "quantity_sheet",
+                f"2026-{index % 12 + 1:02d}",
+                f"负责人 {index:05d}",
+                f"IACUC-2026-{iacuc_index:04d}",
+            )
+            for index in range(candidate_count)
+            for iacuc_index in (index % 4000, (index + 1) % 4000)
         ),
     )
     quantity_count = records // 2
@@ -175,6 +199,10 @@ QUERIES = {
         "SELECT id FROM quantity_sheets ORDER BY month DESC, updated_at DESC LIMIT 20 OFFSET 10000",
         (),
     ),
+    "quantity_month_default_order": (
+        "SELECT id FROM quantity_sheets WHERE month = ? ORDER BY month DESC, iacuc, updated_at DESC LIMIT 20",
+        ("2026-07",),
+    ),
     "quantity_filter_options": ("SELECT pi, COUNT(*) FROM quantity_sheets GROUP BY pi ORDER BY pi LIMIT 500", ()),
     "dashboard_rooms_month": (
         "SELECT month, room_name, payload FROM quantity_sheets WHERE month = ? ORDER BY room_name",
@@ -188,6 +216,10 @@ QUERIES = {
     "intake_owner": (
         "SELECT id FROM intake_batches WHERE owner = ? ORDER BY intake_date DESC LIMIT 20",
         ("实验员 0042",),
+    ),
+    "intake_month_range": (
+        "SELECT id FROM intake_batches WHERE intake_date >= ? AND intake_date < ? ORDER BY intake_date DESC LIMIT 20",
+        ("2026-07-01", "2026-08-01"),
     ),
     "settlement_candidates_default": (
         """
@@ -214,14 +246,15 @@ QUERIES = {
         SELECT month, pi, iacucs_json, total_amount
         FROM billing_candidate_snapshots
         WHERE source_type = ?
-          AND EXISTS (
-            SELECT 1 FROM json_each(billing_candidate_snapshots.iacucs_json)
-            WHERE json_each.value = ?
+          AND (source_type, month, pi) IN (
+            SELECT source_type, month, pi
+            FROM billing_candidate_snapshot_iacucs
+            WHERE source_type = ? AND iacuc = ?
           )
         ORDER BY month DESC, pi COLLATE NOCASE
         LIMIT 20
         """,
-        ("quantity_sheet", "IACUC-2026-0042"),
+        ("quantity_sheet", "quantity_sheet", "IACUC-2026-0042"),
     ),
 }
 

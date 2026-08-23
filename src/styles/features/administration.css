@@ -291,8 +291,7 @@
   --modal-width: 760px;
 }
 
-.workflow-detail-summary,
-.system-status-grid {
+.workflow-detail-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
@@ -456,34 +455,8 @@
   color: var(--muted);
 }
 
-.system-definition-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.system-definition-list div {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-}
-
-.system-definition-list dt {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.system-definition-list dd {
-  margin: 4px 0 0;
-  overflow-wrap: anywhere;
-  font-weight: 600;
-}
-
 @media (width <= 1180px) {
-  .settings-split-layout,
-  .system-layout {
+  .settings-split-layout {
     grid-template-columns: 1fr;
   }
 
@@ -492,8 +465,7 @@
     position: static;
   }
 
-  .workflow-detail-summary,
-  .system-status-grid {
+  .workflow-detail-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -501,9 +473,7 @@
 @media (width <= 760px) {
   .workflow-filter-bar .command-bar-filters,
   .user-fields-react,
-  .workflow-detail-summary,
-  .system-status-grid,
-  .system-definition-list {
+  .workflow-detail-summary {
     grid-template-columns: 1fr;
   }
 
@@ -561,8 +531,484 @@
   gap: 12px;
 }
 
-@media (width <= 760px) {
-  .system-layout {
+/* About / system status owns its complete layout in this feature stylesheet. */
+[data-ui="system-status-page"] {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 1440px;
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.system-workspace,
+.system-workspace-body {
+  min-width: 0;
+}
+
+.system-masthead {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--primary);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-ui="system-status-page"] .system-masthead .ant-card-body {
+  padding: 24px;
+}
+
+.system-masthead-main {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.system-brand-mark {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--primary-soft);
+}
+
+.system-brand-mark img {
+  width: 40px;
+  height: 40px;
+}
+
+.system-masthead-copy {
+  min-width: 0;
+}
+
+.system-eyebrow {
+  color: var(--primary-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[data-ui="system-status-page"] .system-masthead-copy .ant-typography.ant-typography-h1 {
+  margin: 8px 0 4px;
+  color: var(--text-strong);
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+[data-ui="system-status-page"] .system-masthead-copy .ant-typography.ant-typography-h1 + .ant-typography {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.system-masthead-actions {
+  max-width: 420px;
+  justify-content: flex-end;
+}
+
+.system-info-skeleton,
+[data-ui="system-status-page"] .system-masthead > .ant-card-body > .ant-alert {
+  margin-top: 16px;
+}
+
+.system-runtime-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.system-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+[data-ui="system-status-page"] .system-section-heading .ant-typography.ant-typography-h2 {
+  margin: 0 0 2px;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.system-refresh-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.system-pulse-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.system-pulse-tile {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 16px;
+  border-inline-start: 1px solid var(--line);
+}
+
+.system-pulse-tile:first-child {
+  border-inline-start: 0;
+}
+
+.system-pulse-tile::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--line-strong);
+  content: "";
+}
+
+.system-pulse-tile[data-tone="success"]::before,
+.system-pulse-tile[data-tone="success"] .system-status-dot {
+  background: var(--green);
+}
+
+.system-pulse-tile[data-tone="warning"]::before,
+.system-pulse-tile[data-tone="warning"] .system-status-dot {
+  background: var(--amber);
+}
+
+.system-pulse-tile[data-tone="error"]::before,
+.system-pulse-tile[data-tone="error"] .system-status-dot {
+  background: var(--danger);
+}
+
+.system-pulse-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.system-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.system-pulse-tile > strong {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.system-pulse-detail {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+[data-ui="system-status-page"] .ant-typography-secondary,
+[data-ui="system-status-page"] .ant-statistic-title {
+  color: var(--muted);
+}
+
+[data-ui="system-status-page"] .system-health-tag {
+  color: var(--text);
+  font-weight: 600;
+}
+
+[data-ui="system-status-page"] .system-health-tag[data-tone="success"] {
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+[data-ui="system-status-page"] .system-health-tag[data-tone="warning"] {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+[data-ui="system-status-page"] .system-health-tag[data-tone="error"] {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.system-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.system-diagnostic-card,
+.system-tool-card {
+  min-width: 0;
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-card-head,
+[data-ui="system-status-page"] .system-tool-card .ant-card-head {
+  min-height: 64px;
+  padding-inline: 16px;
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-card-head-wrapper,
+[data-ui="system-status-page"] .system-tool-card .ant-card-head-wrapper {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-card-head-title,
+[data-ui="system-status-page"] .system-tool-card .ant-card-head-title {
+  min-width: 0;
+  padding-block: 12px;
+  overflow: visible;
+  white-space: normal;
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-card-extra {
+  padding-block: 14px;
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-card-body,
+[data-ui="system-status-page"] .system-tool-card .ant-card-body {
+  padding: 16px;
+}
+
+.system-card-title {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.system-card-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  font-size: 16px;
+}
+
+[data-ui="system-status-page"] .system-card-title .ant-typography.ant-typography-h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+[data-ui="system-status-page"] .system-card-title .ant-typography-secondary {
+  display: block;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-statistic {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-ui="system-status-page"] .system-diagnostic-card .ant-statistic-content {
+  color: var(--text-strong);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-capacity-block {
+  display: grid;
+  gap: 4px;
+  padding-block: 12px 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-metric-rows {
+  display: grid;
+  gap: 0;
+  margin: 8px 0 0;
+}
+
+.system-metric-rows > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding-block: 7px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.system-metric-rows > div:last-child {
+  border-bottom: 0;
+}
+
+.system-metric-rows dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.system-metric-rows dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: end;
+}
+
+.system-tools-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+  gap: 12px;
+}
+
+[data-ui="system-status-page"] .system-tool-card .ant-typography {
+  overflow-wrap: anywhere;
+}
+
+.system-runtime-loading {
+  min-height: 360px;
+}
+
+@media (width <= 1180px) {
+  .system-masthead-main {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .system-masthead-actions {
+    grid-column: 1 / -1;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .system-pulse-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .system-pulse-tile:nth-child(4) {
+    border-inline-start: 0;
+  }
+
+  .system-pulse-tile:nth-child(n + 4) {
+    border-top: 1px solid var(--line);
+  }
+
+  .system-diagnostics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-diagnostic-card:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .system-tools-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 760px) {
+  [data-ui="system-status-page"] {
+    gap: 12px;
+  }
+
+  [data-ui="system-status-page"] .system-masthead .ant-card-body {
+    padding: 16px;
+  }
+
+  .system-masthead-main {
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+  }
+
+  .system-brand-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+  }
+
+  .system-brand-mark img {
+    width: 32px;
+    height: 32px;
+  }
+
+  [data-ui="system-status-page"] .system-masthead-copy .ant-typography.ant-typography-h1 {
+    margin-top: 6px;
+    font-size: 24px;
+  }
+
+  .system-masthead-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .system-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-ui="system-status-page"] .system-section-heading > .ant-flex {
+    justify-content: space-between;
+  }
+
+  .system-pulse-strip,
+  .system-diagnostics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-pulse-tile:nth-child(3),
+  .system-pulse-tile:nth-child(5) {
+    border-inline-start: 0;
+  }
+
+  .system-pulse-tile:nth-child(4) {
+    border-inline-start: 1px solid var(--line);
+  }
+
+  .system-pulse-tile:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+
+  .system-diagnostic-card,
+  .system-diagnostic-card:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (width <= 520px) {
+  .system-masthead-actions,
+  .system-pulse-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .system-pulse-tile {
+    border-top: 1px solid var(--line);
+    border-inline-start: 0;
+  }
+
+  .system-pulse-tile:first-child {
+    border-top: 0;
+  }
+
+  [data-ui="system-status-page"] .system-section-heading > .ant-flex {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .system-refresh-time {
+    white-space: normal;
   }
 }

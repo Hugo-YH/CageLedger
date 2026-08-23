@@ -90,6 +90,7 @@ def migrate_schema(conn):
     backfills.backfill_quantity_sheet_staff(conn)
     backfills.ensure_users_phone_column(conn)
     backfills.ensure_users_billing_lock_column(conn)
+    backfills.backfill_billing_candidate_snapshot_iacucs(conn)
 
 
 def backfill_occupancy_structured_columns(conn):

@@ -1416,25 +1416,6 @@
   background: var(--app-surface-subtle);
 }
 
-/* System settings uses Ant's list, form and data-display hierarchy. */
-.ant-workspace .system-layout {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
-.ant-workspace .system-status-card .ant-card-body {
-  padding-block: 20px;
-}
-
-.ant-workspace .system-status-card .ant-descriptions-item-content,
-.ant-workspace .system-status-card .ant-descriptions-item-label {
-  overflow-wrap: anywhere;
-}
-
-.ant-workspace .system-update-alert {
-  margin-top: 20px;
-}
-
 .ant-workspace .settings-log-card .ant-card-body {
   padding-top: 8px;
 }
@@ -1836,10 +1817,6 @@
 
   .ant-dashboard-status-legend {
     grid-template-columns: 1fr;
-  }
-
-  .ant-workspace .system-status-card .ant-card-body {
-    padding-block: 16px;
   }
 
   .ant-workspace .settings-data-table-card .ant-card-extra {

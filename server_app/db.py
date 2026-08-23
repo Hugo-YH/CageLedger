@@ -1,12 +1,45 @@
 import sqlite3
 import threading
+import time
 
-from .config import DB_PATH
+from .config import DB_PATH, SLOW_DATABASE_THRESHOLD_MS
+from .performance import record_database_operation
 from .storage_layout import ensure_storage_layout
 
 DB_INIT_LOCK = threading.Lock()
 DB_READY = False
 SCHEMA_INITIALIZER = None
+
+
+class ObservedConnection(sqlite3.Connection):
+    def execute(self, *args, **kwargs):
+        return self._observe(super().execute, *args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        return self._observe(super().executemany, *args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        return self._observe(super().executescript, *args, **kwargs)
+
+    def commit(self):
+        return self._observe(super().commit)
+
+    @staticmethod
+    def _observe(operation, *args, **kwargs):
+        started_at = time.perf_counter()
+        locked = False
+        try:
+            return operation(*args, **kwargs)
+        except sqlite3.OperationalError as exc:
+            locked = "locked" in str(exc).lower() or "busy" in str(exc).lower()
+            raise
+        finally:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000
+            record_database_operation(
+                elapsed_ms,
+                slow=elapsed_ms >= SLOW_DATABASE_THRESHOLD_MS,
+                locked=locked,
+            )
 
 
 def configure_database(schema_initializer):
@@ -16,7 +49,7 @@ def configure_database(schema_initializer):
 
 def connect_db():
     ensure_database_ready()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, factory=ObservedConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
@@ -38,7 +71,7 @@ def ensure_database_ready():
             return
         ensure_storage_layout()
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, factory=ObservedConnection)
         try:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")

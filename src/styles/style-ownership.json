@@ -119,6 +119,13 @@
       "allowedPrefixes": ["[data-ui='mobile-page']"],
       "breakpoints": ["760px", "landscape"],
       "status": "complete"
+    },
+    "system-status-page": {
+      "root": "[data-ui='system-status-page']",
+      "owner": "src/styles/features/administration.css",
+      "allowedPrefixes": ["[data-ui='system-status-page']", ".system-"],
+      "breakpoints": ["desktop", "1180px", "760px", "landscape"],
+      "status": "complete"
     }
   },
   "antGlobalOwner": "src/styles/features/antd-system.css"

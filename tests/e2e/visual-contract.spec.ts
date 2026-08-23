@@ -85,7 +85,7 @@ test("primary actions and selected navigation use the official Ant Design blue",
   await expect(page.getByRole("main")).toContainText(/动态笼位图|尚未创建饲养间/);
 });
 
-test("certificate download card remains usable across supported viewports", async ({ page }, testInfo) => {
+test("system status remains usable across supported viewports", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
@@ -93,22 +93,27 @@ test("certificate download card remains usable across supported viewports", asyn
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await openSettingsView(page, "关于系统");
 
-  const download = page.getByRole("link", { name: "下载 CageLedger 证书", exact: true });
+  const download = page.getByRole("link", { name: "下载客户端证书", exact: true });
+  const pulse = page.locator(".system-pulse-strip");
   for (const viewport of [
-    { name: "1280", width: 1280, height: 900 },
-    { name: "1180", width: 1180, height: 820 },
-    { name: "760", width: 760, height: 900 },
-    { name: "landscape", width: 844, height: 390 },
+    { columns: 5, name: "1280", width: 1280, height: 900 },
+    { columns: 3, name: "1180", width: 1180, height: 820 },
+    { columns: 2, name: "760", width: 760, height: 900 },
+    { columns: 3, name: "landscape", width: 844, height: 390 },
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(download).toBeVisible();
+    await expect(pulse).toBeVisible();
+    expect(await pulse.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(
+      viewport.columns,
+    );
     expect(
       await page.evaluate(() => ({
         clientWidth: document.documentElement.clientWidth,
         scrollWidth: document.documentElement.scrollWidth,
       })),
     ).toMatchObject({ clientWidth: viewport.width, scrollWidth: viewport.width });
-    await attachViewport(page, testInfo, `certificate-${viewport.name}`);
+    await attachViewport(page, testInfo, `system-status-${viewport.name}`);
   }
 });
 

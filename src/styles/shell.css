@@ -987,8 +987,7 @@ h3 {
 }
 
 .content-grid,
-.billing-layout,
-.system-layout {
+.billing-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 390px;
   gap: 16px;
@@ -1010,18 +1009,7 @@ h3 {
   align-items: start;
 }
 
-.system-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
-  align-items: start;
-}
-
-.system-side {
-  display: grid;
-  gap: 16px;
-}
-
-.billing-workspace,
-.system-workspace {
+.billing-workspace {
   gap: 16px;
 }
 

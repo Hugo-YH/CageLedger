@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from server_app.cache import cache_performance_snapshot
 from server_app.config import (
     CAGELEDGER_APP_BUILD,
     CAGELEDGER_APP_VERSION,
@@ -27,6 +28,8 @@ from server_app.config import (
     CAGELEDGER_UPDATE_CHECK_ENABLED,
     DB_PATH,
     ROOT,
+    SLOW_DATABASE_THRESHOLD_MS,
+    SLOW_REQUEST_THRESHOLD_MS,
 )
 from server_app.shared import now_iso
 
@@ -128,6 +131,13 @@ def system_environment():
             "bits64": sys.maxsize > 2**32,
         },
         "database": database_status(),
+        "performance": {
+            **cache_performance_snapshot(),
+            "thresholds": {
+                "slowRequestMs": SLOW_REQUEST_THRESHOLD_MS,
+                "slowDatabaseMs": SLOW_DATABASE_THRESHOLD_MS,
+            },
+        },
     }
 
 
