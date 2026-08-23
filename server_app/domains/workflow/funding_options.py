@@ -32,7 +32,7 @@ def current_funding_book_options(conn, workflow_id):
             options[value] = {"value": value, "label": label, "source": source, "iacucs": [iacuc] if iacuc else []}
     pi_options = _pi_funding_book_options(all_applications, workflow)
     if not pi_options:
-        pi_options = list(options.values())
+        pi_options = options
     return {
         "items": list(options.values()),
         "iacucs": sorted(iacucs),

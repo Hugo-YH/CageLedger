@@ -87,3 +87,20 @@ class WorkflowFundingOptionsTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_falls_back_to_current_iacuc_options_when_pi_has_no_funding_book(self):
+        self._insert_application("Z2026001", "更新后的课题", "新的项目来源", "NEW-100", "其他负责人")
+
+        result = current_funding_book_options(self.conn, "wf-1")
+
+        expected = [
+            {
+                "value": "NEW-100",
+                "label": "更新后的课题（经费本编号：NEW-100）",
+                "source": "fundCode",
+                "iacucs": ["Z2026001"],
+            }
+        ]
+        self.assertEqual(result["items"], expected)
+        self.assertEqual(result["piFundingBookNos"], ["NEW-100"])
+        self.assertEqual(result["piFundingBookOptions"], expected)

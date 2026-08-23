@@ -1,13 +1,33 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { defineConfig } from "vitepress";
+import type { Plugin } from "vite";
 
 import { emitLlms } from "./emit-llms.mjs";
 import { pageRoutes } from "./page-routes.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const documentationEditBranch = process.env.CAGELEDGER_DOCS_EDIT_BRANCH ?? "beta";
+const documentationEditBranch = process.env.CAGELEDGER_DOCS_EDIT_BRANCH ?? "main";
 const documentationRepository = "https://git.cellnucle.us/hugo/cageledger";
+
+function serveLlmIndex(): Plugin {
+  return {
+    name: "cageledger-serve-llms-index",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const pathname = new URL(request.url ?? "/", "http://vite.local").pathname;
+        if (pathname !== "/llms.txt" && pathname !== "/docs/llms.txt") {
+          next();
+          return;
+        }
+        response.statusCode = 200;
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.end(readFileSync(resolve(repositoryRoot, "wiki", "LLMs.md"), "utf8"));
+      });
+    },
+  };
+}
 
 function contributorsFor(filePath: string): string[] {
   if (!filePath.endsWith(".md")) {
@@ -44,6 +64,9 @@ export default defineConfig({
   description: "实验动物笼位管理与计费系统文档",
   base: "/docs/",
   cleanUrls: true,
+  vite: {
+    plugins: [serveLlmIndex()],
+  },
   buildEnd: emitLlms().buildEnd,
   lastUpdated: process.env.CAGELEDGER_DOCS_LAST_UPDATED !== "false",
   transformPageData(pageData) {
@@ -170,7 +193,7 @@ export default defineConfig({
     socialLinks: [{ icon: "github", link: "https://git.cellnucle.us/hugo/cageledger" }],
     search: { provider: "local" },
     editLink: {
-      pattern: `${documentationRepository}/_edit/branch/${documentationEditBranch}/wiki/:path`,
+      pattern: `${documentationRepository}/_edit/${documentationEditBranch}/wiki/:path`,
       text: "编辑此页",
     },
     footer: {

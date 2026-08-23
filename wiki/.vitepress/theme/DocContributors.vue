@@ -12,7 +12,6 @@ const contributors = computed(() => {
 
 <template>
   <section class="cageledger-doc-contributors" aria-label="文档维护信息">
-    <a class="cageledger-doc-llms-link" href="/docs/LLMs" title="查看面向 AI 助手的文档索引">LLMs.md</a>
     <p v-if="contributors.length">
       <span>文档贡献者</span>
       <strong>{{ contributors.join("、") }}</strong>

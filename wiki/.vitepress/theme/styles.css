@@ -161,20 +161,6 @@
   font-weight: 500;
 }
 
-.cageledger-doc-llms-link {
-  flex: 0 0 auto;
-  padding: 3px var(--cl-space-2);
-  border: 1px solid var(--vp-c-border);
-  border-radius: var(--cl-space-1);
-  color: var(--vp-c-text-2);
-  font-weight: 500;
-}
-
-.cageledger-doc-llms-link:hover {
-  border-color: var(--vp-c-brand-2);
-  color: var(--vp-c-brand-1);
-}
-
 @media (max-width: 639px) {
   .cageledger-doc-contributors {
     align-items: flex-start;

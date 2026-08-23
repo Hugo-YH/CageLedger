@@ -208,6 +208,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
           </Form>
           {isMobile ? (
             <MobileSelector
+              className="inspection-module-selector"
               multiple
               columns={1}
               options={moduleOrder.map((code) => {

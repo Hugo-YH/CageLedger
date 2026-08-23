@@ -35,7 +35,6 @@
 }
 
 .inspection-context-panel,
-.inspection-module-panel,
 .inspection-list-panel,
 .inspection-standards-panel {
   overflow: hidden;
@@ -74,73 +73,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-}
-
-.inspection-module-picker {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.inspection-module-picker > div {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--app-surface);
-  transition:
-    border-color var(--motion-fast) var(--ease-out),
-    background-color var(--motion-fast) var(--ease-out),
-    box-shadow var(--motion-fast) var(--ease-out);
-}
-
-.inspection-module-panel[data-module="basicAssessment"] {
-  --inspection-module-accent: var(--primary);
-  --inspection-module-border: var(--primary-soft);
-  --inspection-module-surface: var(--primary-soft);
-}
-
-.inspection-module-panel[data-module="advancedAssessment"] {
-  --inspection-module-accent: var(--amber);
-  --inspection-module-border: var(--warning-line);
-  --inspection-module-surface: var(--warning-soft);
-}
-
-.inspection-module-panel[data-module="abnormalAnimalAssessment"] {
-  --inspection-module-accent: var(--danger);
-  --inspection-module-border: var(--danger-line);
-  --inspection-module-surface: var(--danger-soft);
-}
-
-[data-feature="animal-management"] .inspection-module-picker > div.selected {
-  border-color: var(--ant-color-primary);
-  box-shadow: inset 3px 0 0 var(--ant-color-primary);
-  background: var(--ant-color-primary-bg);
-}
-
-[data-feature="animal-management"] .inspection-module-picker .ant-checkbox-wrapper {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  gap: 8px;
-  align-items: center;
-  cursor: pointer;
-}
-
-[data-feature="animal-management"] .inspection-module-picker .ant-checkbox {
-  top: 0;
-}
-
-[data-feature="animal-management"] .inspection-module-picker strong {
-  overflow: hidden;
-  color: var(--ink-strong);
-  font-size: 14px;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .inspection-section + .inspection-section {
@@ -214,23 +146,6 @@
 
 .inspection-section-label > .inspection-all-normal {
   flex: none;
-}
-
-.inspection-module-panel .panel-title-line {
-  align-items: center;
-}
-
-.inspection-module-panel .panel-title-line h2 {
-  white-space: nowrap;
-}
-
-.inspection-module-panel[data-module] {
-  border-color: var(--inspection-module-border);
-  background: linear-gradient(135deg, var(--inspection-module-surface), var(--surface) 42%);
-}
-
-.inspection-module-panel[data-module] .panel-head {
-  background: color-mix(in srgb, var(--inspection-module-surface) 80%, var(--surface));
 }
 
 .inspection-help-trigger {
@@ -1741,6 +1656,72 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* The mobile Selector reserves its lower-right checkmark area so long module
+ * names can wrap inside the option instead of being clipped or overlapping it. */
+[data-ui="mobile-page"] .inspection-module-selector {
+  width: 100%;
+
+  --padding: 8px 28px 8px 12px;
+}
+
+[data-ui="mobile-page"] .inspection-module-selector .adm-selector-item {
+  box-sizing: border-box;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Collapse headers are nested flex items. Every level must opt into shrinking
+ * on mobile so the end-aligned disclosure icon remains inside its card. */
+[data-ui="mobile-page"] .inspection-module-card,
+[data-ui="mobile-page"] .inspection-section-collapse,
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-header,
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-title,
+[data-ui="mobile-page"] .inspection-section-label,
+[data-ui="mobile-page"] .inspection-section-label-main,
+[data-ui="mobile-page"] .inspection-subsection-collapse,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-header,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-title,
+[data-ui="mobile-page"] .inspection-subsection-label,
+[data-ui="mobile-page"] .inspection-subsection-label h4 {
+  min-width: 0;
+}
+
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-header,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-header {
+  padding: 8px 12px;
+}
+
+[data-ui="mobile-page"] .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header > .ant-collapse-title,
+[data-ui="mobile-page"]
+  .inspection-subsection-collapse
+  > .ant-collapse-item
+  > .ant-collapse-header
+  > .ant-collapse-title {
+  flex: 1 1 0;
+  width: 0;
+}
+
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-expand-icon,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-expand-icon {
+  flex: none;
+}
+
+[data-ui="mobile-page"] .inspection-subsection-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+[data-ui="mobile-page"] .inspection-subsection-label h4 {
+  flex: 1;
+}
+
+[data-ui="mobile-page"] .inspection-subsection-label .inspection-subsection-state,
+[data-ui="mobile-page"] .inspection-subsection-label .inspection-all-normal {
+  flex: none;
 }
 
 .inspection-draft-banner {
