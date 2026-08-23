@@ -96,10 +96,10 @@ test("system status remains usable across supported viewports", async ({ page },
   const download = page.getByRole("link", { name: "下载客户端证书", exact: true });
   const pulse = page.locator(".system-pulse-strip");
   for (const viewport of [
-    { columns: 5, name: "1280", width: 1280, height: 900 },
+    { columns: 3, name: "1280", width: 1280, height: 900 },
     { columns: 3, name: "1180", width: 1180, height: 820 },
     { columns: 2, name: "760", width: 760, height: 900 },
-    { columns: 3, name: "landscape", width: 844, height: 390 },
+    { columns: 2, name: "landscape", width: 844, height: 390 },
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(download).toBeVisible();

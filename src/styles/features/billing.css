@@ -1505,9 +1505,9 @@ th {
   position: sticky;
   top: 0;
   z-index: var(--z-raised);
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   min-height: 48px;
   padding: 8px 0;
@@ -1516,16 +1516,34 @@ th {
 }
 
 .app-modal-root.settlement-preview-modal .settlement-preview-toolbar-context {
-  flex: 1;
   min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
-.app-modal-root.settlement-preview-modal .settlement-preview-toolbar-actions {
-  margin-left: auto;
+.app-modal-root.settlement-preview-modal .settlement-preview-toolbar-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.app-modal-root.settlement-preview-modal .settlement-preview-toolbar-values {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 22px;
+}
+
+@media (width <= 1180px) {
+  .app-modal-root.settlement-preview-modal .settlement-preview-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+    padding-bottom: 12px;
+  }
+
+  .app-modal-root.settlement-preview-modal .settlement-preview-toolbar-actions {
+    justify-content: flex-end;
+  }
 }
 
 .app-modal-root.settlement-preview-modal .settlement-preview {

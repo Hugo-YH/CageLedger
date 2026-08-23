@@ -335,6 +335,7 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
 });
 
 test("settlement preview toolbar keeps long IACUC lists inside the toolbar", async ({ page }) => {
+  await page.setViewportSize({ width: 1098, height: 652 });
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
@@ -385,18 +386,29 @@ test("settlement preview toolbar keeps long IACUC lists inside the toolbar", asy
     const context = document.querySelector<HTMLElement>(
       ".settlement-preview-modal .settlement-preview-toolbar-context",
     );
-    if (!toolbar || !modalBody || !context) return { missing: true };
+    const actions = document.querySelector<HTMLElement>(
+      ".settlement-preview-modal .settlement-preview-toolbar-actions",
+    );
+    if (!toolbar || !modalBody || !context || !actions) return { missing: true };
     const toolbarRect = toolbar.getBoundingClientRect();
     const bodyRect = modalBody.getBoundingClientRect();
+    const contextRect = context.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
     return {
       missing: false,
       toolbarOverflowsModal: toolbarRect.right > bodyRect.right + 1 || toolbarRect.left < bodyRect.left - 1,
-      contextTruncated: context.scrollWidth > context.clientWidth,
+      contextOverlapsActions:
+        contextRect.left < actionsRect.right &&
+        contextRect.right > actionsRect.left &&
+        contextRect.top < actionsRect.bottom &&
+        contextRect.bottom > actionsRect.top,
+      contextTruncated: context.scrollWidth > context.clientWidth || context.scrollHeight > context.clientHeight,
     };
   });
   expect(overflow.missing).toBe(false);
   expect(overflow.toolbarOverflowsModal).toBe(false);
-  expect(overflow.contextTruncated).toBe(true);
+  expect(overflow.contextOverlapsActions).toBe(false);
+  expect(overflow.contextTruncated).toBe(false);
 });
 
 const noticeSheetId = "sheet-e2e-notice";

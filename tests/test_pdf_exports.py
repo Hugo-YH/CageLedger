@@ -1,6 +1,10 @@
 import io
+import json
 import unittest
 import zipfile
+from pathlib import Path
+
+from pypdf import PdfReader
 
 from server_app.pdf import (
     billing_statement_filename,
@@ -13,6 +17,25 @@ from server_app.pdf.documents import billing_statement_html, quantity_sheet_html
 
 
 class PdfExportTests(unittest.TestCase):
+    def test_server_settlement_template_matches_shared_parity_fixture(self):
+        fixture = json.loads(
+            (Path(__file__).parent.parent / "src/react/print/fixtures/settlement-parity.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        html = billing_statement_html(fixture["statement"], fixture["lines"])
+        for expected in (
+            "模板校验课题组实验动物饲养费核算汇总表",
+            "Z-PARITY-MOUSE",
+            "Z-PARITY-RABBIT",
+            "小鼠",
+            "兔",
+            "单位支持：45.00",
+            "实际待缴纳：45.00",
+            "第1页 共1页",
+        ):
+            self.assertIn(expected, html)
+
     def test_quantity_pdf_keeps_calendar_balances_and_blank_handlers(self):
         sheet = {
             "id": "sheet-1",
@@ -83,11 +106,56 @@ class PdfExportTests(unittest.TestCase):
         ]
         pdf = render_billing_statement_pdf(statement, lines)
         self.assertTrue(pdf.startswith(b"%PDF"))
+        pages = PdfReader(io.BytesIO(pdf)).pages
+        self.assertEqual(len(pages), 1)
+        self.assertRegex(pages[0].extract_text(), r"第\s*1\s*\S+\s*共\s*1\s*\S+")
         self.assertEqual(billing_statement_filename(statement), "张教授课题组实验动物饲养费核算汇总表 2026年06月.pdf")
         bundle = build_pdf_zip([("张教授.pdf", pdf), ("张教授.pdf", pdf)])
         with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
             self.assertEqual(archive.namelist(), ["张教授.pdf", "张教授 (2).pdf"])
             self.assertTrue(archive.read("张教授.pdf").startswith(b"%PDF"))
+
+    def test_settlement_physical_pages_match_logical_pages_without_blank_trailer(self):
+        statement = {
+            "id": "physical-pages",
+            "month": "2026-08",
+            "pi": "分页测试",
+            "sourceType": "pi_merged_quantity_sheet",
+            "billingUnit": "cage_day",
+            "iacucs": [f"Z{i}" for i in range(1, 7)],
+        }
+        lines = []
+        for day in range(1, 32):
+            breakdown = [
+                {
+                    "iacuc": f"Z{index}",
+                    "species": "mouse",
+                    "cageCount": index,
+                    "billingItem": "小鼠饲养费",
+                    "billingUnit": "cage_day",
+                    "unitPrice": 4.5,
+                    "payableAmount": index * 4.5,
+                }
+                for index in range(1, 7)
+            ]
+            lines.append(
+                {
+                    "date": f"2026-08-{day:02d}",
+                    "cageCount": sum(range(1, 7)),
+                    "amount": sum(item["payableAmount"] for item in breakdown),
+                    "quantitySheetRowIds": [f"row-{day}"],
+                    "iacucBreakdown": breakdown,
+                }
+            )
+
+        pages = PdfReader(io.BytesIO(render_billing_statement_pdf(statement, lines))).pages
+        self.assertEqual(len(pages), 2)
+        first_text = pages[0].extract_text()
+        second_text = pages[1].extract_text()
+        self.assertRegex(first_text, r"第\s*1\s*\S+\s*共\s*2\s*\S+")
+        self.assertRegex(second_text, r"第\s*2\s*\S+\s*共\s*2\s*\S+")
+        self.assertGreater(len(first_text), 500)
+        self.assertGreater(len(second_text), 500)
 
     def test_settlement_html_groups_iacucs_under_species_headers(self):
         statement = {

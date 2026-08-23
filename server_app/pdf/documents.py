@@ -9,7 +9,7 @@ from server_app.pdf.formatting import (
     normalize_iacuc,
     species_label,
 )
-from server_app.pdf.renderer import html_to_pdf
+from server_app.pdf.renderer import PDF_RENDER_PRIORITY_USER, html_to_pdf
 from server_app.pdf.settlement_notes import settlement_note_markup
 
 GROUP_UNITS = 12
@@ -18,12 +18,12 @@ PRINT_ROWS = 16
 SPECIES_ORDER = {"小鼠": 0, "大鼠": 1, "豚鼠": 2, "兔": 3, "猴": 4, "猪": 5, "犬": 6, "动物": 7}
 
 
-def render_quantity_sheet_pdf(sheet):
-    return html_to_pdf(quantity_sheet_html(sheet))
+def render_quantity_sheet_pdf(sheet, *, priority=PDF_RENDER_PRIORITY_USER):
+    return html_to_pdf(quantity_sheet_html(sheet), priority=priority)
 
 
-def render_billing_statement_pdf(statement, lines):
-    return html_to_pdf(billing_statement_html(statement, lines))
+def render_billing_statement_pdf(statement, lines, *, priority=PDF_RENDER_PRIORITY_USER):
+    return html_to_pdf(billing_statement_html(statement, lines), priority=priority)
 
 
 def quantity_sheet_filename(sheet):

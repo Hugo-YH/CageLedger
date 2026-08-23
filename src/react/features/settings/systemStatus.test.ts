@@ -7,6 +7,8 @@ import {
   formatDuration,
   formatMilliseconds,
   formatPercent,
+  pdfCacheCapacityPercent,
+  pdfHealth,
   runtimeHealth,
 } from "./systemStatus";
 
@@ -28,6 +30,40 @@ const environment: SystemEnvironment = {
       p50Ms: 2,
       p95Ms: 8,
       maxMs: 30,
+    },
+    pdf: {
+      cache: {
+        entries: 12,
+        sizeBytes: 12 * 1024 * 1024,
+        capacityBytes: 512 * 1024 * 1024,
+        ttlSeconds: 2_592_000,
+        hits: 8,
+        misses: 2,
+        evictions: 0,
+        hitRate: 0.8,
+      },
+      jobs: { queued: 0, rendering: 0, ready: 2, failed: 0, active: 0, backgroundQueued: 0 },
+      renders: {
+        completed: 2,
+        failures: 0,
+        sampleCount: 2,
+        averageMs: 140,
+        p50Ms: 130,
+        p95Ms: 150,
+        maxMs: 150,
+      },
+      renderer: {
+        queueDepth: 0,
+        active: false,
+        completed: 2,
+        failures: 0,
+        timeouts: 0,
+        sampleCount: 2,
+        averageMs: 120,
+        p50Ms: 110,
+        p95Ms: 130,
+        maxMs: 130,
+      },
     },
     thresholds: { slowRequestMs: 500, slowDatabaseMs: 100 },
   },
@@ -67,5 +103,19 @@ describe("system status formatting", () => {
         },
       }).tone,
     ).toBe("warning");
+  });
+
+  it("reports PDF cache capacity and generation failures", () => {
+    expect(pdfCacheCapacityPercent(environment.performance)).toBeCloseTo(2.34375);
+    expect(pdfHealth(environment.performance).tone).toBe("success");
+    const failedPerformance = {
+      ...environment.performance,
+      pdf: {
+        ...environment.performance.pdf,
+        renders: { ...environment.performance.pdf.renders, failures: 1 },
+      },
+    };
+    expect(pdfHealth(failedPerformance)).toMatchObject({ label: "生成异常", tone: "warning" });
+    expect(runtimeHealth({ ...environment, performance: failedPerformance }).tone).toBe("warning");
   });
 });

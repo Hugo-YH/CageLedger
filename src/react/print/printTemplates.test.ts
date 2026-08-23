@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BillingStatementLine, BillingStatementResponse, IntakeBatch, QuantitySheet } from "../api/contracts";
+import settlementParityFixture from "./fixtures/settlement-parity.json";
 import { intakeCardsPrintHtml } from "./intakeCards";
 import { quantitySheetPagesMarkup } from "./quantitySheets";
 import { qrCodeMatrix, qrCodeSvg } from "./qrCode";
@@ -8,6 +9,20 @@ import { settlementStatementHtml } from "./settlement";
 import { settlementNotesMarkup } from "./settlementNotes";
 
 describe("print templates", () => {
+  it("keeps the browser settlement template aligned with the server parity fixture", () => {
+    const html = settlementStatementHtml(settlementParityFixture as BillingStatementResponse, false);
+    [
+      "模板校验课题组实验动物饲养费核算汇总表",
+      "Z-PARITY-MOUSE",
+      "Z-PARITY-RABBIT",
+      "小鼠",
+      "兔",
+      "单位支持：45.00",
+      "实际待缴纳：45.00",
+      "第1页 共1页",
+    ].forEach((expected) => expect(html).toContain(expected));
+  });
+
   it("generates a scannable QR matrix for a cage card short code", () => {
     const matrix = qrCodeMatrix("ABCD");
     expect(matrix).toHaveLength(21);

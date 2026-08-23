@@ -11,15 +11,36 @@ async function login(page: Page, username = "admin", password = "admin123") {
 }
 
 test("administrator can inspect and refresh process metrics", async ({ page }) => {
+  await page.setViewportSize({ width: 1218, height: 644 });
   await login(page);
   await openSettingsView(page, "关于系统");
 
   await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 1 })).toBeVisible();
-  await expect(page.getByText("缓存命中率", { exact: true })).toBeVisible();
+  await expect(page.locator(".system-pulse-tile").getByText("缓存命中率", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "数据缓存", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "HTTP 请求", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "SQLite", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "PDF 生成", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByText("PDF 队列", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("PDF 缓存容量占用")).toBeVisible();
   await expect(page.getByText(/自本次启动以来累计/)).toBeVisible();
+
+  const diagnosticLayout = await page.evaluate(() => {
+    const grid = document.querySelector<HTMLElement>(".system-diagnostics-grid");
+    const titles = Array.from(document.querySelectorAll<HTMLElement>(".system-diagnostic-card h2"));
+    return {
+      columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 0,
+      titles: titles.map((title) => ({
+        fontSize: getComputedStyle(title).fontSize,
+        lineHeight: Number.parseFloat(getComputedStyle(title).lineHeight),
+        height: title.getBoundingClientRect().height,
+      })),
+    };
+  });
+  expect(diagnosticLayout.columns).toBe(2);
+  expect(diagnosticLayout.titles).toHaveLength(4);
+  expect(diagnosticLayout.titles.every((title) => title.fontSize === "18px")).toBe(true);
+  expect(diagnosticLayout.titles.every((title) => title.height <= title.lineHeight + 1)).toBe(true);
 
   const refreshed = page.waitForResponse(
     (response) => response.url().includes("/api/system/environment") && response.status() === 200,

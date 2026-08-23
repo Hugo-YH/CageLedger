@@ -10,7 +10,8 @@ from server_app.pdf import (
     render_billing_statement_pdf,
     render_quantity_sheet_pdf,
 )
-from server_app.pdf.cache import pdf_export_cache
+from server_app.pdf.cache import PDF_PRIORITY_WARM, pdf_export_cache
+from server_app.pdf.renderer import PDF_RENDER_PRIORITY_WARM
 
 PDF_CACHE_ACTOR = {"id": "system-pdf-cache", "role": "admin", "displayName": "系统 PDF 缓存"}
 
@@ -96,7 +97,7 @@ def schedule_pdf_cache_refresh(sheets, *, connect_db, generate_statement, billin
     """Warm only documents affected by a quantity-sheet write."""
     unique_sheets = {str(sheet.get("id")): sheet for sheet in sheets if sheet and sheet.get("id")}
     for sheet in unique_sheets.values():
-        _enqueue_quantity_pdf(sheet, PDF_CACHE_ACTOR["id"])
+        _enqueue_quantity_pdf(sheet, PDF_CACHE_ACTOR["id"], priority=PDF_PRIORITY_WARM)
     billing_scopes = set(billing_scopes) | {
         (str(sheet.get("month") or ""), str(sheet.get("pi") or ""))
         for sheet in unique_sheets.values()
@@ -110,6 +111,7 @@ def schedule_pdf_cache_refresh(sheets, *, connect_db, generate_statement, billin
             connect_db=connect_db,
             generate_statement=generate_statement,
             actor=PDF_CACHE_ACTOR,
+            priority=PDF_PRIORITY_WARM,
         )
 
 
@@ -430,26 +432,34 @@ def _read_billing_items(requested, user, connect_db, list_sheets, validate_permi
     return items
 
 
-def _enqueue_quantity_pdf(sheet, owner_id):
+def _enqueue_quantity_pdf(sheet, owner_id, *, priority=0):
     return pdf_export_cache.enqueue_artifact(
         owner_id=owner_id,
         key=quantity_pdf_cache_key(sheet),
         filename=quantity_sheet_filename(sheet),
         content_type="application/pdf",
-        render=lambda: render_quantity_sheet_pdf(sheet),
+        render=lambda: render_quantity_sheet_pdf(
+            sheet, priority=PDF_RENDER_PRIORITY_WARM if priority >= PDF_PRIORITY_WARM else 0
+        ),
+        priority=priority,
     )
 
 
-def _enqueue_billing_pdf(month, pi, owner_id, *, connect_db, generate_statement, actor):
+def _enqueue_billing_pdf(month, pi, owner_id, *, connect_db, generate_statement, actor, priority=0):
     payload = statement_payload({"month": month, "pi": pi, "sourceType": "quantity_sheet"})
     return pdf_export_cache.enqueue_artifact(
         owner_id=owner_id,
         key=billing_pdf_cache_key(month, pi),
         filename=billing_statement_filename(payload),
         content_type="application/pdf",
-        render=lambda: _render_billing_pdf(
-            payload, connect_db=connect_db, generate_statement=generate_statement, actor=actor
+        render=lambda: _generate_billing_pdf(
+            payload,
+            connect_db=connect_db,
+            generate_statement=generate_statement,
+            actor=actor,
+            render_priority=PDF_RENDER_PRIORITY_WARM if priority >= PDF_PRIORITY_WARM else 0,
         ),
+        priority=priority,
     )
 
 
@@ -459,13 +469,18 @@ def _render_quantity_pdf(sheet):
 
 def _render_billing_pdf(payload, *, connect_db, generate_statement, actor):
     key = billing_pdf_cache_key(payload["month"], payload["pi"], payload["sourceType"])
+    return pdf_export_cache.render_cached(
+        key,
+        lambda: _generate_billing_pdf(
+            payload, connect_db=connect_db, generate_statement=generate_statement, actor=actor
+        ),
+    )
 
-    def render():
-        with connect_db() as conn:
-            statement, lines, _ = generate_statement(conn, payload, actor)
-        return render_billing_statement_pdf(statement, lines)
 
-    return pdf_export_cache.render_cached(key, render)
+def _generate_billing_pdf(payload, *, connect_db, generate_statement, actor, render_priority=0):
+    with connect_db() as conn:
+        statement, lines, _ = generate_statement(conn, payload, actor)
+    return render_billing_statement_pdf(statement, lines, priority=render_priority)
 
 
 def _write_billing_statement_pdf(handler, payload, user, connect_db, generate_statement):

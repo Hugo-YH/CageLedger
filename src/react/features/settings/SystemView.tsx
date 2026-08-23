@@ -5,6 +5,7 @@ import {
   CodeOutlined,
   DatabaseOutlined,
   DownloadOutlined,
+  FilePdfOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   ThunderboltOutlined,
@@ -26,6 +27,8 @@ import {
   formatDuration,
   formatMilliseconds,
   formatPercent,
+  pdfCacheCapacityPercent,
+  pdfHealth,
   requestHealth,
   runtimeHealth,
   type RuntimeHealth,
@@ -196,6 +199,7 @@ function RuntimeDashboard({ environment }: { environment: ReturnType<typeof useS
   const cache = cacheHealth(performance);
   const requests = requestHealth(performance);
   const database = databaseHealth(data);
+  const pdf = pdfHealth(performance);
 
   return (
     <section aria-labelledby="system-runtime-title" className="system-runtime-section">
@@ -225,6 +229,7 @@ function RuntimeDashboard({ environment }: { environment: ReturnType<typeof useS
         <PulseTile health={cache} label="缓存命中率" value={formatPercent(performance.cache.hitRate)} />
         <PulseTile health={requests} label="HTTP P95" value={formatMilliseconds(performance.requests.p95Ms)} />
         <PulseTile health={database} label="SQLite P95" value={formatMilliseconds(performance.database.p95Ms)} />
+        <PulseTile health={pdf} label="PDF 队列" value={formatCount(performance.pdf.jobs.active)} />
         <PulseTile
           health={{ detail: "本次进程", label: "运行时长", tone: "default" }}
           label="运行时长"
@@ -236,6 +241,7 @@ function RuntimeDashboard({ environment }: { environment: ReturnType<typeof useS
         <CacheCard performance={performance} />
         <RequestCard performance={performance} />
         <DatabaseCard environment={data} />
+        <PdfCard performance={performance} />
       </div>
     </section>
   );
@@ -338,6 +344,45 @@ function DatabaseCard({ environment }: { environment: SystemEnvironment }) {
           ["慢操作", formatCount(performance.database.slowOperations)],
           ["锁错误", formatCount(performance.database.lockErrors)],
           ["数据库", `${database.journalMode || "未知模式"} · ${formatBytes(database.sizeBytes)}`],
+        ]}
+      />
+    </DiagnosticCard>
+  );
+}
+
+function PdfCard({ performance }: { performance: SystemPerformance }) {
+  const health = pdfHealth(performance);
+  const { cache, jobs, renderer } = performance.pdf;
+  return (
+    <DiagnosticCard
+      extra={<HealthTag health={health} />}
+      icon={<FilePdfOutlined aria-hidden />}
+      subtitle="后台队列、Chromium 渲染与磁盘缓存"
+      title="PDF 生成"
+    >
+      <Statistic title="P95 生成时间" value={formatMilliseconds(renderer.p95Ms)} />
+      <div className="system-capacity-block">
+        <Flex justify="space-between">
+          <Typography.Text type="secondary">PDF 缓存容量</Typography.Text>
+          <Typography.Text>{`${formatBytes(cache.sizeBytes)} / ${formatBytes(cache.capacityBytes)}`}</Typography.Text>
+        </Flex>
+        <Progress
+          aria-label="PDF 缓存容量占用"
+          percent={pdfCacheCapacityPercent(performance)}
+          showInfo={false}
+          size="small"
+        />
+      </div>
+      <MetricRows
+        items={[
+          ["当前任务", `${jobs.active} 个（等待 ${jobs.queued} · 生成 ${jobs.rendering}）`],
+          ["后台预热", `${jobs.backgroundQueued} 个等待`],
+          ["渲染队列", `${renderer.queueDepth} 个等待${renderer.active ? " · 正在生成" : ""}`],
+          ["缓存命中率", formatPercent(cache.hitRate)],
+          ["缓存文件", `${formatCount(cache.entries)} 份`],
+          ["平均生成时间", formatMilliseconds(renderer.averageMs)],
+          ["生成完成", `${formatCount(renderer.completed)} 份`],
+          ["失败 / 超时", `${formatCount(renderer.failures)} / ${formatCount(renderer.timeouts)}`],
         ]}
       />
     </DiagnosticCard>

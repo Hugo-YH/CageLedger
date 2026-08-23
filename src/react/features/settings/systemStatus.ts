@@ -18,6 +18,13 @@ export function runtimeHealth(environment: SystemEnvironment): RuntimeHealth {
   if (performance.database.lockErrors > 0) {
     return { label: "需要关注", detail: "本次运行出现过 SQLite 锁错误", tone: "warning" };
   }
+  if (
+    performance.pdf.renderer.failures > 0 ||
+    performance.pdf.renderer.timeouts > 0 ||
+    performance.pdf.renders.failures > 0
+  ) {
+    return { label: "需要关注", detail: "本次运行出现过 PDF 生成失败或超时", tone: "warning" };
+  }
   if (isAbove(performance.requests.p95Ms, performance.thresholds.slowRequestMs)) {
     return { label: "需要关注", detail: "HTTP P95 已超过慢请求阈值", tone: "warning" };
   }
@@ -72,6 +79,28 @@ export function databaseHealth(environment: SystemEnvironment): RuntimeHealth {
   return { label: "SQLite 正常", detail: database.journalMode || "状态可用", tone: "success" };
 }
 
+export function pdfHealth(performance: SystemPerformance): RuntimeHealth {
+  const pdf = performance.pdf;
+  if (pdf.renderer.failures > 0 || pdf.renderer.timeouts > 0 || pdf.renders.failures > 0) {
+    return {
+      label: "生成异常",
+      detail: `${pdf.renders.failures} 个任务失败，${pdf.renderer.failures} 次渲染失败，${pdf.renderer.timeouts} 次超时`,
+      tone: "warning",
+    };
+  }
+  if (pdf.jobs.active > 0 || pdf.renderer.active || pdf.renderer.queueDepth > 0) {
+    return {
+      label: "正在生成",
+      detail: `${pdf.jobs.active} 个任务处理中，${pdf.renderer.queueDepth} 个等待渲染`,
+      tone: "default",
+    };
+  }
+  if (pdf.renderer.sampleCount === 0) {
+    return { label: "等待首份", detail: "尚无 PDF 生成样本", tone: "default" };
+  }
+  return { label: "生成正常", detail: `${pdf.renderer.completed} 份已完成`, tone: "success" };
+}
+
 export function cacheLookups(performance: SystemPerformance): number {
   return performance.cache.hits + performance.cache.misses + performance.cache.expirations;
 }
@@ -79,6 +108,12 @@ export function cacheLookups(performance: SystemPerformance): number {
 export function cacheCapacityPercent(performance: SystemPerformance): number {
   if (performance.cache.capacity <= 0) return 0;
   return Math.min(100, Math.max(0, (performance.cache.entries / performance.cache.capacity) * 100));
+}
+
+export function pdfCacheCapacityPercent(performance: SystemPerformance): number {
+  const cache = performance.pdf.cache;
+  if (cache.capacityBytes <= 0) return 0;
+  return Math.min(100, Math.max(0, (cache.sizeBytes / cache.capacityBytes) * 100));
 }
 
 export function formatPercent(value: number | null): string {

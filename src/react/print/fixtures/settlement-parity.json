@@ -1,0 +1,55 @@
+{
+  "statement": {
+    "id": "parity",
+    "month": "2026-08",
+    "iacuc": "pi::模板校验",
+    "iacucs": ["Z-PARITY-MOUSE", "Z-PARITY-RABBIT"],
+    "project": "模板一致性校验",
+    "pi": "模板校验",
+    "owner": "经办人",
+    "funding": "测试经费",
+    "sourceType": "pi_merged_quantity_sheet",
+    "billingUnit": "mixed",
+    "freeCageAllowance": 10,
+    "totalCageDays": 20,
+    "totalAnimalDays": 3,
+    "totalFreeCageDays": 10,
+    "totalBillableCageDays": 10,
+    "totalAmount": 90
+  },
+  "lines": [
+    {
+      "date": "2026-08-01",
+      "animalCount": 3,
+      "cageCount": 20,
+      "freeCages": 10,
+      "billableCages": 10,
+      "amount": 90,
+      "cumulative": 90,
+      "quantitySheetRowIds": ["parity-row"],
+      "iacucBreakdown": [
+        {
+          "iacuc": "Z-PARITY-MOUSE",
+          "species": "mouse",
+          "cageCount": 20,
+          "freeCages": 10,
+          "billingItem": "小鼠饲养费",
+          "billingUnit": "cage_day",
+          "unitPrice": 4.5,
+          "supportAmount": 45,
+          "payableAmount": 45
+        },
+        {
+          "iacuc": "Z-PARITY-RABBIT",
+          "species": "rabbit",
+          "animalCount": 3,
+          "billingItem": "兔饲养费",
+          "billingUnit": "animal_day",
+          "unitPrice": 15,
+          "supportAmount": 0,
+          "payableAmount": 45
+        }
+      ]
+    }
+  ]
+}

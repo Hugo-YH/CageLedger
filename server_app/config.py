@@ -9,6 +9,8 @@ DATA_ROOT = Path(
 )
 DB_PATH = Path(_configured_db_path or DATA_ROOT / "database" / "cageledger.sqlite")
 PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DATA_ROOT / "cache" / "pdf"))
+PDF_CACHE_MAX_BYTES = int(os.environ.get("CAGELEDGER_PDF_CACHE_MAX_BYTES", str(512 * 1024 * 1024)))
+PDF_CACHE_TTL_SECONDS = int(os.environ.get("CAGELEDGER_PDF_CACHE_TTL_SECONDS", str(30 * 24 * 60 * 60)))
 ANIMAL_INSPECTION_ATTACHMENTS_PATH = Path(
     os.environ.get(
         "CAGELEDGER_ANIMAL_INSPECTION_ATTACHMENTS", DATA_ROOT / "files" / "animal-inspections" / "attachments"

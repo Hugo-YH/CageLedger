@@ -31,6 +31,8 @@ from server_app.config import (
     SLOW_DATABASE_THRESHOLD_MS,
     SLOW_REQUEST_THRESHOLD_MS,
 )
+from server_app.pdf.cache import pdf_export_cache
+from server_app.pdf.renderer import pdf_renderer_snapshot
 from server_app.shared import now_iso
 
 
@@ -133,6 +135,10 @@ def system_environment():
         "database": database_status(),
         "performance": {
             **cache_performance_snapshot(),
+            "pdf": {
+                **pdf_export_cache.snapshot(),
+                "renderer": pdf_renderer_snapshot(),
+            },
             "thresholds": {
                 "slowRequestMs": SLOW_REQUEST_THRESHOLD_MS,
                 "slowDatabaseMs": SLOW_DATABASE_THRESHOLD_MS,

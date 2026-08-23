@@ -65,8 +65,12 @@ class SystemEnvironmentParsingTests(unittest.TestCase):
         self.assertIsInstance(payload["python"]["bits64"], bool)
         self.assertEqual(set(payload["database"]), {"ok", "journalMode", "sizeBytes", "tables", "path"})
         self.assertIsInstance(payload["database"]["ok"], bool)
-        self.assertEqual(set(payload["performance"]), {"uptimeSeconds", "requests", "cache", "database", "thresholds"})
+        self.assertEqual(
+            set(payload["performance"]),
+            {"uptimeSeconds", "requests", "cache", "database", "pdf", "thresholds"},
+        )
         self.assertEqual(set(payload["performance"]["thresholds"]), {"slowRequestMs", "slowDatabaseMs"})
+        self.assertEqual(set(payload["performance"]["pdf"]), {"cache", "jobs", "renders", "renderer"})
 
 
 class SystemEnvironmentApiTests(unittest.TestCase):

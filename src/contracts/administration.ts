@@ -62,6 +62,10 @@ export interface SystemLatencyMetrics {
   maxMs: number | null;
 }
 
+export interface PdfLatencyMetrics extends SystemLatencyMetrics {
+  averageMs: number | null;
+}
+
 export interface SystemPerformance {
   uptimeSeconds: number;
   requests: SystemLatencyMetrics & {
@@ -81,6 +85,37 @@ export interface SystemPerformance {
     operations: number;
     slowOperations: number;
     lockErrors: number;
+  };
+  pdf: {
+    cache: {
+      entries: number;
+      sizeBytes: number;
+      capacityBytes: number;
+      ttlSeconds: number;
+      hits: number;
+      misses: number;
+      evictions: number;
+      hitRate: number | null;
+    };
+    jobs: {
+      queued: number;
+      rendering: number;
+      ready: number;
+      failed: number;
+      active: number;
+      backgroundQueued: number;
+    };
+    renders: PdfLatencyMetrics & {
+      completed: number;
+      failures: number;
+    };
+    renderer: PdfLatencyMetrics & {
+      queueDepth: number;
+      active: boolean;
+      completed: number;
+      failures: number;
+      timeouts: number;
+    };
   };
   thresholds: {
     slowRequestMs: number;

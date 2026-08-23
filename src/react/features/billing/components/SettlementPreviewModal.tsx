@@ -61,13 +61,14 @@ export function SettlementPreviewModal({
         role="toolbar"
         aria-label="结算单预览操作"
       >
-        <Typography.Paragraph
-          className="settlement-preview-toolbar-context"
-          title={selected.iacucs.join("、")}
-          type="secondary"
-        >
-          {selected.iacucs.join("、")}
-        </Typography.Paragraph>
+        <div className="settlement-preview-toolbar-context">
+          <Typography.Text className="settlement-preview-toolbar-label" strong type="secondary">
+            伦理号
+          </Typography.Text>
+          <Typography.Text className="settlement-preview-toolbar-values" type="secondary">
+            {selected.iacucs.join("、")}
+          </Typography.Text>
+        </div>
         <Space className="settlement-preview-toolbar-actions" wrap>
           <Button icon={<PrinterOutlined aria-hidden />} onClick={() => openSettlementPrint(result)}>
             打印结算单
