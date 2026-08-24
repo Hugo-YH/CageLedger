@@ -10,6 +10,7 @@ import type {
   PagedResponse,
   PrincipalIdentity,
   SystemEnvironment,
+  SystemPerformanceHistory,
   SystemInfo,
   SystemUpdateStatus,
 } from "./contracts";
@@ -125,6 +126,14 @@ export function useSystemEnvironment(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.systemEnvironment,
     queryFn: () => requestJson<SystemEnvironment>("/api/system/environment"),
+    enabled,
+    retry: false,
+  });
+}
+export function useSystemPerformanceHistory(hours: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.systemPerformanceHistory(hours),
+    queryFn: () => requestJson<SystemPerformanceHistory>(`/api/system/performance-history?hours=${hours}`),
     enabled,
     retry: false,
   });

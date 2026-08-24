@@ -121,7 +121,7 @@
 - 样式与响应式：先运行 `npm run check:antd-design`，再运行目标 CSS 的 Stylelint、`git diff --check`；保存四档视口的浏览器截图或 Playwright 断言，记录同组控件高度、标签布局、溢出和组件状态。
 - API、权限、缓存或迁移：运行 `npm run check` 和 `npm run smoke:api`，再验证管理员与房间管理员路径。
 - 打印与 PDF：运行模板测试，并检查预览、打印页数、A4 尺寸和多页定位。
-- 大列表或性能：运行 `npm run benchmark`，检查分页、虚拟化和查询计划。
+- 大列表或性能：运行 `npm run benchmark`，检查分页、虚拟化和查询计划；涉及缓存、索引、SQLite 查询、PDF 渲染、批量操作或首屏加载时，还要以管理员 `/api/system/performance-history` 对比改动前后的同等时间窗口，记录版本、请求/SQLite P95、慢请求和锁错误及结论。性能历史只作趋势与验收证据，不得在请求链路写入，不得记录用户信息、请求参数或 SQL；普通账号不得请求或展示该数据。
 - 关键业务链：根据风险运行 `npm run test:e2e`。
 - 所有文件修改完成后运行 `git diff --check`。
 - 交付说明包含改动、已验证项、未验证项和当前本地地址。

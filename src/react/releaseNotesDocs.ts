@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.1.0",
+    build: "187",
+    releasedAt: "2026-08-24",
+    title: "性能历史记录与优化验收",
+    items: [
+      "服务启动时和此后每 5 分钟，将 HTTP、SQLite、缓存、PDF 与数据库容量的聚合指标写入本地 SQLite；历史记录默认保留 1,095 天，采样失败或遇到锁冲突会跳过当期，不影响业务请求",
+      "“关于系统”新增最近 24 小时性能摘要。管理员可查看已记录周期、请求量、HTTP P95 峰值和最新 SQLite P95；普通账号不会请求或看到运行指标",
+      "新增管理员接口 `GET /api/system/performance-history`，用于按时间窗口读取裁剪后的趋势数据，不包含用户信息、请求参数或 SQL",
+      "开发规范和测试契约增加性能验收要求：涉及缓存、索引、SQLite 查询、PDF、批量操作或首屏加载时，需对比优化前后的历史指标并记录结论",
+    ],
+  },
+  {
     version: "1.0.21",
     build: "186",
     releasedAt: "2026-08-23",

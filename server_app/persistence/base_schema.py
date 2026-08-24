@@ -543,6 +543,19 @@ def initialize_base_schema(
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS system_performance_snapshots (
+            id TEXT PRIMARY KEY,
+            observed_at TEXT NOT NULL,
+            interval_seconds INTEGER NOT NULL,
+            process_started_at TEXT NOT NULL,
+            app_version TEXT NOT NULL,
+            revision TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS inspection_catalog_versions (
             version TEXT PRIMARY KEY,
             source TEXT NOT NULL,

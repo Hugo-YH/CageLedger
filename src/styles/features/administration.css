@@ -889,6 +889,40 @@
   min-height: 360px;
 }
 
+.system-history-card {
+  min-width: 0;
+}
+
+[data-ui="system-status-page"] .system-history-card .ant-card-head {
+  min-height: 64px;
+  padding-inline: 16px;
+}
+
+[data-ui="system-status-page"] .system-history-card .ant-card-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.system-history-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+[data-ui="system-status-page"] .system-history-summary .ant-statistic {
+  min-width: 0;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--primary-border);
+}
+
+[data-ui="system-status-page"] .system-history-summary .ant-statistic-content {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
 @container system-status (width <= 1120px) {
   .system-masthead-main {
     grid-template-columns: 56px minmax(0, 1fr);
@@ -913,6 +947,10 @@
   }
 
   .system-diagnostics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-history-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -971,6 +1009,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .system-history-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .system-pulse-tile:nth-child(3),
   .system-pulse-tile:nth-child(5) {
     border-inline-start: 0;
@@ -988,6 +1030,10 @@
 @container system-status (width <= 480px) {
   .system-masthead-actions,
   .system-pulse-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .system-history-summary {
     grid-template-columns: 1fr;
   }
 

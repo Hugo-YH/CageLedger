@@ -33,6 +33,7 @@ export const queryKeys = {
   auditEvents: (filters: Record<string, unknown>) => ["audit-events", filters] as const,
   systemInfo: ["system", "info"] as const,
   systemEnvironment: ["system", "environment"] as const,
+  systemPerformanceHistory: (hours: number) => ["system", "performance-history", hours] as const,
   systemUpdate: ["system", "update"] as const,
   animalInspectionCatalog: ["animal-inspection-catalog"] as const,
   animalInspectionCatalogDraft: ["animal-inspection-catalog", "draft"] as const,

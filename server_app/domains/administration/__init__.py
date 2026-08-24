@@ -11,12 +11,14 @@ from .auth import (
     user_from_token,
     verify_password,
 )
+from .performance_history import list_performance_history
 from .system import system_environment, system_info, system_update_status
 from .users import create_user, delete_user, update_user
 
 __all__ = [
     "action_label",
     "audit_event",
+    "list_performance_history",
     "authenticate",
     "create_session",
     "create_user",

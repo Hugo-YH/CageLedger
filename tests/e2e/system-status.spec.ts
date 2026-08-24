@@ -21,6 +21,7 @@ test("administrator can inspect and refresh process metrics", async ({ page }) =
   await expect(page.getByRole("heading", { name: "HTTP 请求", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "SQLite", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "PDF 生成", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "最近 24 小时性能记录", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByText("PDF 队列", { exact: true })).toBeVisible();
   await expect(page.getByLabel("PDF 缓存容量占用")).toBeVisible();
   await expect(page.getByText(/自本次启动以来累计/)).toBeVisible();
@@ -48,6 +49,21 @@ test("administrator can inspect and refresh process metrics", async ({ page }) =
   await page.getByRole("button", { name: "刷新状态", exact: true }).click();
   await refreshed;
   await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeEnabled();
+
+  for (const viewport of [
+    { width: 1180, height: 760 },
+    { width: 760, height: 760 },
+    { width: 667, height: 375 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole("heading", { name: "最近 24 小时性能记录", exact: true, level: 2 })).toBeVisible();
+    const historyLayout = await page.locator(".system-history-summary").evaluate((element) => ({
+      columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+      overflow: element.scrollWidth > element.clientWidth,
+    }));
+    expect(historyLayout.columns).toBe(viewport.width <= 480 ? 1 : 2);
+    expect(historyLayout.overflow).toBe(false);
+  }
 });
 
 test("room administrator does not request or see process metrics", async ({ page }) => {
@@ -66,9 +82,14 @@ test("room administrator does not request or see process metrics", async ({ page
   const created = (await createResponse.json()) as { user: { id: string } };
 
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
-  let environmentRequests = 0;
+  let performanceRequests = 0;
   page.on("request", (request) => {
-    if (request.url().includes("/api/system/environment")) environmentRequests += 1;
+    if (
+      request.url().includes("/api/system/environment") ||
+      request.url().includes("/api/system/performance-history")
+    ) {
+      performanceRequests += 1;
+    }
   });
   await login(page, username, "e2e-password");
   await openSettingsView(page, "关于系统");
@@ -77,7 +98,7 @@ test("room administrator does not request or see process metrics", async ({ page
   await expect(page.getByText("运行指标由管理员维护", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "当前服务进程", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toHaveCount(0);
-  expect(environmentRequests).toBe(0);
+  expect(performanceRequests).toBe(0);
 
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await login(page);

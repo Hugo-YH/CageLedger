@@ -179,6 +179,41 @@ class SystemEnvironmentApiTests(unittest.TestCase):
         self.assertEqual(context.exception.code, 403)
         self.assertEqual(json.load(context.exception), {"error": "需要管理员权限"})
 
+    def test_admin_reads_durable_performance_history(self):
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.admin_opener,
+        )
+        status, payload, _ = request_json(
+            self.base_url,
+            "/api/system/performance-history?hours=24",
+            opener=self.admin_opener,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(set(payload), {"items", "intervalSeconds", "retentionDays"})
+        self.assertGreaterEqual(len(payload["items"]), 1)
+        self.assertEqual(
+            set(payload["items"][-1]),
+            {
+                "observedAt",
+                "intervalSeconds",
+                "appVersion",
+                "processStartedAt",
+                "requestCount",
+                "slowRequestCount",
+                "requestP95Ms",
+                "databaseOperationCount",
+                "databaseLockErrorCount",
+                "databaseP95Ms",
+                "cacheHitRate",
+                "pdfActiveJobs",
+                "databaseSizeBytes",
+            },
+        )
+
 
 def available_port():
     with socket.socket() as candidate:

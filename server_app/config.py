@@ -37,6 +37,18 @@ SESSION_COOKIE = "cageledger_session"
 SESSION_TTL_DAYS = 14
 SLOW_REQUEST_THRESHOLD_MS = float(os.environ.get("CAGELEDGER_SLOW_REQUEST_MS", "500"))
 SLOW_DATABASE_THRESHOLD_MS = float(os.environ.get("CAGELEDGER_SLOW_DATABASE_MS", "100"))
+PERFORMANCE_HISTORY_ENABLED = os.environ.get("CAGELEDGER_PERFORMANCE_HISTORY_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+PERFORMANCE_HISTORY_INTERVAL_SECONDS = max(
+    60, int(os.environ.get("CAGELEDGER_PERFORMANCE_HISTORY_INTERVAL_SECONDS", "300"))
+)
+PERFORMANCE_HISTORY_RETENTION_DAYS = max(
+    30, int(os.environ.get("CAGELEDGER_PERFORMANCE_HISTORY_RETENTION_DAYS", "1095"))
+)
 
 
 def frontend_root():

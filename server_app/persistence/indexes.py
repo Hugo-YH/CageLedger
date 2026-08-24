@@ -68,6 +68,7 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_reimbursement_attachments_claim ON reimbursement_claim_attachments(claim_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_project_sync_snapshots_imported_at ON project_sync_snapshots(imported_at)",
     "CREATE INDEX IF NOT EXISTS idx_audit_events_at ON audit_events(at)",
+    "CREATE INDEX IF NOT EXISTS idx_system_performance_snapshots_observed ON system_performance_snapshots(observed_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_catalog_nodes_module ON inspection_catalog_nodes(version, module_code, sort_order)",

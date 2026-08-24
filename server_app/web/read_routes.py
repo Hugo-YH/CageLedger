@@ -16,6 +16,7 @@ from server_app.config import (
 )
 from server_app.db import connect_db
 from server_app.domains.administration import (
+    list_performance_history,
     list_users,
     system_environment,
     system_update_status,
@@ -330,6 +331,19 @@ class ReadRoutesMixin:
                 self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
                 return
             self.send_json(system_environment())
+            return
+        if path == "/api/system/performance-history":
+            user = self.require_user()
+            if not user:
+                return
+            if user["role"] != "admin":
+                self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+                return
+            hours = parse_qs(urlparse(self.path).query).get("hours", ["24"])[0]
+            try:
+                self.send_json(list_performance_history(hours))
+            except ValueError:
+                self.send_json({"error": "hours 必须是整数"}, HTTPStatus.BAD_REQUEST)
             return
         if path == "/api/users":
             user = self.require_user()

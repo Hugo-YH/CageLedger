@@ -157,6 +157,28 @@ export interface SystemEnvironment {
   performance: SystemPerformance;
 }
 
+export interface SystemPerformanceHistoryItem {
+  observedAt: string;
+  intervalSeconds: number;
+  appVersion: string;
+  processStartedAt: string;
+  requestCount: number;
+  slowRequestCount: number;
+  requestP95Ms: number | null;
+  databaseOperationCount: number;
+  databaseLockErrorCount: number;
+  databaseP95Ms: number | null;
+  cacheHitRate: number | null;
+  pdfActiveJobs: number;
+  databaseSizeBytes: number | null;
+}
+
+export interface SystemPerformanceHistory {
+  items: SystemPerformanceHistoryItem[];
+  intervalSeconds: number;
+  retentionDays: number;
+}
+
 export interface SystemUpdateStatus {
   currentVersion?: string | null;
   latestVersion?: string | null;

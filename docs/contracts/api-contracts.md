@@ -153,8 +153,11 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 | `GET`            | `/api/audit-events`                | 分页操作日志                                             |
 | `GET`            | `/api/system/update-check`         | Gitea 最新 Release，管理员权限                           |
 | `GET`            | `/api/system/environment`          | 兼容运行环境参数与当前进程性能快照，管理员权限           |
+| `GET`            | `/api/system/performance-history`  | `hours` 内的性能汇总（管理员权限）                       |
 
-`/api/system/environment.performance` 返回当前服务进程自启动以来的低开销诊断数据：运行时长、HTTP 请求总数/慢请求/最近 512 个样本的 P50/P95/最大耗时、缓存容量/命中/未命中/过期/淘汰/命中率，以及 SQLite 操作/慢操作/锁错误和延迟摘要。指标随进程重启清零，不是持久化历史或 SLA；页面不得向非管理员请求或展示这些字段，也不得用高频自动轮询放大请求统计。
+`/api/system/environment.performance` 返回当前服务进程自启动以来的低开销诊断数据：运行时长、HTTP 请求总数/慢请求/最近 512 个样本的 P50/P95/最大耗时、缓存容量/命中/未命中/过期/淘汰/命中率，以及 SQLite 操作/慢操作/锁错误和延迟摘要。指标随进程重启清零，不是 SLA；页面不得向非管理员请求或展示这些字段，也不得用高频自动轮询放大请求统计。
+
+服务启动后和此后每 5 分钟，服务将聚合快照写入 `system_performance_snapshots`。快照只含计数增量、延迟摘要、缓存命中率、PDF 活动任务和数据库容量，不含用户、请求参数或 SQL 文本；默认保留 1,095 天。采样使用独立短事务，遇到锁冲突或其他失败会跳过当期而不影响业务请求。`/api/system/performance-history` 返回裁剪后的趋势字段，供管理员比较版本升级、重启和优化前后的变化。
 
 ## 动物巡检与目录
 
@@ -198,4 +201,4 @@ npm run smoke:api
 npm run test:e2e
 ```
 
-涉及性能的列表和写入再运行 `npm run benchmark`，并检查 `Server-Timing`、`[perf]` 日志和 SQLite 查询计划。
+涉及性能的列表和写入再运行 `npm run benchmark`，并检查 `Server-Timing`、`[perf]` 日志和 SQLite 查询计划。涉及缓存、索引、SQLite 查询、PDF 渲染、批量操作或首屏加载时，还要用相同时间窗口的 `/api/system/performance-history` 对比改动前后，记录版本、HTTP/SQLite P95、慢请求、锁错误和结论；该记录只供管理员趋势与验收使用。

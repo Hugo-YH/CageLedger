@@ -13,7 +13,12 @@ import {
 import { useState, type ReactNode } from "react";
 import { Alert, Button, Card, Flex, Progress, Segmented, Skeleton, Space, Statistic, Tag, Typography } from "antd";
 
-import { useSystemEnvironment, useSystemInfo, useSystemUpdate } from "../../api/administration";
+import {
+  useSystemEnvironment,
+  useSystemInfo,
+  useSystemPerformanceHistory,
+  useSystemUpdate,
+} from "../../api/administration";
 import type { SessionUser, SystemEnvironment, SystemPerformance } from "../../api/contracts";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
@@ -47,6 +52,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   const dispatch = useUiDispatch();
   const info = useSystemInfo();
   const environment = useSystemEnvironment(user.role === "admin");
+  const performanceHistory = useSystemPerformanceHistory(24, user.role === "admin");
   const [checkEnabled, setCheckEnabled] = useState(false);
   const update = useSystemUpdate(checkEnabled && user.role === "admin");
 
@@ -64,7 +70,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
       />
       {checkEnabled ? <UpdateCard update={update} /> : null}
       {user.role === "admin" ? (
-        <RuntimeDashboard environment={environment} />
+        <RuntimeDashboard environment={environment} performanceHistory={performanceHistory} />
       ) : (
         <Alert
           description="当前账号可以查看版本、文档、客户端证书和本机界面设置。请求、缓存与 SQLite 运行指标仅向系统管理员开放。"
@@ -169,7 +175,13 @@ function SystemMasthead({
   );
 }
 
-function RuntimeDashboard({ environment }: { environment: ReturnType<typeof useSystemEnvironment> }) {
+function RuntimeDashboard({
+  environment,
+  performanceHistory,
+}: {
+  environment: ReturnType<typeof useSystemEnvironment>;
+  performanceHistory: ReturnType<typeof useSystemPerformanceHistory>;
+}) {
   if (environment.isPending) {
     return (
       <Card aria-busy="true" className="system-runtime-loading">
@@ -243,7 +255,70 @@ function RuntimeDashboard({ environment }: { environment: ReturnType<typeof useS
         <DatabaseCard environment={data} />
         <PdfCard performance={performance} />
       </div>
+      <PerformanceHistoryCard history={performanceHistory} />
     </section>
+  );
+}
+
+function PerformanceHistoryCard({ history }: { history: ReturnType<typeof useSystemPerformanceHistory> }) {
+  if (history.isPending) {
+    return (
+      <Card aria-busy="true" className="system-history-card">
+        <Skeleton active paragraph={{ rows: 2 }} title={{ width: "28%" }} />
+      </Card>
+    );
+  }
+  if (history.isError || !history.data) {
+    return (
+      <Alert
+        action={
+          <Button loading={history.isFetching} onClick={() => void history.refetch()} size="small">
+            重新读取
+          </Button>
+        }
+        description={history.error?.message || "未返回历史性能记录"}
+        showIcon
+        title="性能历史读取失败"
+        type="warning"
+      />
+    );
+  }
+  const { items, intervalSeconds, retentionDays } = history.data;
+  const latest = items.at(-1);
+  const peakRequestP95 = items.reduce<number | null>(
+    (peak, item) =>
+      item.requestP95Ms !== null && (peak === null || item.requestP95Ms > peak) ? item.requestP95Ms : peak,
+    null,
+  );
+  const requestCount = items.reduce((total, item) => total + item.requestCount, 0);
+  return (
+    <Card
+      className="system-history-card"
+      extra={
+        <Button loading={history.isFetching} onClick={() => void history.refetch()} size="small">
+          刷新历史
+        </Button>
+      }
+      title={
+        <SectionTitle
+          icon={<ApiOutlined aria-hidden />}
+          subtitle={`每 ${Math.round(intervalSeconds / 60)} 分钟汇总一次，最长保留 ${retentionDays} 天`}
+          title="最近 24 小时性能记录"
+        />
+      }
+    >
+      <div aria-live="polite" className="system-history-summary">
+        <Statistic title="已记录周期" value={formatCount(items.length)} />
+        <Statistic title="周期内请求" value={formatCount(requestCount)} />
+        <Statistic title="HTTP P95 峰值" value={formatMilliseconds(peakRequestP95)} />
+        <Statistic title="最新 SQLite P95" value={formatMilliseconds(latest?.databaseP95Ms ?? null)} />
+      </div>
+      <Typography.Text type="secondary">
+        {latest
+          ? `最近记录：${formatObservedTime(latest.observedAt)}；历史记录用于比较版本升级和优化前后的变化。`
+          : "服务启动后会立即写入基线，后续记录按设定周期追加。"}
+      </Typography.Text>
+    </Card>
   );
 }
 
@@ -555,4 +630,9 @@ function formatBytes(value: number | null): string {
 function formatRefreshTime(timestamp: number): string {
   if (!timestamp) return "尚未更新";
   return REFRESH_TIME_FORMATTER.format(timestamp);
+}
+
+function formatObservedTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : REFRESH_TIME_FORMATTER.format(date);
 }
