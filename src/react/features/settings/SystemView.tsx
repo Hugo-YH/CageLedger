@@ -19,7 +19,7 @@ import {
   useSystemPerformanceHistory,
   useSystemUpdate,
 } from "../../api/administration";
-import type { SessionUser, SystemEnvironment, SystemPerformance } from "../../api/contracts";
+import type { SessionUser, SystemEnvironment, SystemPerformance, SystemRequestBreakdown } from "../../api/contracts";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
@@ -255,6 +255,7 @@ function RuntimeDashboard({
         <DatabaseCard environment={data} />
         <PdfCard performance={performance} />
       </div>
+      <RequestBreakdownCard performance={performance} />
       <PerformanceHistoryCard history={performanceHistory} />
     </section>
   );
@@ -398,6 +399,70 @@ function RequestCard({ performance }: { performance: SystemPerformance }) {
       />
     </DiagnosticCard>
   );
+}
+
+function RequestBreakdownCard({ performance }: { performance: SystemPerformance }) {
+  const items = performance.requests.breakdown.slice(0, 8);
+  return (
+    <Card
+      className="system-request-breakdown-card"
+      title={
+        <SectionTitle
+          icon={<ApiOutlined aria-hidden />}
+          subtitle="资源级聚合不记录查询参数、业务 ID、用户名、请求内容或 SQL；应用 P95 不含响应写入等待。"
+          title="请求分布"
+        />
+      }
+    >
+      {items.length === 0 ? (
+        <Typography.Text type="secondary">尚无可分析的 HTTP 请求样本。</Typography.Text>
+      ) : (
+        <div className="system-request-breakdown-scroll">
+          <table aria-label="HTTP 请求分布" className="system-request-breakdown-table">
+            <thead>
+              <tr>
+                <th scope="col">类别与资源</th>
+                <th scope="col">请求 / 慢请求</th>
+                <th scope="col">应用 P95</th>
+                <th scope="col">端到端 P95</th>
+                <th scope="col">响应体积</th>
+                <th scope="col">错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <RequestBreakdownRow item={item} key={`${item.category}-${item.route}`} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RequestBreakdownRow({ item }: { item: SystemRequestBreakdown }) {
+  return (
+    <tr>
+      <th scope="row">
+        <span className="system-request-route">
+          <Tag className="system-request-category" color="blue">
+            {requestCategoryLabel(item.category)}
+          </Tag>
+          <code>{item.route}</code>
+        </span>
+      </th>
+      <td>{`${formatCount(item.total)} / ${formatCount(item.slow)}`}</td>
+      <td>{formatMilliseconds(item.applicationP95Ms)}</td>
+      <td>{formatMilliseconds(item.p95Ms)}</td>
+      <td>{formatBytes(item.responseBytes)}</td>
+      <td>{formatCount(item.errors)}</td>
+    </tr>
+  );
+}
+
+function requestCategoryLabel(category: SystemRequestBreakdown["category"]) {
+  return { api: "API", download: "下载", page: "页面", static: "静态" }[category];
 }
 
 function DatabaseCard({ environment }: { environment: SystemEnvironment }) {

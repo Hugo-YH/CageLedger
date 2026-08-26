@@ -21,7 +21,9 @@ test("administrator can inspect and refresh process metrics", async ({ page }) =
   await expect(page.getByRole("heading", { name: "HTTP 请求", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "SQLite", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "PDF 生成", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "请求分布", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "最近 24 小时性能记录", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("table", { name: "HTTP 请求分布" })).toBeVisible();
   await expect(page.getByText("PDF 队列", { exact: true })).toBeVisible();
   await expect(page.getByLabel("PDF 缓存容量占用")).toBeVisible();
   await expect(page.getByText(/自本次启动以来累计/)).toBeVisible();
@@ -57,6 +59,7 @@ test("administrator can inspect and refresh process metrics", async ({ page }) =
   ]) {
     await page.setViewportSize(viewport);
     await expect(page.getByRole("heading", { name: "最近 24 小时性能记录", exact: true, level: 2 })).toBeVisible();
+    await expect(page.getByRole("table", { name: "HTTP 请求分布" })).toBeVisible();
     const historyLayout = await page.locator(".system-history-summary").evaluate((element) => ({
       columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
       overflow: element.scrollWidth > element.clientWidth,

@@ -62,6 +62,20 @@ export interface SystemLatencyMetrics {
   maxMs: number | null;
 }
 
+export interface SystemRequestBreakdown {
+  category: "api" | "download" | "page" | "static";
+  route: string;
+  total: number;
+  slow: number;
+  errors: number;
+  responseBytes: number;
+  sampleCount: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  maxMs: number | null;
+  applicationP95Ms: number | null;
+}
+
 export interface PdfLatencyMetrics extends SystemLatencyMetrics {
   averageMs: number | null;
 }
@@ -71,6 +85,7 @@ export interface SystemPerformance {
   requests: SystemLatencyMetrics & {
     total: number;
     slow: number;
+    breakdown: SystemRequestBreakdown[];
   };
   cache: {
     entries: number;

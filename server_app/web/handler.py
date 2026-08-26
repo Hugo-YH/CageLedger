@@ -6,7 +6,7 @@ from http.server import SimpleHTTPRequestHandler
 from server_app.config import MAX_BODY_BYTES, SLOW_REQUEST_THRESHOLD_MS, frontend_root
 from server_app.http import add_default_headers, send_download
 from server_app.http import send_json as send_json_response
-from server_app.performance import record_request
+from server_app.performance import record_request, request_observability
 
 
 class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
@@ -16,24 +16,56 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
     def handle_one_request(self):
         self._request_started_at = time.perf_counter()
         self._response_status = 0
+        self._response_bytes = 0
+        self._response_is_download = False
+        self._response_started_at = None
         try:
             super().handle_one_request()
         finally:
             if getattr(self, "requestline", ""):
                 elapsed_ms = (time.perf_counter() - self._request_started_at) * 1000
                 slow = elapsed_ms >= SLOW_REQUEST_THRESHOLD_MS
-                record_request(elapsed_ms, slow=slow)
+                path = getattr(self, "path", "").split("?", 1)[0]
+                category, route = request_observability(path, is_download=getattr(self, "_response_is_download", False))
+                response_started_at = getattr(self, "_response_started_at", None)
+                application_ms = (
+                    (response_started_at - self._request_started_at) * 1000
+                    if response_started_at is not None
+                    else elapsed_ms
+                )
+                record_request(
+                    elapsed_ms,
+                    slow=slow,
+                    application_ms=application_ms,
+                    category=category,
+                    route=route,
+                    response_bytes=getattr(self, "_response_bytes", 0),
+                    status=getattr(self, "_response_status", 0),
+                )
                 if slow:
                     method = getattr(self, "command", "")
-                    path = getattr(self, "path", "").split("?", 1)[0]
                     print(
-                        f"[slow-request] {method} {path} {elapsed_ms:.1f}ms status={self._response_status or '-'}",
+                        f"[slow-request] {method} {route} total={elapsed_ms:.1f}ms app={application_ms:.1f}ms "
+                        f"kind={category} status={self._response_status or '-'} bytes={self._response_bytes or 0}",
                         flush=True,
                     )
 
     def send_response(self, code, message=None):
         self._response_status = int(code)
+        if self._response_started_at is None:
+            self._response_started_at = time.perf_counter()
         super().send_response(code, message)
+
+    def send_header(self, keyword, value):
+        normalized = keyword.lower()
+        if normalized == "content-length":
+            try:
+                self._response_bytes = max(int(value), 0)
+            except (TypeError, ValueError):
+                self._response_bytes = 0
+        elif normalized == "content-disposition" and "attachment" in str(value).lower():
+            self._response_is_download = True
+        super().send_header(keyword, value)
 
     def end_headers(self):
         add_default_headers(self)

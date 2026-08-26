@@ -5,6 +5,7 @@ from server_app.performance import (
     record_cache,
     record_database_operation,
     record_request,
+    request_observability,
     reset_performance_metrics,
 )
 
@@ -33,10 +34,39 @@ class PerformanceMetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["requests"]["slow"], 1)
         self.assertEqual(snapshot["requests"]["p50Ms"], 30.0)
         self.assertEqual(snapshot["requests"]["p95Ms"], 500.0)
+        self.assertEqual(snapshot["requests"]["breakdown"][0]["route"], "/")
         self.assertEqual(snapshot["cache"]["hitRate"], 0.5)
         self.assertEqual(snapshot["cache"]["evictions"], 1)
         self.assertEqual(snapshot["database"]["slowOperations"], 1)
         self.assertEqual(snapshot["database"]["lockErrors"], 1)
+
+    def test_request_breakdown_aggregates_without_sensitive_path_values(self):
+        record_request(
+            700,
+            slow=True,
+            application_ms=120,
+            category="api",
+            route="/api/quantity-sheets",
+            response_bytes=2048,
+            status=200,
+        )
+        record_request(
+            20,
+            application_ms=15,
+            category="download",
+            route="下载",
+            response_bytes=4096,
+            status=200,
+        )
+
+        breakdown = performance_snapshot()["requests"]["breakdown"]
+        api = next(item for item in breakdown if item["route"] == "/api/quantity-sheets")
+        self.assertEqual(api["slow"], 1)
+        self.assertEqual(api["applicationP95Ms"], 120.0)
+        self.assertEqual(api["responseBytes"], 2048)
+        self.assertEqual(request_observability("/api/users/alice@example.test"), ("api", "/api/users"))
+        self.assertEqual(request_observability("/api/public/cage-card/private-qr"), ("api", "/api/public/cage-card"))
+        self.assertEqual(request_observability("/assets/index-secret.js"), ("static", "/assets"))
 
 
 if __name__ == "__main__":

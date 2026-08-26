@@ -20,7 +20,7 @@ const environment: SystemEnvironment = {
   database: { ok: true, journalMode: "wal", sizeBytes: 1024, tables: 12, path: "test.sqlite" },
   performance: {
     uptimeSeconds: 3_900,
-    requests: { total: 30, slow: 0, sampleCount: 30, p50Ms: 12, p95Ms: 40, maxMs: 80 },
+    requests: { total: 30, slow: 0, sampleCount: 30, p50Ms: 12, p95Ms: 40, maxMs: 80, breakdown: [] },
     cache: { entries: 128, capacity: 512, hits: 18, misses: 2, expirations: 0, evictions: 0, hitRate: 0.9 },
     database: {
       operations: 120,

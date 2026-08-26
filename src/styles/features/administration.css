@@ -893,6 +893,78 @@
   min-width: 0;
 }
 
+.system-request-breakdown-card {
+  min-width: 0;
+}
+
+[data-ui="system-status-page"] .system-request-breakdown-card .ant-card-head {
+  min-height: 64px;
+  padding-inline: 16px;
+}
+
+[data-ui="system-status-page"] .system-request-breakdown-card .ant-card-head-title {
+  padding-block: 12px;
+  overflow: visible;
+  white-space: normal;
+}
+
+[data-ui="system-status-page"] .system-request-breakdown-card .ant-card-body {
+  padding: 0;
+}
+
+.system-request-breakdown-scroll {
+  overflow-x: auto;
+}
+
+.system-request-breakdown-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-request-breakdown-table th,
+.system-request-breakdown-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.system-request-breakdown-table thead th {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.system-request-breakdown-table th:first-child {
+  text-align: start;
+}
+
+.system-request-breakdown-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.system-request-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 330px;
+}
+
+.system-request-category {
+  margin-inline-end: 0;
+}
+
+.system-request-route code {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
 [data-ui="system-status-page"] .system-history-card .ant-card-head {
   min-height: 64px;
   padding-inline: 16px;

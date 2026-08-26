@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.1.1",
+    build: "188",
+    releasedAt: "2026-08-26",
+    title: "请求性能定位补充",
+    items: [
+      "“关于系统”新增请求分布表，按 API、页面、静态资源和下载分别汇总请求量、慢请求、错误数、响应体积及 P95 耗时，便于区分服务端处理慢与响应写入等待",
+      "慢请求日志补充资源级路由、请求类别、应用耗时、总耗时、状态码和响应大小；路由统计不保存查询参数、业务 ID、用户名、请求内容或 SQL",
+      "管理员可查看运行指标，房间管理员不会请求或看到相关数据；新增单元、接口和浏览器回归覆盖监控聚合与权限边界",
+    ],
+  },
+  {
     version: "1.1.0",
     build: "187",
     releasedAt: "2026-08-24",
