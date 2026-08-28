@@ -150,3 +150,91 @@ test("marking a saved batch as printed keeps its server version", async ({ page 
   expect((payload.item ?? payload).status).toBe("printed");
   await page.request.delete(`/api/intake-batches/${batchId}`);
 });
+
+test("intake printing blocks mixed layouts and uses the temporary page size", async ({ page }) => {
+  const suffix = Date.now();
+  const temporaryId = `batch-e2e-temporary-print-${suffix}`;
+  const standardId = `batch-e2e-standard-print-${suffix}`;
+  const temporaryBatchNo = `E2E-TEMPORARY-${suffix}`;
+  const standardBatchNo = `E2E-STANDARD-${suffix}`;
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+  await ensureTestInfrastructure(page);
+  await page.request.post("/api/rooms", {
+    data: {
+      item: {
+        id: "room-e2e-8101",
+        name: "8101",
+        area: "E2E",
+        roomManager: "E2E 房间管理员",
+        facility: "zhujiang",
+        defaultSpecies: "mouse",
+        defaultBillingItem: "mouse_standard",
+        defaultCustomerType: "internal",
+        defaultAnimalCount: 5,
+      },
+    },
+  });
+  const createBatch = (id: string, batchNo: string, roomName: string) =>
+    page.request.post("/api/intake-batches", {
+      data: {
+        item: {
+          id,
+          receiverName: "系统管理员",
+          status: "pending_print",
+          batchNo,
+          iacuc: "Z2026001",
+          supplier: "广东药康",
+          strainStandard: "C57BL/6J",
+          pi: "E2E 打印负责人",
+          owner: "E2E 实验负责人",
+          roomName,
+          intakeDate: "2026-08-26",
+          husbandryDays: 31,
+          endDate: "2026-09-26",
+          quantity: 5,
+          suggestedAnimalsPerCage: 5,
+          suggestedCardCount: 1,
+          finalCardCount: 1,
+          species: "mouse",
+          cards: [],
+        },
+      },
+    });
+  await createBatch(temporaryId, temporaryBatchNo, "8014");
+  await createBatch(standardId, standardBatchNo, "8101");
+  await page.reload();
+
+  const intakeGroup = page.getByRole("button", { name: "笼卡管理", exact: true }).or(
+    page
+      .locator(".ant-main-menu")
+      .getByRole("menuitem", { name: /笼卡管理/ })
+      .first(),
+  );
+  await intakeGroup.click();
+  await page
+    .locator(".ant-main-menu")
+    .getByRole("menuitem", { name: /待接收批次/ })
+    .click();
+
+  const temporaryRow = page.locator("tr", { hasText: temporaryBatchNo }).first();
+  const standardRow = page.locator("tr", { hasText: standardBatchNo }).first();
+  await temporaryRow.getByRole("checkbox", { name: `选择 ${temporaryBatchNo}` }).check();
+  await standardRow.getByRole("checkbox", { name: `选择 ${standardBatchNo}` }).check();
+  const printButton = page.getByRole("button", { name: "打印笼卡", exact: true });
+  await expect(printButton).toBeDisabled();
+  await expect(printButton).toHaveAccessibleDescription("普通饲养间与临时饲养间笼卡不能混合打印，请分开选择。");
+
+  await standardRow.getByRole("checkbox", { name: `选择 ${standardBatchNo}` }).uncheck();
+  await expect(printButton).toBeEnabled();
+  await printButton.click();
+  await expect(page.getByRole("heading", { name: "补齐空白笼卡", exact: true })).toBeVisible();
+  await expect(page.getByText("8014 临时饲养间版式", { exact: true })).toBeVisible();
+  await expect(page.getByText(/距离整页 15 张还差 14 张/)).toBeVisible();
+
+  await page.request.delete(`/api/intake-batches/${temporaryId}`);
+  await page.request.delete(`/api/intake-batches/${standardId}`);
+});

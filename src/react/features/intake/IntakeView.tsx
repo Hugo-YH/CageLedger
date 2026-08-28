@@ -26,9 +26,24 @@ import {
   normalizeIntakeBatch,
   parseIntakeMessage,
 } from "../../../domain/intake";
-import { openIntakeCardPrint } from "../../print/intakeCards";
+import {
+  openIntakeCardPrint,
+  planIntakeCardPrint,
+  type IntakeCardPrintKind,
+  type IntakePrintRoom,
+} from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
 import type { WorkspaceView } from "../../state/ui";
+
+interface PendingIntakePrintJob {
+  batches: IntakeBatch[];
+  kind: IntakeCardPrintKind;
+  cardCount: number;
+  pageSize: number;
+  missing: number;
+  saveCurrent: boolean;
+  exists: boolean;
+}
 
 export function IntakeView({
   user,
@@ -43,6 +58,11 @@ export function IntakeView({
   const queryClient = useQueryClient();
   const bootstrap = useBootstrap("summary");
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
+  const printRooms: IntakePrintRoom[] =
+    bootstrap.data?.rooms.map((room) => ({
+      name: String(room.name || ""),
+      facility: String(room.facility || ""),
+    })) || [];
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [aiParsing, setAiParsing] = useState(false);
@@ -60,6 +80,7 @@ export function IntakeView({
   const [markingPrinted, setMarkingPrinted] = useState(false);
   const [markingReceived, setMarkingReceived] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
+  const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
   const params: IntakeListParams = {
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -74,6 +95,7 @@ export function IntakeView({
   const confirmBatchesReceipt = useConfirmIntakeBatchesReceipt();
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
+  const selectedPrintPlan = planIntakeCardPrint(selectedItems, printRooms);
 
   if (bootstrap.isPending || (mode === "batches" && list.isPending)) {
     return (
@@ -219,7 +241,7 @@ export function IntakeView({
     }
   }
 
-  async function printCurrentBatch() {
+  function printCurrentBatch() {
     const item = normalizeIntakeBatch(draft, roomNames);
     const missingFields = missingIntakeRequiredFields(item);
     if (missingFields.length) {
@@ -230,24 +252,71 @@ export function IntakeView({
       setNotice("打印前请填写动物数量和打印张数。");
       return;
     }
+    requestPrint([item], true, editing);
+  }
+
+  function requestPrint(targets: IntakeBatch[], saveCurrent = false, exists = false) {
+    const plan = planIntakeCardPrint(targets, printRooms);
+    if (plan.disabledReason) {
+      if (saveCurrent) setNotice(plan.disabledReason);
+      else {
+        setBulkNotice(plan.disabledReason);
+        setBulkNoticeKind("info");
+      }
+      return;
+    }
+    const job: PendingIntakePrintJob = {
+      batches: targets,
+      kind: plan.kind as IntakeCardPrintKind,
+      cardCount: plan.cardCount,
+      pageSize: plan.pageSize,
+      missing: plan.missing,
+      saveCurrent,
+      exists,
+    };
+    if (job.missing) {
+      setPendingPrint(job);
+      return;
+    }
+    void executePrint(job, false);
+  }
+
+  async function executePrint(job: PendingIntakePrintJob, fillBlanks: boolean) {
+    setPendingPrint(null);
     const popup = window.open("", "_blank");
     if (!popup) {
-      setNotice("打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。");
+      const message = "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。";
+      if (job.saveCurrent) setNotice(message);
+      else {
+        setBulkNotice(message);
+        setBulkNoticeKind("error");
+      }
       return;
     }
     popup.document.write(
       '<!doctype html><html lang="zh-CN"><head><title>正在准备笼卡</title></head><body>正在准备笼卡...</body></html>',
     );
     popup.document.close();
+    let printable = job.batches;
     try {
-      const response = await save.mutateAsync({ item, exists: editing });
-      const saved = normalizeIntakeBatch(response.item, roomNames);
-      setDraft(saved);
-      setEditing(true);
-      if (openIntakeCardPrint([saved], popup)) await markPrinted([saved]);
+      if (job.saveCurrent) {
+        const response = await save.mutateAsync({ item: job.batches[0], exists: job.exists });
+        const saved = normalizeIntakeBatch(response.item, roomNames);
+        setDraft(saved);
+        setEditing(true);
+        printable = [saved];
+      }
+      if (openIntakeCardPrint(printable, { kind: job.kind, fillBlanks, targetWindow: popup })) {
+        await markPrinted(printable);
+      }
     } catch (error) {
       popup.close();
-      setNotice(error instanceof Error ? error.message : "保存笼卡失败");
+      const message = error instanceof Error ? error.message : "准备笼卡失败";
+      if (job.saveCurrent) setNotice(message);
+      else {
+        setBulkNotice(message);
+        setBulkNoticeKind("error");
+      }
     }
   }
 
@@ -302,35 +371,44 @@ export function IntakeView({
   }
   if (isMobile && mode === "entry") {
     return (
-      <MobilePage
-        actions={
-          <>
-            <MobileButton size="mini" onClick={startNew}>
-              新建批次
-            </MobileButton>
-            <MobileButton color="primary" form="intake-entry-panel" size="mini" type="submit">
-              保存待接收批次
-            </MobileButton>
-          </>
-        }
-        onBack={() => navigate("intake-entry")}
-        title="接收笼卡"
-      >
-        <IntakeEntryPanel
-          editing={editing}
-          draft={draft}
-          headActions={null}
-          aiPending={aiParsing}
-          notice={notice}
-          onAiParse={aiParseMessage}
-          onParse={parseMessage}
-          onPrint={() => void printCurrentBatch()}
-          onSubmit={submit}
-          onUpdate={update}
-          roomNames={roomNames}
-          saving={save.isPending}
-        />
-      </MobilePage>
+      <>
+        <MobilePage
+          actions={
+            <>
+              <MobileButton size="mini" onClick={startNew}>
+                新建批次
+              </MobileButton>
+              <MobileButton color="primary" form="intake-entry-panel" size="mini" type="submit">
+                保存待接收批次
+              </MobileButton>
+            </>
+          }
+          onBack={() => navigate("intake-entry")}
+          title="接收笼卡"
+        >
+          <IntakeEntryPanel
+            editing={editing}
+            draft={draft}
+            headActions={null}
+            aiPending={aiParsing}
+            notice={notice}
+            onAiParse={aiParseMessage}
+            onParse={parseMessage}
+            onPrint={printCurrentBatch}
+            onSubmit={submit}
+            onUpdate={update}
+            roomNames={roomNames}
+            saving={save.isPending}
+          />
+        </MobilePage>
+        {pendingPrint ? (
+          <IntakePrintConfirmDialog
+            job={pendingPrint}
+            onClose={() => setPendingPrint(null)}
+            onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
+          />
+        ) : null}
+      </>
     );
   }
 
@@ -383,6 +461,7 @@ export function IntakeView({
               bulkNoticeKind={bulkNoticeKind}
               markingPrinted={markingPrinted}
               markingReceived={markingReceived}
+              printDisabledReason={selectedPrintPlan.disabledReason}
               page={page}
               pageSize={pageSize}
               params={params}
@@ -403,9 +482,7 @@ export function IntakeView({
                 setAllFilteredSelected(false);
                 setPage(1);
               }}
-              onPrint={(targets) => {
-                if (openIntakeCardPrint(targets)) void markPrinted(targets);
-              }}
+              onPrint={(targets) => requestPrint(targets)}
               onMarkPrinted={(targets) => void markPrinted(targets)}
               onReceive={(targets) => void receive(targets)}
               onEdit={edit}
@@ -479,6 +556,48 @@ export function IntakeView({
           </div>
         </ModalShell>
       ) : null}
+      {pendingPrint ? (
+        <IntakePrintConfirmDialog
+          job={pendingPrint}
+          onClose={() => setPendingPrint(null)}
+          onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function IntakePrintConfirmDialog({
+  job,
+  onClose,
+  onPrint,
+}: {
+  job: PendingIntakePrintJob;
+  onClose: () => void;
+  onPrint: (fillBlanks: boolean) => void;
+}) {
+  return (
+    <ModalShell ariaLabel="补齐空白笼卡" className="intake-print-confirm-modal" onClose={onClose}>
+      <div className="modal-shell-head">
+        <div>
+          <h2>补齐空白笼卡</h2>
+          <p>{job.kind === "temporary" ? "8014 临时饲养间版式" : "普通饲养间版式"}</p>
+        </div>
+        <ActionButton aria-label="关闭" onClick={onClose}>
+          关闭
+        </ActionButton>
+      </div>
+      <div className="modal-shell-body">
+        <p>
+          当前共 {job.cardCount} 张笼卡，距离整页 {job.pageSize} 张还差 {job.missing} 张。是否自动补齐空白卡？
+        </p>
+      </div>
+      <div className="modal-shell-actions">
+        <ActionButton onClick={() => onPrint(false)}>直接打印</ActionButton>
+        <ActionButton tone="primary" onClick={() => onPrint(true)}>
+          补空白卡并打印
+        </ActionButton>
+      </div>
+    </ModalShell>
   );
 }

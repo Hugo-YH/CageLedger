@@ -47,6 +47,11 @@
   margin: 0;
 }
 
+[data-feature="intake"] .intake-print-button-wrap {
+  display: inline-flex;
+  border-radius: 6px;
+}
+
 [data-feature="intake"] .intake-list-pagination {
   margin-top: 0;
 }

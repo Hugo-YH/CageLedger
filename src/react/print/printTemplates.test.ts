@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BillingStatementLine, BillingStatementResponse, IntakeBatch, QuantitySheet } from "../api/contracts";
 import settlementParityFixture from "./fixtures/settlement-parity.json";
-import { intakeCardsPrintHtml } from "./intakeCards";
+import { intakeCardsPrintHtml, planIntakeCardPrint } from "./intakeCards";
 import { quantitySheetPagesMarkup } from "./quantitySheets";
 import { qrCodeMatrix, qrCodeSvg } from "./qrCode";
 import { settlementStatementHtml } from "./settlement";
@@ -65,6 +65,87 @@ describe("print templates", () => {
       cards: [{ qrId: "WXYZ", label: "5/5", index: 5, suggestedQuantity: "" }],
     } as IntakeBatch;
     expect(intakeCardsPrintHtml([batch])).toContain(" /23");
+  });
+
+  it("classifies only the uniquely configured Zhujiang 8014 room as temporary", () => {
+    const temporary = { roomName: "8014", finalCardCount: 5 } as IntakeBatch;
+    const standard = { roomName: "8101", finalCardCount: 9 } as IntakeBatch;
+    const rooms = [
+      { name: "8014", facility: "zhujiang" },
+      { name: "8101", facility: "zhujiang" },
+    ];
+    expect(planIntakeCardPrint([temporary], rooms)).toMatchObject({
+      kind: "temporary",
+      cardCount: 5,
+      pageSize: 15,
+      missing: 10,
+    });
+    expect(planIntakeCardPrint([standard], rooms)).toMatchObject({
+      kind: "standard",
+      cardCount: 9,
+      pageSize: 14,
+      missing: 5,
+    });
+    expect(planIntakeCardPrint([temporary, standard], rooms)).toMatchObject({
+      kind: "mixed",
+      disabledReason: "普通饲养间与临时饲养间笼卡不能混合打印，请分开选择。",
+    });
+  });
+
+  it("keeps non-Zhujiang 8014 standard and blocks unresolved 8014", () => {
+    const batch = { roomName: "8014", finalCardCount: 1 } as IntakeBatch;
+    expect(planIntakeCardPrint([batch], [{ name: "8014", facility: "bioisland" }])).toMatchObject({
+      kind: "standard",
+      disabledReason: "",
+    });
+    expect(planIntakeCardPrint([batch], [])).toMatchObject({
+      kind: "unresolved",
+      disabledReason: "无法确认 8014 饲养间的设施归属，请先检查房间配置。",
+    });
+    expect(
+      planIntakeCardPrint(
+        [batch],
+        [
+          { name: "8014", facility: "zhujiang" },
+          { name: "8014", facility: "bioisland" },
+        ],
+      ),
+    ).toMatchObject({ kind: "unresolved" });
+  });
+
+  it("renders and pads the temporary 8014 layout to fifteen cards without QR or room fields", () => {
+    const batch = {
+      batchNo: "2026-08-26-Z2026013",
+      iacuc: "Z2026013",
+      strainStandard: "C57BL/6J",
+      pi: "项目负责人",
+      owner: "实验负责人",
+      intakeDate: "2026-08-26",
+      endDate: "2026-09-26",
+      roomName: "8014",
+      quantity: 23,
+      finalCardCount: 1,
+      cards: [{ qrId: "ABCD", label: "1/5", index: 1, suggestedQuantity: "" }],
+    } as IntakeBatch;
+    const html = intakeCardsPrintHtml([batch], { kind: "temporary", fillBlanks: true });
+    expect(html.match(/<section class="temporary-card">/g)).toHaveLength(15);
+    expect(html).toContain("grid-template-columns:repeat(3,65mm)");
+    expect(html).toContain("grid-auto-rows:55mm");
+    expect(html).toContain(" /23");
+    expect(html).toContain("2026.8.26-2026.9.26");
+    expect(html).not.toContain('aria-label="笼卡二维码"');
+    expect(html).not.toContain("<th>房间</th>");
+  });
+
+  it("pads the standard layout to fourteen cards without creating QR markup for blank cards", () => {
+    const batch = {
+      quantity: 5,
+      finalCardCount: 1,
+      cards: [{ qrId: "ABCD", label: "1/1", index: 1, suggestedQuantity: "5" }],
+    } as IntakeBatch;
+    const html = intakeCardsPrintHtml([batch], { fillBlanks: true });
+    expect(html.match(/<section class="standard-card">/g)).toHaveLength(14);
+    expect(html.match(/aria-label="笼卡二维码"/g)).toHaveLength(1);
   });
 
   it("uses the two-column official quantity sheet layout", () => {

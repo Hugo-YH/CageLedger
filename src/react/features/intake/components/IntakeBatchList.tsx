@@ -18,6 +18,7 @@ export function IntakeBatchList({
   bulkNoticeKind,
   markingPrinted,
   markingReceived,
+  printDisabledReason,
   page,
   pageSize,
   params,
@@ -44,6 +45,7 @@ export function IntakeBatchList({
   bulkNoticeKind: "success" | "error" | "info";
   markingPrinted: boolean;
   markingReceived: boolean;
+  printDisabledReason: string;
   page: number;
   pageSize: number;
   params: IntakeListParams;
@@ -157,11 +159,25 @@ export function IntakeBatchList({
           className="intake-bulk-alert"
           title={
             <Flex align="center" gap={12} justify="space-between" wrap>
-              <Typography.Text strong>已选 {selectedItems.length} 项</Typography.Text>
+              <Space size={8} wrap>
+                <Typography.Text strong>已选 {selectedItems.length} 项</Typography.Text>
+                {printDisabledReason ? (
+                  <Typography.Text id="intake-print-disabled-reason" type="secondary">
+                    {printDisabledReason}
+                  </Typography.Text>
+                ) : null}
+              </Space>
               <Space wrap>
-                <Button type="primary" onClick={() => onPrint(selectedItems)}>
-                  打印笼卡
-                </Button>
+                <span className="intake-print-button-wrap" title={printDisabledReason}>
+                  <Button
+                    aria-describedby={printDisabledReason ? "intake-print-disabled-reason" : undefined}
+                    disabled={Boolean(printDisabledReason)}
+                    type="primary"
+                    onClick={() => onPrint(selectedItems)}
+                  >
+                    打印笼卡
+                  </Button>
+                </span>
                 <Button
                   disabled={markingPrinted || markingReceived}
                   loading={markingPrinted}
