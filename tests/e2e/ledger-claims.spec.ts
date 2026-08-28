@@ -161,6 +161,25 @@ test("已归档流程可补录报销单并更新状态标签", async ({ page }) 
 
   await row.getByRole("button", { name: "补录" }).click();
   const recording = page.getByRole("dialog").filter({ hasText: "补录报销单" }).first();
+  const removeReimbursementForm = recording.getByRole("button", { name: "删除第 1 行报销单" });
+  await expect(removeReimbursementForm).toBeVisible();
+  await expect(removeReimbursementForm).toHaveCSS("height", "32px");
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 1180, height: 820 },
+    { width: 760, height: 900 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(recording).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+  }
+  await removeReimbursementForm.focus();
+  await page.keyboard.press("Enter");
+  await expect(removeReimbursementForm).toHaveCount(0);
+  await recording.getByRole("button", { name: "添加报销单号" }).click();
   await recording.locator('input[placeholder="报销单号"]').first().fill("BX-LATE-001");
   await recording.locator('input[placeholder="金额（元）"]').first().fill("120");
   await recording.getByRole("button", { name: "保存补录" }).click();

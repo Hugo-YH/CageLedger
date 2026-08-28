@@ -188,10 +188,12 @@ export function WorkflowReimbursementRecordingModal({
                       style={{ width: 120 }}
                     />
                   </Form.Item>
-                  <MinusCircleOutlined
+                  <Button
                     aria-label={`删除第 ${name + 1} 行报销单`}
+                    danger
+                    icon={<MinusCircleOutlined aria-hidden />}
+                    type="text"
                     onClick={() => remove(name)}
-                    role="button"
                   />
                 </Space>
               ))}
