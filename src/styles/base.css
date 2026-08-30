@@ -1094,7 +1094,7 @@ svg {
   padding: 24px;
 }
 
-.confirm-dialog {
+.confirm-dialog-backdrop > .confirm-dialog {
   width: min(420px, 100%);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -1106,18 +1106,18 @@ svg {
   animation: modalSurfaceIn var(--motion-slow) var(--ease-emphasis) both;
 }
 
-.confirm-dialog-save-quantity-sheet {
+.confirm-dialog-backdrop > .confirm-dialog-save-quantity-sheet {
   width: min(560px, 100%);
   padding: 24px;
   border-color: color-mix(in srgb, var(--green) 22%, transparent);
   border-radius: 16px;
 }
 
-.confirm-dialog h2 {
+.confirm-dialog-backdrop > .confirm-dialog h2 {
   font-size: 16px;
 }
 
-.confirm-dialog p {
+.confirm-dialog-backdrop > .confirm-dialog p {
   margin-top: 8px;
   color: var(--muted);
   line-height: 1.55;

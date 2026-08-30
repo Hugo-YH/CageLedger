@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.1.3",
+    build: "190",
+    releasedAt: "2026-08-30",
+    title: "弹窗确认显示修复",
+    items: [
+      "修复房间、笼架等删除操作的二次确认框在部分窗口中显示到页面外的问题；确认框重新居中显示，保留 Esc 关闭和关闭后焦点返回",
+      "清理遗留确认框样式对 Ant Design 弹窗根节点的影响，笼卡打印及其他业务弹窗不再受该样式干扰",
+    ],
+  },
+  {
     version: "1.1.2",
     build: "189",
     releasedAt: "2026-08-30",
