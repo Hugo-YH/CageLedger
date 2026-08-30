@@ -91,6 +91,8 @@ export function WorkflowDetailModal({
     statement_locked: { label: "锁定" },
     statement_unlocked: { label: "解锁" },
   };
+  const eventLabel = (eventType: string) =>
+    eventType === "statement_registered_archived" && !reimbursementRequired ? "结算单交回" : eventMeta[eventType].label;
   const allEvents = (target?.events || [])
     .filter((event) => eventMeta[event.eventType])
     .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
@@ -143,14 +145,13 @@ export function WorkflowDetailModal({
     ...allEvents
       .filter((event) => effectiveIds.has(event.id))
       .map((event) => {
-        const meta = eventMeta[event.eventType];
         return {
           at: event.at,
           color: "var(--primary)",
           title: eventTime(event),
           content: (
             <>
-              <Typography.Text strong>{meta.label}</Typography.Text>
+              <Typography.Text strong>{eventLabel(event.eventType)}</Typography.Text>
               {personName(event.actor?.displayName || "")}
               {event.note && showEventNote(event)
                 ? detailLine(
@@ -219,13 +220,12 @@ export function WorkflowDetailModal({
       return [
         trigger,
         ...events.map((event) => {
-          const meta = eventMeta[event.eventType];
           return {
             color: "gray",
             title: eventTime(event),
             content: (
               <div className="workflow-history-event">
-                <Typography.Text strong>{meta.label}</Typography.Text>
+                <Typography.Text strong>{eventLabel(event.eventType)}</Typography.Text>
                 {personName(event.actor?.displayName || "")}
                 {event.note && showEventNote(event)
                   ? detailLine(
