@@ -133,8 +133,22 @@ describe("print templates", () => {
     expect(html).toContain("grid-auto-rows:55mm");
     expect(html).toContain(" /23");
     expect(html).toContain("2026.8.26-2026.9.26");
+    expect(html).toContain('<span class="batch-iacuc-highlight">Z2026013</span>');
+    expect(html).toContain(".temporary-card .temporary-batch .batch-iacuc-highlight{color:#b91c1c;font-weight:800}");
     expect(html).not.toContain('aria-label="笼卡二维码"');
     expect(html).not.toContain("<th>房间</th>");
+  });
+
+  it("highlights the parenthesized IACUC code on a temporary card when the stored IACUC has changed", () => {
+    const batch = {
+      batchNo: "（Z2025143变更）2026081301",
+      iacuc: "Z2027001",
+      finalCardCount: 1,
+      cards: [{}],
+    } as IntakeBatch;
+    expect(intakeCardsPrintHtml([batch], { kind: "temporary" })).toContain(
+      '（<span class="batch-iacuc-highlight">Z2025143</span>变更）2026081301',
+    );
   });
 
   it("pads the standard layout to fourteen cards without creating QR markup for blank cards", () => {

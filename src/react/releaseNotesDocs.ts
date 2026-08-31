@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.1",
+    build: "192",
+    releasedAt: "2026-08-31",
+    title: "临时笼卡伦理号高亮修复",
+    items: [
+      "修复 8014 临时饲养间 3×5 笼卡中，批次号保留原伦理编号、记录 IACUC 已变更时未显示红色粗体的问题",
+      "现在优先按记录 IACUC 高亮；两者不一致时，自动识别批次号括号中的伦理编号并以红色粗体打印",
+    ],
+  },
+  {
     version: "1.2.0",
     build: "191",
     releasedAt: "2026-08-31",
