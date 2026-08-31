@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.0",
+    build: "191",
+    releasedAt: "2026-08-31",
+    title: "前端性能、交互与界面规范升级",
+    items: [
+      "查询层补齐取消、有限重试、防抖与竞态保护；批量和单项流程写入统一刷新关联数据，减少重复请求与过期结果覆盖",
+      "建立 Ant Design 主题、控件几何和样式归属门禁；表格、表单、弹窗、工具栏与移动端页面统一信息密度、焦点、错误反馈和响应式行为",
+      "扫码、统计表、结算流程、数据管理和巡检列表补齐 loading、失败重试、空状态、跨断点草稿保护与媒体资源清理",
+      "新增克制的页面、按钮、卡片和浮层微交互，支持 reduced-motion；图表仅在进入视口后加载，减少首屏负担",
+      "完整质量检查、API smoke、10 万记录基准和 69 条浏览器回归通过；常用数量表查询 P95 为 0.02–0.18ms，20 并发候选结算查询 P95 为 14.03ms",
+    ],
+  },
+  {
     version: "1.1.3",
     build: "190",
     releasedAt: "2026-08-30",
