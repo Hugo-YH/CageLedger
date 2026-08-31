@@ -86,17 +86,20 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
     </div>
   );
 
-  if (isMobile) {
-    return (
-      <MobilePage onBack={() => navigate("rooms")} title="关于系统" titleAsHeading={false}>
-        {content}
-      </MobilePage>
-    );
-  }
   return (
-    <section className="workspace-view system-workspace" data-feature="administration">
-      <div className="workspace-body system-workspace-body">{content}</div>
-    </section>
+    <MobilePage
+      onBack={() => navigate("rooms")}
+      title="关于系统"
+      titleAsHeading={false}
+      feature="administration"
+      desktop={
+        isMobile
+          ? undefined
+          : { className: "workspace-view system-workspace", bodyClassName: "workspace-body system-workspace-body" }
+      }
+    >
+      {content}
+    </MobilePage>
   );
 }
 

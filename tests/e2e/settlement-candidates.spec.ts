@@ -71,15 +71,15 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(row).toContainText("¥");
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "5 条/页", exact: true }).click();
-  await page.getByLabel("全选当前筛选结果结算项").check();
+  await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).check();
   const selectionSummary = page.getByLabel("结算批量操作").getByText(/已选 \d+ 项/, { exact: true });
   await expect(selectionSummary).toBeVisible();
   const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
   expect(selectedCount).toBeGreaterThan(5);
   await page.locator(".ant-pagination-next").click();
-  await expect(page.locator("table tbody tr").first().getByRole("checkbox")).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /^选择 .+ 结算项$/ }).first()).toBeChecked();
   await page.locator(".ant-pagination-prev").click();
-  await page.getByLabel("全选当前筛选结果结算项").uncheck();
+  await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).uncheck();
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "10 条/页", exact: true }).click();
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
@@ -111,8 +111,14 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByLabel("结算批量操作").getByRole("button", { name: "批量发起结算", exact: true }).click();
   const confirmDialog = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个项目负责人结算项");
+  const batchRefreshes: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-settlement-candidates")
+      batchRefreshes.push(request.url());
+  });
   await confirmDialog.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "已发起 2 个结算流程" })).toBeVisible();
+  expect(batchRefreshes).toHaveLength(1);
   await openBillingNavigation(page);
   await page.getByRole("menuitem", { name: /单据跟踪/ }).click();
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true })).toBeVisible();
@@ -328,8 +334,14 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
   await page.getByLabel("结算批量操作").getByRole("button", { name: "批量撤回" }).click();
   const confirmDialog = page.getByRole("dialog", { name: "批量撤回结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个");
+  const batchRefreshes: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-settlement-candidates")
+      batchRefreshes.push(request.url());
+  });
   await confirmDialog.getByRole("button", { name: "撤回 2 个流程", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "已撤回 2 个结算流程" })).toBeVisible();
+  expect(batchRefreshes).toHaveLength(1);
   await expect(page.getByRole("row", { name: /E2E 批量撤回负责人 1/ })).toContainText("未发起");
   await expect(page.getByRole("row", { name: /E2E 批量撤回负责人 2/ })).toContainText("未发起");
 });

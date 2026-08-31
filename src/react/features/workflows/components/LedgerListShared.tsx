@@ -27,11 +27,12 @@ export function QueryFeedback({
     return (
       <Alert
         action={
-          <Button icon={<ReloadOutlined />} size="small" onClick={retry}>
+          <Button icon={<ReloadOutlined aria-hidden />} onClick={retry}>
             重试
           </Button>
         }
         showIcon
+        role="alert"
         title={errorText}
         type="error"
       />

@@ -1202,7 +1202,7 @@ svg {
   input,
   select,
   textarea,
-  button {
+  button:not(.ant-btn) {
     min-height: 44px;
   }
 }
@@ -1228,8 +1228,8 @@ textarea {
   font-family: inherit;
 }
 
-button:not(.ant-switch),
-[role="button"]:not(.ant-switch) {
+button:not(.ant-switch, .ant-btn),
+[role="button"]:not(.ant-switch, .ant-btn) {
   display: inline-flex;
   align-items: center;
   justify-content: center;

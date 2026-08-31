@@ -43,9 +43,10 @@ export type DashboardOverviewResponse = {
 export function useDashboardOverview(month?: string) {
   return useQuery({
     queryKey: queryKeys.dashboardOverview(month),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       requestJson<DashboardOverviewResponse>(
         `/api/dashboard/overview${month ? `?month=${encodeURIComponent(month)}` : ""}`,
+        { signal },
       ),
   });
 }

@@ -1,0 +1,383 @@
+/* Quantity entry form: one layout owner for the workspace and edit portal. */
+.react-quantity-layout .quantity-sheet-fields {
+  container: quantity-form / inline-size;
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.react-quantity-layout .quantity-field-cluster {
+  min-width: 0;
+}
+
+.react-quantity-layout .field-cluster-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.react-quantity-layout .field-cluster-head > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.react-quantity-layout .quantity-field-group {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.react-quantity-layout .quantity-field-group-basic {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.react-quantity-layout .quantity-field-group-project {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.react-quantity-layout .quantity-ant-field {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  align-content: start;
+}
+
+.react-quantity-layout .quantity-ant-field > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 22px;
+  gap: 4px 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.react-quantity-layout .quantity-ant-field-required > span::before {
+  color: var(--danger);
+  content: "*";
+}
+
+.react-quantity-layout .quantity-field-source.ant-tag {
+  margin: 0;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.react-quantity-layout .quantity-auto-field .ant-input {
+  background: var(--surface-soft);
+}
+
+.react-quantity-layout .quantity-readonly-field .ant-input {
+  border-style: dashed;
+  color: var(--muted);
+  background: var(--surface-soft);
+  cursor: default;
+}
+
+.react-quantity-layout .quantity-ant-field :is(.ant-input, .ant-select, .ant-picker),
+.react-quantity-layout .custom-billing-segment-fields :is(.ant-input, .ant-input-number) {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+}
+
+.react-quantity-layout .quantity-entry-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 8px 16px;
+}
+
+.react-quantity-layout .quantity-entry-toolbar-main {
+  min-width: 0;
+}
+
+.react-quantity-layout .quantity-entry-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.react-quantity-layout .quantity-entry-toolbar-button {
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 14px;
+}
+
+.react-quantity-layout .quantity-animal-control,
+.react-quantity-layout .quantity-animal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.react-quantity-layout .quantity-animal-toggle-label {
+  white-space: nowrap;
+}
+
+.react-quantity-layout .quantity-animal-control.locked,
+.react-quantity-layout .quantity-animal-toggle.locked {
+  color: var(--muted);
+}
+
+.react-quantity-layout .quantity-options-panel {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.react-quantity-layout .quantity-options-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
+  text-align: left;
+  white-space: normal;
+}
+
+.react-quantity-layout .quantity-options-toggle:hover {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+
+.react-quantity-layout .quantity-options-toggle-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+
+.react-quantity-layout .quantity-options-toggle-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.react-quantity-layout .quantity-options-toggle-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.react-quantity-layout .quantity-options-toggle-icon {
+  flex: none;
+  color: var(--primary-text);
+  font-size: 12px;
+}
+
+.react-quantity-layout .quantity-options-badges {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 4px;
+}
+
+.react-quantity-layout .quantity-options-badge {
+  margin: 0;
+  padding-inline: 8px;
+  border-radius: 4px;
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: normal;
+}
+
+.react-quantity-layout .quantity-billing-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.react-quantity-layout .quantity-free-cage-module {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.react-quantity-layout .quantity-free-cage-head,
+.react-quantity-layout .quantity-full-exemption-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px 12px;
+}
+
+.react-quantity-layout .quantity-free-cage-head > div:first-child,
+.react-quantity-layout .quantity-full-exemption-row > div:first-child {
+  display: grid;
+  flex: 1 1 160px;
+  min-width: 0;
+  gap: 4px;
+}
+
+.react-quantity-layout .quantity-free-cage-head strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.react-quantity-layout .quantity-free-cage-head span,
+.react-quantity-layout .quantity-full-exemption-row small,
+.react-quantity-layout .quantity-free-cage-field small,
+.react-quantity-layout .quantity-custom-billing-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.react-quantity-layout .quantity-free-cage-field {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.react-quantity-layout .quantity-full-exemption-row {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.react-quantity-layout .custom-billing-segments {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.react-quantity-layout .custom-billing-segment {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.react-quantity-layout .custom-billing-segment-head,
+.react-quantity-layout .custom-billing-segment-head > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.react-quantity-layout .custom-billing-segment-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.react-quantity-layout .custom-billing-segment-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 144px), 1fr));
+  min-width: 0;
+  gap: 8px;
+}
+
+.react-quantity-layout .custom-billing-segment-fields > * {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.react-quantity-layout .custom-billing-segment-note {
+  grid-column: 1 / -1;
+}
+
+@container quantity-form (width <= 900px) {
+  .react-quantity-layout .quantity-field-group-basic,
+  .react-quantity-layout .quantity-field-group-project {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .react-quantity-layout .quantity-billing-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container quantity-form (width <= 480px) {
+  .react-quantity-layout .quantity-field-group-basic,
+  .react-quantity-layout .quantity-field-group-project {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .react-quantity-layout .quantity-free-cage-module {
+    padding: 12px;
+  }
+}
+
+@media (width <= 480px) {
+  .react-quantity-layout .quantity-entry-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .react-quantity-layout .quantity-entry-toolbar-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Base legacy button rules also match Ant Switch because it renders a button. */
+.react-quantity-layout .ant-switch {
+  box-sizing: border-box;
+  min-width: 44px !important;
+  width: 44px !important;
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  font-size: 0 !important;
+  line-height: 22px !important;
+}
+
+.react-quantity-layout .ant-switch .ant-switch-handle {
+  top: 2px !important;
+  inset-inline-start: 2px !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.react-quantity-layout .ant-switch.ant-switch-checked .ant-switch-handle {
+  inset-inline-start: calc(100% - 20px) !important;
+}
+
+.react-quantity-layout .ant-switch .ant-switch-handle::before {
+  border-radius: 50% !important;
+}

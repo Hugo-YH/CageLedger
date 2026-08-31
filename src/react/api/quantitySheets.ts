@@ -12,6 +12,7 @@ import { requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
+import { invalidateWorkflowQueries } from "./workflows";
 
 function listUrl(params: QuantitySheetListParams) {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
@@ -22,14 +23,14 @@ function listUrl(params: QuantitySheetListParams) {
   return `/api/quantity-sheets?${search.toString()}`;
 }
 
-export function listQuantitySheets(params: QuantitySheetListParams) {
-  return requestJson<PagedResponse<QuantitySheet>>(listUrl(params));
+export function listQuantitySheets(params: QuantitySheetListParams, signal?: AbortSignal) {
+  return requestJson<PagedResponse<QuantitySheet>>(listUrl(params), { signal });
 }
 
 export function useQuantitySheets(params: QuantitySheetListParams) {
   return useQuery({
-    queryKey: queryKeys.quantitySheets(params as unknown as Record<string, unknown>),
-    queryFn: () => listQuantitySheets(params),
+    queryKey: queryKeys.quantitySheets({ ...params }),
+    queryFn: ({ signal }) => listQuantitySheets(params, signal),
     placeholderData: (previous) => previous,
   });
 }
@@ -37,23 +38,24 @@ export function useQuantitySheets(params: QuantitySheetListParams) {
 export function useQuantitySheetPiHistory(iacuc: string, beforeMonth: string, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.quantitySheetPiHistory(iacuc.trim().toUpperCase(), beforeMonth),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       requestJson<{ item: { month: string; pi: string } | null }>(
         `/api/quantity-sheets/pi-history?iacuc=${encodeURIComponent(iacuc.trim().toUpperCase())}&beforeMonth=${encodeURIComponent(beforeMonth)}`,
+        { signal },
       ),
     enabled: enabled && Boolean(iacuc.trim()) && Boolean(beforeMonth),
     staleTime: 60 * 1000,
   });
 }
 
-export function listAllQuantitySheets(params: QuantitySheetListParams) {
-  return loadAllPages((offset, limit) => listQuantitySheets({ ...params, offset, limit }));
+export function listAllQuantitySheets(params: QuantitySheetListParams, signal?: AbortSignal) {
+  return loadAllPages((offset, limit) => listQuantitySheets({ ...params, offset, limit }, signal));
 }
 
 export function useQuantitySheetRooms() {
   return useQuery({
     queryKey: queryKeys.quantitySheetRooms,
-    queryFn: () => requestJson<{ items: CageRoom[] }>("/api/quantity-sheet-rooms"),
+    queryFn: ({ signal }) => requestJson<{ items: CageRoom[] }>("/api/quantity-sheet-rooms", { signal }),
   });
 }
 
@@ -64,7 +66,8 @@ export function useQuantityFilterOptions(params: QuantitySheetListParams, column
 export function useQuantitySheetDetail(id: string) {
   return useQuery({
     queryKey: ["quantity-sheets", "detail", id],
-    queryFn: () => requestJson<{ item: QuantitySheet }>(`/api/quantity-sheets/${encodeURIComponent(id)}`),
+    queryFn: ({ signal }) =>
+      requestJson<{ item: QuantitySheet }>(`/api/quantity-sheets/${encodeURIComponent(id)}`, { signal }),
     enabled: Boolean(id),
   });
 }
@@ -108,28 +111,30 @@ export function useDeleteQuantitySheet() {
   });
 }
 
+export interface GenerateBillingStatementPayload {
+  pi: string;
+  month: string;
+  sourceType: "quantity_sheet" | "cage_map";
+  persist?: boolean;
+}
+
+export function generateBillingStatement({ pi, month, sourceType, persist = false }: GenerateBillingStatementPayload) {
+  return requestJson<BillingStatementResponse>("/api/billing-statements/generate-by-pi", {
+    method: "POST",
+    body: JSON.stringify({ pi, month, sourceType, status: "draft", persist, initiate: persist }),
+  });
+}
+
 export function useGenerateBillingStatement() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      pi,
-      month,
-      sourceType,
-      persist = false,
-    }: {
-      pi: string;
-      month: string;
-      sourceType: "quantity_sheet" | "cage_map";
-      persist?: boolean;
-    }) =>
-      requestJson<BillingStatementResponse>("/api/billing-statements/generate-by-pi", {
-        method: "POST",
-        body: JSON.stringify({ pi, month, sourceType, status: "draft", persist, initiate: persist }),
-      }),
+    mutationFn: generateBillingStatement,
     onSuccess: (_data, variables) => {
       if (!variables.persist) return;
-      void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot });
+      return Promise.all([
+        invalidateWorkflowQueries(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot }),
+      ]);
     },
   });
 }

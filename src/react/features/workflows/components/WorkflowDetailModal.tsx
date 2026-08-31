@@ -1,10 +1,12 @@
 import { DownloadOutlined } from "@ant-design/icons";
 import { Button, Flex, Modal, Tag, Timeline, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
 import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflows";
-import { formatDateTime, formatMoney } from "../../../components/WorkspaceUi";
+import { useWorkflowDetail } from "../../../api/workflows";
+import { formatDateTime, formatMoney, PageSkeleton } from "../../../components/WorkspaceUi";
+import { QueryFeedback } from "./LedgerListShared";
 
 function timeLabel(value?: string) {
   return value ? formatDateTime(value) : "-";
@@ -65,19 +67,37 @@ function showEventNote(event: BillingWorkflowEvent) {
   );
 }
 
-export function WorkflowDetailModal({
-  target,
-  onCancel,
-}: {
-  target: { workflow: BillingWorkflow; events: BillingWorkflowEvent[] } | null;
-  onCancel: () => void;
-}) {
-  const workflow = target?.workflow;
-  const [expandedHistory, setExpandedHistory] = useState<Set<string>>(() => new Set());
+export function WorkflowDetailModal({ target, onCancel }: { target: BillingWorkflow | null; onCancel: () => void }) {
+  const detail = useWorkflowDetail(target?.id || "");
+  return (
+    <Modal
+      footer={null}
+      rootClassName="app-modal-root workflow-detail-modal"
+      open={Boolean(target)}
+      title={`流程记录 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
+      width={720}
+      onCancel={onCancel}
+    >
+      {target ? (
+        <>
+          {detail.isPending ? <PageSkeleton embedded label="流程详情" variant="detail" rows={4} /> : null}
+          <QueryFeedback
+            loading={false}
+            loadingText="正在加载流程详情..."
+            error={detail.isError}
+            errorText={`流程详情加载失败：${detail.error?.message || "请重试"}`}
+            retry={() => void detail.refetch()}
+          />
+          {detail.data && !detail.isError ? <WorkflowDetailContent key={target.id} target={detail.data} /> : null}
+        </>
+      ) : null}
+    </Modal>
+  );
+}
 
-  useEffect(() => {
-    setExpandedHistory(new Set());
-  }, [target?.workflow.id]);
+function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow; events: BillingWorkflowEvent[] } }) {
+  const workflow = target.workflow;
+  const [expandedHistory, setExpandedHistory] = useState<Set<string>>(() => new Set());
 
   const revised = Number(workflow?.currentVersionNo || 1) > 1;
   const reimbursementRequired = workflow?.reimbursementRequired ?? Number(workflow?.totalAmount || 0) > 0;
@@ -257,14 +277,7 @@ export function WorkflowDetailModal({
   if (trailingHistory.length) items.push(...historyTimelineItems(trailingHistory));
 
   return (
-    <Modal
-      footer={null}
-      rootClassName="workflow-detail-modal"
-      open={Boolean(target)}
-      title={`流程记录 · ${workflow?.month ?? ""} ${workflow?.pi ?? ""}`}
-      width={720}
-      onCancel={onCancel}
-    >
+    <>
       <Timeline className="workflow-timeline" items={items} mode="start" />
       <Typography.Title level={5} style={{ marginTop: 16 }}>
         附件
@@ -287,6 +300,6 @@ export function WorkflowDetailModal({
       ) : (
         <Typography.Text type="secondary">无附件</Typography.Text>
       )}
-    </Modal>
+    </>
   );
 }

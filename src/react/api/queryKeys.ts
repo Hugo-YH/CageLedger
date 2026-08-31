@@ -1,5 +1,6 @@
 export const queryKeys = {
   session: ["session"] as const,
+  publicCageCard: (qrId: string) => ["public-cage-card", qrId] as const,
   bootstrap: (scope: string, roomId = "") => ["bootstrap", scope, roomId] as const,
   cageRoom: (roomId: string) => ["bootstrap", "room", roomId] as const,
   dashboardOverview: (month?: string) => ["dashboard-overview", month ?? "default"] as const,
@@ -12,7 +13,9 @@ export const queryKeys = {
   quantitySheetRooms: ["quantity-sheet-rooms"] as const,
   settlementCandidatesRoot: ["billing-settlement-candidates"] as const,
   settlementCandidates: (filters: Record<string, unknown>) => ["billing-settlement-candidates", filters] as const,
+  workflowsRoot: ["billing-workflows"] as const,
   workflows: (filters: Record<string, unknown>) => ["billing-workflows", filters] as const,
+  workflowDetail: (id: string) => ["billing-workflows", "detail", id] as const,
   workflowFundingBookOptions: (workflowId: string) =>
     ["billing-workflows", workflowId, "funding-book-options"] as const,
   reimbursementRoot: ["reimbursement-records"] as const,

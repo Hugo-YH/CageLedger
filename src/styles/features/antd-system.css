@@ -294,11 +294,18 @@
   min-height: 0;
 }
 
-:is(.ant-workspace, .app-modal-root.quantity-edit-modal) input.ant-input {
+/* Affix controls (search, clear and password) own their outer padding and height. */
+:is(.ant-workspace, .app-modal-root.quantity-edit-modal) input.ant-input:not(:where(.ant-input-affix-wrapper input)) {
   min-height: 32px;
   padding: 4px 12px;
   border-radius: var(--ant-border-radius, 6px);
   background: var(--app-surface);
+}
+
+/* The affix wrapper is the Ant control. Keep its geometry token-driven even
+   when legacy native-input rules are present elsewhere in the cascade. */
+:is(.ant-workspace, .app-modal-root.quantity-edit-modal) .ant-input-affix-wrapper {
+  height: var(--ant-control-height);
 }
 
 :is(.ant-workspace, .app-modal-root.quantity-edit-modal) textarea.ant-input {
@@ -341,77 +348,6 @@
 }
 
 .ant-workspace .intake-ant-field .ant-select-single :is(.ant-select-selection-item, .ant-select-selection-placeholder) {
-  line-height: 30px;
-}
-
-/* Quantity-sheet fields still use the legacy grid, while their controls are
-   Ant components. Keep labels above full-width controls like Form.Item. */
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field > span {
-  display: flex;
-  align-items: center;
-  min-height: 22px;
-  gap: 8px;
-  color: var(--ant-color-text);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 22px;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field-required > span::before {
-  margin-inline-end: -2px;
-  color: var(--ant-color-error);
-  content: "*";
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-field-source.ant-tag {
-  margin: 0;
-  padding-inline: 4px;
-  border: 0;
-  border-radius: 4px;
-  color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-tertiary);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-auto-field .ant-input {
-  background: var(--ant-color-fill-alter);
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-readonly-field .ant-input,
-:is(.ant-workspace, .app-modal-root) .quantity-readonly-field .readonly-field {
-  border-style: dashed;
-  color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-quaternary);
-  cursor: default;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select {
-  width: 100%;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-picker {
-  width: 100%;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single {
-  height: 32px;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single .ant-select-selector {
-  height: 32px;
-  padding-block: 0;
-}
-
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single .ant-select-selection-item,
-:is(.ant-workspace, .app-modal-root) .quantity-ant-field .ant-select-single .ant-select-selection-placeholder {
   line-height: 30px;
 }
 
@@ -1239,181 +1175,6 @@
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Quantity-sheet billing controls use Ant's compact form density. */
-.ant-workspace .react-quantity-layout .quantity-animal-control,
-.ant-workspace .react-quantity-layout .quantity-animal-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--ant-color-text);
-  font-size: 14px;
-  font-weight: 400;
-}
-
-/* Base legacy button rules also match Ant Switch because it renders a button. */
-.ant-workspace .react-quantity-layout .ant-switch {
-  box-sizing: border-box;
-  min-width: 44px !important;
-  width: 44px !important;
-  min-height: 22px !important;
-  height: 22px !important;
-  padding: 0 !important;
-  border-radius: 9999px !important;
-  font-size: 0 !important;
-  line-height: 22px !important;
-}
-
-.ant-workspace .react-quantity-layout .ant-switch .ant-switch-handle {
-  top: 2px !important;
-  inset-inline-start: 2px !important;
-  width: 18px !important;
-  height: 18px !important;
-}
-
-.ant-workspace .react-quantity-layout .ant-switch.ant-switch-checked .ant-switch-handle {
-  inset-inline-start: calc(100% - 20px) !important;
-}
-
-.ant-workspace .react-quantity-layout .ant-switch .ant-switch-handle::before {
-  border-radius: 50% !important;
-}
-
-.ant-workspace .react-quantity-layout .quantity-animal-control.required,
-.ant-workspace .react-quantity-layout .quantity-animal-toggle.required {
-  background: transparent;
-  border-color: transparent;
-}
-
-.ant-workspace .react-quantity-layout .quantity-animal-control.locked,
-.ant-workspace .react-quantity-layout .quantity-animal-toggle.locked {
-  color: var(--ant-color-text-tertiary);
-}
-
-.ant-workspace .react-quantity-layout .quantity-animal-toggle-label {
-  color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-toggle {
-  min-height: 48px;
-  padding: 8px 12px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--ant-border-radius, 6px);
-  background: var(--app-surface);
-  color: var(--ant-color-text);
-  box-shadow: none;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-toggle:hover {
-  border-color: var(--ant-color-primary-border-hover);
-  background: var(--app-surface);
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-toggle-copy {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-toggle-copy strong {
-  color: var(--ant-color-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-toggle-copy small {
-  color: var(--ant-color-text-secondary);
-  font-size: 14px;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-badges {
-  gap: 4px;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-badge {
-  min-height: 20px;
-  margin-inline-end: 0;
-  padding-inline: 8px;
-  border-radius: var(--ant-border-radius-sm, 4px);
-  color: var(--ant-color-primary);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 20px;
-}
-
-.ant-workspace .react-quantity-layout .quantity-options-toggle-icon {
-  color: var(--ant-color-primary);
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-.ant-workspace .quantity-billing-options {
-  gap: 16px;
-}
-
-.ant-workspace .quantity-free-cage-module,
-.ant-workspace .quantity-custom-billing-module {
-  gap: 16px;
-  padding: 16px;
-  border-color: var(--app-border);
-  border-radius: var(--ant-border-radius-lg, 8px);
-  background: var(--app-surface);
-  box-shadow: none;
-}
-
-.ant-workspace .quantity-custom-billing-module {
-  border-color: var(--app-border);
-  background: var(--app-surface);
-}
-
-.ant-workspace .quantity-free-cage-head strong {
-  color: var(--ant-color-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.ant-workspace .quantity-free-cage-head span,
-.ant-workspace .quantity-full-exemption-row small,
-.ant-workspace .quantity-free-cage-field small,
-.ant-workspace .quantity-custom-billing-empty {
-  color: var(--ant-color-text-secondary);
-  font-size: 14px;
-}
-
-.ant-workspace .quantity-full-exemption-row {
-  gap: 12px;
-  padding-top: 16px;
-  border-top-color: var(--app-border);
-}
-
-.ant-workspace .quantity-full-exemption-row.enabled {
-  padding: 16px 0 0;
-  border: 0;
-  border-top: 1px solid var(--app-border);
-  border-radius: 0;
-  background: transparent;
-}
-
-.ant-workspace .custom-billing-segment {
-  padding: 12px;
-  border-color: var(--app-border);
-  border-radius: var(--ant-border-radius, 6px);
-  background: var(--app-surface-subtle);
 }
 
 .ant-workspace .settings-log-card .ant-card-body {

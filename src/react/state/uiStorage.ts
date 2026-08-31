@@ -36,15 +36,9 @@ export function readStoredWorkspaceView(): WorkspaceView {
 
 export type ThemePreference = "system" | "light" | "dark";
 
-type StoredUiState = {
-  activeView?: unknown;
-  theme?: unknown;
-};
-
 export function readStoredThemePreference(): ThemePreference {
   try {
-    const raw = localStorage.getItem(UI_STORAGE_KEY);
-    const value = raw ? (JSON.parse(raw) as StoredUiState).theme : "";
+    const value = readState(UI_STORAGE_KEY).theme;
     return value === "light" || value === "dark" || value === "system" ? value : "system";
   } catch {
     return "system";
@@ -60,27 +54,30 @@ export function persistThemePreference(theme: ThemePreference) {
 }
 
 export function clearUiStorage() {
-  localStorage.removeItem(UI_STORAGE_KEY);
+  removeStoredState(UI_STORAGE_KEY);
   clearLegacyBusinessState();
 }
 
 function readView(key: string): WorkspaceView | null {
   try {
-    const raw = localStorage.getItem(key);
-    const value = raw ? (JSON.parse(raw) as StoredUiState).activeView : "";
+    const value = readState(key).activeView;
     if (value === "intake") return "intake-entry";
     if (value === "billing") return "billing-quantity-entry";
     return typeof value === "string" && WORKSPACE_VIEWS.has(value as WorkspaceView) ? (value as WorkspaceView) : null;
   } catch {
-    localStorage.removeItem(key);
+    removeStoredState(key);
     return null;
   }
 }
 
 function persistUiState(update: Partial<{ activeView: WorkspaceView; theme: ThemePreference }>) {
   try {
-    const raw = localStorage.getItem(UI_STORAGE_KEY);
-    const current = raw ? (JSON.parse(raw) as StoredUiState) : {};
+    let current: Record<string, unknown> = {};
+    try {
+      current = readState(UI_STORAGE_KEY);
+    } catch {
+      // A malformed preference must not prevent the next valid preference from being saved.
+    }
     localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({ ...current, ...update }));
   } catch {
     // UI preferences remain optional when browser storage is unavailable.
@@ -88,5 +85,23 @@ function persistUiState(update: Partial<{ activeView: WorkspaceView; theme: Them
 }
 
 function clearLegacyBusinessState() {
-  LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+  LEGACY_STORAGE_KEYS.forEach(removeStoredState);
+}
+
+function readState(key: string): Record<string, unknown> {
+  const raw = localStorage.getItem(key);
+  const value: unknown = raw ? JSON.parse(raw) : null;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+  return {
+    activeView: "activeView" in value ? value.activeView : undefined,
+    theme: "theme" in value ? value.theme : undefined,
+  };
+}
+
+function removeStoredState(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Cleanup is optional too: denied storage must not break startup or recovery.
+  }
 }

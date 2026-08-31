@@ -20,7 +20,7 @@ import { queryKeys } from "./queryKeys";
 export function useUsers(enabled = true) {
   return useQuery({
     queryKey: queryKeys.users,
-    queryFn: () => requestJson<{ users: ManagedUser[] }>("/api/users"),
+    queryFn: ({ signal }) => requestJson<{ users: ManagedUser[] }>("/api/users", { signal }),
     enabled,
   });
 }
@@ -90,7 +90,7 @@ export function useDeleteRoom() {
 export function usePrincipalIdentities(enabled = true) {
   return useQuery({
     queryKey: queryKeys.principalIdentities,
-    queryFn: () => requestJson<{ items: PrincipalIdentity[] }>("/api/principal-identities"),
+    queryFn: ({ signal }) => requestJson<{ items: PrincipalIdentity[] }>("/api/principal-identities", { signal }),
     enabled,
   });
 }
@@ -108,7 +108,7 @@ export function useSavePrincipalIdentity() {
 export function useIacucStatus() {
   return useQuery({
     queryKey: queryKeys.iacucStatus,
-    queryFn: () => requestJson<IacucIndexStatus>("/api/iacuc-index/status"),
+    queryFn: ({ signal }) => requestJson<IacucIndexStatus>("/api/iacuc-index/status", { signal }),
   });
 }
 
@@ -116,16 +116,20 @@ export function useAuditEvents(limit: number, offset: number) {
   const params = { limit, offset };
   return useQuery({
     queryKey: queryKeys.auditEvents(params),
-    queryFn: () => requestJson<PagedResponse<AuditEvent>>(`/api/audit-events?limit=${limit}&offset=${offset}`),
+    queryFn: ({ signal }) =>
+      requestJson<PagedResponse<AuditEvent>>(`/api/audit-events?limit=${limit}&offset=${offset}`, { signal }),
   });
 }
 export function useSystemInfo() {
-  return useQuery({ queryKey: queryKeys.systemInfo, queryFn: () => requestJson<SystemInfo>("/api/system/info") });
+  return useQuery({
+    queryKey: queryKeys.systemInfo,
+    queryFn: ({ signal }) => requestJson<SystemInfo>("/api/system/info", { signal }),
+  });
 }
 export function useSystemEnvironment(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.systemEnvironment,
-    queryFn: () => requestJson<SystemEnvironment>("/api/system/environment"),
+    queryFn: ({ signal }) => requestJson<SystemEnvironment>("/api/system/environment", { signal }),
     enabled,
     retry: false,
   });
@@ -133,7 +137,8 @@ export function useSystemEnvironment(enabled: boolean) {
 export function useSystemPerformanceHistory(hours: number, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.systemPerformanceHistory(hours),
-    queryFn: () => requestJson<SystemPerformanceHistory>(`/api/system/performance-history?hours=${hours}`),
+    queryFn: ({ signal }) =>
+      requestJson<SystemPerformanceHistory>(`/api/system/performance-history?hours=${hours}`, { signal }),
     enabled,
     retry: false,
   });
@@ -141,7 +146,7 @@ export function useSystemPerformanceHistory(hours: number, enabled: boolean) {
 export function useSystemUpdate(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.systemUpdate,
-    queryFn: () => requestJson<SystemUpdateStatus>("/api/system/update-check"),
+    queryFn: ({ signal }) => requestJson<SystemUpdateStatus>("/api/system/update-check", { signal }),
     enabled,
     retry: false,
   });

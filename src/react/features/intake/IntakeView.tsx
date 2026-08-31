@@ -88,7 +88,7 @@ export function IntakeView({
     sortDir: sort.dir,
     columnFilters: filters,
   };
-  const list = useIntakeBatches(params);
+  const list = useIntakeBatches(params, mode === "batches");
   const save = useSaveIntakeBatch();
   const remove = useDeleteIntakeBatch();
   const markBatchesPrinted = useMarkIntakeBatchesPrinted();
@@ -150,7 +150,7 @@ export function IntakeView({
     if (normalizedCode) {
       const result = await queryClient.ensureQueryData({
         queryKey: queryKeys.iacucSearch(normalizedCode, 1),
-        queryFn: () => fetchIacucSearch(normalizedCode, 1),
+        queryFn: ({ signal }) => fetchIacucSearch(normalizedCode, 1, signal),
         staleTime: 5 * 60_000,
       });
       match = result.items[0];

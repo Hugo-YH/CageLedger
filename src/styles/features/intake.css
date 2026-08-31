@@ -140,6 +140,34 @@
   display: none;
 }
 
+[data-feature="intake"] .scanner-camera {
+  position: relative;
+  width: min(640px, 100%);
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--text);
+}
+
+[data-feature="intake"] .scanner-camera video {
+  display: block;
+  width: 100%;
+  max-height: 52vh;
+  object-fit: cover;
+}
+
+[data-feature="intake"] .scanner-camera span {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  padding: 8px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--backdrop);
+  color: var(--text-inverse);
+  text-align: center;
+}
+
 /* Scanner result card and intake batch table (migrated from core.css). */
 .scanner-result-card {
   border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);

@@ -14,6 +14,7 @@ export interface SettlementColumnsOptions {
   selectedCandidates: SettlementCandidate[];
   allFilteredSelected: boolean;
   selectingAll: boolean;
+  disabled?: boolean;
   total: number;
   params: SettlementCandidateListParams;
   filters: Record<string, string[]>;
@@ -21,7 +22,7 @@ export interface SettlementColumnsOptions {
   onToggleAll: () => void;
   onToggle: (candidate: SettlementCandidate, checked: boolean) => void;
   onPreview: (candidate: SettlementCandidate) => void;
-  onSort: (column: string) => void;
+  onSort: (column: NonNullable<SettlementCandidateListParams["sortKey"]>) => void;
   onFilter: (column: string, values: string[]) => void;
 }
 
@@ -30,6 +31,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
     selectedCandidates,
     allFilteredSelected,
     selectingAll,
+    disabled,
     total,
     params,
     filters,
@@ -47,7 +49,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         <Checkbox
           aria-label="全选当前筛选结果结算项"
           checked={total > 0 && allFilteredSelected}
-          disabled={selectingAll || !total}
+          disabled={disabled || selectingAll || !total}
           onChange={onToggleAll}
         />
       ),
@@ -56,7 +58,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         <Checkbox
           aria-label={`选择 ${candidate.pi} ${candidate.month} 结算项`}
           checked={selectedCandidates.some((item) => item.id === candidate.id)}
-          disabled={candidate.totalAmount == null}
+          disabled={disabled || candidate.totalAmount == null}
           onChange={(event) => onToggle(candidate, event.target.checked)}
         />
       ),
@@ -108,6 +110,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         <SettlementCandidateActions
           candidate={candidate}
           previewing={previewing}
+          disabled={disabled}
           onPreview={() => onPreview(candidate)}
         />
       ),

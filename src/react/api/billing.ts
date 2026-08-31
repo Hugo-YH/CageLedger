@@ -17,20 +17,21 @@ function settlementCandidateSearch(params: SettlementCandidateListParams) {
   return search;
 }
 
-export function fetchSettlementCandidates(params: SettlementCandidateListParams) {
+export function fetchSettlementCandidates(params: SettlementCandidateListParams, signal?: AbortSignal) {
   return requestJson<SettlementCandidateListResponse>(
     `/api/billing-settlement-candidates?${settlementCandidateSearch(params).toString()}`,
+    { signal },
   );
 }
 
-export async function fetchAllSettlementCandidates(params: SettlementCandidateListParams) {
+export async function fetchAllSettlementCandidates(params: SettlementCandidateListParams, signal?: AbortSignal) {
   const limit = 100;
-  const firstPage = await fetchSettlementCandidates({ ...params, limit, offset: 0 });
+  const firstPage = await fetchSettlementCandidates({ ...params, limit, offset: 0 }, signal);
   const items = [...firstPage.items];
   const total = firstPage.page.total;
 
   for (let offset = limit; offset < total; offset += limit) {
-    const nextPage = await fetchSettlementCandidates({ ...params, limit, offset });
+    const nextPage = await fetchSettlementCandidates({ ...params, limit, offset }, signal);
     items.push(...nextPage.items);
   }
 
@@ -38,14 +39,14 @@ export async function fetchAllSettlementCandidates(params: SettlementCandidateLi
 }
 
 /** Compatibility alias used by the settlement candidate list. */
-export function listAllSettlementCandidates(params: SettlementCandidateListParams) {
-  return fetchAllSettlementCandidates(params);
+export function listAllSettlementCandidates(params: SettlementCandidateListParams, signal?: AbortSignal) {
+  return fetchAllSettlementCandidates(params, signal);
 }
 
 export function useSettlementCandidates(params: SettlementCandidateListParams, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.settlementCandidates(params as unknown as Record<string, unknown>),
-    queryFn: () => fetchSettlementCandidates(params),
+    queryKey: queryKeys.settlementCandidates({ ...params }),
+    queryFn: ({ signal }) => fetchSettlementCandidates(params, signal),
     placeholderData: (previous) => previous,
     enabled,
   });

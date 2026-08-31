@@ -36,7 +36,6 @@ export function RoomsView({ user }: { user: SessionUser }) {
     if (!roomDraft?.name.trim()) return;
     const exists = visibleRooms.some((room) => room.id === roomDraft.id);
     await save.mutateAsync(exists ? { roomUpdates: [roomDraft] } : { rooms: [roomDraft] });
-    setRoomDraft(null);
   }
   async function persistRack() {
     if (!rackDraft?.roomId || rackDraft.rows < 1 || rackDraft.cols < 1) return;
@@ -59,7 +58,6 @@ export function RoomsView({ user }: { user: SessionUser }) {
             roomUpdates: [{ ...room, rackCount: roomRacks.length + 1 } as CageRoom],
           },
     );
-    setRackDraft(null);
   }
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -73,7 +71,6 @@ export function RoomsView({ user }: { user: SessionUser }) {
         roomUpdates: room ? [{ ...room, rackCount: Math.max(count - 1, 0) } as CageRoom] : [],
       });
     }
-    setDeleteTarget(null);
   }
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
@@ -186,7 +183,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
           pending={save.isPending}
           onChange={setRoomDraft}
           onClose={() => setRoomDraft(null)}
-          onSave={() => void persistRoom()}
+          onSave={persistRoom}
         />
       ) : null}
       {rackDraft ? (
@@ -196,7 +193,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
           pending={save.isPending}
           onChange={setRackDraft}
           onClose={() => setRackDraft(null)}
-          onSave={() => void persistRack()}
+          onSave={persistRack}
         />
       ) : null}
       {deleteTarget ? (
@@ -207,7 +204,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
           danger
           pending={save.isPending || removeRoom.isPending}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => void confirmDelete()}
+          onConfirm={confirmDelete}
         />
       ) : null}
     </section>

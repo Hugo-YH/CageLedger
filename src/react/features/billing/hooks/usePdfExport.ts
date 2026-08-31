@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   downloadFromUrl,
@@ -13,47 +13,65 @@ const POLL_INTERVAL_MS = 500;
 
 export function usePdfExport() {
   const mounted = useRef(true);
+  const inFlight = useRef<Promise<PdfExportJob> | null>(null);
   const [job, setJob] = useState<PdfExportJob | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const tasks = useTaskFeedback();
 
   useEffect(() => {
+    mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  async function exportPdf(payload: PdfExportRequest) {
-    const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload), progress: 0 });
-    try {
-      let current = await startPdfExport(payload);
-      update(current);
-      while (current.status === "queued" || current.status === "rendering") {
-        tasks.update(taskId, { detail: progressLabel(current), progress: jobProgress(current) });
-        await wait(POLL_INTERVAL_MS);
-        current = await getPdfExportJob(current.id);
-        update(current);
+  const exportPdf = useCallback(
+    (payload: PdfExportRequest) => {
+      // Lock before React commits the loading state, including the initial POST.
+      if (inFlight.current) return inFlight.current;
+      if (mounted.current) {
+        setIsExporting(true);
+        setJob(null);
       }
-      tasks.update(taskId, { progress: 100 });
-      if (current.status === "failed") throw new Error(current.error || "PDF 生成失败");
-      if (!current.downloadUrl) throw new Error("PDF 已生成，但下载链接不可用");
-      downloadFromUrl(current.downloadUrl);
-      tasks.complete(taskId, "PDF 已生成，下载已开始。");
-      return current;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "PDF 生成失败";
-      tasks.fail(taskId, message);
-      throw error;
-    }
-  }
-
-  function update(next: PdfExportJob) {
-    if (mounted.current) setJob(next);
-  }
+      const run = async () => {
+        const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload), progress: 0 });
+        try {
+          let current = await startPdfExport(payload);
+          if (mounted.current) setJob(current);
+          while (current.status === "queued" || current.status === "rendering") {
+            tasks.update(taskId, { detail: progressLabel(current), progress: jobProgress(current) });
+            await wait(POLL_INTERVAL_MS);
+            current = await getPdfExportJob(current.id);
+            if (mounted.current) setJob(current);
+          }
+          if (current.status === "failed") throw new Error(current.error || "PDF 生成失败");
+          if (!current.downloadUrl) throw new Error("PDF 已生成，但下载链接不可用");
+          downloadFromUrl(current.downloadUrl);
+          tasks.complete(taskId, "PDF 已生成，下载已开始。");
+          return current;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "PDF 生成失败";
+          if (mounted.current) setJob((previous) => previous && { ...previous, status: "failed", error: message });
+          tasks.fail(taskId, message);
+          throw error;
+        }
+      };
+      const pending = Promise.resolve()
+        .then(run)
+        .finally(() => {
+          inFlight.current = null;
+          if (mounted.current) setIsExporting(false);
+        });
+      inFlight.current = pending;
+      return pending;
+    },
+    [tasks],
+  );
 
   return {
     exportPdf,
     job,
-    isExporting: job?.status === "queued" || job?.status === "rendering",
+    isExporting,
   };
 }
 

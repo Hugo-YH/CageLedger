@@ -16,20 +16,21 @@ function intakeListUrl(params: IntakeListParams) {
   return `/api/intake-batches?${search.toString()}`;
 }
 
-export function listIntakeBatches(params: IntakeListParams) {
-  return requestJson<PagedResponse<IntakeBatch>>(intakeListUrl(params));
+export function listIntakeBatches(params: IntakeListParams, signal?: AbortSignal) {
+  return requestJson<PagedResponse<IntakeBatch>>(intakeListUrl(params), { signal });
 }
 
-export function useIntakeBatches(params: IntakeListParams) {
+export function useIntakeBatches(params: IntakeListParams, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.intake(params as unknown as Record<string, unknown>),
-    queryFn: () => listIntakeBatches(params),
+    queryKey: queryKeys.intake({ ...params }),
+    queryFn: ({ signal }) => listIntakeBatches(params, signal),
     placeholderData: (previous) => previous,
+    enabled,
   });
 }
 
-export function listAllIntakeBatches(params: IntakeListParams) {
-  return loadAllPages((offset, limit) => listIntakeBatches({ ...params, offset, limit }));
+export function listAllIntakeBatches(params: IntakeListParams, signal?: AbortSignal) {
+  return loadAllPages((offset, limit) => listIntakeBatches({ ...params, offset, limit }, signal));
 }
 
 export function useIntakeFilterOptions(params: IntakeListParams, column: string, enabled: boolean) {

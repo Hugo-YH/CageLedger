@@ -2,11 +2,9 @@ import { Component, type ReactNode } from "react";
 import { Button } from "antd";
 
 import { clearUiStorage } from "../../state/uiStorage";
+import { claimChunkRecovery, clearChunkRecovery } from "../../state/chunkRecovery";
 import type { WorkspaceView } from "../../state/ui";
 import { PageSkeleton } from "../../components/PageSkeleton";
-
-const CHUNK_RECOVERY_KEY = "cageledger.workspace.chunk-recovery-at";
-const CHUNK_RECOVERY_WINDOW_MS = 30_000;
 
 export function WorkspaceLoading() {
   return (
@@ -27,13 +25,7 @@ export class WorkspaceErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
-    if (!isChunkLoadFailure(error)) return;
-
-    const lastRecoveryAt = Number(sessionStorage.getItem(CHUNK_RECOVERY_KEY) || 0);
-    if (Date.now() - lastRecoveryAt < CHUNK_RECOVERY_WINDOW_MS) return;
-
-    sessionStorage.setItem(CHUNK_RECOVERY_KEY, String(Date.now()));
-    window.location.reload();
+    if (claimChunkRecovery(error)) window.location.reload();
   }
 
   componentDidUpdate(previousProps: Readonly<{ children: ReactNode; resetKey: WorkspaceView }>) {
@@ -54,7 +46,7 @@ export class WorkspaceErrorBoundary extends Component<
               type="primary"
               onClick={() => {
                 clearUiStorage();
-                sessionStorage.removeItem(CHUNK_RECOVERY_KEY);
+                clearChunkRecovery();
                 window.location.assign("/");
               }}
             >
@@ -65,8 +57,4 @@ export class WorkspaceErrorBoundary extends Component<
       </section>
     );
   }
-}
-
-function isChunkLoadFailure(error: Error) {
-  return /chunkloaderror|loading chunk|dynamically imported module|module script/i.test(error.message);
 }

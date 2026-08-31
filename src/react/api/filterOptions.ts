@@ -19,7 +19,8 @@ export function useColumnFilterOptions(
   if (columnFilters && Object.keys(columnFilters).length) query.set("columnFilters", JSON.stringify(columnFilters));
   return useQuery({
     queryKey: ["filter-options", list, column, columnFilters || {}],
-    queryFn: () => requestJson<{ items: ColumnFilterOption[] }>(`/api/filter-options?${query.toString()}`),
+    queryFn: ({ signal }) =>
+      requestJson<{ items: ColumnFilterOption[] }>(`/api/filter-options?${query.toString()}`, { signal }),
     enabled,
   });
 }

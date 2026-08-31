@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowLeftOutlined, CameraOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
 import {
   Alert,
@@ -17,76 +16,47 @@ import {
   type InputRef,
 } from "antd";
 
-import { requestJson } from "../../api/client";
+import { usePublicCageCard, type CageCardDetails } from "../../api/cageCard";
 import type { WorkspaceView } from "../../state/ui";
 import { WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
-
-type CageCardDetails = Record<string, string | number | null | undefined>;
+import { useCameraScanner } from "./useCameraScanner";
 
 export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
   const isMobile = useIsMobileLayout();
   const [input, setInput] = useState("");
   const [qrId, setQrId] = useState("");
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState("");
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const inputId = useId();
   const inputRef = useRef<InputRef>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const frameRef = useRef(0);
-  const result = useQuery({
-    queryKey: ["cage-card-lookup", qrId],
-    queryFn: () => requestJson<CageCardDetails>(`/api/public/cage-card/${encodeURIComponent(qrId)}`),
-    enabled: Boolean(qrId),
-    retry: false,
+  const {
+    videoRef,
+    active: cameraActive,
+    pending: cameraPending,
+    error: cameraError,
+    toggle: toggleCamera,
+  } = useCameraScanner((value) => {
+    const code = normalizeCode(value);
+    setInput(code);
+    setQrId(code);
   });
-
-  useEffect(() => () => stopCamera(streamRef, frameRef), []);
+  const result = usePublicCageCard(qrId);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  async function toggleCamera() {
-    if (cameraActive) {
-      stopCamera(streamRef, frameRef);
-      setCameraActive(false);
-      return;
-    }
-    setCameraError("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (!videoRef.current) return;
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-      await import("../../../vendor/jsQR.js");
-      setCameraActive(true);
-      scanFrame(videoRef.current, frameRef, (value) => {
-        const code = normalizeCode(value);
-        setInput(code);
-        setQrId(code);
-        stopCamera(streamRef, frameRef);
-        setCameraActive(false);
-      });
-    } catch (error) {
-      stopCamera(streamRef, frameRef);
-      setCameraError(error instanceof Error ? error.message : "无法启动摄像头");
-    }
-  }
 
   const content = (
     <Card
       className="scanner-card"
       extra={
         <Button
+          aria-label={cameraActive ? "停止扫码" : "启动摄像头"}
           danger={cameraActive}
           icon={cameraActive ? <StopOutlined aria-hidden /> : <CameraOutlined aria-hidden />}
           type={cameraActive ? "default" : "primary"}
+          loading={cameraPending}
+          disabled={cameraPending}
           onClick={() => void toggleCamera()}
         >
           {cameraActive ? "停止扫码" : "启动摄像头"}
@@ -98,16 +68,16 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
         </Typography.Title>
       }
     >
-      {cameraActive ? (
+      <div hidden={!cameraActive && !cameraPending}>
         <Card className="scanner-camera-card" size="small" title="扫码取景框" type="inner">
           <div className="scanner-camera">
             <video ref={videoRef} muted playsInline aria-label="笼卡扫码画面" />
             <span>将笼卡二维码置于取景框内</span>
           </div>
         </Card>
-      ) : null}
+      </div>
       {cameraError ? (
-        <Alert className="scanner-alert" title={`摄像头启动失败：${cameraError}`} showIcon type="error" />
+        <Alert role="alert" className="scanner-alert" title={`摄像头启动失败：${cameraError}`} showIcon type="error" />
       ) : null}
       <form
         className="scanner-query-form"
@@ -118,8 +88,9 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
       >
         <Form component={false} layout="vertical">
           <Flex align="flex-end" gap={12} wrap>
-            <Form.Item className="scanner-code-field" label="笼卡识别码">
+            <Form.Item className="scanner-code-field" label="笼卡识别码" htmlFor={inputId}>
               <Input
+                id={inputId}
                 ref={inputRef}
                 allowClear
                 placeholder="输入 4 位识别码或粘贴笼卡链接"
@@ -127,7 +98,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
                 onChange={(event) => setInput(event.target.value)}
               />
             </Form.Item>
-            <Button htmlType="submit" icon={<SearchOutlined />} type="primary">
+            <Button htmlType="submit" icon={<SearchOutlined aria-hidden />} type="primary">
               查询
             </Button>
           </Flex>
@@ -157,24 +128,31 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
       )}
     </Card>
   );
-  if (isMobile) {
-    return (
-      <MobilePage onBack={() => navigate("intake-entry")} title="识别笼卡">
-        {content}
-      </MobilePage>
-    );
-  }
   return (
-    <section className="workspace-view scanner-workspace" data-feature="intake">
-      <WorkspaceToolbar
-        actions={
-          <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={() => navigate("intake-entry")}>
-            返回笼卡管理
-          </Button>
-        }
-      />
-      <div className="workspace-body">{content}</div>
-    </section>
+    <MobilePage
+      onBack={() => navigate("intake-entry")}
+      title="识别笼卡"
+      feature="intake"
+      desktop={
+        isMobile
+          ? undefined
+          : {
+              className: "workspace-view scanner-workspace",
+              bodyClassName: "workspace-body",
+              toolbar: (
+                <WorkspaceToolbar
+                  actions={
+                    <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={() => navigate("intake-entry")}>
+                      返回笼卡管理
+                    </Button>
+                  }
+                />
+              ),
+            }
+      }
+    >
+      {content}
+    </MobilePage>
   );
 }
 
@@ -210,34 +188,9 @@ function CageCardResult({ item }: { item: CageCardDetails }) {
 function normalizeCode(value: string) {
   const raw = value.trim();
   const pathCode = raw.match(/\/(?:c|scan\/cage-card)\/([^/?#]+)/i)?.[1];
-  return decodeURIComponent(pathCode || raw).toUpperCase();
-}
-
-function stopCamera(streamRef: React.RefObject<MediaStream | null>, frameRef: React.RefObject<number>) {
-  if (frameRef.current) cancelAnimationFrame(frameRef.current);
-  frameRef.current = 0;
-  streamRef.current?.getTracks().forEach((track) => track.stop());
-  streamRef.current = null;
-}
-
-function scanFrame(video: HTMLVideoElement, frameRef: React.RefObject<number>, onCode: (value: string) => void) {
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  const tick = () => {
-    if (!context || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      frameRef.current = requestAnimationFrame(tick);
-      return;
-    }
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const image = context.getImageData(0, 0, canvas.width, canvas.height);
-    const result = window.jsQR?.(image.data, image.width, image.height);
-    if (result?.data) {
-      onCode(result.data);
-      return;
-    }
-    frameRef.current = requestAnimationFrame(tick);
-  };
-  frameRef.current = requestAnimationFrame(tick);
+  try {
+    return decodeURIComponent(pathCode || raw).toUpperCase();
+  } catch {
+    return (pathCode || raw).toUpperCase();
+  }
 }

@@ -129,6 +129,13 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
             ) : (
               <Empty description="暂无巡检记录" />
             )}
+            <Pager
+              onPage={(next) => setOffset((next - 1) * page.limit)}
+              page={current}
+              pageSize={page.limit}
+              pages={Math.max(Math.ceil(page.total / page.limit), 1)}
+              total={page.total}
+            />
           </Card>
         </MobilePage>
         {selectedId ? <InspectionDetailDialog id={selectedId} onClose={() => setSelectedId("")} /> : null}
@@ -230,12 +237,31 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const current = Math.floor(page.offset / page.limit) + 1;
   if (query.isLoading) return <PageSkeleton label="异常处置项" variant="table" />;
   if (query.isError) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
+  const filters = (
+    <Form className="inspection-list-filters" component={false} layout={isMobile ? "vertical" : "inline"}>
+      <Form.Item label="处置状态">
+        <Select
+          allowClear
+          className="min-select-control"
+          options={Object.entries(FINDING_STATUS_LABELS).map(([value, label]) => ({ label, value }))}
+          placeholder="全部状态"
+          style={isMobile ? { width: "100%" } : undefined}
+          value={status || undefined}
+          onChange={(value) => {
+            setStatus(value || "");
+            setOffset(0);
+          }}
+        />
+      </Form.Item>
+    </Form>
+  );
   if (isMobile) {
     const findings = query.data?.items || [];
     return (
       <>
         <MobilePage onBack={() => navigate("animal-inspection-entry")} title="异常处置">
           <Card className="animal-ant-card inspection-list-panel">
+            {filters}
             {findings.length ? (
               <MobileList>
                 {findings.map((item) => (
@@ -251,6 +277,13 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
             ) : (
               <Empty description="当前没有异常处置项" />
             )}
+            <Pager
+              onPage={(next) => setOffset((next - 1) * page.limit)}
+              page={current}
+              pageSize={page.limit}
+              pages={Math.max(Math.ceil(page.total / page.limit), 1)}
+              total={page.total}
+            />
           </Card>
         </MobilePage>
         {selected ? <FindingDialog finding={selected} onClose={() => setSelected(null)} /> : null}
@@ -261,21 +294,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
     <section className="workspace-view animal-management-workspace" data-feature="animal-management">
       <div className="workspace-body animal-management-body">
         <Card className="animal-ant-card inspection-list-panel" title="异常处置队列">
-          <Form className="inspection-list-filters" component={false} layout="inline">
-            <Form.Item label="处置状态">
-              <Select
-                allowClear
-                className="min-select-control"
-                options={Object.entries(FINDING_STATUS_LABELS).map(([value, label]) => ({ label, value }))}
-                placeholder="全部状态"
-                value={status || undefined}
-                onChange={(value) => {
-                  setStatus(value || "");
-                  setOffset(0);
-                }}
-              />
-            </Form.Item>
-          </Form>
+          {filters}
           <DataTable
             className="inspection-table"
             resizeKey="inspection-findings"
@@ -432,7 +451,18 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
       width={860}
     >
       {query.isLoading ? <PageSkeleton compact label="巡检结论与处置记录" rows={4} variant="detail" /> : null}
-      {query.isError || !query.data ? <Alert title="巡检记录详情加载失败" showIcon type="error" /> : null}
+      {query.isError || !query.data ? (
+        <Alert
+          action={
+            <Button size="small" onClick={() => void query.refetch()}>
+              重试
+            </Button>
+          }
+          title="巡检记录详情加载失败"
+          showIcon
+          type="error"
+        />
+      ) : null}
       {query.data ? (
         <Space className="inspection-detail-content" orientation="vertical" size={16} style={{ width: "100%" }}>
           <Descriptions bordered column={{ xs: 1, sm: 2 }} size="small" title={query.data.item.roomName}>

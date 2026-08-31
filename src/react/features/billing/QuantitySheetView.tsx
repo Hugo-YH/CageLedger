@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
 import { Button, DatePicker, Input, InputNumber, Popover, Select, Space, Switch, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../api/contracts";
 import { usePrincipalIdentities } from "../../api/administration";
-import { fetchIacucSearch, useIacucSearch } from "../../api/iacuc";
 import { useQuantitySheetPiHistory, useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
-import { queryKeys } from "../../api/queryKeys";
 import { Tooltip } from "../../components/Tooltip";
 import { ActionButton } from "../../components/ui";
 import { AsyncActionButton, ModalShell, PageSkeleton } from "../../components/WorkspaceUi";
@@ -25,6 +22,7 @@ import {
 import { QuantityEditorPages, type QuantityRowHandle } from "./components/QuantityEditorPages";
 import { ConfirmSave } from "./components/QuantitySheetModals";
 import { SavedQuantitySheets } from "./components/SavedQuantitySheets";
+import { useQuantityIacuc } from "./hooks/useQuantityIacuc";
 
 const todayMonth = new Date().toISOString().slice(0, 7);
 const QUANTITY_ROWS_PER_PAGE = 31;
@@ -34,7 +32,20 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const identitiesQuery = usePrincipalIdentities();
   const rooms = roomsQuery.data?.items || [];
   const [draft, setDraft] = useState(() => createQuantitySheet(todayMonth, user.displayName));
-  const iacucQuery = useIacucSearch(draft.iacuc, 20);
+  const fillFromIacuc = useCallback(
+    (match: { iacuc: string; project?: string; pi?: string; owner?: string; funding?: string }) => {
+      setDraft((current) => ({
+        ...current,
+        iacuc: match.iacuc,
+        project: match.project || current.project,
+        pi: match.pi || current.pi,
+        owner: match.owner || current.owner,
+        funding: match.funding || current.funding,
+      }));
+    },
+    [],
+  );
+  const iacucLookup = useQuantityIacuc(draft.iacuc, fillFromIacuc);
   const [editorRows, setEditorRows] = useState(() => makeEditorRows(draft));
   const [exists, setExists] = useState(false);
   const [notice, setNotice] = useState("");
@@ -43,8 +54,6 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const [editingDialog, setEditingDialog] = useState(false);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
-  const lastFilledIacuc = useRef("");
-  const queryClient = useQueryClient();
   const selectedRoom = rooms.find((room) => room.id === draft.roomId);
   const unit = roomBillingUnit(selectedRoom);
   const billingProfile = roomBillingProfile(selectedRoom);
@@ -56,11 +65,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   const freeCageEnabled =
     supportsFreeCages && (Number(draft.preferredFreeCages || 0) > 0 || draft.freeCagePriority !== null);
   const tierPriorityEnabled = supportsTierPriority && draft.tierCagePriority !== null;
-  const iacucOptions = useMemo(() => iacucQuery.data?.items || [], [iacucQuery.data?.items]);
-  const iacucMatch = useMemo(
-    () => iacucOptions.find((item) => item.iacuc.trim().toUpperCase() === draft.iacuc.trim().toUpperCase()),
-    [iacucOptions, draft.iacuc],
-  );
+  const { options: iacucOptions, match: iacucMatch } = iacucLookup;
   const piHistory = useQuantitySheetPiHistory(
     iacucMatch?.iacuc || "",
     draft.month,
@@ -76,35 +81,6 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     draft.pi.trim() === iacucMatch?.pi.trim() &&
     previousPi.trim() !== iacucMatch?.pi.trim();
   const save = useSaveQuantitySheet();
-
-  function exactIacucMatch(value: string) {
-    const normalized = value.trim().toUpperCase();
-    return iacucQuery.data?.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
-  }
-
-  const fillFromIacuc = useCallback(
-    (match: { iacuc: string; project?: string; pi?: string; owner?: string; funding?: string }) => {
-      lastFilledIacuc.current = match.iacuc;
-      setDraft((current) => ({
-        ...current,
-        iacuc: match.iacuc,
-        project: match.project || current.project,
-        pi: match.pi || current.pi,
-        owner: match.owner || current.owner,
-        funding: match.funding || current.funding,
-      }));
-    },
-    [],
-  );
-
-  // Auto-fill as soon as the typed IACUC resolves to a known code, without
-  // waiting for the field to lose focus (covers datalist selection and paste).
-  useEffect(() => {
-    const normalized = draft.iacuc.trim().toUpperCase();
-    if (!normalized) return;
-    const exact = iacucQuery.data?.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
-    if (exact && lastFilledIacuc.current !== exact.iacuc) fillFromIacuc(exact);
-  }, [iacucQuery.data, draft.iacuc, fillFromIacuc]);
 
   const recalculate = useCallback(() => {
     let animals = 0;
@@ -132,6 +108,9 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   }, [customBillingSegmentCount, draft.fullExemption, freeCageEnabled, tierPriorityEnabled]);
 
   function setField<K extends keyof QuantitySheet>(key: K, value: QuantitySheet[K]) {
+    if (key === "iacuc") {
+      iacucLookup.reset();
+    }
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
@@ -209,26 +188,6 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     }));
   }
 
-  async function applyIacuc(value: string) {
-    const normalized = value.trim().toUpperCase();
-    const match = exactIacucMatch(normalized);
-    if (match) {
-      fillFromIacuc(match);
-      return;
-    }
-    if (!normalized) return;
-    // The debounced search may not have resolved before blur; fetch the exact code now.
-    const result = await queryClient.ensureQueryData({
-      queryKey: queryKeys.iacucSearch(normalized, 20),
-      queryFn: () => fetchIacucSearch(normalized, 20),
-      staleTime: 5 * 60_000,
-    });
-    const exact = result.items.find((item) => item.iacuc.trim().toUpperCase() === normalized);
-    if (exact) {
-      fillFromIacuc(exact);
-    }
-  }
-
   function collectSheet() {
     const snapshot = rowRefs.current
       .map((handle) => handle?.getRow())
@@ -264,6 +223,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       const response = await save.mutateAsync({ sheet: confirmSave, exists });
       const normalized = normalizeQuantitySheet(response.item);
       const next = createQuantitySheet(normalized.month, user.displayName);
+      iacucLookup.reset();
       setDraft(next);
       setEditorRows(makeEditorRows(next));
       setExists(false);
@@ -283,6 +243,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   }
 
   function startNew() {
+    iacucLookup.reset();
     const next = createQuantitySheet(todayMonth, user.displayName);
     setDraft(next);
     setEditorRows(makeEditorRows(next));
@@ -292,12 +253,18 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   }
 
   function loadForEdit(sheet: QuantitySheet) {
+    iacucLookup.reset();
     const next = normalizeQuantitySheet(sheet);
     setDraft(next);
     setEditorRows(makeEditorRows(next));
     setExists(true);
     setOptionsExpanded(hasExpandedBillingOptions(next));
     if (mode === "saved") setEditingDialog(true);
+  }
+
+  function closeEditor() {
+    iacucLookup.reset();
+    setEditingDialog(false);
   }
 
   const entryToolbar =
@@ -342,6 +309,8 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     ) : null;
 
   function renderEditor(headActions?: React.ReactNode) {
+    const visibleNotice = iacucLookup.error || notice;
+    const visibleNoticeKind = iacucLookup.error ? "error" : noticeKind;
     return (
       <form
         id="quantity-sheet-entry-form"
@@ -354,16 +323,19 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           </div>
           {headActions ? <div className="panel-head-actions">{headActions}</div> : null}
         </div>
-        {notice ? (
-          <div className={`react-inline-notice is-${noticeKind}`} role="status">
-            {noticeKind === "success" ? (
+        {visibleNotice ? (
+          <div
+            className={`react-inline-notice is-${visibleNoticeKind}`}
+            role={visibleNoticeKind === "error" ? "alert" : "status"}
+          >
+            {visibleNoticeKind === "success" ? (
               <CheckCircleFilled aria-hidden className="notice-icon" />
-            ) : noticeKind === "error" ? (
+            ) : visibleNoticeKind === "error" ? (
               <CloseCircleFilled aria-hidden className="notice-icon" />
             ) : (
               <InfoCircleFilled aria-hidden className="notice-icon" />
             )}
-            <span>{notice}</span>
+            <span>{visibleNotice}</span>
           </div>
         ) : null}
         <div className="quantity-sheet-fields">
@@ -432,11 +404,10 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                     const value = event.target.value.toUpperCase();
                     setField("iacuc", value);
                     if (!value.trim()) {
-                      lastFilledIacuc.current = "";
                       setDraft((current) => ({ ...current, project: "", pi: "", owner: "", funding: "" }));
                     }
                   }}
-                  onBlur={(event) => applyIacuc(event.target.value)}
+                  onBlur={(event) => void iacucLookup.apply(event.target.value)}
                 />
                 <datalist id="quantity-iacuc-options">
                   {iacucOptions.map((item, index) => (
@@ -697,7 +668,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
       ) : null}
       {mode === "entry" ? renderEditor() : <SavedQuantitySheets onEdit={loadForEdit} />}
       {mode === "saved" && editingDialog ? (
-        <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={() => setEditingDialog(false)}>
+        <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={closeEditor}>
           <div className="modal-shell-head">
             <div>
               <h2>编辑数量统计表</h2>
@@ -705,7 +676,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                 {draft.month} · {draft.iacuc}
               </p>
             </div>
-            <ActionButton onClick={() => setEditingDialog(false)}>关闭</ActionButton>
+            <ActionButton onClick={closeEditor}>关闭</ActionButton>
           </div>
           <div className="modal-shell-body">
             <div className="react-quantity-layout quantity-edit-context">

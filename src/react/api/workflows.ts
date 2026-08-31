@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { PagedResponse, ReimbursementDetailResponse, ReimbursementRecord, ReimbursementStatus } from "./contracts";
 import { requestJson } from "./client";
@@ -112,14 +112,15 @@ function listUrl(params: ReimbursementListParams) {
 export function useReimbursements(params: ReimbursementListParams) {
   return useQuery({
     queryKey: queryKeys.reimbursements({ ...params }),
-    queryFn: () => requestJson<PagedResponse<ReimbursementRecord>>(listUrl(params)),
+    queryFn: ({ signal }) => requestJson<PagedResponse<ReimbursementRecord>>(listUrl(params), { signal }),
   });
 }
 
 export function useReimbursement(id: string) {
   return useQuery({
     queryKey: queryKeys.reimbursement(id),
-    queryFn: () => requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`),
+    queryFn: ({ signal }) =>
+      requestJson<ReimbursementDetailResponse>(`/api/reimbursement-records/${encodeURIComponent(id)}`, { signal }),
     enabled: Boolean(id),
   });
 }
@@ -160,47 +161,60 @@ export function useDeleteReimbursement() {
   });
 }
 
+export interface WorkflowAdvancePayload {
+  workflowId: string;
+  toStatus: string;
+  note?: string;
+  registration?: {
+    reimbursementForms?: Array<{ formNo: string; amount: number; fundingBookNo?: string }>;
+    signedStatementReturned?: boolean;
+    signedStatementNote?: string;
+    reimbursementFormReturned?: boolean;
+    reimbursementFormNote?: string;
+  };
+}
+
+export function advanceWorkflow(payload: WorkflowAdvancePayload) {
+  return requestJson<Record<string, unknown>>("/api/billing-workflows/advance", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function invalidateWorkflowQueries(client: QueryClient) {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
+    client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot }),
+    client.invalidateQueries({ queryKey: queryKeys.workflowsRoot }),
+  ]);
+}
+
 export function useAdvanceWorkflow() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (payload: {
-      workflowId: string;
-      toStatus: string;
-      note?: string;
-      registration?: {
-        reimbursementForms?: Array<{ formNo: string; amount: number; fundingBookNo?: string }>;
-        signedStatementReturned?: boolean;
-        signedStatementNote?: string;
-        reimbursementFormReturned?: boolean;
-        reimbursementFormNote?: string;
-      };
-    }) =>
-      requestJson<Record<string, unknown>>("/api/billing-workflows/advance", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
-      void client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
-      void client.invalidateQueries({ queryKey: ["billing-workflows"] });
-    },
+    mutationFn: advanceWorkflow,
+    onSuccess: () => invalidateWorkflowQueries(client),
   });
 }
 
 export function useBillingWorkflows(params: WorkflowListParams) {
   return useQuery({
     queryKey: queryKeys.workflows({ ...params }),
-    queryFn: () =>
-      requestJson<PagedResponse<BillingWorkflow>>(`/api/billing-workflows?${billingWorkflowSearch(params).toString()}`),
+    queryFn: ({ signal }) =>
+      requestJson<PagedResponse<BillingWorkflow>>(
+        `/api/billing-workflows?${billingWorkflowSearch(params).toString()}`,
+        { signal },
+      ),
   });
 }
 
 export function useWorkflowFundingBookOptions(workflowId: string) {
   return useQuery({
     queryKey: queryKeys.workflowFundingBookOptions(workflowId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       requestJson<WorkflowFundingBookOptionsResponse>(
         `/api/billing-workflows/${encodeURIComponent(workflowId)}/funding-options`,
+        { signal },
       ),
     enabled: Boolean(workflowId),
     staleTime: 0,
@@ -220,10 +234,11 @@ function billingWorkflowSearch(params: WorkflowListParams) {
   return query;
 }
 
-export async function fetchAllBillingWorkflows(params: WorkflowListParams) {
+export async function fetchAllBillingWorkflows(params: WorkflowListParams, signal?: AbortSignal) {
   const limit = 100;
   const firstPage = await requestJson<PagedResponse<BillingWorkflow>>(
     `/api/billing-workflows?${billingWorkflowSearch({ ...params, limit, offset: 0 }).toString()}`,
+    { signal },
   );
   const items = [...firstPage.items];
   const total = firstPage.page.total;
@@ -231,6 +246,7 @@ export async function fetchAllBillingWorkflows(params: WorkflowListParams) {
   for (let offset = limit; offset < total; offset += limit) {
     const nextPage = await requestJson<PagedResponse<BillingWorkflow>>(
       `/api/billing-workflows?${billingWorkflowSearch({ ...params, limit, offset }).toString()}`,
+      { signal },
     );
     items.push(...nextPage.items);
   }
@@ -238,12 +254,21 @@ export async function fetchAllBillingWorkflows(params: WorkflowListParams) {
   return items;
 }
 
-export async function fetchWorkflowDetail(workflowId: string) {
+export async function fetchWorkflowDetail(workflowId: string, signal?: AbortSignal) {
   return requestJson<{
     workflow: BillingWorkflow;
     versions: unknown[];
     events: BillingWorkflowEvent[];
-  }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`);
+  }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`, { signal });
+}
+
+export function useWorkflowDetail(workflowId: string) {
+  return useQuery({
+    queryKey: queryKeys.workflowDetail(workflowId),
+    queryFn: ({ signal }) => fetchWorkflowDetail(workflowId, signal),
+    enabled: Boolean(workflowId),
+    staleTime: 0,
+  });
 }
 
 export async function uploadWorkflowAttachment(workflowId: string, kind: "settlement" | "reimbursement", file: File) {
@@ -266,10 +291,7 @@ export async function uploadWorkflowAttachment(workflowId: string, kind: "settle
 export function useDeleteBillingWorkflow() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (workflowId: string) =>
-      requestJson<{ ok: true }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`, {
-        method: "DELETE",
-      }),
+    mutationFn: deleteBillingWorkflow,
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
       void client.invalidateQueries({ queryKey: ["billing-workflows"] });
@@ -290,4 +312,8 @@ export async function recordWorkflowReimbursement(
     },
   );
   return payload;
+}
+
+export function deleteBillingWorkflow(workflowId: string) {
+  return requestJson<{ ok: true }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`, { method: "DELETE" });
 }

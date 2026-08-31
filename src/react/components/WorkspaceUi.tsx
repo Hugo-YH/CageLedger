@@ -1,8 +1,9 @@
-import { Button, Empty, Flex, Modal, Pagination, Space, Typography } from "antd";
+import { Alert, Button, Empty, Flex, Modal, Pagination, Space, Typography } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 import { type ReactNode, useEffect, useRef } from "react";
 
 import { ActionButton, CommandBar, type ActionButtonProps, type ActionTone } from "./ui";
+import { useAsyncFormAction } from "../hooks/useAsyncFormAction";
 
 export { PageSkeleton } from "./PageSkeleton";
 
@@ -122,8 +123,9 @@ export function ConfirmDialog({
   pending?: boolean;
   danger?: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<unknown>;
 }) {
+  const action = useAsyncFormAction("操作失败，请重试");
   return (
     <ModalShell ariaLabel={title} className="confirm-dialog" onClose={onCancel}>
       <div className="modal-shell-head">
@@ -132,11 +134,19 @@ export function ConfirmDialog({
       </div>
       <div className="modal-shell-body">
         <p>{message}</p>
+        {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
       </div>
       <div className="modal-shell-actions">
         <Space>
           <Button onClick={onCancel}>取消</Button>
-          <Button danger={danger} loading={pending} type="primary" onClick={onConfirm}>
+          <Button
+            danger={danger}
+            loading={pending || action.pending}
+            type="primary"
+            onClick={() => {
+              if (!pending) void action.run(() => Promise.resolve(onConfirm()), onCancel);
+            }}
+          >
             {confirmLabel}
           </Button>
         </Space>

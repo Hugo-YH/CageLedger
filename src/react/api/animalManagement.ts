@@ -26,7 +26,7 @@ function url(path: string, params: object) {
 export function useAnimalInspectionCatalog() {
   return useQuery({
     queryKey: queryKeys.animalInspectionCatalog,
-    queryFn: () => requestJson<InspectionCatalogResponse>("/api/animal-inspection-catalog"),
+    queryFn: ({ signal }) => requestJson<InspectionCatalogResponse>("/api/animal-inspection-catalog", { signal }),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -34,7 +34,8 @@ export function useAnimalInspectionCatalog() {
 export function useAnimalInspectionCatalogDraft(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.animalInspectionCatalogDraft,
-    queryFn: () => requestJson<InspectionCatalogDraftResponse>("/api/animal-inspection-catalog/draft"),
+    queryFn: ({ signal }) =>
+      requestJson<InspectionCatalogDraftResponse>("/api/animal-inspection-catalog/draft", { signal }),
     staleTime: 5 * 60 * 1000,
     enabled,
   });
@@ -73,7 +74,8 @@ export function usePublishInspectionCatalogDraft() {
 export function useAnimalInspectionCatalogVersions(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.animalInspectionCatalogVersions,
-    queryFn: () => requestJson<{ items: InspectionCatalogVersionSummary[] }>("/api/animal-inspection-catalog/versions"),
+    queryFn: ({ signal }) =>
+      requestJson<{ items: InspectionCatalogVersionSummary[] }>("/api/animal-inspection-catalog/versions", { signal }),
     staleTime: 30 * 1000,
     enabled,
   });
@@ -106,13 +108,13 @@ export function useUploadInspectionCatalogImage() {
 
 export function useAnimalInspections(params: AnimalInspectionListParams) {
   return useQuery({
-    queryKey: queryKeys.animalInspections(params as unknown as Record<string, unknown>),
-    queryFn: () =>
+    queryKey: queryKeys.animalInspections({ ...params }),
+    queryFn: ({ signal }) =>
       requestJson<{
         items: AnimalInspection[];
         page: { offset: number; limit: number; total: number };
         filterOptions: Record<string, string[]>;
-      }>(url("/api/animal-inspections", params)),
+      }>(url("/api/animal-inspections", params), { signal }),
     placeholderData: (previous) => previous,
   });
 }
@@ -120,7 +122,8 @@ export function useAnimalInspections(params: AnimalInspectionListParams) {
 export function useAnimalInspection(id: string) {
   return useQuery({
     queryKey: queryKeys.animalInspection(id),
-    queryFn: () => requestJson<AnimalInspectionDetail>(`/api/animal-inspections/${encodeURIComponent(id)}`),
+    queryFn: ({ signal }) =>
+      requestJson<AnimalInspectionDetail>(`/api/animal-inspections/${encodeURIComponent(id)}`, { signal }),
     enabled: Boolean(id),
   });
 }
@@ -129,10 +132,11 @@ export function useAnimalFindings(
   params: Pick<AnimalInspectionListParams, "limit" | "offset" | "room" | "status" | "severity">,
 ) {
   return useQuery({
-    queryKey: queryKeys.animalFindings(params as Record<string, unknown>),
-    queryFn: () =>
+    queryKey: queryKeys.animalFindings({ ...params }),
+    queryFn: ({ signal }) =>
       requestJson<{ items: InspectionFinding[]; page: { offset: number; limit: number; total: number } }>(
         url("/api/animal-inspection-findings", params),
+        { signal },
       ),
     placeholderData: (previous) => previous,
   });

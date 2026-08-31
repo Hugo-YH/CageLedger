@@ -44,23 +44,28 @@ function invalidateLedger(client: ReturnType<typeof useQueryClient>) {
 export function useSettlementObligations(params: LedgerListParams) {
   return useQuery({
     queryKey: queryKeys.reimbursementObligations({ ...params }),
-    queryFn: () =>
-      requestJson<PagedResponse<SettlementObligation>>(queryUrl("/api/reimbursement-ledger/obligations", params)),
+    queryFn: ({ signal }) =>
+      requestJson<PagedResponse<SettlementObligation>>(queryUrl("/api/reimbursement-ledger/obligations", params), {
+        signal,
+      }),
   });
 }
 
 export function useReimbursementClaims(params: LedgerListParams) {
   return useQuery({
     queryKey: queryKeys.reimbursementClaims({ ...params }),
-    queryFn: () => requestJson<PagedResponse<ReimbursementClaim>>(queryUrl("/api/reimbursement-ledger/claims", params)),
+    queryFn: ({ signal }) =>
+      requestJson<PagedResponse<ReimbursementClaim>>(queryUrl("/api/reimbursement-ledger/claims", params), { signal }),
   });
 }
 
 export function useReimbursementClaim(id: string) {
   return useQuery({
     queryKey: queryKeys.reimbursementClaim(id),
-    queryFn: () =>
-      requestJson<{ item: ReimbursementClaim }>(`/api/reimbursement-ledger/claims/${encodeURIComponent(id)}`),
+    queryFn: ({ signal }) =>
+      requestJson<{ item: ReimbursementClaim }>(`/api/reimbursement-ledger/claims/${encodeURIComponent(id)}`, {
+        signal,
+      }),
     enabled: Boolean(id),
   });
 }
@@ -68,8 +73,11 @@ export function useReimbursementClaim(id: string) {
 export function useLegacyReimbursements(params: LedgerListParams) {
   return useQuery({
     queryKey: queryKeys.reimbursementLegacy({ ...params }),
-    queryFn: () =>
-      requestJson<PagedResponse<Record<string, unknown>>>(queryUrl("/api/reimbursement-ledger/legacy-records", params)),
+    queryFn: ({ signal }) =>
+      requestJson<PagedResponse<Record<string, unknown>>>(
+        queryUrl("/api/reimbursement-ledger/legacy-records", params),
+        { signal },
+      ),
   });
 }
 

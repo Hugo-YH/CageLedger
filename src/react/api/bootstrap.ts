@@ -15,7 +15,7 @@ export function bootstrapUrl(scope: BootstrapScope, roomId = "") {
 export function useBootstrap(scope: BootstrapScope, roomId = "", enabled = true) {
   return useQuery({
     queryKey: queryKeys.bootstrap(scope, roomId),
-    queryFn: () => requestJson<BootstrapResponse>(bootstrapUrl(scope, roomId)),
+    queryFn: ({ signal }) => requestJson<BootstrapResponse>(bootstrapUrl(scope, roomId), { signal }),
     enabled,
   });
 }

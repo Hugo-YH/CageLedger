@@ -1,7 +1,8 @@
 import type { CageRack, CageRoom } from "../../../api/contracts";
-import { Button, Form, Input, Select as AntSelect } from "antd";
+import { Alert, Button, Form, Input, Select as AntSelect } from "antd";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import type { RoomDraft } from "../model";
+import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 
 const facilityOptions = [
   ["zhujiang", "珠江新城设施"],
@@ -39,8 +40,9 @@ export function RoomEditor({
   pending: boolean;
   onChange: (draft: RoomDraft) => void;
   onClose: () => void;
-  onSave: () => void;
+  onSave: () => Promise<unknown>;
 }) {
+  const action = useAsyncFormAction("饲养间保存失败，请重试");
   const update = (key: keyof RoomDraft, value: string | number) => onChange({ ...draft, [key]: value });
   return (
     <ModalShell
@@ -55,6 +57,7 @@ export function RoomEditor({
         </Button>
       </div>
       <div className="modal-shell-body form">
+        {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
         <Field label="饲养间名称" value={draft.name} onChange={(value) => update("name", value)} />
         <Field label="区域" value={draft.area || ""} onChange={(value) => update("area", value)} />
         <Field label="房间管理员" value={draft.roomManager || ""} onChange={(value) => update("roomManager", value)} />
@@ -98,7 +101,12 @@ export function RoomEditor({
       </div>
       <div className="modal-shell-actions">
         <Button onClick={onClose}>取消</Button>
-        <Button disabled={pending || !draft.name.trim()} loading={pending} type="primary" onClick={onSave}>
+        <Button
+          disabled={pending || !draft.name.trim()}
+          loading={pending || action.pending}
+          type="primary"
+          onClick={() => void action.run(onSave, onClose)}
+        >
           保存饲养间
         </Button>
       </div>
@@ -118,8 +126,9 @@ export function RackEditor({
   pending: boolean;
   onChange: (draft: CageRack) => void;
   onClose: () => void;
-  onSave: () => void;
+  onSave: () => Promise<unknown>;
 }) {
+  const action = useAsyncFormAction("笼架保存失败，请重试");
   const update = (key: keyof CageRack, value: string | number) => onChange({ ...draft, [key]: value });
   const rackName = (roomId: string, index: number) => {
     const room = rooms.find((item) => item.id === roomId);
@@ -139,6 +148,7 @@ export function RackEditor({
         </Button>
       </div>
       <div className="modal-shell-body form">
+        {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
         <Form component={false} layout="vertical">
           <Form.Item label="所属饲养间">
             <AntSelect
@@ -172,7 +182,12 @@ export function RackEditor({
       </div>
       <div className="modal-shell-actions">
         <Button onClick={onClose}>取消</Button>
-        <Button disabled={pending} loading={pending} type="primary" onClick={onSave}>
+        <Button
+          disabled={pending}
+          loading={pending || action.pending}
+          type="primary"
+          onClick={() => void action.run(onSave, onClose)}
+        >
           保存笼架
         </Button>
       </div>

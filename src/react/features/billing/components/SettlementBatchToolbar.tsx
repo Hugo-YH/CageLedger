@@ -3,6 +3,7 @@ import { Button, Space, Tooltip, Typography } from "antd";
 
 export function SettlementBatchToolbar({
   total,
+  disabled = false,
   selectedCount,
   selectingAll,
   pdfExporting,
@@ -17,6 +18,7 @@ export function SettlementBatchToolbar({
   onInitiate,
 }: {
   total: number;
+  disabled?: boolean;
   selectedCount: number;
   selectingAll: boolean;
   pdfExporting: boolean;
@@ -30,7 +32,7 @@ export function SettlementBatchToolbar({
   onWithdraw: () => void;
   onInitiate: () => void;
 }) {
-  const empty = !selectedCount || selectingAll;
+  const empty = disabled || !selectedCount || selectingAll;
   return (
     <div className="settlement-action-bar" aria-label="结算批量操作">
       <Typography.Text type={selectedCount ? undefined : "secondary"}>

@@ -12,6 +12,7 @@
     "src/styles/features/antd-system.css",
     "src/styles/features/intake.css",
     "src/styles/features/billing.css",
+    "src/styles/features/quantity-entry-form.css",
     "src/styles/features/animal-management.css",
     "src/styles/features/cages.css",
     "src/styles/features/workflow.css",
@@ -36,6 +37,12 @@
       "status": "complete",
       "selectorPrefixes": [".react-quantity-layout"]
     },
+    "src/styles/features/quantity-entry-form.css": {
+      "owner": "quantity-entry-form",
+      "status": "complete",
+      "scopeRoots": [".react-quantity-layout"],
+      "selectorPrefixes": [".react-quantity-layout"]
+    },
     "src/styles/features/animal-management.css": {
       "owner": "animal-management",
       "status": "complete",
@@ -52,7 +59,8 @@
     "src/styles/features/workflow.css": {
       "owner": "workflow",
       "status": "complete",
-      "scopeRoots": ["[data-feature=\"workflow\"]", ".workflow-detail-modal"]
+      "scopeRoots": ["[data-feature=\"workflow\"]", ".workflow-detail-modal", ".workflow-reimbursement-fields"],
+      "selectorPrefixes": [".workflow-reimbursement-fields"]
     },
     "src/styles/features/administration.css": { "owner": "administration", "status": "complete" },
     "src/styles/features/project-home.css": {

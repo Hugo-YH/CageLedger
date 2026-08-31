@@ -68,17 +68,23 @@ export function BillingView({
       {mode === "monthly-summary" && user.role === "admin" ? <MonthlyBillingSummary /> : null}
     </div>
   );
-  if (isMobile) {
-    return (
-      <MobilePage onBack={() => navigate("billing-quantity-entry")} title={title} titleAsHeading={false}>
-        {body}
-      </MobilePage>
-    );
-  }
   return (
-    <section className="workspace-view billing-workspace react-billing-view" data-feature="billing">
-      <div className="workspace-body billing-workspace-body">{body}</div>
-    </section>
+    <MobilePage
+      desktop={
+        isMobile
+          ? undefined
+          : {
+              className: "workspace-view billing-workspace react-billing-view",
+              bodyClassName: "workspace-body billing-workspace-body",
+              feature: "billing",
+            }
+      }
+      onBack={() => navigate("billing-quantity-entry")}
+      title={title}
+      titleAsHeading={false}
+    >
+      {body}
+    </MobilePage>
   );
 }
 

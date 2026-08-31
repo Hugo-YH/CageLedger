@@ -6,10 +6,12 @@ import type { SettlementCandidate } from "../../../api/contracts";
 export function SettlementCandidateActions({
   candidate,
   previewing,
+  disabled = false,
   onPreview,
 }: {
   candidate: SettlementCandidate;
   previewing: boolean;
+  disabled?: boolean;
   onPreview: () => void;
 }) {
   const action = (
@@ -18,7 +20,7 @@ export function SettlementCandidateActions({
         icon={<EyeOutlined aria-hidden />}
         loading={previewing}
         size="small"
-        disabled={candidate.totalAmount == null}
+        disabled={disabled || candidate.totalAmount == null}
         onClick={onPreview}
       >
         预览结算单

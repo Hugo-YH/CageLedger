@@ -1,17 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "antd";
 
-import { requestJson } from "../../api/client";
-
-type CageCardDetails = Record<string, string | number | null | undefined>;
+import { usePublicCageCard } from "../../api/cageCard";
 
 export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
-  const details = useQuery({
-    queryKey: ["public-cage-card", qrId],
-    queryFn: () => requestJson<CageCardDetails>(`/api/public/cage-card/${encodeURIComponent(qrId)}`),
-    enabled: Boolean(qrId),
-    retry: false,
-  });
+  const details = usePublicCageCard(qrId);
   const item = details.data || {};
   const rows: Array<[string, unknown]> = [
     ["笼号", item.cageCode || item.slotCode],

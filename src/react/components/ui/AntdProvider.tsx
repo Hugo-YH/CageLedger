@@ -1,22 +1,15 @@
 import { App as AntApp, ConfigProvider, theme as antTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { type PropsWithChildren, useEffect, useMemo, useState } from "react";
+import { type PropsWithChildren, useMemo } from "react";
 
-import { useUiState } from "../../state/ui";
+import { useResolvedTheme } from "../../state/ui";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+
+const BUTTON_CONFIG = { autoInsertSpace: false };
 
 export function AntdProvider({ children }: PropsWithChildren) {
-  const { theme } = useUiState();
-  const [reducedMotion, setReducedMotion] = useState(
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReducedMotion(media.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-  const resolvedTheme =
-    theme === "system" ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : theme;
+  const resolvedTheme = useResolvedTheme();
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const config = useMemo(
     () => ({
       algorithm: resolvedTheme === "dark" ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
@@ -29,9 +22,8 @@ export function AntdProvider({ children }: PropsWithChildren) {
         colorError: "#cf1322",
         colorLink: "#0958d9",
         colorLinkHover: "#1677ff",
-        // Dashboard labels and descriptions remain readable on neutral surfaces.
-        colorTextSecondary: "#595959",
-        colorTextDescription: "#595959",
+        // Dark surfaces use the algorithm's light text instead of the light-theme gray override.
+        ...(resolvedTheme === "light" ? { colorTextSecondary: "#595959", colorTextDescription: "#595959" } : {}),
         borderRadius: 6,
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
@@ -47,8 +39,7 @@ export function AntdProvider({ children }: PropsWithChildren) {
       components: {
         Button: {
           borderRadius: 6,
-          defaultColor: "#262626",
-          defaultBorderColor: "#d9d9d9",
+          ...(resolvedTheme === "light" ? { defaultColor: "#262626", defaultBorderColor: "#d9d9d9" } : {}),
           // Solid controls keep the official blue seed for branding and use blue-7 with white text for AA contrast.
           colorPrimary: "var(--primary-control)",
           colorPrimaryHover: "var(--primary-control-hover)",
@@ -74,7 +65,7 @@ export function AntdProvider({ children }: PropsWithChildren) {
   );
 
   return (
-    <ConfigProvider button={{ autoInsertSpace: false }} componentSize="middle" locale={zhCN} theme={config}>
+    <ConfigProvider button={BUTTON_CONFIG} componentSize="middle" locale={zhCN} theme={config}>
       <AntApp>{children}</AntApp>
     </ConfigProvider>
   );

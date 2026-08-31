@@ -104,6 +104,42 @@
   font-weight: 600;
 }
 
+.workflow-reimbursement-fields {
+  container: reimbursement-fields / inline-size;
+}
+
+.workflow-reimbursement-fields .workflow-reimbursement-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(96px, 0.6fr) 32px;
+  align-items: start;
+  gap: 8px;
+}
+
+.workflow-reimbursement-fields .ant-form-item {
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+.workflow-reimbursement-fields .ant-input-number {
+  width: 100%;
+}
+
+.workflow-reimbursement-fields .workflow-reimbursement-remove {
+  margin-top: 30px;
+}
+
+@container reimbursement-fields (width <= 480px) {
+  .workflow-reimbursement-fields .workflow-reimbursement-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .workflow-reimbursement-fields .workflow-reimbursement-remove {
+    justify-self: end;
+    margin: 0 0 12px;
+  }
+}
+
 @media (width <= 760px) {
   [data-feature="workflow"] .ant-table-wrapper {
     overflow-x: auto;

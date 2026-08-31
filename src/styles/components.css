@@ -36,205 +36,11 @@
   color: var(--primary);
 }
 
-.workflow-version-list,
-.quantity-sheet-fields {
+.workflow-version-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
   margin-bottom: 16px;
-}
-
-.quantity-field-group {
-  display: grid;
-  gap: 12px;
-}
-
-.quantity-field-group-basic {
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-}
-
-.quantity-field-group .readonly-field {
-  color: var(--text);
-  background: var(--surface-soft);
-  border-style: dashed;
-  cursor: default;
-}
-
-.quantity-field-group-project {
-  grid-template-columns: repeat(5, minmax(140px, 1fr));
-}
-
-.quantity-free-cage-module {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
-}
-
-.quantity-billing-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.quantity-billing-options > * {
-  min-width: 0;
-}
-
-.quantity-custom-billing-module {
-  min-width: 0;
-  border-color: color-mix(in srgb, var(--primary) 18%, transparent);
-  background: color-mix(in srgb, var(--primary-soft) 78%, transparent);
-}
-
-.custom-billing-segments {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.custom-billing-segment {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-overlay) 72%, transparent);
-}
-
-.custom-billing-segment-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.custom-billing-segment-head strong {
-  color: var(--text);
-  font-size: 0.9rem;
-}
-
-.custom-billing-segment-head > div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.custom-billing-segment-head span {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.custom-billing-segment-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
-  gap: 8px;
-}
-
-.custom-billing-segment-fields label {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.custom-billing-segment-fields input {
-  min-width: 0;
-}
-
-.custom-billing-segment-note {
-  grid-column: span 2;
-}
-
-.quantity-free-cage-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.quantity-free-cage-head > .tooltip-anchor,
-.quantity-full-exemption-row > .tooltip-anchor {
-  flex: 0 0 auto;
-}
-
-.quantity-free-cage-head > div {
-  display: grid;
-  gap: 4px;
-}
-
-.quantity-free-cage-head strong {
-  color: var(--text);
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.quantity-free-cage-head span {
-  color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.45;
-}
-
-.quantity-free-cage-field {
-  max-width: 320px;
-}
-
-.quantity-free-cage-field small {
-  display: block;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
-.quantity-free-cage-module.muted-field {
-  color: var(--muted);
-}
-
-.quantity-free-cage-module.muted-field input {
-  background: var(--surface-soft);
-  color: var(--muted);
-  cursor: not-allowed;
-}
-
-.quantity-free-cage-toggle {
-  flex: 0 0 auto;
-}
-
-.quantity-full-exemption-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.quantity-full-exemption-row > div {
-  display: grid;
-  gap: 4px;
-}
-
-.quantity-full-exemption-row small {
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.quantity-full-exemption-row.enabled {
-  padding: 12px;
-  border: 1px solid var(--success-line);
-  border-radius: var(--radius-md);
-  background: var(--success-soft);
-}
-
-.quantity-field-group .wide {
-  grid-column: span 2;
 }
 
 .quantity-entry-wrap {
@@ -530,63 +336,6 @@
   border-color: var(--amber);
   box-shadow: inset 3px 0 0 var(--amber);
   background: var(--surface-soft);
-}
-
-.quantity-animal-toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
-  border-radius: 4px;
-  background: var(--surface-overlay);
-  color: var(--primary-ink);
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.quantity-animal-toggle input {
-  position: absolute;
-  inset: 0;
-  z-index: var(--z-raised);
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: inherit;
-}
-
-.quantity-animal-toggle:has(input:focus-visible) {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.quantity-animal-toggle-track,
-.quantity-animal-toggle-label {
-  pointer-events: none;
-}
-
-.quantity-animal-toggle.enabled .quantity-animal-toggle-track {
-  background: var(--primary);
-}
-
-.quantity-animal-toggle.enabled .quantity-animal-toggle-track span {
-  transform: translateX(17px);
-}
-
-.quantity-animal-toggle.locked {
-  cursor: not-allowed;
-  background: var(--surface-soft);
-}
-
-.quantity-animal-toggle small {
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .quantity-animal-detail-notice.required {
@@ -1182,13 +931,9 @@
   box-shadow: 0 0 0 2px var(--ant-color-primary-border-hover);
 }
 
-[data-ui="data-table"].app-data-table .ant-table-tbody > tr > td {
+.app-data-table [data-ui="data-table"] .ant-table-tbody > tr > td:not(.ant-table-cell-ellipsis) {
   white-space: normal;
   overflow-wrap: anywhere;
-}
-
-[data-ui="data-table"].app-data-table .ant-table-thead > tr > th {
-  text-align: left !important;
 }
 
 .empty-state {

@@ -422,12 +422,19 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
   // 全选批量锁定
   await page.locator("thead").getByLabel("全选当前页可锁定的结算流程").click();
   await expect(page.locator(".ledger-toolbar").getByText(/已选 \d+ 条可锁定/)).toBeVisible();
+  const batchRefreshes: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-workflows") {
+      batchRefreshes.push(request.url());
+    }
+  });
   await page.getByRole("button", { name: "批量锁定" }).click();
   await page.locator(".ant-popconfirm").getByRole("button", { name: "批量锁定", exact: true }).click();
   await expect(page.getByText(/已锁定 \d+ 条结算流程/)).toBeVisible({ timeout: 10_000 });
   for (const pi of pis) {
     await expect(page.getByRole("row", { name: new RegExp(pi) })).toContainText("已锁定", { timeout: 10_000 });
   }
+  expect(batchRefreshes).toHaveLength(1);
 
   // 已锁定流程不允许撤回，可解锁回到已归档
   const lockedRow = page.getByRole("row", { name: new RegExp(pis[0]) });

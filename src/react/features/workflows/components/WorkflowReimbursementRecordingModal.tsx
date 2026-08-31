@@ -1,19 +1,6 @@
-import { InfoCircleOutlined, MinusCircleOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  AutoComplete,
-  Button,
-  Flex,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Space,
-  Tooltip,
-  Typography,
-  Upload,
-} from "antd";
-import { useEffect, useState } from "react";
+import { UploadOutlined } from "@ant-design/icons";
+import { Alert, Button, Flex, Form, Modal, Space, Typography, Upload } from "antd";
+import { useState } from "react";
 
 import { unverifiedFundingBookNos } from "../../../../domain/fundingBookNo";
 import { defaultReimbursementFormNo } from "../../../../domain/reimbursementFormNo";
@@ -24,6 +11,8 @@ import {
   useWorkflowFundingBookOptions,
 } from "../../../api/workflows";
 import { FundingBookConfirmationModal } from "./FundingBookConfirmationModal";
+import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
+import { ReimbursementFormFields } from "./ReimbursementFormFields";
 
 interface RecordingValues {
   reimbursementForms?: Array<{ formNo: string; amount?: number; fundingBookNo?: string }>;
@@ -38,90 +27,92 @@ export function WorkflowReimbursementRecordingModal({
   onCancel: () => void;
   onRecorded: () => void;
 }) {
-  const [form] = Form.useForm<RecordingValues>();
-  const [attachment, setAttachment] = useState<BillingWorkflowAttachment | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [unverifiedFundingBookNumbers, setUnverifiedFundingBookNumbers] = useState<string[]>([]);
-  const fundingBookOptions = useWorkflowFundingBookOptions(target?.id ?? "");
-  const fundingOptions = fundingBookOptions.data?.items ?? [];
-
-  useEffect(() => {
-    if (target) {
-      form.resetFields();
-      setFormError("");
-    }
-  }, [form, target]);
-
-  function reset() {
-    setAttachment(null);
-  }
-
-  async function submit(confirmed = false) {
-    if (!target) return;
-    try {
-      const values = await form.validateFields();
-      const forms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
-      if (!forms.length) {
-        setFormError("请填写报销单号和金额");
-        return;
-      }
-      const unverified = fundingBookOptions.data
-        ? unverifiedFundingBookNos(
-            forms.map((entry) => entry.fundingBookNo),
-            fundingBookOptions.data.piFundingBookNos,
-          )
-        : [];
-      if (!confirmed && unverified.length) {
-        setUnverifiedFundingBookNumbers(unverified);
-        return;
-      }
-      setUnverifiedFundingBookNumbers([]);
-      setFormError("");
-      setSaving(true);
-      await recordWorkflowReimbursement(
-        target.id,
-        forms.map((entry) => ({
-          formNo: entry.formNo,
-          amount: Number(entry.amount) || 0,
-          fundingBookNo: entry.fundingBookNo?.trim() || "",
-        })),
-      );
-      onRecorded();
-    } catch (error) {
-      console.error("补录报销单失败", error);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleUpload(file: File) {
-    if (!target) return;
-    setUploading(true);
-    try {
-      const uploaded = await uploadWorkflowAttachment(target.id, "reimbursement", file);
-      setAttachment(uploaded ?? null);
-    } finally {
-      setUploading(false);
-    }
-    return false;
-  }
-
   return (
     <Modal
-      cancelText="取消"
-      confirmLoading={saving}
       destroyOnHidden
-      okText="保存补录"
+      footer={null}
       open={Boolean(target)}
       rootClassName="app-modal-root workflow-reimbursement-recording-modal"
       title={`补录报销单 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
       width={640}
-      afterClose={reset}
       onCancel={onCancel}
-      onOk={() => void submit()}
     >
+      {target ? (
+        <WorkflowReimbursementRecordingForm
+          key={target.id}
+          target={target}
+          onCancel={onCancel}
+          onRecorded={onRecorded}
+        />
+      ) : null}
+    </Modal>
+  );
+}
+
+function WorkflowReimbursementRecordingForm({
+  target,
+  onCancel,
+  onRecorded,
+}: {
+  target: BillingWorkflow;
+  onCancel: () => void;
+  onRecorded: () => void;
+}) {
+  const [form] = Form.useForm<RecordingValues>();
+  const [attachment, setAttachment] = useState<BillingWorkflowAttachment | null>(null);
+  const save = useAsyncFormAction("补录报销单失败，请重试");
+  const upload = useAsyncFormAction("扫描件上传失败，请重试");
+  const [unverifiedFundingBookNumbers, setUnverifiedFundingBookNumbers] = useState<string[]>([]);
+  const fundingBookOptions = useWorkflowFundingBookOptions(target?.id ?? "");
+  const fundingOptions = fundingBookOptions.data?.items ?? [];
+
+  async function submit(confirmed = false) {
+    if (upload.pending) return;
+    await save.run(
+      async () => {
+        const values = await form.validateFields();
+        const forms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
+        if (!forms.length) {
+          throw new Error("请填写报销单号和金额");
+        }
+        const unverified = fundingBookOptions.data
+          ? unverifiedFundingBookNos(
+              forms.map((entry) => entry.fundingBookNo),
+              fundingBookOptions.data.piFundingBookNos,
+            )
+          : [];
+        if (!confirmed && unverified.length) {
+          setUnverifiedFundingBookNumbers(unverified);
+          return;
+        }
+        setUnverifiedFundingBookNumbers([]);
+        await recordWorkflowReimbursement(
+          target.id,
+          forms.map((entry) => ({
+            formNo: entry.formNo,
+            amount: Number(entry.amount) || 0,
+            fundingBookNo: entry.fundingBookNo?.trim() || "",
+          })),
+        );
+        return true;
+      },
+      (recorded) => {
+        if (recorded) onRecorded();
+      },
+    );
+  }
+
+  async function handleUpload(file: File) {
+    if (save.pending) return false;
+    await upload.run(
+      () => uploadWorkflowAttachment(target.id, "reimbursement", file),
+      (uploaded) => setAttachment(uploaded ?? null),
+    );
+    return false;
+  }
+
+  return (
+    <>
       {target?.reimbursementForms?.length ? (
         <Typography.Paragraph type="secondary">
           已登记报销单：{target.reimbursementForms.map((entry) => entry.formNo).join("、")}
@@ -135,81 +126,20 @@ export function WorkflowReimbursementRecordingModal({
           type="warning"
         />
       ) : null}
-      {formError ? <Alert showIcon style={{ marginBottom: 12 }} title={formError} type="error" /> : null}
+      {save.error || upload.error ? (
+        <Alert role="alert" showIcon style={{ marginBottom: 12 }} title={save.error || upload.error} type="error" />
+      ) : null}
       <Form
+        name={`workflow-recording-${target.id}`}
         form={form}
+        disabled={save.pending || upload.pending}
         initialValues={{
           reimbursementForms: [{ formNo: defaultReimbursementFormNo(), amount: undefined, fundingBookNo: "" }],
         }}
         layout="vertical"
+        onFinish={() => void submit()}
       >
-        <Flex gap={8} style={{ marginBottom: 8 }}>
-          <Typography.Text type="secondary" style={{ width: 200 }}>
-            经费本编号
-          </Typography.Text>
-          <Typography.Text type="secondary" style={{ width: 200 }}>
-            报销单号
-            <Tooltip title="已按本月自动生成 BXD1001YYYYMM000，请核对是否正确并完善报销单号">
-              <InfoCircleOutlined aria-label="报销单号生成说明" style={{ marginInlineStart: 4 }} />
-            </Tooltip>
-          </Typography.Text>
-          <Typography.Text type="secondary" style={{ width: 120 }}>
-            金额（元）
-          </Typography.Text>
-        </Flex>
-        <Form.List name="reimbursementForms">
-          {(fields, { add, remove }) => (
-            <>
-              {fields.map(({ key, name, ...restField }) => (
-                <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
-                  <Form.Item {...restField} name={[name, "fundingBookNo"]}>
-                    <AutoComplete
-                      allowClear
-                      options={fundingOptions}
-                      notFoundContent={fundingBookOptions.isLoading ? "正在读取最新版实验申请汇总表…" : undefined}
-                      popupMatchSelectWidth={false}
-                      placeholder="选择或输入经费本编号"
-                      style={{ width: 200 }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    {...restField}
-                    name={[name, "formNo"]}
-                    rules={[{ required: true, message: "请填写报销单号" }]}
-                  >
-                    <Input placeholder="报销单号" style={{ width: 200 }} />
-                  </Form.Item>
-                  <Form.Item {...restField} name={[name, "amount"]} rules={[{ required: true, message: "请填写金额" }]}>
-                    <InputNumber
-                      controls={false}
-                      min={0}
-                      precision={2}
-                      placeholder="金额（元）"
-                      style={{ width: 120 }}
-                    />
-                  </Form.Item>
-                  <Button
-                    aria-label={`删除第 ${name + 1} 行报销单`}
-                    danger
-                    icon={<MinusCircleOutlined aria-hidden />}
-                    type="text"
-                    onClick={() => remove(name)}
-                  />
-                </Space>
-              ))}
-              <Form.Item>
-                <Button
-                  block
-                  icon={<PlusOutlined aria-hidden />}
-                  type="dashed"
-                  onClick={() => add({ formNo: "", amount: undefined, fundingBookNo: "" })}
-                >
-                  添加报销单号
-                </Button>
-              </Form.Item>
-            </>
-          )}
-        </Form.List>
+        <ReimbursementFormFields options={fundingOptions} loading={fundingBookOptions.isLoading} />
         <Form.Item label="报销单扫描件">
           <Flex vertical gap={4}>
             <Space>
@@ -219,7 +149,7 @@ export function WorkflowReimbursementRecordingModal({
                 showUploadList={false}
                 beforeUpload={(file) => handleUpload(file)}
               >
-                <Button icon={<UploadOutlined aria-hidden />} loading={uploading} size="small">
+                <Button icon={<UploadOutlined aria-hidden />} loading={upload.pending} size="small">
                   上传扫描件
                 </Button>
               </Upload>
@@ -231,14 +161,20 @@ export function WorkflowReimbursementRecordingModal({
           </Flex>
         </Form.Item>
       </Form>
+      <Flex justify="flex-end" gap={8} style={{ marginTop: 16 }}>
+        <Button onClick={onCancel}>取消</Button>
+        <Button disabled={upload.pending} loading={save.pending} type="primary" onClick={() => void submit()}>
+          保存补录
+        </Button>
+      </Flex>
       <FundingBookConfirmationModal
         otherProjectFundingBooks={[]}
-        pending={saving}
+        pending={save.pending}
         pi={target?.pi ?? ""}
         unknownFundingBookNos={unverifiedFundingBookNumbers}
         onCancel={() => setUnverifiedFundingBookNumbers([])}
         onConfirm={() => void submit(true)}
       />
-    </Modal>
+    </>
   );
 }

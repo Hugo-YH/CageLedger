@@ -1,4 +1,4 @@
-import { Fragment, useDeferredValue, useEffect, useState } from "react";
+import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { InboxOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Input, Select, Space, Statistic, Typography, Upload } from "antd";
@@ -10,6 +10,8 @@ import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
 import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 import { DataTable } from "../../components/ui";
+import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
 
 const principalTypeOptions = [
   { value: "independent", label: "独立科研人员" },
@@ -19,7 +21,6 @@ const principalTypeOptions = [
 export function DataView({ user }: { user: SessionUser }) {
   const status = useIacucStatus();
   const identities = usePrincipalIdentities();
-  const saveIdentity = useSavePrincipalIdentity();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("");
   const deferredFilter = useDeferredValue(filter);
@@ -27,62 +28,79 @@ export function DataView({ user }: { user: SessionUser }) {
   const [pageSize, setPageSize] = useState(10);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [uploading, setUploading] = useState("");
-  const rows = (identities.data?.items || []).filter((item) =>
-    item.pi.toLocaleLowerCase("zh-CN").includes(deferredFilter.trim().toLocaleLowerCase("zh-CN")),
-  );
+  const uploadBusy = useRef(false);
+  const uploadRequest = useLatestRequest();
+  const rows = useMemo(() => {
+    const search = deferredFilter.trim().toLocaleLowerCase("zh-CN");
+    return (identities.data?.items || []).filter((item) => item.pi.toLocaleLowerCase("zh-CN").includes(search));
+  }, [identities.data?.items, deferredFilter]);
   useEffect(() => setPage(1), [deferredFilter]);
   const pages = Math.max(Math.ceil(rows.length / pageSize), 1);
-  const visibleRows = rows.slice((page - 1) * pageSize, page * pageSize);
+  const currentPage = Math.min(page, pages);
+  const visibleRows = useMemo(
+    () => rows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [rows, currentPage, pageSize],
+  );
 
   async function upload(kind: "iacuc" | "monthly" | "arrears", file?: File) {
-    if (!file) return;
+    if (!file || uploadBusy.current) return;
+    uploadBusy.current = true;
+    const isCurrent = uploadRequest.begin();
     setUploading(kind);
+    setNotice(null);
     try {
       const endpoint = kind === "iacuc" ? "/api/iacuc-index/upload" : `/api/reimbursement-records/import-${kind}`;
       const result = await uploadFile<{ count?: number }>(endpoint, file);
-      setNotice({ type: "success", message: `${file.name} 已处理，共 ${result.count ?? 0} 条记录。` });
       if (kind === "iacuc") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.iacucStatus });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.principalIdentities });
-      } else void queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.iacucStatus }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.principalIdentities }),
+        ]);
+      } else await queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
+      if (isCurrent()) setNotice({ type: "success", message: `${file.name} 已处理，共 ${result.count ?? 0} 条记录。` });
     } catch (error) {
-      setNotice({ type: "error", message: error instanceof Error ? error.message : "文件处理失败" });
+      if (isCurrent()) setNotice({ type: "error", message: error instanceof Error ? error.message : "文件处理失败" });
     } finally {
-      setUploading("");
+      uploadBusy.current = false;
+      if (isCurrent()) setUploading("");
     }
   }
 
-  const columns: ColumnsType<PrincipalIdentity> = [
-    { title: "项目负责人", dataIndex: "pi", key: "pi" },
-    {
-      title: "负责人身份",
-      dataIndex: "principalType",
-      key: "principalType",
-      width: 220,
-      render: (_value, item) => (
-        <PrincipalTypeSelect
-          item={item}
-          disabled={user.role !== "admin"}
-          pending={saveIdentity.isPending}
-          onSave={(next) => saveIdentity.mutateAsync(next)}
-        />
-      ),
-    },
-    { title: "免费笼数/天", dataIndex: "freeCageAllowance", key: "freeCageAllowance", width: 140, align: "right" },
-    {
-      title: "更新时间",
-      dataIndex: "updatedAt",
-      key: "updatedAt",
-      width: 188,
-      render: (value: string) => <Typography.Text type="secondary">{formatDateTime(value)}</Typography.Text>,
-    },
-  ];
+  const columns = useMemo<ColumnsType<PrincipalIdentity>>(
+    () => [
+      { title: "项目负责人", dataIndex: "pi", key: "pi" },
+      {
+        title: "负责人身份",
+        dataIndex: "principalType",
+        key: "principalType",
+        width: 220,
+        render: (_value, item) => (
+          <PrincipalTypeSelect key={`${item.pi}:${item.updatedAt}`} item={item} disabled={user.role !== "admin"} />
+        ),
+      },
+      { title: "免费笼数/天", dataIndex: "freeCageAllowance", key: "freeCageAllowance", width: 140, align: "right" },
+      {
+        title: "更新时间",
+        dataIndex: "updatedAt",
+        key: "updatedAt",
+        width: 188,
+        render: (value: string) => <Typography.Text type="secondary">{formatDateTime(value)}</Typography.Text>,
+      },
+    ],
+    [user.role],
+  );
 
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
       <div className="workspace-body settings-workspace-body">
         {notice ? (
-          <Alert closable={{ onClose: () => setNotice(null) }} showIcon title={notice.message} type={notice.type} />
+          <Alert
+            role={notice.type === "error" ? "alert" : "status"}
+            closable={{ onClose: () => setNotice(null) }}
+            showIcon
+            title={notice.message}
+            type={notice.type}
+          />
         ) : null}
         <section className="settings-split-layout data-settings-layout">
           <Card
@@ -125,7 +143,7 @@ export function DataView({ user }: { user: SessionUser }) {
                     setPageSize(nextSize);
                     setPage(1);
                   }}
-                  page={page}
+                  page={currentPage}
                   pageSize={pageSize}
                   pages={pages}
                   total={rows.length}
@@ -137,6 +155,8 @@ export function DataView({ user }: { user: SessionUser }) {
             <Card size="small" title="IACUC 索引">
               {status.isPending ? (
                 <PageSkeleton compact label="索引状态" rows={3} variant="detail" />
+              ) : status.isError ? (
+                <PageState title="索引状态加载失败" retry={() => status.refetch()} />
               ) : (
                 <Space orientation="vertical" size={12} style={{ width: "100%" }}>
                   <Statistic title="已索引记录" value={status.data?.count || 0} suffix="条" />
@@ -153,6 +173,7 @@ export function DataView({ user }: { user: SessionUser }) {
                   accept=".csv,text/csv"
                   label="上传 IACUC CSV"
                   pending={uploading === "iacuc"}
+                  disabled={Boolean(uploading)}
                   onFile={(file) => void upload("iacuc", file)}
                 />
               ) : null}
@@ -164,12 +185,14 @@ export function DataView({ user }: { user: SessionUser }) {
                     accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     label="导入月汇总 Excel"
                     pending={uploading === "monthly"}
+                    disabled={Boolean(uploading)}
                     onFile={(file) => void upload("monthly", file)}
                   />
                   <ImportDragger
                     accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     label="导入欠缴汇算 Excel"
                     pending={uploading === "arrears"}
+                    disabled={Boolean(uploading)}
                     onFile={(file) => void upload("arrears", file)}
                   />
                 </Space>
@@ -182,37 +205,37 @@ export function DataView({ user }: { user: SessionUser }) {
   );
 }
 
-function PrincipalTypeSelect({
-  item,
-  disabled,
-  pending,
-  onSave,
-}: {
-  item: PrincipalIdentity;
-  disabled: boolean;
-  pending: boolean;
-  onSave: (item: PrincipalIdentity) => Promise<unknown>;
-}) {
+function PrincipalTypeSelect({ item, disabled }: { item: PrincipalIdentity; disabled: boolean }) {
+  const saveIdentity = useSavePrincipalIdentity();
+  const action = useAsyncFormAction("负责人身份保存失败，请重试");
   const [type, setType] = useState(item.principalType);
   const allowance = type === "pi" ? 20 : 10;
   return (
-    <Space.Compact className="principal-type-action">
-      <Select
-        aria-label={`${item.pi} 的负责人身份`}
-        disabled={disabled}
-        onChange={setType}
-        options={principalTypeOptions}
-        value={type}
-      />
-      <Button
-        disabled={disabled}
-        loading={pending}
-        onClick={() => void onSave({ ...item, principalType: type, freeCageAllowance: allowance })}
-        type="primary"
-      >
-        保存
-      </Button>
-    </Space.Compact>
+    <div>
+      <Space.Compact className="principal-type-action">
+        <Select
+          aria-label={`${item.pi} 的负责人身份`}
+          disabled={disabled || action.pending}
+          onChange={setType}
+          options={principalTypeOptions}
+          value={type}
+        />
+        <Button
+          aria-label={`保存 ${item.pi} 的负责人身份`}
+          disabled={disabled || action.pending}
+          loading={action.pending}
+          onClick={() =>
+            void action.run(() =>
+              saveIdentity.mutateAsync({ ...item, principalType: type, freeCageAllowance: allowance }),
+            )
+          }
+          type="primary"
+        >
+          保存
+        </Button>
+      </Space.Compact>
+      {action.error ? <Alert role="alert" type="error" title={action.error} showIcon /> : null}
+    </div>
   );
 }
 
@@ -220,16 +243,18 @@ function ImportDragger({
   accept,
   label,
   pending,
+  disabled,
   onFile,
 }: {
   accept: string;
   label: string;
   pending: boolean;
+  disabled: boolean;
   onFile: (file?: File) => void;
 }) {
   const props: UploadProps = {
     accept,
-    disabled: pending,
+    disabled,
     maxCount: 1,
     showUploadList: false,
     beforeUpload: (file) => {
@@ -238,9 +263,9 @@ function ImportDragger({
     },
   };
   return (
-    <Upload.Dragger {...props} className="data-import-dragger">
+    <Upload.Dragger {...props} aria-label={label} className="data-import-dragger">
       <p className="ant-upload-drag-icon">
-        <InboxOutlined />
+        <InboxOutlined aria-hidden />
       </p>
       <p className="ant-upload-text">{pending ? "正在处理文件..." : label}</p>
       <p className="ant-upload-hint">点击或拖入文件上传</p>

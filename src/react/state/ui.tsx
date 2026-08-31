@@ -6,6 +6,7 @@ import {
   type ThemePreference,
 } from "./uiStorage";
 import type { WorkspaceView } from "./uiTypes";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 export type { WorkspaceView } from "./uiTypes";
 
@@ -41,45 +42,42 @@ const initialState: UiState = {
 export function uiReducer(state: UiState, action: UiAction): UiState {
   switch (action.type) {
     case "navigate":
-      return { ...state, activeView: action.view };
+      return state.activeView === action.view ? state : { ...state, activeView: action.view };
     case "toggle-sidebar":
       return { ...state, sidebarCollapsed: !state.sidebarCollapsed };
     case "set-settings":
-      return { ...state, settingsExpanded: action.expanded };
+      return state.settingsExpanded === action.expanded ? state : { ...state, settingsExpanded: action.expanded };
     case "set-theme":
-      persistThemePreference(action.theme);
-      return { ...state, theme: action.theme };
+      return state.theme === action.theme ? state : { ...state, theme: action.theme };
   }
 }
 
 const UiStateContext = createContext<UiState | null>(null);
 const UiDispatchContext = createContext<Dispatch<UiAction> | null>(null);
+const ResolvedThemeContext = createContext<"light" | "dark" | null>(null);
 
 export function UiProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(uiReducer, initialState, initialUiState);
-  useApplyTheme(state.theme);
+  const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
+  const resolvedTheme = state.theme === "system" ? (systemDark ? "dark" : "light") : state.theme;
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme]);
+  useEffect(() => persistThemePreference(state.theme), [state.theme]);
   return (
     <UiStateContext value={state}>
-      <UiDispatchContext value={dispatch}>{children}</UiDispatchContext>
+      <UiDispatchContext value={dispatch}>
+        <ResolvedThemeContext value={resolvedTheme}>{children}</ResolvedThemeContext>
+      </UiDispatchContext>
     </UiStateContext>
   );
 }
 
-function useApplyTheme(theme: ThemePreference) {
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      const resolved = theme === "system" ? (media.matches ? "dark" : "light") : theme;
-      document.documentElement.dataset.theme = resolved;
-      document.documentElement.style.colorScheme = resolved;
-    };
-    apply();
-    if (theme === "system") {
-      media.addEventListener("change", apply);
-      return () => media.removeEventListener("change", apply);
-    }
-    return undefined;
-  }, [theme]);
+export function useResolvedTheme() {
+  const value = useContext(ResolvedThemeContext);
+  if (!value) throw new Error("useResolvedTheme must be used inside UiProvider");
+  return value;
 }
 
 export function useUiState() {

@@ -7,7 +7,7 @@ import { queryKeys } from "./queryKeys";
 export function useSession() {
   return useQuery({
     queryKey: queryKeys.session,
-    queryFn: () => requestJson<SessionResponse>("/api/auth/me"),
+    queryFn: ({ signal }) => requestJson<SessionResponse>("/api/auth/me", { signal }),
     retry: false,
   });
 }
