@@ -43,6 +43,26 @@ test("quantity workspace keeps its desktop and mobile layout contract", async ({
   await expect(entryTable.locator(".ant-input").first()).toBeVisible();
   await expect(entryTable.locator(".ant-select").first()).toHaveCount(1);
   await expect(page.locator(".quantity-entry-wrap")).toHaveCSS("max-height", "none");
+
+  await page.getByRole("textbox", { name: /月份/ }).click();
+  const monthPanel = page.locator(".ant-picker-dropdown");
+  const monthTable = monthPanel.locator(".ant-picker-content");
+  await expect(monthPanel).toContainText("1月");
+  await expect(monthPanel).toContainText("12月");
+  await expect(monthTable).toHaveCSS("min-width", "0px");
+  expect(
+    await monthTable.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    "月份面板不应被业务表格样式撑宽或裁切",
+  ).toBe(true);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: /计费扩展选项/ }).click();
+  const toggleLabels = page.locator(".quantity-animal-toggle-label");
+  await expect(toggleLabels).toHaveCount(3);
+  for (const label of await toggleLabels.all()) {
+    await expect(label).toHaveCSS("font-size", "14px");
+    await expect(label).toHaveCSS("line-height", "22px");
+  }
   await attachViewport(page, testInfo, "quantity-1280");
 
   await page.setViewportSize({ width: 1180, height: 820 });

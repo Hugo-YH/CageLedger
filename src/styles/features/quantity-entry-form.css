@@ -253,7 +253,7 @@
   font-size: 14px;
 }
 
-.react-quantity-layout .quantity-free-cage-head span,
+.react-quantity-layout .quantity-free-cage-head > div:first-child > span,
 .react-quantity-layout .quantity-full-exemption-row small,
 .react-quantity-layout .quantity-free-cage-field small,
 .react-quantity-layout .quantity-custom-billing-empty {

@@ -1,11 +1,15 @@
 import { App as AntApp, ConfigProvider, theme as antTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import { type PropsWithChildren, useMemo } from "react";
 
 import { useResolvedTheme } from "../../state/ui";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 const BUTTON_CONFIG = { autoInsertSpace: false };
+
+dayjs.locale("zh-cn");
 
 export function AntdProvider({ children }: PropsWithChildren) {
   const resolvedTheme = useResolvedTheme();

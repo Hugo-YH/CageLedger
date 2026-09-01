@@ -1190,12 +1190,11 @@ svg {
     overflow: auto;
   }
 
-  table {
+  table:not([class^="ant-"], [class*=" ant-"]) {
     min-width: 640px;
   }
 
-  th,
-  td {
+  table:not([class^="ant-"], [class*=" ant-"]) :is(th, td) {
     padding: 8px;
   }
 

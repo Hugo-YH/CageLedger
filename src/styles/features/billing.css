@@ -138,7 +138,7 @@
   box-shadow: var(--shadow-fade-left);
 }
 
-table {
+table:not([class^="ant-"], [class*=" ant-"]) {
   width: 100%;
   border-collapse: collapse;
   min-width: 720px;
@@ -167,14 +167,13 @@ table {
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 24%, transparent);
 }
 
-th,
-td {
+table:not([class^="ant-"], [class*=" ant-"]) :is(th, td) {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   text-align: left;
 }
 
-th {
+table:not([class^="ant-"], [class*=" ant-"]) th {
   background: var(--table-head);
   color: var(--muted);
   font-size: 14px;
