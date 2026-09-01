@@ -64,6 +64,20 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await openBillingNavigation(page);
   await page.getByRole("menuitem", { name: /结算管理/ }).click();
   await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  const settlementRegion = page.getByRole("region", { name: "结算管理列表" });
+  const settlementGeometry = await settlementRegion.evaluate((element) => {
+    const content = element.querySelector<HTMLElement>(".ant-table-content");
+    const actionsHeader = element.querySelector<HTMLElement>("th.ant-table-cell-fix-end");
+    return {
+      contentRight: Math.round(content?.getBoundingClientRect().right ?? 0),
+      headerRight: Math.round(actionsHeader?.getBoundingClientRect().right ?? 0),
+      regionRight: Math.round(element.getBoundingClientRect().right),
+      pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  expect(settlementGeometry.headerRight).toBe(settlementGeometry.contentRight);
+  expect(Math.abs(settlementGeometry.regionRight - settlementGeometry.contentRight)).toBeLessThanOrEqual(1);
+  expect(settlementGeometry.pageOverflows).toBe(false);
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");

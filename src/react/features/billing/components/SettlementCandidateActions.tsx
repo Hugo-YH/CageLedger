@@ -1,4 +1,3 @@
-import { EyeOutlined } from "@ant-design/icons";
 import { Button, Space, Tooltip } from "antd";
 
 import type { SettlementCandidate } from "../../../api/contracts";
@@ -17,10 +16,9 @@ export function SettlementCandidateActions({
   const action = (
     <Space size={4} wrap>
       <Button
-        icon={<EyeOutlined aria-hidden />}
         loading={previewing}
-        size="small"
         disabled={disabled || candidate.totalAmount == null}
+        type="primary"
         onClick={onPreview}
       >
         预览结算单

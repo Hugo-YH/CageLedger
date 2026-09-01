@@ -47,12 +47,18 @@ describe("DataTable", () => {
   it("resolves numeric string and fixed widths, including a horizontal scroll budget", () => {
     const { container } = render(<DataTable columns={columns} dataSource={rows} rowKey="id" pagination={false} />);
     expect(screen.getByRole("slider", { name: "调整数量列宽" })).toHaveAttribute("aria-valuenow", "120");
-    expect(screen.queryByRole("slider", { name: "调整操作列宽" })).not.toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "调整操作列宽" })).toHaveAttribute("aria-valuenow", "140");
+    expect(screen.getByRole("columnheader", { name: /数量/ })).toHaveStyle({ textAlign: "left" });
+    expect(screen.getByRole("columnheader", { name: /操作/ })).toHaveStyle({ textAlign: "left" });
+    expect(screen.getByRole("cell", { name: "10" })).toHaveStyle({ textAlign: "right" });
     expect(container.querySelector("table")).toHaveStyle({ width: "400px" });
-    expect(container.querySelectorAll("col")[2]).toHaveStyle({ width: "140px" });
+    expect(container.querySelectorAll("col")[2]).not.toHaveAttribute("style");
+    expect(container.querySelectorAll("col")[3]).toHaveStyle({ width: "140px" });
+    expect(container.querySelector(".app-table-flex-spacer")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelectorAll(".app-table-flex-spacer [role='slider']")).toHaveLength(0);
   });
 
-  it("supports fixed:false and keyboard resizing without triggering sorting", () => {
+  it("supports fixed columns and keyboard resizing without triggering sorting", () => {
     const onChange = vi.fn();
     render(<DataTable columns={columns} dataSource={rows} rowKey="id" pagination={false} onChange={onChange} />);
     const slider = screen.getByRole("slider", { name: "调整批次列宽" });
@@ -63,6 +69,25 @@ describe("DataTable", () => {
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("columnheader", { name: "批次" }));
     expect(onChange).toHaveBeenCalledOnce();
+    fireEvent.keyDown(screen.getByRole("slider", { name: "调整操作列宽" }), { key: "ArrowLeft" });
+    expect(screen.getByRole("slider", { name: "调整操作列宽" })).toHaveAttribute("aria-valuenow", "124");
+  });
+
+  it("keeps checkbox headers centered while text headers stay left aligned", () => {
+    render(
+      <DataTable
+        columns={[
+          { key: "selection", title: "选择", width: 44, render: () => "选择" },
+          { key: "name", dataIndex: "name", title: "批次", width: 140 },
+        ]}
+        dataSource={rows}
+        rowKey="id"
+        pagination={false}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: /选择/ })).toHaveStyle({ textAlign: "center" });
+    expect(screen.getByRole("cell", { name: "选择" })).toHaveStyle({ textAlign: "center" });
+    expect(screen.getByRole("columnheader", { name: /批次/ })).toHaveStyle({ textAlign: "left" });
   });
 
   it("reloads the correct preferences when the table identity changes", () => {

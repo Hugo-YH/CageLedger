@@ -179,17 +179,15 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
               {
                 title: "操作",
                 fixed: "right",
+                width: 256,
                 render: (_, item) => (
                   <Space size={4}>
-                    <Button size="small" onClick={() => setSelectedId(item.id)}>
+                    <Button type="primary" onClick={() => setSelectedId(item.id)}>
                       详情
                     </Button>
-                    <Button size="small" onClick={() => void downloadAnimalInspectionPdf(item.id)}>
-                      导出 PDF
-                    </Button>
+                    <Button onClick={() => void downloadAnimalInspectionPdf(item.id)}>导出 PDF</Button>
                     {item.status === "draft" && item.createdBy === user.id ? (
                       <Button
-                        size="small"
                         onClick={() => {
                           setResumeInspectionId(item.id);
                           navigate("animal-inspection-entry");
@@ -312,8 +310,9 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
               {
                 title: "操作",
                 fixed: "right",
+                width: 96,
                 render: (_, item) => (
-                  <Button size="small" onClick={() => setSelected(item)}>
+                  <Button type="primary" onClick={() => setSelected(item)}>
                     处置
                   </Button>
                 ),

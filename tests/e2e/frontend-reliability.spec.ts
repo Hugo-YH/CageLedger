@@ -61,8 +61,16 @@ test("business table resize persists without sorting requests and stays inside e
   await openNavigationEntry(page, "笼卡管理", "待接收批次");
   const region = page.getByRole("region", { name: "待接收批次列表" });
   await expect(region).toBeVisible();
-  const slider = region.getByRole("slider").first();
+  const actionsHeader = region.locator(".ant-table-thead th.ant-table-cell-fix-end");
+  await expect(actionsHeader).toHaveText("操作");
+  await expect(actionsHeader).toHaveCSS("position", "sticky");
+  const slider = region.getByRole("slider", { name: "调整选择列宽" });
+  const actionSlider = region.getByRole("slider", { name: "调整操作列宽" });
   const initialWidth = Number(await slider.getAttribute("aria-valuenow"));
+  const initialActionWidth = Number(await actionSlider.getAttribute("aria-valuenow"));
+  const headerWidthsBeforeResize = await region
+    .locator(".ant-table-thead > tr > th:not(.app-table-flex-spacer)")
+    .evaluateAll((headers) => headers.map((header) => Math.round(header.getBoundingClientRect().width)));
   let requests = 0;
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/api/intake-batches") requests += 1;
@@ -71,11 +79,37 @@ test("business table resize persists without sorting requests and stays inside e
   await slider.press("ArrowRight");
   await slider.press("Enter");
   await expect(slider).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
+  const headerWidthsAfterResize = await region
+    .locator(".ant-table-thead > tr > th:not(.app-table-flex-spacer)")
+    .evaluateAll((headers) => headers.map((header) => Math.round(header.getBoundingClientRect().width)));
+  expect(headerWidthsAfterResize.filter((_, index) => index !== 0)).toEqual(
+    headerWidthsBeforeResize.filter((_, index) => index !== 0),
+  );
+  expect(headerWidthsAfterResize[0]).toBe(headerWidthsBeforeResize[0] + 16);
+  await actionSlider.focus();
+  await actionSlider.press("ArrowLeft");
+  await expect(actionSlider).toHaveAttribute("aria-valuenow", String(initialActionWidth - 16));
+  const fixedActionGeometry = await actionsHeader.evaluate((element) => {
+    const content = element.closest<HTMLElement>(".ant-table-content");
+    const actions = Array.from(
+      element.closest("table")?.querySelectorAll<HTMLElement>("tbody td.ant-table-cell-fix-end .table-actions") ?? [],
+    );
+    return {
+      contentRight: Math.round(content?.getBoundingClientRect().right ?? 0),
+      headerRight: Math.round(element.getBoundingClientRect().right),
+      buttonsVisible: actions.every(
+        (action) => action.getBoundingClientRect().right <= element.getBoundingClientRect().right,
+      ),
+    };
+  });
+  expect(fixedActionGeometry.headerRight).toBe(fixedActionGeometry.contentRight);
+  expect(fixedActionGeometry.buttonsVisible).toBe(true);
   expect(requests).toBe(0);
   // Navigating away immediately also verifies the pending preference is flushed on unmount.
   await page.getByRole("menuitem", { name: /总览/ }).click();
   await openNavigationEntry(page, "笼卡管理", "待接收批次");
   await expect(slider).toHaveAttribute("aria-valuenow", String(initialWidth + 16));
+  await expect(actionSlider).toHaveAttribute("aria-valuenow", String(initialActionWidth - 16));
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 1200, height: 900 },
@@ -90,6 +124,16 @@ test("business table resize persists without sorting requests and stays inside e
     await expect(region).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(region.locator(".ant-table-content")).toHaveCSS("overflow-x", "auto");
+    if (viewport.width === 768) {
+      const scrollOwners = await region.evaluate((element) => {
+        const content = element.querySelector<HTMLElement>(".ant-table-content");
+        return {
+          contentCanScroll: Boolean(content && content.scrollWidth > content.clientWidth),
+          regionCanScroll: element.scrollWidth > element.clientWidth,
+        };
+      });
+      expect(scrollOwners).toEqual({ contentCanScroll: true, regionCanScroll: false });
+    }
     const screenshot = testInfo.outputPath(`intake-table-${viewport.width}x${viewport.height}.png`);
     await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" });
     await testInfo.attach(`intake-table-${viewport.width}x${viewport.height}`, {

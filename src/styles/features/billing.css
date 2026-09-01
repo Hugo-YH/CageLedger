@@ -382,6 +382,17 @@ th {
   table-layout: fixed;
 }
 
+/* Ant Table fixed columns are anchored to .ant-table-content. Keep the legacy
+ * table frame as a visual container only, otherwise its scrollbar bypasses the
+ * right fixed action column. */
+[data-feature="billing"] .table-wrap.quantity-saved-list {
+  overflow: visible;
+}
+
+[data-feature="billing"] .table-wrap.quantity-saved-list .quantity-saved-table {
+  min-width: 0;
+}
+
 .quantity-saved-table th,
 .quantity-saved-table td {
   overflow: hidden;
@@ -1104,6 +1115,11 @@ th {
 }
 
 .reimbursement-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.reimbursement-table table {
   min-width: 1020px;
   table-layout: auto;
 }
@@ -1253,6 +1269,10 @@ th {
 }
 
 /* Ant Design financial workspace: shared density, hierarchy and responsive behavior. */
+[data-feature="billing"] {
+  min-width: 0;
+}
+
 [data-feature="billing"] .monthly-billing-summary-card {
   max-width: 960px;
 }

@@ -67,11 +67,27 @@ function showEventNote(event: BillingWorkflowEvent) {
   );
 }
 
-export function WorkflowDetailModal({ target, onCancel }: { target: BillingWorkflow | null; onCancel: () => void }) {
+export function WorkflowDetailModal({
+  target,
+  recordable = false,
+  onCancel,
+  onRecord,
+}: {
+  target: BillingWorkflow | null;
+  recordable?: boolean;
+  onCancel: () => void;
+  onRecord?: (workflow: BillingWorkflow) => void;
+}) {
   const detail = useWorkflowDetail(target?.id || "");
   return (
     <Modal
-      footer={null}
+      footer={
+        recordable && target && onRecord ? (
+          <Button type="primary" onClick={() => onRecord(target)}>
+            补录报销单
+          </Button>
+        ) : null
+      }
       rootClassName="app-modal-root workflow-detail-modal"
       open={Boolean(target)}
       title={`流程记录 · ${target?.month ?? ""} ${target?.pi ?? ""}`}

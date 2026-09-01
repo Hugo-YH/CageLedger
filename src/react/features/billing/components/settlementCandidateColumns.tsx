@@ -105,7 +105,8 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
     {
       key: "actions",
       title: "操作",
-      width: 190,
+      fixed: "right" as const,
+      width: 144,
       render: (_, candidate) => (
         <SettlementCandidateActions
           candidate={candidate}

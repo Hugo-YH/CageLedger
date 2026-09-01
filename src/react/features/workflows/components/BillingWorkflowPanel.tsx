@@ -1,5 +1,5 @@
 import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
-import { LockOutlined, UndoOutlined } from "@ant-design/icons";
+import { LockOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
 import type { SessionUser } from "../../../api/contracts";
@@ -15,6 +15,7 @@ import { WorkflowDetailModal } from "./WorkflowDetailModal";
 import { WorkflowReimbursementRecordingModal } from "./WorkflowReimbursementRecordingModal";
 import { WorkflowRegistrationModal } from "./WorkflowRegistrationModal";
 import { WorkflowRevokeModal, type WorkflowRevokeTarget } from "./WorkflowRevokeModal";
+import { WorkflowRowActions } from "./WorkflowRowActions";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 
 const workflowStatusMeta: Record<string, { label: string; color: string }> = {
@@ -220,147 +221,135 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       key: "actions",
       title: "操作",
       fixed: "right" as const,
-      width: 220,
+      width: 240,
       render: (_: unknown, item: BillingWorkflow) => {
-        const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
         if (item.workflowStatus === "statement_sent") {
           return (
-            <Space size={4}>
-              <Button type="primary" size="small" onClick={() => setRegisterTarget(item)}>
-                登记
-              </Button>
-              <Button
-                danger
-                icon={<UndoOutlined aria-hidden />}
-                size="small"
-                onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_generated" })}
-              >
-                撤回
-              </Button>
-              {user.billingLockAllowed ? (
-                <Popconfirm
-                  destroyOnHidden
-                  title="锁定该结算流程？"
-                  description="锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
-                  okText="锁定"
-                  cancelText="取消"
-                  onConfirm={() =>
-                    lockAction.run(() =>
-                      advance.mutateAsync({
-                        workflowId: item.id,
-                        toStatus: "statement_locked",
-                        note: "锁定结算流程",
-                      }),
-                    )
-                  }
-                >
-                  <Button
-                    aria-label="锁定"
-                    loading={lockAction.pending && advance.variables?.workflowId === item.id}
-                    disabled={batchLocking || lockAction.pending}
-                    icon={<LockOutlined aria-hidden />}
-                    size="small"
+            <WorkflowRowActions
+              primary={
+                <Button type="primary" onClick={() => setRegisterTarget(item)}>
+                  登记
+                </Button>
+              }
+              revoke={
+                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_generated" })}>
+                  撤回
+                </Button>
+              }
+              lock={
+                user.billingLockAllowed ? (
+                  <Popconfirm
+                    destroyOnHidden
+                    title="锁定该结算流程？"
+                    description="锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
+                    okText="锁定"
+                    cancelText="取消"
+                    onConfirm={() =>
+                      lockAction.run(() =>
+                        advance.mutateAsync({
+                          workflowId: item.id,
+                          toStatus: "statement_locked",
+                          note: "锁定结算流程",
+                        }),
+                      )
+                    }
                   >
-                    锁定
-                  </Button>
-                </Popconfirm>
-              ) : null}
-            </Space>
+                    <Button
+                      aria-label="锁定"
+                      loading={lockAction.pending && advance.variables?.workflowId === item.id}
+                      disabled={batchLocking || lockAction.pending}
+                    >
+                      锁定
+                    </Button>
+                  </Popconfirm>
+                ) : undefined
+              }
+            />
           );
         }
         if (item.workflowStatus === "statement_archived") {
           return (
-            <Space className="workflow-row-actions" size={4}>
-              <Button size="small" type="primary" onClick={() => setDetailTarget(item)}>
-                查看归档
-              </Button>
-              {reimbursementRequired && !item.reimbursementFormReturned ? (
-                <Button size="small" onClick={() => setRecordingTarget(item)}>
-                  补录
+            <WorkflowRowActions
+              primary={
+                <Button type="primary" onClick={() => setDetailTarget(item)}>
+                  查看
                 </Button>
-              ) : null}
-              {user.billingLockAllowed ? (
-                <Popconfirm
-                  destroyOnHidden
-                  title="锁定该结算流程？"
-                  description="锁定后流程进入只读，仅授权账号可补录或解锁。"
-                  okText="锁定"
-                  cancelText="取消"
-                  onConfirm={() =>
-                    lockAction.run(() =>
-                      advance.mutateAsync({
-                        workflowId: item.id,
-                        toStatus: "statement_locked",
-                        note: "锁定结算流程",
-                      }),
-                    )
-                  }
-                >
-                  <Button
-                    aria-label="锁定"
-                    disabled={batchLocking || lockAction.pending}
-                    loading={lockAction.pending && advance.variables?.workflowId === item.id}
-                    icon={<LockOutlined aria-hidden />}
-                    size="small"
+              }
+              revoke={
+                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_sent" })}>
+                  撤回
+                </Button>
+              }
+              lock={
+                user.billingLockAllowed ? (
+                  <Popconfirm
+                    destroyOnHidden
+                    title="锁定该结算流程？"
+                    description="锁定后流程进入只读，仅授权账号可补录或解锁。"
+                    okText="锁定"
+                    cancelText="取消"
+                    onConfirm={() =>
+                      lockAction.run(() =>
+                        advance.mutateAsync({
+                          workflowId: item.id,
+                          toStatus: "statement_locked",
+                          note: "锁定结算流程",
+                        }),
+                      )
+                    }
                   >
-                    锁定
-                  </Button>
-                </Popconfirm>
-              ) : null}
-              <Button
-                danger
-                icon={<UndoOutlined aria-hidden />}
-                size="small"
-                type="text"
-                onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_sent" })}
-              >
-                撤回
-              </Button>
-            </Space>
+                    <Button
+                      aria-label="锁定"
+                      disabled={batchLocking || lockAction.pending}
+                      loading={lockAction.pending && advance.variables?.workflowId === item.id}
+                    >
+                      锁定
+                    </Button>
+                  </Popconfirm>
+                ) : undefined
+              }
+            />
           );
         }
         if (item.workflowStatus === "statement_locked") {
           const unlockStatus = item.signedStatementReturned ? "statement_archived" : "statement_sent";
           const unlockStatusLabel = unlockStatus === "statement_archived" ? "已归档" : "已发起";
           return (
-            <Space className="workflow-row-actions" size={4}>
-              <Button size="small" type="primary" onClick={() => setDetailTarget(item)}>
-                查看归档
-              </Button>
-              {user.billingLockAllowed && reimbursementRequired && !item.reimbursementFormReturned ? (
-                <Button size="small" onClick={() => setRecordingTarget(item)}>
-                  补录
+            <WorkflowRowActions
+              primary={
+                <Button type="primary" onClick={() => setDetailTarget(item)}>
+                  查看
                 </Button>
-              ) : null}
-              {user.billingLockAllowed ? (
-                <Popconfirm
-                  destroyOnHidden
-                  title="解锁该结算流程？"
-                  description={`解锁后依据结算单交回状态回到${unlockStatusLabel}，已补录信息会保留。`}
-                  okText="解锁"
-                  cancelText="取消"
-                  onConfirm={() =>
-                    lockAction.run(() =>
-                      advance.mutateAsync({
-                        workflowId: item.id,
-                        toStatus: unlockStatus,
-                        note: "解锁结算流程",
-                      }),
-                    )
-                  }
-                >
-                  <Button
-                    aria-label="解锁"
-                    disabled={batchLocking || lockAction.pending}
-                    loading={lockAction.pending && advance.variables?.workflowId === item.id}
-                    icon={<LockOutlined aria-hidden />}
-                    size="small"
+              }
+              lock={
+                user.billingLockAllowed ? (
+                  <Popconfirm
+                    destroyOnHidden
+                    title="解锁该结算流程？"
+                    description={`解锁后依据结算单交回状态回到${unlockStatusLabel}，已补录信息会保留。`}
+                    okText="解锁"
+                    cancelText="取消"
+                    onConfirm={() =>
+                      lockAction.run(() =>
+                        advance.mutateAsync({
+                          workflowId: item.id,
+                          toStatus: unlockStatus,
+                          note: "解锁结算流程",
+                        }),
+                      )
+                    }
                   >
-                    解锁
-                  </Button>
-                </Popconfirm>
-              ) : null}
-            </Space>
+                    <Button
+                      aria-label="解锁"
+                      disabled={batchLocking || lockAction.pending}
+                      loading={lockAction.pending && advance.variables?.workflowId === item.id}
+                    >
+                      解锁
+                    </Button>
+                  </Popconfirm>
+                ) : undefined
+              }
+            />
           );
         }
         return <Typography.Text type="secondary">待发起</Typography.Text>;
@@ -442,7 +431,20 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           setRegisterTarget(null);
         }}
       />
-      <WorkflowDetailModal target={detailTarget} onCancel={() => setDetailTarget(null)} />
+      <WorkflowDetailModal
+        target={detailTarget}
+        recordable={Boolean(
+          detailTarget &&
+          user.billingLockAllowed &&
+          (detailTarget.reimbursementRequired ?? Number(detailTarget.totalAmount || 0) > 0) &&
+          !detailTarget.reimbursementFormReturned,
+        )}
+        onCancel={() => setDetailTarget(null)}
+        onRecord={(workflow) => {
+          setDetailTarget(null);
+          setRecordingTarget(workflow);
+        }}
+      />
       <WorkflowReimbursementRecordingModal
         target={recordingTarget}
         onCancel={() => setRecordingTarget(null)}

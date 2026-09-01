@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DeleteOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Popconfirm, Space, Tag } from "antd";
 import type { TableProps } from "antd";
 
@@ -88,9 +87,10 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
       key: "actions",
       title: "操作",
       fixed: "right",
+      width: 160,
       render: (_, item) => (
         <Space size={4}>
-          <Button size="small" onClick={() => onOpen(item.id)}>
+          <Button type="primary" onClick={() => onOpen(item.id)}>
             详情
           </Button>
           <Popconfirm
@@ -100,7 +100,7 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
             title="删除该报销单？"
             onConfirm={() => void deleteFor(item.id)}
           >
-            <Button danger icon={<DeleteOutlined aria-hidden />} loading={deletingId === item.id} size="small">
+            <Button danger loading={deletingId === item.id}>
               删除
             </Button>
           </Popconfirm>

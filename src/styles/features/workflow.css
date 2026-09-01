@@ -15,6 +15,21 @@
   padding: 20px 24px 24px;
 }
 
+[data-feature="workflow"] .workflow-row-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 4px;
+}
+
+[data-feature="workflow"] .workflow-row-action-slot {
+  min-width: 0;
+}
+
+[data-feature="workflow"] .workflow-row-action-slot > .ant-btn,
+[data-feature="workflow"] .workflow-row-action-slot > .ant-popover-open > .ant-btn {
+  width: 100%;
+}
+
 /* 交回登记与补录弹窗的表单控件统一为默认 32px 高度，
    抵消全局 input min-height: 40px 造成的同行控件错位。 */
 .app-modal-root.workflow-registration-modal .ant-input,

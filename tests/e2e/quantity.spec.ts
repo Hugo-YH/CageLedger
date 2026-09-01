@@ -14,6 +14,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test("save and delete a quantity sheet in the ephemeral database", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 900 });
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
@@ -53,6 +54,25 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
 
   await openSavedQuantitySheets(page);
   await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
+  const actionsHeader = page.locator(".quantity-saved-panel .ant-table-thead th.ant-table-cell-fix-end");
+  await expect(actionsHeader).toHaveText("操作");
+  await expect(actionsHeader).toHaveCSS("position", "sticky");
+  const actionsHeaderRight = await actionsHeader.evaluate((element) => {
+    const tableBody = element.closest(".ant-table-content");
+    return {
+      headerRight: element.getBoundingClientRect().right,
+      tableRight: tableBody?.getBoundingClientRect().right ?? 0,
+    };
+  });
+  expect(Math.abs(actionsHeaderRight.headerRight - actionsHeaderRight.tableRight)).toBeLessThanOrEqual(1);
+  const scrollOwners = await page.getByRole("region", { name: "已保存数量统计表" }).evaluate((element) => {
+    const content = element.querySelector<HTMLElement>(".ant-table-content");
+    return {
+      contentCanScroll: Boolean(content && content.scrollWidth > content.clientWidth),
+      regionCanScroll: element.scrollWidth > element.clientWidth,
+    };
+  });
+  expect(scrollOwners).toEqual({ contentCanScroll: true, regionCanScroll: false });
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
   await expect(savedRow).toBeVisible();
   await expect(savedRow).toContainText("系统管理员");

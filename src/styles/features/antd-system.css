@@ -521,12 +521,12 @@
   vertical-align: middle;
 }
 
-/* Service-side tables use Ant Table directly. Keep horizontal overflow at the
- * region boundary so columns retain their declared widths instead of inheriting
- * the legacy template-table frame. */
+/* Ant Table owns horizontal scrolling. Keeping the region at the workspace
+ * width lets right-fixed action columns anchor to the visible container edge. */
 .ant-workspace .ant-table-region {
   width: 100%;
-  overflow-x: auto;
+  min-width: 0;
+  overflow-x: visible;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: var(--ant-border-radius-lg, 8px);
   background: var(--app-surface);
@@ -539,7 +539,8 @@
 }
 
 .ant-workspace .ant-table-region .ant-table-wrapper {
-  min-width: max-content;
+  width: 100%;
+  min-width: 0;
 }
 
 .ant-workspace .ant-table-region .ant-table {

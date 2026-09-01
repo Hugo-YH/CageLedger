@@ -41,12 +41,22 @@ for (const recording of [false, true]) {
       pending = route;
     });
     await openWorkflowCenter(page);
-    const trigger = page
-      .getByRole("row")
-      .filter({ hasText: "甲" })
-      .getByRole("button", { name: recording ? "补录" : "登记", exact: true });
-    await trigger.click();
-    const dialog = page.getByRole("dialog");
+    const row = page.getByRole("row").filter({ hasText: "甲" });
+    const trigger = row.getByRole("button", { name: recording ? "查看" : "登记", exact: true });
+    const detailDialog = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+    const openForm = async () => {
+      if (!recording) {
+        await trigger.click();
+        return;
+      }
+      if ((await detailDialog.count()) === 0) await trigger.click();
+      await detailDialog.getByRole("button", { name: "补录报销单", exact: true }).click();
+    };
+    await openForm();
+    const dialog = page
+      .getByRole("dialog")
+      .filter({ hasText: recording ? "补录报销单" : "交回登记" })
+      .first();
     if (!recording) {
       await dialog.getByRole("switch", { name: "饲养费结算单", exact: true }).click();
       await dialog.getByRole("switch", { name: "报销单", exact: true }).click();
@@ -94,7 +104,7 @@ for (const recording of [false, true]) {
     await expect.poll(() => writes).toBe(2);
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await trigger.click();
+    await openForm();
     await expect(dialog.getByRole("alert")).toHaveCount(0);
     await pending?.fulfill({ json: { ok: true, item: workflow } });
     await expect(dialog).toBeVisible();
@@ -156,8 +166,8 @@ test("workflow details open immediately, ignore closed requests, and retry acces
     requests.set(new URL(route.request().url()).pathname.split("/").at(-1) || "", route);
   });
   await openWorkflowCenter(page);
-  const first = page.getByRole("row").filter({ hasText: "甲" }).getByRole("button", { name: "查看归档" });
-  const second = page.getByRole("row").filter({ hasText: "乙" }).getByRole("button", { name: "查看归档" });
+  const first = page.getByRole("row").filter({ hasText: "甲" }).getByRole("button", { name: "查看", exact: true });
+  const second = page.getByRole("row").filter({ hasText: "乙" }).getByRole("button", { name: "查看", exact: true });
   await first.click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("status", { name: /流程详情/ })).toBeVisible();

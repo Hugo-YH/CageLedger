@@ -221,19 +221,20 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
             key: "actions",
             title: "操作",
             fixed: "right",
+            width: 96,
             render: (_, item) => (
               <Space size={4}>
                 {user.role === "admin" && item.status === "draft" ? (
                   <Button
-                    size="small"
                     loading={confirm.isPending}
+                    type="primary"
                     onClick={() => void confirm.mutateAsync(item.id).then(() => void detail.refetch())}
                   >
                     确认
                   </Button>
                 ) : null}
                 {user.role === "admin" && item.status === "confirmed" ? (
-                  <Button danger size="small" onClick={() => setReverseTarget(item.id)}>
+                  <Button danger onClick={() => setReverseTarget(item.id)}>
                     撤销
                   </Button>
                 ) : null}

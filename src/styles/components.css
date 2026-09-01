@@ -356,9 +356,12 @@
   min-width: 920px;
 }
 
-.table-wrap.quantity-saved-list table:not(.quantity-template-table) th {
+.table-wrap.quantity-saved-list table:not(.quantity-template-table) th:not(.ant-table-cell-fix) {
   position: relative;
   z-index: auto;
+}
+
+.table-wrap.quantity-saved-list table:not(.quantity-template-table) th {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: normal;
@@ -882,8 +885,15 @@
 
 /* Draggable column widths and business cell wrapping (migrated from
  * ux-foundation.css). */
-.app-data-table .app-table-resizable {
+.app-data-table .app-table-resizable:not(.ant-table-cell-fix) {
   position: relative;
+}
+
+/* Only this internal column absorbs spare container width. Business columns
+ * keep their declared widths and right-fixed actions remain anchored. */
+.app-data-table .app-table-flex-spacer {
+  padding: 0 !important;
+  pointer-events: none;
 }
 
 .app-data-table .react-resizable-handle {

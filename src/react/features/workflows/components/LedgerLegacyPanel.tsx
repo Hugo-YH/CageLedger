@@ -66,9 +66,10 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
       key: "actions",
       title: "迁入",
       fixed: "right",
+      width: 96,
       render: (_, item) =>
         user.role === "admin" && item.migrationEligible ? (
-          <Button size="small" loading={migrate.isPending} onClick={() => void migrate.mutateAsync(String(item.id))}>
+          <Button type="primary" loading={migrate.isPending} onClick={() => void migrate.mutateAsync(String(item.id))}>
             迁入
           </Button>
         ) : (

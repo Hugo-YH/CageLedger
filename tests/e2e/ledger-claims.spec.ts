@@ -32,6 +32,30 @@ test("单据跟踪展示以结算流程为主线的面板", async ({ page }) => 
   await expect(page.getByRole("columnheader", { name: /IACUC/ })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: /登记人员/ })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: /状态/ })).toBeVisible();
+  const table = page.locator(".reimbursement-table");
+  const selectionSlider = table.getByRole("slider", { name: "调整选择列宽" });
+  const widthsBefore = await table
+    .locator(".ant-table-thead > tr > th:not(.app-table-flex-spacer)")
+    .evaluateAll((headers) => headers.map((header) => Math.round(header.getBoundingClientRect().width)));
+  await selectionSlider.press("ArrowRight");
+  const widthsAfter = await table
+    .locator(".ant-table-thead > tr > th:not(.app-table-flex-spacer)")
+    .evaluateAll((headers) => headers.map((header) => Math.round(header.getBoundingClientRect().width)));
+  expect(widthsAfter[0]).toBe(widthsBefore[0] + 16);
+  expect(widthsAfter.slice(1)).toEqual(widthsBefore.slice(1));
+  const trackingGeometry = await table.evaluate((element) => {
+    const content = element.querySelector<HTMLElement>(".ant-table-content");
+    const actionsHeader = element.querySelector<HTMLElement>("th.ant-table-cell-fix-end");
+    return {
+      contentRight: Math.round(content?.getBoundingClientRect().right ?? 0),
+      headerRight: Math.round(actionsHeader?.getBoundingClientRect().right ?? 0),
+      wrapperRight: Math.round(element.getBoundingClientRect().right),
+      pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  expect(trackingGeometry.headerRight).toBe(trackingGeometry.contentRight);
+  expect(trackingGeometry.wrapperRight).toBe(trackingGeometry.contentRight);
+  expect(trackingGeometry.pageOverflows).toBe(false);
 });
 
 test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", async ({ page }) => {
@@ -159,7 +183,9 @@ test("已归档流程可补录报销单并更新状态标签", async ({ page }) 
   await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
   await expect(row).toContainText("报销单 未交回");
 
-  await row.getByRole("button", { name: "补录" }).click();
+  await row.getByRole("button", { name: "查看" }).click();
+  const detailForRecording = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  await detailForRecording.getByRole("button", { name: "补录报销单" }).click();
   const recording = page.getByRole("dialog").filter({ hasText: "补录报销单" }).first();
   const removeReimbursementForm = recording.getByRole("button", { name: "删除第 1 行报销单" });
   await expect(removeReimbursementForm).toBeVisible();
@@ -186,7 +212,7 @@ test("已归档流程可补录报销单并更新状态标签", async ({ page }) 
   await expect(recording).toHaveCount(0, { timeout: 10_000 });
   await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
 
-  await row.getByRole("button", { name: "查看归档" }).click();
+  await row.getByRole("button", { name: "查看" }).click();
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
   await expect(detail).toContainText("报销单 已交回");
   await expect(detail).toContainText("BX-LATE-001");
@@ -268,7 +294,7 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
 
   // 主时间轴只保留生效环节，历史记录默认折叠
-  await row.getByRole("button", { name: "查看归档" }).click();
+  await row.getByRole("button", { name: "查看" }).click();
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
   await expect(detail.getByText("结算单/报销单交回")).toHaveCount(1);
   await expect(detail).toContainText("BX-RE-001");
@@ -348,7 +374,7 @@ test("结算金额为 0 的交回登记不显示报销单开关", async ({ page 
   await expect(zeroModal).toHaveCount(0);
   await expect(zeroRow.getByText("报销单", { exact: false })).toHaveCount(0);
   await expect(zeroRow.getByRole("button", { name: "补录" })).toHaveCount(0);
-  await zeroRow.getByRole("button", { name: "查看归档" }).click();
+  await zeroRow.getByRole("button", { name: "查看" }).click();
   const zeroDetail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
   await expect(zeroDetail.getByText("报销单", { exact: false })).toHaveCount(0);
   await expect(zeroDetail.getByText("报销单号", { exact: false })).toHaveCount(0);
@@ -445,7 +471,7 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
   await expect(lockedRow).toContainText("结算单 已交回");
   await expect(page.getByRole("row", { name: new RegExp(pis[1]) })).toContainText("已锁定");
 
-  await lockedRow.getByRole("button", { name: "查看归档" }).click();
+  await lockedRow.getByRole("button", { name: "查看" }).click();
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
   const history = detail.getByText(/历史修改（2 条）/);
   await expect(history).toBeVisible();

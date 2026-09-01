@@ -7,6 +7,7 @@ import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, pixelWidth } from "./tableColumnWid
 import { useColumnWidths } from "./useColumnWidths";
 
 const DEFAULT_COLUMN_WIDTH = 140;
+const FLEX_SPACER_KEY = "__app_table_flex_spacer__";
 
 type ResizableHeaderCellProps = ThHTMLAttributes<HTMLTableCellElement> & {
   width?: number;
@@ -84,6 +85,10 @@ function estimateColumnWidth(column: { title?: unknown; dataIndex?: unknown }): 
 type TableColumn<RecordType> = NonNullable<TableProps<RecordType>["columns"]>[number];
 type DataTableProps<RecordType> = TableProps<RecordType> & { resizeKey?: string };
 
+function isRightFixedColumn<RecordType>(column: TableColumn<RecordType>): boolean {
+  return column.fixed === "right" || column.fixed === "end";
+}
+
 export function DataTable<RecordType extends object>(props: DataTableProps<RecordType>) {
   return <ResizableDataTable key={props.resizeKey} {...props} />;
 }
@@ -98,7 +103,6 @@ function ResizableDataTable<RecordType extends object>({
 }: DataTableProps<RecordType>) {
   const tableClassName = ["app-data-table", className].filter(Boolean).join(" ");
   const { widths: overrides, resize } = useColumnWidths(resizeKey);
-  const hasCustomHeader = Boolean(components?.header?.cell);
   const { mergedColumns, totalWidth, hasFluidWidth } = useMemo(() => {
     let totalWidth = 0;
     let hasFluidWidth = false;
@@ -112,34 +116,58 @@ function ResizableDataTable<RecordType extends object>({
         };
       }
       const colKey = columnKey(column, path);
+      const semanticAlign =
+        column.align ??
+        (colKey === "selection" ? "center" : colKey === "actions" || colKey === "action" ? "right" : undefined);
       const explicitWidth = pixelWidth(column.width);
       // Relative CSS widths stay relative and are not given pixel-based resize handles.
       if (typeof column.width === "string" && explicitWidth === undefined) {
         hasFluidWidth = true;
         return column;
       }
-      const width =
-        (!isFixed && !hasCustomHeader ? overrides[colKey] : undefined) ?? explicitWidth ?? estimateColumnWidth(column);
+      const width = overrides[colKey] ?? explicitWidth ?? estimateColumnWidth(column);
       totalWidth += width;
-      if (isFixed || hasCustomHeader) return { ...column, width };
       const existingHeaderCell = column.onHeaderCell;
       return {
         ...column,
+        ...(semanticAlign ? { align: semanticAlign } : {}),
         width,
-        onHeaderCell: (cellColumn) => ({
-          ...(existingHeaderCell?.(cellColumn) ?? {}),
-          width,
-          resizeLabel: typeof column.title === "string" ? `调整${column.title}列宽` : "调整列宽",
-          onResize: (_event: SyntheticEvent, data?: ResizeCallbackData) => {
-            if (!data) return;
-            resize(colKey, data.size.width);
-          },
-        }),
+        onHeaderCell: (cellColumn) => {
+          const existingProps = existingHeaderCell?.(cellColumn) ?? {};
+          return {
+            ...existingProps,
+            style: { ...existingProps.style, textAlign: colKey === "selection" ? "center" : "left" },
+            width,
+            resizeLabel:
+              colKey === "selection"
+                ? "调整选择列宽"
+                : typeof column.title === "string"
+                  ? `调整${column.title}列宽`
+                  : "调整列宽",
+            onResize: (_event: SyntheticEvent, data?: ResizeCallbackData) => {
+              if (!data) return;
+              resize(colKey, data.size.width);
+            },
+          };
+        },
       };
     }
-    const mergedColumns = props.columns?.map((column, index) => resolve(column, String(index)));
+    const resolvedColumns = props.columns?.map((column, index) => resolve(column, String(index)));
+    const rightFixedIndex = resolvedColumns?.findIndex(isRightFixedColumn) ?? -1;
+    const flexSpacer: TableColumn<RecordType> = {
+      key: FLEX_SPACER_KEY,
+      title: null,
+      className: "app-table-flex-spacer",
+      render: () => null,
+      onHeaderCell: () => ({ "aria-hidden": true }),
+      onCell: () => ({ "aria-hidden": true }),
+    };
+    const mergedColumns =
+      resolvedColumns && rightFixedIndex >= 0
+        ? [...resolvedColumns.slice(0, rightFixedIndex), flexSpacer, ...resolvedColumns.slice(rightFixedIndex)]
+        : resolvedColumns;
     return { mergedColumns, totalWidth: Math.ceil(totalWidth), hasFluidWidth };
-  }, [overrides, props.columns, resize, hasCustomHeader]);
+  }, [overrides, props.columns, resize]);
 
   const mergedComponents = useMemo(
     () => ({ ...components, header: { cell: ResizableHeaderCell, ...components?.header } }),
