@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.3",
+    build: "194",
+    releasedAt: "2026-09-01",
+    title: "数量统计表选择器修复",
+    items: [
+      "修复数量统计表选择器的日期与下拉选项仍显示英文的问题，统一使用中文本地化",
+      "调整选择器样式，使其与 Ant Design 控件保持一致",
+      "增加浏览器回归检查，覆盖选择器的本地化文本和视觉契约",
+    ],
+  },
+  {
     version: "1.2.2",
     build: "193",
     releasedAt: "2026-09-01",
