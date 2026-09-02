@@ -13,6 +13,15 @@
 | 打印与 PDF  | 模板单元测试、PDF 解析、浏览器预览  | A4、物理页数、空白页、页脚、二维码和固定尺寸     |
 | 性能        | benchmark、性能历史、浏览器性能记录 | SQLite 查询、分页、虚拟列表和首屏加载            |
 
+## 结算汇总表双渲染链路
+
+结算汇总表不是单一模板出口，修改时必须把以下两条链路视为同一份业务契约：
+
+- 前端预览和“直接打印”由 `src/react/print/settlement.ts` 生成。
+- 服务端 PDF、后台 PDF 任务和批量导出由 `server_app/pdf/documents.py` 生成。
+
+涉及字段、计费结果、汇总、分页、列宽、说明或页脚的修改，需要同时更新两端实现，并分别在 `src/react/print/printTemplates.test.ts` 和 `tests/test_pdf_exports.py` 添加等价断言。多页结算单至少覆盖：第一页汇总包含后续页同品种伦理，逐日笼数、减免、梯度、缴纳金额和单项合计一致，预览与导出 PDF 的物理页数及页码一致。只验证其中一个出口不得作为完成依据。
+
 ## 快速门禁
 
 `npm run check` 执行格式检查、全部 lint、TypeScript 类型检查、Vitest 和 Python unittest。开发依赖需要提前安装：

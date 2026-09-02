@@ -157,6 +157,55 @@ class PdfExportTests(unittest.TestCase):
         self.assertGreater(len(first_text), 500)
         self.assertGreater(len(second_text), 500)
 
+    def test_first_page_mouse_summary_includes_mouse_iacucs_from_later_pages(self):
+        statement = {
+            "id": "cross-page-mouse-summary",
+            "month": "2026-08",
+            "pi": "跨页汇总测试",
+            "sourceType": "pi_merged_quantity_sheet",
+            "billingUnit": "cage_day",
+            "iacucs": [f"Z{i}" for i in range(1, 7)],
+        }
+        breakdown = [
+            {
+                "iacuc": f"Z{index}",
+                "species": "mouse",
+                "cageCount": index,
+                "freeCages": index,
+                "tier2BillableCages": index,
+                "billingItem": "小鼠饲养费",
+                "billingUnit": "cage_day",
+                "unitPrice": 4.5,
+                "overageUnitPrice": 6.5,
+                "tiered": True,
+                "payableAmount": index * 10,
+            }
+            for index in range(1, 7)
+        ]
+        html = billing_statement_html(
+            statement,
+            [
+                {
+                    "date": "2026-08-01",
+                    "cageCount": 21,
+                    "freeCages": 21,
+                    "tier2BillableCages": 21,
+                    "amount": 210,
+                    "quantitySheetRowIds": ["row-1"],
+                    "iacucBreakdown": breakdown,
+                }
+            ],
+        )
+
+        first_page = html.split("</main>", 1)[0]
+        cross_page_summary = (
+            '<td>2026-08-01</td><td colspan="3" class="num">21</td>'
+            '<td colspan="2" class="num">21</td><td colspan="3" class="num">21</td>'
+            '<td colspan="4" class="money">210.00</td>'
+        )
+        self.assertIn(cross_page_summary, first_page)
+        self.assertEqual(first_page.count(cross_page_summary), 1)
+
     def test_settlement_html_groups_iacucs_under_species_headers(self):
         statement = {
             "id": "species-summary",

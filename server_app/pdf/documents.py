@@ -174,6 +174,7 @@ def billing_statement_html(statement, lines):
     columns = statement_columns(statement, kept_lines)
     modeled = [statement_row(line, columns, unit) for line in kept_lines]
     summaries = {column["key"]: summary_for_column(column["key"], modeled) for column in columns}
+    mouse_column_keys = [column["key"] for column in columns if column["species"] == "小鼠"]
     for column in columns:
         summary = summaries[column["key"]]
         column["showFree"] = column["species"] == "小鼠" and summary["free"] > 0
@@ -193,6 +194,7 @@ def billing_statement_html(statement, lines):
                 modeled,
                 page,
                 summaries,
+                mouse_column_keys,
                 unit,
                 total_count,
                 total_free,
@@ -300,6 +302,7 @@ def settlement_page_markup(
     rows,
     page,
     summaries,
+    mouse_column_keys,
     unit,
     total_count,
     total_free,
@@ -310,7 +313,9 @@ def settlement_page_markup(
     note_markup,
 ):
     slots = page["slots"]
-    mouse_summaries = [summaries[slot["key"]] for slot in slots if slot and slot["species"] == "小鼠"]
+    page_mouse_keys = [slot["key"] for slot in slots if slot and slot["species"] == "小鼠"]
+    summary_mouse_keys = mouse_column_keys if page["leading"] else page_mouse_keys
+    mouse_summaries = [summaries[key] for key in summary_mouse_keys]
     mouse_total_count = sum(item["count"] for item in mouse_summaries)
     mouse_total_free = sum(item["free"] for item in mouse_summaries)
     mouse_total_tier = sum(item["tier"] for item in mouse_summaries)
@@ -351,18 +356,10 @@ def settlement_page_markup(
         leading_values = (
             group_cells(
                 {
-                    "count": sum(
-                        row["values"][slot["key"]]["count"] for slot in slots if slot and slot["species"] == "小鼠"
-                    ),
-                    "free": sum(
-                        row["values"][slot["key"]]["free"] for slot in slots if slot and slot["species"] == "小鼠"
-                    ),
-                    "tier": sum(
-                        row["values"][slot["key"]]["tier"] for slot in slots if slot and slot["species"] == "小鼠"
-                    ),
-                    "amount": sum(
-                        row["values"][slot["key"]]["amount"] for slot in slots if slot and slot["species"] == "小鼠"
-                    ),
+                    "count": sum(row["values"][key]["count"] for key in summary_mouse_keys),
+                    "free": sum(row["values"][key]["free"] for key in summary_mouse_keys),
+                    "tier": sum(row["values"][key]["tier"] for key in summary_mouse_keys),
+                    "amount": sum(row["values"][key]["amount"] for key in summary_mouse_keys),
                 },
                 page_has_free,
                 page_has_tier,

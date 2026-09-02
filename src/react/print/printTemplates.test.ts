@@ -963,6 +963,9 @@ describe("print templates", () => {
     expect(pages[1]).toContain(">笼数<");
     expect(pages[1]).toContain("汇总");
     expect(pages[1]).toContain(
+      '<td>2026-06-01</td><td colspan="6" class="num">21</td><td colspan="6" class="money">94.50</td>',
+    );
+    expect(pages[1]).toContain(
       '<td colspan="7" class="row-label row-label-summary row-label-summary-wide">本月待缴纳饲养费<br />总计（元）</td><td colspan="6" class="money summary-total-money">94.50</td>',
     );
     expect(pages[2]).not.toContain('<th colspan="12">汇总</th>');

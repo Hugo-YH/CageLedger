@@ -106,6 +106,9 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
   ];
   const statementNotes = settlementNotesMarkup(columns, statement.notes, lines);
   const totalPages = Math.max(pagedColumns.length, 1);
+  const allMouseSlots = columns
+    .filter((column) => column.speciesLabel === "小鼠")
+    .map((column) => ({ column, summary: totalsByKey.get(column.key) || emptySummary() }));
 
   const statementPages = pagedColumns
     .map((page, pageIndex) => {
@@ -113,15 +116,15 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         column: slot.column,
         summary: slot.column ? totals.find((item) => item.key === slot.column?.key) || emptySummary() : emptySummary(),
       }));
+      const mouseSlots = page.showLeadingTotals
+        ? allMouseSlots
+        : resolvedSlots.filter((slot) => slot.column?.speciesLabel === "小鼠");
       const pageHasFree = page.showLeadingTotals
-        ? resolvedSlots.filter((slot) => slot.column?.speciesLabel === "小鼠").some((slot) => slot.summary.free > 0)
+        ? mouseSlots.some((slot) => slot.summary.free > 0)
         : resolvedSlots.some((slot) => slot.summary.free > 0);
       const pageHasTier = page.showLeadingTotals
-        ? resolvedSlots
-            .filter((slot) => slot.column?.speciesLabel === "小鼠")
-            .some((slot) => slot.summary.tier2Billable > 0)
+        ? mouseSlots.some((slot) => slot.summary.tier2Billable > 0)
         : resolvedSlots.some((slot) => slot.summary.tier2Billable > 0);
-      const mouseSlots = resolvedSlots.filter((slot) => slot.column?.speciesLabel === "小鼠");
       const mouseTotals = mouseSlots.reduce(
         (summary, slot) => ({
           count: summary.count + slot.summary.count,
