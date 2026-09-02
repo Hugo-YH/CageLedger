@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.6",
+    build: "197",
+    releasedAt: "2026-09-02",
+    title: "优先减免额度分配修复",
+    items: [
+      "修复多个 IACUC 开启优先减免时，普通 IACUC 可能提前分走剩余额度的问题",
+      "现在会先满足全部优先 IACUC，再按稳定顺序处理普通 IACUC",
+      "补充业务规则说明和多优先 IACUC 回归测试",
+    ],
+  },
+  {
     version: "1.2.5",
     build: "196",
     releasedAt: "2026-09-02",
