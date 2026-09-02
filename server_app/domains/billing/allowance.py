@@ -93,26 +93,25 @@ def allocate_daily_free_cages_by_iacuc(breakdown, free_cages):
         ]
         if not candidates:
             break
-        # 开了优先减免（未填笼数）的伦理号在剩余额度分配中优先于未开启的。
+        # 开了优先减免（未填笼数）的伦理号必须先用完剩余额度；
+        # 只有全部优先伦理都已满足后，普通伦理才参与分配。
         priority_candidates = [item for item in candidates if item["iacuc"] in priority_only_iacucs]
         ordinary_candidates = [item for item in candidates if item["iacuc"] not in priority_only_iacucs]
-        for group in (priority_candidates, ordinary_candidates):
-            if not group or remaining <= 0:
-                continue
-            coverable = sorted(
-                (item for item in group if item["remainingCages"] <= remaining),
-                key=free_cage_allocation_sort_key,
-            )
-            if coverable:
-                target = coverable[0]
-                allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
-                remaining_by_iacuc[target["iacuc"]] = 0
-                remaining -= target["remainingCages"]
-                continue
-            target = sorted(group, key=free_cage_allocation_sort_key)[0]
-            allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + remaining
-            remaining_by_iacuc[target["iacuc"]] = max(target["remainingCages"] - remaining, 0)
-            remaining = 0
+        active_candidates = priority_candidates or ordinary_candidates
+        coverable = sorted(
+            (item for item in active_candidates if item["remainingCages"] <= remaining),
+            key=free_cage_allocation_sort_key,
+        )
+        if coverable:
+            target = coverable[0]
+            allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + target["remainingCages"]
+            remaining_by_iacuc[target["iacuc"]] = 0
+            remaining -= target["remainingCages"]
+            continue
+        target = sorted(active_candidates, key=free_cage_allocation_sort_key)[0]
+        allocations[target["iacuc"]] = allocations.get(target["iacuc"], 0) + remaining
+        remaining_by_iacuc[target["iacuc"]] = max(target["remainingCages"] - remaining, 0)
+        remaining = 0
 
     return allocations
 

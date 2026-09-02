@@ -204,6 +204,44 @@ class BusinessRuleParityTests(unittest.TestCase):
         self.assertEqual(breakdown[0]["freeCages"], 4)
         self.assertEqual(breakdown[1]["freeCages"], 6)
 
+    def test_multiple_priority_iacucs_are_exhausted_before_ordinary_iacucs(self):
+        breakdown = [
+            {
+                "iacuc": "Z1",
+                "cageCount": 4,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": 1,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z2",
+                "cageCount": 7,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": 1,
+                "freeCages": 0,
+            },
+            {
+                "iacuc": "Z3",
+                "cageCount": 20,
+                "billingUnit": "cage_day",
+                "freeAllowance": True,
+                "freeEligible": True,
+                "preferredFreeCages": 0,
+                "freeCagePriority": None,
+                "freeCages": 0,
+            },
+        ]
+        allocations = server.allocate_daily_free_cages_by_iacuc(breakdown, 10)
+        self.assertEqual(allocations, {"Z1": 4, "Z2": 6, "Z3": 0})
+        server.apply_free_cage_allocations(breakdown, allocations)
+        self.assertEqual([item["freeCages"] for item in breakdown], [4, 6, 0])
+
     def test_quantity_sheet_expiry_note_identifies_iacuc_and_first_ineligible_date(self):
         sheets = [
             {
