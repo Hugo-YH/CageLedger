@@ -113,10 +113,11 @@ describe("print templates", () => {
     ).toMatchObject({ kind: "unresolved" });
   });
 
-  it("renders and pads the temporary 8014 layout to fifteen cards without QR or room fields", () => {
+  it("renders and pads the temporary 8014 layout to fifteen cards with the compact QR information grid", () => {
     const batch = {
       batchNo: "2026-08-26-Z2026013",
       iacuc: "Z2026013",
+      supplier: "广东药康生物科技有限公司",
       strainStandard: "C57BL/6J",
       pi: "项目负责人",
       owner: "实验负责人",
@@ -132,11 +133,42 @@ describe("print templates", () => {
     expect(html).toContain("grid-template-columns:repeat(3,65mm)");
     expect(html).toContain("grid-auto-rows:55mm");
     expect(html).toContain(" /23");
-    expect(html).toContain("2026.8.26-2026.9.26");
+    expect(html).toContain("2026.8.26 至 2026.9.26");
+    expect(html).toContain("实验负责人");
+    expect(html).not.toContain("实验负责人/助手");
+    expect(html).toContain("购买单位");
+    expect(html).toContain("广东药康");
+    expect(html).toContain("批次编号");
     expect(html).toContain('<span class="batch-iacuc-highlight">Z2026013</span>');
-    expect(html).toContain(".temporary-card .temporary-batch .batch-iacuc-highlight{color:#b91c1c;font-weight:800}");
-    expect(html).not.toContain('aria-label="笼卡二维码"');
+    expect(html).toContain(
+      ".temporary-card .temporary-batch .batch-iacuc-highlight{font-size:2.6mm;color:#b91c1c;font-weight:800}",
+    );
+    expect(html.match(/aria-label="笼卡二维码"/g)).toHaveLength(1);
+    expect(html).toContain(
+      '<table class="temporary-card-grid"><colgroup><col style="width:19mm"><col style="width:28mm"><col style="width:18mm">',
+    );
+    expect(html).not.toContain("实验动物信息卡");
+    expect(html).not.toContain("笼号");
+    expect(html).toContain('class="temporary-strain" colspan="2"');
+    expect(html).toContain('class="temporary-qr-cell" rowspan="2"');
+    expect(html).toContain(".temporary-card .temporary-owner-row>*,.temporary-card .temporary-pi-row>*{height:9mm}");
+    expect(html).toContain(".temporary-card .temporary-owner,.temporary-card .temporary-strain{font-size:2.55mm");
+    expect(html).toContain(".temporary-card{width:65mm;height:55mm;overflow:visible");
+    expect(html).toContain(".temporary-card .temporary-period{font-size:2.35mm;font-weight:400");
+    expect(html).toContain(".temporary-card .temporary-qr-cell svg{display:block;width:100%;height:100%;margin:0}");
     expect(html).not.toContain("<th>房间</th>");
+  });
+
+  it("uses the compact two-line treatment only for unusually long temporary-card values", () => {
+    const batch = {
+      owner: "实验负责人兼动物实验技术支持人员",
+      strainStandard: "C57BL/6J-Tg(超长基因工程小鼠品系名称用于版式检查)",
+      finalCardCount: 1,
+      cards: [{}],
+    } as IntakeBatch;
+    const html = intakeCardsPrintHtml([batch], { kind: "temporary" });
+    expect(html).toContain('class="temporary-owner temporary-compact"');
+    expect(html).toContain('class="temporary-strain temporary-compact"');
   });
 
   it("highlights the parenthesized IACUC code on a temporary card when the stored IACUC has changed", () => {

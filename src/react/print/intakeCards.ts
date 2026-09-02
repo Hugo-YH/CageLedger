@@ -119,14 +119,21 @@ function renderStandardCard({ batch, card, blank }: IntakeCardPrintItem) {
 }
 
 function renderTemporaryCard({ batch, card, blank }: IntakeCardPrintItem) {
-  return `<section class="temporary-card"><table>
-<tr class="temporary-head"><th colspan="2">实验动物信息卡</th><th class="cage-label">笼号</th><td></td></tr>
-<tr><th>实验负责人/助手</th><td colspan="3">${blank ? "" : escapeHtml(batch.owner)}</td></tr>
-<tr><th>项目负责人</th><td colspan="3">${blank ? "" : escapeHtml(batch.pi)}</td></tr>
-<tr><th>批次号</th><td class="temporary-batch" colspan="3">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td></tr>
-<tr><th>品系</th><td colspan="3">${blank ? "" : escapeHtml(batch.strainStandard || batch.strainRaw)}</td></tr>
-<tr><th>数量</th><td colspan="3">${blank ? "" : escapeHtml(cardQuantityRatio(batch, card))}</td></tr>
-<tr><th>饲养周期</th><td class="temporary-period" colspan="3">${blank ? "" : escapeHtml(formatRange(batch.intakeDate, batch.endDate))}</td></tr>
+  const owner = String(batch.owner || "").trim();
+  const strain = String(batch.strainStandard || batch.strainRaw || "").trim();
+  const qrId = blank
+    ? ""
+    : String(card?.qrId || "")
+        .trim()
+        .toUpperCase();
+  return `<section class="temporary-card"><table class="temporary-card-grid"><colgroup><col style="width:19mm"><col style="width:28mm"><col style="width:18mm"></colgroup>
+<tr class="temporary-owner-row"><th>实验负责人</th><td class="${temporaryTextClass("temporary-owner", owner, 20)}">${blank ? "" : escapeHtml(owner)}</td><td class="temporary-qr-cell" rowspan="2">${qrId ? qrCodeSvg(qrId, "笼卡二维码", 1) : ""}</td></tr>
+<tr class="temporary-pi-row"><th>项目负责人</th><td>${blank ? "" : escapeHtml(batch.pi)}</td></tr>
+<tr><th>批次编号</th><td class="temporary-batch" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td></tr>
+<tr><th>购买单位</th><td colspan="2">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
+<tr><th>品系</th><td class="${temporaryTextClass("temporary-strain", strain, 35)}" colspan="2">${blank ? "" : escapeHtml(strain)}</td></tr>
+<tr><th>数量</th><td colspan="2">${blank ? "" : escapeHtml(cardQuantityRatio(batch, card))}</td></tr>
+<tr><th>饲养周期</th><td class="temporary-period" colspan="2">${blank ? "" : temporaryPeriodMarkup(batch.intakeDate, batch.endDate)}</td></tr>
 </table></section>`;
 }
 
@@ -162,6 +169,16 @@ function formatDate(value: string) {
 function formatRange(start: string, end: string) {
   return [formatDate(start), formatDate(end)].filter(Boolean).join("-");
 }
+function temporaryPeriodMarkup(start: string, end: string) {
+  return escapeHtml([formatDate(start), formatDate(end)].filter(Boolean).join(" 至 "));
+}
+function temporaryTextClass(base: string, value: string, compactAt: number) {
+  const units = Array.from(value).reduce(
+    (total, character) => total + ((character.codePointAt(0) || 0) > 0xff ? 2 : 1),
+    0,
+  );
+  return units > compactAt ? `${base} temporary-compact` : base;
+}
 function escapeHtml(value: unknown) {
   return String(value || "").replace(
     /[&<>"']/g,
@@ -169,5 +186,38 @@ function escapeHtml(value: unknown) {
   );
 }
 function printStyles() {
-  return `:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#fff;font-family:"Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a}.sheet{width:210mm;height:297mm;display:grid;align-content:start;justify-content:center;break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}.standard-sheet{padding:3.86mm 4mm 2.7mm;grid-template-columns:repeat(2,100mm);grid-auto-rows:40.09mm;gap:1.87mm 1.86mm}.standard-card{position:relative;width:100mm;height:40.09mm;border:0;overflow:hidden;background:#fff}.standard-card table{width:100%;height:100%;border-collapse:separate;border-spacing:0;border-top:.32mm solid #111827;border-left:.32mm solid #111827;table-layout:fixed}.standard-card td{border:0;border-right:.32mm solid #111827;border-bottom:.32mm solid #111827;padding:.12mm .55mm;vertical-align:middle;font-size:2.45mm;line-height:1;word-break:break-word;overflow:hidden}.standard-card .label{font-size:2.35mm;font-weight:800;color:#111827;white-space:nowrap}.standard-card .label-long{font-size:2.35mm}.standard-card .value{font-size:2.32mm;font-weight:500;text-align:center}.standard-card .value-compact{font-size:1.98mm;line-height:.98}.batch-iacuc-highlight{font-size:2.7mm;color:#b91c1c;font-weight:800}.standard-card .row-head{text-align:center;font-weight:800;font-size:2.35mm;white-space:nowrap}.standard-card .room{text-align:center;color:#7f0000;font-size:9.25mm;font-weight:900}.standard-card .cycle{font-size:1.86mm;font-weight:800;text-align:center;letter-spacing:-.06mm;white-space:nowrap}.standard-card .quantity-ratio{font-size:2.18mm;font-weight:700;white-space:nowrap}.standard-card .qr-cell{padding:0}.standard-card .qr-cell svg{display:block;width:19mm;height:19mm;margin:0 auto}.temporary-sheet{padding:7mm 5.5mm;grid-template-columns:repeat(3,65mm);grid-auto-rows:55mm;gap:2mm}.temporary-card{width:65mm;height:55mm;overflow:hidden;background:#fff}.temporary-card table{width:100%;height:54.6mm;border-collapse:collapse;table-layout:fixed;border:.3mm solid #111}.temporary-card th,.temporary-card td{height:7.8mm;border:.25mm solid #111;padding:.4mm .7mm;text-align:center;vertical-align:middle;overflow:hidden;word-break:break-word;font-size:2.3mm;line-height:1.1}.temporary-card th{width:21mm;font-weight:800;white-space:nowrap}.temporary-card .temporary-head th,.temporary-card .temporary-head td{height:7.2mm}.temporary-card .temporary-head th:first-child{width:auto;font-size:3.1mm;text-align:left;padding-left:2.4mm}.temporary-card .temporary-head .cage-label{width:9mm;font-size:2.3mm;text-align:center;padding:0}.temporary-card .temporary-head td{width:17mm}.temporary-card .temporary-batch{font-size:2mm;line-height:1}.temporary-card .temporary-batch .batch-iacuc-highlight{color:#b91c1c;font-weight:800}.temporary-card .temporary-period{font-size:2mm;font-weight:700;white-space:nowrap;letter-spacing:-.04mm}@media print{@page{size:A4 portrait;margin:0}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sheet,.standard-card,.temporary-card{break-inside:avoid;page-break-inside:avoid}}`;
+  return `:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;font-family:"Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a}
+.sheet{width:210mm;height:297mm;display:grid;align-content:start;justify-content:center;break-after:page;page-break-after:always}
+.sheet:last-child{break-after:auto;page-break-after:auto}
+.standard-sheet{padding:3.86mm 4mm 2.7mm;grid-template-columns:repeat(2,100mm);grid-auto-rows:40.09mm;gap:1.87mm 1.86mm}
+.standard-card{position:relative;width:100mm;height:40.09mm;border:0;overflow:hidden;background:#fff}
+.standard-card table{width:100%;height:100%;border-collapse:separate;border-spacing:0;border-top:.32mm solid #111827;border-left:.32mm solid #111827;table-layout:fixed}
+.standard-card td{border:0;border-right:.32mm solid #111827;border-bottom:.32mm solid #111827;padding:.12mm .55mm;vertical-align:middle;font-size:2.45mm;line-height:1;word-break:break-word;overflow:hidden}
+.standard-card .label{font-size:2.35mm;font-weight:800;color:#111827;white-space:nowrap}
+.standard-card .label-long{font-size:2.35mm}
+.standard-card .value{font-size:2.32mm;font-weight:500;text-align:center}
+.standard-card .value-compact{font-size:1.98mm;line-height:.98}
+.batch-iacuc-highlight{font-size:2.7mm;color:#b91c1c;font-weight:800}
+.standard-card .row-head{text-align:center;font-weight:800;font-size:2.35mm;white-space:nowrap}
+.standard-card .room{text-align:center;color:#7f0000;font-size:9.25mm;font-weight:900}
+.standard-card .cycle{font-size:1.86mm;font-weight:800;text-align:center;letter-spacing:-.06mm;white-space:nowrap}
+.standard-card .quantity-ratio{font-size:2.18mm;font-weight:700;white-space:nowrap}
+.standard-card .qr-cell{padding:0}
+.standard-card .qr-cell svg{display:block;width:19mm;height:19mm;margin:0 auto}
+.temporary-sheet{padding:7mm 5.5mm;grid-template-columns:repeat(3,65mm);grid-auto-rows:55mm;gap:2mm}
+.temporary-card{width:65mm;height:55mm;overflow:visible;background:#fff}
+.temporary-card .temporary-card-grid{width:100%;height:54.6mm;border-collapse:collapse;table-layout:fixed;border:.3mm solid #111}
+.temporary-card th,.temporary-card td{height:7.32mm;border:.25mm solid #111;padding:.35mm .6mm;text-align:center;vertical-align:middle;overflow:hidden;word-break:break-word;font-size:2.5mm;line-height:1.08}
+.temporary-card th{font-size:2.55mm;font-weight:800;white-space:nowrap}
+.temporary-card .temporary-owner-row>*,.temporary-card .temporary-pi-row>*{height:9mm}
+.temporary-card .temporary-owner,.temporary-card .temporary-strain{font-size:2.55mm;white-space:nowrap}
+.temporary-card .temporary-compact{font-size:2.08mm!important;line-height:1.02;white-space:normal}
+.temporary-card .temporary-batch{font-size:2.18mm;line-height:1}
+.temporary-card .temporary-batch .batch-iacuc-highlight{font-size:2.6mm;color:#b91c1c;font-weight:800}
+.temporary-card .temporary-period{font-size:2.35mm;font-weight:400;letter-spacing:-.03mm;white-space:nowrap}
+.temporary-card .temporary-qr-cell{height:18mm;padding:0}
+.temporary-card .temporary-qr-cell svg{display:block;width:100%;height:100%;margin:0}
+@media print{@page{size:A4 portrait;margin:0}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sheet,.standard-card,.temporary-card{break-inside:avoid;page-break-inside:avoid}}`;
 }
