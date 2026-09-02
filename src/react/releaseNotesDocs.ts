@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.5",
+    build: "196",
+    releasedAt: "2026-09-02",
+    title: "结算单跨页汇总修复",
+    items: [
+      "修复结算单分页后，首页汇总没有计入后续页面小鼠伦理号数据的问题",
+      "前端预览、直接打印和服务端 PDF 导出统一使用完整的小鼠汇总范围",
+      "增加前后端回归测试，校验跨页汇总的数量、减免、阶梯计费和金额",
+    ],
+  },
+  {
     version: "1.2.4",
     build: "195",
     releasedAt: "2026-09-02",
