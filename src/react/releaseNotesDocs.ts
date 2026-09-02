@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.4",
+    build: "195",
+    releasedAt: "2026-09-02",
+    title: "临时饲养间笼卡版式优化",
+    items: [
+      "临时饲养间笼卡补充购买单位、二维码等信息，并重新整理字段布局",
+      "优化长负责人和长品系名称的显示，避免内容挤压或溢出",
+      "饲养周期改用中文日期范围显示，并补充版式回归检查",
+    ],
+  },
+  {
     version: "1.2.3",
     build: "194",
     releasedAt: "2026-09-01",
