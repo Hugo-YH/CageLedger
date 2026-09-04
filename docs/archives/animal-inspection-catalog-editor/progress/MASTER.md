@@ -18,6 +18,7 @@
 - [x] Phase P1: 前端在线编辑 (3/3 tasks) — [phase-1-frontend.md](phase-1-frontend.md)
 - [x] Phase P2: 一致性收尾 (3/3 tasks) — [phase-2-consistency.md](phase-2-consistency.md)
 - [x] Phase P3: 前端硬编码摘除 (1/1 tasks) — [phase-3-hardcode-removal.md](phase-3-hardcode-removal.md)
+- [x] Phase P4: 大动物异常评估资料接收 (1/1 tasks) — [phase-4-large-animal-intake.md](phase-4-large-animal-intake.md)
 
 ## Adaptive Control State
 
@@ -29,9 +30,9 @@ adaptive:
     annotate: 3
     replan: 5
     rescope: 7
-  total_tasks: 11
-  completed_tasks: 11
-  last_updated: "2026-08-06T08:40:00+08:00"
+  total_tasks: 12
+  completed_tasks: 12
+  last_updated: "2026-09-04T00:00:00+08:00"
 ```
 
 ## Task Telemetry Log
@@ -50,16 +51,18 @@ adaptive:
 | T9 目录数据清理      | M      | P         | 5              | 删除 4 个节点（3 跳过 + 1 去重合并）；种子升 v2；渲染集不变（125/32/26）                   |
 | T10 契约与回归       | M      | P         | 2–9            | api-contracts + 3 条 e2e（编辑-发布/房管只读/版本回滚）+ 全量验证                          |
 | T11 硬编码摘除       | L      | R         | 9              | 区域/分组/改名迁入 config.presentation；删除 8 条重名条目；渲染签名一致                    |
+| T12 大动物资料入库   | M      | S, P, E   | —              | 目录草案与 51 张参考图进入开发资料；图片压缩并清除 EXIF/GPS，未接入 active 目录            |
 
 ## Current Status
 
-全部 11/11 完成。巡检标准支持在线编辑、图片、草稿/发布、历史版本回滚；目录数据已清理并配置化（233 节点，v3），异常模块表单渲染完全由目录 config 驱动，model.ts 无硬编码过滤。
+原目录编辑器 11/11 项保持完成。2026-09-04 已接收“异常动物（大动物）评估”前期资料，开发副本位于
+`docs/analysis/large-animal-abnormal-assessment/`；新模块尚未设计或接入 active 目录。
 
 ## Next Steps
 
-1. 实现 `catalog_schema.py` 校验模块（T1）
-2. 草稿接口（T2）→ 发布接口（T3）→ 图片上传（T4）
-3. 每完成一个任务更新本文件与对应 phase 文件
+1. 确认大动物模块的物种范围、字段和 A/B/C 处置时效口径。
+2. 设计独立 `moduleCode`、目录节点和物种适用配置。
+3. 从开发资料生成目录草稿，经兽医审核后再走管理员发布流程。
 
 ## Session Log
 
@@ -68,3 +71,4 @@ adaptive:
 - 2026-08-06：完成 P1 全部 3 个任务（编辑模式/图片管理/发布确认），Playwright 浏览器验收通过，npm run check 全绿
 - 2026-08-06：完成 P2 全部 3 个任务（历史版本回滚/目录数据清理/契约与回归），22 条 e2e 全绿
 - 2026-08-06：完成 P3（区域/分组/改名迁入 config，摘除 model.ts 硬编码），11/11 全部完成，归档至 docs/archives/animal-inspection-catalog-editor/
+- 2026-09-04：导入大动物异常评估开发资料；51 张图片生成去除 EXIF/GPS 的压缩副本，未修改现有巡检目录或运行数据
