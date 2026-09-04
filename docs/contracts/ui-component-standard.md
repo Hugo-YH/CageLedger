@@ -19,7 +19,8 @@
 ## 响应式与动效
 
 - `761px` 以上使用桌面 Ant Layout；`760px` 以下使用 antd-mobile TabBar 与 Popup。
-- 动效使用 transform 和 opacity：按压 100ms、浮层 200ms、Drawer/Modal 300ms，对应 Ant Design 的 `motionDurationFast`、`motionDurationMid`、`motionDurationSlow`。
+- 动效使用 transform 和 opacity：按压 140ms、常规切换与浮层 220ms、Drawer/Modal 280ms，统一使用 `cubic-bezier(0.2, 0, 0, 1)`，并对应 Ant Design 的 `motionDurationFast`、`motionDurationMid`、`motionDurationSlow`。
+- 运营工作台和公开入口不使用持续循环的装饰动画；无限动画仅允许用于明确的加载指示器。
 - `prefers-reduced-motion` 下保留状态色与透明度，移除位移与缩放。
 
 ## 布局归属与改动流程

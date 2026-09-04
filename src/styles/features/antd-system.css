@@ -1363,14 +1363,14 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  animation: cageledger-notice-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: cageledger-notice-in var(--motion-base) var(--ease-standard) both;
 }
 
 .react-inline-notice .notice-icon {
   flex: 0 0 auto;
   margin-top: 4px;
   font-size: 16px;
-  animation: cageledger-icon-pop 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: cageledger-icon-pop var(--motion-slow) var(--ease-standard) both;
 }
 
 .react-inline-notice.is-success {
@@ -1396,7 +1396,7 @@
   color: var(--app-primary);
 }
 
-/* Press feedback: buttons respond instantly (100-160ms, ease-out). */
+/* Press feedback uses the shared 140ms micro-interaction token. */
 .ant-btn:not(:disabled):active {
   transform: scale(0.97);
 }

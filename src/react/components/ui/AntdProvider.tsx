@@ -36,9 +36,9 @@ export function AntdProvider({ children }: PropsWithChildren) {
         controlHeightSM: 24,
         controlHeightLG: 40,
         motion: !reducedMotion,
-        motionDurationFast: "0.1s",
-        motionDurationMid: "0.2s",
-        motionDurationSlow: "0.3s",
+        motionDurationFast: "0.14s",
+        motionDurationMid: "0.22s",
+        motionDurationSlow: "0.28s",
       },
       components: {
         Button: {

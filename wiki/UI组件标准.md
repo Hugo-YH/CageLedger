@@ -32,6 +32,6 @@
 
 ## 动效与可访问性
 
-按压反馈使用 100ms，Tooltip/Popover 使用 200ms，抽屉和 Modal 使用 300ms，对应 Ant Design 官方动效时长。动画只使用 `transform` 和 `opacity`，`prefers-reduced-motion` 保留状态反馈并移除位移与缩放。交互控件保留可见焦点和键盘路径。
+按压反馈使用 140ms，常规切换与 Tooltip/Popover 使用 220ms，抽屉和 Modal 使用 280ms，统一使用 `cubic-bezier(0.2, 0, 0, 1)`。动画只使用 `transform` 和 `opacity`，`prefers-reduced-motion` 保留状态反馈并移除位移与缩放。交互控件保留可见焦点和键盘路径。
 
 完整约定见 `docs/contracts/ui-component-standard.md`、`docs/contracts/ui-color-system.md` 与 `docs/contracts/ui-interaction-system.md`。

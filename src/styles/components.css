@@ -493,6 +493,29 @@
     scroll-behavior: auto !important;
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .flash-notice,
+  .confirm-dialog,
+  .editor-modal,
+  .settings-drawer-desktop,
+  .workspace-view,
+  .quantity-template-table td.quantity-cell-attention {
+    animation: none !important;
+  }
+
+  .dashboard-overview-card:hover,
+  .dashboard-facility-card:hover,
+  .metric:hover,
+  .chart-legend-item:hover,
+  .summary-tile:hover,
+  .workspace-meta-card:hover,
+  .panel:hover,
+  .settings-drawer-item:hover,
+  .quantity-entry-status-pill:not(:disabled):hover,
+  .nav-item:hover {
+    transform: none;
   }
 }
 

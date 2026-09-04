@@ -465,35 +465,6 @@
   .project-hero-panel {
     animation-delay: 50ms;
   }
-
-  .project-demo-flow-line span {
-    animation: project-flow 2.8s var(--ease-in-out) infinite;
-  }
-
-  .project-demo-cage.is-active {
-    animation: project-cage-active 2.8s var(--ease-in-out) infinite;
-  }
-}
-
-@keyframes project-flow {
-  0% {
-    transform: translateY(-32px);
-  }
-
-  100% {
-    transform: translateY(150px);
-  }
-}
-
-@keyframes project-cage-active {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ant-color-success) 0%, transparent);
-  }
-
-  50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--ant-color-success) 15%, transparent);
-  }
 }
 
 @keyframes project-reveal {

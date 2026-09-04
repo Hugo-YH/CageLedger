@@ -142,63 +142,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-  }
-
-  .flash-notice,
-  .confirm-dialog,
-  .editor-modal,
-  .settings-drawer-desktop,
-  .workspace-view,
-  .quantity-template-table td.quantity-cell-attention {
-    animation: none !important;
-  }
-
-  .help-hint-bubble,
-  .dashboard-overview-card,
-  .dashboard-facility-card,
-  .metric,
-  .chart-legend-item,
-  .summary-tile,
-  .field-cluster,
-  .command-bar,
-  .panel,
-  .settings-drawer-item,
-  .table-wrap,
-  .quantity-entry-status-pill,
-  .dense-table tbody tr,
-  .table-wrap table:not(.quantity-template-table) tbody tr,
-  .workflow-row,
-  .placement-task-floating-card,
-  .workspace-meta-card,
-  .sidebar-toggle,
-  .nav-item,
-  .nav-toggle,
-  button,
-  input,
-  select,
-  textarea {
-    transition-duration: 0.01ms !important;
-  }
-
-  .dashboard-overview-card:hover,
-  .dashboard-facility-card:hover,
-  .metric:hover,
-  .chart-legend-item:hover,
-  .summary-tile:hover,
-  .workspace-meta-card:hover,
-  .panel:hover,
-  .settings-drawer-item:hover,
-  .quantity-entry-status-pill:not(:disabled):hover,
-  .nav-item:hover {
-    transform: none;
-  }
-}
-
 @media (width <= 1180px) {
   .navigation-panel .settings-drawer-item {
     border: 1px solid var(--line);

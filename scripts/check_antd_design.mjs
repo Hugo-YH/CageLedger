@@ -38,11 +38,11 @@ const required = [
   [tokens.includes("--primary: #1677ff;"), "应用 CSS 主色未使用 #1677ff。"],
   [tokens.includes("--primary-dark: #0958d9;"), "应用 CSS 未声明官方蓝 active 阶 #0958d9。"],
   [docsTheme.includes("--vp-c-brand-1: var(--cl-brand-1);"), "文档站未复用品牌 Token。"],
-  [componentContract.includes("按压 100ms、浮层 200ms、Drawer/Modal 300ms"), "组件契约未使用官方动效时长。"],
+  [componentContract.includes("按压 140ms、常规切换与浮层 220ms、Drawer/Modal 280ms"), "组件契约未使用统一动效时长。"],
   [colorContract.includes("默认高度为 `32px`，紧凑操作为 `24px`，强调操作为 `40px`"), "颜色契约未使用标准控件高度。"],
   [
-    wikiContract.includes("按压反馈使用 100ms，Tooltip/Popover 使用 200ms，抽屉和 Modal 使用 300ms"),
-    "Wiki 组件标准未同步官方动效。",
+    wikiContract.includes("按压反馈使用 140ms，常规切换与 Tooltip/Popover 使用 220ms，抽屉和 Modal 使用 280ms"),
+    "Wiki 组件标准未同步统一动效。",
   ],
 ];
 for (const [passes, message] of required) {
