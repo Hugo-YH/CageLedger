@@ -6,10 +6,10 @@ export const test = base.extend({
   page: async ({ page }, runPage) => {
     const runtimeErrors: string[] = [];
     page.on("console", (message) => {
-      if (message.type() !== "error") return;
+      if (message.type() !== "error" && message.type() !== "warning") return;
       const text = message.text();
       if (text.startsWith("Failed to load resource: the server responded with a status of")) return;
-      runtimeErrors.push(`console: ${text}`);
+      runtimeErrors.push(`console ${message.type()}: ${text}`);
     });
     page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
 

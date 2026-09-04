@@ -11,3 +11,4 @@
 | Ant Design UI 审计与整改 | 2026-08-14 至 2026-08-16 | 阶段 1 已完成，持续收敛项转入日常 UI 迭代 | [MASTER](./ant-design-ui-audit/progress/MASTER.md) |
 | legacy.py 持续拆分 | 2026-08-16 | 完成 persistence、state、业务事务、HTTP composition 与兼容入口拆分，legacy 收敛为 101 行 | [MASTER](./legacy-decomposition/progress/MASTER.md) |
 | 系统状态页重建 | 2026-08-23 | 将“关于系统”重建为管理员运行状态页，补齐性能指标、权限、响应式和无障碍回归 | [MASTER](./system-status-page-rebuild/progress/MASTER.md) |
+| 前端性能、Ant Design 与交互升级 | 2026-08-31 至 2026-09-04 | 完成查询、表格、主题、响应式、异步反馈、动效、可访问性与生产启动验收 | [MASTER](./frontend-performance-ui/progress/MASTER.md) |

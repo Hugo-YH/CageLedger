@@ -12,7 +12,7 @@ const version = execFileSync(
 ).trim();
 
 if (version !== "3.13") {
-  throw new Error(`浏览器回归要求 .venv Python 3.13，当前运行时为 ${version}：${python}`);
+  throw new Error(`项目要求 Python 3.13，当前运行时为 ${version}：${python}`);
 }
 
-console.log(`浏览器回归使用 ${python}（Python ${version}）。`);
+console.log(`项目使用 ${python}（Python ${version}）。`);

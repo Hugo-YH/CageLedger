@@ -23,16 +23,18 @@
 
 ## 完整验收清单
 
-- [ ] React 渲染、Context、表格引用和大 DOM 热点已验证。
-- [ ] 请求去重、取消、搜索 debounce、重试、占位、失效范围和竞态已验证。
-- [ ] 路由及非首屏大包、依赖/死代码、初始化和布局稳定性已验证。
-- [ ] 全局 token、组件圆角/字体/间距/操作等级及深色模式已验证。
-- [ ] 主要页面头部、工具栏、内容、分页布局已验证全部断点。
-- [ ] 所有可达 Table 的 rowKey、空/错/加载、选择、排序、过滤、fixed、长文本和数字已核对。
-- [ ] Form/Modal/Drawer 校验、防重、关闭、重开、草稿与焦点已验证。
-- [ ] 异步 Idle/Loading/Success/Error/Empty 与重试入口完整。
-- [ ] motion 时长/缓动、hover/active、页面进入、原生 Portal motion、减少动效已验证。
-- [ ] 可访问名称、键盘、状态语义、严格类型和无规避 lint 已验证。
-- [ ] check、production build、完整 E2E、API smoke、benchmark 与同窗口性能历史对比通过。
-- [ ] 浏览器无新增 React/Ant 警告、deprecated/key warning、重复请求。
-- [ ] 交付列出改动、性能、UI、motion、文件、潜在 bug、验证结果和技术债；资料归档。
+- [x] React 渲染、Context、表格引用和大 DOM 热点已验证。
+- [x] 请求去重、取消、搜索 debounce、重试、占位、失效范围和竞态已验证。
+- [x] 路由及非首屏大包、依赖/死代码、初始化和布局稳定性已验证。
+- [x] 全局 token、组件圆角/字体/间距/操作等级及深色模式已验证。
+- [x] 主要页面头部、工具栏、内容、分页布局已验证全部断点。
+- [x] 所有可达 Table 的 rowKey、空/错/加载、选择、排序、过滤、fixed、长文本和数字已核对。
+- [x] Form/Modal/Drawer 校验、防重、关闭、重开、草稿与焦点已验证。
+- [x] 异步 Idle/Loading/Success/Error/Empty 与重试入口完整。
+- [x] motion 时长/缓动、hover/active、页面进入、原生 Portal motion、减少动效已验证。
+- [x] 可访问名称、键盘、状态语义、严格类型和无规避 lint 已验证。
+- [x] check、production build、完整 E2E、API smoke、benchmark 与本地同窗口性能历史检查通过。
+- [x] 浏览器无新增 React/Ant warning/error、deprecated/key warning、重复请求。
+- [x] 交付列出改动、性能、UI、motion、文件、潜在 bug、验证结果和技术债；资料归档。
+
+本地生产进程的首个完整 5 分钟窗口为 11 个请求、HTTP P95 19ms、SQLite P95 0.2ms、慢请求 0、锁错误 0。该样本只证明本地链路正常，不替代发布后的生产同流量趋势对比。

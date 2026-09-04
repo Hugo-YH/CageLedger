@@ -9,7 +9,10 @@ describe("useColumnWidths", () => {
     localStorage.clear();
     vi.useFakeTimers();
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it("does not write on mount and coalesces drag updates into one idle write", () => {
     const { result } = renderHook(() => useColumnWidths("intake"));
@@ -31,11 +34,15 @@ describe("useColumnWidths", () => {
   });
 
   it("flushes the last resize when leaving the page before the debounce expires", () => {
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
     const { result, unmount } = renderHook(() => useColumnWidths("intake"));
     act(() => result.current.resize("name", 280));
+    const persistenceTimer = setTimeoutSpy.mock.results.at(-1)?.value;
+    expect(persistenceTimer).toBeDefined();
     unmount();
     expect(loadStoredWidths("intake")).toEqual({ name: 280 });
-    expect(vi.getTimerCount()).toBe(0);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(persistenceTimer);
   });
 
   it("clamps user changes, ignores non-finite widths and keeps no-op state stable", () => {

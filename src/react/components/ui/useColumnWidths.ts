@@ -6,20 +6,31 @@ import { loadStoredWidths, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, persistColumnWidt
 export function useColumnWidths(resizeKey?: string) {
   const [state, setState] = useState(() => ({ widths: loadStoredWidths(resizeKey), changed: false }));
   const pending = useRef<Record<string, number> | null>(null);
+  const timer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!resizeKey || !state.changed) return;
     pending.current = state.widths;
-    const timer = window.setTimeout(() => {
+    timer.current = window.setTimeout(() => {
       persistColumnWidths(resizeKey, state.widths);
       pending.current = null;
+      timer.current = null;
     }, 200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (timer.current === null) return;
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    };
   }, [resizeKey, state]);
 
   useEffect(
     () => () => {
+      if (timer.current !== null) {
+        window.clearTimeout(timer.current);
+        timer.current = null;
+      }
       if (resizeKey && pending.current) persistColumnWidths(resizeKey, pending.current);
+      pending.current = null;
     },
     [resizeKey],
   );
