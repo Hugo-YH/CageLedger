@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.7",
+    build: "198",
+    releasedAt: "2026-09-04",
+    title: "前端稳定性与交互优化",
+    items: [
+      "优化查询取消、搜索防抖、批量刷新和大数据渲染，减少重复请求、过期结果覆盖和无效重绘",
+      "完善列宽持久化、固定操作列、响应式布局、异步反馈和弹窗状态清理，统一 Ant Design 控件尺寸与交互层级",
+      "统一页面与微交互动效，补齐深浅主题、减少动态效果和浏览器存储不可用时的兼容处理",
+      "修复本地生产启动可能误用系统 Python 3.9 的问题，统一使用项目 Python 3.13 运行时",
+      "完成 253 项前端测试、216 项后端测试和 70 项浏览器回归，并增加控制台警告与页面异常发布门禁",
+    ],
+  },
+  {
     version: "1.2.6",
     build: "197",
     releasedAt: "2026-09-02",
