@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import unittest
+from contextlib import closing
 
 import server
 from server_app.domains.billing.custom_billing import validate_custom_billing_segments
@@ -9,7 +10,7 @@ from server_app.persistence.backfills import backfill_quantity_sheet_staff
 
 class BusinessRuleParityTests(unittest.TestCase):
     def test_quantity_sheet_save_creates_a_new_sheet_when_its_id_is_absent(self):
-        with sqlite3.connect(":memory:") as conn:
+        with closing(sqlite3.connect(":memory:")) as conn:
             conn.row_factory = sqlite3.Row
             server.initialize_schema(conn)
             sheet, previous, _, _, status, _ = server.save_quantity_sheet(
@@ -30,7 +31,7 @@ class BusinessRuleParityTests(unittest.TestCase):
             self.assertEqual(status, 201)
 
     def test_quantity_sheet_staff_backfill_uses_audit_and_room_configuration(self):
-        with sqlite3.connect(":memory:") as conn:
+        with closing(sqlite3.connect(":memory:")) as conn:
             conn.row_factory = sqlite3.Row
             conn.executescript(
                 """

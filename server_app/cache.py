@@ -1,6 +1,7 @@
+import hashlib
+import json
 import threading
 import time
-from datetime import UTC, datetime, timedelta
 
 from server_app.performance import performance_snapshot, record_cache
 
@@ -8,25 +9,26 @@ CACHE_TTL_SECONDS = 15
 CACHE_MAX_ENTRIES = 512
 DATA_CACHE_LOCK = threading.Lock()
 DATA_CACHE = {}
+CACHE_MISS = object()
 
 
-def cache_get(key):
+def cache_get(key, default=None):
     with DATA_CACHE_LOCK:
         entry = DATA_CACHE.get(key)
         if not entry:
             record_cache("miss")
-            return None
-        if entry["expiresAt"] <= datetime.now(UTC):
+            return default
+        if entry["expiresAt"] <= time.monotonic():
             DATA_CACHE.pop(key, None)
             record_cache("expired")
-            return None
+            return default
         record_cache("hit")
         return entry["value"]
 
 
 def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS):
     with DATA_CACHE_LOCK:
-        now = datetime.now(UTC)
+        now = time.monotonic()
         expired = [cache_key for cache_key, entry in DATA_CACHE.items() if entry["expiresAt"] <= now]
         for cache_key in expired:
             DATA_CACHE.pop(cache_key, None)
@@ -36,7 +38,7 @@ def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS):
             record_cache("eviction")
         DATA_CACHE[key] = {
             "value": value,
-            "expiresAt": now + timedelta(seconds=ttl_seconds),
+            "expiresAt": now + ttl_seconds,
         }
     return value
 
@@ -66,13 +68,14 @@ def log_perf(label, started_at, **fields):
 
 
 def cache_key(prefix, **fields):
-    normalized = []
-    for key in sorted(fields):
-        value = fields[key]
-        if isinstance(value, list | tuple | set):
-            value = ",".join(str(item) for item in value)
-        normalized.append(f"{key}={value}")
-    return f"{prefix}::" + "|".join(normalized)
+    encoded = json.dumps(fields, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=_encode_set)
+    return f"{prefix}::" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _encode_set(value):
+    if isinstance(value, set | frozenset):
+        return sorted(value, key=lambda item: json.dumps(item, sort_keys=True))
+    raise TypeError(f"Unsupported cache key type: {type(value).__name__}")
 
 
 def cache_performance_snapshot():

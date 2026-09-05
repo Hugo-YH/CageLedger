@@ -4,6 +4,8 @@ import time
 from http import HTTPStatus
 from urllib.parse import quote, urlparse
 
+from server_app.web.origin import cors_response_origin
+
 
 def add_default_headers(handler):
     path = urlparse(handler.path).path
@@ -16,10 +18,17 @@ def add_default_headers(handler):
     if started_at is not None:
         handler.send_header("Server-Timing", f"app;dur={(time.perf_counter() - started_at) * 1000:.1f}")
     handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("X-Frame-Options", "DENY")
+    handler.send_header("Referrer-Policy", "same-origin")
+    handler.send_header("X-Request-ID", getattr(handler, "_request_id", ""))
+    if origin := cors_response_origin(handler.headers):
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Access-Control-Allow-Credentials", "true")
+        handler.send_header("Vary", "Origin")
 
 
-def send_json(handler, payload, status=HTTPStatus.OK):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+def send_json(handler, payload, status=HTTPStatus.OK, extra_headers=None):
+    body = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
     accepts_gzip = "gzip" in handler.headers.get("Accept-Encoding", "").lower()
     compressed = accepts_gzip and len(body) >= 1024
     if compressed:
@@ -31,6 +40,8 @@ def send_json(handler, payload, status=HTTPStatus.OK):
     handler.send_header("Vary", "Accept-Encoding")
     if compressed:
         handler.send_header("Content-Encoding", "gzip")
+    for name, value in (extra_headers or {}).items():
+        handler.send_header(name, value)
     handler.end_headers()
     handler.wfile.write(body)
 

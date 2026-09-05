@@ -1,12 +1,13 @@
 import sqlite3
 import unittest
+from contextlib import closing
 
 import server
 
 
 class PerformanceIndexTests(unittest.TestCase):
     def test_quantity_sheet_indexes_are_created_idempotently(self):
-        with sqlite3.connect(":memory:") as conn:
+        with closing(sqlite3.connect(":memory:")) as conn:
             conn.row_factory = sqlite3.Row
             server.initialize_schema(conn)
             server.initialize_schema(conn)

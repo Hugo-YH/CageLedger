@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import mimetypes
 import shutil
 
@@ -71,6 +72,7 @@ from .repository import (
 from .repository import (
     upsert_obligation as _upsert_obligation,
 )
+from .repository import validate_funding_line_ownership
 
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 MAX_ATTACHMENTS_PER_CLAIM = 10
@@ -164,6 +166,7 @@ def save_claim(conn, actor, claim_id, payload):
     if not isinstance(line_input, list) or not line_input:
         raise ValueError("请至少添加一条经费明细")
     normalized_lines = [_normalize_funding_line(item, index) for index, item in enumerate(line_input, start=1)]
+    validate_funding_line_ownership(conn, normalized_lines, claim_id)
     owners = {item["fundingOwner"] for item in normalized_lines}
     if len(owners) != 1:
         raise ValueError("同一张报销单的经费明细必须使用同一位经费负责人")
@@ -261,7 +264,7 @@ def create_allocation(conn, actor, payload):
         raise ValueError("核销经费明细与报销单不匹配")
     _require_claim_edit(actor, claim)
     obligation = _obligation_row(conn, clean_text(payload.get("obligationId", "")))
-    amount = _money(payload.get("amount"))
+    amount = _input_money(payload.get("amount"), "核销金额")
     if amount <= 0:
         raise ValueError("核销金额应大于 0")
     record = {
@@ -303,18 +306,28 @@ def confirm_allocation(conn, actor, allocation_id):
         raise ValueError("只有核销草稿可以确认")
     line = _funding_line_row(conn, allocation["funding_line_id"])
     obligation = _obligation_row(conn, allocation["obligation_id"])
-    if _confirmed_amount_for_line(conn, line["id"]) + allocation["amount"] > line["reimbursement_amount"] + 0.00001:
-        raise ValueError("本次核销超过经费明细可分摊余额")
-    if (
-        _confirmed_amount_for_obligation(conn, obligation["id"]) + allocation["amount"]
-        > obligation["payable_amount"] + 0.00001
-    ):
-        raise ValueError("本次核销超过结算应收待核销金额")
     now = now_iso()
-    conn.execute(
-        "UPDATE reimbursement_allocations SET status = 'confirmed', confirmed_by = ?, confirmed_at = ?, updated_at = ? WHERE id = ?",
+    updated = conn.execute(
+        """UPDATE reimbursement_allocations AS target
+           SET status = 'confirmed', confirmed_by = ?, confirmed_at = ?, updated_at = ?
+           WHERE target.id = ? AND target.status = 'draft'
+             AND target.amount + (
+               SELECT COALESCE(SUM(other.amount), 0) FROM reimbursement_allocations AS other
+               WHERE other.funding_line_id = target.funding_line_id AND other.status = 'confirmed'
+             ) <= (SELECT reimbursement_amount FROM reimbursement_claim_funding_lines WHERE id = target.funding_line_id)
+             AND target.amount + (
+               SELECT COALESCE(SUM(other.amount), 0) FROM reimbursement_allocations AS other
+               WHERE other.obligation_id = target.obligation_id AND other.status = 'confirmed'
+             ) <= (SELECT payable_amount FROM reimbursement_settlement_obligations WHERE id = target.obligation_id)""",
         (actor["id"], now, now, allocation_id),
     )
+    if updated.rowcount != 1:
+        current = _allocation_row(conn, allocation_id)
+        if current["status"] != "draft":
+            raise ValueError("只有核销草稿可以确认")
+        if _confirmed_amount_for_line(conn, line["id"]) + allocation["amount"] > line["reimbursement_amount"] + 0.00001:
+            raise ValueError("本次核销超过经费明细可分摊余额")
+        raise ValueError("本次核销超过结算应收待核销金额")
     _refresh_line_balance(conn, line["id"])
     _refresh_obligation_balance(conn, obligation["id"])
     _refresh_claim_balances(conn, line["claim_id"])
@@ -659,7 +672,7 @@ def _normalize_funding_line(value, index):
         raise ValueError("经费明细格式无效")
     fund_book = clean_text(value.get("fundBookNo", ""))
     owner = clean_text(value.get("fundingOwner", ""))
-    amount = _money(value.get("reimbursementAmount", 0))
+    amount = _input_money(value.get("reimbursementAmount", 0), "报销金额")
     if not fund_book or not owner:
         raise ValueError("经费明细需填写经费本号和经费负责人")
     if amount < 0:
@@ -729,9 +742,22 @@ def _page(filters, total):
 
 def _money(value):
     try:
-        return round(float(value or 0), 2)
+        number = float(value or 0)
+        return round(number, 2) if math.isfinite(number) else 0.0
     except (TypeError, ValueError):
         return 0.0
+
+
+def _input_money(value, field):
+    if isinstance(value, bool):
+        raise ValueError(f"{field}格式无效")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field}格式无效") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{field}格式无效")
+    return round(number, 2)
 
 
 def _load(value):

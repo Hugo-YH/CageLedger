@@ -4,6 +4,7 @@ import time
 
 from .config import DB_PATH, SLOW_DATABASE_THRESHOLD_MS
 from .performance import record_database_operation
+from .shared.sqlite import ClosingConnection
 from .storage_layout import ensure_storage_layout
 
 DB_INIT_LOCK = threading.Lock()
@@ -11,7 +12,7 @@ DB_READY = False
 SCHEMA_INITIALIZER = None
 
 
-class ObservedConnection(sqlite3.Connection):
+class ObservedConnection(ClosingConnection):
     def execute(self, *args, **kwargs):
         return self._observe(super().execute, *args, **kwargs)
 
@@ -50,13 +51,17 @@ def configure_database(schema_initializer):
 def connect_db():
     ensure_database_ready()
     conn = sqlite3.connect(DB_PATH, factory=ObservedConnection)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA temp_store=MEMORY")
-    conn.execute("PRAGMA cache_size=-80000")
-    conn.execute("PRAGMA mmap_size=268435456")
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA temp_store=MEMORY")
+        conn.execute("PRAGMA cache_size=-80000")
+        conn.execute("PRAGMA mmap_size=268435456")
+    except BaseException:
+        conn.close()
+        raise
     return conn
 
 

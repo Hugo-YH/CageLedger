@@ -21,6 +21,7 @@ from server_app.repositories.billing_candidates import (
     sync_billing_candidate_snapshot_registry,
     upsert_billing_candidate_snapshot,
 )
+from server_app.shared.sqlite import ClosingConnection
 
 
 class SettlementCandidateSnapshotTests(unittest.TestCase):
@@ -28,7 +29,7 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
         invalidate_data_cache_prefixes("quantity_sheets::settlement_candidates::", "quantity_sheets::")
 
     def test_schema_initialization_creates_candidate_snapshot_tables(self):
-        with sqlite3.connect(":memory:") as conn:
+        with sqlite3.connect(":memory:", factory=ClosingConnection) as conn:
             conn.row_factory = sqlite3.Row
             server.initialize_schema(conn)
             tables = {
@@ -355,7 +356,7 @@ class SettlementCandidateSnapshotTests(unittest.TestCase):
 
 
 def build_candidate_conn():
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     conn.executescript(
         """

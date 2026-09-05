@@ -1,7 +1,11 @@
 import json
 import sqlite3
+import tempfile
+import threading
 import unittest
+from pathlib import Path
 
+from server_app.domains.reimbursement_ledger.repository import upsert_funding_line
 from server_app.domains.reimbursement_ledger.service import (
     confirm_allocation,
     create_allocation,
@@ -13,6 +17,7 @@ from server_app.domains.reimbursement_ledger.service import (
     sync_settlement_obligations,
 )
 from server_app.legacy import initialize_schema
+from server_app.shared.sqlite import ClosingConnection
 
 ADMIN = {"id": "admin", "username": "admin", "displayName": "系统管理员", "role": "admin", "roomIds": []}
 ROOM_ADMIN = {"id": "room", "username": "room", "displayName": "房间管理员", "role": "room_admin", "roomIds": []}
@@ -32,6 +37,10 @@ class ReimbursementLedgerTests(unittest.TestCase):
         self.conn.close()
 
     def _insert_statement(self, workflow_id, version_id, month, pi, iacuc, amount, version_no=1):
+        self._insert_statement_on(self.conn, workflow_id, version_id, month, pi, iacuc, amount, version_no)
+
+    @staticmethod
+    def _insert_statement_on(conn, workflow_id, version_id, month, pi, iacuc, amount, version_no=1):
         workflow = {
             "id": workflow_id,
             "iacuc": iacuc,
@@ -49,20 +58,152 @@ class ReimbursementLedgerTests(unittest.TestCase):
             "generatedAt": "2026-06-30T12:00:00+00:00",
             "statement": {"pi": pi, "iacuc": iacuc, "iacucs": [iacuc], "totalAmount": amount},
         }
-        self.conn.execute(
+        conn.execute(
             """INSERT INTO billing_workflows (id, business_key, iacuc, month, source_type, workflow_status, current_version_id, current_version_no, latest_event_at, payload)
                VALUES (?, ?, ?, ?, 'quantity_sheet', 'statement_generated', ?, ?, '', ?)""",
             (workflow_id, f"{month}:{iacuc}", iacuc, month, version_id, version_no, json.dumps(workflow)),
         )
-        self.conn.execute(
+        conn.execute(
             """INSERT INTO billing_statement_versions (id, workflow_id, version_no, version_status, workflow_status, generated_at, voided_at, created_by, payload)
                VALUES (?, ?, ?, 'active', 'statement_generated', ?, NULL, 'admin', ?)""",
             (version_id, workflow_id, version_no, version["generatedAt"], json.dumps(version)),
         )
-        self.conn.commit()
+        conn.commit()
 
     def _obligations(self):
         return list_obligations(self.conn, ADMIN, {"limit": 20, "offset": 0})["items"]
+
+    def test_claim_cannot_overwrite_another_claims_funding_line(self):
+        payload = {
+            "documentNumber": "owner-claim",
+            "fundingLines": [{"fundBookNo": "F1", "fundingOwner": "负责人", "reimbursementAmount": 80}],
+        }
+        original = save_claim(self.conn, ADMIN, None, payload)["item"]
+        own = save_claim(self.conn, ROOM_ADMIN, None, {**payload, "documentNumber": "own-claim"})["item"]
+        malicious_line = {**original["fundingLines"][0], "reimbursementAmount": 1}
+        for target in (None, own["id"]):
+            with self.subTest(target=target), self.assertRaises(PermissionError):
+                save_claim(self.conn, ROOM_ADMIN, target, {**payload, "fundingLines": [malicious_line]})
+            self.assertEqual(get_claim(self.conn, ADMIN, original["id"])["item"], original)
+            self.assertEqual(get_claim(self.conn, ROOM_ADMIN, own["id"])["item"], own)
+            self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM reimbursement_claims").fetchone()[0], 2)
+
+        with self.assertRaises(PermissionError):
+            upsert_funding_line(self.conn, {**malicious_line, "claimId": own["id"]})
+        self.assertEqual(get_claim(self.conn, ADMIN, original["id"])["item"], original)
+
+    def test_claim_rejects_duplicate_lines_and_allows_own_line_update(self):
+        payload = {
+            "documentNumber": "editable-claim",
+            "fundingLines": [{"fundBookNo": "F1", "fundingOwner": "负责人", "reimbursementAmount": 80}],
+        }
+        claim = save_claim(self.conn, ROOM_ADMIN, None, payload)["item"]
+        line = claim["fundingLines"][0]
+        with self.assertRaisesRegex(ValueError, "不能重复"):
+            save_claim(self.conn, ROOM_ADMIN, claim["id"], {**payload, "fundingLines": [line, line]})
+        updated = save_claim(
+            self.conn,
+            ROOM_ADMIN,
+            claim["id"],
+            {**payload, "fundingLines": [{**line, "reimbursementAmount": 90}]},
+        )["item"]
+        self.assertEqual(updated["totalAmount"], 90)
+
+    def test_rejects_non_finite_or_boolean_money_input(self):
+        for value in ("NaN", "Infinity", "-Infinity", True, None, "invalid"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "报销金额格式无效"):
+                save_claim(
+                    self.conn,
+                    ROOM_ADMIN,
+                    None,
+                    {
+                        "documentNumber": f"invalid-{value}",
+                        "fundingLines": [{"fundBookNo": "F1", "fundingOwner": "负责人", "reimbursementAmount": value}],
+                    },
+                )
+        valid = save_claim(
+            self.conn,
+            ROOM_ADMIN,
+            None,
+            {
+                "documentNumber": "allocation-money",
+                "fundingLines": [{"fundBookNo": "F1", "fundingOwner": "负责人", "reimbursementAmount": 100}],
+            },
+        )["item"]
+        obligation = self._obligations()[0]
+        for value in ("NaN", "Infinity", True, None, "invalid"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "核销金额格式无效"):
+                create_allocation(
+                    self.conn,
+                    ROOM_ADMIN,
+                    {
+                        "claimId": valid["id"],
+                        "fundingLineId": valid["fundingLines"][0]["id"],
+                        "obligationId": obligation["id"],
+                        "amount": value,
+                    },
+                )
+
+    def test_concurrent_confirmations_cannot_over_allocate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite"
+            with sqlite3.connect(path, factory=ClosingConnection) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA foreign_keys=ON")
+                initialize_schema(conn)
+                self._insert_statement_on(conn, "workflow", "version", "2026-06", "张教授", "Z2026001", 100)
+                sync_settlement_obligations(conn)
+                claim = save_claim(
+                    conn,
+                    ADMIN,
+                    None,
+                    {
+                        "documentNumber": "concurrent",
+                        "fundingLines": [{"fundBookNo": "F1", "fundingOwner": "负责人", "reimbursementAmount": 100}],
+                    },
+                )["item"]
+                obligation = list_obligations(conn, ADMIN, {"limit": 20})["items"][0]
+                allocation_ids = [
+                    create_allocation(
+                        conn,
+                        ADMIN,
+                        {
+                            "claimId": claim["id"],
+                            "fundingLineId": claim["fundingLines"][0]["id"],
+                            "obligationId": obligation["id"],
+                            "amount": 60,
+                        },
+                    )["item"]["id"]
+                    for _ in range(2)
+                ]
+
+            barrier = threading.Barrier(2)
+            outcomes = []
+
+            def confirm(allocation_id):
+                try:
+                    with sqlite3.connect(path, timeout=5, factory=ClosingConnection) as conn:
+                        conn.row_factory = sqlite3.Row
+                        conn.execute("PRAGMA foreign_keys=ON")
+                        barrier.wait(timeout=5)
+                        confirm_allocation(conn, ADMIN, allocation_id)
+                    outcomes.append("confirmed")
+                except ValueError:
+                    outcomes.append("rejected")
+
+            threads = [threading.Thread(target=confirm, args=(allocation_id,)) for allocation_id in allocation_ids]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+            self.assertEqual(sorted(outcomes), ["confirmed", "rejected"])
+            self.assertTrue(all(not thread.is_alive() for thread in threads))
+            with sqlite3.connect(path, factory=ClosingConnection) as conn:
+                conn.row_factory = sqlite3.Row
+                refreshed_claim = get_claim(conn, ADMIN, claim["id"])["item"]
+                refreshed_obligation = list_obligations(conn, ADMIN, {"limit": 20})["items"][0]
+                self.assertEqual(refreshed_claim["allocatedAmount"], 60)
+                self.assertEqual(refreshed_obligation["allocatedAmount"], 60)
 
     def test_one_funding_line_can_reconcile_multiple_source_principals(self):
         claim = save_claim(

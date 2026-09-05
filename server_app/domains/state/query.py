@@ -23,8 +23,8 @@ from server_app.shared import clean_text
 def actor_cache_scope(actor):
     if not actor:
         return "anonymous"
-    rooms = ",".join(sorted(clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)))
-    return f"{actor.get('role', '')}:{rooms}"
+    rooms = sorted(clean_text(item) for item in actor.get("roomIds", []) if clean_text(item))
+    return {"role": actor.get("role", ""), "rooms": rooms}
 
 
 def read_bootstrap_state(conn, actor, read_cached_state, scope="summary", room_id=""):

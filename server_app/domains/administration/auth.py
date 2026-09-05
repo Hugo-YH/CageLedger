@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from server_app.config import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME, SESSION_TTL_DAYS
 from server_app.repositories.users import (
+    delete_expired_sessions,
     delete_session_by_token_hash,
     get_active_user_by_username,
     get_user_by_session_token_hash,
@@ -65,6 +66,7 @@ def create_session(conn, user_id):
     token_hash = hash_token(token)
     now = datetime.now(UTC)
     expires_at = now + timedelta(days=SESSION_TTL_DAYS)
+    delete_expired_sessions(conn, now.isoformat())
     insert_session(conn, token_hash, user_id, now.isoformat(), expires_at.isoformat())
     conn.commit()
     return token, expires_at
@@ -82,7 +84,7 @@ def hash_token(token):
 
 
 def user_from_token(conn, token):
-    if not token:
+    if not token or len(token) > 256:
         return None
     return get_user_by_session_token_hash(conn, hash_token(token), now_iso(), sanitize_user)
 

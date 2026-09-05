@@ -1,19 +1,29 @@
 import json
+import logging
+import secrets
 import time
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
 
-from server_app.config import MAX_BODY_BYTES, SLOW_REQUEST_THRESHOLD_MS, frontend_root
+from server_app.config import SLOW_REQUEST_THRESHOLD_MS, frontend_root
 from server_app.http import add_default_headers, send_download
 from server_app.http import send_json as send_json_response
 from server_app.performance import record_request, request_observability
+from server_app.web.origin import is_origin_allowed
+from server_app.web.request_body import RequestBodyError, parse_json_object, read_body
+
+_LOGGER = logging.getLogger("cageledger.http")
 
 
 class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
+    timeout = 30
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(frontend_root()), **kwargs)
 
     def handle_one_request(self):
+        self._request_id = secrets.token_hex(8)
+        self._actor_id = ""
         self._request_started_at = time.perf_counter()
         self._response_status = 0
         self._response_bytes = 0
@@ -21,6 +31,26 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
         self._response_started_at = None
         try:
             super().handle_one_request()
+        except RequestBodyError as exc:
+            self.close_connection = True
+            if not self._response_status:
+                self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+        except Exception as exc:  # noqa: BLE001 - outer HTTP boundary must contain failures.
+            self.close_connection = True
+            path = getattr(self, "path", "").split("?", 1)[0]
+            _LOGGER.exception(
+                "request_failed request_id=%s method=%s route=%s error_type=%s",
+                self._request_id,
+                getattr(self, "command", ""),
+                request_observability(path)[1],
+                type(exc).__name__,
+            )
+            if not self._response_status and path.startswith("/api/"):
+                self.send_json(
+                    {"error": "服务器暂时无法处理请求", "requestId": self._request_id}, HTTPStatus.INTERNAL_SERVER_ERROR
+                )
         finally:
             if getattr(self, "requestline", ""):
                 elapsed_ms = (time.perf_counter() - self._request_started_at) * 1000
@@ -42,11 +72,25 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
                     response_bytes=getattr(self, "_response_bytes", 0),
                     status=getattr(self, "_response_status", 0),
                 )
-                if slow:
-                    method = getattr(self, "command", "")
+                if path.startswith("/api/") or slow:
                     print(
-                        f"[slow-request] {method} {route} total={elapsed_ms:.1f}ms app={application_ms:.1f}ms "
-                        f"kind={category} status={self._response_status or '-'} bytes={self._response_bytes or 0}",
+                        json.dumps(
+                            {
+                                "event": "http_request",
+                                "requestId": self._request_id,
+                                "method": getattr(self, "command", ""),
+                                "route": route,
+                                "status": self._response_status or 0,
+                                "durationMs": round(elapsed_ms, 1),
+                                "applicationMs": round(application_ms, 1),
+                                "responseBytes": self._response_bytes or 0,
+                                "actorId": self._actor_id,
+                                "category": category,
+                                "slow": slow,
+                            },
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
                         flush=True,
                     )
 
@@ -72,41 +116,34 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self):
+        if not self.require_safe_origin():
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    def require_safe_origin(self):
+        if is_origin_allowed(self.headers):
+            return True
+        self.send_json({"error": "请求来源不受信任"}, HTTPStatus.FORBIDDEN)
+        return False
+
+    def log_message(self, _format, *_args):
+        """Access logging is emitted once from handle_one_request without query strings."""
+
     def read_json_body(self):
-        raw = self.read_raw_body()
-        try:
-            return json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ValueError("Invalid JSON body") from exc
+        return parse_json_object(self.read_raw_body())
 
     def read_raw_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0:
-            raise ValueError("Missing request body")
-        if length > MAX_BODY_BYTES:
-            raise ValueError("Request body is too large")
-        return self.rfile.read(length)
+        return read_body(self.headers, self.rfile)
 
     def read_optional_json_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0:
-            return {}
-        if length > MAX_BODY_BYTES:
-            raise ValueError("Request body is too large")
-        raw = self.rfile.read(length)
-        try:
-            return json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ValueError("Invalid JSON body") from exc
+        raw = read_body(self.headers, self.rfile, optional=True)
+        return parse_json_object(raw) if raw else {}
 
-    def send_json(self, payload, status=HTTPStatus.OK):
-        send_json_response(self, payload, status)
+    def send_json(self, payload, status=HTTPStatus.OK, extra_headers=None):
+        send_json_response(self, payload, status, extra_headers)
 
     def send_download(self, body, filename, content_type, status=HTTPStatus.OK):
         send_download(self, body, filename, content_type, status)

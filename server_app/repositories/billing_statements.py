@@ -1,6 +1,6 @@
 import json
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
 
 from .payload import dump_json
 
@@ -100,8 +100,8 @@ def list_current_billing_statements(conn):
 
 def get_current_billing_statement(conn, statement_id):
     key = cache_key("billing_statements::current_item", id=statement_id)
-    cached = cache_get(key)
-    if cached is not None:
+    cached = cache_get(key, CACHE_MISS)
+    if cached is not CACHE_MISS:
         return cached
     row = conn.execute(
         """

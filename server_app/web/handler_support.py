@@ -60,6 +60,7 @@ class HandlerSupportMixin:
         if not user:
             self.send_json({"error": "请先登录"}, HTTPStatus.UNAUTHORIZED)
             return None
+        self._actor_id = clean_text(user.get("id"))
         return user
 
     def session_token(self):

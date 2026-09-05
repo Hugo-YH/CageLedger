@@ -91,6 +91,10 @@ def delete_session_by_token_hash(conn, token_hash):
     conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
 
 
+def delete_expired_sessions(conn, now_iso):
+    conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso,))
+
+
 def get_user_by_session_token_hash(conn, token_hash, now_iso, sanitize_user):
     row = conn.execute(
         """

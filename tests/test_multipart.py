@@ -4,6 +4,31 @@ from server_app.web.multipart import parse_multipart_upload
 
 
 class MultipartUploadTests(unittest.TestCase):
+    def test_preserves_trailing_newlines_and_boundary_text_inside_file(self):
+        for body in (b"", b"report\r\n\n\r", b"prefix--boundary-suffix\r\n", b"\x00\xff\r\n"):
+            with self.subTest(body=body):
+                raw = (
+                    b'--boundary\r\nContent-Disposition: form-data; name="file"; filename="report.csv"\r\n\r\n'
+                    + body
+                    + b"\r\n--boundary--\r\n"
+                )
+                self.assertEqual(parse_multipart_upload("multipart/form-data; boundary=boundary", raw)[1], body)
+
+    def test_rejects_truncated_upload(self):
+        raw = b'--boundary\r\nContent-Disposition: form-data; name="file"\r\n\r\nincomplete'
+        with self.assertRaisesRegex(ValueError, "格式不完整"):
+            parse_multipart_upload("multipart/form-data; boundary=boundary", raw)
+
+    def test_rejects_invalid_boundary_and_header_injection(self):
+        for suffix in ('boundary=""', "boundary=" + "x" * 71, "boundary=b\r\nX-Test: injected"):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                parse_multipart_upload("multipart/form-data; " + suffix, b"")
+
+    def test_rejects_duplicate_file_fields(self):
+        part = b'--boundary\r\nContent-Disposition: form-data; name="file"\r\n\r\ncontent\r\n'
+        with self.assertRaisesRegex(ValueError, "只能上传一个"):
+            parse_multipart_upload("multipart/form-data; boundary=boundary", part * 2 + b"--boundary--\r\n")
+
     def test_reads_file_name_and_preserves_binary_content(self):
         boundary = "CageLedgerBoundary"
         file_body = b"\x00report\r\nbytes\xff"

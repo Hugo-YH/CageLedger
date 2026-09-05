@@ -1,6 +1,30 @@
 import os
 from pathlib import Path
 
+
+def _env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _env_float(name, default, minimum, maximum):
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST_PATH = ROOT / "web-dist"
 _configured_db_path = os.environ.get("CAGELEDGER_DB", "").strip()
@@ -9,8 +33,8 @@ DATA_ROOT = Path(
 )
 DB_PATH = Path(_configured_db_path or DATA_ROOT / "database" / "cageledger.sqlite")
 PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DATA_ROOT / "cache" / "pdf"))
-PDF_CACHE_MAX_BYTES = int(os.environ.get("CAGELEDGER_PDF_CACHE_MAX_BYTES", str(512 * 1024 * 1024)))
-PDF_CACHE_TTL_SECONDS = int(os.environ.get("CAGELEDGER_PDF_CACHE_TTL_SECONDS", str(30 * 24 * 60 * 60)))
+PDF_CACHE_MAX_BYTES = _env_int("CAGELEDGER_PDF_CACHE_MAX_BYTES", 512 * 1024 * 1024, 1024 * 1024, 10 * 1024**3)
+PDF_CACHE_TTL_SECONDS = _env_int("CAGELEDGER_PDF_CACHE_TTL_SECONDS", 30 * 24 * 60 * 60, 60, 365 * 24 * 60 * 60)
 ANIMAL_INSPECTION_ATTACHMENTS_PATH = Path(
     os.environ.get(
         "CAGELEDGER_ANIMAL_INSPECTION_ATTACHMENTS", DATA_ROOT / "files" / "animal-inspections" / "attachments"
@@ -28,26 +52,26 @@ ANIMAL_INSPECTION_CATALOG_PATH = ROOT / "server_app" / "resources" / "animal_ins
 IACUC_INDEX_PATH = Path(os.environ.get("CAGELEDGER_IACUC_INDEX", DATA_ROOT / "indexes" / "iacuc" / "index.json"))
 LEGACY_IACUC_INDEX_PATH = ROOT / "src" / "iacuc-data.local.json"
 HOST = os.environ.get("CAGELEDGER_HOST", "0.0.0.0")
-PORT = int(os.environ.get("CAGELEDGER_PORT", "5173"))
+PORT = _env_int("CAGELEDGER_PORT", 5173, 1, 65535)
 # File uploads reserve a small multipart envelope beyond the 10 MiB per-image limit.
 # Multipart endpoints apply their own file-type and size limits. The largest current
 # upload is a 30 MiB reimbursement attachment plus its multipart envelope.
 MAX_BODY_BYTES = 32 * 1024 * 1024
 SESSION_COOKIE = "cageledger_session"
-SESSION_TTL_DAYS = 14
-SLOW_REQUEST_THRESHOLD_MS = float(os.environ.get("CAGELEDGER_SLOW_REQUEST_MS", "500"))
-SLOW_DATABASE_THRESHOLD_MS = float(os.environ.get("CAGELEDGER_SLOW_DATABASE_MS", "100"))
-PERFORMANCE_HISTORY_ENABLED = os.environ.get("CAGELEDGER_PERFORMANCE_HISTORY_ENABLED", "true").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-PERFORMANCE_HISTORY_INTERVAL_SECONDS = max(
-    60, int(os.environ.get("CAGELEDGER_PERFORMANCE_HISTORY_INTERVAL_SECONDS", "300"))
-)
-PERFORMANCE_HISTORY_RETENTION_DAYS = max(
-    30, int(os.environ.get("CAGELEDGER_PERFORMANCE_HISTORY_RETENTION_DAYS", "1095"))
+SESSION_TTL_DAYS = _env_int("CAGELEDGER_SESSION_TTL_DAYS", 14, 1, 365)
+SESSION_COOKIE_SECURE = _env_bool("CAGELEDGER_COOKIE_SECURE")
+LOGIN_FAILURE_LIMIT = _env_int("CAGELEDGER_LOGIN_FAILURE_LIMIT", 8, 3, 100)
+LOGIN_IP_FAILURE_LIMIT = _env_int("CAGELEDGER_LOGIN_IP_FAILURE_LIMIT", 40, 5, 1000)
+LOGIN_FAILURE_WINDOW_SECONDS = _env_int("CAGELEDGER_LOGIN_FAILURE_WINDOW_SECONDS", 300, 30, 3600)
+SLOW_REQUEST_THRESHOLD_MS = _env_float("CAGELEDGER_SLOW_REQUEST_MS", 500, 1, 600_000)
+SLOW_DATABASE_THRESHOLD_MS = _env_float("CAGELEDGER_SLOW_DATABASE_MS", 100, 1, 600_000)
+PERFORMANCE_HISTORY_ENABLED = _env_bool("CAGELEDGER_PERFORMANCE_HISTORY_ENABLED", True)
+PERFORMANCE_HISTORY_INTERVAL_SECONDS = _env_int("CAGELEDGER_PERFORMANCE_HISTORY_INTERVAL_SECONDS", 300, 60, 86400)
+PERFORMANCE_HISTORY_RETENTION_DAYS = _env_int("CAGELEDGER_PERFORMANCE_HISTORY_RETENTION_DAYS", 1095, 30, 3650)
+CORS_ALLOWED_ORIGINS = frozenset(
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("CAGELEDGER_CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
 )
 
 
@@ -79,13 +103,8 @@ CAGELEDGER_REPOSITORY_URL = os.environ.get(
 ).strip()
 CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
 CAGELEDGER_GITEA_TOKEN = os.environ.get("CAGELEDGER_GITEA_TOKEN", "").strip()
-CAGELEDGER_UPDATE_CHECK_ENABLED = os.environ.get("CAGELEDGER_UPDATE_CHECK_ENABLED", "false").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+CAGELEDGER_UPDATE_CHECK_ENABLED = _env_bool("CAGELEDGER_UPDATE_CHECK_ENABLED")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_API_URL = os.environ.get("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions").strip()
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat").strip()
-DEEPSEEK_TIMEOUT_SECONDS = int(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "30"))
+DEEPSEEK_TIMEOUT_SECONDS = _env_int("DEEPSEEK_TIMEOUT_SECONDS", 30, 1, 300)

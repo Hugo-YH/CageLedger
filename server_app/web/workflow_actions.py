@@ -15,6 +15,7 @@ from server_app.cache import (
 from server_app.config import (
     ANIMAL_INSPECTION_IMAGES_PATH,
     SESSION_COOKIE,
+    SESSION_COOKIE_SECURE,
 )
 from server_app.db import connect_db
 from server_app.domains.administration import (
@@ -81,11 +82,17 @@ from server_app.services.reimbursement import (
 )
 from server_app.shared import clean_text, now_iso
 from server_app.shared.concurrency import StaleWriteError
+from server_app.web.login_throttle import LOGIN_THROTTLE
 from server_app.web.multipart import parse_multipart_upload
 from server_app.web.pdf_exports import (
     invalidate_all_pdf_cache,
 )
 from server_app.web.ports import app_ports
+
+
+def _session_cookie(value, expires):
+    secure = "; Secure" if SESSION_COOKIE_SECURE else ""
+    return f"{SESSION_COOKIE}={value}; Path=/; HttpOnly; SameSite=Lax; {expires}{secure}"
 
 
 class WorkflowActionsMixin:
@@ -97,11 +104,24 @@ class WorkflowActionsMixin:
             return
         username = str(body.get("username", "")).strip()
         password = str(body.get("password", ""))
+        if len(username) > 128 or len(password) > 1024:
+            self.send_json({"error": "用户名或密码错误"}, HTTPStatus.UNAUTHORIZED)
+            return
+        client_ip = self.client_address[0] if self.client_address else ""
+        if retry_after := LOGIN_THROTTLE.retry_after(client_ip, username):
+            self.send_json(
+                {"error": "登录失败次数过多，请稍后重试"},
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"Retry-After": str(retry_after)},
+            )
+            return
         with connect_db() as conn:
             user = authenticate(conn, username, password)
             if not user:
+                LOGIN_THROTTLE.record_failure(client_ip, username)
                 self.send_json({"error": "用户名或密码错误"}, HTTPStatus.UNAUTHORIZED)
                 return
+            LOGIN_THROTTLE.clear_account(client_ip, username)
             token, expires_at = create_session(conn, user["id"])
             now = now_iso()
             event = audit_event(
@@ -116,7 +136,7 @@ class WorkflowActionsMixin:
                 {
                     "username": user["username"],
                     "role": user["role"],
-                    "clientIp": self.client_address[0] if self.client_address else "",
+                    "clientIp": client_ip,
                     "userAgent": self.headers.get("User-Agent", ""),
                 },
             )
@@ -129,7 +149,7 @@ class WorkflowActionsMixin:
         self.send_header("Cache-Control", "no-store")
         self.send_header(
             "Set-Cookie",
-            f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Expires={app_ports().format_http_date(expires_at)}",
+            _session_cookie(token, expires=f"Expires={app_ports().format_http_date(expires_at)}"),
         )
         self.end_headers()
         self.wfile.write(body_bytes)
@@ -142,7 +162,7 @@ class WorkflowActionsMixin:
         body = b'{"ok": true}'
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+        self.send_header("Set-Cookie", _session_cookie("", expires="Max-Age=0"))
         self.end_headers()
         self.wfile.write(body)
 

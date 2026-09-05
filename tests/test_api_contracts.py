@@ -26,6 +26,8 @@ class ApiContractTests(unittest.TestCase):
             "CAGELEDGER_DB": str(Path(cls.temp_dir.name) / "cageledger.sqlite"),
             "CAGELEDGER_IACUC_INDEX": str(Path(cls.temp_dir.name) / "iacuc-index.json"),
             "CAGELEDGER_DEV_ASSETS": "1",
+            "CAGELEDGER_LOGIN_FAILURE_LIMIT": "3",
+            "CAGELEDGER_LOGIN_IP_FAILURE_LIMIT": "100",
         }
         cls.server = subprocess.Popen(
             [sys.executable, "server.py"],
@@ -46,6 +48,8 @@ class ApiContractTests(unittest.TestCase):
             cls.server.wait(timeout=5)
         except subprocess.TimeoutExpired:
             cls.server.kill()
+            cls.server.wait(timeout=5)
+        cls.server.stderr.close()
         cls.temp_dir.cleanup()
 
     def test_health_and_unauthenticated_contracts(self):
@@ -54,10 +58,67 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn("system", payload)
         self.assertIn("Server-Timing", headers)
+        self.assertRegex(headers["X-Request-ID"], r"^[0-9a-f]{16}$")
         with self.assertRaises(urllib.error.HTTPError) as context:
             request_json(self.base_url, "/api/users")
         self.assertEqual(context.exception.code, 401)
         self.assertEqual(json.load(context.exception), {"error": "请先登录"})
+
+    def test_login_invalid_body_returns_json_error(self):
+        for raw in (b"null", b"[]", b"\xff", b"{"):
+            request = urllib.request.Request(
+                self.base_url + "/api/auth/login", data=raw, headers={"Content-Type": "application/json"}
+            )
+            with self.subTest(raw=raw), self.assertRaises(urllib.error.HTTPError) as context:
+                urllib.request.urlopen(request, timeout=5)
+            with context.exception as response:
+                self.assertEqual(response.code, 400)
+                self.assertIsInstance(json.load(response)["error"], str)
+
+    def test_write_requests_enforce_origin(self):
+        request = urllib.request.Request(
+            self.base_url + "/api/auth/login",
+            data=b'{"username":"admin","password":"admin123"}',
+            headers={"Content-Type": "application/json", "Origin": "https://evil.example"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            urllib.request.urlopen(request, timeout=5)
+        with context.exception as response:
+            self.assertEqual(response.code, 403)
+            self.assertEqual(json.load(response), {"error": "请求来源不受信任"})
+
+        request = urllib.request.Request(
+            self.base_url + "/api/auth/login",
+            data=b'{"username":"admin","password":"admin123"}',
+            headers={"Content-Type": "application/json", "Origin": self.base_url},
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers["Access-Control-Allow-Origin"], self.base_url)
+            self.assertEqual(response.headers["Access-Control-Allow-Credentials"], "true")
+
+    def test_login_failures_are_rate_limited(self):
+        for _ in range(3):
+            with self.assertRaises(urllib.error.HTTPError) as context:
+                request_json(
+                    self.base_url,
+                    "/api/auth/login",
+                    method="POST",
+                    body={"username": "rate-limit-probe", "password": "wrong"},
+                )
+            self.assertEqual(context.exception.code, 401)
+            context.exception.close()
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/api/auth/login",
+                method="POST",
+                body={"username": "rate-limit-probe", "password": "wrong"},
+            )
+        with context.exception as response:
+            self.assertEqual(response.code, 429)
+            self.assertGreaterEqual(int(response.headers["Retry-After"]), 1)
+            self.assertEqual(json.load(response), {"error": "登录失败次数过多，请稍后重试"})
 
     def test_authenticated_list_shapes(self):
         status, login, _ = request_json(
@@ -90,6 +151,46 @@ class ApiContractTests(unittest.TestCase):
                 response_status, payload, _ = request_json(self.base_url, path, opener=self.opener)
                 self.assertEqual(response_status, 200)
                 self.assertTrue(keys.issubset(payload.keys()))
+
+    def test_claim_api_rejects_cross_claim_funding_line(self):
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.opener,
+        )
+        endpoint = "/api/reimbursement-ledger/claims"
+        body = {
+            "documentNumber": "ownership-api-test",
+            "fundingLines": [{"fundBookNo": "F1", "fundingOwner": "测试负责人", "reimbursementAmount": 80}],
+        }
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                endpoint,
+                method="POST",
+                body={**body, "fundingLines": [{**body["fundingLines"][0], "reimbursementAmount": "NaN"}]},
+                opener=self.opener,
+            )
+        with context.exception as response:
+            self.assertEqual(response.code, 400)
+            self.assertEqual(json.load(response), {"error": "报销金额格式无效"})
+        _, created, _ = request_json(self.base_url, endpoint, method="POST", body=body, opener=self.opener)
+        original = created["item"]
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                endpoint,
+                method="POST",
+                opener=self.opener,
+                body={**body, "fundingLines": [{**original["fundingLines"][0], "reimbursementAmount": 1}]},
+            )
+        with context.exception as response:
+            self.assertEqual(response.code, 403)
+            self.assertEqual(json.load(response), {"error": "经费明细不属于当前报销单"})
+        _, detail, _ = request_json(self.base_url, endpoint + "/" + original["id"], opener=self.opener)
+        self.assertEqual(detail["item"], original)
 
     def test_monthly_billing_summary_requires_available_quantity_sheets(self):
         request_json(

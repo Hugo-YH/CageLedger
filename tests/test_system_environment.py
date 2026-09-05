@@ -105,6 +105,8 @@ class SystemEnvironmentApiTests(unittest.TestCase):
             cls.server.wait(timeout=5)
         except subprocess.TimeoutExpired:
             cls.server.kill()
+            cls.server.wait(timeout=5)
+        cls.server.stderr.close()
         cls.temp_dir.cleanup()
 
     def test_environment_requires_login(self):

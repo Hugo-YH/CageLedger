@@ -1,6 +1,6 @@
 import json
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
 
 QUANTITY_SHEET_LIST_COLUMNS = {
     "month": {"expr": "month", "order": "month"},
@@ -204,8 +204,8 @@ def quantity_sheet_list_item(sheet):
 
 def get_quantity_sheet(conn, sheet_id):
     key = cache_key("quantity_sheets::detail", id=sheet_id)
-    cached = cache_get(key)
-    if cached is not None:
+    cached = cache_get(key, CACHE_MISS)
+    if cached is not CACHE_MISS:
         return cached
     row = conn.execute("SELECT payload FROM quantity_sheets WHERE id = ?", (sheet_id,)).fetchone()
     return cache_set(key, json.loads(row["payload"]) if row else None)

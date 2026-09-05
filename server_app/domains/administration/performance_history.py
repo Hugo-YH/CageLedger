@@ -17,6 +17,7 @@ from server_app.config import (
 )
 from server_app.repositories.system_performance import delete_expired_snapshots, insert_snapshot, list_snapshots
 from server_app.shared import new_id, now_iso
+from server_app.shared.sqlite import ClosingConnection
 
 _LOGGER = logging.getLogger(__name__)
 _PROCESS_STARTED_AT = now_iso()
@@ -106,9 +107,13 @@ def _counter_interval(current, previous, section, *keys):
 
 
 def _connect_history_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=100")
+    conn = sqlite3.connect(DB_PATH, factory=ClosingConnection)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=100")
+    except BaseException:
+        conn.close()
+        raise
     return conn
 
 

@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+from contextlib import closing
 
 from server_app.persistence import SchemaRegistry, SchemaStep
 from server_app.web import JsonResponse, Router
@@ -14,7 +15,7 @@ class SchemaRegistryTests(unittest.TestCase):
                 SchemaStep("indexes", lambda conn: events.append("indexes")),
             ]
         )
-        with sqlite3.connect(":memory:") as conn:
+        with closing(sqlite3.connect(":memory:")) as conn:
             registry.apply(conn)
         self.assertEqual(events, ["base", "indexes"])
 

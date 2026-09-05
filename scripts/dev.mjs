@@ -10,6 +10,12 @@ const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(j
 const apiPort = process.env.CAGELEDGER_DEV_API_PORT || "5174";
 const appPort = process.env.CAGELEDGER_DEV_PORT || "5173";
 const docsPort = process.env.CAGELEDGER_DOCS_PORT || "5175";
+const devBrowserOrigins = [`http://localhost:${appPort}`, `http://127.0.0.1:${appPort}`];
+const configuredCorsOrigins = (process.env.CAGELEDGER_CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const corsAllowedOrigins = [...new Set([...configuredCorsOrigins, ...devBrowserOrigins])].join(",");
 
 function loadDotEnv(root) {
   const path = resolve(root, ".env");
@@ -54,6 +60,10 @@ process.on("SIGTERM", () => shutdown(0));
 launch(resolveProjectPython(), ["server.py"], {
   CAGELEDGER_PORT: apiPort,
   CAGELEDGER_DEV_ASSETS: "1",
+  // In development the browser talks to Vite while Vite proxies /api to Python.
+  // Keep the production default same-origin-only and explicitly allow only the
+  // two browser-facing loopback origins for this local proxy instance.
+  CAGELEDGER_CORS_ALLOWED_ORIGINS: corsAllowedOrigins,
   ...(ephemeralDir ? { CAGELEDGER_DB: join(ephemeralDir, "cageledger.sqlite") } : {}),
 });
 launch(process.platform === "win32" ? "npm.cmd" : "npm", [

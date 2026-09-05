@@ -1,4 +1,5 @@
 import json
+import math
 
 from server_app.shared import now_iso
 
@@ -232,15 +233,30 @@ def upsert_claim(conn, item):
     )
 
 
+def validate_funding_line_ownership(conn, lines, claim_id):
+    ids = [line["id"] for line in lines if line["id"]]
+    if len(ids) != len(set(ids)):
+        raise ValueError("经费明细 ID 不能重复")
+    for offset in range(0, len(ids), 500):
+        batch = ids[offset : offset + 500]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT claim_id FROM reimbursement_claim_funding_lines WHERE id IN ({placeholders})", batch
+        )
+        if any(row["claim_id"] != claim_id for row in rows):
+            raise PermissionError("经费明细不属于当前报销单")
+
+
 def upsert_funding_line(conn, item):
-    conn.execute(
+    cursor = conn.execute(
         """INSERT INTO reimbursement_claim_funding_lines
            (id, claim_id, fund_book_no, funding_owner, reimbursement_amount, allocated_amount, unallocated_amount, sort_order,
             created_at, updated_at, payload)
            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET fund_book_no=excluded.fund_book_no, funding_owner=excluded.funding_owner,
              reimbursement_amount=excluded.reimbursement_amount, sort_order=excluded.sort_order, updated_at=excluded.updated_at,
-             payload=excluded.payload""",
+             payload=excluded.payload
+           WHERE reimbursement_claim_funding_lines.claim_id = excluded.claim_id""",
         (
             item["id"],
             item["claimId"],
@@ -254,6 +270,8 @@ def upsert_funding_line(conn, item):
             dump(item),
         ),
     )
+    if cursor.rowcount != 1:
+        raise PermissionError("经费明细不属于当前报销单")
 
 
 def upsert_allocation(conn, item):
@@ -377,7 +395,8 @@ def claim_has_confirmed_allocations(conn, claim_id):
 
 def money(value):
     try:
-        return round(float(value or 0), 2)
+        number = float(value or 0)
+        return round(number, 2) if math.isfinite(number) else 0.0
     except (TypeError, ValueError):
         return 0.0
 

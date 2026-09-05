@@ -46,6 +46,8 @@ from server_app.web.router_registry import API_ROUTER
 
 class WriteRoutesMixin:
     def do_POST(self):
+        if not self.require_safe_origin():
+            return
         path = urlparse(self.path).path
         if routed := API_ROUTER.dispatch("POST", path, self):
             self.send_json(routed.payload, routed.status)
@@ -252,6 +254,8 @@ class WriteRoutesMixin:
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PUT(self):
+        if not self.require_safe_origin():
+            return
         path = urlparse(self.path).path
         if path == "/api/animal-inspection-catalog/draft":
             self.handle_animal_inspection_catalog_draft_save()
@@ -326,6 +330,8 @@ class WriteRoutesMixin:
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self):
+        if not self.require_safe_origin():
+            return
         path = urlparse(self.path).path
         user_id = self.user_route(path)
         if user_id:
