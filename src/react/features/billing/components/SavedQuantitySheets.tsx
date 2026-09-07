@@ -73,7 +73,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       title: (
         <Checkbox
           aria-label="全选当前筛选结果统计表"
-          disabled={selectingAll || !total}
+          disabled={list.isFetching || selectingAll || !total}
           checked={total > 0 && allFilteredSelected}
           onChange={() => void toggleAllFiltered()}
         />
@@ -82,6 +82,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         <Checkbox
           aria-label={`选择 ${item.iacuc}`}
           checked={selected.includes(item.id)}
+          disabled={list.isFetching}
           onChange={(event) => {
             setAllFilteredSelected(false);
             setSelected((current) =>
@@ -145,11 +146,13 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       align: "right",
       render: (_, item) => (
         <Space size={4} className="table-actions">
-          <Button type="primary" onClick={() => setViewId(item.id)}>
+          <Button disabled={list.isFetching} type="primary" onClick={() => setViewId(item.id)}>
             预览
           </Button>
-          <Button onClick={() => setEditId(item.id)}>编辑</Button>
-          <Button danger onClick={() => setDeleteId(item.id)}>
+          <Button disabled={list.isFetching} onClick={() => setEditId(item.id)}>
+            编辑
+          </Button>
+          <Button danger disabled={list.isFetching} onClick={() => setDeleteId(item.id)}>
             删除
           </Button>
         </Space>
@@ -197,14 +200,14 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         <div className="workspace-toolbar-actions">
           <Space className="workspace-toolbar-action-group">
             <ActionButton
-              disabled={!selected.length || selectingAll || printPending}
+              disabled={!selected.length || list.isFetching || selectingAll || printPending}
               loading={printPending}
               onClick={() => void printSelected()}
             >
               {printPending ? "正在准备打印…" : "打印数量统计表"}
             </ActionButton>
             <ActionButton
-              disabled={!selected.length || pdfExport.isExporting || selectingAll}
+              disabled={!selected.length || list.isFetching || pdfExport.isExporting || selectingAll}
               loading={pdfExport.isExporting}
               tone="primary"
               onClick={() => void exportSelected()}
@@ -243,13 +246,13 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         data-ui="data-table"
         role="region"
         tabIndex={0}
+        aria-busy={list.isFetching}
         aria-label="已保存数量统计表"
       >
         <DataTable
           className="quantity-saved-table"
           columns={columns}
           dataSource={items}
-          loading={list.isFetching}
           pagination={false}
           resizeKey="quantity-saved"
           rowKey="id"

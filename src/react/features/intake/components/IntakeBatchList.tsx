@@ -71,7 +71,7 @@ export function IntakeBatchList({
         <Checkbox
           aria-label="全选筛选结果"
           checked={total > 0 && allFilteredSelected}
-          disabled={selectingAll || !total}
+          disabled={loading || selectingAll || !total}
           onChange={onToggleAll}
         />
       ),
@@ -79,6 +79,7 @@ export function IntakeBatchList({
         <Checkbox
           aria-label={`选择 ${item.batchNo}`}
           checked={selectedItems.some((selectedItem) => selectedItem.id === item.id)}
+          disabled={loading}
           onChange={(event) => onToggleItem(item, event.target.checked)}
         />
       ),
@@ -130,10 +131,10 @@ export function IntakeBatchList({
       fixed: "right",
       render: (_, item) => (
         <Space className="table-actions" size={4}>
-          <Button type="primary" onClick={() => onEdit(item)}>
+          <Button disabled={loading} type="primary" onClick={() => onEdit(item)}>
             编辑
           </Button>
-          <Button danger onClick={() => onDelete(item)}>
+          <Button danger disabled={loading} onClick={() => onDelete(item)}>
             删除
           </Button>
         </Space>
@@ -171,7 +172,7 @@ export function IntakeBatchList({
                 <span className="intake-print-button-wrap" title={printDisabledReason}>
                   <Button
                     aria-describedby={printDisabledReason ? "intake-print-disabled-reason" : undefined}
-                    disabled={Boolean(printDisabledReason)}
+                    disabled={loading || Boolean(printDisabledReason)}
                     type="primary"
                     onClick={() => onPrint(selectedItems)}
                   >
@@ -179,14 +180,14 @@ export function IntakeBatchList({
                   </Button>
                 </span>
                 <Button
-                  disabled={markingPrinted || markingReceived}
+                  disabled={loading || markingPrinted || markingReceived}
                   loading={markingPrinted}
                   onClick={() => onMarkPrinted(selectedItems)}
                 >
                   标记已打印
                 </Button>
                 <Button
-                  disabled={markingPrinted || markingReceived}
+                  disabled={loading || markingPrinted || markingReceived}
                   loading={markingReceived}
                   onClick={() => onReceive(selectedItems)}
                 >
@@ -199,12 +200,11 @@ export function IntakeBatchList({
           type="info"
         />
       ) : null}
-      <div aria-label="待接收批次列表" className="ant-table-region" role="region" tabIndex={0}>
+      <div aria-busy={loading} aria-label="待接收批次列表" className="ant-table-region" role="region" tabIndex={0}>
         <DataTable
           className="intake-batch-table"
           columns={columns}
           dataSource={items}
-          loading={loading}
           pagination={false}
           resizeKey="intake-batch"
           rowKey="id"

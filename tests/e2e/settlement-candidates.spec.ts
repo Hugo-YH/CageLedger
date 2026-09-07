@@ -20,6 +20,38 @@ const sheetIds = [
   "sheet-e2e-settlement-7",
 ];
 
+test("settlement filters remain clickable while the list refreshes", async ({ page }) => {
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await openBillingNavigation(page);
+  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+
+  let releaseRefresh: (() => void) | undefined;
+  const refreshBlocked = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let requestBlocked: (() => void) | undefined;
+  const requestStarted = new Promise<void>((resolve) => {
+    requestBlocked = resolve;
+  });
+  await page.route("**/api/billing-settlement-candidates?**", async (route) => {
+    requestBlocked?.();
+    await refreshBlocked;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "结算月份，点击切换排序" }).click();
+  await requestStarted;
+  await expect(page.getByRole("region", { name: "结算管理列表" })).toHaveAttribute("aria-busy", "true");
+  await page.getByRole("button", { name: "筛选项目负责人姓名" }).click();
+  await expect(page.getByPlaceholder("搜索当前列")).toBeVisible();
+
+  releaseRefresh?.();
+});
+
 test.afterEach(async ({ page }) => {
   for (const id of sheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
 });

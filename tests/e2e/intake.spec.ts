@@ -3,10 +3,42 @@ import {
   expect,
   openBillingNavigation,
   openIntakeEntry,
+  openNavigationEntry,
   openQuantityEntry,
   openSettingsNavigation,
   test,
 } from "./fixtures";
+
+test("intake filters remain clickable while the list refreshes", async ({ page }) => {
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await openNavigationEntry(page, "笼卡管理", "待接收批次");
+  await expect(page.getByRole("region", { name: "待接收批次列表" })).toBeVisible();
+
+  let releaseRefresh: (() => void) | undefined;
+  const refreshBlocked = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let requestBlocked: (() => void) | undefined;
+  const requestStarted = new Promise<void>((resolve) => {
+    requestBlocked = resolve;
+  });
+  await page.route("**/api/intake-batches?**", async (route) => {
+    requestBlocked?.();
+    await refreshBlocked;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "状态，点击切换排序" }).click();
+  await requestStarted;
+  await expect(page.getByRole("region", { name: "待接收批次列表" })).toHaveAttribute("aria-busy", "true");
+  await page.getByRole("button", { name: "筛选批次号" }).click();
+  await expect(page.getByPlaceholder("搜索当前列")).toBeVisible();
+
+  releaseRefresh?.();
+});
 
 test("intake workspace remains operable at the mobile breakpoint", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 });

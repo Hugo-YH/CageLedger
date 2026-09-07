@@ -9,6 +9,37 @@ import {
 
 const bulkSheetIds = Array.from({ length: 7 }, (_, index) => `sheet-e2e-quantity-bulk-${index + 1}`);
 
+test("saved quantity filters remain clickable while the list refreshes", async ({ page }) => {
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await openSavedQuantitySheets(page);
+  await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
+
+  let releaseRefresh: (() => void) | undefined;
+  const refreshBlocked = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let requestBlocked: (() => void) | undefined;
+  const requestStarted = new Promise<void>((resolve) => {
+    requestBlocked = resolve;
+  });
+  await page.route("**/api/quantity-sheets?**", async (route) => {
+    requestBlocked?.();
+    await refreshBlocked;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "月份，点击切换排序" }).click();
+  await requestStarted;
+  await expect(page.getByRole("region", { name: "已保存数量统计表" })).toHaveAttribute("aria-busy", "true");
+  await page.getByRole("button", { name: "筛选IACUC" }).click();
+  await expect(page.getByPlaceholder("搜索当前列")).toBeVisible();
+
+  releaseRefresh?.();
+});
+
 test.afterEach(async ({ page }) => {
   for (const id of bulkSheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
 });

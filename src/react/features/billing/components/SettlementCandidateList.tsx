@@ -331,11 +331,16 @@ export function SettlementCandidateList({
         onInitiate={() => setBatchConfirmOpen(true)}
         onWithdraw={() => setBatchWithdrawOpen(true)}
       />
-      <div className="ant-table-region settlement-candidate-list" role="region" tabIndex={0} aria-label="结算管理列表">
+      <div
+        className="ant-table-region settlement-candidate-list"
+        role="region"
+        tabIndex={0}
+        aria-busy={list.isFetching}
+        aria-label="结算管理列表"
+      >
         <DataTable
           columns={columns}
           dataSource={items}
-          loading={list.isFetching}
           pagination={false}
           resizeKey="settlement-candidates"
           rowKey="id"
