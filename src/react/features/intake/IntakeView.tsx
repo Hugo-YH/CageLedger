@@ -66,7 +66,7 @@ export function IntakeView({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [aiParsing, setAiParsing] = useState(false);
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "intakeDate", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);
   const [selectingAll, setSelectingAll] = useState(false);

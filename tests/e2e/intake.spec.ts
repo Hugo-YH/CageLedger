@@ -14,7 +14,14 @@ test("intake filters remain clickable while the list refreshes", async ({ page }
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
+  const initialListRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/intake-batches";
+  });
   await openNavigationEntry(page, "笼卡管理", "待接收批次");
+  const initialListParams = new URL((await initialListRequest).url()).searchParams;
+  expect(initialListParams.get("sortKey")).toBe("intakeDate");
+  expect(initialListParams.get("sortDir")).toBe("desc");
   await expect(page.getByRole("region", { name: "待接收批次列表" })).toBeVisible();
 
   let releaseRefresh: (() => void) | undefined;

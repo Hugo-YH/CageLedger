@@ -23,7 +23,7 @@ ENTITY_ORDER_BY = {
     "placement_tasks": "planned_move_in_date, rowid",
     "billing_rules": "rowid",
     "billing_adjustments": "rowid",
-    "intake_batches": "updated_at DESC, rowid DESC",
+    "intake_batches": "intake_date DESC, updated_at DESC, rowid DESC",
     "experiment_applications": "rowid",
     "billing_statements": "month DESC, iacuc, rowid DESC",
     "billing_statement_lines": "statement_id, line_date, rowid",
