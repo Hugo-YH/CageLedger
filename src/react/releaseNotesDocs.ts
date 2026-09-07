@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.9",
+    build: "200",
+    releasedAt: "2026-09-07",
+    title: "列表刷新交互修复",
+    items: [
+      "修复待接收批次、已保存数量统计表和结算管理列表刷新时，筛选入口无法及时响应的问题",
+      "刷新期间保留列表内容并明确标记忙碌状态，同时停用选择、编辑、删除、打印和导出等可能产生竞态的操作",
+      "增加三组浏览器回归，覆盖刷新中的筛选操作",
+    ],
+  },
+  {
     version: "1.2.8",
     build: "199",
     releasedAt: "2026-09-05",
