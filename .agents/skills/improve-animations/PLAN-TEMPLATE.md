@@ -1,6 +1,6 @@
 # Plan Template
 
-Every plan written by `improve-animations` follows this structure. The executor may be a less capable model with zero context and zero taste — the plan must contain everything, exactly. No references to "the audit above" or "the easing we discussed."
+Use the sections that help the requested plan. Include enough context for implementation, but omit irrelevant sections and do not create a plan for every small fix. Project tokens and verified behavior take precedence over example values.
 
 ```markdown
 # NNN — <Short imperative title>
@@ -16,23 +16,23 @@ Every plan written by `improve-animations` follows this structure. The executor 
 What is wrong, where, and why it matters to how the product feels. Cite every
 location as `path/to/file.tsx:123` and include the current code verbatim:
 
-​```css
+​`css
 /* src/components/dropdown.css:14 — current */
 .dropdown { transition: all 400ms ease-in; }
-​```
+​`
 
 ## Target
 
 The exact end state. Every value spelled out — curves, durations, spring
 configs, media queries. Never "use a nicer easing":
 
-​```css
+​`css
 /* target */
 .dropdown {
   transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out);
   transform-origin: var(--transform-origin);
 }
-​```
+​`
 
 ## Repo conventions to follow
 

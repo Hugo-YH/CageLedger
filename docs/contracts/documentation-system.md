@@ -25,6 +25,10 @@
 | 业务规则和输出              | `src/domain/`、`server_app/services/`、`src/react/print/`、`server_app/pdf/`     |
 | 发布和离线制品              | `scripts/release_local.sh`、`scripts/package_offline*.sh`                        |
 
+## 代理指令
+
+项目代理入口为 `AGENTS.md`，技能与指令维护见 [agent-instructions.md](agent-instructions.md)。开发验证统一维护在 [testing-strategy.md](testing-strategy.md)，其他文档引用该矩阵，不复制平行门禁。
+
 ## 修改规则
 
 1. 新增或调整用户功能时，同步修改对应的指南页面。

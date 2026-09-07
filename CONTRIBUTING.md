@@ -60,16 +60,11 @@ npm run typecheck
 
 `docs/archives/`、`src/vendor/`、`web-dist/`、`dist/` 和 `data/` 保持在批量格式化范围外。
 
-## 测试矩阵
+## 验证
 
-| 改动                   | 最低验证                                  |
-| ---------------------- | ----------------------------------------- |
-| 文档、配置、低风险样式 | `npm run check`、`git diff --check`       |
-| React 交互             | 上述检查和目标页面浏览器验收              |
-| API、权限、缓存、迁移  | 上述检查、`npm run smoke:api`、双角色验证 |
-| 打印和 PDF             | 模板测试、预览、A4 页数与多页定位         |
-| 关键业务链             | `npm run test:e2e`                        |
-| 大列表和查询性能       | `npm run benchmark`                       |
+按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 四档视口、结算双渲染和性能历史要求。纯文档修改在开发中运行文档检查；提交和发布前必须通过完整基础质量检查。
+
+代理指令与 Skills 的维护约定见 [agent-instructions.md](docs/contracts/agent-instructions.md)。
 
 基础质量检查：
 

@@ -1,96 +1,36 @@
 # CageLedger 代理工作规范
 
-本文件面向代码代理，作用范围是仓库根目录及全部子目录。修改代码、文档、部署和发布流程时，先遵守本文件。
+适用于仓库及子目录。保留项目特有边界；具体实现与验证按任务查阅下方契约。
 
-## 1. 当前架构
+## 完成标准与自主执行
 
-- CageLedger 是实验动物笼卡、笼位、数量统计表、饲养费结算和报销台账系统。
-- 前端使用 React 19、TypeScript、Vite、TanStack Query 和 TanStack Virtual。
-- 前端入口是 `index.html`、`src/main.tsx` 和 `src/react/App.tsx`。
-- 后端使用 Python 标准库 HTTP 服务，入口是 `server.py`。
-- 后端分层位于 `server_app/repositories/` 和 `server_app/services/`。
-- 默认存储是 SQLite，运行库位于 `data/database/cageledger.sqlite`。
-- 生产前端构建到 `web-dist/`，Python 服务统一提供页面和 `/api`。
+- 以用户当前目标为范围，完成实现、相关验证和由本次改动造成的问题修复后再交付；用户只要求分析或方案时，交付对应结果。
+- 可自行定位文件、选择常规实现、编辑和运行本地检查，无需在计划或首版实现后等待确认。测试通过后，只有新改动、失败或未解决风险才触发重跑或扩大验证。
+- 只有业务规则变更、缺失的关键输入或未获授权的外部操作才需要澄清。提交、推送、发布和生产数据操作按用户授权范围执行；整理代码不代表授权发布。
+- 只读取当前任务相关的契约和 Skill。小修正不要求全仓扫描、阶段计划、评分或进度遥测。已有任务跟踪仅在确实属于该任务时更新；`docs/archives/` 是历史资料，不恢复为活动任务。
+- 用户要求优先于 Skill 建议。若某条规则导致暂停，指出具体文件、原文和需要用户决定的事项；不把建议自行解释为审批要求。
+- 交付用简洁中文说明改动、验证结果和未验证项；涉及页面时附实际本地地址，未启动时说明。
 
-## 2. 安装、启动与验证
+## 项目入口
 
-- Node.js 版本要求：`>=22.12.0`，使用 `.nvmrc`。
-- Python 版本要求：`3.13`，使用 `.python-version`。
-- 首次安装：`npm ci` 和 `python3 -m pip install -r requirements-dev.txt`。
-- 开发模式：`npm run dev`。
-  - Vite 页面：`http://localhost:5173`
-  - Python API：`http://127.0.0.1:5174`
-  - Vite 将 `/api` 代理到 Python API。
-- 生产构建：`npm run build`。
-- 本地生产运行：`npm start`。
-- 类型检查：`npm run typecheck`。
-- 单元与后端测试：`npm run test`、`python3 -m unittest discover -s tests -p 'test_*.py'`。
-- 基础质量检查：`npm run check`。
-- 完整发布验证：`npm run verify:full`。
-- 浏览器回归：`npm run test:e2e`。
-- API 冒烟：`npm run smoke:api`。
-- 性能基准：`npm run benchmark`。
-- 离线包：`npm run package:offline`。
-- 发布：`npm run release:local -- --version X.Y.Z --push`。
+React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表使用 TanStack Virtual。Python 标准库 HTTP 服务与 SQLite 提供后端，生产页面和 `/api` 由同一服务提供。
 
-页面异常时先检查 `5173` 和 `5174` 的进程归属。修改交互、权限、打印、导出、缓存和加载链路后，使用浏览器验证实际页面。
+| 任务                     | 入口与按需契约                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 首次安装、启动、分支     | [CONTRIBUTING.md](CONTRIBUTING.md)；Node 版本见 `.nvmrc`，Python 见 `.python-version`                                                                                                             |
+| 模块定位、跨层修改       | [module-boundaries.md](docs/contracts/module-boundaries.md)；前端 `src/react/features/`，后端 `server_app/domains/`，`server.py` 为装配及兼容入口                                                 |
+| React 状态、Query、请求  | [frontend-state.md](docs/contracts/frontend-state.md)、[api-contracts.md](docs/contracts/api-contracts.md)；请求在 `src/react/api/`，新类型在 `src/contracts/`                                    |
+| UI、表单、弹窗、布局     | [ui-component-standard.md](docs/contracts/ui-component-standard.md)、[ui-interaction-system.md](docs/contracts/ui-interaction-system.md)、[style-ownership.md](docs/contracts/style-ownership.md) |
+| 颜色、主题               | [ui-color-system.md](docs/contracts/ui-color-system.md)、[antd-design-language.md](docs/contracts/antd-design-language.md)                                                                        |
+| API 写入、权限、迁移     | [write-safety.md](docs/contracts/write-safety.md)、[api-contracts.md](docs/contracts/api-contracts.md)                                                                                            |
+| 测试、浏览器、打印、性能 | [testing-strategy.md](docs/contracts/testing-strategy.md) 中对应任务条目                                                                                                                          |
+| 格式、lint、架构门禁     | [code-quality.md](docs/contracts/code-quality.md)                                                                                                                                                 |
+| 文档或代理指令维护       | [documentation-system.md](docs/contracts/documentation-system.md)、[agent-instructions.md](docs/contracts/agent-instructions.md)                                                                  |
+| 发布                     | [开发规范](wiki/开发规范.md)、[branching.md](docs/contracts/branching.md)、`scripts/release_local.sh`                                                                                             |
 
-## 3. 代码归属
+常用命令：`npm run dev`、`npm run check`、`npm run build`。开发页面 `http://localhost:5173`，API `http://127.0.0.1:5174`；页面异常先确认这两个端口的进程归属。项目 Python 命令通过 `scripts/run_python.mjs` 使用 `.venv`，可由 `CAGELEDGER_PYTHON_BIN` 覆盖。
 
-| 领域         | 主要路径                            | 责任                                             |
-| ------------ | ----------------------------------- | ------------------------------------------------ |
-| 应用装配     | `src/main.tsx`、`src/react/App.tsx` | Provider、会话入口、公开扫码入口                 |
-| 工作区外壳   | `src/react/features/shell/`         | 导航、权限可见性、懒加载页面                     |
-| 业务页面     | `src/react/features/`               | 页面编排、表单状态、用户交互                     |
-| 通用组件     | `src/react/components/`             | 可复用工作区组件和表格组件                       |
-| 服务端状态   | `src/react/api/`                    | typed contracts、请求、Query hooks、查询键和失效 |
-| 本地 UI 状态 | `src/react/state/`                  | 当前页面、导航折叠、界面偏好存储                 |
-| 纯业务函数   | `src/domain/`                       | 日期、笼位、笼卡、数量统计表等纯计算             |
-| 打印与导出   | `src/react/print/`                  | 笼卡、二维码、数量统计表和结算单模板             |
-| 全局样式     | `src/styles.css`                    | 语义变量、布局、组件状态和打印外层样式           |
-| HTTP 入口    | `server.py`                         | 路由、鉴权、参数解析、兼容迁移和响应装配         |
-| 数据访问     | `server_app/repositories/`          | SQLite 查询、分页、结构化列和 payload 兼容       |
-| 业务服务     | `server_app/services/`              | 接收、入驻、转移、结算、报销等事务流程           |
-| 正式文档     | `wiki/`                             | 使用、部署、运维和公开开发说明                   |
-| 工程契约     | `docs/contracts/`                   | 模块边界、状态、API 和 UI 语义规范               |
-| 迁移归档     | `docs/archives/`                    | 已完成项目记录，仅作历史依据                     |
-
-`web-dist/` 是 Vite 构建产物，`dist/` 是离线发布包目录，`data/` 是运行数据目录。常规代码任务不手工编辑这些目录。
-
-## 4. 前端规则
-
-- 页面通过 `src/react/api/` 的 typed hooks 访问服务端数据。
-- 服务端业务数据由 TanStack Query 管理；业务写入成功后失效精确查询键。
-- 本地 UI reducer 只保存导航和显示偏好，不保存笼卡、笼位、统计表和结算数据。
-- 表单草稿优先留在页面组件，频繁输入使用局部 state 或 ref，避免整页查询失效和失焦。
-- 可复用纯计算放入 `src/domain/` 并补 Vitest。
-- 打印模板放入 `src/react/print/`，预览与实际打印共享同一份模板。
-- 页面级功能通过 `React.lazy` 保持按业务域拆包。
-- 通知和确认统一使用站内组件；页面代码不调用浏览器原生 `alert()`、`confirm()`。
-- 颜色使用 `src/styles.css` 的语义变量，规则见 `docs/contracts/ui-color-system.md`。
-- 新增图标优先沿用现有图标系统，保持按钮尺寸、焦点环和语义色一致。
-- UI 组件拥有唯一的布局归属，登记来源为 `src/styles/style-ownership.json`。Shell 写入 `src/styles/shell.css`，通用组件写入 `src/styles/components.css`，业务专属布局写入对应 feature 样式；同一组件不得由多个样式文件定义网格、尺寸或响应式规则。
-- UI 改动前使用 `rg` 检查目标 class、data attribute 和媒体查询的全部定义；改动后合并或删除过期规则，避免通过更高选择器追加覆盖。
-- 响应式布局使用组件专属断点规则。页面级组件不得被全局 `@media` 选择器重置为单列、固定宽度或独立间距。
-- 影响布局、表单、表格、导航、弹窗或浮层的改动必须验证桌面、1180px、760px 和手机横屏；目标组件在每个视口只保留一个有效布局来源。
-- UI 修改前运行 `npm run check:style-ownership` 并检索目标选择器、`data-ui` / `data-feature` 与媒体查询；修改后删除替代规则，记录截图与 computed style 证据。
-- 每次 UI 调整前执行 `npm run check:antd-design`，以本地 `@ant-design/cli design.md` 为设计基线；主色 `#1677ff`、4px 间距、14px 正文、6px 控件圆角、8px 容器圆角、32px 默认控件高度属于强制约束。
-- 修改同组表单控件时，必须在目标页面读取 DatePicker、Select、Input 与只读 Input 的 computed style。默认控件的外框高度统一为 `32px`；紧凑控件为 `24px`；强调控件为 `40px`。同一行控件只使用一个高度档位。
-- 弹窗、Drawer 等 Portal 组件必须检查 `.app-modal-root` 下的实际作用域，确认工作区样式能够覆盖其控件；滚动容器保持单一纵向所有者，表格或网格仅在需要时接管横向滚动。
-- Stylelint、TypeScript 与 CLI 用法检查用于静态门禁；布局结论以浏览器截图、四档视口和 computed style 为准。提交前执行 `npm run check` 与 `git diff --check`。
-
-## 5. 后端规则
-
-- HTTP handler 负责鉴权、输入解析、状态码和响应装配。
-- service 负责跨表事务、业务校验、缓存失效和审计语义。
-- repository 负责 SQL、分页、结构化列、payload 兼容和行级读写。
-- 新写入接口返回前端局部刷新所需的最新对象和受影响对象。
-- 新列表接口使用服务端分页、筛选和稳定排序。
-- SQLite schema 迁移保持幂等，旧库启动后自动补字段、索引和必要回填。
-- 修改缓存、索引、迁移或权限时，交付说明要写明验证路径。
-- `server.py` 仍承担路由和兼容入口；新增业务优先进入现有 service/repository 边界。
-
-## 6. 业务约束
+## 业务边界
 
 - IACUC 是笼卡、占用、数量统计表和结算链路的核心业务键。
 - Animal Record ID 是笼卡实例的持久唯一标识，后续实验、繁殖、取材记录继续沿用该标识。
@@ -104,84 +44,21 @@
 - 房间管理员的设施写权限按授权房间控制；数量统计表跨房间录入、结算导出和发起流程按现行业务授权执行。
 - 涉及结算、权限、转移和状态推进的修改同时验证前端、API、SQLite 和审计日志。
 
-## 7. API 与状态约束
+## 工程与数据边界
 
-- 通用请求入口是 `src/react/api/client.ts`。
-- 可复用响应类型集中在 `src/react/api/contracts.ts`。
-- 查询键集中在 `src/react/api/queryKeys.ts`。
-- 默认查询缓存：`staleTime=15s`、`gcTime=5min`、查询重试一次、窗口聚焦不自动刷新。
-- 列表响应使用 `{ items, page }`，单对象响应优先使用 `{ item }`。
-- 错误响应使用 `{ error: string }`。
-- Cookie Session 由 `/api/auth/*` 管理，401 进入登录态处理。
-- 完整约束见 `docs/contracts/frontend-state.md` 和 `docs/contracts/api-contracts.md`。
+- 页面通过 typed hooks 访问服务端；TanStack Query 管业务数据，UI reducer 只管显示偏好，高频表单草稿留在局部。业务写入精确失效查询键。
+- handler 管鉴权与响应，领域 service 管事务、校验、审计与缓存，repository 管 SQL 和兼容读写。新增业务进入 `server_app/domains/`，不扩大历史兼容层。
+- 不直接修改 SQLite、WAL 和运行时 JSON；不手工编辑 `data/`、`web-dist/`、`dist/`、`node_modules/`。测试使用隔离数据，不能仅凭 localhost 判断数据可丢弃。
+- 不删除旧字段、payload 或兼容迁移，除非任务明确包含迁移方案；schema 迁移保持幂等和旧库回填。
+- UI 使用现有 Ant Design 组件与语义 Token：主色 `#1677ff`、4px 间距、14px 正文、6px 控件圆角、8px 容器圆角、32px 默认控件高度。布局以 `src/styles/style-ownership.json` 登记的唯一来源为准，`src/styles.css` 仅作导入入口。
+- 修改布局、表单、表格、导航、弹窗或浮层，按测试契约保留四档视口与 computed style 证据。通知和确认使用站内组件。
+- 结算汇总表同时检查 `src/react/print/settlement.ts` 与 `server_app/pdf/documents.py`，保留前端和 Python 的等价回归，尤其是跨页汇总。
+- 提交和发布前必须通过 `npm run check`；所有文件修改完成后运行 `git diff --check`。开发中按测试契约选择检查，不要求每次编辑后运行全套。
 
-## 8. 修改与验证要求
+## Skill 与发布边界
 
-- 前端交互：运行 `npm run check`，再验证目标页面。
-- 样式与响应式：先运行 `npm run check:antd-design`，再运行目标 CSS 的 Stylelint、`git diff --check`；保存四档视口的浏览器截图或 Playwright 断言，记录同组控件高度、标签布局、溢出和组件状态。
-- API、权限、缓存或迁移：运行 `npm run check` 和 `npm run smoke:api`，再验证管理员与房间管理员路径。
-- 打印与 PDF：运行模板测试，并检查预览、打印页数、A4 尺寸和多页定位。结算汇总表存在两条渲染链路：前端预览/直接打印使用 `src/react/print/settlement.ts`，服务端 PDF/批量导出使用 `server_app/pdf/documents.py`；修改字段、计算、分页或样式时必须同步检查两端，并分别补 Vitest 与 Python 回归测试，尤其验证跨页汇总一致性。
-- 大列表或性能：运行 `npm run benchmark`，检查分页、虚拟化和查询计划；涉及缓存、索引、SQLite 查询、PDF 渲染、批量操作或首屏加载时，还要以管理员 `/api/system/performance-history` 对比改动前后的同等时间窗口，记录版本、请求/SQLite P95、慢请求和锁错误及结论。性能历史只作趋势与验收证据，不得在请求链路写入，不得记录用户信息、请求参数或 SQL；普通账号不得请求或展示该数据。
-- 关键业务链：根据风险运行 `npm run test:e2e`。
-- 所有文件修改完成后运行 `git diff --check`。
-- 交付说明包含改动、已验证项、未验证项和当前本地地址。
+按实际能力选择技能，不固定串联。Ant API 查询用 `antd`；CageLedger UI 一致性审查用 `antd-ui-audit`；巡检目录草稿、发布或图片维护用 `inspection-catalog-editor`。动画审查、设计方案、选库等专项技能只在对应需求下使用，具体路由见各 Skill 描述。复杂跨模块工作可用 `spec-driven-develop`，普通修改不因关键词触发完整规划流程。
 
-## 9. 发布与 Gitea
+发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。正式上游为 `http://ddns.cellnucle.us:3333/hugo/cageledger`，镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
 
-- 正式上游：`http://ddns.cellnucle.us:3333/hugo/cageledger`。
-- 正式镜像：`ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
-- 正式版本出口：`v*` tag、Gitea Release 和同版本容器镜像。
-- 版本源头：`package.json`。
-- 版本同步：`scripts/set_version.mjs`。
-- 更新记录：`src/react/releaseNotes.ts` 中的 `SYSTEM_RELEASE_NOTES`。
-- 发布入口：`scripts/release_local.sh`。
-- 发布顺序保持 `release notes -> check -> offline package -> commit -> tag -> push`。
-- 系统更新检查以 Gitea 最新 Release 为准。
-- 私有仓库更新检查使用 `CAGELEDGER_UPDATE_CHECK_ENABLED=true` 和只读 `CAGELEDGER_GITEA_TOKEN`。
-- Mac mini 是验证、制品生成、Release 上传和 Wiki 同步的唯一执行端；Gitea 仅托管代码、Wiki、Release 资产和容器镜像。
-
-## 10. 固定事实与禁止事项
-
-- 默认管理员来自环境变量，缺省值为 `admin / admin123`。
-- 默认生产端口是 `5173`。
-- Docker 使用 Node 构建阶段和 Python 运行阶段。
-- 在线部署使用 `docker-compose.yml`，离线源码构建使用 `docker-compose.offline.yml`。
-- 不直接修改 SQLite 文件、WAL 文件和运行时 JSON。
-- 不手工修改 `web-dist/`、`dist/`、`data/` 和 `node_modules/`。
-- 不删除旧字段、旧 payload 和兼容迁移逻辑，除非任务明确包含数据迁移方案。
-- 不改变结算、减免、IACUC 匹配和权限口径，除非用户明确确认业务规则。
-- 不跳过 `npm run check` 执行提交或发布。
-- 不复用旧 tag 修补新版本。
-
-## 11. 文档维护
-
-- 用户流程、部署、配置和公开接口更新到 `wiki/`。
-- 代码边界、状态管理、API 约束和视觉语义更新到 `docs/contracts/`。
-- 已完成迁移资料保留在 `docs/archives/`，后续开发以当前代码和当前契约为准。
-- 文档命令、路径、端口和环境变量需要可以直接执行或定位。
-- 项目文档和业务说明优先使用中文。
-
-## 12. Skill 使用矩阵
-
-| 任务                                 | 必用 Skill                       | 执行重点                                                                                |
-| ------------------------------------ | -------------------------------- | --------------------------------------------------------------------------------------- |
-| 大型功能、迁移、重构、跨模块数据模型 | `spec-driven-develop`            | 先分析和拆解；私有 Gitea 或 `LOCAL_ONLY` 跟踪；完成资料归档到 `docs/archives/`          |
-| React、Query、性能和包体             | `vercel-react-best-practices`    | 采用适用于 Vite 客户端的规则；检查 waterfall、动态导入、重渲染、localStorage 和事件监听 |
-| 页面、组件和视觉交互                 | `frontend-design`                | 延续青绿色、高密度、安静的运营工作台风格                                                |
-| 按钮、表单、弹窗、菜单、Tab 和焦点   | `fixing-accessibility`           | 检查名称、label、键盘流、焦点恢复、ARIA 和对比度                                        |
-| 自动化页面回归                       | `webapp-testing`                 | 仓库内 TypeScript Playwright 测试是权威自动化入口                                       |
-| localhost 快速验收                   | `browser:control-in-app-browser` | 检查页面、控制台、网络和截图                                                            |
-| 打印和 PDF                           | `pdf:pdf`                        | 渲染检查 A4、尺寸、页数和二维码                                                         |
-| CSV、XLSX 和模板                     | `spreadsheets:Spreadsheets`      | 保留表头、公式、格式和导入兼容                                                          |
-| README、Wiki、发布记录和用户文案     | `humanizer-zh`                   | 使用自然、直接、可执行的中文                                                            |
-
-Skill 服从用户要求、业务规则、本文件和 `docs/contracts/`。UI 任务按 `frontend-design -> fixing-accessibility -> vercel-react-best-practices -> webapp-testing` 的顺序实施和验收。
-
-## 13. 工程质量基线
-
-- 新代码满足 S.U.P.E.R：单一职责、单向依赖、显式契约、环境无关和可替换边界。
-- Prettier、ESLint、Stylelint、Markdownlint 和 Ruff 是统一格式与 lint 来源。
-- `npm run check` 是提交和发布前的基础质量检查。
-- `npm run verify:full` 执行基础质量检查、生产构建和完整 Playwright。
-- `npm run release:local -- --version X.Y.Z --push` 在 Mac mini 执行发布验证、离线包上传和 Wiki 同步。
-- 完整规则见 `CONTRIBUTING.md`、`docs/contracts/code-quality.md` 和 `docs/contracts/testing-strategy.md`。
+发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序。Mac mini 是发布验证、制品生成、Release 上传和 Wiki 同步执行端；Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
