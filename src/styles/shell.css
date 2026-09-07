@@ -1333,3 +1333,35 @@ h3 {
   left: 22px;
   top: 76px;
 }
+
+[data-ui="release-announcement"] h3.ant-typography {
+  margin-block: 16px 12px;
+  font-size: 20px;
+}
+
+[data-ui="release-announcement"] .release-announcement-items {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-ui="release-announcement"] .release-announcement-items li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  line-height: 1.65;
+}
+
+[data-ui="release-announcement"] .release-announcement-items li > .anticon {
+  margin-top: 5px;
+  color: var(--ant-color-primary);
+}
+
+[data-ui="release-announcement"] .release-announcement-note.ant-typography {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--app-border);
+}

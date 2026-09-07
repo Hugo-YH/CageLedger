@@ -31,14 +31,16 @@ graph LR
 
 ### 会话和公开查询
 
-| 方法   | 路径                                     | 用途                          |
-| ------ | ---------------------------------------- | ----------------------------- |
-| `GET`  | `/api/health`                            | 服务、数据库、版本和 revision |
-| `GET`  | `/api/system/info`                       | 系统元数据                    |
-| `POST` | `/api/auth/login`                        | 登录                          |
-| `POST` | `/api/auth/logout`                       | 退出                          |
-| `GET`  | `/api/auth/me`                           | 当前会话                      |
-| `GET`  | `/api/public/cage-card/{animalRecordId}` | 免登录笼卡查询                |
+| 方法   | 路径                                               | 用途                           |
+| ------ | -------------------------------------------------- | ------------------------------ |
+| `GET`  | `/api/health`                                      | 服务、数据库、版本和 revision  |
+| `GET`  | `/api/system/info`                                 | 系统元数据                     |
+| `POST` | `/api/auth/login`                                  | 登录                           |
+| `POST` | `/api/auth/logout`                                 | 退出                           |
+| `GET`  | `/api/auth/me`                                     | 当前会话                       |
+| `GET`  | `/api/release-announcements/{version}`             | 当前账号的版本更新说明确认状态 |
+| `POST` | `/api/release-announcements/{version}/acknowledge` | 确认当前账号已阅读该版本说明   |
+| `GET`  | `/api/public/cage-card/{animalRecordId}`           | 免登录笼卡查询                 |
 
 ### 设施和笼位
 
@@ -138,22 +140,23 @@ graph LR
 
 ## 核心数据对象
 
-| 对象                        | 业务键                   | 说明                               |
-| --------------------------- | ------------------------ | ---------------------------------- |
-| `experiment_applications`   | IACUC                    | 项目、PI、实验负责人、来源和有效期 |
-| `intake_batches`            | batch id                 | 接收批次和打印卡集合               |
-| `cards`                     | Animal Record ID         | 单张笼卡的持久唯一身份             |
-| `placement_tasks`           | task id                  | 接收后到正式入驻的任务             |
-| `occupancies`               | occupancy id + slot id   | 笼位占用历史                       |
-| `quantity_sheets`           | month + IACUC + sheet id | 月度人工数量记录                   |
-| `billing_statements`        | statement/version id     | 月度结算结果                       |
-| `billing_workflows`         | workflow id              | 结算单状态和版本链                 |
-| `animal_inspections`        | inspection id            | 饲养间巡检、快照和提交状态         |
-| `inspection_findings`       | finding id               | 异常发现、处置和复查链             |
-| `reimbursement_claims`      | claim number             | 报销单头和经费负责人               |
-| `reimbursement_allocations` | allocation id            | 经费明细与结算应收的核销分摊       |
-| `reimbursement_records`     | month + PI               | 应缴、已缴、未缴和报销状态         |
-| `audit_events`              | event id                 | 关键写操作审计                     |
+| 对象                                    | 业务键                   | 说明                               |
+| --------------------------------------- | ------------------------ | ---------------------------------- |
+| `experiment_applications`               | IACUC                    | 项目、PI、实验负责人、来源和有效期 |
+| `intake_batches`                        | batch id                 | 接收批次和打印卡集合               |
+| `cards`                                 | Animal Record ID         | 单张笼卡的持久唯一身份             |
+| `placement_tasks`                       | task id                  | 接收后到正式入驻的任务             |
+| `occupancies`                           | occupancy id + slot id   | 笼位占用历史                       |
+| `quantity_sheets`                       | month + IACUC + sheet id | 月度人工数量记录                   |
+| `billing_statements`                    | statement/version id     | 月度结算结果                       |
+| `billing_workflows`                     | workflow id              | 结算单状态和版本链                 |
+| `animal_inspections`                    | inspection id            | 饲养间巡检、快照和提交状态         |
+| `inspection_findings`                   | finding id               | 异常发现、处置和复查链             |
+| `reimbursement_claims`                  | claim number             | 报销单头和经费负责人               |
+| `reimbursement_allocations`             | allocation id            | 经费明细与结算应收的核销分摊       |
+| `reimbursement_records`                 | month + PI               | 应缴、已缴、未缴和报销状态         |
+| `audit_events`                          | event id                 | 关键写操作审计                     |
+| `release_announcement_acknowledgements` | user id + version        | 每位用户逐版本的更新说明确认记录   |
 
 SQLite 同时保留结构化热字段和兼容 payload。启动迁移会补字段、索引和必要回填。
 

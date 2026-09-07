@@ -5,6 +5,14 @@ export { expect };
 export const test = base.extend({
   page: async ({ page }, runPage) => {
     const runtimeErrors: string[] = [];
+    await page.route("**/api/release-announcements/*", async (route) => {
+      if (route.request().method() === "GET") {
+        const version = route.request().url().split("/").at(-1) || "";
+        await route.fulfill({ json: { version, acknowledged: true } });
+        return;
+      }
+      await route.fallback();
+    });
     page.on("console", (message) => {
       if (message.type() !== "error" && message.type() !== "warning") return;
       const text = message.text();

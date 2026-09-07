@@ -38,6 +38,9 @@ const DashboardView = lazy(() => loadDashboardView().then((module) => ({ default
 const MobileNavigation = lazy(() =>
   import("./MobileNavigation").then((module) => ({ default: module.MobileNavigation })),
 );
+const ReleaseAnnouncementModal = lazy(() =>
+  import("./ReleaseAnnouncementModal").then((module) => ({ default: module.ReleaseAnnouncementModal })),
+);
 const AnimalManagementView = lazy(() =>
   import("../animal-management/AnimalManagementView").then((module) => ({ default: module.AnimalManagementView })),
 );
@@ -253,6 +256,9 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
           />
         </Suspense>
       ) : null}
+      <Suspense fallback={null}>
+        <ReleaseAnnouncementModal />
+      </Suspense>
     </Layout>
   );
 }

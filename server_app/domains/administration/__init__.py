@@ -12,11 +12,13 @@ from .auth import (
     verify_password,
 )
 from .performance_history import list_performance_history
+from .release_announcements import acknowledge_release_announcement, release_announcement_status
 from .system import system_environment, system_info, system_update_status
 from .users import create_user, delete_user, update_user
 
 __all__ = [
     "action_label",
+    "acknowledge_release_announcement",
     "audit_event",
     "list_performance_history",
     "authenticate",
@@ -29,6 +31,7 @@ __all__ = [
     "hash_token",
     "list_users",
     "merge_audit_logs",
+    "release_announcement_status",
     "sanitize_user",
     "system_environment",
     "system_info",

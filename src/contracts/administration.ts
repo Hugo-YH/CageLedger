@@ -55,6 +55,11 @@ export interface SystemInfo {
   revisionShort: string;
 }
 
+export interface ReleaseAnnouncementStatus {
+  version: string;
+  acknowledged: boolean;
+}
+
 export interface SystemLatencyMetrics {
   sampleCount: number;
   p50Ms: number | null;

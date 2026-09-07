@@ -152,6 +152,55 @@ class ApiContractTests(unittest.TestCase):
                 self.assertEqual(response_status, 200)
                 self.assertTrue(keys.issubset(payload.keys()))
 
+    def test_release_announcement_acknowledgement_is_persisted_per_user_and_version(self):
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.opener,
+        )
+        version = "api-contract-1.0.0"
+        status, initial, _ = request_json(self.base_url, f"/api/release-announcements/{version}", opener=self.opener)
+        self.assertEqual(status, 200)
+        self.assertEqual(initial, {"version": version, "acknowledged": False})
+
+        status, acknowledged, _ = request_json(
+            self.base_url,
+            f"/api/release-announcements/{version}/acknowledge",
+            method="POST",
+            opener=self.opener,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(acknowledged, {"version": version, "acknowledged": True})
+
+        _, persisted, _ = request_json(self.base_url, f"/api/release-announcements/{version}", opener=self.opener)
+        self.assertEqual(persisted, acknowledged)
+
+        request_json(
+            self.base_url,
+            "/api/users",
+            method="POST",
+            body={
+                "username": "release-status-user",
+                "password": "release-status-password",
+                "displayName": "版本确认测试账号",
+                "role": "room_admin",
+                "roomIds": [],
+            },
+            opener=self.opener,
+        )
+        other_user = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "release-status-user", "password": "release-status-password"},
+            opener=other_user,
+        )
+        _, other_status, _ = request_json(self.base_url, f"/api/release-announcements/{version}", opener=other_user)
+        self.assertEqual(other_status, {"version": version, "acknowledged": False})
+
     def test_claim_api_rejects_cross_claim_funding_line(self):
         request_json(
             self.base_url,

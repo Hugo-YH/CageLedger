@@ -139,21 +139,23 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 
 ## 数据与系统管理
 
-| 方法             | 路径                               | 说明                                                     |
-| ---------------- | ---------------------------------- | -------------------------------------------------------- |
-| `GET` / `POST`   | `/api/users`                       | 管理账号                                                 |
-| `PUT` / `DELETE` | `/api/users/{id}`                  | 更新或删除账号                                           |
-| `POST`           | `/api/intake/standardize-strain`   | 服务端 MGI 品系标准化，登录权限                          |
-| `GET`            | `/api/iacuc-index`                 | 完整 IACUC 索引                                          |
-| `GET`            | `/api/iacuc-index/expiry`          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用 |
-| `GET`            | `/api/iacuc-index/status`          | 索引数量、时间和来源                                     |
-| `POST`           | `/api/iacuc-index/upload`          | 上传 CSV，更新快照和派生字段                             |
-| `GET`            | `/api/principal-identities`        | PI 身份和减免配置                                        |
-| `PUT`            | `/api/principal-identities/{name}` | 更新 PI 配置                                             |
-| `GET`            | `/api/audit-events`                | 分页操作日志                                             |
-| `GET`            | `/api/system/update-check`         | Gitea 最新 Release，管理员权限                           |
-| `GET`            | `/api/system/environment`          | 兼容运行环境参数与当前进程性能快照，管理员权限           |
-| `GET`            | `/api/system/performance-history`  | `hours` 内的性能汇总（管理员权限）                       |
+| 方法             | 路径                                               | 说明                                                     |
+| ---------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| `GET` / `POST`   | `/api/users`                                       | 管理账号                                                 |
+| `PUT` / `DELETE` | `/api/users/{id}`                                  | 更新或删除账号                                           |
+| `POST`           | `/api/intake/standardize-strain`                   | 服务端 MGI 品系标准化，登录权限                          |
+| `GET`            | `/api/iacuc-index`                                 | 完整 IACUC 索引                                          |
+| `GET`            | `/api/iacuc-index/expiry`                          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用 |
+| `GET`            | `/api/iacuc-index/status`                          | 索引数量、时间和来源                                     |
+| `POST`           | `/api/iacuc-index/upload`                          | 上传 CSV，更新快照和派生字段                             |
+| `GET`            | `/api/principal-identities`                        | PI 身份和减免配置                                        |
+| `PUT`            | `/api/principal-identities/{name}`                 | 更新 PI 配置                                             |
+| `GET`            | `/api/audit-events`                                | 分页操作日志                                             |
+| `GET`            | `/api/system/update-check`                         | Gitea 最新 Release，管理员权限                           |
+| `GET`            | `/api/system/environment`                          | 兼容运行环境参数与当前进程性能快照，管理员权限           |
+| `GET`            | `/api/system/performance-history`                  | `hours` 内的性能汇总（管理员权限）                       |
+| `GET`            | `/api/release-announcements/{version}`             | 当前账号是否已确认指定版本的更新说明                     |
+| `POST`           | `/api/release-announcements/{version}/acknowledge` | 确认当前账号已阅读指定版本的更新说明                     |
 
 `/api/system/environment.performance` 返回当前服务进程自启动以来的低开销诊断数据：运行时长、HTTP 请求总数/慢请求/最近 512 个样本的 P50/P95/最大耗时、缓存容量/命中/未命中/过期/淘汰/命中率，以及 SQLite 操作/慢操作/锁错误和延迟摘要。指标随进程重启清零，不是 SLA；页面不得向非管理员请求或展示这些字段，也不得用高频自动轮询放大请求统计。
 

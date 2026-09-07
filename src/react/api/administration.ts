@@ -9,6 +9,7 @@ import type {
   ManagedUser,
   PagedResponse,
   PrincipalIdentity,
+  ReleaseAnnouncementStatus,
   SystemEnvironment,
   SystemPerformanceHistory,
   SystemInfo,
@@ -149,6 +150,29 @@ export function useSystemUpdate(enabled: boolean) {
     queryFn: ({ signal }) => requestJson<SystemUpdateStatus>("/api/system/update-check", { signal }),
     enabled,
     retry: false,
+  });
+}
+
+export function useReleaseAnnouncement(version: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.releaseAnnouncement(version),
+    queryFn: ({ signal }) =>
+      requestJson<ReleaseAnnouncementStatus>(`/api/release-announcements/${encodeURIComponent(version)}`, {
+        signal,
+      }),
+    enabled: enabled && Boolean(version),
+    retry: false,
+  });
+}
+
+export function useAcknowledgeReleaseAnnouncement(version: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      requestJson<ReleaseAnnouncementStatus>(`/api/release-announcements/${encodeURIComponent(version)}/acknowledge`, {
+        method: "POST",
+      }),
+    onSuccess: (status) => client.setQueryData(queryKeys.releaseAnnouncement(version), status),
   });
 }
 

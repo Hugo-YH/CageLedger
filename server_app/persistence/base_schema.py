@@ -526,6 +526,17 @@ def initialize_base_schema(
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS release_announcement_acknowledgements (
+            user_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            acknowledged_at TEXT NOT NULL,
+            PRIMARY KEY(user_id, version),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS audit_events (
             id TEXT PRIMARY KEY,
             actor_user_id TEXT,
