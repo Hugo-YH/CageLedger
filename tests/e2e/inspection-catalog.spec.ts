@@ -6,7 +6,7 @@ async function login(page: Page, username: string, password: string) {
   await page.getByLabel("用户名", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
 }
 
 async function openStandards(page: Page) {

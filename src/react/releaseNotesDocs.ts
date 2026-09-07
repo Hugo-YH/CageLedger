@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.10",
+    build: "201",
+    releasedAt: "2026-09-07",
+    title: "版本更新说明",
+    items: [
+      "新版本首次进入工作区时展示更新摘要，帮助用户快速了解本次变化",
+      "更新说明按账号和版本记录确认状态，每个版本只提示一次",
+      "支持键盘关闭、查看完整更新记录，并补充桌面、紧凑、手机和横屏视口回归",
+    ],
+  },
+  {
     version: "1.2.9",
     build: "200",
     releasedAt: "2026-09-07",
