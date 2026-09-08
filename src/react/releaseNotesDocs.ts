@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.11",
+    build: "202",
+    releasedAt: "2026-09-08",
+    title: "列表排序与筛选弹层修复",
+    items: [
+      "待接收批次改为按接收日期稳定排序，列表顺序与业务时间保持一致",
+      "修复启用减少动态效果时，表格筛选弹层定位延迟导致输入框移出可视区域的问题",
+      "补充四档视口和两种动效偏好下的筛选弹层浏览器回归",
+    ],
+  },
+  {
     version: "1.2.10",
     build: "201",
     releasedAt: "2026-09-07",
