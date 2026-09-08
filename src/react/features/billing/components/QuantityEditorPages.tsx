@@ -1,7 +1,9 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Button, Input, Select, type InputRef } from "antd";
+import { Button, Calendar, Input, Popover, Select } from "antd";
+import dayjs from "dayjs";
 
 import type { QuantitySheetRow } from "../../../api/contracts";
+import { useMediaQuery } from "../../../hooks/useMediaQuery";
 
 const QUANTITY_ROWS_PER_PAGE = 31;
 const QUANTITY_LEFT_ROWS = 15;
@@ -37,6 +39,7 @@ export const QuantityEditorPages = memo(function QuantityEditorPages({
   rowRefs: React.MutableRefObject<Array<QuantityRowHandle | null>>;
   onChanged: () => void;
 }) {
+  const shortViewport = useMediaQuery("(max-height: 500px)");
   const pageCount = Math.max(Math.ceil(rows.length / QUANTITY_ROWS_PER_PAGE), 1);
   return (
     <div className="quantity-entry-wrap">
@@ -78,6 +81,7 @@ export const QuantityEditorPages = memo(function QuantityEditorPages({
                             row={rows[leftIndex]}
                             index={leftIndex}
                             month={month}
+                            shortViewport={shortViewport}
                             showCalculatedPlaceholders={showCalculatedPlaceholders}
                             onChanged={onChanged}
                           />
@@ -90,6 +94,7 @@ export const QuantityEditorPages = memo(function QuantityEditorPages({
                           row={rows[rightIndex]}
                           index={rightIndex}
                           month={month}
+                          shortViewport={shortViewport}
                           showCalculatedPlaceholders={showCalculatedPlaceholders}
                           onChanged={onChanged}
                         />
@@ -153,16 +158,23 @@ const QuantityEntryCells = memo(
       row: QuantitySheetRow;
       index: number;
       month: string;
+      shortViewport: boolean;
       showCalculatedPlaceholders: boolean;
       onChanged: () => void;
     }
-  >(function QuantityEntryCells({ row: initial, index, month, showCalculatedPlaceholders, onChanged }, ref) {
+  >(function QuantityEntryCells(
+    { row: initial, index, month, shortViewport, showCalculatedPlaceholders, onChanged },
+    ref,
+  ) {
     const [row, setRow] = useState(initial);
     const [calculated, setCalculated] = useState({
       animals: Number(initial.animalCount || 0),
       cages: Number(initial.cageCount || 0),
     });
-    const pickerRef = useRef<InputRef>(null);
+    const [datePickerOpen, setDatePickerOpen] = useState(false);
+    const datePickerTrigger = useRef<HTMLButtonElement>(null);
+    const selectedCalendarDay = useRef<HTMLButtonElement>(null);
+    const calendarDate = row.date >= `${month}-01` && row.date <= monthEnd(month) ? row.date : `${month}-01`;
     useImperativeHandle(
       ref,
       () => ({
@@ -235,27 +247,65 @@ const QuantityEntryCells = memo(
                 if (normalized) setDate(normalized, normalized);
               }}
             />
-            <Button
-              aria-label={`选择第 ${index + 1} 行日期`}
-              className="quantity-date-picker-button"
-              htmlType="button"
-              icon={<CalendarIcon />}
-              size="small"
-              tabIndex={-1}
-              type="text"
-              onClick={() => pickerRef.current?.input?.showPicker()}
-            />
-            <Input
-              ref={pickerRef}
-              className="quantity-date-picker-native"
-              type="date"
-              tabIndex={-1}
-              aria-hidden="true"
-              min={`${month}-01`}
-              max={monthEnd(month)}
-              value={row.date}
-              onChange={(event) => setDate(event.target.value, event.target.value)}
-            />
+            <Popover
+              open={datePickerOpen}
+              onOpenChange={setDatePickerOpen}
+              afterOpenChange={(open) => {
+                if (open) selectedCalendarDay.current?.focus({ preventScroll: true });
+              }}
+              trigger="click"
+              placement={shortViewport ? "right" : "bottom"}
+              destroyOnHidden
+              content={
+                <div className="quantity-date-calendar">
+                  <Calendar
+                    fullscreen={false}
+                    headerRender={() => <strong>{month}</strong>}
+                    value={dayjs(calendarDate)}
+                    validRange={[dayjs(`${month}-01`), dayjs(monthEnd(month))]}
+                    fullCellRender={(date) => {
+                      const value = date.format("YYYY-MM-DD");
+                      return (
+                        <Button
+                          size="small"
+                          type={value === row.date ? "primary" : "text"}
+                          aria-label={value}
+                          ref={value === calendarDate ? selectedCalendarDay : undefined}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.stopPropagation();
+                              setDatePickerOpen(false);
+                              datePickerTrigger.current?.focus({ preventScroll: true });
+                            }
+                          }}
+                          disabled={value < `${month}-01` || value > monthEnd(month)}
+                        >
+                          {date.date()}
+                        </Button>
+                      );
+                    }}
+                    onSelect={(date, info) => {
+                      if (info.source !== "date") return;
+                      const value = date.format("YYYY-MM-DD");
+                      setDate(value, value);
+                      setDatePickerOpen(false);
+                      datePickerTrigger.current?.focus({ preventScroll: true });
+                    }}
+                  />
+                </div>
+              }
+            >
+              <Button
+                ref={datePickerTrigger}
+                aria-label={`选择第 ${index + 1} 行日期`}
+                className="quantity-date-picker-button"
+                htmlType="button"
+                icon={<CalendarIcon />}
+                size="small"
+                type="text"
+                aria-expanded={datePickerOpen}
+              />
+            </Popover>
           </div>
         </td>
         <td className="quantity-change-cell animal-detail-col">

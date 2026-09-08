@@ -149,7 +149,8 @@
   background: var(--text);
 }
 
-[data-feature="intake"] .scanner-camera video {
+[data-feature="intake"] .scanner-camera video,
+[data-feature="intake"] .scanner-frozen-frame {
   display: block;
   width: 100%;
   max-height: 52vh;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { InspectionCatalogNode } from "../../api/contracts";
 import {
@@ -7,6 +7,8 @@ import {
   inspectionAnswerKey,
   inspectionFacilityLabel,
   inspectionOutcome,
+  resumeInspectionId,
+  setResumeInspectionId,
 } from "./model";
 
 const nodes: InspectionCatalogNode[] = [
@@ -23,6 +25,29 @@ const nodes: InspectionCatalogNode[] = [
 ];
 
 describe("animal inspection model", () => {
+  it("keeps the resume hint usable when storage operations are denied", () => {
+    const denied = () => {
+      throw new DOMException("Storage denied", "SecurityError");
+    };
+    vi.stubGlobal("sessionStorage", { getItem: denied, setItem: denied, removeItem: denied });
+    try {
+      setResumeInspectionId("draft-in-memory");
+      expect(resumeInspectionId()).toBe("draft-in-memory");
+      setResumeInspectionId("");
+      expect(resumeInspectionId()).toBe("");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("persists and clears the resume hint when storage is available", () => {
+    setResumeInspectionId("draft-in-storage");
+    expect(resumeInspectionId()).toBe("draft-in-storage");
+    expect(sessionStorage.getItem("cageledger.animal-inspection.resume-id")).toBe("draft-in-storage");
+    setResumeInspectionId("");
+    expect(resumeInspectionId()).toBe("");
+  });
+
   it("groups item nodes under their category", () => {
     expect(groupedItems(nodes, "basicAssessment")).toEqual([["环境", [nodes[1]]]]);
   });

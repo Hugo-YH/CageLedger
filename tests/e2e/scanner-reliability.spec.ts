@@ -83,3 +83,70 @@ test("denied camera permission gives feedback and manual malformed codes do not 
   await expect(page.getByText("查询失败", { exact: true })).toBeVisible();
   await expect(page.getByLabel("笼卡识别码")).toHaveValue("%invalid");
 });
+
+test("real camera frames decode and automatically query the cage card", async ({ page }, testInfo) => {
+  const { qrCodeMatrix } = await import("../../src/react/print/qrCode");
+  const matrix = qrCodeMatrix("https://example.test/c/AB12");
+  await page.route("**/api/public/cage-card/AB12", (route) =>
+    route.fulfill({
+      json: {
+        qrId: "AB12",
+        batchNo: "扫码回归批次",
+        roomName: "测试饲养间",
+        statusLabel: "已接收",
+        iacuc: "TEST-IACUC",
+      },
+    }),
+  );
+  const cameraTrack = await page.evaluateHandle((modules) => {
+    const canvas = document.createElement("canvas");
+    const cell = 8;
+    canvas.width = canvas.height = (modules.length + 8) * cell;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "white";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "black";
+    modules.forEach((row, y) =>
+      row.forEach((dark, x) => {
+        if (dark) context.fillRect((x + 4) * cell, (y + 4) * cell, cell, cell);
+      }),
+    );
+    const stream = canvas.captureStream(10);
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: () => Promise.resolve(stream),
+    });
+    return stream.getVideoTracks()[0];
+  }, matrix);
+  await page.getByRole("button", { name: "启动摄像头", exact: true }).click();
+  await expect(page.getByLabel("笼卡识别码")).toHaveValue("AB12");
+  await expect(page.getByText("扫码回归批次", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "已识别笼卡的冻结画面" })).toBeVisible();
+  expect(await cameraTrack.evaluate((track) => track.readyState)).toBe("ended");
+  await expect(page.getByRole("button", { name: "继续扫码", exact: true })).toBeEnabled();
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1180, height: 820 },
+    { width: 760, height: 900 },
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const frozen = page.getByRole("img", { name: "已识别笼卡的冻结画面" });
+    await frozen.scrollIntoViewIfNeeded();
+    await expect(frozen).toBeInViewport();
+    const box = await frozen.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    await testInfo.attach(`frozen-${viewport.width}`, { body: await page.screenshot(), contentType: "image/png" });
+    await testInfo.attach(`frozen-style-${viewport.width}`, {
+      body: JSON.stringify(
+        await frozen.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return { display: style.display, objectFit: style.objectFit, width: style.width, maxHeight: style.maxHeight };
+        }),
+      ),
+      contentType: "application/json",
+    });
+  }
+});

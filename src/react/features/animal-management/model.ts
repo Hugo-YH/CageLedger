@@ -164,11 +164,23 @@ export function inspectionAnswerKey(moduleCode: InspectionModuleCode, nodeCode: 
   return `${moduleCode}:${nodeCode}`;
 }
 
+let inMemoryResumeInspectionId = "";
+
 export function resumeInspectionId() {
-  return sessionStorage.getItem("cageledger.animal-inspection.resume-id") || "";
+  try {
+    inMemoryResumeInspectionId = sessionStorage.getItem("cageledger.animal-inspection.resume-id") || "";
+  } catch {
+    // Storage can be denied by browser policy; keep navigation usable in this tab.
+  }
+  return inMemoryResumeInspectionId;
 }
 
 export function setResumeInspectionId(id: string) {
-  if (id) sessionStorage.setItem("cageledger.animal-inspection.resume-id", id);
-  else sessionStorage.removeItem("cageledger.animal-inspection.resume-id");
+  inMemoryResumeInspectionId = id;
+  try {
+    if (id) sessionStorage.setItem("cageledger.animal-inspection.resume-id", id);
+    else sessionStorage.removeItem("cageledger.animal-inspection.resume-id");
+  } catch {
+    // This is only a resume hint; saving the server-side draft must still succeed.
+  }
 }

@@ -34,6 +34,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
     active: cameraActive,
     pending: cameraPending,
     error: cameraError,
+    snapshot: cameraSnapshot,
     toggle: toggleCamera,
   } = useCameraScanner((value) => {
     const code = normalizeCode(value);
@@ -41,6 +42,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
     setQrId(code);
   });
   const result = usePublicCageCard(qrId);
+  const cameraButtonLabel = cameraActive ? "停止扫码" : cameraSnapshot ? "继续扫码" : "启动摄像头";
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -51,7 +53,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
       className="scanner-card"
       extra={
         <Button
-          aria-label={cameraActive ? "停止扫码" : "启动摄像头"}
+          aria-label={cameraButtonLabel}
           danger={cameraActive}
           icon={cameraActive ? <StopOutlined aria-hidden /> : <CameraOutlined aria-hidden />}
           type={cameraActive ? "default" : "primary"}
@@ -59,7 +61,7 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
           disabled={cameraPending}
           onClick={() => void toggleCamera()}
         >
-          {cameraActive ? "停止扫码" : "启动摄像头"}
+          {cameraButtonLabel}
         </Button>
       }
       title={
@@ -68,16 +70,25 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
         </Typography.Title>
       }
     >
-      <div hidden={!cameraActive && !cameraPending}>
+      <div hidden={!cameraActive && !cameraPending && !cameraSnapshot}>
         <Card className="scanner-camera-card" size="small" title="扫码取景框" type="inner">
           <div className="scanner-camera">
-            <video ref={videoRef} muted playsInline aria-label="笼卡扫码画面" />
-            <span>将笼卡二维码置于取景框内</span>
+            <video
+              ref={videoRef}
+              muted
+              playsInline
+              aria-label="笼卡扫码画面"
+              style={{ display: cameraSnapshot ? "none" : undefined }}
+            />
+            {cameraSnapshot ? (
+              <img className="scanner-frozen-frame" src={cameraSnapshot} alt="已识别笼卡的冻结画面" />
+            ) : null}
+            <span role="status">{cameraSnapshot ? "已识别，画面已冻结" : "将笼卡二维码置于取景框内"}</span>
           </div>
         </Card>
       </div>
       {cameraError ? (
-        <Alert role="alert" className="scanner-alert" title={`摄像头启动失败：${cameraError}`} showIcon type="error" />
+        <Alert role="alert" className="scanner-alert" title={`扫码失败：${cameraError}`} showIcon type="error" />
       ) : null}
       <form
         className="scanner-query-form"

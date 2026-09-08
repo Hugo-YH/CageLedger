@@ -10,6 +10,7 @@ export function useCameraScanner(onCode: (value: string) => void) {
   const [active, setActive] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [snapshot, setSnapshot] = useState("");
 
   function release() {
     cancelAnimationFrame(frameRef.current);
@@ -40,6 +41,7 @@ export function useCameraScanner(onCode: (value: string) => void) {
     const isCurrent = () => generation.current === request;
     setPending(true);
     setError("");
+    setSnapshot("");
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("当前浏览器无法访问摄像头，请输入识别码查询");
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -54,8 +56,12 @@ export function useCameraScanner(onCode: (value: string) => void) {
       const video = videoRef.current;
       if (!video) throw new Error("扫码画面未就绪，请重试");
       video.srcObject = stream;
-      await Promise.all([video.play(), import("../../../vendor/jsQR.js")]);
+      const [, decoderModule] = await Promise.all([video.play(), import("../../../vendor/jsQR.js")]);
       if (!isCurrent()) return;
+      // Vite production builds expose this UMD dependency as a default export;
+      // the dev server executes its browser-global branch instead.
+      const decode = typeof decoderModule.default === "function" ? decoderModule.default : window.jsQR;
+      if (typeof decode !== "function") throw new Error("二维码识别器加载失败，请重试或输入识别码查询");
       setActive(true);
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -71,12 +77,17 @@ export function useCameraScanner(onCode: (value: string) => void) {
             video.videoHeight
           ) {
             lastScan = timestamp;
-            if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
-            if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+            const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+            const width = Math.max(1, Math.round(video.videoWidth * scale));
+            const height = Math.max(1, Math.round(video.videoHeight * scale));
+            if (canvas.width !== width) canvas.width = width;
+            if (canvas.height !== height) canvas.height = height;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const image = context.getImageData(0, 0, canvas.width, canvas.height);
-            const result = window.jsQR?.(image.data, image.width, image.height);
+            const result = decode(image.data, image.width, image.height);
             if (result?.data) {
+              setSnapshot(canvas.toDataURL("image/jpeg", 0.85));
+              generation.current += 1;
               release();
               setActive(false);
               onCode(result.data);
@@ -103,5 +114,5 @@ export function useCameraScanner(onCode: (value: string) => void) {
     }
   }
 
-  return { videoRef, active, pending, error, toggle };
+  return { videoRef, active, pending, error, snapshot, toggle };
 }

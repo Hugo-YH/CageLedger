@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.12",
+    build: "203",
+    releasedAt: "2026-09-08",
+    title: "扫码与数量录入体验修复",
+    items: [
+      "扫码识别成功后冻结当前画面，自动查询笼卡并支持继续扫码；同时降低高分辨率视频的识别开销",
+      "数量统计表日期改用站内日历选择器，在短视口下调整弹层方向并支持键盘返回输入位置",
+      "浏览器禁用存储时仍可继续巡检草稿导航，补充扫码、日期选择和多视口兼容性回归",
+    ],
+  },
+  {
     version: "1.2.11",
     build: "202",
     releasedAt: "2026-09-08",
