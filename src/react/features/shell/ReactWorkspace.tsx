@@ -30,6 +30,9 @@ import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { WorkspaceErrorBoundary, WorkspaceLoading } from "./WorkspaceErrorBoundary";
 import { billingSidebarItems, isWorkspaceView } from "./workspaceNavigation";
 
+const QuarantineView = lazy(() =>
+  import("../quarantine/QuarantineView").then((module) => ({ default: module.QuarantineView })),
+);
 const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({ default: module.IntakeView })));
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
 const CagesView = lazy(() => import("../cages/CagesView").then((module) => ({ default: module.CagesView })));
@@ -126,6 +129,17 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
         item("intake-entry", "预约消息识别", <TagsOutlined />),
         item("intake-batches", "待接收批次", <BookOutlined />),
         item("cage-card-scanner", "二维码扫描", <QrcodeOutlined />),
+      ],
+    },
+    {
+      key: "quarantine",
+      icon: <AuditOutlined />,
+      label: "检疫管理",
+      children: [
+        item("quarantine-parasite", "寄生虫检测", <AuditOutlined />),
+        item("quarantine-elisa", "ELISA检测", <AuditOutlined />),
+        item("quarantine-pcr", "PCR检测", <AuditOutlined />),
+        item("quarantine-reports", "检疫报告", <AuditOutlined />),
       ],
     },
     item("cages", "笼位管理", <AppstoreOutlined />),
@@ -268,6 +282,13 @@ function item(key: string, label: string, icon: ReactNode, dataUi?: string): Non
 }
 
 function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (view: WorkspaceView) => void) {
+  if (
+    view === "quarantine-parasite" ||
+    view === "quarantine-elisa" ||
+    view === "quarantine-pcr" ||
+    view === "quarantine-reports"
+  )
+    return <QuarantineView key={view} mode={view} />;
   if (view === "intake-entry") return <IntakeView mode="entry" user={user} navigate={navigate} />;
   if (view === "intake-batches") return <IntakeView mode="batches" user={user} navigate={navigate} />;
   if (view === "cage-card-scanner") return <ScannerView navigate={navigate} />;

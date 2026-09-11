@@ -17,7 +17,8 @@
     "src/styles/features/cages.css",
     "src/styles/features/workflow.css",
     "src/styles/features/administration.css",
-    "src/styles/features/project-home.css"
+    "src/styles/features/project-home.css",
+    "src/styles/features/quarantine.css"
   ],
   "stylesheets": {
     "src/styles/brand-tokens.css": { "owner": "shared-brand", "status": "complete" },
@@ -68,6 +69,12 @@
       "status": "in-progress",
       "selectorPrefixes": [".project-"],
       "scopeRoots": ["[data-feature=\"project-home\"]", ".project-home"]
+    },
+    "src/styles/features/quarantine.css": {
+      "owner": "quarantine",
+      "status": "complete",
+      "scopeRoots": ["[data-feature=\"quarantine\"]"],
+      "selectorPrefixes": [".quarantine-"]
     }
   },
   "componentFamilies": {

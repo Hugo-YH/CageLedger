@@ -204,3 +204,32 @@ npm run test:e2e
 ```
 
 涉及性能的列表和写入再运行 `npm run benchmark`，并检查 `Server-Timing`、`[perf]` 日志和 SQLite 查询计划。涉及缓存、索引、SQLite 查询、PDF 渲染、批量操作或首屏加载时，还要用相同时间窗口的 `/api/system/performance-history` 对比改动前后，记录版本、HTTP/SQLite P95、慢请求、锁错误和结论；该记录只供管理员趋势与验收使用。
+
+## 检疫管理
+
+`/api/quarantine/` 下所有接口要求登录；第一版全部登录角色可读写，权限集中在检疫领域。批次来源取到货记录快照，检测保存混样及项目判定，不建立单笼采样关联。
+
+| 方法       | 相对路径                                     | 行为                                                    |
+| ---------- | -------------------------------------------- | ------------------------------------------------------- |
+| GET        | `catalog`、`supplier-options`                | 项目配置与规范供应商候选                                |
+| GET        | `sources`、`batches`                         | 分页来源与检疫批次，支持日期或名称筛选                  |
+| POST / PUT | `batches[/{id}]`、`tests[/{id}]`             | 创建或编辑，正文 `{ item, expectedUpdatedAt }`          |
+| GET        | `batches/{id}`                               | 覆盖范围、检测、附件与历史报告版本                      |
+| POST       | `tests/{id}/attachments`                     | multipart字段file；查询参数传关联样本、项目、分类及版本 |
+| GET        | `attachments/{id}`、`reports/{id}`           | 受鉴权下载                                              |
+| GET        | `tests/{id}/preview`                         | 带草稿标识的Word预览                                    |
+| POST       | `tests/{id}/issue`                           | 传检测和批次版本；成功生成文件后保存不可变快照          |
+| POST       | `tests/{id}/correction`、`tests/{id}/retest` | 新草稿ID及版本；复检另传供应商                          |
+| GET        | `suppliers`                                  | 供应商、日期范围／类型、种类、方法、结果过滤，含明细    |
+
+编辑必须提供 `expectedUpdatedAt`，缺失或过期返回409；出具另传 `expectedBatchUpdatedAt`。出具重试返回已有报告，生成失败保留草稿。更正新建检测记录并关联原版本，旧Word继续可下载。事务记录操作者与审计快照。`quarantine_batches/tests/attachments/reports` 与 `files/quarantine/` 共同组成检疫备份范围。
+
+检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
+
+`POST batches/{id}/complete` 接收 `{ expectedUpdatedAt, expectedTestVersions: { [testId]: updatedAt } }`，校验三类正式报告、适用动物种类、异常复检和批次结论，在单事务保存完成时间、确认人、报告关联及审计。重复确认返回已完成记录；并发变化返回409。更正或复检会重新打开该批次，历史完成快照保留。
+
+### 检疫报告表单 v2
+
+检测写入 `reportFormVersion: 2` 后，服务端对每组 `sourceIds` 去重，固定 `poolCount = 1`、`portionCount = sourceIds.length`；`reportMaterial` 与 `reportSpecimenState` 保存报告首节信息。新记录出具不要求额外 `conclusion`，批次完成结论校验不变。
+
+附件上传接受 JSON 字符串 `projectIds`；`PUT /api/quarantine/attachments/{id}` 使用检测记录的 `expectedUpdatedAt` 校验，可修改多个项目关联、图注、顺序和草稿移除标记。返回附件与检测记录的新版本。保留首次 `uploadedBy`、`uploadedAt`，后续修改单独审计。正式版本附件不可修改，更正草稿复制关联，旧文件和报告快照保留。

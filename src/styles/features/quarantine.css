@@ -1,0 +1,385 @@
+[data-feature="quarantine"] {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+[data-feature="quarantine"] .quarantine-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+}
+
+[data-feature="quarantine"] .ant-select,
+[data-feature="quarantine"] .ant-picker,
+[data-feature="quarantine"] .ant-input-number {
+  min-width: 120px;
+  max-width: 100%;
+}
+
+[data-feature="quarantine"] .ant-form-item .ant-select,
+[data-feature="quarantine"] .ant-form-item .ant-picker,
+[data-feature="quarantine"] .ant-form-item .ant-input-number {
+  width: 100%;
+}
+
+[data-feature="quarantine"] .ant-card {
+  margin-block: 8px;
+}
+
+[data-feature="quarantine"] .ant-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-feature="quarantine"] .quarantine-report-download {
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+[data-feature="quarantine"].quarantine-editing {
+  gap: 0;
+}
+
+[data-feature="quarantine"].quarantine-editing > .quarantine-page-heading,
+[data-feature="quarantine"].quarantine-editing > .quarantine-page-tabs {
+  display: none;
+}
+
+[data-feature="quarantine"] .quarantine-report-editor {
+  min-width: 0;
+  margin: -8px;
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-layout);
+}
+
+[data-feature="quarantine"] .quarantine-report-workbar {
+  position: sticky;
+  z-index: var(--z-sticky);
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+[data-feature="quarantine"] .quarantine-report-workbar > div:first-child,
+[data-feature="quarantine"] .quarantine-report-outline {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-feature="quarantine"] .quarantine-report-workbar > div:first-child {
+  gap: 4px;
+}
+
+[data-feature="quarantine"] .quarantine-report-workspace {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 940px);
+  align-items: start;
+  gap: 24px;
+  max-width: 1170px;
+  margin: 24px auto 40px;
+  padding-inline: 16px;
+}
+
+[data-feature="quarantine"] .quarantine-report-outline {
+  position: sticky;
+  top: 84px;
+  min-width: 0;
+}
+
+[data-feature="quarantine"] .quarantine-report-outline h4 {
+  margin: 8px 0 20px;
+}
+
+[data-feature="quarantine"] .quarantine-report-outline nav {
+  display: grid;
+  gap: 4px;
+}
+
+[data-feature="quarantine"] .quarantine-report-outline nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  color: var(--ant-color-text);
+  border-radius: 6px;
+}
+
+[data-feature="quarantine"] .quarantine-report-outline nav a:hover,
+[data-feature="quarantine"] .quarantine-report-outline nav a:focus-visible {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+[data-feature="quarantine"] .quarantine-report-outline nav a span {
+  width: 23px;
+  height: 23px;
+  font-size: 12px;
+  line-height: 21px;
+  text-align: center;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 50%;
+}
+
+[data-feature="quarantine"] .quarantine-report-coverage {
+  padding-top: 18px;
+  margin-top: 22px;
+  line-height: 1.7;
+  border-top: 1px solid var(--ant-color-border);
+}
+
+[data-feature="quarantine"] .quarantine-report-coverage p {
+  margin: 8px 0;
+}
+
+[data-feature="quarantine"] .quarantine-report-progress {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 20px 0 10px;
+}
+
+[data-feature="quarantine"] .quarantine-report-progress strong {
+  color: var(--ant-color-primary);
+  font-size: 24px;
+}
+
+[data-feature="quarantine"] .quarantine-report-progress span {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+[data-feature="quarantine"] .quarantine-report-paper {
+  min-width: 0;
+  overflow-x: hidden;
+  padding: 32px 38px 26px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: 0 4px 24px rgb(19 45 75 / 5%);
+}
+
+[data-feature="quarantine"] .quarantine-report-letterhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 12px;
+  border-bottom: 1px solid var(--ant-color-text);
+}
+
+[data-feature="quarantine"] .quarantine-report-paper > h1 {
+  margin: 26px 0 32px;
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 26px;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+[data-feature="quarantine"] .quarantine-report-metadata {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 28px;
+}
+
+[data-feature="quarantine"] .quarantine-report-metadata > .ant-form-item {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+[data-feature="quarantine"] .quarantine-report-metadata .ant-form-item-label {
+  padding: 0;
+  text-align: left;
+}
+
+[data-feature="quarantine"] .quarantine-report-preview .ant-table-thead > tr > th,
+[data-feature="quarantine"]
+  .quarantine-report-preview
+  .quarantine-sample-table
+  .ant-table-row
+  > .ant-table-cell:first-child {
+  background: var(--ant-color-bg-container);
+}
+
+[data-feature="quarantine"] .quarantine-report-section {
+  min-width: 0;
+  margin-bottom: 32px;
+  scroll-margin-top: 88px;
+}
+
+[data-feature="quarantine"] .quarantine-report-section h5 {
+  margin: 0 0 14px;
+}
+
+[data-feature="quarantine"] .quarantine-report-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+[data-feature="quarantine"] .quarantine-report-section-heading h5 {
+  margin: 0;
+}
+
+[data-feature="quarantine"] .quarantine-report-subsection {
+  padding-top: 24px;
+  scroll-margin-top: 88px;
+}
+
+[data-feature="quarantine"] .quarantine-report-section .ant-table-wrapper {
+  margin-block: 10px;
+  border: 1px solid var(--ant-color-border);
+}
+
+[data-feature="quarantine"] .quarantine-report-paper .ant-table-cell {
+  text-align: center;
+}
+
+[data-feature="quarantine"] .quarantine-report-paper .ant-table-thead > tr > th {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+[data-feature="quarantine"] .quarantine-report-paper .ant-table-cell .ant-input {
+  padding-inline: 4px;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-feature="quarantine"] .quarantine-report-paper .ant-table-cell .ant-input:hover,
+[data-feature="quarantine"] .quarantine-report-paper .ant-table-cell .ant-input:focus {
+  background: var(--ant-color-primary-bg);
+}
+
+[data-feature="quarantine"] .quarantine-sample-table .ant-table-row > .ant-table-cell:first-child {
+  width: 130px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+[data-feature="quarantine"] .quarantine-report-hint,
+[data-feature="quarantine"] .quarantine-report-paper-note {
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+[data-feature="quarantine"] .quarantine-result-block {
+  margin-block: 20px;
+}
+
+[data-feature="quarantine"] .quarantine-record-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+[data-feature="quarantine"] .quarantine-record-image {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  background: var(--ant-color-fill-quaternary);
+}
+
+[data-feature="quarantine"] .quarantine-attachment-card {
+  margin-block: 0;
+  border-color: var(--ant-color-border-secondary);
+}
+
+[data-feature="quarantine"] .quarantine-record-image-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-block: 12px;
+}
+
+[data-feature="quarantine"] .quarantine-record-empty {
+  padding: 32px 16px;
+  color: var(--ant-color-text-secondary);
+  text-align: center;
+  border: 1px dashed var(--ant-color-border);
+  border-radius: 8px;
+  margin-block: 16px;
+}
+
+[data-feature="quarantine"] .quarantine-signatures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  justify-content: space-between;
+  padding-block: 24px;
+  border-top: 1px solid var(--ant-color-border);
+  font-family: "Songti SC", SimSun, serif;
+}
+
+@media (width <= 1180px) {
+  [data-feature="quarantine"] .quarantine-report-workbar {
+    flex-wrap: wrap;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-workspace {
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-paper {
+    padding: 26px 24px;
+  }
+}
+
+@media (width <= 760px) {
+  [data-feature="quarantine"] .quarantine-report-editor {
+    margin: 0;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-workbar {
+    position: static;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-workspace {
+    display: block;
+    padding-inline: 0;
+    margin-top: 12px;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-outline {
+    display: none;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-paper {
+    padding: 22px 14px;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-paper > h1 {
+    font-size: 22px;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-metadata {
+    grid-template-columns: 1fr;
+  }
+
+  [data-feature="quarantine"] .quarantine-record-images {
+    grid-template-columns: 1fr;
+  }
+
+  [data-feature="quarantine"] .quarantine-report-section-heading {
+    flex-wrap: wrap;
+  }
+}

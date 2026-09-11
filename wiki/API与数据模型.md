@@ -175,3 +175,9 @@ SQLite 同时保留结构化热字段和兼容 payload。启动迁移会补字�
 - [[饲养费核算]]
 - [[开发规范]]
 - 文档维护规则位于仓库 `docs/contracts/documentation-system.md`。
+
+## 检疫领域
+
+检疫入口为 `/api/quarantine/`，全部接口校验登录，第一版所有登录角色可读写。提供批次、检测、原始附件、报告预览／出具／更正、分供应商复检和历史查询。接口细节见项目 `docs/contracts/api-contracts.md` 的检疫管理条目。
+
+SQLite中的 `quarantine_batches` 保存覆盖来源快照和最终结论；`quarantine_tests` 保存各方法混样、项目结果与复检／更正关系；`quarantine_attachments` 保留每次上传人和时间；`quarantine_reports` 保存已出具快照和版本。文件位于 `data/files/quarantine/`，下载要求会话鉴权。编辑按服务端版本校验，操作进入审计日志。

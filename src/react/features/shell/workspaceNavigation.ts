@@ -12,6 +12,10 @@ export type BillingSidebarItem = {
 export function isWorkspaceView(value: string): value is WorkspaceView {
   return [
     "dashboard",
+    "quarantine-parasite",
+    "quarantine-elisa",
+    "quarantine-pcr",
+    "quarantine-reports",
     "cages",
     "intake-entry",
     "intake-batches",

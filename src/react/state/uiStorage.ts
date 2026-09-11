@@ -4,6 +4,10 @@ const UI_STORAGE_KEY = "cageledger.ui.v2";
 const LEGACY_STORAGE_KEYS = ["cageledger.v1", "lahcas.v1"];
 const WORKSPACE_VIEWS = new Set<WorkspaceView>([
   "dashboard",
+  "quarantine-parasite",
+  "quarantine-elisa",
+  "quarantine-pcr",
+  "quarantine-reports",
   "cages",
   "intake-entry",
   "intake-batches",

@@ -133,6 +133,17 @@ export function MobileNavigation({
               <MenuItem icon={<InboxOutlined />} label="待接收批次" view="intake-batches" onNavigate={onNavigate} />
               <MenuItem icon={<QrcodeOutlined />} label="二维码扫描" view="cage-card-scanner" onNavigate={onNavigate} />
             </List>
+            <List header="检疫管理">
+              <MenuItem
+                icon={<AuditOutlined />}
+                label="寄生虫检测"
+                view="quarantine-parasite"
+                onNavigate={onNavigate}
+              />
+              <MenuItem icon={<AuditOutlined />} label="ELISA检测" view="quarantine-elisa" onNavigate={onNavigate} />
+              <MenuItem icon={<AuditOutlined />} label="PCR检测" view="quarantine-pcr" onNavigate={onNavigate} />
+              <MenuItem icon={<AuditOutlined />} label="检疫报告" view="quarantine-reports" onNavigate={onNavigate} />
+            </List>
             <List header="笼位管理">
               <MenuItem icon={<AppstoreOutlined />} label="动态笼位图" view="cages" onNavigate={onNavigate} />
             </List>

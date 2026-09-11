@@ -5,6 +5,7 @@ import type { IntakeBatch, IntakeBatchStatus, IntakeListParams } from "../../../
 import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { DataTable } from "../../../components/ui";
+import { IntakeQuarantineStatus } from "../../quarantine/IntakeQuarantineStatus";
 import { intakeStatusLabel } from "../../../../domain/intake";
 
 export function IntakeBatchList({
@@ -123,6 +124,7 @@ export function IntakeBatchList({
         );
       },
     })),
+    { key: "quarantine", title: "检疫状态", width: 110, render: (_, item) => <IntakeQuarantineStatus item={item} /> },
     {
       key: "actions",
       title: "操作",

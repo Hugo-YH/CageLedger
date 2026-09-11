@@ -48,7 +48,11 @@ export function useSaveIntakeBatch() {
           body: JSON.stringify({ item, expectedUpdatedAt: exists ? item.updatedAt : "" }),
         },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+      ]),
   });
 }
 
@@ -57,7 +61,11 @@ export function useDeleteIntakeBatch() {
   return useMutation({
     mutationFn: (id: string) =>
       requestJson<IntakeWriteResponse>(`/api/intake-batches/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+      ]),
   });
 }
 
@@ -69,7 +77,11 @@ export function useConfirmIntakeBatch() {
         method: "POST",
         body: JSON.stringify({ actualReceiptDate, cardCount }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+      ]),
   });
 }
 
@@ -81,7 +93,11 @@ export function useMarkIntakeBatchesPrinted() {
         method: "POST",
         body: JSON.stringify({ ids }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+      ]),
   });
 }
 
@@ -93,7 +109,11 @@ export function useConfirmIntakeBatchesReceipt() {
         method: "POST",
         body: JSON.stringify({ ids }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+      ]),
   });
 }
 

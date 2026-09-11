@@ -16,6 +16,8 @@ export interface IntakeReceipt {
 }
 
 export interface IntakeBatch {
+  quarantineStatus?: "待接收" | "待检疫" | "检疫中" | "已检疫";
+  quarantineBatches?: { id: string; name: string; completedAt: string }[];
   id: string;
   rawMessage: string;
   purchaseOrderNo: string;
