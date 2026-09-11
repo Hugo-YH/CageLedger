@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from server_app.domains.iacuc.auto_import import (
     xlsx_to_csv_bytes,
 )
 from server_app.legacy import initialize_schema
+from server_app.persistence.legacy_migrations import repair_intake_batch_species
 
 
 def build_summary_xlsx(path, rows):
@@ -112,6 +114,58 @@ class IacucAutoImportTests(unittest.TestCase):
         self.assertTrue(target.exists())
         self.assertFalse(source.exists())
         self.assertTrue(target.name.startswith("动物实验申请汇总表"))
+
+    @patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file")
+    def test_iacuc_species_summary_does_not_overwrite_intake_species(self, _save_index):
+        payload = {
+            "id": "intake",
+            "iacuc": "Z2026001",
+            "species": "mouse",
+            "strainRaw": "C57/B6J",
+            "rawMessage": "品系：C57/B6J",
+        }
+        self.conn.execute(
+            """
+            INSERT INTO intake_batches (
+                id, batch_no, iacuc, status, updated_at, payload
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("intake", "batch", "Z2026001", "received", "before", json.dumps(payload)),
+        )
+        path = Path(self.tmpdir.name) / "summary.csv"
+        path.write_text(
+            "动物伦理编号,动物实验名称,项目负责人,实验负责人,动物品系\n"
+            "Z2026001,近视研究,张三,李四,C57小鼠600只、SD大鼠72只\n",
+            encoding="utf-8-sig",
+        )
+        import_summary_file(path, conn=self.conn, now="2026-09-11T12:00:00")
+        stored = json.loads(
+            self.conn.execute("SELECT payload FROM intake_batches WHERE id='intake'").fetchone()["payload"]
+        )
+        self.assertEqual(stored["species"], "mouse")
+
+    def test_repairs_polluted_intake_species_from_its_own_strain(self):
+        payload = {
+            "id": "intake",
+            "species": "C57小鼠600只、SD大鼠72只",
+            "strainRaw": "SD大鼠",
+            "strainStandard": "SD大鼠",
+            "rawMessage": "品系：SD大鼠",
+        }
+        self.conn.execute(
+            """
+            INSERT INTO intake_batches (
+                id, batch_no, status, updated_at, payload
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            ("intake", "batch", "received", "before", json.dumps(payload)),
+        )
+        repair_intake_batch_species(self.conn)
+        repair_intake_batch_species(self.conn)
+        stored = json.loads(
+            self.conn.execute("SELECT payload FROM intake_batches WHERE id='intake'").fetchone()["payload"]
+        )
+        self.assertEqual(stored["species"], "rat")
 
 
 if __name__ == "__main__":

@@ -209,20 +209,23 @@ npm run test:e2e
 
 `/api/quarantine/` 下所有接口要求登录；第一版全部登录角色可读写，权限集中在检疫领域。批次来源取到货记录快照，检测保存混样及项目判定，不建立单笼采样关联。
 
-| 方法       | 相对路径                                     | 行为                                                    |
-| ---------- | -------------------------------------------- | ------------------------------------------------------- |
-| GET        | `catalog`、`supplier-options`                | 项目配置与规范供应商候选                                |
-| GET        | `sources`、`batches`                         | 分页来源与检疫批次，支持日期或名称筛选                  |
-| POST / PUT | `batches[/{id}]`、`tests[/{id}]`             | 创建或编辑，正文 `{ item, expectedUpdatedAt }`          |
-| GET        | `batches/{id}`                               | 覆盖范围、检测、附件与历史报告版本                      |
-| POST       | `tests/{id}/attachments`                     | multipart字段file；查询参数传关联样本、项目、分类及版本 |
-| GET        | `attachments/{id}`、`reports/{id}`           | 受鉴权下载                                              |
-| GET        | `tests/{id}/preview`                         | 带草稿标识的Word预览                                    |
-| POST       | `tests/{id}/issue`                           | 传检测和批次版本；成功生成文件后保存不可变快照          |
-| POST       | `tests/{id}/correction`、`tests/{id}/retest` | 新草稿ID及版本；复检另传供应商                          |
-| GET        | `suppliers`                                  | 供应商、日期范围／类型、种类、方法、结果过滤，含明细    |
+| 方法       | 相对路径                                      | 行为                                                    |
+| ---------- | --------------------------------------------- | ------------------------------------------------------- |
+| GET        | `catalog`、`supplier-options`、`batch-number` | 项目配置、供应商候选与 `BYYMMDDNN` 建议批次编号         |
+| GET        | `sources`、`batches`                          | 分页来源与检疫批次，支持日期或批次编号筛选              |
+| POST / PUT | `batches[/{id}]`、`tests[/{id}]`              | 创建或编辑，正文 `{ item, expectedUpdatedAt }`          |
+| DELETE     | `batches/{id}`                                | 删除无检测记录的批次，正文 `{ expectedUpdatedAt }`      |
+| GET        | `batches/{id}`                                | 覆盖范围、检测、附件与历史报告版本                      |
+| POST       | `tests/{id}/attachments`                      | multipart字段file；查询参数传关联样本、项目、分类及版本 |
+| GET        | `attachments/{id}`、`reports/{id}`            | 受鉴权下载                                              |
+| GET        | `tests/{id}/preview`                          | 带草稿标识的Word预览                                    |
+| POST       | `tests/{id}/issue`                            | 传检测和批次版本；成功生成文件后保存不可变快照          |
+| POST       | `tests/{id}/correction`、`tests/{id}/retest`  | 新草稿ID及版本；复检另传供应商                          |
+| GET        | `suppliers`                                   | 供应商、日期范围／类型、种类、方法、结果过滤，含明细    |
 
 编辑必须提供 `expectedUpdatedAt`，缺失或过期返回409；出具另传 `expectedBatchUpdatedAt`。出具重试返回已有报告，生成失败保留草稿。更正新建检测记录并关联原版本，旧Word继续可下载。事务记录操作者与审计快照。`quarantine_batches/tests/attachments/reports` 与 `files/quarantine/` 共同组成检疫备份范围。
+
+检疫批次编号首次保存后冻结，流水号一经分配不再回收。正式报告按 `{批次编号}{M|E|P}{YYMMDD}{NN}` 编号；ELISA 大小鼠共用 `E` 序列，更正版本沿用报告编号并递增独立版本号。报告编号保存在系统记录中，正式 Word 暂不打印该编号。
 
 检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
 

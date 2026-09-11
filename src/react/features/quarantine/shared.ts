@@ -1,4 +1,5 @@
 import { createClientId } from "../../../domain/id";
+import { speciesLabel } from "../../../domain/intake";
 import type {
   QuarantineMethod,
   QuarantineResult,
@@ -26,7 +27,7 @@ export function sourceLabel(s: QuarantineSource) {
     s.supplier,
     s.pi,
     s.owner,
-    s.species,
+    speciesLabel(s.species),
     s.strainStandard || s.strainRaw,
     s.intakeDate,
     s.manual ? "手工来源" : "",

@@ -10,6 +10,12 @@ type Props = {
   onRemoveProject?: (id: string) => void;
   fields?: ("name" | "kit" | "lot")[];
 };
+
+function sourceLabel(source: QuarantineBatch["sources"][number]) {
+  if (source.pi && source.owner) return `${source.pi}${source.pi.endsWith("组") ? "" : "组"}${source.owner}`;
+  return source.pi || source.owner || source.notes || "手工来源";
+}
+
 export function ReportInformation({ test, onChange }: Pick<Props, "test" | "onChange">) {
   const material = test.reportMaterial ?? [...new Set(test.samples.map((s) => s.material))].join("、");
   const state =
@@ -165,6 +171,11 @@ export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) 
             width: 220,
             render: (_: unknown, row: { label: string }) => {
               const selected = batch.sources.filter((s) => sample.sourceIds.includes(s.id));
+              const assignedToOtherSamples = new Set(
+                test.samples
+                  .filter((candidate) => candidate.id !== sample.id)
+                  .flatMap((candidate) => candidate.sourceIds),
+              );
               if (row.label === "供应商")
                 return [...new Set(selected.map((s) => s.supplier))].join("、") || "选择来源后带入";
               if (row.label === "课题组／实验人员")
@@ -176,14 +187,15 @@ export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) 
                     options={batch.sources
                       .filter(
                         (s) =>
-                          !test.method.startsWith("elisa") ||
-                          (test.method === "elisa_mouse" ? ["小鼠", "mouse"] : ["大鼠", "rat"]).includes(
-                            s.species.toLowerCase(),
-                          ),
+                          (sample.sourceIds.includes(s.id) || !assignedToOtherSamples.has(s.id)) &&
+                          (!test.method.startsWith("elisa") ||
+                            (test.method === "elisa_mouse" ? ["小鼠", "mouse"] : ["大鼠", "rat"]).includes(
+                              s.species.toLowerCase(),
+                            )),
                       )
                       .map((s) => ({
                         value: s.id,
-                        label: [s.pi, s.owner].filter(Boolean).join("／") || s.notes || "手工来源",
+                        label: sourceLabel(s),
                       }))}
                     onChange={(sourceIds) =>
                       onChange({
@@ -199,7 +211,7 @@ export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) 
                 ) : (
                   <Space orientation="vertical">
                     {selected.map((s) => (
-                      <span key={s.id}>{[s.pi, s.owner].filter(Boolean).join("／") || s.notes || "手工来源"}</span>
+                      <span key={s.id}>{sourceLabel(s)}</span>
                     ))}
                   </Space>
                 );

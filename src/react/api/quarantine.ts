@@ -52,7 +52,7 @@ export function useQuarantineWrite() {
     }: {
       path: string;
       body?: object;
-      method?: "POST" | "PUT";
+      method?: "POST" | "PUT" | "DELETE";
       file?: File;
     }) =>
       file

@@ -134,6 +134,7 @@ export function MobileNavigation({
               <MenuItem icon={<QrcodeOutlined />} label="二维码扫描" view="cage-card-scanner" onNavigate={onNavigate} />
             </List>
             <List header="检疫管理">
+              <MenuItem icon={<BookOutlined />} label="检疫批次" view="quarantine-batches" onNavigate={onNavigate} />
               <MenuItem
                 icon={<AuditOutlined />}
                 label="寄生虫检测"

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Button, DatePicker, Select, Space, Table, Tag } from "antd";
 import dayjs from "dayjs";
+import { speciesLabel } from "../../../domain/intake";
 import type { IntakeBatch } from "../../../contracts/intake";
 import type { QuarantineSource } from "../../../contracts/quarantine";
 import { useQuarantineSources } from "../../api/quarantine";
@@ -89,7 +90,7 @@ export function QuarantinePool({
           { title: "到货批次", dataIndex: "batchNo" },
           { title: "供应商", dataIndex: "supplier" },
           { title: "品系", render: (_, s) => s.strainStandard || s.strainRaw || "—" },
-          { title: "种类", dataIndex: "species" },
+          { title: "种类", render: (_, s) => speciesLabel(s.species) || "—" },
           { title: "数量", dataIndex: "quantity" },
           { title: "课题组", dataIndex: "pi" },
           { title: "检疫状态", render: (_, s) => <Tag>{s.quarantineStatus}</Tag> },

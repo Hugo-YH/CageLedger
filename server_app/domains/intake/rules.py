@@ -164,6 +164,26 @@ def species_label(value):
     }.get(clean_text(value), clean_text(value))
 
 
+SPECIES_CODES = frozenset(("mouse", "rat", "guinea_pig", "rabbit", "monkey", "dog", "pig"))
+
+
+def infer_species(value):
+    text = clean_text(value)
+    if re.search(r"猴|monkey|macaque", text, re.IGNORECASE):
+        return "monkey"
+    if re.search(r"兔|rabbit", text, re.IGNORECASE):
+        return "rabbit"
+    if re.search(r"猪|pig|swine", text, re.IGNORECASE):
+        return "pig"
+    if re.search(r"犬|狗|dog|canine", text, re.IGNORECASE):
+        return "dog"
+    if re.search(r"豚鼠|guinea", text, re.IGNORECASE):
+        return "guinea_pig"
+    if re.search(r"大鼠|rat|sprague|wistar|lewis|\bsd\b", text, re.IGNORECASE):
+        return "rat"
+    return "mouse"
+
+
 def cage_card_status_label(batch, task, occupancy):
     if occupancy:
         return {"reserved": "已预留", "active": "已入驻", "ended": "已结束"}.get(

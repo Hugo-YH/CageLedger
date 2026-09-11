@@ -136,6 +136,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
       icon: <AuditOutlined />,
       label: "检疫管理",
       children: [
+        item("quarantine-batches", "检疫批次", <BookOutlined />),
         item("quarantine-parasite", "寄生虫检测", <AuditOutlined />),
         item("quarantine-elisa", "ELISA检测", <AuditOutlined />),
         item("quarantine-pcr", "PCR检测", <AuditOutlined />),
@@ -283,6 +284,7 @@ function item(key: string, label: string, icon: ReactNode, dataUi?: string): Non
 
 function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (view: WorkspaceView) => void) {
   if (
+    view === "quarantine-batches" ||
     view === "quarantine-parasite" ||
     view === "quarantine-elisa" ||
     view === "quarantine-pcr" ||

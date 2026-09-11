@@ -338,6 +338,8 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
+        if handle_quarantine(self, "DELETE", path):
+            return
         user_id = self.user_route(path)
         if user_id:
             user = self.require_user()

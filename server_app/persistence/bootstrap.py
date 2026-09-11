@@ -34,6 +34,7 @@ from server_app.persistence.legacy_migrations import (
     ensure_experiment_applications_duplicate_schema,
     ensure_intake_batch_structured_columns,
     ensure_occupancies_history_schema,
+    repair_intake_batch_species,
 )
 from server_app.persistence.legacy_migrations import (
     ensure_occupancies_structured_columns as ensure_occupancies_structured_columns_migration,
@@ -86,6 +87,7 @@ def migrate_schema(conn):
     ensure_occupancies_history_schema(conn)
     ensure_occupancies_structured_columns_migration(conn, backfill_occupancy_structured_columns)
     ensure_intake_batch_structured_columns(conn)
+    repair_intake_batch_species(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
     migrate_reimbursement_record_schema(conn)

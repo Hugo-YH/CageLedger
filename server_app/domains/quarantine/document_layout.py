@@ -179,7 +179,11 @@ def image_table(template, doc, entries, root, sizes):
             if entry and entry.get("attachment"):
                 attachment = entry["attachment"]
                 shape = (
-                    cell.paragraphs[0].add_run().add_picture(BytesIO((root / attachment["storageName"]).read_bytes()))
+                    cell.paragraphs[0]
+                    .add_run()
+                    .add_picture(
+                        BytesIO((root / attachment.get("previewStorageName", attachment["storageName"])).read_bytes())
+                    )
                 )
                 image_width, height = sizes[index % len(sizes)] if sizes else (2700000, 2100000)
                 ratio = min(min(image_width, width - 150000) / shape.width, height / shape.height)

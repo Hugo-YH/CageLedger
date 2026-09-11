@@ -5,6 +5,7 @@ import {
   missingIntakeRequiredFields,
   normalizeIntakeBatch,
   parseIntakeMessage,
+  speciesLabel,
   standardizeStrain,
 } from "./intake";
 
@@ -75,5 +76,10 @@ describe("intake message parser", () => {
   it("shortens supplier names with the shared print rules", () => {
     expect(abbreviateSupplier("上海南方模式生物科技股份有限公司")).toBe("上海南模");
     expect(abbreviateSupplier("未收录供应商")).toBe("未收录供应商");
+  });
+
+  it("shows stored species codes as Chinese business labels", () => {
+    expect(speciesLabel("mouse")).toBe("小鼠");
+    expect(speciesLabel("rat")).toBe("大鼠");
   });
 });

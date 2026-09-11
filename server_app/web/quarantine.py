@@ -52,6 +52,8 @@ def get(handler, conn, parts, params):
         return {"projects": PROJECTS, "templateVersion": TEMPLATE_VERSION}
     if parts == ["supplier-options"]:
         return {"items": repo.supplier_options(conn)}
+    if parts == ["batch-number"]:
+        return {"batchNo": service.next_batch_number(conn, params.get("businessDate", ""))}
     if parts in (["sources"], ["batches"]):
         return repo.list_page(conn, parts[0], params)
     if len(parts) == 2 and parts[0] == "batches":
@@ -60,6 +62,10 @@ def get(handler, conn, parts, params):
         return {"items": supplier_history(conn, params)}
     if len(parts) == 2 and parts[0] in {"attachments", "reports"}:
         item = repo.get(conn, parts[0], parts[1])
+        if parts[0] == "attachments" and params.get("preview") == "1" and item["mime"].startswith("image/"):
+            content, mime = files.preview(item, QUARANTINE_FILES_PATH)
+            handler.send_download(content, "preview.png" if mime == "image/png" else item["name"], mime)
+            return None
         name = item["name"] if parts[0] == "attachments" else item["number"] + ".docx"
         handler.send_download(
             (QUARANTINE_FILES_PATH / item["storageName"]).read_bytes(), name, item.get("mime", files.DOCX_MIME)
@@ -82,6 +88,8 @@ def write(handler, conn, user, method, parts, params):
     body = handler.read_json_body()
     if method == "PUT" and len(parts) == 2 and parts[0] == "attachments":
         return attachment_metadata.update(conn, user, parts[1], body)
+    if method == "DELETE" and len(parts) == 2 and parts[0] == "batches":
+        return {"item": service.delete_batch(conn, user, parts[1], body)}
     if method == "POST" and len(parts) == 3 and parts[0] == "batches" and parts[2] == "complete":
         return {"item": workflow.complete(conn, user, parts[1], body)}
     if parts[0] in {"batches", "tests"} and (

@@ -26,7 +26,7 @@ for (const size of [
         Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true }),
       );
       await login(page);
-      await openNavigationEntry(page, "检疫管理", "检疫报告");
+      await openNavigationEntry(page, "检疫管理", "检疫批次");
       await expect(page.getByRole("combobox", { name: "检疫池范围" })).toBeVisible();
       const poolStyle = await page.locator('section[data-feature="quarantine"]').evaluate((el) => ({
         display: getComputedStyle(el).display,
@@ -40,11 +40,13 @@ for (const size of [
       });
       await page.screenshot({ path: testInfo.outputPath("pool.png"), fullPage: true });
       await page.getByRole("button", { name: "新建检疫批次", exact: true }).click();
-      const batchName = `哨兵鼠检疫-${randomUUID()}`;
-      await page.getByRole("textbox", { name: "检疫批次名称", exact: true }).fill(batchName);
+      const batchNumberInput = page.getByRole("textbox", { name: "检疫批次编号", exact: true });
+      await expect(batchNumberInput).toHaveValue(/^B\d{8}$/);
+      const batchName = await batchNumberInput.inputValue();
+      await page.getByText("手工补充来源（哨兵鼠等）", { exact: true }).click();
       await page.getByRole("combobox", { name: "手工供应商", exact: true }).fill("测试供应商");
       await page.getByRole("button", { name: "添加手工来源" }).click();
-      await expect(page.getByText("已选覆盖来源（1）")).toBeVisible();
+      await expect(page.getByText("已添加手工来源", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "保存检疫批次" }).click();
       await expect(page.getByRole("dialog")).toBeHidden();
       await openNavigationEntry(page, "检疫管理", "寄生虫检测");
@@ -88,10 +90,17 @@ for (const size of [
         paperBackground: getComputedStyle(element.querySelector(".quarantine-report-paper")!).backgroundColor,
         outlineDisplay: getComputedStyle(element.querySelector(".quarantine-report-outline")!).display,
         toolbarPosition: getComputedStyle(document.querySelector(".quarantine-report-workbar")!).position,
+        samplingDateWidth: Math.round(
+          document
+            .querySelector<HTMLElement>('[aria-label="采样日期"]')!
+            .closest<HTMLElement>(".ant-picker")!
+            .getBoundingClientRect().width,
+        ),
       }));
       expect(reportStyle.paperBackground).not.toBe("rgba(0, 0, 0, 0)");
-      expect(reportStyle.outlineDisplay).toBe(size.width <= 760 ? "none" : "flex");
+      expect(reportStyle.outlineDisplay).toBe(size.width <= 900 ? "none" : "flex");
       expect(reportStyle.toolbarPosition).toBe(size.width <= 760 ? "static" : "sticky");
+      expect(reportStyle.samplingDateWidth).toBeGreaterThan(200);
       await testInfo.attach("report-computed-style", {
         body: JSON.stringify(reportStyle),
         contentType: "application/json",
@@ -176,7 +185,7 @@ test("room administrator without assigned rooms can manage quarantine", async ({
   await regular.getByLabel("用户名", { exact: true }).fill(username);
   await regular.getByLabel("密码", { exact: true }).fill("Quarantine-test-123");
   await regular.getByRole("button", { name: "登录", exact: true }).click();
-  await openNavigationEntry(regular, "检疫管理", "检疫报告");
+  await openNavigationEntry(regular, "检疫管理", "检疫批次");
   await expect(regular.getByRole("button", { name: "新建检疫批次", exact: true })).toBeVisible();
   const saved = await regular.request.post("/api/quarantine/batches", {
     data: {
@@ -189,6 +198,43 @@ test("room administrator without assigned rooms can manage quarantine", async ({
   });
   expect(saved.ok()).toBe(true);
   await context.close();
+});
+
+test("quarantine batch workspace provides create, edit and guarded delete actions", async ({ page }) => {
+  await login(page);
+  const batchId = randomUUID();
+  const batchName = `批次维护-${batchId}`;
+  const created = await page.request.post("/api/quarantine/batches", {
+    data: {
+      item: {
+        id: batchId,
+        name: batchName,
+        sources: [{ id: "manual", supplier: "哨兵鼠供应商", species: "小鼠" }],
+      },
+    },
+  });
+  expect(created.ok()).toBe(true);
+  await openNavigationEntry(page, "检疫管理", "检疫批次");
+  await expect(page.getByRole("tab", { name: "待检疫列表", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "检疫批次列表", exact: true }).click();
+  let row = page.getByRole("row").filter({ hasText: batchName });
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "检疫批次编号", exact: true })).toHaveValue(batchName);
+  await expect(page.getByRole("combobox", { name: "手工供应商" })).toBeHidden();
+  await page.getByText("手工补充来源（哨兵鼠等）", { exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "手工供应商" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "异常处理说明" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "检疫最终结论" })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "检疫批次备注" }).fill("批次建立备注");
+  await page.getByRole("button", { name: "保存检疫批次", exact: true }).click();
+  await expect(page.getByText("备注：批次建立备注", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "返回列表", exact: true }).click();
+  row = page.getByRole("row").filter({ hasText: batchName });
+  await row.getByRole("button", { name: "删除", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "删除检疫批次" });
+  await confirmation.getByRole("button", { name: "删除", exact: true }).click();
+  await expect(page.getByText("检疫批次已删除", { exact: true })).toBeVisible();
+  await expect(row).toBeHidden();
 });
 
 test("received animals flow through pool, covered cohort and manual completion", async ({ page }, testInfo) => {
@@ -230,20 +276,26 @@ test("received animals flow through pool, covered cohort and manual completion",
     });
     expect(received.ok(), await received.text()).toBe(true);
   }
-  await openNavigationEntry(page, "检疫管理", "检疫报告");
+  await openNavigationEntry(page, "检疫管理", "检疫批次");
   for (const intakeId of intakeIds) {
     const row = page.getByRole("row").filter({ hasText: intakeId });
     await expect(row).toContainText("C57BL/6J");
+    await expect(row).toContainText("小鼠");
+    await expect(row).not.toContainText("mouse");
     await expect(row).toContainText("待检疫");
     await row.getByRole("checkbox").check();
   }
   await page.getByRole("button", { name: "用所选动物新建检疫批次（2）" }).click();
-  await page.getByRole("textbox", { name: "检疫批次名称", exact: true }).fill(`整批检疫-${suffix}`);
-  await page.getByRole("textbox", { name: "检疫最终结论" }).fill("所属检疫批次抽检无异常");
+  const batchNumberInput = page.getByRole("textbox", { name: "检疫批次编号", exact: true });
+  await expect(batchNumberInput).toHaveValue(/^B\d{8}$/);
+  const batchNumber = await batchNumberInput.inputValue();
+  await expect(page.getByRole("button", { name: "移除", exact: true })).toHaveCount(2);
   await page.getByRole("button", { name: "保存检疫批次", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByRole("button", { name: "确认检疫完成", exact: true })).toBeDisabled();
-  const batches = await (await page.request.get(`/api/quarantine/batches?search=${encodeURIComponent(suffix)}`)).json();
+  const batches = await (
+    await page.request.get(`/api/quarantine/batches?search=${encodeURIComponent(batchNumber)}`)
+  ).json();
   const batch = batches.items[0];
   pool = await (await page.request.get("/api/quarantine/sources?limit=200")).json();
   expect(pool.items.some((i: { id: string }) => intakeIds.includes(i.id))).toBe(false);
@@ -291,13 +343,16 @@ test("received animals flow through pool, covered cohort and manual completion",
     expect(issued.ok(), await issued.text()).toBe(true);
   }
   await page.reload();
-  await openNavigationEntry(page, "检疫管理", "检疫报告");
-  await page.getByRole("tab", { name: "批次与报告", exact: true }).click();
+  await openNavigationEntry(page, "检疫管理", "检疫批次");
+  await page.getByRole("tab", { name: "检疫批次列表", exact: true }).click();
   await page
     .getByRole("row")
-    .filter({ hasText: `整批检疫-${suffix}` })
-    .getByRole("button", { name: "查看检疫批次" })
+    .filter({ hasText: batchNumber })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
+  await page.getByRole("button", { name: "填写检疫结论", exact: true }).click();
+  await page.getByRole("textbox", { name: "检疫最终结论" }).fill("所属检疫批次抽检无异常");
+  await page.getByRole("button", { name: "保存检疫结论", exact: true }).click();
   await page.getByRole("button", { name: "确认检疫完成", exact: true }).click();
   await page.getByRole("button", { name: "确认整批已检疫", exact: true }).click();
   await expect(page.getByText("整批已检疫 · 确认人：系统管理员")).toBeVisible();
@@ -396,11 +451,20 @@ test("ELISA report form links sources, symbols and multi-project image metadata"
   await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "查看检测记录" }).click();
   await page.getByRole("button", { name: "ELISA检测（小鼠） · 2026-09-03 · 草稿", exact: true }).click();
   await page.getByRole("button", { name: "编辑检测", exact: true }).click();
+  await page.getByRole("button", { name: "＋ 添加样本", exact: true }).click();
+  const secondSource = page.getByRole("combobox", { name: "混样来源 2", exact: true });
+  await secondSource.click();
+  const secondDropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
+  await expect(secondDropdown).not.toContainText("甲组张同学");
+  await expect(secondDropdown).toContainText("乙组李同学");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "删除样本", exact: true }).last().click();
+  await page.getByRole("button", { name: "确认删除", exact: true }).click();
   const source = page.getByRole("combobox", { name: "混样来源 1", exact: true });
   await source.click();
   const dropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
   await expect(dropdown).not.toContainText("江苏集萃");
-  await dropdown.getByText("乙组／李同学", { exact: true }).click();
+  await dropdown.getByText("乙组李同学", { exact: true }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByText("1样（2份血清）", { exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "结果判定", exact: true })).toHaveCount(0);
@@ -424,6 +488,7 @@ test("ELISA report form links sources, symbols and multi-project image metadata"
     .filter({ hasText: /^SV$/ })
     .click();
   await page.keyboard.press("Escape");
+  await expect(page.locator('input[type="file"]')).toHaveAttribute("accept", /\.tif/);
   await page.locator('input[type="file"]').setInputFiles({
     name: "gel.png",
     mimeType: "image/png",

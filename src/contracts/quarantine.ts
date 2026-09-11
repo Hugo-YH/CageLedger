@@ -19,8 +19,11 @@ export interface QuarantineSource {
 }
 export interface QuarantineBatch {
   id: string;
+  batchNo?: string;
+  businessDate?: string;
   name: string;
   sources: QuarantineSource[];
+  notes: string;
   conclusion: string;
   handling: string;
   updatedAt: string;

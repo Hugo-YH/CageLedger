@@ -1,4 +1,9 @@
 import json
+import re
+
+from server_app.domains.intake import SPECIES_CODES
+from server_app.repositories.payload import dump_json
+from server_app.shared import clean_text
 
 
 def ensure_schema(conn):
@@ -16,6 +21,64 @@ def ensure_schema(conn):
         )
     for table, field in (("tests", "batch_id"), ("attachments", "test_id"), ("reports", "test_id")):
         conn.execute(f"CREATE INDEX IF NOT EXISTS idx_quarantine_{table}_{field} ON quarantine_{table}({field})")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS quarantine_number_sequences (
+               scope TEXT PRIMARY KEY,
+               last_value INTEGER NOT NULL
+           )"""
+    )
+    backfill_number_sequences(conn)
+    repair_linked_source_species(conn)
+
+
+def backfill_number_sequences(conn):
+    for batch in all_items(conn, "batches"):
+        batch_no = clean_text(batch.get("batchNo") or batch.get("name"))
+        if match := re.fullmatch(r"B(\d{6})(\d{2})", batch_no):
+            advance_sequence(conn, f"batch:{match.group(1)}", int(match.group(2)))
+    for report in all_items(conn, "reports"):
+        if match := re.fullmatch(r"(B\d{8})([MEP])(\d{6})(\d{2})", clean_text(report.get("number"))):
+            advance_sequence(conn, f"report:{match.group(1)}:{match.group(2)}:{match.group(3)}", int(match.group(4)))
+
+
+def sequence_value(conn, scope):
+    row = conn.execute("SELECT last_value FROM quarantine_number_sequences WHERE scope=?", (scope,)).fetchone()
+    return int(row[0]) if row else 0
+
+
+def advance_sequence(conn, scope, value):
+    if value <= sequence_value(conn, scope):
+        return
+    conn.execute(
+        """INSERT INTO quarantine_number_sequences(scope, last_value) VALUES (?, ?)
+           ON CONFLICT(scope) DO UPDATE SET last_value=MAX(last_value, excluded.last_value)""",
+        (scope, value),
+    )
+
+
+def reserve_sequence(conn, scope, value):
+    if value <= sequence_value(conn, scope):
+        raise ValueError("编号已经分配过且不能重复使用，请刷新后重试")
+    advance_sequence(conn, scope, value)
+
+
+def repair_linked_source_species(conn):
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='intake_batches'").fetchone():
+        return
+    intake_species = {
+        row["id"]: clean_text(json.loads(row["payload"]).get("species"))
+        for row in conn.execute("SELECT id, payload FROM intake_batches")
+    }
+    for row in conn.execute("SELECT id, payload FROM quarantine_batches"):
+        payload = json.loads(row["payload"])
+        changed = False
+        for source in payload.get("sources", []):
+            species = intake_species.get(clean_text(source.get("intakeId")))
+            if species in SPECIES_CODES and source.get("species") != species:
+                source["species"] = species
+                changed = True
+        if changed:
+            conn.execute("UPDATE quarantine_batches SET payload=? WHERE id=?", (dump_json(payload), row["id"]))
 
 
 def get(conn, table, entity_id):
@@ -59,6 +122,10 @@ def save(conn, table, item, *, create=False):
     )
 
 
+def delete(conn, table, entity_id):
+    conn.execute(f"DELETE FROM quarantine_{table} WHERE id=?", (entity_id,))
+
+
 def intake(conn, entity_id):
     row = conn.execute("SELECT payload FROM intake_batches WHERE id=?", (entity_id,)).fetchone()
     if not row:
@@ -75,6 +142,18 @@ def supplier_options(conn):
     }
     names.update(s["supplier"] for b in all_items(conn, "batches") for s in b["sources"])
     return sorted(name for name in names if name)
+
+
+def batch_number_exists(conn, batch_no, exclude_id=""):
+    return bool(
+        conn.execute(
+            """SELECT 1 FROM quarantine_batches
+               WHERE lower(COALESCE(json_extract(payload, '$.batchNo'), json_extract(payload, '$.name'))) = lower(?)
+                 AND id != ?
+               LIMIT 1""",
+            (batch_no, exclude_id),
+        ).fetchone()
+    )
 
 
 def list_page(conn, table, params):

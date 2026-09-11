@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 
+from server_app.domains.intake import SPECIES_CODES, infer_species
 from server_app.repositories.payload import dump_json
 from server_app.shared import as_int, clean_text
 
@@ -158,6 +159,18 @@ def backfill_intake_batch_structured_columns(conn):
                 row["id"],
             ),
         )
+
+
+def repair_intake_batch_species(conn):
+    """Restore batch-level species values overwritten by IACUC project summaries."""
+    rows = conn.execute("SELECT id, payload FROM intake_batches").fetchall()
+    for row in rows:
+        payload = json.loads(row["payload"])
+        if clean_text(payload.get("species")) in SPECIES_CODES:
+            continue
+        evidence = " ".join(clean_text(payload.get(field)) for field in ("strainStandard", "strainRaw", "rawMessage"))
+        payload["species"] = infer_species(evidence)
+        conn.execute("UPDATE intake_batches SET payload = ? WHERE id = ?", (dump_json(payload), row["id"]))
 
 
 def ensure_occupancies_history_schema(conn):

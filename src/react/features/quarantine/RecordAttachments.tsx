@@ -81,7 +81,7 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             onChange={setProjectIds}
           />
           <Upload
-            accept=".png,.jpg,.jpeg,.pdf,.xlsx,.xls"
+            accept=".png,.jpg,.jpeg,.tif,.tiff,.pdf,.xlsx,.xls"
             showUploadList={false}
             beforeUpload={(file) => {
               void upload(file);
@@ -155,7 +155,7 @@ function AttachmentCard({
       {a.mime.startsWith("image/") ? (
         <Image
           className="quarantine-record-image"
-          src={`/api/quarantine/attachments/${a.id}`}
+          src={`/api/quarantine/attachments/${a.id}?preview=1`}
           alt={draft.caption || a.name}
         />
       ) : (

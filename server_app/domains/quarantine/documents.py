@@ -138,12 +138,10 @@ def generate(snapshot, root, *, draft=False):
         if closing.tag == qn("w:p"):
             Paragraph(closing, document).paragraph_format.keep_with_next = True
         closing = closing.getprevious()
-    footer_label = "草稿 · 仅供预览" if draft else snapshot["number"]
-    # Identification lives in the footer so the original title block and section order remain unchanged.
-    for section in document.sections:
-        for footer in (section.footer, section.first_page_footer, section.even_page_footer):
-            paragraph = footer.paragraphs[0]
-            paragraph.add_run(f"  {footer_label}  {snapshot['templateVersion']}")
+    if draft:
+        for section in document.sections:
+            for footer in (section.footer, section.first_page_footer, section.even_page_footer):
+                footer.paragraphs[0].add_run("  草稿 · 仅供预览")
     output = BytesIO()
     document.save(output)
     return output.getvalue()

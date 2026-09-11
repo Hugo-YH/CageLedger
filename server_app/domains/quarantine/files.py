@@ -1,11 +1,14 @@
 import copy
 import hashlib
+import re
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 from zipfile import BadZipFile, ZipFile
 
 from docx.image.image import Image
+from PIL import Image as PillowImage
 
 from . import repository as repo
 from .attachment_metadata import validate as validate_attachment
@@ -17,11 +20,28 @@ MIME = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
     ".pdf": "application/pdf",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".xls": "application/vnd.ms-excel",
 }
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+METHOD_CODES = {"parasite": "M", "elisa_mouse": "E", "elisa_rat": "E", "pcr": "P"}
+
+
+def next_report_number(conn, batch, method):
+    batch_no = str(batch.get("batchNo") or batch.get("name", "")).upper()
+    if not re.fullmatch(r"B\d{8}", batch_no):
+        return ""
+    issued_date = datetime.now().astimezone().strftime("%y%m%d")
+    method_code = METHOD_CODES[method]
+    scope = f"report:{batch_no}:{method_code}:{issued_date}"
+    sequence = repo.sequence_value(conn, scope) + 1
+    if sequence > 99:
+        raise ValueError("该批次、检测方法和日期的报告编号已达到99份")
+    repo.reserve_sequence(conn, scope, sequence)
+    return f"{batch_no}{method_code}{issued_date}{sequence:02d}"
 
 
 def upload(conn, user, test_id, params, name, content, root):
@@ -33,14 +53,20 @@ def upload(conn, user, test_id, params, name, content, root):
         raise ValueError("已出具记录不能追加附件，请创建更正草稿")
     suffix = Path(name).suffix.lower()
     if suffix not in MIME or not 0 < len(content) <= 30 * 1024 * 1024:
-        raise ValueError("支持 PNG、JPEG、PDF、Excel，单文件不超过30MB")
-    if suffix in {".png", ".jpg", ".jpeg"}:
+        raise ValueError("支持 PNG、JPEG、TIF、PDF、Excel，单文件不超过30MB")
+    if suffix in {".png", ".jpg", ".jpeg", ".tif", ".tiff"}:
         try:
-            parsed = Image.from_blob(content)
-            if parsed.px_width * parsed.px_height > 40_000_000 or parsed.content_type != MIME[suffix]:
+            if suffix in {".tif", ".tiff"}:
+                with PillowImage.open(BytesIO(content)) as parsed:
+                    width, height, image_format = parsed.width, parsed.height, parsed.format
+                valid = image_format == "TIFF"
+            else:
+                parsed = Image.from_blob(content)
+                width, height, valid = parsed.px_width, parsed.px_height, parsed.content_type == MIME[suffix]
+            if width * height > 40_000_000 or not valid:
                 raise ValueError("图片格式或尺寸不受支持")
         except Exception as exc:
-            raise ValueError("图片格式无效，请上传PNG或JPEG") from exc
+            raise ValueError("图片格式无效，请上传PNG、JPEG或TIF") from exc
     elif suffix == ".pdf" and not content.startswith(b"%PDF-"):
         raise ValueError("PDF文件无效")
     elif suffix == ".xls" and not content.startswith(bytes.fromhex("D0CF11E0A1B11AE1")):
@@ -78,20 +104,43 @@ def upload(conn, user, test_id, params, name, content, root):
         "uploadedBy": {"id": user["id"], "name": user["displayName"]},
         "updatedAt": now(),
     }
+    preview_content = None
+    if suffix in {".tif", ".tiff"}:
+        with PillowImage.open(BytesIO(content)) as source:
+            source.seek(0)
+            preview = source.copy()
+        preview.thumbnail((3000, 3000))
+        if preview.mode not in {"1", "L", "P", "RGB", "RGBA", "I", "I;16"}:
+            preview = preview.convert("RGB")
+        converted = BytesIO()
+        preview.save(converted, format="PNG", optimize=True)
+        preview_content = converted.getvalue()
+        item["previewStorageName"] = uuid4().hex + ".png"
     item.update(validate_attachment(test, params, item["mime"]))
     item["uploadedAt"] = item["updatedAt"]
     root.mkdir(parents=True, exist_ok=True)
     target = root / item["storageName"]
+    preview_target = root / item["previewStorageName"] if item.get("previewStorageName") else None
     try:
         target.write_bytes(content)
+        if preview_target and preview_content is not None:
+            preview_target.write_bytes(preview_content)
         repo.save(conn, "attachments", item, create=True)
         test["updatedAt"] = now()
         repo.save(conn, "tests", test)
         audit(conn, user, "attachment_uploaded", None, item)
     except BaseException:
         target.unlink(missing_ok=True)
+        if preview_target:
+            preview_target.unlink(missing_ok=True)
         raise
     return {"item": item, "test": test}
+
+
+def preview(item, root):
+    storage_name = item.get("previewStorageName") or item["storageName"]
+    mime = "image/png" if item.get("previewStorageName") else item["mime"]
+    return (root / storage_name).read_bytes(), mime
 
 
 def snapshot(conn, test):
@@ -144,7 +193,11 @@ def issue(conn, user, test_id, body, root):
     if test.get("correctionOf"):
         previous = repo.all_items(conn, "reports", test["correctionOf"])
         version = previous[0]["version"] + 1
-    number = f"Q-{now()[:10].replace('-', '')}-{report_id[:12].upper()}"
+        number = previous[0]["number"]
+    else:
+        number = next_report_number(conn, batch, test["method"])
+        if not number:
+            number = f"Q-{now()[:10].replace('-', '')}-{report_id[:12].upper()}"
     document["number"] = number
     content = generate(document, root)
     item = {
@@ -156,6 +209,7 @@ def issue(conn, user, test_id, body, root):
         "snapshot": document,
         "storageName": report_id + ".docx",
         "updatedAt": now(),
+        "issuedDate": datetime.now().astimezone().date().isoformat(),
         "issuedBy": {"id": user["id"], "name": user["displayName"]},
     }
     root.mkdir(parents=True, exist_ok=True)

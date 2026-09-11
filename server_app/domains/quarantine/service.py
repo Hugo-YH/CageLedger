@@ -6,7 +6,9 @@ from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from server_app.domains.administration.audit import audit_event, write_audit_events
+from server_app.domains.intake import SPECIES_CODES, infer_species
 from server_app.domains.intake.strain_standard import abbreviate_supplier
+from server_app.shared import clean_text
 from server_app.shared.concurrency import StaleWriteError
 
 from . import repository as repo
@@ -67,6 +69,13 @@ def source_snapshot(conn, source, existing):
     raw = repo.intake(conn, identifier(intake_id)) if intake_id else source
     if intake_id and raw.get("status") != "received":
         raise ValueError("只能从已接收动物中选择检疫来源")
+    if intake_id and clean_text(raw.get("species")) not in SPECIES_CODES:
+        raw = {
+            **raw,
+            "species": infer_species(
+                " ".join(clean_text(raw.get(field)) for field in ("strainStandard", "strainRaw", "rawMessage"))
+            ),
+        }
     result = {
         key: text(str(raw.get(key, "") or ""))
         for key in (
@@ -90,6 +99,32 @@ def source_snapshot(conn, source, existing):
         raise ValueError("来源需填写供应商和动物种类")
     validate_date(result["intakeDate"])
     return result
+
+
+def parse_batch_number(value):
+    match = re.fullmatch(r"B(\d{6})(\d{2})", value)
+    if not match:
+        raise ValueError("检疫批次编号格式应为BYYMMDDNN，例如B26090901")
+    short, sequence = match.groups()
+    date.fromisoformat(f"20{short[:2]}-{short[2:4]}-{short[4:6]}")
+    if int(sequence) < 1:
+        raise ValueError("检疫批次流水号应从01开始")
+    return short, int(sequence)
+
+
+def normalize_batch_number(value):
+    cleaned = text(value)
+    return cleaned.upper() if re.fullmatch(r"B\d{8}", cleaned, re.IGNORECASE) else cleaned
+
+
+def next_batch_number(conn, business_date=""):
+    value = business_date or datetime.now().astimezone().date().isoformat()
+    validate_date(value)
+    short = value[2:4] + value[5:7] + value[8:10]
+    sequence = repo.sequence_value(conn, f"batch:{short}") + 1
+    if sequence > 99:
+        raise ValueError("该日期的检疫批次编号已达到99个")
+    return f"B{short}{sequence:02d}"
 
 
 def save_batch(conn, user, body, entity_id=None):
@@ -127,21 +162,64 @@ def save_batch(conn, user, body, entity_id=None):
         }
         if used - set(ids):
             raise ValueError("已参与检测的来源不能移除")
+    batch_no = normalize_batch_number(raw.get("batchNo") or raw.get("name", ""))
+    if not batch_no:
+        raise ValueError("请填写检疫批次编号")
+    previous_no = normalize_batch_number((before or {}).get("batchNo") or (before or {}).get("name", ""))
+    if before and batch_no != previous_no:
+        raise ValueError("检疫批次编号保存后不能修改")
+    if repo.batch_number_exists(conn, batch_no, entity_id or ""):
+        raise ValueError("检疫批次编号已存在，请修改后再保存")
+    business_date = (before or {}).get("businessDate", "")
+    if not before and raw.get("batchNo"):
+        short, sequence = parse_batch_number(batch_no)
+        repo.reserve_sequence(conn, f"batch:{short}", sequence)
+        business_date = f"20{short[:2]}-{short[2:4]}-{short[4:6]}"
     item = {
         "id": entity_id or identifier(raw["id"]),
-        "name": text(raw["name"]),
+        "batchNo": batch_no,
+        "name": batch_no,
+        "businessDate": business_date,
         "sources": sources,
+        "notes": text(raw.get("notes", "")),
         "conclusion": text(raw.get("conclusion", "")),
         "handling": text(raw.get("handling", "")),
         "updatedAt": now(),
     }
     if before and before.get("completionHistory"):
         item["completionHistory"] = before["completionHistory"]
-    if not item["name"] or not sources:
-        raise ValueError("请填写检疫批次名称并添加覆盖来源")
+    if not sources:
+        raise ValueError("请添加检疫覆盖来源")
     repo.save(conn, "batches", item, create=not before)
     audit(conn, user, "batch_saved", before, item)
     return item
+
+
+def delete_batch(conn, user, entity_id, body):
+    authorize(user)
+    conn.execute("BEGIN IMMEDIATE")
+    before = repo.get(conn, "batches", identifier(entity_id))
+    check_version(before, body)
+    if repo.all_items(conn, "tests", entity_id):
+        raise ValueError("检疫批次已有检测记录，不能删除")
+    repo.delete(conn, "batches", entity_id)
+    write_audit_events(
+        conn,
+        [
+            audit_event(
+                user,
+                "quarantine.batch_deleted",
+                "quarantine",
+                entity_id,
+                "删除检疫批次",
+                [],
+                now(),
+                before,
+                None,
+            )
+        ],
+    )
+    return before
 
 
 def validate_test(item, batch):
@@ -153,6 +231,7 @@ def validate_test(item, batch):
         validate_date(item[key])
     source_ids = {s["id"] for s in batch["sources"]}
     sample_ids = set()
+    assigned_source_ids = set()
     for sample in item["samples"]:
         sid = identifier(sample["id"])
         if sid in sample_ids or not text(sample["number"]):
@@ -160,6 +239,9 @@ def validate_test(item, batch):
         sample_ids.add(sid)
         if not sample["sourceIds"] or set(sample["sourceIds"]) - source_ids:
             raise ValueError("样本来源必须属于检疫覆盖范围")
+        if assigned_source_ids.intersection(sample["sourceIds"]):
+            raise ValueError("同一来源不能重复分配到多个实验组")
+        assigned_source_ids.update(sample["sourceIds"])
         for key in ("poolCount", "portionCount"):
             if type(sample[key]) is not int or not 1 <= sample[key] <= 100000:
                 raise ValueError("混样数与原始样本份数必须是正整数")

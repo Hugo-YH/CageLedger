@@ -9,6 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 from zipfile import ZipFile
 
+from PIL import Image as PillowImage
+
 from server_app.domains.quarantine import files, service
 from server_app.domains.quarantine import repository as repo
 from server_app.domains.quarantine.documents import generate
@@ -72,7 +74,9 @@ class QuarantineTests(unittest.TestCase):
             {"id": "source-a", "supplier": "供应商甲", "species": "小鼠"},
             {"id": "source-b", "supplier": "供应商乙", "species": "小鼠"},
         ]
-        self.batch = self.write(service.save_batch, {"item": {"id": "batch", "name": "周三检疫", "sources": sources}})
+        self.batch = self.write(
+            service.save_batch, {"item": {"id": "batch", "batchNo": "B26090201", "sources": sources}}
+        )
 
     def tearDown(self):
         self.audit_patch.stop()
@@ -101,6 +105,63 @@ class QuarantineTests(unittest.TestCase):
         self.assertEqual(test["samples"][0]["sourceIds"], ["source-a"])
         self.assertEqual(self.audits[-1]["actorUserId"], "regular")
 
+    def test_one_source_cannot_be_assigned_to_multiple_sample_groups(self):
+        raw = sample_test()
+        raw["samples"].append(
+            {
+                "id": "sample-2",
+                "number": "2",
+                "material": "皮毛",
+                "poolCount": 1,
+                "portionCount": 1,
+                "sourceIds": ["source-a"],
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "同一来源不能重复分配到多个实验组"):
+            self.create_test(raw)
+
+    def test_batch_notes_are_saved_separately_from_result_fields(self):
+        raw = copy.deepcopy(self.batch)
+        raw["notes"] = "本周补充哨兵鼠"
+        saved = self.write(
+            service.save_batch,
+            {"item": raw, "expectedUpdatedAt": self.batch["updatedAt"]},
+            "batch",
+        )
+        self.assertEqual(saved["notes"], "本周补充哨兵鼠")
+        self.assertEqual(saved["handling"], "")
+        self.assertEqual(saved["conclusion"], "")
+
+    def test_batch_number_is_generated_and_must_be_unique(self):
+        generated = service.next_batch_number(self.conn)
+        self.assertRegex(generated, r"^B\d{6}01$")
+        duplicate = {
+            "id": "duplicate",
+            "batchNo": "B26090201",
+            "sources": [{"id": "source", "supplier": "甲", "species": "小鼠"}],
+        }
+        with self.assertRaisesRegex(ValueError, "检疫批次编号已存在"):
+            self.write(service.save_batch, {"item": duplicate})
+
+        numbered = self.write(
+            service.save_batch,
+            {
+                "item": {
+                    "id": "numbered",
+                    "batchNo": "B26090301",
+                    "sources": [{"id": "source", "supplier": "甲", "species": "小鼠"}],
+                }
+            },
+        )
+        self.write(service.delete_batch, numbered["id"], {"expectedUpdatedAt": numbered["updatedAt"]})
+        self.assertEqual(service.next_batch_number(self.conn, "2026-09-03"), "B26090302")
+
+    def test_elisa_report_numbers_share_one_method_sequence(self):
+        first = files.next_report_number(self.conn, self.batch, "elisa_mouse")
+        second = files.next_report_number(self.conn, self.batch, "elisa_rat")
+        self.assertRegex(first, r"^B26090201E\d{6}01$")
+        self.assertRegex(second, r"^B26090201E\d{6}02$")
+
     def test_missing_and_stale_versions_rejected(self):
         test = self.create_test()
         for expected in ("", "old"):
@@ -108,6 +169,28 @@ class QuarantineTests(unittest.TestCase):
                 self.write(service.save_test, {"item": test, "expectedUpdatedAt": expected}, test["id"])
         updated = self.write(service.save_test, {"item": test, "expectedUpdatedAt": test["updatedAt"]}, test["id"])
         self.assertNotEqual(test["updatedAt"], updated["updatedAt"])
+
+    def test_empty_batch_delete_requires_version_and_preserves_audit(self):
+        with self.assertRaises(StaleWriteError):
+            self.write(service.delete_batch, self.batch["id"], {"expectedUpdatedAt": "stale"})
+        deleted = self.write(
+            service.delete_batch,
+            self.batch["id"],
+            {"expectedUpdatedAt": self.batch["updatedAt"]},
+        )
+        self.assertEqual(deleted["id"], self.batch["id"])
+        with self.assertRaises(LookupError):
+            repo.get(self.conn, "batches", self.batch["id"])
+        self.assertEqual(self.audits[-1]["action"], "quarantine.batch_deleted")
+
+    def test_batch_with_detection_record_cannot_be_deleted(self):
+        self.create_test()
+        with self.assertRaisesRegex(ValueError, "已有检测记录"):
+            self.write(
+                service.delete_batch,
+                self.batch["id"],
+                {"expectedUpdatedAt": self.batch["updatedAt"]},
+            )
 
     def test_source_snapshot_is_not_overwritten_by_intake_edit(self):
         with self.conn:
@@ -132,10 +215,49 @@ class QuarantineTests(unittest.TestCase):
         batch = self.write(service.save_batch, {"item": batch, "expectedUpdatedAt": batch["updatedAt"]}, batch["id"])
         self.assertEqual(batch["sources"][0]["supplier"], "原供应商")
 
+    def test_linked_source_rejects_iacuc_species_summary_as_batch_species(self):
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO intake_batches VALUES (?, ?, ?)",
+                (
+                    "polluted-intake",
+                    "2026-09-02",
+                    json.dumps(
+                        {
+                            "supplier": "供应商",
+                            "species": "C57小鼠600只、SD大鼠72只",
+                            "strainRaw": "SD大鼠",
+                            "intakeDate": "2026-09-02",
+                            "status": "received",
+                        }
+                    ),
+                ),
+            )
+        batch = self.write(
+            service.save_batch,
+            {
+                "item": {
+                    "id": "normalized-snapshot",
+                    "name": "标准物种快照",
+                    "sources": [{"id": "normalized-source", "intakeId": "polluted-intake"}],
+                }
+            },
+        )
+        self.assertEqual(batch["sources"][0]["species"], "rat")
+
     def test_issued_report_immutable_idempotent_and_corrections_preserved(self):
         test = self.create_test()
         report = self.issue(test)
+        self.assertRegex(report["number"], r"^B26090201M\d{6}01$")
         original = (self.root / report["storageName"]).read_bytes()
+        with ZipFile(BytesIO(original)) as archive:
+            footers = "".join(
+                archive.read(name).decode()
+                for name in archive.namelist()
+                if name.startswith("word/footer") and name.endswith(".xml")
+            )
+        self.assertNotIn(report["number"], footers)
+        self.assertNotIn("草稿", footers)
         self.assertEqual(self.issue(test)["id"], report["id"])
         current = repo.get(self.conn, "tests", test["id"])
         with self.assertRaises(ValueError):
@@ -145,6 +267,7 @@ class QuarantineTests(unittest.TestCase):
         )
         report2 = self.issue(corrected)
         self.assertEqual(report2["version"], 2)
+        self.assertEqual(report2["number"], report["number"])
         self.assertEqual((self.root / report["storageName"]).read_bytes(), original)
         self.assertEqual(len(repo.all_items(self.conn, "reports")), 2)
 
@@ -218,13 +341,45 @@ class QuarantineTests(unittest.TestCase):
             )
         self.assertEqual(len(repo.all_items(self.conn, "attachments")), 1)
 
+    def test_tiff_upload_preserves_original_and_generates_png_preview_for_word(self):
+        test = self.create_test()
+        source = BytesIO()
+        PillowImage.new("L", (24, 16), 128).save(source, format="TIFF")
+        original = source.getvalue()
+        uploaded = self.write(
+            files.upload,
+            test["id"],
+            {
+                "expectedUpdatedAt": test["updatedAt"],
+                "sampleId": "sample",
+                "category": "体外",
+                "projectIds": '["endo"]',
+            },
+            "显微镜原图.tif",
+            original,
+            self.root,
+        )
+        attachment = uploaded["item"]
+        self.assertEqual(attachment["mime"], "image/tiff")
+        self.assertEqual((self.root / attachment["storageName"]).read_bytes(), original)
+        preview, mime = files.preview(attachment, self.root)
+        self.assertEqual(mime, "image/png")
+        self.assertTrue(preview.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(generate(files.snapshot(self.conn, uploaded["test"]), self.root, draft=True))
+
     def test_word_has_draft_marker_repeated_headers_and_blank_signatures(self):
         test = self.create_test()
         content = generate(files.snapshot(self.conn, test), self.root, draft=True)
         with ZipFile(BytesIO(content)) as archive:
             xml = "".join(archive.read(name).decode() for name in archive.namelist() if name.endswith(".xml"))
+            footers = "".join(
+                archive.read(name).decode()
+                for name in archive.namelist()
+                if name.startswith("word/footer") and name.endswith(".xml")
+            )
         for token in ("草稿", "检测人：", "复核人：", "tblHeader", "体内寄生虫"):
             self.assertIn(token, xml)
+        self.assertIn("草稿 · 仅供预览", footers)
         self.assertNotIn("检测员", xml)
 
     def test_word_preserves_source_styles_page_system_and_horizontal_tables(self):
