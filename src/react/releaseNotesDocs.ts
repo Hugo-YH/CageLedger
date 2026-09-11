@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.13",
+    build: "204",
+    releasedAt: "2026-09-11",
+    title: "笼卡打印尺寸校准",
+    items: [
+      "按实物预切纸确认临时饲养间 15 张笼卡版式：A4 上下边距 7mm、左右边距 5.5mm、卡片间距 2mm",
+      "固定单张卡片为 65mm × 55mm，并增加尺寸回归检查，确保 3 列 × 5 行布局与纸张切线对应",
+      "普通 14 张笼卡按单张 100mm × 40mm、上下边距 2.5mm、左右边距 4mm、卡片间距 2mm 重新校准",
+    ],
+  },
+  {
     version: "1.2.12",
     build: "203",
     releasedAt: "2026-09-08",

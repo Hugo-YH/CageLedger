@@ -47,7 +47,10 @@ describe("print templates", () => {
     } as IntakeBatch;
     const html = intakeCardsPrintHtml([batch]);
     expect(html).toContain('aria-label="笼卡二维码"');
-    expect(html).toContain("grid-auto-rows:40.09mm");
+    expect(html).toContain(".standard-sheet{padding:2.5mm 4mm");
+    expect(html).toContain("grid-template-columns:repeat(2,100mm)");
+    expect(html).toContain("grid-auto-rows:40mm;gap:2mm");
+    expect(html).toContain(".standard-card{position:relative;width:100mm;height:40mm");
     expect(html).toContain("width:9.5mm");
     expect(html).toContain("width:19mm;height:19mm");
     expect(html).toContain('viewBox="0 0 23 23"');
@@ -130,6 +133,7 @@ describe("print templates", () => {
     } as IntakeBatch;
     const html = intakeCardsPrintHtml([batch], { kind: "temporary", fillBlanks: true });
     expect(html.match(/<section class="temporary-card">/g)).toHaveLength(15);
+    expect(html).toContain(".temporary-sheet{padding:7mm 5.5mm");
     expect(html).toContain("grid-template-columns:repeat(3,65mm)");
     expect(html).toContain("grid-auto-rows:55mm");
     expect(html).toContain(" /23");

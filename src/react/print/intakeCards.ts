@@ -191,8 +191,8 @@ function printStyles() {
 body{margin:0;background:#fff;font-family:"Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a}
 .sheet{width:210mm;height:297mm;display:grid;align-content:start;justify-content:center;break-after:page;page-break-after:always}
 .sheet:last-child{break-after:auto;page-break-after:auto}
-.standard-sheet{padding:3.86mm 4mm 2.7mm;grid-template-columns:repeat(2,100mm);grid-auto-rows:40.09mm;gap:1.87mm 1.86mm}
-.standard-card{position:relative;width:100mm;height:40.09mm;border:0;overflow:hidden;background:#fff}
+.standard-sheet{padding:2.5mm 4mm;grid-template-columns:repeat(2,100mm);grid-auto-rows:40mm;gap:2mm}
+.standard-card{position:relative;width:100mm;height:40mm;border:0;overflow:hidden;background:#fff}
 .standard-card table{width:100%;height:100%;border-collapse:separate;border-spacing:0;border-top:.32mm solid #111827;border-left:.32mm solid #111827;table-layout:fixed}
 .standard-card td{border:0;border-right:.32mm solid #111827;border-bottom:.32mm solid #111827;padding:.12mm .55mm;vertical-align:middle;font-size:2.45mm;line-height:1;word-break:break-word;overflow:hidden}
 .standard-card .label{font-size:2.35mm;font-weight:800;color:#111827;white-space:nowrap}
