@@ -1,73 +1,23 @@
-# Plan Template
+# 动效改进计划参考
 
-Use the sections that help the requested plan. Include enough context for implementation, but omit irrelevant sections and do not create a plan for every small fix. Project tokens and verified behavior take precedence over example values.
+用于需要交接或多处改动的方案；单个修正可直接实现。按任务选择下列内容，不要求为每个发现建立独立文件或计划索引。
 
-```markdown
-# NNN — <Short imperative title>
+## 问题与目标
 
-- **Status**: TODO
-- **Commit**: <output of `git rev-parse --short HEAD` when this plan was written>
-- **Severity**: HIGH | MEDIUM | LOW
-- **Category**: <audit category>
-- **Estimated scope**: <n files, rough size>
+- 说明触发场景、当前表现、影响及可定位的代码；区分已复现问题与待验证假设。
+- 描述用户可观察的目标，例如快速开关弹窗时不中断输入、减少动态效果时浮层仍可见。
+- 需要精确参数时引用项目现有 Token。新增参数说明用途，参考数值不覆盖项目约定。
 
-## Problem
+## 实现范围
 
-What is wrong, where, and why it matters to how the product feels. Cite every
-location as `path/to/file.tsx:123` and include the current code verbatim:
+记录需要改动的组件、样式归属和依赖关系。相关问题可以合并处理；不为动效优化附带更换组件库、扩展业务或新增审批流程。
 
-​`css
-/* src/components/dropdown.css:14 — current */
-.dropdown { transition: all 400ms ease-in; }
-​`
+实际代码与计划不符时，核对当前实现并修正计划。普通文件迁移或接口调整可在已授权范围内处理；只有影响业务决定、缺失关键输入或超出授权时才询问用户。
 
-## Target
+## 验证与完成
 
-The exact end state. Every value spelled out — curves, durations, spring
-configs, media queries. Never "use a nicer easing":
+按项目测试契约验证目标交互，包括相关的快速重复操作、键盘、触屏与减少动态效果。慢放和性能录制用于需要判断连续性或掉帧的场景。
 
-​`css
-/* target */
-.dropdown {
-  transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out);
-  transform-origin: var(--transform-origin);
-}
-​`
+完成标准是目标行为成立、相关检查通过且本次引起的失败已修复。减少动态效果允许关闭非必要动画；加载、成功、错误等状态仍须可辨认，不依赖动画结束事件才能操作。
 
-## Repo conventions to follow
-
-How this codebase already does it, with one exemplar the executor should
-imitate (token names, file placement, prop patterns):
-
-- Easing tokens live in `src/styles/tokens.css`; add new curves there, e.g. `--ease-out: cubic-bezier(0.23, 1, 0.32, 1);`
-- <exemplar file:line that already does this correctly>
-
-## Steps
-
-1. <One concrete edit per step: file, what changes, resulting code.>
-2. …
-
-## Boundaries
-
-- Do NOT touch <files/components out of scope>.
-- Do NOT change markup/structure — motion properties only (unless a step says otherwise).
-- Do NOT add new dependencies.
-- If a step doesn't match the code you find (drift since the commit stamp), STOP and report instead of improvising.
-
-## Verification
-
-- **Mechanical**: <exact commands — typecheck, lint, build — with expected outcome>.
-- **Feel check**: run the UI, trigger <interaction>, and confirm:
-  - <observable check, e.g. "the dropdown scales from its trigger, not from center">
-  - <e.g. "spamming the toggle never restarts the animation from zero">
-  - In DevTools, set playback to 10% (Animations panel) and confirm <detail>.
-  - Toggle `prefers-reduced-motion` (Rendering panel) and confirm movement is dropped but opacity feedback remains.
-- **Done when**: <machine- or eye-checkable completion criteria>.
-```
-
-## Notes for the plan author
-
-- One plan per finding. If two findings share every file and the same fix pattern (e.g. the same easing token swap across components), they may merge into one plan.
-- Pull every value from [AUDIT.md](AUDIT.md) — never approximate from memory.
-- The feel check is not optional. Motion can be mechanically correct and still feel wrong; give the executor (or the human reviewing the executor's diff) concrete things to watch for in slow motion.
-- After writing plans, create or update `plans/README.md` with: a table of plans (number, title, severity, status), the recommended execution order, and any dependencies between plans.
+[AUDIT.md](AUDIT.md) 提供按问题查阅的审计维度，不是强制参数表。

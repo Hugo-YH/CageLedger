@@ -1,83 +1,23 @@
-# Design engineering reference
+# Performance and accessibility reference
 
-These are design heuristics and examples. CageLedger tokens, accessibility contracts and the requested scope take precedence. Read only relevant sections.
+Use CageLedger tokens, accessibility contracts and the requested scope. Read the sections relevant to the affected interaction.
 
-## Performance Rules
+## Rendering cost
 
-### Only animate transform and opacity
+Prefer transform and opacity when they can express the change without shifting layout. Size transitions can be appropriate for expanding content; inspect layout, paint and dropped frames under realistic load before replacing them.
 
-These properties skip layout and paint, running on the GPU. Animating `padding`, `margin`, `height`, or `width` triggers all three rendering steps.
+Changing inherited CSS variables may enlarge the style-recalculation surface. For a drag, compare a direct transform on the moving element with updates on a shared ancestor. Keep changes based on measured impact.
 
-### CSS variables are inheritable
+## Animation APIs
 
-Changing a CSS variable on a parent recalculates styles for all children. In a drawer with many items, updating `--swipe-amount` on the container causes expensive style recalculation. Update `transform` directly on the element instead.
+Hardware acceleration depends on the animated property, browser and installed library version. Do not assume that every shorthand is main-thread-only or that every CSS/WAAPI animation is accelerated. Check current source or documentation and profile the actual component when performance is in question.
 
-```js
-// Bad: triggers recalc on all children
-element.style.setProperty("--swipe-amount", `${distance}px`);
+Use the existing component implementation when it meets the task. CSS transitions, WAAPI and JavaScript springs can each support appropriate workflows; preserve cancellation, cleanup and continuity when changing APIs.
 
-// Good: only affects this element
-element.style.transform = `translateY(${distance}px)`;
-```
+## Reduced motion
 
-### Framer Motion hardware acceleration caveat
+Nonessential animation may be disabled completely. Preserve visible loading, success, error and focus states using text, color or static indicators. Opening and closing overlays must work without waiting for an animation or transition end event. Verify both preference settings for affected components.
 
-Framer Motion's shorthand properties (`x`, `y`, `scale`) are NOT hardware-accelerated. They use `requestAnimationFrame` on the main thread. For hardware acceleration, use the full `transform` string:
+## Touch and keyboard
 
-```jsx
-// NOT hardware accelerated (convenient but drops frames under load)
-<motion.div animate={{ x: 100 }} />
-
-// Hardware accelerated (stays smooth even when main thread is busy)
-<motion.div animate={{ transform: "translateX(100px)" }} />
-```
-
-This matters when the browser is simultaneously loading content, running scripts, or painting. At Vercel, the dashboard tab animation used Shared Layout Animations and dropped frames during page loads. Switching to CSS animations (off main thread) fixed it.
-
-### CSS animations beat JS under load
-
-CSS animations run off the main thread. When the browser is busy loading a new page, Framer Motion animations (using `requestAnimationFrame`) drop frames. CSS animations remain smooth. Use CSS for predetermined animations; JS for dynamic, interruptible ones.
-
-### Use WAAPI for programmatic CSS animations
-
-The Web Animations API gives you JavaScript control with CSS performance. Hardware-accelerated, interruptible, and no library needed.
-
-```js
-element.animate([{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }], {
-  duration: 1000,
-  fill: "forwards",
-  easing: "cubic-bezier(0.77, 0, 0.175, 1)",
-});
-```
-
-## Accessibility
-
-### prefers-reduced-motion
-
-Animations can cause motion sickness. Reduced motion means fewer and gentler animations, not zero. Keep opacity and color transitions that aid comprehension. Remove movement and position animations.
-
-```css
-@media (prefers-reduced-motion: reduce) {
-  .element {
-    animation: fade 0.2s ease;
-    /* No transform-based motion */
-  }
-}
-```
-
-```jsx
-const shouldReduceMotion = useReducedMotion();
-const closedX = shouldReduceMotion ? 0 : "-100%";
-```
-
-### Touch device hover states
-
-```css
-@media (hover: hover) and (pointer: fine) {
-  .element:hover {
-    transform: scale(1.05);
-  }
-}
-```
-
-Touch devices trigger hover on tap, causing false positives. Gate hover animations behind this media query.
+Decorative hover motion should be limited to hover-capable fine pointers. Keep focus feedback and keyboard activation available when hover is absent. For touch gestures, validate the actual pointer lifecycle and interrupted interactions; do not add a gesture solely because it is illustrated in a reference.

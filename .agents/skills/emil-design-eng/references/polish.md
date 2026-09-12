@@ -14,7 +14,7 @@ These principles come from building Sonner (13M+ weekly npm downloads) and apply
 
 4. **Handle edge cases invisibly.** Pause toast timers when the tab is hidden. Fill gaps between stacked toasts with pseudo-elements to maintain hover state. Capture pointer events during drag. Users never notice these, and that is exactly right.
 
-5. **Use transitions, not keyframes, for dynamic UI.** Toasts are added rapidly. Keyframes restart from zero on interruption. Transitions retarget smoothly.
+5. **Preserve continuity in dynamic UI.** Toasts can be added rapidly. Check cancellation and retargeting from the visible state; transitions can be useful when a fixed-start animation visibly jumps on restart.
 
 6. **Build a great documentation site.** Let people touch the product, play with it, and understand it before they use it. Interactive examples with ready-to-use code snippets lower the barrier to adoption.
 
@@ -28,9 +28,9 @@ When choosing animation values, consider the personality of the component. A pla
 
 When items enter and exit a list (like Family's drawer), the opacity change must work well with the height animation. This is often trial and error. There is no formula — you adjust until it feels right.
 
-### Review your work the next day
+### Review uncertain timing
 
-Review animations with fresh eyes. You notice imperfections the next day that you missed during development. Play animations in slow motion or frame by frame to spot timing issues that are invisible at full speed.
+A fresh review can help when the result remains uncertain. Slow motion or frame-by-frame playback can expose timing issues missed at full speed; use them where they resolve a concrete concern.
 
 ### Asymmetric enter/exit timing
 

@@ -39,19 +39,19 @@ el.addEventListener("pointerdown", (e) => {
 
 > "The thought and the gesture happen in parallel."
 
-Every animation must be interruptible and redirectable at any moment. A user must be able to grab a moving element mid-flight and reverse it without waiting for the animation to finish. A closing modal the user grabs again should follow the finger — not finish closing first, then reopen.
+For reversible gestures, let the user grab a moving element mid-flight and redirect it without waiting for the animation to finish. A closing drawer grabbed again should follow the finger from its current position.
 
 - **Never lock out input during a transition.**
 - **Always animate from the _presentation_ (current) value, never the target value.** On interrupt, read the element's live on-screen transform and start the new animation from there. Starting from the logical/target value causes a visible jump.
-- **Avoid CSS transitions and `@keyframes` for anything gesture-driven** — they can't be smoothly grabbed and reversed mid-flight. Springs animate from the current value by default, which is exactly what interruption needs.
+- **Check cancellation and retargeting in the current implementation.** A fixed-start animation may jump if restarted; transitions, keyframes and springs need to preserve the visible state when interrupted.
 - **When a gesture reverses, blend velocity — don't hard-cut it.** Replacing one animation with another at a reversal creates a velocity discontinuity, a "brick wall." Spring libraries that carry velocity through a re-target avoid it. (This is what iOS's _additive animations_ do natively; on the web, choose a spring library that re-targets from the current velocity.)
 - **Decompose 2D motion into independent X and Y springs.** A single spring on a 2D distance desyncs when X and Y have different velocities.
 
-## 4. Behavior over animation — use springs
+## 4. Behavior over animation — when springs help
 
 > "Think of animation as a conversation between you and the object, not something prescribed by the interface."
 
-A pre-scripted, fixed-duration animation can't respond to new input. A spring can — new input just changes the target, and the motion stays continuous. Reach for springs for anything a user can touch.
+A spring can carry momentum through a change of target, which is useful for gestures that reverse or continue after release. Keep an existing transition or animation when its cancellation and retargeting already fit the interaction.
 
 Apple deliberately replaced the physics triplet (mass/stiffness/damping) with two designer-friendly parameters. Think in these:
 
@@ -71,7 +71,7 @@ Apple deliberately replaced the physics triplet (mass/stiffness/damping) with tw
 | Rotation                     | `0.8`   | `0.4`    |
 | Drawer / sheet               | `0.8`   | `0.3`    |
 
-**Web mapping (Motion / Framer Motion):** the `bounce` + `duration` spring API maps closely to Apple's damping + response. A safe house style is `damping: 1.0` springs everywhere by default; reserve bounce for momentum-driven, physical interactions.
+**Web mapping (Motion / Framer Motion):** the `bounce` + `duration` spring API offers a similar way to tune feel. For a gesture that needs a spring, the examples below start without bounce and add it for momentum-driven motion; use the installed library's actual parameter semantics.
 
 ```js
 import { animate } from "motion";
