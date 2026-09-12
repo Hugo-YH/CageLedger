@@ -1,44 +1,28 @@
 import { useState } from "react";
-import { Button as MobileButton, List as MobileList } from "antd-mobile";
-import {
-  Alert,
-  Button,
-  Card,
-  Collapse,
-  Descriptions,
-  Empty,
-  Form,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
+import { List as MobileList } from "antd-mobile";
+import { Alert, Button, Card, Collapse, Descriptions, Empty, Form, Modal, Select, Space, Tag, Typography } from "antd";
 
-import type {
-  AnimalInspectionDetail,
-  FindingStatus,
-  InspectionCatalogNode,
-  InspectionFinding,
-  InspectionModuleCode,
-  SessionUser,
-} from "../../api/contracts";
+import type { FindingStatus, InspectionFinding, InspectionModuleCode, SessionUser } from "../../api/contracts";
 import {
   downloadAnimalInspectionPdf,
   useAnimalFindings,
   useAnimalInspection,
   useAnimalInspections,
-  useResolveFinding,
-  useUpdateFinding,
 } from "../../api/animalManagement";
 import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { MobilePage } from "../../components/ui/MobilePage";
-import { DataTable } from "../../components/ui";
+import { DataTable, ListRefreshStatus } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
-import { FINDING_STATUS_LABELS, inspectionOutcome, MODULE_LABELS, setResumeInspectionId } from "./model";
+import { FindingDialog } from "./InspectionFindingDialog";
+import {
+  FINDING_STATUS_LABELS,
+  findingLocation,
+  summarizeInspectionOutcomes,
+  MODULE_LABELS,
+  setResumeInspectionId,
+} from "./model";
 
 const pageSize = 10;
 
@@ -62,10 +46,13 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
     setOffset(0);
   }
 
-  if (query.isLoading) return <PageSkeleton label="巡检记录" variant="table" />;
-  if (query.isError) return <PageState title="巡检记录加载失败" retry={() => void query.refetch()} />;
+  if (query.isPending) return <PageSkeleton label="巡检记录" variant="table" />;
+  if (query.isError && !query.data) return <PageState title="巡检记录加载失败" retry={() => void query.refetch()} />;
+  const feedback = (
+    <InspectionListFeedback error={query.isError} refreshing={query.isFetching} retry={() => void query.refetch()} />
+  );
   const filters = (
-    <Form className="inspection-list-filters" component={false} layout={isMobile ? "vertical" : "inline"}>
+    <Form className="inspection-list-filters" component="div" layout={isMobile ? "vertical" : "inline"}>
       <Form.Item label="饲养间">
         <Select
           allowClear
@@ -102,16 +89,17 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
   if (isMobile) {
     return (
       <>
-        <MobilePage
-          actions={
-            <MobileButton color="primary" size="mini" onClick={() => navigate("animal-inspection-entry")}>
-              新建巡检
-            </MobileButton>
-          }
-          onBack={() => navigate("animal-inspection-entry")}
-          title="巡检记录"
-        >
-          {filters}
+        <MobilePage onBack={() => navigate("animal-inspection-entry")} title="巡检记录">
+          <WorkspaceToolbar
+            ariaLabel="巡检记录操作"
+            filters={filters}
+            primaryAction={
+              <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
+                新建巡检
+              </ActionButton>
+            }
+          />
+          {feedback}
           <Card className="animal-ant-card inspection-list-panel">
             {items.length ? (
               <MobileList>
@@ -143,17 +131,28 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
     );
   }
   return (
-    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <WorkspaceToolbar
-        actions={
-          <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
-            新建巡检
-          </ActionButton>
-        }
-      />
-      <div className="workspace-body animal-management-body">
+    <>
+      <MobilePage
+        title="巡检记录"
+        onBack={() => navigate("animal-inspection-entry")}
+        desktop={{
+          className: "workspace-view animal-management-workspace",
+          bodyClassName: "workspace-body animal-management-body",
+          feature: "animal-management",
+        }}
+      >
+        <WorkspaceToolbar
+          ariaLabel="巡检记录操作"
+          filters={filters}
+          primaryAction={
+            <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
+              新建巡检
+            </ActionButton>
+          }
+        />
+
+        {feedback}
         <Card className="animal-ant-card inspection-list-panel" title="巡检记录">
-          {filters}
           <DataTable
             className="inspection-table"
             resizeKey="inspection-records"
@@ -182,9 +181,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
                 width: 256,
                 render: (_, item) => (
                   <Space size={4}>
-                    <Button type="primary" onClick={() => setSelectedId(item.id)}>
-                      详情
-                    </Button>
+                    <Button onClick={() => setSelectedId(item.id)}>详情</Button>
                     <Button onClick={() => void downloadAnimalInspectionPdf(item.id)}>导出 PDF</Button>
                     {item.status === "draft" && item.createdBy === user.id ? (
                       <Button
@@ -219,9 +216,9 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
             total={page.total}
           />
         </Card>
-      </div>
+      </MobilePage>
       {selectedId ? <InspectionDetailDialog id={selectedId} onClose={() => setSelectedId("")} /> : null}
-    </section>
+    </>
   );
 }
 
@@ -233,10 +230,13 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const query = useAnimalFindings({ limit: pageSize, offset, status });
   const page = query.data?.page || { offset: 0, limit: pageSize, total: 0 };
   const current = Math.floor(page.offset / page.limit) + 1;
-  if (query.isLoading) return <PageSkeleton label="异常处置项" variant="table" />;
-  if (query.isError) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
+  if (query.isPending) return <PageSkeleton label="异常处置项" variant="table" />;
+  if (query.isError && !query.data) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
+  const feedback = (
+    <InspectionListFeedback error={query.isError} refreshing={query.isFetching} retry={() => void query.refetch()} />
+  );
   const filters = (
-    <Form className="inspection-list-filters" component={false} layout={isMobile ? "vertical" : "inline"}>
+    <Form className="inspection-list-filters" component="div" layout={isMobile ? "vertical" : "inline"}>
       <Form.Item label="处置状态">
         <Select
           allowClear
@@ -258,8 +258,9 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
     return (
       <>
         <MobilePage onBack={() => navigate("animal-inspection-entry")} title="异常处置">
+          <WorkspaceToolbar ariaLabel="异常处置" filters={filters} />
+          {feedback}
           <Card className="animal-ant-card inspection-list-panel">
-            {filters}
             {findings.length ? (
               <MobileList>
                 {findings.map((item) => (
@@ -289,10 +290,19 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
     );
   }
   return (
-    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <div className="workspace-body animal-management-body">
+    <>
+      <MobilePage
+        title="异常处置"
+        onBack={() => navigate("animal-inspection-entry")}
+        desktop={{
+          className: "workspace-view animal-management-workspace",
+          bodyClassName: "workspace-body animal-management-body",
+          feature: "animal-management",
+        }}
+      >
+        <WorkspaceToolbar ariaLabel="异常处置" filters={filters} />
+        {feedback}
         <Card className="animal-ant-card inspection-list-panel" title="异常处置队列">
-          {filters}
           <DataTable
             className="inspection-table"
             resizeKey="inspection-findings"
@@ -332,106 +342,38 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
             total={page.total}
           />
         </Card>
-      </div>
+      </MobilePage>
       {selected ? <FindingDialog finding={selected} onClose={() => setSelected(null)} /> : null}
-    </section>
+    </>
   );
 }
 
-function FindingDialog({ finding, onClose }: { finding: InspectionFinding; onClose: () => void }) {
-  const [status, setStatus] = useState<FindingStatus>(finding.status);
-  const [actionNote, setActionNote] = useState(finding.actionNote || "");
-  const [responsibleName, setResponsibleName] = useState(finding.responsibleName || "");
-  const [recheckDueAt, setRecheckDueAt] = useState(finding.recheckDueAt || "");
-  const [conclusion, setConclusion] = useState("");
-  const update = useUpdateFinding();
-  const resolve = useResolveFinding();
-  const [notice, setNotice] = useState("");
-  async function save() {
-    try {
-      await update.mutateAsync({ id: finding.id, status, actionNote, responsibleName, recheckDueAt });
-      setNotice("处置记录已保存。");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "保存处置失败");
-    }
-  }
-  async function closeFinding() {
-    try {
-      await resolve.mutateAsync({ id: finding.id, conclusion });
-      onClose();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "关闭异常失败");
-    }
-  }
+function InspectionListFeedback({
+  error,
+  refreshing,
+  retry,
+}: {
+  error: boolean;
+  refreshing: boolean;
+  retry: () => void;
+}) {
   return (
-    <Modal
-      cancelText="取消"
-      className="inspection-action-modal"
-      destroyOnHidden
-      okButtonProps={{ loading: update.isPending }}
-      okText="保存处置"
-      onCancel={onClose}
-      onOk={() => void save()}
-      open
-      title="异常处置"
-      width={720}
-      footer={(_, { CancelBtn, OkBtn }) => (
-        <Space>
-          <CancelBtn />
-          <OkBtn />
-          <Button
-            danger
-            disabled={!conclusion.trim()}
-            loading={resolve.isPending}
-            type="primary"
-            onClick={() => void closeFinding()}
-          >
-            确认关闭
-          </Button>
-        </Space>
-      )}
-    >
-      <Descriptions className="inspection-finding-summary" column={{ xs: 1, sm: 2 }} size="small">
-        <Descriptions.Item label="饲养间">{finding.roomName}</Descriptions.Item>
-        <Descriptions.Item label="异常项目">{finding.nodeCode}</Descriptions.Item>
-        <Descriptions.Item label="定位信息" span={{ xs: 1, sm: 2 }}>
-          {findingLocation(finding)}
-        </Descriptions.Item>
-      </Descriptions>
-      <Form className="inspection-action-form" layout="vertical">
-        <Form.Item label="处置状态">
-          <Select<FindingStatus>
-            options={Object.entries(FINDING_STATUS_LABELS).map(([value, label]) => ({
-              label,
-              value: value as FindingStatus,
-            }))}
-            value={status}
-            onChange={setStatus}
-          />
-        </Form.Item>
-        <Form.Item label="实际措施">
-          <Input.TextArea rows={3} value={actionNote} onChange={(event) => setActionNote(event.target.value)} />
-        </Form.Item>
-        <div className="inspection-action-fields">
-          <Form.Item label="责任人">
-            <Input value={responsibleName} onChange={(event) => setResponsibleName(event.target.value)} />
-          </Form.Item>
-          <Form.Item label="复查日期">
-            <Input type="date" value={recheckDueAt} onChange={(event) => setRecheckDueAt(event.target.value)} />
-          </Form.Item>
-        </div>
-        <Form.Item label="关闭结论">
-          <Input.TextArea rows={3} value={conclusion} onChange={(event) => setConclusion(event.target.value)} />
-        </Form.Item>
-      </Form>
-      {notice ? <Alert title={notice} showIcon type="info" /> : null}
-      <Alert
-        className="inspection-action-note"
-        description="医疗、安乐死与给药建议作为人工参考，处置前执行兽医与伦理审核。"
-        showIcon
-        type="warning"
-      />
-    </Modal>
+    <>
+      <ListRefreshStatus active={refreshing} />
+      {error ? (
+        <Alert
+          role="alert"
+          title="巡检信息更新失败，暂显示上次结果"
+          showIcon
+          type="error"
+          action={
+            <Button loading={refreshing} onClick={retry}>
+              重试
+            </Button>
+          }
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -449,8 +391,8 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
       title="巡检记录详情"
       width={860}
     >
-      {query.isLoading ? <PageSkeleton compact label="巡检结论与处置记录" rows={4} variant="detail" /> : null}
-      {query.isError || !query.data ? (
+      {query.isPending ? <PageSkeleton compact label="巡检结论与处置记录" rows={4} variant="detail" /> : null}
+      {query.isError || (query.isSuccess && !query.data) ? (
         <Alert
           action={
             <Button size="small" onClick={() => void query.refetch()}>
@@ -534,53 +476,8 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
   );
 }
 
-function summarizeInspectionOutcomes(
-  answers: AnimalInspectionDetail["answers"],
-  nodes: InspectionCatalogNode[],
-): Array<{
-  code: InspectionModuleCode;
-  counts: Record<"normal" | "abnormal", number>;
-  items: Array<{ moduleCode: InspectionModuleCode; nodeCode: string; name: string; outcome: "normal" | "abnormal" }>;
-}> {
-  const nodeByKey = new Map(nodes.map((node) => [`${node.moduleCode}:${node.code}`, node]));
-  const records = answers.map((answer) => {
-    const source = answer.payload || answer;
-    const moduleCode = source.moduleCode || answer.module_code;
-    const nodeCode = source.nodeCode || answer.node_code;
-    const node = nodeByKey.get(`${moduleCode}:${nodeCode}`);
-    return { moduleCode, nodeCode, name: node?.name || nodeCode, outcome: inspectionOutcome(source) };
-  });
-  return (Object.keys(MODULE_LABELS) as InspectionModuleCode[])
-    .map((code) => {
-      const items = records.filter((item) => item.moduleCode === code);
-      return {
-        code,
-        counts: {
-          normal: items.filter((item) => item.outcome === "normal").length,
-          abnormal: items.filter((item) => item.outcome === "abnormal").length,
-        },
-        items,
-      };
-    })
-    .filter((module) => module.items.length);
-}
-
 function moduleLabel(code: InspectionModuleCode) {
   return code === "basicAssessment" ? "基础" : code === "advancedAssessment" ? "进阶" : "异常小鼠";
-}
-
-function findingLocation(item: InspectionFinding) {
-  return (
-    [
-      item.rackHint && `笼架 ${item.rackHint}`,
-      item.cageNumber && `笼号 ${item.cageNumber}`,
-      item.locationHint,
-      item.animalIdentifier,
-    ]
-      .filter(Boolean)
-      .filter((value, index, values) => values.indexOf(value) === index)
-      .join(" / ") || "-"
-  );
 }
 
 function findingStatusColor(status: FindingStatus) {

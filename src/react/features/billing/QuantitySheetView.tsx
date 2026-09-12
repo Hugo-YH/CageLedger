@@ -8,7 +8,7 @@ import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser
 import { usePrincipalIdentities } from "../../api/administration";
 import { useQuantitySheetPiHistory, useQuantitySheetRooms, useSaveQuantitySheet } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
-import { ActionButton } from "../../components/ui";
+import { ActionButton, CommandBar, DateInput } from "../../components/ui";
 import { AsyncActionButton, ModalShell, PageSkeleton } from "../../components/WorkspaceUi";
 import {
   createQuantityRow,
@@ -269,8 +269,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
 
   const entryToolbar =
     mode === "entry" ? (
-      <>
-        <div className="workspace-toolbar-main quantity-entry-toolbar-main">
+      <CommandBar
+        ariaLabel="数量统计表录入操作"
+        className="quantity-entry-toolbar"
+        sticky
+        context={
           <Tooltip
             content={unit === "animal_day" ? "当前房间按只/天计费，动物数量必须填写。" : "打开后记录动物数量变化。"}
           >
@@ -286,26 +289,22 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
               <span>动物数量</span>
             </div>
           </Tooltip>
-        </div>
-        <div className="workspace-toolbar-actions quantity-entry-toolbar-actions">
-          <div className="workspace-toolbar-action-group">
-            <ActionButton className="quantity-entry-toolbar-button" onClick={startNew}>
-              新建
-            </ActionButton>
-            <Tooltip content={saveHint(editorRows, animalDetails)}>
-              <AsyncActionButton
-                className="primary quantity-entry-toolbar-button quantity-entry-save-button"
-                type="submit"
-                form="quantity-sheet-entry-form"
-                pending={save.isPending}
-                pendingLabel="保存中..."
-              >
-                保存统计表
-              </AsyncActionButton>
-            </Tooltip>
-          </div>
-        </div>
-      </>
+        }
+        actions={<ActionButton onClick={startNew}>新建</ActionButton>}
+        primaryAction={
+          <Tooltip content={saveHint(editorRows, animalDetails)}>
+            <AsyncActionButton
+              className="primary quantity-entry-save-button"
+              type="submit"
+              form="quantity-sheet-entry-form"
+              pending={save.isPending}
+              pendingLabel="保存中..."
+            >
+              保存统计表
+            </AsyncActionButton>
+          </Tooltip>
+        }
+      />
     ) : null;
 
   function renderEditor(headActions?: React.ReactNode) {
@@ -661,11 +660,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
 
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">
-      {mode === "entry" ? (
-        <div className="workspace-toolbar quantity-entry-toolbar" data-ui="workspace-toolbar">
-          {entryToolbar}
-        </div>
-      ) : null}
+      {entryToolbar}
       {mode === "entry" ? renderEditor() : <SavedQuantitySheets onEdit={loadForEdit} />}
       {mode === "saved" && editingDialog ? (
         <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={closeEditor}>
@@ -785,20 +780,18 @@ function CustomBillingSegmentsEditor({
           <div className="custom-billing-segment-fields">
             <div className="custom-billing-field">
               <span>开始日期</span>
-              <Input
-                type="date"
-                aria-label="开始日期"
+              <DateInput
+                label="开始日期"
                 value={segment.startDate}
-                onChange={(event) => onChanged(segment.id, { startDate: event.target.value })}
+                onChange={(value) => onChanged(segment.id, { startDate: value })}
               />
             </div>
             <div className="custom-billing-field">
               <span>结束日期</span>
-              <Input
-                type="date"
-                aria-label="结束日期"
+              <DateInput
+                label="结束日期"
                 value={segment.endDate}
-                onChange={(event) => onChanged(segment.id, { endDate: event.target.value })}
+                onChange={(value) => onChanged(segment.id, { endDate: value })}
               />
             </div>
             <label>

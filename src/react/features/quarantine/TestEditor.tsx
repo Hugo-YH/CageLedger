@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import { Alert, Button, Form, Modal, Space, Tag, Typography } from "antd";
+import { Alert, Button, Form, Modal, Tag, Typography } from "antd";
 import type { QuarantineBatch, QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { useQuarantineRecordSave } from "../../api/quarantine";
 import { id, methodLabels, reportSections } from "./shared";
 import { ReportInformation, ReportProjects, ReportSamples } from "./ReportFields";
 import { ReportResults } from "./ReportResults";
 import { RecordAttachments } from "./RecordAttachments";
+import { CommandBar } from "../../components/ui";
 
 function reportTitle(method: QuarantineTest["method"]) {
   if (method === "parasite") return "体内外寄生虫检测记录表";
@@ -168,22 +169,40 @@ export function TestEditor({
 
   return (
     <div className="quarantine-report-editor">
-      <Form layout="vertical" disabled={save.isPending || fileBusy}>
-        <div className="quarantine-report-workbar">
-          <div>
+      <CommandBar
+        sticky
+        ariaLabel="检测记录编辑操作"
+        context={
+          <>
             <Typography.Text strong>{preview ? "报告预览" : "填写检测记录"}</Typography.Text>
-            <Typography.Text type="secondary">
+            <Typography.Text type="secondary" aria-live="polite">
               {saved ? "当前内容已保存" : "内容尚未保存，导出 Word 时沿用原始表格版式"}
             </Typography.Text>
-          </div>
-          <Space wrap>
-            <Button onClick={onCancel}>返回批次</Button>
-            <Button onClick={() => setPreview((value) => !value)}>{preview ? "继续填写" : "查看报告预览"}</Button>
-            <Button type="primary" loading={save.isPending} onClick={() => void finish()}>
-              保存检测草稿
+          </>
+        }
+        actions={
+          <>
+            <Button disabled={save.isPending || fileBusy} onClick={onCancel}>
+              返回批次
             </Button>
-          </Space>
-        </div>
+            <Button disabled={save.isPending || fileBusy} onClick={() => setPreview((value) => !value)}>
+              {preview ? "继续填写" : "查看报告预览"}
+            </Button>
+          </>
+        }
+        primaryAction={
+          <Button
+            aria-label="保存检测草稿"
+            type="primary"
+            disabled={fileBusy}
+            loading={save.isPending}
+            onClick={() => void finish()}
+          >
+            保存检测草稿
+          </Button>
+        }
+      />
+      <Form layout="vertical" disabled={save.isPending || fileBusy}>
         {error && <Alert type="error" title={error} showIcon />}
         <div className="quarantine-report-workspace">
           <aside className="quarantine-report-outline" aria-label="报告章节">

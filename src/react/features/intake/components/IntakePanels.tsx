@@ -2,6 +2,7 @@ import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
 
 import type { IntakeBatch, IntakeBatchStatus } from "../../../api/contracts";
+import { CommandBar, DateInput } from "../../../components/ui";
 
 export { IntakeBatchList } from "./IntakeBatchList";
 
@@ -41,9 +42,9 @@ export function IntakeEntryPanel({
 }) {
   return (
     <form id="intake-entry-panel" className="intake-entry-form" onSubmit={onSubmit}>
+      {headActions ? <CommandBar ariaLabel="编辑笼卡操作" sticky primaryAction={headActions} /> : null}
       <Card
         className="intake-entry-card"
-        extra={headActions}
         title={
           <Typography.Title level={2} style={{ margin: 0 }}>
             {editing ? "编辑接收笼卡" : "接收笼卡"}
@@ -55,7 +56,10 @@ export function IntakeEntryPanel({
             <Card
               className="intake-recognition-card"
               extra={
-                <Space>
+                <Space wrap>
+                  <Button htmlType="button" onClick={onParse} size="small">
+                    本地识别
+                  </Button>
                   <Button
                     htmlType="button"
                     icon={<RobotOutlined aria-hidden />}
@@ -65,9 +69,6 @@ export function IntakeEntryPanel({
                     type="primary"
                   >
                     AI识别
-                  </Button>
-                  <Button htmlType="button" onClick={onParse} size="small">
-                    本地识别
                   </Button>
                 </Space>
               }
@@ -245,14 +246,18 @@ function Field({
 }) {
   return (
     <Form.Item label={label} required={required}>
-      <Input
-        aria-label={label}
-        type={type}
-        value={value}
-        min={type === "number" ? 0 : undefined}
-        required={required}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {type === "date" ? (
+        <DateInput label={label} value={String(value)} onChange={onChange} required={required} />
+      ) : (
+        <Input
+          aria-label={label}
+          type={type}
+          value={value}
+          min={type === "number" ? 0 : undefined}
+          required={required}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
     </Form.Item>
   );
 }

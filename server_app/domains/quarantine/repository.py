@@ -170,7 +170,13 @@ def list_page(conn, table, params):
         args = [start, start, end, end]
         state = params.get("state", "pending")
         if state == "pending":
-            where += " AND NOT EXISTS (SELECT 1 FROM quarantine_batches q, json_each(q.payload, '$.sources') s WHERE json_extract(s.value, '$.intakeId') = intake_batches.id)"
+            # Build the covered ID set once instead of scanning every source for each intake.
+            # Manual sources may omit intakeId; exclude NULL so NOT IN retains uncovered rows.
+            where += """ AND id NOT IN (
+                SELECT json_extract(s.value, '$.intakeId')
+                FROM quarantine_batches q, json_each(q.payload, '$.sources') s
+                WHERE json_extract(s.value, '$.intakeId') IS NOT NULL
+            )"""
     total = conn.execute(f"SELECT COUNT(*) FROM {source} WHERE {where}", args).fetchone()[0]
     items = [
         json.loads(row[0])

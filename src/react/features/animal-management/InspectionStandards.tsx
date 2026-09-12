@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Alert, Button, Card, Col, Descriptions, Row, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
 import { useAnimalInspectionCatalog, useAnimalInspectionCatalogDraft } from "../../api/animalManagement";
 import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
+import { CommandBar } from "../../components/ui";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
@@ -19,6 +20,13 @@ export function InspectionStandards({
   navigate: (view: WorkspaceView) => void;
 }) {
   const isMobile = useIsMobileLayout();
+  const desktop = isMobile
+    ? undefined
+    : {
+        className: "workspace-view animal-management-workspace",
+        bodyClassName: "workspace-body animal-management-body",
+        feature: "animal-management",
+      };
   const isAdmin = user.role === "admin";
   const [editing, setEditing] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
@@ -29,18 +37,10 @@ export function InspectionStandards({
     return <PageState title="巡检标准加载失败" retry={() => void catalog.refetch()} />;
   if (editing) {
     if (draft.isLoading || !draft.data) return <PageSkeleton label="巡检编辑草稿" variant="form" />;
-    const editor = <InspectionCatalogEditor draft={draft.data} onExit={() => setEditing(false)} />;
-    if (isMobile) {
-      return (
-        <MobilePage onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
-          {editor}
-        </MobilePage>
-      );
-    }
     return (
-      <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-        <div className="workspace-body animal-management-body">{editor}</div>
-      </section>
+      <MobilePage desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
+        <InspectionCatalogEditor draft={draft.data} onExit={() => setEditing(false)} />
+      </MobilePage>
     );
   }
   const content = (
@@ -59,27 +59,23 @@ export function InspectionStandards({
           }
         />
       ) : null}
-      <Card
-        className="animal-ant-card inspection-standards-panel"
-        extra={
-          <Space>
+      <Card className="animal-ant-card inspection-standards-panel" title="巡检标准目录">
+        <CommandBar
+          ariaLabel="巡检标准操作"
+          context={
             <Tag color={catalog.data.version.status === "active" ? "green" : "default"}>
               {catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
             </Tag>
-            {isAdmin ? (
-              <Space>
-                <Button size="small" onClick={() => setVersionsOpen(true)}>
-                  版本历史
-                </Button>
-                <Button size="small" type="primary" onClick={() => setEditing(true)}>
-                  编辑目录
-                </Button>
-              </Space>
-            ) : null}
-          </Space>
-        }
-        title="巡检标准目录"
-      >
+          }
+          actions={isAdmin ? <Button onClick={() => setVersionsOpen(true)}>版本历史</Button> : undefined}
+          primaryAction={
+            isAdmin ? (
+              <Button type="primary" onClick={() => setEditing(true)}>
+                编辑目录
+              </Button>
+            ) : undefined
+          }
+        />
         <Descriptions bordered className="inspection-catalog-summary" column={{ xs: 1, sm: 2 }} size="small">
           <Descriptions.Item label="当前目录版本">{catalog.data.version.version}</Descriptions.Item>
           <Descriptions.Item label="导入时间">
@@ -110,16 +106,9 @@ export function InspectionStandards({
       {isAdmin ? <InspectionVersionHistoryModal open={versionsOpen} onClose={() => setVersionsOpen(false)} /> : null}
     </>
   );
-  if (isMobile) {
-    return (
-      <MobilePage onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
-        {content}
-      </MobilePage>
-    );
-  }
   return (
-    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
-      <div className="workspace-body animal-management-body">{content}</div>
-    </section>
+    <MobilePage desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
+      {content}
+    </MobilePage>
   );
 }

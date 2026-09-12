@@ -423,6 +423,7 @@
 
 .project-home-footer {
   display: flex;
+  flex-wrap: wrap;
   width: min(1200px, calc(100% - 48px));
   align-items: center;
   justify-content: space-between;
@@ -434,11 +435,12 @@
 }
 
 [data-feature="project-home"] .project-home-footer .ant-divider {
+  flex: 0 0 100%;
   width: 100%;
   margin: 0 0 24px;
 }
 
-.project-home-footer > div:first-of-type {
+.project-home-footer > div:not(.ant-divider, .ant-space) {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;

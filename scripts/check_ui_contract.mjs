@@ -20,6 +20,13 @@ const failures = required.filter((path) => !existsSync(join(root, path))).map((p
 const source = walk(join(root, "src"));
 for (const path of source) {
   const text = readFileSync(path, "utf8");
+  if (
+    path.endsWith(".tsx") &&
+    relative(path) !== "src/react/components/ui/CommandBar.tsx" &&
+    /data-ui=["']workspace-toolbar["']/.test(text)
+  ) {
+    failures.push(`${relative(path)} 直接声明公共工具栏，请使用 CommandBar 或 WorkspaceToolbar`);
+  }
   if (/transition:\s*all\b/.test(text)) failures.push(`${relative(path)} 使用 transition: all`);
   if (/z-index:\s*(?:[1-9]\d{3,}|\d{5,})/.test(text)) failures.push(`${relative(path)} 使用未登记的高层级 z-index`);
 }

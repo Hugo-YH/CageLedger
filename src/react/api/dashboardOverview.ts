@@ -40,7 +40,7 @@ export type DashboardOverviewResponse = {
   pi: PiOverview[];
 };
 
-export function useDashboardOverview(month?: string) {
+export function useDashboardOverview(month?: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.dashboardOverview(month),
     queryFn: ({ signal }) =>
@@ -48,5 +48,6 @@ export function useDashboardOverview(month?: string) {
         `/api/dashboard/overview${month ? `?month=${encodeURIComponent(month)}` : ""}`,
         { signal },
       ),
+    enabled,
   });
 }

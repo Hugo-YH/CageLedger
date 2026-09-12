@@ -20,6 +20,7 @@ import {
   useSystemUpdate,
 } from "../../api/administration";
 import type { SessionUser, SystemEnvironment, SystemPerformance, SystemRequestBreakdown } from "../../api/contracts";
+import { CommandBar } from "../../components/ui";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
@@ -141,23 +142,33 @@ function SystemMasthead({
               : "查看 CageLedger 版本、使用文档、客户端证书与本机界面设置。"}
           </Typography.Paragraph>
         </div>
-        <Flex className="system-masthead-actions" gap={8} wrap>
-          {isAdmin ? (
-            <Button loading={updateLoading} onClick={onCheckUpdate}>
-              检查更新
-            </Button>
-          ) : null}
-          <Button href="/docs/" icon={<BookOutlined aria-hidden />}>
-            项目文档
-          </Button>
-          <Button href="/docs/releases/">更新记录</Button>
-          {info.data?.repositoryUrl ? (
-            <Button href={info.data.repositoryUrl} icon={<CodeOutlined aria-hidden />} rel="noreferrer" target="_blank">
-              Gitea 仓库
-            </Button>
-          ) : null}
-        </Flex>
       </div>
+      <CommandBar
+        ariaLabel="系统信息操作"
+        actions={
+          <>
+            {isAdmin ? (
+              <Button loading={updateLoading} onClick={onCheckUpdate}>
+                检查更新
+              </Button>
+            ) : null}
+            <Button href="/docs/" icon={<BookOutlined aria-hidden />}>
+              项目文档
+            </Button>
+            <Button href="/docs/releases/">更新记录</Button>
+            {info.data?.repositoryUrl ? (
+              <Button
+                href={info.data.repositoryUrl}
+                icon={<CodeOutlined aria-hidden />}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Gitea 仓库
+              </Button>
+            ) : null}
+          </>
+        }
+      />
       {info.isPending ? (
         <Skeleton active className="system-info-skeleton" paragraph={{ rows: 1 }} title={false} />
       ) : null}

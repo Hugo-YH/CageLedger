@@ -1,3 +1,4 @@
+import { captureUiAudit } from "./uiAudit";
 import type { Route } from "@playwright/test";
 import { ensureTestInfrastructure, expect, openSettingsView, test } from "./fixtures";
 
@@ -9,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
 });
 
-test("account forms keep their own labels and show create, edit and delete failures", async ({ page }) => {
+test("account forms keep their own labels and show create, edit and delete failures", async ({ page }, testInfo) => {
   const users = ["甲", "乙"].map((name, index) => ({
     id: `mock-${index}`,
     username: `account-${index}`,
@@ -60,9 +61,10 @@ test("account forms keep their own labels and show create, edit and delete failu
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await expect(editor).toBeVisible();
+  await captureUiAudit(page, testInfo, "account-errors");
 });
 
-test("infrastructure save and delete failures stay in the open dialog", async ({ page }) => {
+test("infrastructure save and delete failures stay in the open dialog", async ({ page }, testInfo) => {
   await ensureTestInfrastructure(page);
   await openSettingsView(page, "房间管理");
   let requests = 0;
@@ -76,6 +78,7 @@ test("infrastructure save and delete failures stay in the open dialog", async ({
   await dialog.getByRole("button", { name: "保存饲养间", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("基础设施冲突，请重新核对");
   await expect(dialog.getByLabel("饲养间名称", { exact: true })).toHaveValue("未保存的测试房间");
+  await captureUiAudit(page, testInfo, "room-editor-error", dialog);
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   const rack = page.locator(".settings-rack-row").first();
   await rack.getByRole("button", { name: "删除", exact: true }).click();

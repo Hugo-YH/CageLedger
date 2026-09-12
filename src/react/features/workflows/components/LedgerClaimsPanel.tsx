@@ -123,6 +123,7 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
       />
       {!query.isPending && !query.isError ? (
         <DataTable
+          refreshing={query.isFetching}
           className="antd-data-table reimbursement-table"
           columns={columns}
           dataSource={items}

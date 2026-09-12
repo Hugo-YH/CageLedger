@@ -88,6 +88,7 @@ export function ObligationsPanel() {
       />
       {!query.isPending && !query.isError ? (
         <DataTable
+          refreshing={query.isFetching}
           className="antd-data-table reimbursement-table"
           columns={columns}
           dataSource={items}

@@ -1,3 +1,4 @@
+import { captureUiAudit } from "./uiAudit";
 import { expect, openNavigationEntry, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
@@ -14,7 +15,8 @@ async function openStandards(page: Page) {
   await expect(page.locator(".inspection-standards-panel")).toBeVisible();
 }
 
-test("admin edits the catalog, saves a draft and publishes a new version", async ({ page }) => {
+test("admin edits the catalog, saves a draft and publishes a new version", async ({ page }, testInfo) => {
+  test.setTimeout(60000);
   await login(page, "admin", "admin123");
   await openStandards(page);
   await expect(page.locator(".inspection-standard-list")).toContainText("125 个巡检条目");
@@ -23,17 +25,22 @@ test("admin edits the catalog, saves a draft and publishes a new version", async
   await expect(page.locator(".inspection-editor-panel")).toBeVisible();
   const treeNode = page
     .locator(".inspection-editor-tree .ant-tree-treenode:visible")
-    .getByText("呼吸急促", { exact: true })
+    .getByText(/^呼吸急促/)
     .first();
   await treeNode.click();
   await expect(page.locator(".inspection-node-drawer")).toBeVisible();
   const nameInput = page.locator(".inspection-node-drawer #name");
-  await nameInput.fill("呼吸急促（E2E 发布）");
+  const nodeName = `呼吸急促（E2E 发布 ${Date.now()}）`;
+  await nameInput.fill(nodeName);
+  await captureUiAudit(page, testInfo, "inspection-node", page.getByRole("dialog"));
+  await expect(nameInput).toHaveValue(nodeName);
   await page.getByRole("button", { name: /保存修改/ }).click();
   await expect(page.locator(".inspection-editor-tree .inspection-tree-change:visible")).toHaveCount(1);
 
   await page.locator(".inspection-editor-panel button").filter({ hasText: "保存草稿" }).click();
-  await expect(page.locator(".inspection-editor-status .ant-tag").first()).toHaveText("草稿已保存");
+  await expect(
+    page.getByRole("group", { name: "巡检目录编辑操作", exact: true }).getByText("草稿已保存", { exact: true }),
+  ).toHaveText("草稿已保存");
 
   await page.locator(".inspection-editor-panel button").filter({ hasText: "返回" }).click();
   await expect(page.locator(".inspection-draft-banner")).toBeVisible();
@@ -43,7 +50,13 @@ test("admin edits the catalog, saves a draft and publishes a new version", async
   await page.locator(".inspection-editor-panel button").filter({ hasText: "发布" }).click();
   await expect(page.locator(".inspection-publish-modal")).toBeVisible();
   await expect(page.locator(".inspection-publish-diff-item")).toHaveCount(1);
-  await page.getByRole("button", { name: "确认发布", exact: true }).click();
+  await captureUiAudit(page, testInfo, "inspection-publish", page.getByRole("dialog"));
+  await page.setViewportSize({ width: 844, height: 390 });
+  const confirmPublish = page.getByRole("button", { name: "确认发布", exact: true });
+  await confirmPublish.scrollIntoViewIfNeeded();
+  await expect(confirmPublish).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("inspection-publish-scrolled-844.png"), animations: "disabled" });
+  await confirmPublish.click();
   await expect(page.locator(".inspection-standards-panel")).toBeVisible();
   await expect(page.locator(".inspection-catalog-summary")).toContainText("manual-");
   await expect(page.locator(".inspection-draft-banner")).toHaveCount(0);
@@ -71,13 +84,15 @@ test("room administrator only sees the read-only standards page", async ({ page 
   expect(deleteResponse.ok()).toBeTruthy();
 });
 
-test("admin can review the version history", async ({ page }) => {
+test("admin can review the version history", async ({ page }, testInfo) => {
+  test.setTimeout(60000);
   await login(page, "admin", "admin123");
   await openStandards(page);
   await page.getByRole("button", { name: "版本历史" }).click();
   await expect(page.locator(".inspection-version-modal")).toBeVisible();
   await expect(page.locator(".inspection-version-row").first()).toContainText("当前生效");
   await expect(page.locator(".inspection-version-row").first()).toContainText("233 条巡检内容");
+  await captureUiAudit(page, testInfo, "inspection-versions", page.getByRole("dialog"));
   const rowCount = await page.locator(".inspection-version-row").count();
   expect(rowCount).toBeGreaterThanOrEqual(2);
   const historyRow = page.locator(".inspection-version-row").filter({ hasNotText: "当前生效" }).first();

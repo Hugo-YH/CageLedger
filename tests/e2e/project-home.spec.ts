@@ -1,6 +1,7 @@
+import { captureUiAudit } from "./uiAudit";
 import { expect, test } from "./fixtures";
 
-test("project portal provides product and Gitea resource entry points", async ({ page }) => {
+test("project portal provides product and Gitea resource entry points", async ({ page }, testInfo) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", level: 1 })).toBeVisible();
@@ -12,6 +13,7 @@ test("project portal provides product and Gitea resource entry points", async ({
   await expect(page.getByRole("heading", { name: "围绕实验动物中心日常工作的统一系统", level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "文档、版本与部署资源", level: 2 })).toBeVisible();
   await expect(page.getByRole("link", { name: "打开资源" }).first()).toHaveAttribute("href", "/docs/");
+  await captureUiAudit(page, testInfo, "project-portal");
 });
 
 test("project portal preserves readable mobile, dark, and reduced-motion layouts", async ({ page }) => {

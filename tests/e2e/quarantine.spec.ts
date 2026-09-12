@@ -89,7 +89,9 @@ for (const size of [
         columns: getComputedStyle(element).gridTemplateColumns,
         paperBackground: getComputedStyle(element.querySelector(".quarantine-report-paper")!).backgroundColor,
         outlineDisplay: getComputedStyle(element.querySelector(".quarantine-report-outline")!).display,
-        toolbarPosition: getComputedStyle(document.querySelector(".quarantine-report-workbar")!).position,
+        toolbarPosition: getComputedStyle(
+          document.querySelector('[data-ui="workspace-toolbar"][aria-label="检测记录编辑操作"]')!,
+        ).position,
         samplingDateWidth: Math.round(
           document
             .querySelector<HTMLElement>('[aria-label="采样日期"]')!
@@ -99,12 +101,24 @@ for (const size of [
       }));
       expect(reportStyle.paperBackground).not.toBe("rgba(0, 0, 0, 0)");
       expect(reportStyle.outlineDisplay).toBe(size.width <= 900 ? "none" : "flex");
-      expect(reportStyle.toolbarPosition).toBe(size.width <= 760 ? "static" : "sticky");
+      expect(reportStyle.toolbarPosition).toBe(size.height <= 500 ? "relative" : "sticky");
       expect(reportStyle.samplingDateWidth).toBeGreaterThan(200);
       await testInfo.attach("report-computed-style", {
         body: JSON.stringify(reportStyle),
         contentType: "application/json",
       });
+      const editorToolbar = page.getByRole("group", { name: "检测记录编辑操作", exact: true });
+      await expect(editorToolbar.locator(".ant-btn-primary")).toHaveCount(1);
+      await expect(root.locator('[data-ui="workspace-toolbar"]')).toHaveCount(1);
+      if (size.height > 500) {
+        await page
+          .locator(".quarantine-report-paper .quarantine-report-section")
+          .last()
+          .evaluate((element) => element.scrollIntoView({ block: "start" }));
+        await expect(editorToolbar.getByRole("button", { name: "保存检测草稿" })).toBeInViewport();
+        await editorToolbar.getByRole("button", { name: "保存检测草稿" }).focus();
+        await expect(editorToolbar.getByRole("button", { name: "保存检测草稿" })).toBeFocused();
+      }
       await page.screenshot({ path: testInfo.outputPath("quarantine.png"), fullPage: true });
       await page.getByRole("button", { name: "保存检测草稿" }).click();
       await expect(page.getByText("当前内容已保存", { exact: true })).toBeVisible();
@@ -121,8 +135,8 @@ for (const size of [
   });
 }
 
-test("quarantine APIs authenticate, audit and preserve report versions", async ({ page, playwright }) => {
-  const anon = await playwright.request.newContext({ baseURL: "http://127.0.0.1:5183" });
+test("quarantine APIs authenticate, audit and preserve report versions", async ({ page, playwright, baseURL }) => {
+  const anon = await playwright.request.newContext({ baseURL });
   expect((await anon.get("/api/quarantine/batches")).status()).toBe(401);
   await anon.dispose();
   await login(page);
@@ -449,7 +463,7 @@ test("ELISA report form links sources, symbols and multi-project image metadata"
   expect(recordResponse.ok()).toBe(true);
   await openNavigationEntry(page, "检疫管理", "ELISA检测");
   await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "查看检测记录" }).click();
-  await page.getByRole("button", { name: "ELISA检测（小鼠） · 2026-09-03 · 草稿", exact: true }).click();
+  await page.getByRole("tab", { name: "ELISA检测（小鼠） · 2026-09-03 · 草稿", exact: true }).click();
   await page.getByRole("button", { name: "编辑检测", exact: true }).click();
   await page.getByRole("button", { name: "＋ 添加样本", exact: true }).click();
   const secondSource = page.getByRole("combobox", { name: "混样来源 2", exact: true });

@@ -54,6 +54,7 @@ export function LogsView() {
           ) : (
             <Fragment>
               <DataTable
+                refreshing={query.isFetching}
                 className="app-data-table audit-log-table"
                 columns={columns}
                 dataSource={query.data?.items || []}

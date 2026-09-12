@@ -14,16 +14,20 @@ import { uploadFile } from "./administration";
 import { queryKeys } from "./queryKeys";
 
 const base = "/api/quarantine";
-export function useQuarantineQuery<T>(path: string, enabled = true) {
+export function useQuarantineQuery<T>(path: string, enabled = true, retainList = false) {
   return useQuery({
     queryKey: [...queryKeys.quarantine, path],
     queryFn: ({ signal }) => requestJson<T>(`${base}/${path}`, { signal }),
     enabled,
+    placeholderData: (previous, previousQuery) =>
+      retainList && String(previousQuery?.queryKey.at(-1)).split("?")[0] === path.split("?")[0] ? previous : undefined,
   });
 }
-export function useQuarantineBatches(search: string, page: number) {
+export function useQuarantineBatches(search: string, page: number, enabled = true) {
   return useQuarantineQuery<QuarantinePage<QuarantineBatch>>(
     `batches?search=${encodeURIComponent(search)}&offset=${(page - 1) * 30}`,
+    enabled,
+    true,
   );
 }
 export function useQuarantineDetail(id: string) {
@@ -33,13 +37,17 @@ export function useQuarantineSources(from: string, to: string, page: number, ena
   return useQuarantineQuery<QuarantinePage<IntakeBatch>>(
     `sources?dateFrom=${from}&dateTo=${to}&offset=${(page - 1) * 30}&state=${state}`,
     enabled,
+    true,
   );
 }
-export function useQuarantineCatalog() {
-  return useQuarantineQuery<{ projects: Record<QuarantineMethod, string[]>; templateVersion: string }>("catalog");
+export function useQuarantineCatalog(enabled = true) {
+  return useQuarantineQuery<{ projects: Record<QuarantineMethod, string[]>; templateVersion: string }>(
+    "catalog",
+    enabled,
+  );
 }
 export function useSupplierHistory(filters: Record<string, string>, enabled: boolean) {
-  return useQuarantineQuery<{ items: SupplierHistory[] }>(`suppliers?${new URLSearchParams(filters)}`, enabled);
+  return useQuarantineQuery<{ items: SupplierHistory[] }>(`suppliers?${new URLSearchParams(filters)}`, enabled, true);
 }
 export function useQuarantineWrite() {
   const client = useQueryClient();

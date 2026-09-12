@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Alert, Button, Card, Modal, Select, Space, Tag, Typography } from "antd";
+import { useRef, useState } from "react";
+import { Alert, Button, Card, Form, Modal, Select, Space, Tag, Typography } from "antd";
 import type { QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { downloadQuarantine, useQuarantineWrite } from "../../api/quarantine";
 import { id, methodLabels } from "./shared";
@@ -7,6 +7,7 @@ import { ReportInformation, ReportProjects, ReportSamples } from "./ReportFields
 import { ReportResults } from "./ReportResults";
 import { RecordAttachments } from "./RecordAttachments";
 import { reportSections } from "./shared";
+import { CommandBar } from "../../components/ui";
 export function TestDetail({
   test,
   detail,
@@ -22,8 +23,15 @@ export function TestDetail({
   const [error, setError] = useState("");
   const [supplier, setSupplier] = useState<string>();
   const [issuing, setIssuing] = useState(false);
+  const [downloading, setDownloading] = useState("");
+  const [failedDownload, setFailedDownload] = useState("");
+  const [downloadStatus, setDownloadStatus] = useState("");
+  const downloadLock = useRef(false);
   const sections = reportSections(test.method);
+  const reports = detail.reports.filter((report) => report.testId === test.id);
   async function action(name: string) {
+    setError("");
+    setFailedDownload("");
     try {
       const response = await write.mutateAsync({
         path: `tests/${test.id}/${name}`,
@@ -37,14 +45,27 @@ export function TestDetail({
     }
   }
   async function download(path: string) {
+    if (downloadLock.current) return;
+    downloadLock.current = true;
+    setDownloading(path);
+    setFailedDownload("");
+    setError("");
+    setDownloadStatus(path.endsWith("/preview") ? "正在生成 Word 草稿…" : "正在下载报告…");
     try {
-      await downloadQuarantine(path);
+      const filename = await downloadQuarantine(path);
+      setDownloadStatus(`已下载 ${filename}`);
     } catch (e) {
+      setDownloadStatus("");
+      setFailedDownload(path);
       setError(e instanceof Error ? e.message : "下载失败");
+    } finally {
+      downloadLock.current = false;
+      setDownloading("");
     }
   }
   return (
     <Card
+      className="quarantine-test-detail"
       title={
         <Space wrap>
           {methodLabels[test.method]}
@@ -54,39 +75,65 @@ export function TestDetail({
         </Space>
       }
     >
-      {error && <Alert type="error" title={error} />}
-      <Space wrap>
-        {test.state === "draft" ? (
-          <>
-            <Button onClick={onEdit}>编辑检测</Button>
-            <Button onClick={() => void download(`tests/${test.id}/preview`)}>下载Word草稿</Button>
+      {error && (
+        <Alert
+          type="error"
+          title={error}
+          action={failedDownload && <Button onClick={() => void download(failedDownload)}>重试下载</Button>}
+        />
+      )}
+      <Typography.Text role="status" aria-live="polite">
+        {downloadStatus}
+      </Typography.Text>
+      <CommandBar
+        ariaLabel="报告操作"
+        actions={
+          test.state === "draft" && (
+            <>
+              <Button onClick={onEdit}>编辑检测</Button>
+              <Button
+                aria-label="下载Word草稿"
+                loading={Boolean(downloading)}
+                onClick={() => void download(`tests/${test.id}/preview`)}
+              >
+                下载Word草稿
+              </Button>
+            </>
+          )
+        }
+        primaryAction={
+          test.state === "draft" ? (
             <Button type="primary" onClick={() => setIssuing(true)}>
               出具报告
             </Button>
-          </>
-        ) : (
-          <Button loading={write.isPending} onClick={() => void action("correction")}>
-            创建更正草稿
-          </Button>
-        )}
-        <Select
-          aria-label="复检供应商"
-          placeholder="选择复检供应商"
-          value={supplier}
-          options={[
-            ...new Set(
-              test.samples
-                .flatMap((s) => s.sourceIds)
-                .map((sid) => detail.item.sources.find((s) => s.id === sid)?.supplier)
-                .filter((s): s is string => Boolean(s)),
-            ),
-          ].map((value) => ({ value, label: value }))}
-          onChange={setSupplier}
-        />
+          ) : (
+            <Button type="primary" loading={write.isPending} onClick={() => void action("correction")}>
+              创建更正草稿
+            </Button>
+          )
+        }
+      />
+      <Form className="quarantine-retest-actions" layout="vertical" aria-label="复检操作">
+        <Form.Item label="复检供应商">
+          <Select
+            aria-label="复检供应商"
+            placeholder="选择复检供应商"
+            value={supplier}
+            options={[
+              ...new Set(
+                test.samples
+                  .flatMap((s) => s.sourceIds)
+                  .map((sid) => detail.item.sources.find((s) => s.id === sid)?.supplier)
+                  .filter((s): s is string => Boolean(s)),
+              ),
+            ].map((value) => ({ value, label: value }))}
+            onChange={setSupplier}
+          />
+        </Form.Item>
         <Button disabled={!supplier} loading={write.isPending} onClick={() => void action("retest")}>
           按供应商新建复检
         </Button>
-      </Space>
+      </Form>
       <div className="quarantine-report-form">
         <ReportInformation test={test} />
         {test.method !== "parasite" && (
@@ -133,17 +180,22 @@ export function TestDetail({
           <Typography.Paragraph type="secondary">历史记录结论：{test.conclusion}</Typography.Paragraph>
         )}
       </div>
-      <Card size="small" title="已出具报告版本">
-        <Space wrap>
-          {detail.reports
-            .filter((r) => r.testId === test.id)
-            .map((r) => (
-              <Button key={r.id} onClick={() => void download(`reports/${r.id}`)}>
+      {reports.length > 0 && (
+        <Card size="small" title="已出具报告版本">
+          <Space wrap>
+            {reports.map((r) => (
+              <Button
+                key={r.id}
+                loading={downloading === `reports/${r.id}`}
+                disabled={Boolean(downloading) && downloading !== `reports/${r.id}`}
+                onClick={() => void download(`reports/${r.id}`)}
+              >
                 {r.number} · 第{r.version}版 · {r.issuedBy.name}
               </Button>
             ))}
-        </Space>
-      </Card>
+          </Space>
+        </Card>
+      )}
       <Modal
         open={issuing}
         title="确认出具检疫报告"

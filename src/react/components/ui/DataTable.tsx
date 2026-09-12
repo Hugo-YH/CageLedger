@@ -5,6 +5,7 @@ import { Resizable, type ResizeCallbackData } from "react-resizable";
 
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, pixelWidth } from "./tableColumnWidths";
 import { useColumnWidths } from "./useColumnWidths";
+import { ListRefreshStatus } from "./ListRefreshStatus";
 
 const DEFAULT_COLUMN_WIDTH = 140;
 const FLEX_SPACER_KEY = "__app_table_flex_spacer__";
@@ -83,7 +84,7 @@ function estimateColumnWidth(column: { title?: unknown; dataIndex?: unknown }): 
 
 /** Standard server-side business list. Keep pagination and filtering in the domain hook. */
 type TableColumn<RecordType> = NonNullable<TableProps<RecordType>["columns"]>[number];
-type DataTableProps<RecordType> = TableProps<RecordType> & { resizeKey?: string };
+type DataTableProps<RecordType> = TableProps<RecordType> & { resizeKey?: string; refreshing?: boolean };
 
 function isRightFixedColumn<RecordType>(column: TableColumn<RecordType>): boolean {
   return column.fixed === "right" || column.fixed === "end";
@@ -99,6 +100,7 @@ function ResizableDataTable<RecordType extends object>({
   scroll,
   components,
   size = "middle",
+  refreshing,
   ...props
 }: DataTableProps<RecordType>) {
   const tableClassName = ["app-data-table", className].filter(Boolean).join(" ");
@@ -188,14 +190,17 @@ function ResizableDataTable<RecordType extends object>({
   }, [scroll, totalWidth, hasFluidWidth, selectionWidth, expansionWidth]);
 
   return (
-    <Table<RecordType>
-      {...props}
-      className={tableClassName}
-      columns={mergedColumns}
-      components={mergedComponents}
-      data-ui="data-table"
-      scroll={mergedScroll}
-      size={size}
-    />
+    <>
+      {refreshing !== undefined && <ListRefreshStatus active={refreshing} />}
+      <Table<RecordType>
+        {...props}
+        className={tableClassName}
+        columns={mergedColumns}
+        components={mergedComponents}
+        data-ui="data-table"
+        scroll={mergedScroll}
+        size={size}
+      />
+    </>
   );
 }

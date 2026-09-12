@@ -146,6 +146,15 @@ export function ReportProjects({ test, onChange, onRemoveProject, fields }: Prop
   );
 }
 export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) {
+  const sourceMap = new Map(batch.sources.map((source) => [source.id, source]));
+  const assigned = new Set(test.samples.flatMap((sample) => sample.sourceIds));
+  const sourceOptions = batch.sources
+    .filter(
+      (source) =>
+        !test.method.startsWith("elisa") ||
+        (test.method === "elisa_mouse" ? ["小鼠", "mouse"] : ["大鼠", "rat"]).includes(source.species.toLowerCase()),
+    )
+    .map((source) => ({ value: source.id, label: sourceLabel(source) }));
   const rows = [
     "样本编号",
     "供应商",
@@ -165,79 +174,69 @@ export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) 
         dataSource={rows.map((label) => ({ label }))}
         columns={[
           { title: "样本统计", dataIndex: "label", width: 130 },
-          ...test.samples.map((sample, index) => ({
-            title: `实验组 ${index + 1}`,
-            key: sample.id,
-            width: 220,
-            render: (_: unknown, row: { label: string }) => {
-              const selected = batch.sources.filter((s) => sample.sourceIds.includes(s.id));
-              const assignedToOtherSamples = new Set(
-                test.samples
-                  .filter((candidate) => candidate.id !== sample.id)
-                  .flatMap((candidate) => candidate.sourceIds),
-              );
-              if (row.label === "供应商")
-                return [...new Set(selected.map((s) => s.supplier))].join("、") || "选择来源后带入";
-              if (row.label === "课题组／实验人员")
+          ...test.samples.map((sample, index) => {
+            const ownIds = new Set(sample.sourceIds);
+            const selected = sample.sourceIds.flatMap((id) => {
+              const source = sourceMap.get(id);
+              return source ? [source] : [];
+            });
+            const options = sourceOptions.filter((option) => ownIds.has(option.value) || !assigned.has(option.value));
+            return {
+              title: `实验组 ${index + 1}`,
+              key: sample.id,
+              width: 220,
+              render: (_: unknown, row: { label: string }) => {
+                if (row.label === "供应商")
+                  return [...new Set(selected.map((s) => s.supplier))].join("、") || "选择来源后带入";
+                if (row.label === "课题组／实验人员")
+                  return onChange ? (
+                    <Select
+                      mode="multiple"
+                      aria-label={`混样来源 ${index + 1}`}
+                      value={sample.sourceIds}
+                      options={options}
+                      onChange={(sourceIds) =>
+                        onChange({
+                          ...test,
+                          samples: test.samples.map((s) =>
+                            s.id === sample.id
+                              ? { ...s, sourceIds, poolCount: 1, portionCount: new Set(sourceIds).size }
+                              : s,
+                          ),
+                        })
+                      }
+                    />
+                  ) : (
+                    <Space orientation="vertical">
+                      {selected.map((s) => (
+                        <span key={s.id}>{sourceLabel(s)}</span>
+                      ))}
+                    </Space>
+                  );
+                if (row.label === "操作")
+                  return (
+                    <Button danger type="text" onClick={() => onRemoveSample?.(sample.id)}>
+                      删除样本
+                    </Button>
+                  );
+                const key = row.label === "材料" ? "material" : "number";
                 return onChange ? (
-                  <Select
-                    mode="multiple"
-                    aria-label={`混样来源 ${index + 1}`}
-                    value={sample.sourceIds}
-                    options={batch.sources
-                      .filter(
-                        (s) =>
-                          (sample.sourceIds.includes(s.id) || !assignedToOtherSamples.has(s.id)) &&
-                          (!test.method.startsWith("elisa") ||
-                            (test.method === "elisa_mouse" ? ["小鼠", "mouse"] : ["大鼠", "rat"]).includes(
-                              s.species.toLowerCase(),
-                            )),
-                      )
-                      .map((s) => ({
-                        value: s.id,
-                        label: sourceLabel(s),
-                      }))}
-                    onChange={(sourceIds) =>
+                  <Input
+                    aria-label={`${row.label} ${index + 1}`}
+                    value={sample[key]}
+                    onChange={(e) =>
                       onChange({
                         ...test,
-                        samples: test.samples.map((s) =>
-                          s.id === sample.id
-                            ? { ...s, sourceIds, poolCount: 1, portionCount: new Set(sourceIds).size }
-                            : s,
-                        ),
+                        samples: test.samples.map((s) => (s.id === sample.id ? { ...s, [key]: e.target.value } : s)),
                       })
                     }
                   />
                 ) : (
-                  <Space orientation="vertical">
-                    {selected.map((s) => (
-                      <span key={s.id}>{sourceLabel(s)}</span>
-                    ))}
-                  </Space>
+                  sample[key]
                 );
-              if (row.label === "操作")
-                return (
-                  <Button danger type="text" onClick={() => onRemoveSample?.(sample.id)}>
-                    删除样本
-                  </Button>
-                );
-              const key = row.label === "材料" ? "material" : "number";
-              return onChange ? (
-                <Input
-                  aria-label={`${row.label} ${index + 1}`}
-                  value={sample[key]}
-                  onChange={(e) =>
-                    onChange({
-                      ...test,
-                      samples: test.samples.map((s) => (s.id === sample.id ? { ...s, [key]: e.target.value } : s)),
-                    })
-                  }
-                />
-              ) : (
-                sample[key]
-              );
-            },
-          })),
+              },
+            };
+          }),
         ]}
       />
       {onChange && (

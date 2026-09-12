@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
+import type jsQR from "./vendor/jsQR";
 
 declare global {
   interface Window {
-    jsQR?: (...args: unknown[]) => { data?: string } | null;
+    jsQR?: typeof jsQR;
   }
 }
 

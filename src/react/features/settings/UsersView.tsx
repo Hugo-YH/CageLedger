@@ -5,6 +5,7 @@ import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
 import { useDeleteUser, useSaveUser, useUsers } from "../../api/administration";
 import { ConfirmDialog, PageSkeleton, PageState } from "../../components/WorkspaceUi";
+import { ListRefreshStatus } from "../../components/ui";
 import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 
 const emptyDraft = {
@@ -42,7 +43,7 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
         <PageSkeleton label="账号与房间" variant="table" />
       </section>
     );
-  if (users.isError || bootstrap.isError)
+  if ((users.isError && !users.data) || (bootstrap.isError && !bootstrap.data))
     return (
       <section className="workspace-view">
         <PageState
@@ -65,6 +66,26 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
       <div className="workspace-body settings-workspace-body">
+        <ListRefreshStatus active={users.isFetching || bootstrap.isFetching} />
+        {users.isError || bootstrap.isError ? (
+          <Alert
+            role="alert"
+            showIcon
+            type="error"
+            title="账号与房间信息更新失败，当前输入已保留"
+            action={
+              <Button
+                loading={users.isFetching || bootstrap.isFetching}
+                onClick={() => {
+                  void users.refetch();
+                  void bootstrap.refetch();
+                }}
+              >
+                重试
+              </Button>
+            }
+          />
+        ) : null}
         <section className="settings-split-layout">
           <Card
             className="settings-user-list-card"

@@ -15,6 +15,8 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
   const write = useQuarantineAttachmentWrite();
   const lock = useRef(false);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [sampleId, setSampleId] = useState(test.samples[0]?.id ?? "");
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [category, setCategory] = useState(test.method === "parasite" ? "体外" : "原始记录");
@@ -26,8 +28,10 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
   async function upload(file: File) {
     if (!persist || lock.current) return;
     lock.current = true;
+    setUploading(true);
     onBusy?.(true);
     setError("");
+    setStatus("正在保存草稿并上传原始资料…");
     try {
       const current = await persist();
       const res = await write.mutateAsync({
@@ -35,10 +39,13 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
         file,
       });
       onVersion?.(res.test);
+      setStatus(`已上传 ${file.name}`);
     } catch (e) {
+      setStatus("");
       setError(e instanceof Error ? e.message : "上传失败");
     } finally {
       lock.current = false;
+      setUploading(false);
       onBusy?.(false);
     }
   }
@@ -53,6 +60,9 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
   return (
     <>
       {error && <Alert type="error" title={error} />}
+      <Typography.Text role="status" aria-live="polite">
+        {status}
+      </Typography.Text>
       {persist && (
         <Space wrap>
           {test.method === "parasite" && (
@@ -81,6 +91,7 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             onChange={setProjectIds}
           />
           <Upload
+            disabled={busy || uploading || write.isPending}
             accept=".png,.jpg,.jpeg,.tif,.tiff,.pdf,.xlsx,.xls"
             showUploadList={false}
             beforeUpload={(file) => {
@@ -89,10 +100,14 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             }}
           >
             <Button
+              aria-label="上传原始资料"
               disabled={
-                busy || write.isPending || (test.method === "parasite" && !test.samples.some((s) => s.id === sampleId))
+                busy ||
+                uploading ||
+                write.isPending ||
+                (test.method === "parasite" && !test.samples.some((s) => s.id === sampleId))
               }
-              loading={write.isPending}
+              loading={uploading}
             >
               上传原始资料
             </Button>
@@ -113,6 +128,7 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             onVersion={onVersion}
             busy={busy}
             onBusy={onBusy}
+            onStatus={setStatus}
           />
         ))}
       </div>
@@ -126,13 +142,20 @@ function AttachmentCard({
   onVersion,
   busy,
   onBusy,
-}: Omit<Props, "attachments"> & { attachment: QuarantineAttachment }) {
+  onStatus,
+}: Omit<Props, "attachments"> & { attachment: QuarantineAttachment; onStatus: (status: string) => void }) {
   const [draft, setDraft] = useState(a);
   const [error, setError] = useState("");
   const [remove, setRemove] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const lock = useRef(false);
   const write = useQuarantineAttachmentWrite();
   async function save(removed = false) {
+    if (lock.current) return;
+    lock.current = true;
+    setSaving(true);
     onBusy?.(true);
+    onStatus(removed ? "正在移除附件…" : "正在保存图片信息…");
     try {
       setError("");
       const current = await persist!();
@@ -142,9 +165,13 @@ function AttachmentCard({
       });
       onVersion?.(res.test);
       setRemove(false);
+      onStatus(removed ? `已移除 ${a.name}` : `已保存 ${a.name} 图片信息`);
     } catch (e) {
+      onStatus("");
       setError(e instanceof Error ? e.message : "保存失败");
     } finally {
+      lock.current = false;
+      setSaving(false);
       onBusy?.(false);
     }
   }
@@ -154,6 +181,8 @@ function AttachmentCard({
       {error && <Alert type="error" title={error} />}
       {a.mime.startsWith("image/") ? (
         <Image
+          loading="lazy"
+          decoding="async"
           className="quarantine-record-image"
           src={`/api/quarantine/attachments/${a.id}?preview=1`}
           alt={draft.caption || a.name}
@@ -212,10 +241,10 @@ function AttachmentCard({
             />
           </label>
           <Space wrap>
-            <Button disabled={busy || write.isPending} onClick={() => void save()} loading={write.isPending}>
+            <Button disabled={busy || saving} onClick={() => void save()} loading={saving}>
               保存图片信息
             </Button>
-            <Button danger disabled={busy || write.isPending} onClick={() => setRemove(true)}>
+            <Button danger disabled={busy || saving} onClick={() => setRemove(true)}>
               移除附件
             </Button>
           </Space>
@@ -239,9 +268,12 @@ function AttachmentCard({
       <Modal
         open={remove}
         title="从当前草稿移除此附件？"
-        onCancel={() => setRemove(false)}
+        onCancel={() => {
+          if (!saving) setRemove(false);
+        }}
         onOk={() => void save(true)}
-        confirmLoading={write.isPending}
+        confirmLoading={saving}
+        cancelButtonProps={{ disabled: saving }}
         okText="移除附件"
       >
         <p>已出具的历史报告和原始上传记录仍会保留。</p>

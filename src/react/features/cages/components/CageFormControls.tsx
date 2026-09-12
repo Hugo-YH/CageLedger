@@ -1,4 +1,5 @@
 import { Input, InputNumber, Select } from "antd";
+import { DateInput } from "../../../components/ui";
 
 export function Field({
   label,
@@ -30,13 +31,17 @@ export function Field({
   return (
     <label>
       {label}
-      <Input
-        aria-label={label}
-        max={max}
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {type === "date" ? (
+        <DateInput label={label} value={String(value)} onChange={onChange} max={max} />
+      ) : (
+        <Input
+          aria-label={label}
+          max={max}
+          type={type}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
     </label>
   );
 }

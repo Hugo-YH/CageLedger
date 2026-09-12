@@ -343,18 +343,19 @@ def batch_detail(conn, entity_id):
     batch = repo.get(conn, "batches", entity_id)
     tests = repo.all_items(conn, "tests", entity_id)
     source_map = {s["id"]: s for s in batch["sources"]}
-    abnormal = any(abnormal_samples(t) for t in tests)
+    abnormal_by_test = {t["id"]: abnormal_samples(t) for t in tests}
+    abnormal = any(abnormal_by_test.values())
     cross = any(
         len({source_map[sid]["supplier"] for sid in s["sourceIds"]}) > 1
         for t in tests
         for s in t["samples"]
-        if s["id"] in abnormal_samples(t)
+        if s["id"] in abnormal_by_test[t["id"]]
     )
     pending_split = any(
         not split_retest_completed(tests, t["id"], sample["id"], supplier, source_map)
         for t in tests
         for sample in t["samples"]
-        if sample["id"] in abnormal_samples(t)
+        if sample["id"] in abnormal_by_test[t["id"]]
         if len(suppliers := {source_map[sid]["supplier"] for sid in sample["sourceIds"]}) > 1
         for supplier in suppliers
     )

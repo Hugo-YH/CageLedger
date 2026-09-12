@@ -1478,6 +1478,27 @@
   gap: 0 16px;
 }
 
+.inspection-action-modal .ant-modal-container {
+  display: flex;
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
+}
+
+.inspection-action-modal .ant-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.inspection-action-modal .inspection-action-summary {
+  margin-bottom: 16px;
+}
+
+.inspection-action-modal .inspection-action-note {
+  margin-top: 12px;
+}
+
 .inspection-reference-strip {
   margin-bottom: 16px;
 }
@@ -1724,22 +1745,6 @@
 
 .inspection-draft-banner {
   margin-bottom: 16px;
-}
-
-.inspection-editor-panel .inspection-editor-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.inspection-editor-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
 }
 
 .inspection-editor-body {

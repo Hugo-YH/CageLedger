@@ -18,6 +18,8 @@
 
 本地检查及本次改动引起的失败修复可连续执行，不在每一步等待确认。使用测试框架建立的临时库和 fixtures；API 冒烟或浏览器写入前核实服务和数据目录，不能将运行库当作测试库。环境缺失或历史失败要如实记录，不扩大到无关修复。
 
+Playwright 默认启动隔离服务；`CAGELEDGER_E2E_REUSE=1` 会复用已有实例，只有确认该实例使用可丢弃的临时库时才用于写入测试。完整回归优先使用新实例，避免残留 fixtures 导致编号冲突、状态污染或分页假设失效。失败先区分环境、测试数据和本次实现原因，再选择受影响检查重跑。
+
 不为低风险文字改动编写只匹配措辞的测试。测试应验证可观察的行为或业务约束，复用已有回归覆盖。
 
 ## 分层
@@ -57,14 +59,13 @@ npm run check
 
 ## UI 回归流程
 
-适用于实际 UI 改动，覆盖受影响组件和状态。任务开始运行一次 `npm run check:antd-design` 与 `npm run check:style-ownership`；后续 `npm run check` 已包含这两项，不额外重复。
+适用于实际 UI 改动，覆盖受影响组件和状态。以下是验收要求，不规定每次编辑的固定顺序。`npm run check` 已包含 Ant Design、样式归属与 Stylelint 检查；需要定位问题或确认历史基线时可提前单独运行，完整检查通过后无需再重复这些子项。
 
-1. 使用 `rg` 枚举目标组件的 class、data attribute、媒体查询和导入顺序，记录唯一布局归属。
-2. 在桌面、1180px、760px、手机横屏验证目标页面的默认、焦点、禁用、加载和长文本状态。
-3. 检查浏览器 computed style 与容器溢出，重点覆盖 `display`、网格列、最小宽度、间距、定位和层级。
-4. 运行目标 CSS 的 Stylelint、`npm run check` 和 `git diff --check`；关键流程补充或更新 Playwright 截图断言。
-5. 视觉差异先回溯样式来源和级联顺序，再修改唯一组件规则。验收禁止新增同类覆盖层。
-6. 按 [`ui-change-evidence.md`](../templates/ui-change-evidence.md) 保存组件归属、四档视口、溢出与 computed style 证据。
+- 定位目标组件的 class、data attribute、媒体查询和导入顺序，确认唯一布局归属。视觉差异回溯样式来源和级联，不新增同类覆盖层。
+- 在桌面、1180px、760px、手机横屏验证目标页面实际适用的默认、焦点、禁用、加载和长文本状态。
+- 检查浏览器 computed style 与容器溢出，重点覆盖 `display`、网格列、最小宽度、间距、定位和层级。
+- 实现完成后通过 `npm run check` 和 `git diff --check`；关键流程有变化时补充或更新对应 Playwright 断言，版式变化保留截图。
+- 按 [`ui-change-evidence.md`](../templates/ui-change-evidence.md) 保存组件归属、四档视口、溢出与 computed style 证据。
 
 同组表单读取实际存在的 DatePicker、Select、Input 与只读 Input 的 computed style，统一外框高度档位：默认 32px、紧凑 24px、强调 40px。同一行只用一种档位。Portal 检查 `.app-modal-root` 的实际样式作用域；保持单一纵向滚动所有者。修改交互、权限、打印、导出、缓存或加载链路时，浏览器检查实际用户入口。
 

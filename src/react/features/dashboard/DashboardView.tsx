@@ -1,11 +1,12 @@
 import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
-import { Badge, Button, Card, Col, Progress, Row, Select, Skeleton, Statistic, Tag, Typography } from "antd";
+import { Alert, Badge, Button, Card, Col, Progress, Row, Select, Skeleton, Statistic, Tag, Typography } from "antd";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
 import { useDashboardOverview } from "../../api/dashboardOverview";
 import { PageState } from "../../components/WorkspaceUi";
+import { ListRefreshStatus } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 
@@ -86,10 +87,29 @@ function hexToRgba(hex: string, alpha: number) {
 
 export function DashboardView({ navigate }: { navigate: (view: WorkspaceView) => void }) {
   const [month, setMonth] = useState<string | undefined>(undefined);
+  const [displayedMonth, setDisplayedMonth] = useState<string | undefined>(undefined);
   const overview = useDashboardOverview(month);
-  if (overview.isPending) return <DashboardSkeleton />;
-  if (overview.isError || !overview.data) return <DashboardError retry={() => overview.refetch()} />;
-  return <DashboardContent data={overview.data} month={month} onMonthChange={setMonth} navigate={navigate} />;
+  // Retain the displayed query in the cache while another month loads or fails.
+  // The disabled observer does not request data or store a second local copy.
+  const displayed = useDashboardOverview(displayedMonth, false);
+  useEffect(() => {
+    if (overview.isSuccess) setDisplayedMonth(month);
+  }, [month, overview.isSuccess]);
+  const data = overview.data ?? displayed.data;
+  if (!data) {
+    return overview.isPending ? <DashboardSkeleton /> : <DashboardError retry={() => overview.refetch()} />;
+  }
+  return (
+    <DashboardContent
+      data={data}
+      month={month}
+      onMonthChange={setMonth}
+      navigate={navigate}
+      refreshing={overview.isFetching}
+      failed={overview.isError}
+      retry={() => void overview.refetch()}
+    />
+  );
 }
 
 function DashboardContent({
@@ -97,14 +117,20 @@ function DashboardContent({
   month,
   onMonthChange,
   navigate,
+  refreshing,
+  failed,
+  retry,
 }: {
   data: DashboardOverviewResponse;
   month?: string;
   onMonthChange: (month?: string) => void;
   navigate: (view: WorkspaceView) => void;
+  refreshing: boolean;
+  failed: boolean;
+  retry: () => void;
 }) {
   const { availableMonths, intake, rooms, pi } = data;
-  const currentMonth = month === "all" ? "历史合计" : month || data.month;
+  const currentMonth = data.month === "all" ? "历史合计" : data.month;
   const tasks = [
     {
       label: "待接收批次",
@@ -166,6 +192,19 @@ function DashboardContent({
           />
           <Typography.Text type="secondary">当前统计月份：{currentMonth}</Typography.Text>
         </div>
+        <ListRefreshStatus active={refreshing} />
+        {failed ? (
+          <Alert
+            type="error"
+            showIcon
+            title="运营数据更新失败，暂显示上次结果"
+            action={
+              <Button loading={refreshing} onClick={retry}>
+                重试
+              </Button>
+            }
+          />
+        ) : null}
         <Card className="ant-dashboard-section" size="small" title="待办任务">
           <Row gutter={[0, 12]}>
             {tasks.map((task) => (
@@ -488,7 +527,7 @@ function DashboardSkeleton() {
       <div aria-hidden="true" className="dashboard-hero dashboard-skeleton-hero">
         <Skeleton.Input active size="small" style={{ width: 72 }} />
         <div className="workspace-title-line">
-          <Skeleton.Input active size="large" style={{ width: 360 }} />
+          <Skeleton.Input active size="large" style={{ width: "min(360px, 100%)" }} />
           <Skeleton.Button active size="small" />
         </div>
         <Skeleton active paragraph={{ rows: 1, width: "48%" }} title={false} />

@@ -65,7 +65,31 @@ export interface IntakeWriteResponse {
   auditLogs?: Record<string, unknown>[];
 }
 
+/** Read-only public projection; never expose the complete intake batch or account data. */
+export interface CageCardDetails {
+  qrId: string;
+  batchNo: string | null;
+  cageCode: string | null;
+  roomName: string | null;
+  rackName: string | null;
+  slotCode: string | null;
+  iacuc: string | null;
+  project: string | null;
+  pi: string | null;
+  owner: string | null;
+  species: string | null;
+  speciesLabel: string | null;
+  strainStandard: string | null;
+  animalCount: string | number | null;
+  sex: string | null;
+  birthDate: string | null;
+  age: string | null;
+  startDate: string | null;
+  actualMoveInDate: string | null;
+  endDate: string | null;
+  statusLabel: string | null;
+}
+
 export interface PublicCageCardResponse {
-  batch: IntakeBatch;
-  card: IntakeCard;
+  item: CageCardDetails;
 }

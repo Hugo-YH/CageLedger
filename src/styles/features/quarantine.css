@@ -5,6 +5,16 @@
   gap: 16px;
 }
 
+[data-feature="quarantine"] .quarantine-test-detail > .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+[data-feature="quarantine"] .quarantine-retest-actions {
+  width: min(100%, 320px);
+}
+
 [data-feature="quarantine"] .quarantine-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
@@ -45,11 +55,6 @@
   gap: 0;
 }
 
-[data-feature="quarantine"].quarantine-editing > .quarantine-page-heading,
-[data-feature="quarantine"].quarantine-editing > .quarantine-page-tabs {
-  display: none;
-}
-
 [data-feature="quarantine"] .quarantine-report-editor {
   min-width: 0;
   margin: -8px;
@@ -57,28 +62,9 @@
   background: var(--ant-color-bg-layout);
 }
 
-[data-feature="quarantine"] .quarantine-report-workbar {
-  position: sticky;
-  z-index: var(--z-sticky);
-  top: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: color-mix(in srgb, var(--ant-color-bg-container) 94%, transparent);
-  backdrop-filter: blur(8px);
-}
-
-[data-feature="quarantine"] .quarantine-report-workbar > div:first-child,
 [data-feature="quarantine"] .quarantine-report-outline {
   display: flex;
   flex-direction: column;
-}
-
-[data-feature="quarantine"] .quarantine-report-workbar > div:first-child {
-  gap: 4px;
 }
 
 [data-feature="quarantine"] .quarantine-report-workspace {
@@ -93,7 +79,7 @@
 
 [data-feature="quarantine"] .quarantine-report-outline {
   position: sticky;
-  top: 84px;
+  top: var(--cl-workspace-toolbar-offset, 0);
   min-width: 0;
 }
 
@@ -162,7 +148,7 @@
 [data-feature="quarantine"] .quarantine-report-paper {
   min-width: 0;
   overflow-x: hidden;
-  padding: 32px 38px 26px;
+  padding: 32px 36px 24px;
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   box-shadow: 0 4px 24px rgb(19 45 75 / 5%);
@@ -189,7 +175,7 @@
 
 [data-feature="quarantine"] .quarantine-report-metadata {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 28px;
+  gap: 16px 24px;
 }
 
 [data-feature="quarantine"] .quarantine-report-metadata > .ant-form-item {
@@ -222,7 +208,6 @@
 [data-feature="quarantine"] .quarantine-report-section {
   min-width: 0;
   margin-bottom: 32px;
-  scroll-margin-top: 88px;
 }
 
 [data-feature="quarantine"] .quarantine-report-section h5 {
@@ -243,7 +228,6 @@
 
 [data-feature="quarantine"] .quarantine-report-subsection {
   padding-top: 24px;
-  scroll-margin-top: 88px;
 }
 
 [data-feature="quarantine"] .quarantine-report-section .ant-table-wrapper {
@@ -333,17 +317,13 @@
 }
 
 @media (width <= 1180px) {
-  [data-feature="quarantine"] .quarantine-report-workbar {
-    flex-wrap: wrap;
-  }
-
   [data-feature="quarantine"] .quarantine-report-workspace {
     grid-template-columns: 150px minmax(0, 1fr);
     gap: 16px;
   }
 
   [data-feature="quarantine"] .quarantine-report-paper {
-    padding: 26px 24px;
+    padding: 24px;
   }
 }
 
@@ -359,19 +339,13 @@
   }
 
   [data-feature="quarantine"] .quarantine-report-paper {
-    padding: 22px 14px;
+    padding: 24px 16px;
   }
 }
 
 @media (width <= 760px) {
   [data-feature="quarantine"] .quarantine-report-editor {
     margin: 0;
-  }
-
-  [data-feature="quarantine"] .quarantine-report-workbar {
-    position: static;
-    flex-wrap: wrap;
-    padding: 12px 16px;
   }
 
   [data-feature="quarantine"] .quarantine-report-workspace {
@@ -385,7 +359,7 @@
   }
 
   [data-feature="quarantine"] .quarantine-report-paper {
-    padding: 22px 14px;
+    padding: 24px 16px;
   }
 
   [data-feature="quarantine"] .quarantine-report-paper > h1 {

@@ -1,19 +1,4 @@
-import {
-  App,
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Input,
-  Modal,
-  Select,
-  Skeleton,
-  Space,
-  Table,
-  Tabs,
-  Tag,
-  Typography,
-} from "antd";
+import { App, Alert, Button, Card, Empty, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import { speciesLabel } from "../../../domain/intake";
@@ -36,6 +21,8 @@ import { TestEditor } from "./TestEditor";
 import { TestDetail } from "./TestDetail";
 import { SupplierHistoryView } from "./SupplierHistory";
 import { emptyTest, methodLabels } from "./shared";
+import { PageSkeleton } from "../../components/PageSkeleton";
+import { CommandBar, ListRefreshStatus } from "../../components/ui";
 
 export function QuarantineView({
   mode,
@@ -58,9 +45,12 @@ export function QuarantineView({
   const [method, setMethod] = useState<QuarantineMethod>(
     mode === "quarantine-parasite" ? "parasite" : mode === "quarantine-pcr" ? "pcr" : "elisa_mouse",
   );
-  const batches = useQuarantineBatches(search, page);
+  const listVisible = !editor && !batchId && tab !== "pool" && tab !== "suppliers";
+  const batches = useQuarantineBatches(search, page, listVisible || batchPicker);
   const detail = useQuarantineDetail(batchId);
-  const catalog = useQuarantineCatalog();
+  const catalog = useQuarantineCatalog(
+    batchPicker || pendingNewRecord || (Boolean(batchId) && !isReports && !isBatchManagement),
+  );
   const tests =
     detail.data?.tests.filter(
       (t) =>
@@ -73,6 +63,7 @@ export function QuarantineView({
     setBatchId(value);
     setTestId("");
     setEditor(null);
+    setPendingNewRecord(false);
     if (isBatchManagement) setTab("batches");
     if (isReports) setTab("reports");
   }
@@ -80,6 +71,10 @@ export function QuarantineView({
     openBatch(value);
     setBatchPicker(false);
     setPendingNewRecord(true);
+  }
+  function newBatch() {
+    setInitialSources([]);
+    setBatchEditor("new");
   }
   useEffect(() => {
     if (!pendingNewRecord || !catalog.data || detail.data?.item.id !== batchId) return;
@@ -123,25 +118,7 @@ export function QuarantineView({
   }
   return (
     <section data-feature="quarantine" className={editor ? "quarantine-editing" : undefined} aria-label={title}>
-      <Space wrap className="quarantine-page-heading">
-        <Typography.Title level={3}>{title}</Typography.Title>
-        {!isReports && (
-          <Button
-            type="primary"
-            onClick={() => {
-              if (isBatchManagement) {
-                setInitialSources([]);
-                setBatchEditor("new");
-              } else {
-                setBatchPicker(true);
-              }
-            }}
-          >
-            {isBatchManagement ? "新建检疫批次" : `新建${title}记录`}
-          </Button>
-        )}
-      </Space>
-      {(isBatchManagement || isReports) && (
+      {!editor && (isBatchManagement || isReports) && (
         <Tabs
           className="quarantine-page-tabs"
           activeKey={tab}
@@ -162,6 +139,7 @@ export function QuarantineView({
       {isBatchManagement && tab === "pool" ? (
         <QuarantinePool
           onOpen={openBatch}
+          onNew={newBatch}
           onCreate={(sources) => {
             setInitialSources(sources);
             setBatchEditor("new");
@@ -172,21 +150,38 @@ export function QuarantineView({
       ) : (
         <>
           {!editor && !batchId && (
-            <Input.Search
-              aria-label="搜索检疫批次"
-              placeholder="按检疫批次编号搜索"
-              allowClear
-              onSearch={(v) => {
-                setSearch(v);
-                setPage(1);
-              }}
+            <CommandBar
+              ariaLabel={`${title}列表操作`}
+              filters={
+                <Input.Search
+                  aria-label="搜索检疫批次"
+                  placeholder="按检疫批次编号搜索"
+                  allowClear
+                  onSearch={(v) => {
+                    setSearch(v);
+                    setPage(1);
+                  }}
+                />
+              }
+              primaryAction={
+                !isReports && (
+                  <Button type="primary" onClick={isBatchManagement ? newBatch : () => setBatchPicker(true)}>
+                    {isBatchManagement ? "新建检疫批次" : `新建${title}记录`}
+                  </Button>
+                )
+              }
             />
           )}
-          {batches.error && <Alert type="error" title={batches.error.message} />}
+          {listVisible && batches.error && (
+            <Alert
+              type="error"
+              title={batches.error.message}
+              action={<Button onClick={() => void batches.refetch()}>重试</Button>}
+            />
+          )}
+          {listVisible && !batches.isPending && <ListRefreshStatus active={batches.isFetching} />}
           {!editor && !batchId && batches.isLoading ? (
-            <div role="status" aria-label="正在加载检疫批次">
-              <Skeleton active />
-            </div>
+            <PageSkeleton label="检疫批次" variant="table" />
           ) : !editor && !batchId ? (
             <Table
               rowKey="id"
@@ -229,87 +224,106 @@ export function QuarantineView({
               ]}
             />
           ) : null}
-          {detail.error && <Alert type="error" title={detail.error.message} />}
-          {batchId && detail.isLoading && <Skeleton active />}
+          {batchId && !editor && !detail.data && (
+            <CommandBar
+              ariaLabel="检疫批次详情操作"
+              actions={<Button onClick={() => openBatch("")}>返回列表</Button>}
+            />
+          )}
+          {batchId && detail.error && (
+            <Alert
+              type="error"
+              title={detail.error.message}
+              action={<Button onClick={() => void detail.refetch()}>重试</Button>}
+            />
+          )}
+          {batchId && !editor && detail.data && <ListRefreshStatus active={detail.isFetching} />}
+          {batchId && detail.isLoading && <PageSkeleton label="检疫批次详情" variant="detail" />}
           {detail.data && (
             <>
               {!editor && (
-                <Card
-                  title={detail.data.item.name}
-                  extra={
-                    <Space wrap>
-                      <Button onClick={() => openBatch("")}>返回列表</Button>
-                      {isBatchManagement && (
+                <>
+                  <CommandBar
+                    ariaLabel="检疫批次详情操作"
+                    context={detail.data.item.name}
+                    filters={
+                      !isReports &&
+                      !isBatchManagement &&
+                      !detail.data.item.completedAt &&
+                      mode === "quarantine-elisa" && (
+                        <Select
+                          aria-label="ELISA动物种类"
+                          value={method}
+                          options={[
+                            { value: "elisa_mouse", label: "小鼠" },
+                            { value: "elisa_rat", label: "大鼠" },
+                          ]}
+                          onChange={setMethod}
+                        />
+                      )
+                    }
+                    actions={<Button onClick={() => openBatch("")}>返回列表</Button>}
+                    primaryAction={
+                      isBatchManagement ? (
                         <Button
+                          type="primary"
                           disabled={Boolean(detail.data.item.completedAt)}
                           onClick={() => setBatchEditor(detail.data.item)}
                         >
                           编辑检疫批次
                         </Button>
-                      )}
-                    </Space>
-                  }
-                >
-                  <Space wrap>
-                    <Tag>{detail.data.item.status}</Tag>
-                    <span>{detail.data.item.conclusion || "尚未填写最终结论"}</span>
-                  </Space>
-                  {detail.data.item.handling && <p>处理说明：{detail.data.item.handling}</p>}
-                  {detail.data.item.notes && <p>备注：{detail.data.item.notes}</p>}
-                  <Space wrap>
-                    {detail.data.item.sources.map((s) => (
-                      <Tag key={s.id}>
-                        {s.supplier} · {s.strainStandard || s.strainRaw || speciesLabel(s.species)} · {s.pi}
-                        {s.manual ? " · 手工来源" : ""}
-                      </Tag>
-                    ))}
-                  </Space>
-                </Card>
-              )}
-              {isBatchManagement && !editor && <BatchCompletion detail={detail.data} />}
-              {!isReports && !isBatchManagement && !editor && !detail.data.item.completedAt && (
-                <Space wrap>
-                  {mode === "quarantine-elisa" && (
-                    <Select
-                      aria-label="ELISA动物种类"
-                      value={method}
-                      options={[
-                        { value: "elisa_mouse", label: "小鼠" },
-                        { value: "elisa_rat", label: "大鼠" },
-                      ]}
-                      onChange={setMethod}
-                    />
-                  )}
-                  <Button
-                    type="primary"
-                    disabled={!catalog.data}
-                    onClick={() => setEditor(emptyTest(batchId, method, catalog.data?.projects[method] ?? []))}
-                  >
-                    新建检测记录
-                  </Button>
-                </Space>
-              )}
-              {!isBatchManagement && (
-                <>
-                  {catalog.error && <Alert type="error" title={catalog.error.message} />}
-                  {!editor && (
-                    <Space wrap>
-                      {tests.map((t) => (
+                      ) : !isReports && !detail.data.item.completedAt ? (
                         <Button
-                          key={t.id}
-                          type={testId === t.id ? "primary" : "default"}
-                          onClick={() => {
-                            setTestId(t.id);
-                            setEditor(null);
-                          }}
+                          type="primary"
+                          disabled={!catalog.data}
+                          onClick={() => setEditor(emptyTest(batchId, method, catalog.data?.projects[method] ?? []))}
                         >
-                          {methodLabels[t.method]} · {t.testDate || "日期未填"} ·{" "}
-                          {t.state === "issued" ? "已出具" : "草稿"}
-                          {t.retestOf ? " · 复检" : ""}
-                          {t.correctionOf ? " · 更正" : ""}
+                          新建检测记录
                         </Button>
+                      ) : undefined
+                    }
+                  />
+                  <Card>
+                    <Space wrap>
+                      <Tag>{detail.data.item.status}</Tag>
+                      <span>{detail.data.item.conclusion || "尚未填写最终结论"}</span>
+                    </Space>
+                    {detail.data.item.handling && <p>处理说明：{detail.data.item.handling}</p>}
+                    {detail.data.item.notes && <p>备注：{detail.data.item.notes}</p>}
+                    <Space wrap>
+                      {detail.data.item.sources.map((s) => (
+                        <Tag key={s.id}>
+                          {s.supplier} · {s.strainStandard || s.strainRaw || speciesLabel(s.species)} · {s.pi}
+                          {s.manual ? " · 手工来源" : ""}
+                        </Tag>
                       ))}
                     </Space>
+                  </Card>
+                </>
+              )}
+              {isBatchManagement && !editor && <BatchCompletion detail={detail.data} />}
+              {!isBatchManagement && (
+                <>
+                  {!isReports && catalog.error && (
+                    <Alert
+                      type="error"
+                      title={catalog.error.message}
+                      action={<Button onClick={() => void catalog.refetch()}>重试</Button>}
+                    />
+                  )}
+                  {!editor && (
+                    <Tabs
+                      aria-label="检测记录"
+                      activeKey={testId}
+                      onChange={(value) => {
+                        setTestId(value);
+                        setEditor(null);
+                      }}
+                      items={tests.map((t) => ({
+                        key: t.id,
+                        label: `${methodLabels[t.method]} · ${t.testDate || "日期未填"} · ${t.state === "issued" ? "已出具" : "草稿"}${t.retestOf ? " · 复检" : ""}${t.correctionOf ? " · 更正" : ""}`,
+                      }))}
+                    />
                   )}
                   {editor ? (
                     <TestEditor
@@ -388,7 +402,14 @@ export function QuarantineView({
             }}
           />
         </Space>
-        {batches.error && <Alert type="error" title={batches.error.message} />}
+        {batches.error && (
+          <Alert
+            type="error"
+            title={batches.error.message}
+            action={<Button onClick={() => void batches.refetch()}>重试</Button>}
+          />
+        )}
+        <ListRefreshStatus active={batches.isFetching && !batches.isPending} />
         <Table<QuarantineBatch>
           rowKey="id"
           size="small"

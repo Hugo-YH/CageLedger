@@ -22,7 +22,7 @@ export function PageSkeleton({
   const visibleRows = skeletonRows.slice(0, Math.max(1, Math.min(rows, skeletonRows.length)));
   const isTable = variant === "table";
   const isDetail = variant === "detail";
-  const tableRows = compact ? rows : Math.max(rows, 10);
+  const tableRows = Math.min(12, Math.max(1, compact ? rows : Math.max(rows, 10)));
 
   return (
     <section
@@ -38,13 +38,13 @@ export function PageSkeleton({
       {isTable ? (
         <div className="page-skeleton-table" aria-hidden="true">
           <div className="page-skeleton-table-head">
-            {Array.from({ length: 8 }, (_, index) => (
+            {Array.from({ length: 4 }, (_, index) => (
               <Skeleton.Input active block key={index} size="small" />
             ))}
           </div>
           {Array.from({ length: tableRows }, (_, index) => (
             <div className="page-skeleton-table-row" key={index}>
-              {Array.from({ length: 8 }, (_, cellIndex) => (
+              {Array.from({ length: 4 }, (_, cellIndex) => (
                 <Skeleton.Input active block key={cellIndex} size="small" />
               ))}
             </div>

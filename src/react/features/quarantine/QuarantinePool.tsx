@@ -1,3 +1,6 @@
+import { PageSkeleton } from "../../components/PageSkeleton";
+import { CommandBar, ListRefreshStatus } from "../../components/ui";
+import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useState } from "react";
 import { Alert, Button, DatePicker, Select, Space, Table, Tag } from "antd";
 import dayjs from "dayjs";
@@ -9,9 +12,11 @@ import { id } from "./shared";
 
 export function QuarantinePool({
   onCreate,
+  onNew,
   onOpen,
 }: {
   onCreate: (sources: QuarantineSource[]) => void;
+  onNew: () => void;
   onOpen: (id: string) => void;
 }) {
   const [from, setFrom] = useState("");
@@ -20,94 +25,118 @@ export function QuarantinePool({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<IntakeBatch[]>([]);
   const query = useQuarantineSources(from, to, page, true, state);
+  useSelectionScope(JSON.stringify([from, to, state]), () => setSelected([]), selected.length > 0);
   return (
     <>
+      <CommandBar
+        ariaLabel="待检疫列表操作"
+        sticky="selection"
+        context="待检疫动物"
+        selection={{ count: selected.length, onClear: () => setSelected([]) }}
+        filters={
+          <>
+            <Select
+              aria-label="检疫池范围"
+              value={state}
+              options={[
+                { value: "pending", label: "待检疫" },
+                { value: "all", label: "全部已接收动物" },
+              ]}
+              onChange={(v) => {
+                setState(v);
+                setPage(1);
+              }}
+            />
+            <DatePicker
+              aria-label="检疫池接收起始日期"
+              value={from ? dayjs(from) : null}
+              onChange={(v) => {
+                setFrom(v?.format("YYYY-MM-DD") ?? "");
+                setPage(1);
+              }}
+            />
+            <DatePicker
+              aria-label="检疫池接收结束日期"
+              value={to ? dayjs(to) : null}
+              onChange={(v) => {
+                setTo(v?.format("YYYY-MM-DD") ?? "");
+                setPage(1);
+              }}
+            />
+          </>
+        }
+        actions={selected.length > 0 && <Button onClick={onNew}>新建检疫批次</Button>}
+        primaryAction={
+          selected.length > 0 ? (
+            <Button type="primary" onClick={() => onCreate(selected.map((s) => ({ ...s, id: id(), intakeId: s.id })))}>
+              用所选动物新建检疫批次（{selected.length}）
+            </Button>
+          ) : (
+            <Button type="primary" onClick={onNew}>
+              新建检疫批次
+            </Button>
+          )
+        }
+      />
       <Alert
         type="info"
         showIcon
         title="接收后自动进入待检疫池。勾选本次覆盖的动物建立检疫批次，再从中登记实际抽样；确认完成后，未直接采样的覆盖动物也统一标记已检疫。"
       />
-      <Space wrap>
-        <Select
-          aria-label="检疫池范围"
-          value={state}
-          options={[
-            { value: "pending", label: "待检疫" },
-            { value: "all", label: "全部已接收动物" },
+      {query.error && (
+        <Alert
+          type="error"
+          title={query.error.message}
+          action={<Button onClick={() => void query.refetch()}>重试</Button>}
+        />
+      )}
+      <ListRefreshStatus active={query.isFetching && !query.isPending} />
+      {query.isPending ? (
+        <PageSkeleton embedded label="待检疫列表" variant="table" />
+      ) : (
+        <Table<IntakeBatch>
+          rowKey="id"
+          size="small"
+          aria-busy={query.isFetching}
+          dataSource={query.data?.items ?? []}
+          scroll={{ x: 900 }}
+          rowSelection={{
+            selectedRowKeys: selected.map((s) => s.id),
+            preserveSelectedRowKeys: true,
+            onChange: (_, rows) => setSelected(rows),
+            getCheckboxProps: (s) => ({ disabled: s.quarantineStatus !== "待检疫" }),
+          }}
+          pagination={{
+            current: page,
+            pageSize: 30,
+            total: query.data?.page.total,
+            showSizeChanger: false,
+            onChange: setPage,
+          }}
+          columns={[
+            { title: "接收日期", dataIndex: "intakeDate" },
+            { title: "到货批次", dataIndex: "batchNo" },
+            { title: "供应商", dataIndex: "supplier" },
+            { title: "品系", render: (_, s) => s.strainStandard || s.strainRaw || "—" },
+            { title: "种类", render: (_, s) => speciesLabel(s.species) || "—" },
+            { title: "数量", dataIndex: "quantity" },
+            { title: "课题组", dataIndex: "pi" },
+            { title: "检疫状态", render: (_, s) => <Tag>{s.quarantineStatus}</Tag> },
+            {
+              title: "关联检疫批次",
+              render: (_, s) => (
+                <Space wrap>
+                  {s.quarantineBatches?.map((b) => (
+                    <Button key={b.id} onClick={() => onOpen(b.id)}>
+                      {b.name}
+                    </Button>
+                  ))}
+                </Space>
+              ),
+            },
           ]}
-          onChange={(v) => {
-            setState(v);
-            setPage(1);
-            setSelected([]);
-          }}
         />
-        <DatePicker
-          aria-label="检疫池接收起始日期"
-          value={from ? dayjs(from) : null}
-          onChange={(v) => {
-            setFrom(v?.format("YYYY-MM-DD") ?? "");
-            setPage(1);
-          }}
-        />
-        <DatePicker
-          aria-label="检疫池接收结束日期"
-          value={to ? dayjs(to) : null}
-          onChange={(v) => {
-            setTo(v?.format("YYYY-MM-DD") ?? "");
-            setPage(1);
-          }}
-        />
-        <Button
-          type="primary"
-          disabled={!selected.length}
-          onClick={() => onCreate(selected.map((s) => ({ ...s, id: id(), intakeId: s.id })))}
-        >
-          用所选动物新建检疫批次（{selected.length}）
-        </Button>
-      </Space>
-      {query.error && <Alert type="error" title={query.error.message} />}
-      <Table<IntakeBatch>
-        rowKey="id"
-        size="small"
-        loading={query.isLoading}
-        dataSource={query.data?.items ?? []}
-        scroll={{ x: 900 }}
-        rowSelection={{
-          selectedRowKeys: selected.map((s) => s.id),
-          preserveSelectedRowKeys: true,
-          onChange: (_, rows) => setSelected(rows),
-          getCheckboxProps: (s) => ({ disabled: s.quarantineStatus !== "待检疫" }),
-        }}
-        pagination={{
-          current: page,
-          pageSize: 30,
-          total: query.data?.page.total,
-          showSizeChanger: false,
-          onChange: setPage,
-        }}
-        columns={[
-          { title: "接收日期", dataIndex: "intakeDate" },
-          { title: "到货批次", dataIndex: "batchNo" },
-          { title: "供应商", dataIndex: "supplier" },
-          { title: "品系", render: (_, s) => s.strainStandard || s.strainRaw || "—" },
-          { title: "种类", render: (_, s) => speciesLabel(s.species) || "—" },
-          { title: "数量", dataIndex: "quantity" },
-          { title: "课题组", dataIndex: "pi" },
-          { title: "检疫状态", render: (_, s) => <Tag>{s.quarantineStatus}</Tag> },
-          {
-            title: "关联检疫批次",
-            render: (_, s) => (
-              <Space wrap>
-                {s.quarantineBatches?.map((b) => (
-                  <Button key={b.id} onClick={() => onOpen(b.id)}>
-                    {b.name}
-                  </Button>
-                ))}
-              </Space>
-            ),
-          },
-        ]}
-      />
+      )}
     </>
   );
 }

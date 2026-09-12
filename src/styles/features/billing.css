@@ -928,34 +928,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   opacity: 0.7;
 }
 
-.cage-reserve-bar {
-  position: sticky;
-  z-index: var(--z-sticky);
-  right: 16px;
-  bottom: 16px;
-  left: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: -66px 16px 16px;
-  padding: 12px 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
-  border-radius: 8px;
-  background: color-mix(in srgb, white 92%, var(--accent));
-  box-shadow: var(--shadow-lift);
-}
-
-.cage-reserve-bar div {
-  display: grid;
-  gap: 4px;
-}
-
-.cage-reserve-bar span {
-  color: var(--text-soft);
-  font-size: 12px;
-}
-
 .cage-slot-modal {
   width: min(880px, calc(100vw - 32px));
 }
@@ -1003,8 +975,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
     height: 58vh;
   }
 
-  .placement-react-list article,
-  .cage-reserve-bar {
+  .placement-react-list article {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1297,7 +1268,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   background: var(--surface-soft);
 }
 
-[data-feature="billing"] .monthly-summary-controls .ant-form-item {
+[data-feature="billing"] .monthly-summary-form .ant-form-item {
   min-width: 220px;
   margin-bottom: 0;
 }
@@ -1318,21 +1289,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 [data-feature="billing"] .settlement-card-description,
 [data-feature="billing"] .reimbursement-ledger-description {
   margin-top: 12px !important;
-}
-
-[data-feature="billing"] .settlement-action-bar {
-  position: sticky;
-  top: 12px;
-  z-index: var(--z-raised);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid var(--surface-strong);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
 }
 
 .app-modal-root.settlement-preview-modal .ant-modal-body {
@@ -1368,21 +1324,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   color: var(--text);
 }
 
-.app-modal-root.settlement-preview-modal .settlement-preview-toolbar {
-  min-width: 0;
-  position: sticky;
-  top: 0;
-  z-index: var(--z-raised);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 48px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--surface-strong);
-  background: var(--surface);
-}
-
 .app-modal-root.settlement-preview-modal .settlement-preview-toolbar-context {
   min-width: 0;
   display: flex;
@@ -1399,19 +1340,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   min-width: 0;
   overflow-wrap: anywhere;
   line-height: 22px;
-}
-
-@media (width <= 1180px) {
-  .app-modal-root.settlement-preview-modal .settlement-preview-toolbar {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 8px;
-    padding-bottom: 12px;
-  }
-
-  .app-modal-root.settlement-preview-modal .settlement-preview-toolbar-actions {
-    justify-content: flex-end;
-  }
 }
 
 .app-modal-root.settlement-preview-modal .settlement-preview {
@@ -1499,32 +1427,9 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 }
 
 @media (width <= 760px) {
-  [data-feature="billing"] .monthly-summary-controls {
-    align-items: stretch;
-  }
-
-  [data-feature="billing"] .monthly-summary-controls .ant-form {
-    flex: 1 1 100%;
-    width: 100%;
-  }
-
-  [data-feature="billing"] .monthly-summary-controls .ant-btn {
-    width: 100%;
-  }
-
-  [data-feature="billing"] .settlement-action-bar,
   [data-feature="billing"] .ledger-toolbar {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  [data-feature="billing"] .settlement-action-bar .ant-space {
-    display: flex;
-    width: 100%;
-  }
-
-  [data-feature="billing"] .settlement-action-bar .ant-btn {
-    flex: 1;
   }
 
   [data-feature="billing"] .reconciliation-picker {

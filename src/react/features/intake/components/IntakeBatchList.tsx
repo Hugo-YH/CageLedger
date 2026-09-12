@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { IntakeBatch, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
 import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
-import { DataTable } from "../../../components/ui";
+import { CommandBar, DataTable } from "../../../components/ui";
 import { IntakeQuarantineStatus } from "../../quarantine/IntakeQuarantineStatus";
 import { intakeStatusLabel } from "../../../../domain/intake";
 
@@ -24,6 +24,7 @@ export function IntakeBatchList({
   pageSize,
   params,
   filters,
+  onClearSelection,
   onToggleAll,
   onToggleItem,
   onSort,
@@ -51,6 +52,7 @@ export function IntakeBatchList({
   pageSize: number;
   params: IntakeListParams;
   filters: Record<string, string[]>;
+  onClearSelection: () => void;
   onToggleAll: () => void;
   onToggleItem: (item: IntakeBatch, checked: boolean) => void;
   onSort: (key: string) => void;
@@ -133,7 +135,7 @@ export function IntakeBatchList({
       fixed: "right",
       render: (_, item) => (
         <Space className="table-actions" size={4}>
-          <Button disabled={loading} type="primary" onClick={() => onEdit(item)}>
+          <Button disabled={loading} onClick={() => onEdit(item)}>
             编辑
           </Button>
           <Button danger disabled={loading} onClick={() => onDelete(item)}>
@@ -145,65 +147,64 @@ export function IntakeBatchList({
   ];
 
   return (
-    <Card
-      className="intake-batch-list-card"
-      extra={
-        <Tag color="blue">
-          {selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selectedItems.length}`}
-        </Tag>
-      }
-      title="待接收批次列表"
-    >
+    <Card className="intake-batch-list-card" title="待接收批次列表">
       {bulkNotice ? (
         <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
       ) : null}
-      {selectedItems.length ? (
-        <Alert
-          className="intake-bulk-alert"
-          title={
-            <Flex align="center" gap={12} justify="space-between" wrap>
-              <Space size={8} wrap>
-                <Typography.Text strong>已选 {selectedItems.length} 项</Typography.Text>
-                {printDisabledReason ? (
-                  <Typography.Text id="intake-print-disabled-reason" type="secondary">
-                    {printDisabledReason}
-                  </Typography.Text>
-                ) : null}
-              </Space>
-              <Space wrap>
-                <span className="intake-print-button-wrap" title={printDisabledReason}>
-                  <Button
-                    aria-describedby={printDisabledReason ? "intake-print-disabled-reason" : undefined}
-                    disabled={loading || Boolean(printDisabledReason)}
-                    type="primary"
-                    onClick={() => onPrint(selectedItems)}
-                  >
-                    打印笼卡
-                  </Button>
-                </span>
-                <Button
-                  disabled={loading || markingPrinted || markingReceived}
-                  loading={markingPrinted}
-                  onClick={() => onMarkPrinted(selectedItems)}
-                >
-                  标记已打印
-                </Button>
-                <Button
-                  disabled={loading || markingPrinted || markingReceived}
-                  loading={markingReceived}
-                  onClick={() => onReceive(selectedItems)}
-                >
-                  标记已接收
-                </Button>
-              </Space>
-            </Flex>
-          }
-          showIcon
-          type="info"
-        />
+      <CommandBar
+        ariaLabel="待接收批次批量操作"
+        sticky="selection"
+        context={
+          <Typography.Text type="secondary">
+            {selectingAll ? `正在选择全部 ${total} 条` : `共 ${total} 条`}
+          </Typography.Text>
+        }
+        selection={{
+          count: selectedItems.length,
+          onClear: onClearSelection,
+          pending: selectingAll || markingPrinted || markingReceived,
+        }}
+        actions={
+          selectedItems.length ? (
+            <>
+              <Button
+                disabled={loading || markingPrinted || markingReceived}
+                loading={markingPrinted}
+                onClick={() => onMarkPrinted(selectedItems)}
+              >
+                标记已打印
+              </Button>
+              <Button
+                disabled={loading || markingPrinted || markingReceived}
+                loading={markingReceived}
+                onClick={() => onReceive(selectedItems)}
+              >
+                标记已接收
+              </Button>
+            </>
+          ) : null
+        }
+        primaryAction={
+          selectedItems.length ? (
+            <Button
+              aria-describedby={printDisabledReason ? "intake-print-disabled-reason" : undefined}
+              disabled={loading || Boolean(printDisabledReason)}
+              type="primary"
+              onClick={() => onPrint(selectedItems)}
+            >
+              打印笼卡
+            </Button>
+          ) : null
+        }
+      />
+      {selectedItems.length && printDisabledReason ? (
+        <Typography.Text id="intake-print-disabled-reason" type="secondary">
+          {printDisabledReason}
+        </Typography.Text>
       ) : null}
       <div aria-busy={loading} aria-label="待接收批次列表" className="ant-table-region" role="region" tabIndex={0}>
         <DataTable
+          refreshing={loading}
           className="intake-batch-table"
           columns={columns}
           dataSource={items}

@@ -91,31 +91,6 @@
   height: 32px;
 }
 
-.react-quantity-layout .quantity-entry-toolbar {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  padding: 8px 16px;
-}
-
-.react-quantity-layout .quantity-entry-toolbar-main {
-  min-width: 0;
-}
-
-.react-quantity-layout .quantity-entry-toolbar-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.react-quantity-layout .quantity-entry-toolbar-button {
-  height: 32px;
-  min-height: 32px;
-  padding: 4px 12px;
-  font-size: 14px;
-}
-
 .react-quantity-layout .quantity-animal-control,
 .react-quantity-layout .quantity-animal-toggle {
   display: inline-flex;
@@ -341,16 +316,6 @@
 
   .react-quantity-layout .quantity-free-cage-module {
     padding: 12px;
-  }
-}
-
-@media (width <= 480px) {
-  .react-quantity-layout .quantity-entry-toolbar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .react-quantity-layout .quantity-entry-toolbar-actions {
-    justify-content: flex-start;
   }
 }
 

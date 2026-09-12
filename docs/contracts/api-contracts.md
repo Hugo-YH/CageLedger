@@ -26,12 +26,14 @@
 | ------ | ---------------------------------------- | ---------------------------- | -------- |
 | `GET`  | `/api/health`                            | `{ ok, database, system }`   | 公开     |
 | `GET`  | `/api/system/info`                       | 系统版本和构建信息           | 公开     |
-| `GET`  | `/api/public/cage-card/{animalRecordId}` | `{ batch, card }`            | 公开只读 |
+| `GET`  | `/api/public/cage-card/{animalRecordId}` | `{ item: CageCardDetails }`  | 公开只读 |
 | `POST` | `/api/auth/login`                        | `{ user }` + Cookie          | 公开     |
 | `POST` | `/api/auth/logout`                       | `{ ok: true }` + 清除 Cookie | 公开     |
 | `GET`  | `/api/auth/me`                           | `{ user }`；未登录返回 401   | 会话     |
 
 公开笼卡响应只提供查询所需信息。经费、账号、审计和报销字段不进入公开响应。
+
+`item` 是笼卡、到货批次、待进驻任务与占用信息的只读投影，前端通过 `usePublicCageCard` 解包后呈现。状态以返回的 `statusLabel` 为准；缺少状态不能自行推断为“待接收”。同一码再次查询或扫描时重新读取，确保接收、预留与入驻后的状态及时更新。扫码回归至少包含真实 API 创建、打印、接收、预留与入驻链路，不能只用模拟响应验证。
 
 ## Bootstrap 和设施
 

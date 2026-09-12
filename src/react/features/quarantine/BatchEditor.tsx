@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { ListRefreshStatus } from "../../components/ui";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   AutoComplete,
@@ -58,6 +59,7 @@ export function BatchEditor({
   );
   const suppliers = useQuarantineQuery<{ items: string[] }>("supplier-options");
   const write = useQuarantineWrite();
+  const saving = useRef(false);
   const [error, setError] = useState("");
   const [manual, setManual] = useState({
     supplier: "",
@@ -99,6 +101,9 @@ export function BatchEditor({
     setError("");
   }
   async function save() {
+    if (saving.current) return;
+    saving.current = true;
+    setError("");
     try {
       await write.mutateAsync({
         path: initial ? `batches/${initial.id}` : "batches",
@@ -108,6 +113,8 @@ export function BatchEditor({
       onSaved(draft.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      saving.current = false;
     }
   }
   return (
@@ -115,15 +122,20 @@ export function BatchEditor({
       open
       title={initial ? "编辑检疫批次" : "新建检疫批次"}
       width={980}
-      onCancel={onClose}
+      onCancel={() => {
+        if (!saving.current) onClose();
+      }}
       onOk={() => void save()}
       confirmLoading={write.isPending}
+      closable={!write.isPending}
+      cancelButtonProps={{ disabled: write.isPending }}
+      okButtonProps={{ "aria-label": "保存检疫批次" }}
       okText="保存检疫批次"
       className="quarantine-modal"
     >
       <div data-feature="quarantine">
         {error && <Alert type="error" title={error} showIcon />}
-        <Form layout="vertical">
+        <Form layout="vertical" disabled={write.isPending}>
           <Form.Item
             label="检疫批次编号"
             required
@@ -142,7 +154,14 @@ export function BatchEditor({
               }}
             />
           </Form.Item>
-          {sources.error && <Alert type="error" title={sources.error.message} />}
+          {sources.error && (
+            <Alert
+              type="error"
+              title={sources.error.message}
+              action={<Button onClick={() => void sources.refetch()}>重试</Button>}
+            />
+          )}
+          <ListRefreshStatus active={sources.isFetching && !sources.isPending} />
           <Table
             size="small"
             rowKey="id"
@@ -254,7 +273,7 @@ export function BatchEditor({
                             .map((source) => (
                               <Tag
                                 key={source.id}
-                                closable
+                                closable={!write.isPending}
                                 onClose={() =>
                                   setDraft({
                                     ...draft,

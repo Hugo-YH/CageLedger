@@ -1,6 +1,8 @@
 import type {
+  AnimalInspectionDetail,
   InspectionAnswer,
   InspectionCatalogNode,
+  InspectionFinding,
   InspectionModuleCode,
   InspectionOutcome,
 } from "../../api/contracts";
@@ -183,4 +185,49 @@ export function setResumeInspectionId(id: string) {
   } catch {
     // This is only a resume hint; saving the server-side draft must still succeed.
   }
+}
+
+export function summarizeInspectionOutcomes(
+  answers: AnimalInspectionDetail["answers"],
+  nodes: InspectionCatalogNode[],
+): Array<{
+  code: InspectionModuleCode;
+  counts: Record<"normal" | "abnormal", number>;
+  items: Array<{ moduleCode: InspectionModuleCode; nodeCode: string; name: string; outcome: "normal" | "abnormal" }>;
+}> {
+  const nodeByKey = new Map(nodes.map((node) => [`${node.moduleCode}:${node.code}`, node]));
+  const records = answers.map((answer) => {
+    const source = answer.payload || answer;
+    const moduleCode = source.moduleCode || answer.module_code;
+    const nodeCode = source.nodeCode || answer.node_code;
+    const node = nodeByKey.get(`${moduleCode}:${nodeCode}`);
+    return { moduleCode, nodeCode, name: node?.name || nodeCode, outcome: inspectionOutcome(source) };
+  });
+  return (Object.keys(MODULE_LABELS) as InspectionModuleCode[])
+    .map((code) => {
+      const items = records.filter((item) => item.moduleCode === code);
+      return {
+        code,
+        counts: {
+          normal: items.filter((item) => item.outcome === "normal").length,
+          abnormal: items.filter((item) => item.outcome === "abnormal").length,
+        },
+        items,
+      };
+    })
+    .filter((module) => module.items.length);
+}
+
+export function findingLocation(item: InspectionFinding) {
+  return (
+    [
+      item.rackHint && `笼架 ${item.rackHint}`,
+      item.cageNumber && `笼号 ${item.cageNumber}`,
+      item.locationHint,
+      item.animalIdentifier,
+    ]
+      .filter(Boolean)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .join(" / ") || "-"
+  );
 }

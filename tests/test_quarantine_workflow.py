@@ -74,6 +74,21 @@ class QuarantineWorkflowTests(unittest.TestCase):
                 {"item": {"id": "other", "name": "未接收", "sources": [{"id": "x", "intakeId": "printed"}]}},
             )
 
+    def test_pending_pool_preserves_unclaimed_rows_with_null_manual_sources(self):
+        for entity_id in ("claimed", "available-a", "available-b"):
+            self.add_intake(entity_id)
+        self.add_intake("not-received", "printed")
+        # Legacy/manual sources without an intake key must not poison NOT IN.
+        raw = copy.deepcopy(self.batch)
+        raw["sources"] += [{"intakeId": None}, {"intakeId": ""}, {"intakeId": "claimed"}]
+        repo.save(self.conn, "batches", raw)
+        page = repo.list_page(self.conn, "sources", {"limit": "1", "offset": "1"})
+        self.assertEqual(page["page"]["total"], 2)
+        self.assertEqual(len(page["items"]), 1)
+        self.assertIn(page["items"][0]["id"], ("available-a", "available-b"))
+        self.assertEqual(repo.list_page(self.conn, "sources", {"dateFrom": "2026-09-03"})["page"]["total"], 0)
+        self.assertEqual(repo.list_page(self.conn, "sources", {"state": "all"})["page"]["total"], 3)
+
     def test_completion_covers_unsampled_intake_and_keeps_receipt_state(self):
         animal = self.add_intake("not-sampled")
         self.batch["sources"].append({"id": "not-sampled", "intakeId": animal["id"]})

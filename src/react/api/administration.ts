@@ -115,8 +115,9 @@ export function useIacucStatus() {
 
 export function useAuditEvents(limit: number, offset: number) {
   const params = { limit, offset };
-  return useQuery({
+  return useQuery<PagedResponse<AuditEvent>>({
     queryKey: queryKeys.auditEvents(params),
+    placeholderData: (previous) => previous,
     queryFn: ({ signal }) =>
       requestJson<PagedResponse<AuditEvent>>(`/api/audit-events?limit=${limit}&offset=${offset}`, { signal }),
   });
