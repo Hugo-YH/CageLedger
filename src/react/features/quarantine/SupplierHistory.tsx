@@ -5,7 +5,7 @@ import { Alert, Button, DatePicker, Input, Select, Space, Table, Tag } from "ant
 import { useSupplierHistory } from "../../api/quarantine";
 import { methodLabels } from "./shared";
 
-export function SupplierHistoryView({ onOpen }: { onOpen: (batchId: string) => void }) {
+export function SupplierHistoryView({ onOpen }: { onOpen: (batchId: string, testId: string) => void }) {
   const [filters, setFilters] = useState<Record<string, string>>({ dateType: "arrival" });
   const query = useSupplierHistory(filters, true);
   const set = (key: string, value: string) => setFilters((current) => ({ ...current, [key]: value }));
@@ -110,7 +110,7 @@ export function SupplierHistoryView({ onOpen }: { onOpen: (batchId: string) => v
               <Space wrap>
                 {r.details.map((d) => (
                   <span key={d.testId}>
-                    <Button onClick={() => onOpen(d.batchId)}>
+                    <Button onClick={() => onOpen(d.batchId, d.testId)}>
                       {d.batchName} · {d.testDate || "日期未填"}
                     </Button>
                     {d.sharedPools && <Tag>共享混样</Tag>}

@@ -54,5 +54,111 @@
       [2112923, 1260000],
       [2112923, 1260000]
     ]
+  },
+  "parasite_6": {
+    "source": "体内外寄生虫检测表格记录.docx",
+    "sha256": "9c00e4977bf771f8b7159156b11e8c7670f1127088313fabaf1d46b1f1f412b6",
+    "method": "parasite",
+    "sampleCapacity": 6,
+    "imageColumns": 2,
+    "imageSizes": [
+      [2860040, 2164715],
+      [2828290, 2159000],
+      [2861945, 2138680],
+      [2825750, 2089785],
+      [2856230, 2045335],
+      [2827020, 2121535],
+      [2861945, 2016125],
+      [2826385, 1991995],
+      [2860040, 1894205],
+      [2827020, 1887855],
+      [2857500, 1925955],
+      [2827655, 1889760]
+    ]
+  },
+  "parasite_7": {
+    "source": "体内外寄生虫检测表格记录.docx",
+    "sha256": "190cf87cce83ab9acaf696fb734d4a6c4e24056e8fcc4fbbd5c040c60410b1a8",
+    "method": "parasite",
+    "sampleCapacity": 7,
+    "imageColumns": 2,
+    "imageSizes": [
+      [2860040, 2129155],
+      [2824480, 2174240],
+      [2861310, 2075815],
+      [2825750, 2176145],
+      [2864485, 2083435],
+      [2823210, 2105025],
+      [2856230, 2188845],
+      [2824480, 2210435],
+      [2861310, 2322830],
+      [2829560, 2272665],
+      [2858770, 2323465],
+      [2829560, 2277745],
+      [2855595, 2091690],
+      [2820035, 2142490]
+    ]
+  },
+  "elisa_mouse_4": {
+    "source": "ELISA检测记录表-小鼠.docx",
+    "sha256": "ae29155ddbb5d3b28747a128619f1724b407941d9a94bcb3cea8f167840aa6aa",
+    "method": "elisa_mouse",
+    "sampleCapacity": 4,
+    "imageColumns": 2,
+    "imageSizes": [
+      [5090795, 1198245],
+      [965200, 1254125]
+    ]
+  },
+  "elisa_mouse_4_single": {
+    "source": "ELISA检测记录表-小鼠.docx",
+    "sha256": "650fd9d3b3dcdadab2eb8724b1a23907ad465b28ebcfd50672723734c2e459f2",
+    "method": "elisa_mouse",
+    "sampleCapacity": 4,
+    "imageColumns": 1,
+    "imageSizes": [[5789295, 1362710]]
+  },
+  "elisa_mouse_7": {
+    "source": "ELISA检测记录表-小鼠.docx",
+    "sha256": "2d088810aef68d4fbcc878351ebd8c7764b9c75bc9f299ad204b6c219b3318fe",
+    "method": "elisa_mouse",
+    "sampleCapacity": 7,
+    "imageColumns": 2,
+    "imageSizes": [
+      [5039360, 1345565],
+      [920115, 855980]
+    ]
+  },
+  "elisa_mouse_8_single": {
+    "source": "ELISA检测记录表-小鼠.docx",
+    "sha256": "b4049b6753708f46b8ff357c41aa3332081a9b04419e1a9a6a833c773222a875",
+    "method": "elisa_mouse",
+    "sampleCapacity": 8,
+    "imageColumns": 1,
+    "imageSizes": [[5790565, 1532890]]
+  },
+  "elisa_rat_1": {
+    "source": "ELISA检测记录表-大鼠.docx",
+    "sha256": "a670a9b7a96457f1e05081b84dff5bcd6df975eb51d57bb0bd18a6159bf5db88",
+    "method": "elisa_rat",
+    "sampleCapacity": 1,
+    "imageColumns": 2,
+    "imageSizes": [
+      [2784475, 622935],
+      [2882265, 644525]
+    ]
+  },
+  "pcr_9": {
+    "source": "20260812-PCR检测记录表.docx",
+    "sha256": "79c18c0bbdd74845b46d9f0fef1b5020344695baaafb62df217d0bd9a8a70494",
+    "method": "pcr",
+    "sampleCapacity": 9,
+    "imageColumns": 1,
+    "imageSizes": [
+      [2879725, 1963420],
+      [2879725, 2073275],
+      [2879725, 1970405],
+      [2879725, 2035175]
+    ]
   }
 }

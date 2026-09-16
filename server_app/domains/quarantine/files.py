@@ -10,10 +10,10 @@ from zipfile import BadZipFile, ZipFile
 from docx.image.image import Image
 from PIL import Image as PillowImage
 
+from . import pdf
 from . import repository as repo
 from .attachment_metadata import validate as validate_attachment
 from .catalog import TEMPLATE_VERSION
-from .documents import generate
 from .service import audit, authorize, check_version, now
 
 MIME = {
@@ -27,7 +27,16 @@ MIME = {
     ".xls": "application/vnd.ms-excel",
 }
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+PDF_MIME = "application/pdf"
 METHOD_CODES = {"parasite": "M", "elisa_mouse": "E", "elisa_rat": "E", "pcr": "P"}
+METHOD_FILENAMES = {
+    "parasite": "寄生虫",
+    "elisa_mouse": "ELISA小鼠",
+    "elisa_rat": "ELISA大鼠",
+    "pcr": "PCR",
+}
+_UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+generate = pdf.generate
 
 
 def next_report_number(conn, batch, method):
@@ -42,6 +51,31 @@ def next_report_number(conn, batch, method):
         raise ValueError("该批次、检测方法和日期的报告编号已达到99份")
     repo.reserve_sequence(conn, scope, sequence)
     return f"{batch_no}{method_code}{issued_date}{sequence:02d}"
+
+
+def report_download_filename(test, batch, *, number="", version=None, draft=False):
+    """Return the one safe, descriptive filename used by preview and report downloads."""
+    method = METHOD_FILENAMES.get(test.get("method"), "未知检测")
+    test_date = _filename_part(test.get("testDate"), "未填写实验日期", date=True)
+    batch_no = _filename_part(batch.get("batchNo") or batch.get("name"), "未填写批次号")
+    suffix = "草稿" if draft else f"{_filename_part(number, '未编号报告')}_{_report_version(version)}"
+    return f"{method}_{test_date}_{batch_no}_{suffix}.pdf"
+
+
+def _filename_part(value, fallback, *, date=False):
+    text = _UNSAFE_FILENAME_CHARS.sub("-", str(value or "").strip())
+    text = re.sub(r"\s+", " ", text).strip(" .-")[:80]
+    if date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return fallback
+    return text or fallback
+
+
+def _report_version(value):
+    try:
+        version = int(value)
+    except (TypeError, ValueError):
+        return "v未知版本"
+    return f"v{version}" if version > 0 else "v未知版本"
 
 
 def upload(conn, user, test_id, params, name, content, root):
@@ -207,7 +241,8 @@ def issue(conn, user, test_id, body, root):
         "number": number,
         "templateVersion": TEMPLATE_VERSION,
         "snapshot": document,
-        "storageName": report_id + ".docx",
+        "storageName": report_id + ".pdf",
+        "mime": PDF_MIME,
         "updatedAt": now(),
         "issuedDate": datetime.now().astimezone().date().isoformat(),
         "issuedBy": {"id": user["id"], "name": user["displayName"]},

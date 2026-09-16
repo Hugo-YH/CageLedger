@@ -1,17 +1,18 @@
-import { useRef, useState } from "react";
-import { Alert, Button, Form, Modal, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Anchor, Button, Card, Descriptions, Form, Modal, Typography } from "antd";
 import type { QuarantineBatch, QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { useQuarantineRecordSave } from "../../api/quarantine";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
+import { CommandBar } from "../../components/ui";
 import { id, methodLabels, reportSections } from "./shared";
+import { RecordAttachments } from "./RecordAttachments";
 import { ReportInformation, ReportProjects, ReportSamples } from "./ReportFields";
 import { ReportResults } from "./ReportResults";
-import { RecordAttachments } from "./RecordAttachments";
-import { CommandBar } from "../../components/ui";
 
-function reportTitle(method: QuarantineTest["method"]) {
-  if (method === "parasite") return "体内外寄生虫检测记录表";
-  if (method === "pcr") return "PCR 检测记录表";
-  return `ELISA 检测记录表（${method === "elisa_rat" ? "大鼠" : "小鼠"}）`;
+function initialDraft(initial: QuarantineTest) {
+  const draft = structuredClone(initial);
+  if (!draft.updatedAt && draft.reportFormVersion === undefined) draft.reportFormVersion = 2;
+  return draft;
 }
 
 export function TestEditor({
@@ -19,29 +20,54 @@ export function TestEditor({
   batch,
   detail,
   onCancel,
+  onSaved,
 }: {
   initial: QuarantineTest;
   batch: QuarantineBatch;
   detail: QuarantineDetail;
   onCancel: () => void;
+  onSaved: (test: QuarantineTest) => void;
 }) {
-  const [draft, setDraft] = useState<QuarantineTest>(() => ({
-    ...structuredClone(initial),
-    reportFormVersion: 2,
-    reportMaterial: initial.reportMaterial ?? [...new Set(initial.samples.map((s) => s.material))].join("、"),
-    reportSpecimenState:
-      initial.reportSpecimenState ??
-      [...new Set(initial.samples.map((s) => s.specimenState))].filter(Boolean).join("、"),
-  }));
+  const [draft, setDraft] = useState<QuarantineTest>(() => initialDraft(initial));
+  const [baseline, setBaseline] = useState<QuarantineTest>(() => initialDraft(initial));
   const version = useRef(initial.updatedAt);
   const saving = useRef<Promise<QuarantineTest> | null>(null);
   const [fileBusy, setFileBusy] = useState(false);
-  const [preview, setPreview] = useState(false);
   const [saved, setSaved] = useState(Boolean(initial.updatedAt));
   const [error, setError] = useState("");
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [anchorOffset, setAnchorOffset] = useState(0);
+  const getScrollContainer = useCallback(() => editorRef.current?.closest<HTMLElement>(".workspace") ?? window, []);
+  useEffect(() => {
+    const owner = getScrollContainer();
+    const toolbar = editorRef.current?.querySelector<HTMLElement>(".app-command-bar");
+    if (!(owner instanceof HTMLElement) || !toolbar) return;
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setAnchorOffset(parseFloat(getComputedStyle(owner).getPropertyValue("--cl-workspace-toolbar-offset")) || 0);
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(owner);
+    observer.observe(toolbar);
+    measure();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [getScrollContainer]);
   const [removal, setRemoval] = useState<{ kind: "sample" | "project"; id: string } | null>(null);
   const save = useQuarantineRecordSave();
   const sections = reportSections(draft.method);
+  const [attachmentChanges, setAttachmentChanges] = useState<Record<string, boolean>>({});
+  const attachmentDirty = Object.values(attachmentChanges).some(Boolean);
+  const markAttachmentDirty = useCallback((id: string, changed: boolean) => {
+    setAttachmentChanges((current) => (current[id] === changed ? current : { ...current, [id]: changed }));
+  }, []);
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [baseline, draft]);
+  const confirmLeave = useUnsavedChanges(dirty || attachmentDirty, save.isPending || fileBusy);
   const resultTotal = draft.projects.reduce(
     (count, project) => count + project.sampleIds.length + (draft.method === "parasite" ? 0 : 2),
     0,
@@ -54,29 +80,26 @@ export function TestEditor({
     0,
   );
   const outline = [
-    { number: 1, label: "采样实验信息" },
-    ...(draft.method === "pcr"
-      ? [
-          { number: 2, label: "试剂盒名称" },
-          { number: 3, label: "试剂盒批号" },
-        ]
-      : draft.method === "parasite"
-        ? []
-        : [{ number: 2, label: "试剂盒与批号" }]),
-    { number: sections.sample, label: "样本统计表" },
-    { number: sections.pictures, label: draft.method === "parasite" ? "显微观察记录" : "原始记录" },
-    { number: sections.results, label: "检测结果" },
+    { key: "information", href: "#quarantine-part-1", title: "基础信息" },
+    { key: "projects", href: "#quarantine-part-projects", title: "项目与试剂" },
+    { key: "samples", href: `#quarantine-part-${sections.sample}`, title: "样本" },
+    { key: "results", href: `#quarantine-part-${sections.results}`, title: "结果" },
+    { key: "attachments", href: `#quarantine-part-${sections.pictures}`, title: "原始资料" },
   ];
 
   function changeDraft(test: QuarantineTest) {
     setDraft(test);
     setSaved(false);
   }
+
   function received(test: QuarantineTest) {
     version.current = test.updatedAt;
+    setBaseline(structuredClone(test));
     setDraft(test);
     setSaved(true);
+    onSaved(test);
   }
+
   async function persist() {
     if (saving.current) return saving.current;
     const pending = save.mutateAsync({ item: draft, version: version.current }).then(({ item }) => {
@@ -91,6 +114,7 @@ export function TestEditor({
       saving.current = null;
     }
   }
+
   async function finish() {
     try {
       await persist();
@@ -98,6 +122,11 @@ export function TestEditor({
       setError(cause instanceof Error ? cause.message : "保存失败");
     }
   }
+
+  async function leave() {
+    if (await confirmLeave()) onCancel();
+  }
+
   function addSample() {
     const sample = {
       id: id(),
@@ -105,7 +134,7 @@ export function TestEditor({
       material: draft.reportMaterial || "",
       specimenState: draft.reportSpecimenState || "",
       poolCount: 1,
-      portionCount: 0,
+      portionCount: draft.reportFormVersion === 2 ? 0 : 1,
       sourceIds: [] as string[],
     };
     changeDraft({
@@ -117,6 +146,7 @@ export function TestEditor({
       })),
     });
   }
+
   function addProject() {
     changeDraft({
       ...draft,
@@ -136,6 +166,7 @@ export function TestEditor({
       ],
     });
   }
+
   function remove() {
     if (!removal) return;
     const removedId = removal.id;
@@ -157,38 +188,24 @@ export function TestEditor({
     );
     setRemoval(null);
   }
-  const projects = (fields?: ("name" | "kit" | "lot")[]) => (
-    <ReportProjects
-      test={draft}
-      batch={batch}
-      fields={fields}
-      onChange={preview ? undefined : changeDraft}
-      onRemoveProject={preview ? undefined : (projectId) => setRemoval({ kind: "project", id: projectId })}
-    />
-  );
 
   return (
-    <div className="quarantine-report-editor">
+    <div className="quarantine-record-editor" ref={editorRef}>
       <CommandBar
         sticky
         ariaLabel="检测记录编辑操作"
         context={
           <>
-            <Typography.Text strong>{preview ? "报告预览" : "填写检测记录"}</Typography.Text>
+            <Typography.Text strong>填写检测记录</Typography.Text>
             <Typography.Text type="secondary" aria-live="polite">
-              {saved ? "当前内容已保存" : "内容尚未保存，导出 Word 时沿用原始表格版式"}
+              {saved && !dirty && !attachmentDirty ? "当前内容已保存" : "内容尚未保存"}
             </Typography.Text>
           </>
         }
         actions={
-          <>
-            <Button disabled={save.isPending || fileBusy} onClick={onCancel}>
-              返回批次
-            </Button>
-            <Button disabled={save.isPending || fileBusy} onClick={() => setPreview((value) => !value)}>
-              {preview ? "继续填写" : "查看报告预览"}
-            </Button>
-          </>
+          <Button disabled={save.isPending || fileBusy} onClick={() => void leave()}>
+            返回批次
+          </Button>
         }
         primaryAction={
           <Button
@@ -204,123 +221,96 @@ export function TestEditor({
       />
       <Form layout="vertical" disabled={save.isPending || fileBusy}>
         {error && <Alert type="error" title={error} showIcon />}
-        <div className="quarantine-report-workspace">
-          <aside className="quarantine-report-outline" aria-label="报告章节">
-            <Typography.Text type="secondary">本份记录</Typography.Text>
-            <Typography.Title level={4}>{methodLabels[draft.method]}</Typography.Title>
-            <nav>
-              {outline.map((item) => (
-                <a key={item.number} href={`#quarantine-part-${item.number}`}>
-                  <span>{item.number}</span>
-                  {item.label}
-                </a>
-              ))}
-            </nav>
-            <div className="quarantine-report-coverage">
-              <Typography.Text strong>所属检疫批次</Typography.Text>
-              <p>{batch.name}</p>
-              <Typography.Text type="secondary">
-                覆盖 {batch.sources.length} 个到货来源，抽检实验组见样本统计表。
-              </Typography.Text>
-            </div>
-            <div className="quarantine-report-progress" aria-live="polite">
+        <div className="quarantine-record-workspace">
+          <aside className="quarantine-record-anchor" aria-label="检测记录章节">
+            <Typography.Text type="secondary">所属检疫批次</Typography.Text>
+            <Typography.Title level={4}>{batch.name}</Typography.Title>
+            <Anchor
+              items={outline}
+              affix={false}
+              getContainer={getScrollContainer}
+              targetOffset={anchorOffset}
+              onClick={(event) => event.preventDefault()}
+            />
+            <div className="quarantine-record-progress" aria-live="polite">
               <strong>
                 {resultCompleted} / {resultTotal}
               </strong>
-              <span>结果已填写</span>
+              <span>项判定已填写</span>
             </div>
-            <Typography.Paragraph type="secondary">
-              先填写试剂盒与样本，再填写结果。新增项目和样本会自动出现在结果表。
-            </Typography.Paragraph>
           </aside>
-          <main className={`quarantine-report-paper${preview ? " quarantine-report-preview" : ""}`}>
-            <div className="quarantine-report-letterhead">
-              <span>中山眼科中心眼科学实验动物中心</span>
-              <Tag color="blue">{preview ? "报告预览" : "检测记录草稿"}</Tag>
-            </div>
-            <h1>{reportTitle(draft.method)}</h1>
-            <ReportInformation test={draft} onChange={preview ? undefined : changeDraft} />
-            {draft.method !== "parasite" && (
-              <section id="quarantine-part-2" className="quarantine-report-section">
-                <div className="quarantine-report-section-heading">
-                  <Typography.Title level={5}>
-                    {draft.method === "pcr" ? "2、试剂盒名称" : "2、试剂盒名称及批号"}
-                  </Typography.Title>
-                  {!preview && (
-                    <Button size="small" onClick={addProject}>
-                      ＋ 添加检测项目
-                    </Button>
-                  )}
-                </div>
-                {projects(draft.method === "pcr" ? ["name", "kit"] : undefined)}
-                {draft.method === "pcr" && (
-                  <div id="quarantine-part-3" className="quarantine-report-subsection">
-                    <Typography.Title level={5}>3、试剂盒批号</Typography.Title>
-                    {projects(["name", "lot"])}
-                  </div>
-                )}
-                <Typography.Paragraph type="secondary" className="quarantine-report-hint">
-                  检测项目会同步到图片区和结果表，修改名称不会清空已填结果。
-                </Typography.Paragraph>
-              </section>
-            )}
-            <section id={`quarantine-part-${sections.sample}`} className="quarantine-report-section">
-              <div className="quarantine-report-section-heading">
-                <Typography.Title level={5}>{sections.sample}、样本统计表</Typography.Title>
-                {!preview && (
-                  <Button size="small" onClick={addSample}>
-                    ＋ 添加样本
+          <div className="quarantine-record-content">
+            <section className="quarantine-record-section" aria-label="基础信息">
+              <Card title="基础信息" size="small">
+                <Descriptions size="small" column={2} className="quarantine-record-summary">
+                  <Descriptions.Item label="检测方法">{methodLabels[draft.method]}</Descriptions.Item>
+                  <Descriptions.Item label="覆盖来源">{batch.sources.length} 个</Descriptions.Item>
+                </Descriptions>
+                <ReportInformation test={draft} onChange={changeDraft} hideTitle />
+              </Card>
+            </section>
+            <section id="quarantine-part-projects" className="quarantine-record-section" aria-label="项目与试剂">
+              <Card
+                title="项目与试剂"
+                size="small"
+                extra={
+                  <Button size="small" onClick={addProject}>
+                    添加检测项目
                   </Button>
-                )}
-              </div>
-              <ReportSamples
-                test={draft}
-                batch={batch}
-                onChange={preview ? undefined : changeDraft}
-                onRemoveSample={preview ? undefined : (sampleId) => setRemoval({ kind: "sample", id: sampleId })}
-              />
+                }
+              >
+                <ReportProjects
+                  test={draft}
+                  batch={batch}
+                  onChange={changeDraft}
+                  onRemoveProject={(projectId) => setRemoval({ kind: "project", id: projectId })}
+                />
+                <Typography.Paragraph type="secondary" className="quarantine-record-hint">
+                  项目名称、试剂盒和批号的修改不会清空已填写的结果。
+                </Typography.Paragraph>
+              </Card>
             </section>
-            <section id={`quarantine-part-${sections.pictures}`} className="quarantine-report-section">
-              <Typography.Title level={5}>
-                {sections.pictures}、
-                {draft.method === "parasite"
-                  ? "显微观察记录"
-                  : draft.method === "pcr"
-                    ? "凝胶成像分析系统原始记录"
-                    : "原始记录"}
-              </Typography.Title>
-              <RecordAttachments
-                test={draft}
-                attachments={detail.attachments}
-                persist={preview ? undefined : persist}
-                onVersion={preview ? undefined : received}
-                busy={save.isPending || fileBusy}
-                onBusy={setFileBusy}
-              />
+            <section id={`quarantine-part-${sections.sample}`} className="quarantine-record-section" aria-label="样本">
+              <Card
+                title="样本"
+                size="small"
+                extra={
+                  <Button size="small" onClick={addSample}>
+                    添加样本
+                  </Button>
+                }
+              >
+                <ReportSamples
+                  test={draft}
+                  batch={batch}
+                  onChange={changeDraft}
+                  onRemoveSample={(sampleId) => setRemoval({ kind: "sample", id: sampleId })}
+                />
+              </Card>
             </section>
-            {draft.method === "parasite" && (
-              <section className="quarantine-report-section">
-                <div className="quarantine-report-section-heading">
-                  <Typography.Title level={5}>检测项目</Typography.Title>
-                  {!preview && (
-                    <Button size="small" onClick={addProject}>
-                      ＋ 添加检测项目
-                    </Button>
-                  )}
-                </div>
-                {projects()}
-              </section>
-            )}
-            <ReportResults test={draft} onChange={preview ? undefined : changeDraft} sectionNumber={sections.results} />
-            <footer className="quarantine-signatures">
-              <span>检测人：____________</span>
-              <span>复核人：____________</span>
-              <span>日期：____________</span>
-            </footer>
-            <Typography.Paragraph type="secondary" className="quarantine-report-paper-note">
-              签名栏固定留空，供导出后手写签名。
-            </Typography.Paragraph>
-          </main>
+            <section className="quarantine-record-section" aria-label="检测结果">
+              <Card title="检测结果" size="small">
+                <ReportResults test={draft} onChange={changeDraft} sectionNumber={sections.results} hideTitle />
+              </Card>
+            </section>
+            <section
+              id={`quarantine-part-${sections.pictures}`}
+              className="quarantine-record-section"
+              aria-label="原始资料"
+            >
+              <Card title="原始资料" size="small">
+                <RecordAttachments
+                  test={draft}
+                  attachments={detail.attachments}
+                  persist={persist}
+                  onVersion={received}
+                  busy={save.isPending || fileBusy}
+                  onBusy={setFileBusy}
+                  onDirty={markAttachmentDirty}
+                />
+              </Card>
+            </section>
+          </div>
         </div>
       </Form>
       <Modal
@@ -330,7 +320,7 @@ export function TestEditor({
         onOk={remove}
         okText="确认删除"
       >
-        <p>对应结果也会移除，其他实验组和项目的结果不变。如果已有图片关联，请先在原始记录中解除关联。</p>
+        <p>对应结果也会移除，其他实验组和项目的结果不变。如果已有图片关联，请先在原始资料中解除关联。</p>
       </Modal>
     </div>
   );

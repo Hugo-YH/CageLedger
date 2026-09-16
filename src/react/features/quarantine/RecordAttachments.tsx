@@ -10,8 +10,9 @@ type Props = {
   onVersion?: (t: QuarantineTest) => void;
   busy?: boolean;
   onBusy?: (busy: boolean) => void;
+  onDirty?: (id: string, dirty: boolean) => void;
 };
-export function RecordAttachments({ test, attachments, persist, onVersion, busy, onBusy }: Props) {
+export function RecordAttachments({ test, attachments, persist, onVersion, busy, onBusy, onDirty }: Props) {
   const write = useQuarantineAttachmentWrite();
   const lock = useRef(false);
   const [error, setError] = useState("");
@@ -129,6 +130,7 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             busy={busy}
             onBusy={onBusy}
             onStatus={setStatus}
+            onDirty={onDirty}
           />
         ))}
       </div>
@@ -143,8 +145,14 @@ function AttachmentCard({
   busy,
   onBusy,
   onStatus,
+  onDirty,
 }: Omit<Props, "attachments"> & { attachment: QuarantineAttachment; onStatus: (status: string) => void }) {
   const [draft, setDraft] = useState(a);
+  const dirty = Boolean(persist) && JSON.stringify(draft) !== JSON.stringify(a);
+  useEffect(() => {
+    onDirty?.(a.id, dirty);
+    return () => onDirty?.(a.id, false);
+  }, [a.id, dirty, onDirty]);
   const [error, setError] = useState("");
   const [remove, setRemove] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -179,6 +187,7 @@ function AttachmentCard({
   return (
     <Card size="small" title={a.name} className="quarantine-attachment-card">
       {error && <Alert type="error" title={error} />}
+      {dirty && <Typography.Text type="warning">图片信息尚未保存</Typography.Text>}
       {a.mime.startsWith("image/") ? (
         <Image
           loading="lazy"

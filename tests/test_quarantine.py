@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from contextlib import nullcontext
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -70,6 +71,8 @@ class QuarantineTests(unittest.TestCase):
             side_effect=lambda conn, events: self.audits.extend(events),
         )
         self.audit_patch.start()
+        self.pdf_generate_patch = patch("server_app.domains.quarantine.files.generate", return_value=b"%PDF-1.7\nmock")
+        self.pdf_generate_patch.start()
         sources = [
             {"id": "source-a", "supplier": "供应商甲", "species": "小鼠"},
             {"id": "source-b", "supplier": "供应商乙", "species": "小鼠"},
@@ -79,6 +82,7 @@ class QuarantineTests(unittest.TestCase):
         )
 
     def tearDown(self):
+        self.pdf_generate_patch.stop()
         self.audit_patch.stop()
         self.conn.close()
         self.tmp.cleanup()
@@ -104,6 +108,32 @@ class QuarantineTests(unittest.TestCase):
         self.assertEqual(len(service.batch_detail(self.conn, "batch")["item"]["sources"]), 2)
         self.assertEqual(test["samples"][0]["sourceIds"], ["source-a"])
         self.assertEqual(self.audits[-1]["actorUserId"], "regular")
+
+    def test_batch_method_filter_precedes_pagination_and_keeps_unfiltered_picker(self):
+        for index, method in enumerate(("parasite", "pcr", "elisa_mouse", "elisa_rat")):
+            batch_id = f"filtered-{index}"
+            self.write(
+                service.save_batch,
+                {"item": {"id": batch_id, "batchNo": f"B2609030{index + 1}", "sources": self.batch["sources"]}},
+            )
+            for suffix in ("a", "b"):
+                record = sample_test(batch_id)
+                record.update(id=f"{batch_id}-{suffix}", method=method, samples=[], projects=[])
+                self.create_test(record)
+        self.assertEqual(repo.list_page(self.conn, "batches", {})["page"]["total"], 5)
+        for method in ("parasite", "pcr", "elisa_mouse", "elisa_rat"):
+            result = repo.list_page(self.conn, "batches", {"method": method})
+            self.assertEqual(result["page"]["total"], 1)
+            self.assertEqual(len(result["items"]), 1)
+        first = repo.list_page(self.conn, "batches", {"method": "elisa", "limit": 1})
+        second = repo.list_page(self.conn, "batches", {"method": "elisa", "limit": 1, "offset": 1})
+        self.assertEqual(first["page"]["total"], 2)
+        self.assertTrue(first["page"]["hasMore"])
+        self.assertFalse(second["page"]["hasMore"])
+        self.assertNotEqual(first["items"][0]["id"], second["items"][0]["id"])
+        self.assertEqual(repo.list_page(self.conn, "batches", {"method": "pcr", "search": "missing"})["items"], [])
+        with self.assertRaises(ValueError):
+            repo.list_page(self.conn, "batches", {"method": "unknown"})
 
     def test_one_source_cannot_be_assigned_to_multiple_sample_groups(self):
         raw = sample_test()
@@ -161,6 +191,118 @@ class QuarantineTests(unittest.TestCase):
         second = files.next_report_number(self.conn, self.batch, "elisa_rat")
         self.assertRegex(first, r"^B26090201E\d{6}01$")
         self.assertRegex(second, r"^B26090201E\d{6}02$")
+
+    def test_report_download_filename_distinguishes_elisa_species_and_sanitizes_fields(self):
+        mouse = {**sample_test(), "method": "elisa_mouse", "testDate": "2026-09-03"}
+        rat = {**mouse, "method": "elisa_rat"}
+        self.assertEqual(
+            files.report_download_filename(mouse, self.batch, draft=True),
+            "ELISA小鼠_2026-09-03_B26090201_草稿.pdf",
+        )
+        self.assertEqual(
+            files.report_download_filename(rat, self.batch, number="B26090201E26090301", version=2),
+            "ELISA大鼠_2026-09-03_B26090201_B26090201E26090301_v2.pdf",
+        )
+        self.assertEqual(
+            files.report_download_filename(
+                {"method": "pcr", "testDate": "2026////09"},
+                {"batchNo": 'B26:090201?"'},
+                draft=True,
+            ),
+            "PCR_未填写实验日期_B26-090201_草稿.pdf",
+        )
+
+    def test_preview_and_issued_downloads_use_report_filenames(self):
+        from server_app.web import quarantine
+
+        class DownloadHandler:
+            def __init__(self):
+                self.download = None
+
+            def send_download(self, body, filename, content_type):
+                self.download = (body, filename, content_type)
+
+        test = self.create_test()
+        preview_handler = DownloadHandler()
+        with (
+            patch.object(quarantine, "QUARANTINE_FILES_PATH", self.root),
+            patch.object(quarantine.pdf, "generate", return_value=b"%PDF-1.7\npreview"),
+        ):
+            self.assertIsNone(quarantine.get(preview_handler, self.conn, ["tests", test["id"], "preview"], {}))
+        self.assertEqual(preview_handler.download[1], "寄生虫_2026-09-03_B26090201_草稿.pdf")
+        self.assertEqual(preview_handler.download[2], files.PDF_MIME)
+
+        report = self.issue(test)
+        issued_handler = DownloadHandler()
+        with patch.object(quarantine, "QUARANTINE_FILES_PATH", self.root):
+            self.assertIsNone(quarantine.get(issued_handler, self.conn, ["reports", report["id"]], {}))
+        self.assertEqual(issued_handler.download[1], f"寄生虫_2026-09-03_B26090201_{report['number']}_v1.pdf")
+        self.assertEqual(issued_handler.download[2], files.PDF_MIME)
+
+        legacy = {**report, "storageName": "legacy.docx", "mime": files.DOCX_MIME}
+        (self.root / legacy["storageName"]).write_bytes(b"legacy Word snapshot")
+        legacy_handler = DownloadHandler()
+        with (
+            patch.object(quarantine, "QUARANTINE_FILES_PATH", self.root),
+            patch.object(quarantine.repo, "get", return_value=legacy),
+            patch.object(quarantine.pdf, "convert_docx", return_value=b"%PDF-1.7\nconverted") as convert,
+        ):
+            self.assertIsNone(quarantine.get(legacy_handler, self.conn, ["reports", report["id"]], {}))
+        convert.assert_called_once_with(b"legacy Word snapshot")
+        self.assertEqual(legacy_handler.download[1], issued_handler.download[1])
+        self.assertEqual(legacy_handler.download[2], files.PDF_MIME)
+
+    def test_attachment_downloads_keep_original_name_mime_and_bytes(self):
+        from server_app.web import quarantine
+
+        class DownloadHandler:
+            def send_download(self, body, filename, content_type):
+                self.download = (body, filename, content_type)
+
+        for name, mime, content in (
+            ("原始图片.png", "image/png", b"\x89PNG\r\n\x1a\nimage"),
+            (
+                "原始数据.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                b"PK\x03\x04xlsx",
+            ),
+        ):
+            with self.subTest(name=name):
+                item = {"id": "attachment", "name": name, "mime": mime, "storageName": "attachment.bin"}
+                (self.root / item["storageName"]).write_bytes(content)
+                handler = DownloadHandler()
+                with (
+                    patch.object(quarantine, "QUARANTINE_FILES_PATH", self.root),
+                    patch.object(quarantine.repo, "get", return_value=item),
+                    patch.object(quarantine.pdf, "convert_docx") as convert,
+                ):
+                    self.assertIsNone(quarantine.get(handler, self.conn, ["attachments", item["id"]], {}))
+                self.assertEqual(handler.download, (content, name, mime))
+                convert.assert_not_called()
+
+    def test_pdf_download_failures_are_json_responses(self):
+        from server_app.web import quarantine
+
+        class ErrorHandler:
+            path = "/api/quarantine/tests/test/preview"
+
+            def require_user(self):
+                return ACTOR
+
+            def send_json(self, payload, status):
+                self.response = (payload, status)
+
+        for error, expected_status in ((quarantine.pdf.PdfRenderError("渲染不可用"), 503), (OSError(), 500)):
+            with self.subTest(error=type(error).__name__):
+                handler = ErrorHandler()
+                with (
+                    patch.object(quarantine, "connect_db", return_value=nullcontext(None)),
+                    patch.object(quarantine.service, "authorize"),
+                    patch.object(quarantine, "get", side_effect=error),
+                ):
+                    self.assertTrue(quarantine.handle(handler, "GET", "/api/quarantine/tests/test/preview"))
+                self.assertEqual(handler.response[1], expected_status)
+                self.assertIn("error", handler.response[0])
 
     def test_missing_and_stale_versions_rejected(self):
         test = self.create_test()
@@ -250,14 +392,9 @@ class QuarantineTests(unittest.TestCase):
         report = self.issue(test)
         self.assertRegex(report["number"], r"^B26090201M\d{6}01$")
         original = (self.root / report["storageName"]).read_bytes()
-        with ZipFile(BytesIO(original)) as archive:
-            footers = "".join(
-                archive.read(name).decode()
-                for name in archive.namelist()
-                if name.startswith("word/footer") and name.endswith(".xml")
-            )
-        self.assertNotIn(report["number"], footers)
-        self.assertNotIn("草稿", footers)
+        self.assertTrue(original.startswith(b"%PDF-"))
+        self.assertEqual(report["mime"], files.PDF_MIME)
+        self.assertTrue(report["storageName"].endswith(".pdf"))
         self.assertEqual(self.issue(test)["id"], report["id"])
         current = repo.get(self.conn, "tests", test["id"])
         with self.assertRaises(ValueError):
@@ -385,7 +522,7 @@ class QuarantineTests(unittest.TestCase):
     def test_word_preserves_source_styles_page_system_and_horizontal_tables(self):
         from docx import Document
 
-        from server_app.domains.quarantine.documents import TEMPLATES
+        from server_app.domains.quarantine.documents import TEMPLATES, normalize_style_order
 
         test = self.create_test()
         content = generate(files.snapshot(self.conn, test), self.root, draft=True)
@@ -396,7 +533,7 @@ class QuarantineTests(unittest.TestCase):
         self.assertEqual(exported.tables[1].cell(0, 0).text, "样本编号")
         self.assertEqual(exported.tables[1].cell(1, 0).text, "动物批号")
         with ZipFile(BytesIO(content)) as output, ZipFile(TEMPLATES / "parasite.docx") as template:
-            self.assertEqual(output.read("word/styles.xml"), template.read("word/styles.xml"))
+            self.assertEqual(output.read("word/styles.xml"), normalize_style_order(template.read("word/styles.xml")))
 
     def test_report_form_derives_counts_and_issues_without_extra_conclusion(self):
         raw = sample_test()
@@ -531,7 +668,10 @@ class QuarantineBackupTests(unittest.TestCase):
             conn = sqlite3.connect(original / "quarantine.sqlite")
             conn.row_factory = sqlite3.Row
             repo.ensure_schema(conn)
-            with patch("server_app.domains.quarantine.service.write_audit_events"):
+            with (
+                patch("server_app.domains.quarantine.service.write_audit_events"),
+                patch("server_app.domains.quarantine.files.generate", return_value=b"%PDF-1.7\nmock"),
+            ):
                 with conn:
                     batch = service.save_batch(
                         conn,

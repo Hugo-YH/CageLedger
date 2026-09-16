@@ -4,6 +4,7 @@ from copy import deepcopy
 from io import BytesIO
 
 from docx.oxml import OxmlElement
+from docx.shared import Pt
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
@@ -41,15 +42,18 @@ def replace_element(old, elements):
 def sample_table(template, doc, samples, sources, *, pcr=False):
     result = deepcopy(template)
     table = Table(result, doc)
-    capacity = len(table.columns) - 1
     group_size = 3 if pcr else 2
-    patterns = [deepcopy(row._tr) for row in table.rows[:group_size]]
+    patterns = _row_groups(table, group_size)
     for row in list(table.rows):
         result.remove(row._tr)
-    for offset in range(0, max(len(samples), 1), capacity):
-        for row in patterns:
+    offset, group_index = 0, 0
+    while offset < max(len(samples), 1):
+        pattern = patterns[min(group_index, len(patterns) - 1)]
+        for row in pattern:
             result.append(deepcopy(row))
         rows = Table(result, doc).rows[-group_size:]
+        # Some historical PCR forms omit the last cell in the second row group.
+        capacity = min(len(row.cells) for row in rows) - 1
         for index in range(capacity):
             sample = samples[offset + index] if offset + index < len(samples) else None
             cell_text(rows[0].cells[index + 1], sample["number"] if sample else "")
@@ -65,6 +69,8 @@ def sample_table(template, doc, samples, sources, *, pcr=False):
                 cell_text(rows[2].cells[index + 1], "\n".join(filter(None, people)))
             else:
                 cell_text(rows[1].cells[index + 1], "\n".join([*supplier_names, *filter(None, people)]))
+        offset += capacity
+        group_index += 1
     for row_index, row in enumerate(Table(result, doc).rows):
         row._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
         if row_index % group_size < group_size - 1:
@@ -121,11 +127,15 @@ def horizontal_result(template, doc, project, samples, *, controls):
                     paragraph.paragraph_format.keep_with_next = True
         unfloat(result)
         elements.append(result)
-        # Adjacent tables otherwise merge in Word and repeat the wrong sample header on later pages.
-        separator = OxmlElement("w:p")
-        Paragraph(separator, doc).paragraph_format.space_after = 0
-        Paragraph(separator, doc).paragraph_format.space_before = 0
-        elements.append(separator)
+        if offset + capacity < len(applicable):
+            # Only consecutive chunks need a separator; the next project has its own heading.
+            # An empty normal-sized paragraph after every project adds unwanted vertical gaps.
+            separator = OxmlElement("w:p")
+            paragraph = Paragraph(separator, doc)
+            paragraph.paragraph_format.space_after = 0
+            paragraph.paragraph_format.space_before = 0
+            paragraph.paragraph_format.line_spacing = Pt(1)
+            elements.append(separator)
     return elements
 
 
@@ -153,24 +163,18 @@ def image_table(template, doc, entries, root, sizes):
     result = deepcopy(template)
     source = Table(result, doc)
     source.autofit = False
-    # Use the original image area width, shared equally by the two image/caption pairs.
-    width = sum(column.width for column in source.columns) // 2
-    for column in source.columns:
-        column.width = width
-    for row in source.rows[:2]:
-        for cell in row.cells:
-            cell.width = width
-    image_pattern = deepcopy(source.rows[0]._tr)
-    caption_pattern = deepcopy(source.rows[1]._tr)
+    capacity = len(source.columns)
+    patterns = _row_groups(source, 2)
     for row in list(source.rows):
         result.remove(row._tr)
-    for offset in range(0, max(len(entries), 2), 2):
-        result.append(deepcopy(image_pattern))
-        result.append(deepcopy(caption_pattern))
+    for group_index, offset in enumerate(range(0, max(len(entries), capacity), capacity)):
+        pattern = patterns[min(group_index, len(patterns) - 1)]
+        for row in pattern:
+            result.append(deepcopy(row))
         rows = Table(result, doc).rows[-2:]
         for row in rows:
             row._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
-        for index in range(2):
+        for index in range(capacity):
             entry = entries[offset + index] if offset + index < len(entries) else None
             caption = entry["caption"] if entry else ""
             cell_text(rows[1].cells[index], caption)
@@ -185,8 +189,9 @@ def image_table(template, doc, entries, root, sizes):
                         BytesIO((root / attachment.get("previewStorageName", attachment["storageName"])).read_bytes())
                     )
                 )
-                image_width, height = sizes[index % len(sizes)] if sizes else (2700000, 2100000)
-                ratio = min(min(image_width, width - 150000) / shape.width, height / shape.height)
+                image_width, height = _image_size(sizes, offset + index)
+                width = cell.width or image_width
+                ratio = min(min(image_width, max(width - 150000, 1)) / shape.width, height / shape.height)
                 shape.width, shape.height = int(shape.width * ratio), int(shape.height * ratio)
             elif entry:
                 cell_text(cell, "未上传图片")
@@ -194,6 +199,18 @@ def image_table(template, doc, entries, root, sizes):
                 paragraph.paragraph_format.keep_with_next = True
     unfloat(result)
     return result
+
+
+def _row_groups(table, group_size):
+    rows = [deepcopy(row._tr) for row in table.rows]
+    groups = [rows[index : index + group_size] for index in range(0, len(rows), group_size)]
+    return [group for group in groups if len(group) == group_size]
+
+
+def _image_size(sizes, index):
+    if not sizes:
+        return 2700000, 2100000
+    return sizes[min(index, len(sizes) - 1)]
 
 
 def unfloat(table):

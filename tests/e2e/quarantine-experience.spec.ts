@@ -24,7 +24,7 @@ async function seed(page: Page, method: QuarantineMethod = "elisa_mouse", sample
   const sources = Array.from({ length: sampleCount }, (_, index) => ({
     id: `source-${index}`,
     supplier: "体验测试供应商",
-    species: "mouse",
+    species: method === "elisa_rat" ? "rat" : "mouse",
     pi: `课题组${index + 1}`,
     owner: "检测员",
   }));
@@ -87,8 +87,17 @@ async function seed(page: Page, method: QuarantineMethod = "elisa_mouse", sample
 
 async function openRecord(page: Page, batchName: string, method: QuarantineMethod) {
   await openNavigationEntry(page, "检疫管理", method.startsWith("elisa") ? "ELISA检测" : methodLabels[method]);
-  await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "查看检测记录" }).click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: batchName })
+    .first()
+    .getByRole("button", { name: "查看检测记录" })
+    .click();
   await page.getByRole("tab", { name: `${methodLabels[method]} · 2026-09-12 · 草稿`, exact: true }).click();
+  for (const name of ["记录概览", "样本清单", "项目与结果", "原始资料", "操作历史"]) {
+    await expect(page.getByRole("tab", { name, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("tab", { name: /报告版本/ })).toBeVisible();
 }
 
 test("batch save locks its submitted draft and recovers from failure", async ({ page }) => {
@@ -122,7 +131,8 @@ test("batch save locks its submitted draft and recovers from failure", async ({ 
   failSave = false;
   await dialog.getByRole("button", { name: "保存检疫批次", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText("备注：保留当前批次备注", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "批次备注", exact: true }).click();
+  await expect(page.getByText("保留当前批次备注", { exact: true })).toBeVisible();
 });
 
 test("quarantine detail and catalog failures retain navigation and retry", async ({ page }) => {
@@ -137,7 +147,12 @@ test("quarantine detail and catalog failures retain navigation and retry", async
     failCatalog ? route.fulfill({ status: 500, json: { error: "检测目录暂时不可用" } }) : route.fallback(),
   );
   await openNavigationEntry(page, "检疫管理", "ELISA检测");
-  await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "查看检测记录" }).click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: batchName })
+    .first()
+    .getByRole("button", { name: "查看检测记录" })
+    .click();
   await expect(page.getByRole("alert").filter({ hasText: "批次详情暂时不可用" })).toBeVisible();
   await expect(page.getByRole("button", { name: "返回列表", exact: true })).toBeVisible();
   failDetail = false;
@@ -169,23 +184,23 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
           ? { status: 500, json: { error: "测试下载失败" } }
           : {
               status: 200,
-              contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-              headers: { "Content-Disposition": 'attachment; filename="report.docx"' },
+              contentType: "application/pdf",
+              headers: { "Content-Disposition": 'attachment; filename="report.pdf"' },
               body: "test download",
             },
       );
     });
-    await page.getByRole("button", { name: "下载Word草稿", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "正在生成 Word 草稿" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "下载Word草稿", exact: true })).toHaveClass(/ant-btn-loading/);
+    await page.getByRole("button", { name: "下载PDF草稿", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "正在生成 PDF 草稿" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "下载PDF草稿", exact: true })).toHaveClass(/ant-btn-loading/);
     expect(downloads).toBe(1);
     releaseDownload();
     await expect(page.getByRole("alert").filter({ hasText: "测试下载失败" })).toBeVisible();
     failDownload = false;
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: "重试下载", exact: true }).click();
-    expect((await download).suggestedFilename()).toBe("report.docx");
-    await expect(page.getByRole("status").filter({ hasText: "已下载 report.docx" })).toBeVisible();
+    expect((await download).suggestedFilename()).toBe("report.pdf");
+    await expect(page.getByRole("status").filter({ hasText: "已下载 report.pdf" })).toBeVisible();
     await page.getByRole("button", { name: "编辑检测", exact: true }).click();
     const material = page.getByRole("textbox", { name: "样品名称", exact: true });
     await material.fill("测试材料");
@@ -249,6 +264,9 @@ test("supplier history retains populated results while filtering and can retry a
   });
   expect(issued.ok(), await issued.text()).toBe(true);
   await openNavigationEntry(page, "检疫管理", "检疫报告");
+  await expect(
+    page.getByRole("row").filter({ hasText: batchName }).first().getByRole("button", { name: "查看报告", exact: true }),
+  ).toBeVisible();
   let failHistory = false;
   let releaseHistory!: () => void;
   const historyGate = new Promise<void>((resolve) => {
@@ -312,7 +330,7 @@ test("supplier history retains populated results while filtering and can retry a
   await supplier.first().locator("..").getByRole("button", { name: "展开行" }).click();
   await page.getByRole("button", { name: `${batchName} · 2026-09-12`, exact: true }).click();
   await expect(page.getByRole("group", { name: "检疫批次详情操作", exact: true })).toContainText(batchName);
-  await page.getByRole("tab", { name: "ELISA检测（小鼠） · 2026-09-12 · 已出具", exact: true }).click();
+  await expect(page.getByRole("tab", { name: /报告版本/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("已出具报告版本", { exact: true })).toBeVisible();
 });
 
@@ -344,7 +362,7 @@ test("quarantine large record input and four viewport evidence", async ({ page }
   ]) {
     await page.setViewportSize({ width, height });
     await expect(material).toHaveValue("血清ABCDE");
-    const metrics = await page.locator(".quarantine-report-workspace").evaluate((element) => {
+    const metrics = await page.locator(".quarantine-record-workspace").evaluate((element) => {
       const style = getComputedStyle(element);
       return {
         display: style.display,
@@ -357,6 +375,7 @@ test("quarantine large record input and four viewport evidence", async ({ page }
         samplesOverflow:
           element.querySelector(".quarantine-sample-table .ant-table-content")!.scrollWidth >
           element.querySelector(".quarantine-sample-table .ant-table-content")!.clientWidth,
+        sampleInputs: element.querySelectorAll('[aria-label^="样本编号 "]').length,
         controls: [".ant-picker", ".ant-input", ".ant-select"].map((selector) => {
           const control = element.querySelector(selector)!;
           return { selector, height: control.getBoundingClientRect().height };
@@ -364,7 +383,7 @@ test("quarantine large record input and four viewport evidence", async ({ page }
       };
     });
     expect(metrics.pageOverflow).toBe(false);
-    expect(metrics.samplesOverflow).toBe(true);
+    expect(metrics.sampleInputs).toBe(24);
     await testInfo.attach(`large-record-${width}-style`, {
       body: JSON.stringify(metrics),
       contentType: "application/json",
@@ -378,8 +397,138 @@ test("quarantine large record input and four viewport evidence", async ({ page }
   await expect(material).toHaveValue("血清ABCDE");
   await expect(material).toBeFocused();
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByRole("button", { name: "查看报告预览", exact: true }).click();
-  await expect(page.locator(".quarantine-report-preview")).toContainText("血清ABCDE");
-  await page.getByRole("button", { name: "继续填写", exact: true }).click();
   await expect(material).toHaveValue("血清ABCDE");
+});
+
+test("method lists reveal matching drafts and compact summary across four viewports", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await login(page);
+  const parasite = await seed(page, "parasite", 17, 1);
+  const pcr = await seed(page, "pcr");
+  const elisa = await seed(page, "elisa_rat");
+  const batch = (await (await page.request.get(`/api/quarantine/batches/${parasite.batchId}`)).json()).item;
+  const notes = "历史报告录入（本地对照草稿） 原文件：寄生虫检测记录.docx " + "原始样本和供应商信息待核对。".repeat(40);
+  const update = await page.request.put(`/api/quarantine/batches/${parasite.batchId}`, {
+    data: { item: { ...batch, notes }, expectedUpdatedAt: batch.updatedAt },
+  });
+  expect(update.ok()).toBe(true);
+  await openNavigationEntry(page, "检疫管理", "寄生虫检测");
+  await expect(page.getByRole("row").filter({ hasText: parasite.batchName })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: pcr.batchName })).toHaveCount(0);
+  await expect(page.getByRole("row").filter({ hasText: elisa.batchName })).toHaveCount(0);
+  await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
+  const picker = page.getByRole("dialog");
+  await expect(picker.getByRole("row").filter({ hasText: pcr.batchName })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+  await page
+    .getByRole("row")
+    .filter({ hasText: parasite.batchName })
+    .first()
+    .getByRole("button", { name: "查看检测记录" })
+    .click();
+  await expect(page.getByRole("button", { name: "下载PDF草稿", exact: true })).toBeVisible();
+  const toolbar = page.getByRole("group", { name: "检疫批次详情操作", exact: true });
+  await expect(toolbar.getByRole("button", { name: "下载PDF草稿", exact: true })).toBeVisible();
+  await expect(toolbar.locator(".ant-btn-primary")).toHaveCount(1);
+  await expect(toolbar.getByRole("button", { name: "新建检测记录", exact: true })).not.toHaveClass(/ant-btn-primary/);
+  await expect(page.getByRole("group", { name: "报告操作", exact: true })).toHaveCount(0);
+  await expect(page.getByText(notes, { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: /批次概况/ }).click();
+  for (const [width, height] of [
+    [1440, 900],
+    [1180, 900],
+    [760, 900],
+    [844, 390],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const summary = page.locator(".quarantine-batch-summary");
+    const metrics = await summary.evaluate((element) => ({
+      display: getComputedStyle(element).display,
+      minWidth: getComputedStyle(element).minWidth,
+      gap: getComputedStyle(element.parentElement!).gap,
+      pageOverflow: document.documentElement.scrollWidth > innerWidth,
+      summaryOverflow: element.scrollWidth > element.clientWidth,
+    }));
+    expect(metrics.pageOverflow).toBe(false);
+    expect(metrics.summaryOverflow).toBe(false);
+    const toolbarMetrics = await toolbar.evaluate((element) => ({
+      display: getComputedStyle(element).display,
+      flexWrap: getComputedStyle(element).flexWrap,
+      overflow: element.scrollWidth > element.clientWidth,
+      buttonHeights: [...element.querySelectorAll("button")].map((button) => button.getBoundingClientRect().height),
+    }));
+    expect(toolbarMetrics.overflow).toBe(false);
+    expect(toolbarMetrics.buttonHeights.every((height) => height === 32)).toBe(true);
+    await testInfo.attach(`record-toolbar-${width}-style`, {
+      body: JSON.stringify(toolbarMetrics),
+      contentType: "application/json",
+    });
+    await testInfo.attach(`batch-summary-${width}-style`, {
+      body: JSON.stringify(metrics),
+      contentType: "application/json",
+    });
+    await page.screenshot({ path: testInfo.outputPath(`batch-summary-${width}.png`) });
+    const notesToggle = page.getByRole("button", { name: /备注$/ });
+    await notesToggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText(notes, { exact: true })).toBeVisible();
+    expect(await summary.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await notesToggle.press("Enter");
+    await expect(page.getByText(notes, { exact: true })).toBeHidden();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openNavigationEntry(page, "检疫管理", "PCR检测");
+  await expect(page.getByRole("row").filter({ hasText: parasite.batchName })).toHaveCount(0);
+  await page
+    .getByRole("row")
+    .filter({ hasText: pcr.batchName })
+    .first()
+    .getByRole("button", { name: "查看检测记录" })
+    .click();
+  await expect(page.getByRole("button", { name: "下载PDF草稿", exact: true })).toBeVisible();
+  await openNavigationEntry(page, "检疫管理", "ELISA检测");
+  await page
+    .getByRole("row")
+    .filter({ hasText: elisa.batchName })
+    .first()
+    .getByRole("button", { name: "查看检测记录" })
+    .click();
+  await expect(page.getByRole("button", { name: "下载PDF草稿", exact: true })).toBeVisible();
+});
+
+test("top report actions follow selected record and retain issue confirmation", async ({ page }) => {
+  await login(page);
+  const { batchName, record } = await seed(page, "parasite");
+  const second = { ...record, id: randomUUID(), testDate: "2026-09-13", updatedAt: "" };
+  expect((await page.request.post("/api/quarantine/tests", { data: { item: second } })).ok()).toBe(true);
+  await openRecord(page, batchName, "parasite");
+  const toolbar = page.getByRole("group", { name: "检疫批次详情操作", exact: true });
+  await expect(toolbar).toContainText("2026-09-12 · 草稿");
+  const requested: string[] = [];
+  await page.route("**/api/quarantine/tests/*/preview", async (route) => {
+    requested.push(route.request().url());
+    await route.fulfill({
+      contentType: "application/pdf",
+      headers: { "Content-Disposition": 'attachment; filename="draft.pdf"' },
+      body: "%PDF-test",
+    });
+  });
+  for (const [date, id] of [
+    ["2026-09-12", record.id],
+    ["2026-09-13", second.id],
+  ]) {
+    await page.getByRole("tab", { name: `寄生虫检测 · ${date} · 草稿`, exact: true }).click();
+    await expect(toolbar).toContainText(`${date} · 草稿`);
+    const downloaded = page.waitForEvent("download");
+    await toolbar.getByRole("button", { name: "下载PDF草稿", exact: true }).click();
+    await downloaded;
+    expect(requested.at(-1)).toContain(`/tests/${id}/preview`);
+  }
+  await toolbar.getByRole("button", { name: "出具报告", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "确认出具检疫报告" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await toolbar.getByRole("button", { name: "编辑检测", exact: true }).click();
+  await expect(page.getByRole("button", { name: "保存检测草稿", exact: true })).toBeVisible();
 });

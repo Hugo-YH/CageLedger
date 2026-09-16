@@ -28,6 +28,9 @@ export interface QuarantineBatch {
   handling: string;
   updatedAt: string;
   status?: string;
+  recordCount?: number;
+  issuedCount?: number;
+  methods?: QuarantineMethod[];
   completedAt?: string;
   completedBy?: { id: string; name: string };
   completionReportIds?: string[];
@@ -94,6 +97,7 @@ export interface QuarantineReport {
   updatedAt: string;
   issuedBy: { id: string; name: string };
   templateVersion: string;
+  mime?: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 }
 export interface QuarantineDetail {
   completionReasons: string[];
@@ -127,4 +131,35 @@ export interface SupplierHistory {
     status: string;
     sharedPools: boolean;
   }[];
+}
+
+export interface QuarantineRecordRow {
+  id: string;
+  testId: string;
+  batchId: string;
+  batchName: string;
+  method: QuarantineMethod;
+  testDate: string;
+  samplingDate: string;
+  state: "draft" | "issued";
+  sampleCount: number;
+  projectCount: number;
+  abnormalCount: number;
+  suppliers: string[];
+  updatedAt: string;
+  retestOf: string;
+  correctionOf: string;
+  number?: string;
+  version?: number;
+  issuedBy?: { id: string; name: string };
+  templateVersion?: string;
+}
+export interface QuarantineWorklist extends QuarantinePage<QuarantineRecordRow> {
+  summary: { total: number; draft: number; issued: number };
+}
+export interface QuarantineActivity {
+  id: string;
+  action: string;
+  actor: string;
+  at: string;
 }

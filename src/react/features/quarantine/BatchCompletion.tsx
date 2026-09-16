@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { useState } from "react";
 import { Alert, Button, Form, Input, Modal, Space } from "antd";
 import type { QuarantineDetail } from "../../../contracts/quarantine";
@@ -11,6 +12,10 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
   const [error, setError] = useState("");
   const write = useQuarantineWrite();
   const reasons = detail.completionReasons;
+  const confirmLeave = useUnsavedChanges(
+    conclusionOpen && (conclusion !== detail.item.conclusion || handling !== detail.item.handling),
+    write.isPending,
+  );
   async function complete() {
     try {
       await write.mutateAsync({
@@ -53,7 +58,13 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
   return (
     <Space orientation="vertical">
       <Alert type="info" title={reasons.length ? reasons.join("；") : "三类检测已完成，可以确认整批检疫完成"} />
-      <Button onClick={() => setConclusionOpen(true)}>
+      <Button
+        onClick={() => {
+          setConclusion(detail.item.conclusion);
+          setHandling(detail.item.handling);
+          setConclusionOpen(true);
+        }}
+      >
         {detail.item.conclusion ? "修改检疫结论" : "填写检疫结论"}
       </Button>
       <Button type="primary" disabled={Boolean(reasons.length)} onClick={() => setOpen(true)}>
@@ -62,12 +73,19 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
       <Modal
         open={conclusionOpen}
         title="填写检疫结论"
-        onCancel={() => setConclusionOpen(false)}
+        onCancel={() => {
+          if (!write.isPending)
+            void confirmLeave().then((leave) => {
+              if (leave) setConclusionOpen(false);
+            });
+        }}
+        cancelButtonProps={{ disabled: write.isPending }}
+        closable={!write.isPending}
         onOk={() => void saveConclusion()}
         confirmLoading={write.isPending}
         okText="保存检疫结论"
       >
-        <Form layout="vertical">
+        <Form layout="vertical" disabled={write.isPending}>
           <Form.Item label="最终结论" required>
             <Input.TextArea
               aria-label="检疫最终结论"
@@ -88,7 +106,11 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
       <Modal
         open={open}
         title="确认整批检疫完成"
-        onCancel={() => setOpen(false)}
+        onCancel={() => {
+          if (!write.isPending) setOpen(false);
+        }}
+        cancelButtonProps={{ disabled: write.isPending }}
+        closable={!write.isPending}
         onOk={() => void complete()}
         confirmLoading={write.isPending}
         okText="确认整批已检疫"

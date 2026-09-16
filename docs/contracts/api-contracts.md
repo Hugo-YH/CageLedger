@@ -211,6 +211,10 @@ npm run test:e2e
 
 `/api/quarantine/` 下所有接口要求登录；第一版全部登录角色可读写，权限集中在检疫领域。批次来源取到货记录快照，检测保存混样及项目判定，不建立单笼采样关联。
 
+`GET batches` 支持可选 `method=parasite|pcr|elisa|elisa_mouse|elisa_rat`，在分页前筛选已有对应检测记录的批次；`elisa` 包含小鼠和大鼠。省略该参数返回全部批次，供批次管理及新建检测选择使用。另支持 `state=open|completed`，返回批次的 `recordCount`、`issuedCount` 和 `methods` 只读汇总。
+
+`GET records` 与 `GET reports` 分别提供检测记录及已出具报告台账，支持 `method`、`state`、`search`、`dateFrom/dateTo`、`limit/offset`，返回分页与当前筛选的 `summary`。日期以检测日期为准，筛选在分页前执行，按更新时间降序及 id 稳定排序；报告保留各版本，不暴露 snapshot 或 storageName。`GET batches/{id}/activity` 返回该批次及其检测、附件、报告的审计摘要分页，仅包含动作、操作人、时间，沿用现有检疫读取权限。已移除附件的下载与预览返回 404。
+
 | 方法       | 相对路径                                      | 行为                                                    |
 | ---------- | --------------------------------------------- | ------------------------------------------------------- |
 | GET        | `catalog`、`supplier-options`、`batch-number` | 项目配置、供应商候选与 `BYYMMDDNN` 建议批次编号         |
@@ -219,15 +223,15 @@ npm run test:e2e
 | DELETE     | `batches/{id}`                                | 删除无检测记录的批次，正文 `{ expectedUpdatedAt }`      |
 | GET        | `batches/{id}`                                | 覆盖范围、检测、附件与历史报告版本                      |
 | POST       | `tests/{id}/attachments`                      | multipart字段file；查询参数传关联样本、项目、分类及版本 |
-| GET        | `attachments/{id}`、`reports/{id}`            | 受鉴权下载                                              |
-| GET        | `tests/{id}/preview`                          | 带草稿标识的Word预览                                    |
-| POST       | `tests/{id}/issue`                            | 传检测和批次版本；成功生成文件后保存不可变快照          |
+| GET        | `attachments/{id}`、`reports/{id}`            | 受鉴权下载；报告统一返回 PDF，历史 Word 在下载时转换    |
+| GET        | `tests/{id}/preview`                          | 带草稿标识的 PDF 预览                                   |
+| POST       | `tests/{id}/issue`                            | 传检测和批次版本；成功生成 PDF 后保存不可变快照         |
 | POST       | `tests/{id}/correction`、`tests/{id}/retest`  | 新草稿ID及版本；复检另传供应商                          |
 | GET        | `suppliers`                                   | 供应商、日期范围／类型、种类、方法、结果过滤，含明细    |
 
-编辑必须提供 `expectedUpdatedAt`，缺失或过期返回409；出具另传 `expectedBatchUpdatedAt`。出具重试返回已有报告，生成失败保留草稿。更正新建检测记录并关联原版本，旧Word继续可下载。事务记录操作者与审计快照。`quarantine_batches/tests/attachments/reports` 与 `files/quarantine/` 共同组成检疫备份范围。
+编辑必须提供 `expectedUpdatedAt`，缺失或过期返回409；出具另传 `expectedBatchUpdatedAt`。出具重试返回已有报告，生成失败保留草稿。更正新建检测记录并关联原版本；既有 Word 报告保留原件并在下载时转换为 PDF。PDF 渲染不可用、超时或转换结果无效返回503，文件读写失败返回500。事务记录操作者与审计快照。`quarantine_batches/tests/attachments/reports` 与 `files/quarantine/` 共同组成检疫备份范围。
 
-检疫批次编号首次保存后冻结，流水号一经分配不再回收。正式报告按 `{批次编号}{M|E|P}{YYMMDD}{NN}` 编号；ELISA 大小鼠共用 `E` 序列，更正版本沿用报告编号并递增独立版本号。报告编号保存在系统记录中，正式 Word 暂不打印该编号。
+检疫批次编号首次保存后冻结，流水号一经分配不再回收。正式报告按 `{批次编号}{M|E|P}{YYMMDD}{NN}` 编号；ELISA 大小鼠共用 `E` 序列，更正版本沿用报告编号并递增独立版本号。报告下载文件名为 `{检测类型}_{实验日期}_{批次号}_{报告编号}_v{版本}.pdf`，草稿以 `草稿` 替代报告编号和版本；ELISA 文件名区分小鼠和大鼠。
 
 检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
 

@@ -25,6 +25,7 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         chromium \
+        libreoffice-writer \
         fontconfig \
         fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
@@ -51,6 +52,7 @@ ENV CAGELEDGER_REPOSITORY_URL=https://git.cellnucle.us/hugo/cageledger
 ENV CAGELEDGER_BRANCH=main
 ENV CAGELEDGER_UPDATE_CHECK_ENABLED=false
 ENV CAGELEDGER_CHROMIUM_BIN=/usr/bin/chromium
+ENV CAGELEDGER_LIBREOFFICE_BIN=/usr/bin/libreoffice
 
 EXPOSE 5173
 

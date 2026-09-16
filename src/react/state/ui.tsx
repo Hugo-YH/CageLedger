@@ -1,4 +1,4 @@
-import { createContext, type Dispatch, type PropsWithChildren, useContext, useEffect, useReducer } from "react";
+import { createContext, type Dispatch, type PropsWithChildren, useContext, useEffect, useReducer, useRef } from "react";
 import {
   persistThemePreference,
   readStoredThemePreference,
@@ -54,10 +54,12 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
 
 const UiStateContext = createContext<UiState | null>(null);
 const UiDispatchContext = createContext<Dispatch<UiAction> | null>(null);
+const NavigationGuardContext = createContext<{ current: (() => Promise<boolean>) | null } | null>(null);
 const ResolvedThemeContext = createContext<"light" | "dark" | null>(null);
 
 export function UiProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(uiReducer, initialState, initialUiState);
+  const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
   const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
   const resolvedTheme = state.theme === "system" ? (systemDark ? "dark" : "light") : state.theme;
   useEffect(() => {
@@ -68,7 +70,9 @@ export function UiProvider({ children }: PropsWithChildren) {
   return (
     <UiStateContext value={state}>
       <UiDispatchContext value={dispatch}>
-        <ResolvedThemeContext value={resolvedTheme}>{children}</ResolvedThemeContext>
+        <NavigationGuardContext value={navigationGuard}>
+          <ResolvedThemeContext value={resolvedTheme}>{children}</ResolvedThemeContext>
+        </NavigationGuardContext>
       </UiDispatchContext>
     </UiStateContext>
   );
@@ -89,5 +93,11 @@ export function useUiState() {
 export function useUiDispatch() {
   const value = useContext(UiDispatchContext);
   if (!value) throw new Error("useUiDispatch must be used inside UiProvider");
+  return value;
+}
+
+export function useNavigationGuard() {
+  const value = useContext(NavigationGuardContext);
+  if (!value) throw new Error("Navigation guard requires UiProvider");
   return value;
 }

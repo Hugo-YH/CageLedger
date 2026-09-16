@@ -5,10 +5,9 @@ from urllib.parse import parse_qs, urlparse
 
 from server_app.config import QUARANTINE_FILES_PATH
 from server_app.db import connect_db
-from server_app.domains.quarantine import attachment_metadata, files, service, workflow
+from server_app.domains.quarantine import attachment_metadata, files, pdf, service, workflow, worklist
 from server_app.domains.quarantine import repository as repo
 from server_app.domains.quarantine.catalog import PROJECTS, TEMPLATE_VERSION
-from server_app.domains.quarantine.documents import generate
 from server_app.domains.quarantine.history import supplier_history
 from server_app.shared.concurrency import StaleWriteError
 from server_app.web.multipart import parse_multipart_upload
@@ -42,12 +41,18 @@ def handle(handler, method, path):
         handler.send_json({"error": "记录已存在，请刷新后查看"}, 409)
     except (ValueError, TypeError, KeyError) as exc:
         handler.send_json({"error": str(exc) or "检疫数据格式无效"}, 400)
+    except pdf.PdfRenderError as exc:
+        handler.send_json({"error": str(exc) or "PDF 渲染服务暂不可用，请稍后重试"}, 503)
     except OSError:
         handler.send_json({"error": "文件处理失败，未完成出具，请稍后重试"}, 500)
     return True
 
 
 def get(handler, conn, parts, params):
+    if parts in (["records"], ["reports"]):
+        return worklist.list_records(conn, params, reports=parts == ["reports"])
+    if len(parts) == 3 and parts[0] == "batches" and parts[2] == "activity":
+        return worklist.activity(conn, parts[1], params)
     if parts == ["catalog"]:
         return {"projects": PROJECTS, "templateVersion": TEMPLATE_VERSION}
     if parts == ["supplier-options"]:
@@ -62,19 +67,37 @@ def get(handler, conn, parts, params):
         return {"items": supplier_history(conn, params)}
     if len(parts) == 2 and parts[0] in {"attachments", "reports"}:
         item = repo.get(conn, parts[0], parts[1])
+        if parts[0] == "attachments" and item.get("removed"):
+            raise LookupError("附件已移除")
         if parts[0] == "attachments" and params.get("preview") == "1" and item["mime"].startswith("image/"):
             content, mime = files.preview(item, QUARANTINE_FILES_PATH)
             handler.send_download(content, "preview.png" if mime == "image/png" else item["name"], mime)
             return None
-        name = item["name"] if parts[0] == "attachments" else item["number"] + ".docx"
-        handler.send_download(
-            (QUARANTINE_FILES_PATH / item["storageName"]).read_bytes(), name, item.get("mime", files.DOCX_MIME)
+        if parts[0] == "attachments":
+            handler.send_download(
+                (QUARANTINE_FILES_PATH / item["storageName"]).read_bytes(), item["name"], item["mime"]
+            )
+            return None
+        name = files.report_download_filename(
+            item["snapshot"]["test"],
+            item["snapshot"]["batch"],
+            number=item.get("number", ""),
+            version=item.get("version"),
         )
+        content = (QUARANTINE_FILES_PATH / item["storageName"]).read_bytes()
+        if item.get("mime") == files.DOCX_MIME or item["storageName"].lower().endswith(".docx"):
+            content = pdf.convert_docx(content)
+        handler.send_download(content, name, files.PDF_MIME)
         return None
     if len(parts) == 3 and parts[0] == "tests" and parts[2] == "preview":
         test = repo.get(conn, "tests", parts[1])
-        data = generate(files.snapshot(conn, test), QUARANTINE_FILES_PATH, draft=True)
-        handler.send_download(data, "检疫报告-草稿.docx", files.DOCX_MIME)
+        document = files.snapshot(conn, test)
+        data = pdf.generate(document, QUARANTINE_FILES_PATH, draft=True)
+        handler.send_download(
+            data,
+            files.report_download_filename(document["test"], document["batch"], draft=True),
+            files.PDF_MIME,
+        )
         return None
     raise LookupError("接口不存在")
 

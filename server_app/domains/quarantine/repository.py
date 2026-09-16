@@ -163,6 +163,26 @@ def list_page(conn, table, params):
         source, order = "quarantine_batches", "updated_at DESC, id"
         where = "instr(lower(json_extract(payload, '$.name')), lower(?)) > 0"
         args = [params.get("search", "")]
+        state = params.get("state", "")
+        if state not in {"", "open", "completed"}:
+            raise ValueError("检疫状态无效")
+        if state:
+            where += " AND COALESCE(json_extract(payload, '$.completedAt'), '') " + (
+                "!= ''" if state == "completed" else "= ''"
+            )
+
+        method = params.get("method", "")
+        if method:
+            if method not in {"parasite", "pcr", "elisa", "elisa_mouse", "elisa_rat"}:
+                raise ValueError("不支持的检测类型")
+            methods = ("elisa_mouse", "elisa_rat") if method == "elisa" else (method,)
+            placeholders = ",".join("?" for _ in methods)
+            where += f""" AND EXISTS (
+                SELECT 1 FROM quarantine_tests t
+                WHERE t.batch_id = quarantine_batches.id
+                  AND json_extract(t.payload, '$.method') IN ({placeholders})
+            )"""
+            args.extend(methods)
     else:
         source, order = "intake_batches", "intake_date DESC, id"
         where = "json_extract(payload, '$.status') = 'received' AND (? = '' OR intake_date >= ?) AND (? = '' OR intake_date <= ?)"
@@ -184,6 +204,19 @@ def list_page(conn, table, params):
             f"SELECT payload FROM {source} WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", [*args, limit, offset]
         )
     ]
+    if table == "batches" and items:
+        by_id = {item["id"]: item for item in items}
+        for item in items:
+            item.update(recordCount=0, issuedCount=0, methods=[])
+        marks = ",".join("?" for _ in items)
+        for row in conn.execute(
+            f"SELECT batch_id, payload FROM quarantine_tests WHERE batch_id IN ({marks})", list(by_id)
+        ):
+            test, batch = json.loads(row[1]), by_id[row[0]]
+            batch["recordCount"] += 1
+            batch["issuedCount"] += int(test.get("state") == "issued")
+            if test["method"] not in batch["methods"]:
+                batch["methods"].append(test["method"])
     if table != "batches":
         from .workflow import decorate_intakes
 

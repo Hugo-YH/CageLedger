@@ -1,3 +1,4 @@
+import { useNavigationGuard } from "../../state/ui";
 import {
   AppstoreOutlined,
   AuditOutlined,
@@ -81,6 +82,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
   const dispatch = useUiDispatch();
   const logout = useLogout();
+  const navigationGuard = useNavigationGuard();
   const systemInfo = useSystemInfo();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const isMobileLayout = useIsMobileLayout();
@@ -98,6 +100,11 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   ];
 
   function navigate(view: WorkspaceView) {
+    void guardedNavigate(view);
+  }
+  async function guardedNavigate(view: WorkspaceView) {
+    if (view === ui.activeView) return;
+    if (navigationGuard.current && !(await navigationGuard.current())) return;
     if (view === "dashboard") preloadDashboard();
     persistWorkspaceView(view);
     dispatch({ type: "navigate", view });
@@ -110,6 +117,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   }
 
   async function signOut() {
+    if (navigationGuard.current && !(await navigationGuard.current())) return;
     await logout.mutateAsync();
     window.dispatchEvent(new CustomEvent("cageledger:session-changed"));
   }

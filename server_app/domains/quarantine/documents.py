@@ -3,11 +3,13 @@
 import json
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 from docx import Document
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
+from lxml import etree
 
 from .attachment_metadata import project_ids
 from .document_layout import (
@@ -20,8 +22,78 @@ from .document_layout import (
     replace_element,
     sample_table,
 )
+from .document_patterns import result_patterns, result_prefix, sized_result_pattern, template_name
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "resources" / "quarantine" / "templates"
+
+WORDPROCESSINGML = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+VML = "urn:schemas-microsoft-com:vml"
+OFFICE = "urn:schemas-microsoft-com:office:office"
+
+
+def normalize_style_order(content):
+    """Repair the known legacy style-order violation without changing style values."""
+    root = etree.fromstring(content)
+    style_tag = f"{{{WORDPROCESSINGML}}}style"
+    ui_priority_tag = f"{{{WORDPROCESSINGML}}}uiPriority"
+    quick_format_tag = f"{{{WORDPROCESSINGML}}}qFormat"
+    changed = False
+    for style in root.findall(style_tag):
+        ui_priority = style.find(ui_priority_tag)
+        quick_format = style.find(quick_format_tag)
+        if ui_priority is None:
+            continue
+        first_after_ui_priority = min(
+            (
+                style.index(element)
+                for element in (
+                    style.find(f"{{{WORDPROCESSINGML}}}semiHidden"),
+                    style.find(f"{{{WORDPROCESSINGML}}}unhideWhenUsed"),
+                    quick_format,
+                )
+                if element is not None
+            ),
+            default=len(style),
+        )
+        if style.index(ui_priority) > first_after_ui_priority:
+            style.remove(ui_priority)
+            style.insert(first_after_ui_priority, ui_priority)
+            changed = True
+    if not changed:
+        return content
+    return etree.tostring(root, encoding="UTF-8", xml_declaration=True, standalone=True)
+
+
+def normalize_footer_shape_ids(content):
+    """Give only duplicate legacy VML shapes a distinct ID in exported footers."""
+    root = etree.fromstring(content)
+    shape_tag = f"{{{VML}}}shape"
+    office_spid = f"{{{OFFICE}}}spid"
+    reserved = {shape.get("id") for shape in root.iter(shape_tag) if shape.get("id")}
+    seen, changed = set(), False
+    for shape in root.iter(shape_tag):
+        shape_id = shape.get("id")
+        if not shape_id or shape_id not in seen:
+            if shape_id:
+                seen.add(shape_id)
+            continue
+        prefix, separator, suffix = shape_id.rpartition("s")
+        if not separator or not suffix.isdigit():
+            raise ValueError(f"Unsupported duplicate VML shape ID: {shape_id}")
+        next_number = int(suffix) + 1
+        replacement = f"{prefix}{separator}{next_number}"
+        while replacement in reserved:
+            next_number += 1
+            replacement = f"{prefix}{separator}{next_number}"
+        shape.set("id", replacement)
+        if shape.get(office_spid) == shape_id:
+            shape.set(office_spid, replacement)
+        seen.add(replacement)
+        reserved.add(replacement)
+        changed = True
+    if not changed:
+        return content
+    return etree.tostring(root, encoding="UTF-8", xml_declaration=True, standalone=True)
 
 
 def chinese_date(value):
@@ -34,9 +106,9 @@ def chinese_date(value):
 def generate(snapshot, root, *, draft=False):
     test = snapshot["test"]
     method = test["method"]
-    template_name = "pcr_small" if method == "pcr" and len(test["samples"]) <= 6 else method
-    document = Document(TEMPLATES / f"{template_name}.docx")
-    manifest = json.loads((TEMPLATES / "manifest.json").read_text(encoding="utf-8"))[template_name]
+    selected_template = template_name(test, snapshot["attachments"])
+    document = Document(TEMPLATES / f"{selected_template}.docx")
+    manifest = json.loads((TEMPLATES / "manifest.json").read_text(encoding="utf-8"))[selected_template]
     body = list(document.element.body)
     for element in body:
         if element.tag == qn("w:p"):
@@ -81,32 +153,47 @@ def generate(snapshot, root, *, draft=False):
                 paragraph_text(
                     paragraph, "试剂盒批号：" + "；".join(dict.fromkeys(p.get("lot", "") for p in test["projects"]))
                 )
-    pictures = next(
-        t for t in tables[1:] if len(Table(t, document).columns) == 2 and not Table(t, document).cell(0, 0).text
-    )
     entries = image_entries(test, snapshot["attachments"])
-    replace_element(pictures, [image_table(pictures, document, entries, root, manifest["imageSizes"])])
     result_heading = next(el for el in body if el.tag == qn("w:p") and "实验结果统计表" in Paragraph(el, document).text)
+    pictures = [
+        el
+        for el in body[: body.index(result_heading)]
+        if el.tag == qn("w:tbl") and not Table(el, document).cell(0, 0).text
+    ]
+    offset = 0
+    for index, picture in enumerate(pictures):
+        table = Table(picture, document)
+        capacity = len(table.rows) // 2 * len(table.columns)
+        chunk = entries[offset:] if index == len(pictures) - 1 else entries[offset : offset + capacity]
+        replacement = (
+            [
+                image_table(
+                    picture, document, chunk, root, manifest["imageSizes"][offset:] or manifest["imageSizes"][-1:]
+                )
+            ]
+            if chunk or index == 0
+            else []
+        )
+        replace_element(picture, replacement)
+        offset += capacity
     legend = next(el for el in body if el.tag == qn("w:p") and Paragraph(el, document).text.startswith("注："))
     region = body[body.index(result_heading) + 1 : body.index(legend)]
-    heading_pattern = next(el for el in region if el.tag == qn("w:p") and Paragraph(el, document).text.strip())
-    result_patterns = [el for el in region if el.tag == qn("w:tbl")]
+    patterns = result_patterns(region, document)
+    prefix = result_prefix(patterns, document)
     for element in region:
         element.getparent().remove(element)
-    prefix = "6" if method == "pcr" else "5" if method.startswith("elisa") else "4"
-    heading_paragraph = Paragraph(result_heading, document)
-    paragraph_text(heading_paragraph, f"{prefix}、实验结果统计表")
-    for numbering in result_heading.xpath("./w:pPr/w:numPr"):
-        numbering.getparent().remove(numbering)
     for index, project in enumerate(test["projects"]):
+        heading_pattern, pattern = sized_result_pattern(patterns, document, project, controls=method != "parasite")
         heading = copy_paragraph(heading_pattern, document, f"{prefix}-{index + 1}{project['name']}")
         Paragraph(heading, document).paragraph_format.keep_with_next = True
         legend.addprevious(heading)
-        pattern = result_patterns[min(index, len(result_patterns) - 1)]
         for element in horizontal_result(pattern, document, project, test["samples"], controls=method != "parasite"):
             legend.addprevious(element)
-    paragraph_text(Paragraph(legend, document), "注：“-”代表阴性，“＋”代表阳性，“±”代表可疑，“/”代表空白。")
-    signature = next(el for el in body if el.tag == qn("w:p") and Paragraph(el, document).text.startswith("检测人："))
+    signature = next(
+        el
+        for el in body
+        if el.tag == qn("w:p") and Paragraph(el, document).text.strip().startswith(("检测人：", "检验人："))
+    )
     # Empty filler paragraphs in the examples located the signature; dynamic content flows naturally instead.
     for element in body[body.index(legend) + 1 : body.index(signature)]:
         if element.tag == qn("w:p") and not Paragraph(element, document).text.strip():
@@ -142,8 +229,33 @@ def generate(snapshot, root, *, draft=False):
         for section in document.sections:
             for footer in (section.footer, section.first_page_footer, section.even_page_footer):
                 footer.paragraphs[0].add_run("  草稿 · 仅供预览")
+    # Detached table clones are invisible to python-docx's next-ID allocator.
+    for index, drawing in enumerate(document.element.xpath(".//wp:docPr"), 1):
+        drawing.set("id", str(index))
     output = BytesIO()
     document.save(output)
+    return preserve_parts(output.getvalue(), TEMPLATES / f"{selected_template}.docx", draft=draft)
+
+
+def preserve_parts(content, template, *, draft):
+    """Keep untouched source parts byte-for-byte, including their XML serialization."""
+    output = BytesIO()
+    with ZipFile(template) as original, ZipFile(BytesIO(content)) as generated, ZipFile(output, "w") as result:
+        retained = {
+            name
+            for name in original.namelist()
+            if name in {"word/styles.xml", "word/numbering.xml", "word/fontTable.xml"}
+            or name.startswith(("word/theme/", "word/header", "word/_rels/header"))
+            or (not draft and name.startswith(("word/footer", "word/_rels/footer")))
+        }
+        for entry in generated.infolist():
+            source = original if entry.filename in retained else generated
+            part = source.read(entry.filename)
+            if entry.filename == "word/styles.xml":
+                part = normalize_style_order(part)
+            elif entry.filename.startswith("word/footer") and entry.filename.endswith(".xml"):
+                part = normalize_footer_shape_ids(part)
+            result.writestr(entry, part)
     return output.getvalue()
 
 
@@ -186,9 +298,8 @@ def image_entries(test, attachments):
         entries.append(
             {
                 "attachment": attachment,
-                "caption": " / ".join(
-                    filter(None, [project or attachment["name"], sample, attachment.get("caption", "")])
-                ),
+                "caption": attachment.get("caption")
+                or " / ".join(filter(None, [project or attachment["name"], sample])),
             }
         )
     return entries

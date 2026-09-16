@@ -19,13 +19,24 @@ export function useQuarantineQuery<T>(path: string, enabled = true, retainList =
     queryKey: [...queryKeys.quarantine, path],
     queryFn: ({ signal }) => requestJson<T>(`${base}/${path}`, { signal }),
     enabled,
-    placeholderData: (previous, previousQuery) =>
-      retainList && String(previousQuery?.queryKey.at(-1)).split("?")[0] === path.split("?")[0] ? previous : undefined,
+    placeholderData: (previous, previousQuery) => {
+      const previousPath = String(previousQuery?.queryKey.at(-1));
+      const sameMethod =
+        new URLSearchParams(previousPath.split("?")[1]).get("method") ===
+        new URLSearchParams(path.split("?")[1]).get("method");
+      return retainList && sameMethod && previousPath.split("?")[0] === path.split("?")[0] ? previous : undefined;
+    },
   });
 }
-export function useQuarantineBatches(search: string, page: number, enabled = true) {
+export function useQuarantineBatches(
+  search: string,
+  page: number,
+  enabled = true,
+  method?: QuarantineMethod | "elisa",
+  state = "",
+) {
   return useQuarantineQuery<QuarantinePage<QuarantineBatch>>(
-    `batches?search=${encodeURIComponent(search)}&offset=${(page - 1) * 30}`,
+    `batches?search=${encodeURIComponent(search)}&offset=${(page - 1) * 30}${method ? `&method=${method}` : ""}&state=${state}`,
     enabled,
     true,
   );

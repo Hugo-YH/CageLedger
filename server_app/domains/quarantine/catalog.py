@@ -1,4 +1,4 @@
-TEMPLATE_VERSION = "quarantine-2"
+TEMPLATE_VERSION = "quarantine-3"
 PROJECTS = {
     "parasite": ["体内寄生虫", "体外寄生虫"],
     "elisa_mouse": [
