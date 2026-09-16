@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.2.14",
+    build: "205",
+    releasedAt: "2026-09-16",
+    title: "已发起结算流程信息保护",
+    items: [
+      "汇总表同步不再覆盖已发起、已归档或已锁定流程关联的数量统计表",
+      "预览、打印及 PDF、Excel 导出使用保存的结算版本，修复旧接口版本匹配和导出缓存问题",
+      "采用新数据需撤回后重新生成或明确修订；本次不自动恢复此前被覆盖的历史源表",
+    ],
+  },
+  {
     version: "1.2.13",
     build: "204",
     releasedAt: "2026-09-11",

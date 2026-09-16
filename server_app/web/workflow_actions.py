@@ -425,6 +425,7 @@ class WorkflowActionsMixin:
                 "reimbursement_records::",
                 "quantity_sheets::settlement_candidates::",
             )
+            invalidate_all_pdf_cache()
             self.send_json(
                 {
                     "workflow": workflow,
@@ -550,6 +551,7 @@ class WorkflowActionsMixin:
                 "reimbursement_records::",
                 "quantity_sheets::settlement_candidates::",
             )
+            invalidate_all_pdf_cache()
             self.send_json(
                 {
                     "ok": True,

@@ -23,6 +23,7 @@ from server_app.domains.billing.charging import (
     occupancy_active_on_date,
     statement_billing_unit_from_lines,
 )
+from server_app.domains.billing.frozen import frozen_statement
 from server_app.domains.billing.profiles import billing_profile_for_occupancy, occupancy_animal_count
 from server_app.domains.billing.statements import (
     distinct_funding_text,
@@ -76,6 +77,12 @@ def generate_quantity_sheet_statement(conn, sheet_id, payload, actor, ports):
     for item in sheets:
         validate_quantity_sheet_permission(actor, item)
     pi_name = clean_text(sheet.get("pi", ""))
+    if not persist:
+        frozen = frozen_statement(
+            conn, sheet["month"], pi_name, "quantity_sheet", source_id=sheet_id, iacuc=sheet_iacuc
+        )
+        if frozen is not None:
+            return *frozen, []
     principal_type_by_pi = ports.read_principal_type_by_pi(conn)
     principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)
     # IACUC 分表阶段不应用 PI 免费笼位，避免跨伦理号结算失真。
@@ -164,6 +171,13 @@ def generate_billing_statement(conn, payload, actor, ports):
         raise ValueError("结算单状态只能是 draft 或 locked")
     if not iacuc:
         raise ValueError("请先选择伦理号后再生成结算单")
+
+    if not persist:
+        if not actor:
+            raise PermissionError("请先登录")
+        frozen = frozen_statement(conn, month, requested_pi, "cage_map", iacuc=iacuc)
+        if frozen is not None:
+            return *frozen, []
 
     occupancies = ports.read_occupancies_for_billing(conn, month, iacuc=iacuc)
     applications_by_iacuc = ports.read_applications_by_iacuc(conn)
@@ -325,6 +339,13 @@ def generate_billing_statement_by_pi(conn, payload, actor, ports):
         raise ValueError("sourceType 只能是 cage_map 或 quantity_sheet")
     if not pi_name:
         raise ValueError("按 PI 合表需要提供项目负责人")
+
+    if not persist:
+        if not actor:
+            raise PermissionError("请先登录")
+        frozen = frozen_statement(conn, month, pi_name, f"pi_merged_{source_type}")
+        if frozen is not None:
+            return *frozen, []
 
     principal_type_by_pi = ports.read_principal_type_by_pi(conn)
     principal_type = principal_type_by_pi.get(pi_name, BILLING_PRINCIPAL_INDEPENDENT)

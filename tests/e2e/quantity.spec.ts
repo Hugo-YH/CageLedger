@@ -46,6 +46,15 @@ test.afterEach(async ({ page }) => {
 
 test("save and delete a quantity sheet in the ephemeral database", async ({ page }) => {
   await page.setViewportSize({ width: 1180, height: 900 });
+  const iacucCandidates = [
+    { iacuc: "Z2025063", project: "E2E IACUC 候选项目", pi: "E2E负责人" },
+    { iacuc: "E2E-IACUC-001", project: "E2E 保存测试项目", pi: "E2E负责人" },
+  ];
+  await page.route("**/api/iacuc-index?*", (route) => {
+    const query = new URL(route.request().url()).searchParams.get("q")?.toUpperCase() || "";
+    const items = iacucCandidates.filter((item) => item.iacuc.includes(query));
+    return route.fulfill({ json: { items, count: items.length } });
+  });
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");

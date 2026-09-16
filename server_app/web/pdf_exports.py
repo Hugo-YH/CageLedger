@@ -1,8 +1,10 @@
 import hashlib
+import json
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from server_app.domains.billing.frozen import frozen_statement
 from server_app.pdf import (
     billing_statement_filename,
     build_pdf_zip,
@@ -52,6 +54,7 @@ def _render_code_fingerprint() -> str:
         root / "domains" / "billing" / "allowance.py",
         root / "domains" / "billing" / "charging.py",
         root / "domains" / "billing" / "monthly_summary.py",
+        root / "domains" / "billing" / "frozen.py",
     ]
     digest = hashlib.sha256()
     for path in sources:
@@ -149,7 +152,8 @@ def download_billing_statement_pdf(
     )
     try:
         with connect_db() as conn:
-            sheets = list_quantity_sheets_by_month_pi(conn, payload["month"], payload["pi"])
+            frozen = frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
+            sheets = [frozen[0]] if frozen else list_quantity_sheets_by_month_pi(conn, payload["month"], payload["pi"])
             if not sheets:
                 raise ValueError("未找到该 PI 在结算月份内的数量统计表")
             for sheet in sheets:
@@ -371,14 +375,20 @@ def _start_billing_export(
             actor=user,
         )
 
+    with connect_db() as conn:
+        documents = [
+            frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
+            for payload in items
+        ]
+
     def render(progress):
         files = []
-        for index, payload in enumerate(items, start=1):
+        for index, (payload, frozen) in enumerate(zip(items, documents, strict=True), start=1):
             files.append(
                 (
                     billing_statement_filename(payload),
                     _render_billing_pdf(
-                        payload, connect_db=connect_db, generate_statement=generate_statement, actor=user
+                        payload, connect_db=connect_db, generate_statement=generate_statement, actor=user, frozen=frozen
                     ),
                 )
             )
@@ -423,7 +433,8 @@ def _read_billing_items(requested, user, connect_db, list_sheets, validate_permi
             )
             if payload["sourceType"] != "quantity_sheet":
                 raise ValueError("当前仅支持数量统计表来源的结算导出")
-            sheets = list_sheets(conn, payload["month"], payload["pi"])
+            frozen = frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
+            sheets = [frozen[0]] if frozen else list_sheets(conn, payload["month"], payload["pi"])
             if not sheets:
                 raise ValueError("未找到该 PI 在结算月份内的数量统计表")
             for sheet in sheets:
@@ -447,17 +458,23 @@ def _enqueue_quantity_pdf(sheet, owner_id, *, priority=0):
 
 def _enqueue_billing_pdf(month, pi, owner_id, *, connect_db, generate_statement, actor, priority=0):
     payload = statement_payload({"month": month, "pi": pi, "sourceType": "quantity_sheet"})
+    frozen = _frozen_billing_pdf(payload, connect_db)
+    render_priority = PDF_RENDER_PRIORITY_WARM if priority >= PDF_PRIORITY_WARM else 0
     return pdf_export_cache.enqueue_artifact(
         owner_id=owner_id,
-        key=billing_pdf_cache_key(month, pi),
+        key=_frozen_pdf_cache_key(frozen) if frozen else billing_pdf_cache_key(month, pi),
         filename=billing_statement_filename(payload),
         content_type="application/pdf",
-        render=lambda: _generate_billing_pdf(
-            payload,
-            connect_db=connect_db,
-            generate_statement=generate_statement,
-            actor=actor,
-            render_priority=PDF_RENDER_PRIORITY_WARM if priority >= PDF_PRIORITY_WARM else 0,
+        render=(
+            (lambda: render_billing_statement_pdf(*frozen, priority=render_priority))
+            if frozen
+            else lambda: _generate_billing_pdf(
+                payload,
+                connect_db=connect_db,
+                generate_statement=generate_statement,
+                actor=actor,
+                render_priority=render_priority,
+            )
         ),
         priority=priority,
     )
@@ -467,7 +484,12 @@ def _render_quantity_pdf(sheet):
     return pdf_export_cache.render_cached(quantity_pdf_cache_key(sheet), lambda: render_quantity_sheet_pdf(sheet))
 
 
-def _render_billing_pdf(payload, *, connect_db, generate_statement, actor):
+def _render_billing_pdf(payload, *, connect_db, generate_statement, actor, frozen=None):
+    frozen = frozen if frozen is not None else _frozen_billing_pdf(payload, connect_db)
+    if frozen:
+        return pdf_export_cache.render_cached(
+            _frozen_pdf_cache_key(frozen), lambda: render_billing_statement_pdf(*frozen)
+        )
     key = billing_pdf_cache_key(payload["month"], payload["pi"], payload["sourceType"])
     return pdf_export_cache.render_cached(
         key,
@@ -475,6 +497,19 @@ def _render_billing_pdf(payload, *, connect_db, generate_statement, actor):
             payload, connect_db=connect_db, generate_statement=generate_statement, actor=actor
         ),
     )
+
+
+def _frozen_billing_pdf(payload, connect_db):
+    with connect_db() as conn:
+        return frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
+
+
+def _frozen_pdf_cache_key(document):
+    statement, _ = document
+    # A withdrawn draft can reuse its version ID when explicitly regenerated.
+    # Include the content so an older queued export cannot poison that cache.
+    digest = hashlib.sha256(json.dumps(document, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return f"billing-version:{PDF_RENDER_VERSION}:{PDF_RENDER_CODE_FINGERPRINT}:{statement['id']}:{digest}"
 
 
 def _generate_billing_pdf(payload, *, connect_db, generate_statement, actor, render_priority=0):

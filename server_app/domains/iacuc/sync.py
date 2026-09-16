@@ -15,6 +15,7 @@ from server_app.domains.billing import (
 from server_app.domains.dashboard_overview import invalidate_dashboard_overview_cache
 from server_app.domains.iacuc.importer import normalize_application_amount, normalize_application_date
 from server_app.domains.iacuc.rules import normalize_iacuc_number
+from server_app.domains.workflow.constants import FROZEN_WORKFLOW_STATUSES
 from server_app.repositories.billing_candidates import (
     mark_all_billing_candidate_snapshots_stale,
     mark_billing_candidate_snapshots_stale_by_pi,
@@ -26,6 +27,7 @@ from server_app.repositories.entities import (
 )
 from server_app.repositories.iacuc import replace_experiment_applications
 from server_app.repositories.payload import dump_json
+from server_app.repositories.workflow_documents import protected_quantity_sheet_ids
 from server_app.shared import clean_text, new_id, now_iso
 from server_app.shared.concurrency import require_current_version
 
@@ -118,9 +120,14 @@ def source_iacuc_for_placement_tasks(conn):
 
 
 def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imported_at, source_iacuc_by_batch=None):
+    protected_ids = (
+        protected_quantity_sheet_ids(conn, FROZEN_WORKFLOW_STATUSES) if table == "quantity_sheets" else set()
+    )
     rows = conn.execute(f"SELECT * FROM {table}").fetchall()
     changes = []
     for row in rows:
+        if row["id"] in protected_ids:
+            continue
         payload = json.loads(row["payload"])
         if table == "placement_tasks":
             source_iacuc = (source_iacuc_by_batch or {}).get(clean_text(payload.get("sourceBatchId", "")), "")
