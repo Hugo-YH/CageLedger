@@ -39,11 +39,11 @@
 }
 
 .VPDoc h1 {
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
 }
 
 .VPDoc .vp-doc a {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .VPDoc .vp-doc h2 {
@@ -122,7 +122,7 @@
 
 .VPHome .VPHero .name,
 .VPHome .VPHero .text {
-  letter-spacing: -0.025em;
+  letter-spacing: normal;
 }
 
 .VPHome .VPFeature {
@@ -144,7 +144,7 @@
   min-height: 40px;
   margin-bottom: var(--cl-space-4);
   color: var(--vp-c-text-2);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .cageledger-doc-contributors p {
@@ -158,7 +158,7 @@
 
 .cageledger-doc-contributors strong {
   color: var(--vp-c-text-2);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 @media (max-width: 639px) {

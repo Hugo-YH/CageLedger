@@ -86,7 +86,10 @@ for (const recording of [false, true]) {
         ".workflow-reimbursement-remove",
       ]) {
         const control = fields.locator(selector).first();
-        await expect(control).toHaveCSS("height", "32px");
+        await expect(control).toHaveCSS(
+          "height",
+          viewport.width < 768 ? (selector === ".workflow-reimbursement-remove" ? "44px" : "40px") : "32px",
+        );
         const box = await control.boundingBox();
         if (!box) throw new Error(`控件未显示: ${selector}`);
         expect(box.x).toBeGreaterThanOrEqual(0);
@@ -155,7 +158,7 @@ test("manual selection wins over a slow select-all response", async ({ page }) =
   await expect.poll(() => Boolean(pending)).toBe(true);
   await page.getByRole("checkbox", { name: "选择 甲 2026-08 结算项", exact: true }).check();
   await pending?.fulfill({ json: list });
-  await expect(page.getByLabel("结算批量操作")).toContainText("已选 1 项");
+  await expect(page.getByLabel("结算批量操作", { exact: true })).toContainText("已选 1 项");
   await expect(all).not.toBeChecked();
   await expect(page.getByRole("checkbox", { name: "选择 乙 2026-08 结算项", exact: true })).not.toBeChecked();
 });
@@ -173,7 +176,10 @@ test("workflow details open immediately, ignore closed requests, and retry acces
   await openWorkflowCenter(page);
   const first = page.getByRole("row").filter({ hasText: "甲" }).getByRole("button", { name: "查看", exact: true });
   const second = page.getByRole("row").filter({ hasText: "乙" }).getByRole("button", { name: "查看", exact: true });
-  await first.click();
+  // Exercise focus restoration from a keyboard-opened dialog. Mouse clicks in
+  // WebKit do not assign focus to buttons.
+  await first.focus();
+  await first.press("Enter");
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("status", { name: /流程详情/ })).toBeVisible();
   await expect.poll(() => requests.has(workflows[0].id)).toBe(true);
@@ -196,7 +202,10 @@ test("workflow details open immediately, ignore closed requests, and retry acces
   ]) {
     await page.setViewportSize(viewport);
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "重试" })).toHaveCSS("height", "32px");
+    await expect(dialog.getByRole("button", { name: "重试" })).toHaveCSS(
+      "height",
+      viewport.width < 768 ? "44px" : "32px",
+    );
     const bounds = await dialog.boundingBox();
     if (!bounds) throw new Error("流程详情弹窗未显示");
     expect(bounds.x).toBeGreaterThanOrEqual(0);

@@ -15,7 +15,7 @@ test("desktop inspection help buttons remain circular at supported widths", asyn
   for (const viewport of [
     { width: 1362, height: 652 },
     { width: 1180, height: 800 },
-    { width: 761, height: 900 },
+    { width: 768, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
     const box = await helpButton.boundingBox();

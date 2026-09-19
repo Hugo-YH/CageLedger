@@ -105,7 +105,7 @@ export function MobileNavigation({
         </TabBar>
       </div>
       <Popup
-        bodyStyle={{ borderRadius: "16px 16px 0 0" }}
+        bodyStyle={{ borderRadius: "8px 8px 0 0" }}
         destroyOnClose
         position="bottom"
         visible={open}

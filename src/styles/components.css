@@ -33,7 +33,7 @@
 .workflow-statement-toggle.active {
   border-color: var(--primary);
   background: var(--surface-soft);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .workflow-version-list {
@@ -274,9 +274,9 @@
   box-shadow: none;
   opacity: 0.8;
   transition:
-    opacity 120ms ease,
-    background 120ms ease,
-    color 120ms ease;
+    opacity var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
 
 .quantity-date-picker-button:hover,
@@ -302,6 +302,15 @@
 .quantity-date-calendar {
   width: 280px;
   max-width: calc(100vw - 48px);
+}
+
+@media (width < 768px) {
+  .quantity-date-picker-button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 .quantity-change-editor {
@@ -371,8 +380,8 @@
   background: var(--warning-soft);
   box-shadow: inset 4px 0 0 var(--amber);
   transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease;
+    background var(--motion-base) var(--ease-standard),
+    box-shadow var(--motion-base) var(--ease-standard);
 }
 
 .quantity-saved-list tbody tr.recent-saved-row:hover {
@@ -462,8 +471,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.intake-form-grid textarea,
-.intake-form-grid input,
 .intake-field-row.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -562,9 +569,7 @@
 }
 
 [data-ui="workspace-toolbar"] .app-command-bar-actions button {
-  height: 32px;
-  min-height: 32px;
-  font-size: 14px;
+  min-height: var(--control-height);
   white-space: nowrap;
 }
 
@@ -719,7 +724,7 @@
   border-top: 1px solid var(--cl-color-border-secondary);
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-ui="workspace-toolbar"] {
     flex-direction: column;
     align-items: stretch;
@@ -738,35 +743,12 @@
  * previously won the cascade (apple-ux / ux-foundation). */
 .panel {
   background: var(--surface-raised);
-  border-color: var(--card-border);
   border-radius: 8px;
-  padding: 16px;
+  padding: 24px;
   min-width: 0;
   position: relative;
   box-shadow: var(--shadow-sm);
-  transition:
-    border-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard),
-    transform var(--motion-base) var(--ease-emphasis);
-}
-
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: var(--shadow-inset);
-}
-
-.panel:hover {
-  border-color: color-mix(in srgb, var(--primary) 18%, transparent);
-  box-shadow: var(--shadow-sm);
-}
-
-.panel:focus-within {
-  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
-  box-shadow: var(--focus-ring);
+  border: 1px solid var(--card-border);
 }
 
 .panel.large {
@@ -779,30 +761,9 @@
   gap: 16px;
   align-items: flex-start;
   margin-bottom: 16px;
-  padding-bottom: 12px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
-}
-
-.panel .panel-head {
-  position: sticky;
-  top: 14px;
-  z-index: var(--z-sticky);
-  margin: -4px -4px 16px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--surface), var(--surface-soft));
-  box-shadow: var(--shadow-lift);
-  backdrop-filter: blur(14px);
-}
-
-.panel .panel-head::after {
-  content: "";
-  position: absolute;
-  inset: auto 18px -10px;
-  height: 10px;
-  pointer-events: none;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 55%, transparent), transparent);
+  min-height: 40px;
 }
 
 .panel-head-actions {
@@ -860,12 +821,6 @@
   text-align: right;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .table-actions > button:hover:not(:disabled) {
-    transform: translateY(-1px);
-  }
-}
-
 @media (prefers-contrast: more) {
   .panel,
   .field-cluster,
@@ -890,15 +845,6 @@
 
 /* Panel headers, table surfaces and form notices (migrated from
  * ux-foundation.css). */
-.panel > .panel-head {
-  min-height: 48px;
-  padding: 12px 16px;
-}
-
-.panel > .panel-head h2 {
-  font-size: 16px;
-  letter-spacing: -0.015em;
-}
 
 .table-wrap {
   border-radius: 8px;
@@ -956,7 +902,7 @@
   cursor: col-resize;
   touch-action: none;
   opacity: 0;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--motion-fast) var(--ease-out);
 }
 
 .app-data-table .react-resizable-handle::after {
@@ -970,8 +916,8 @@
   content: "";
   transform: translate(-50%, -50%);
   transition:
-    background-color 120ms ease-out,
-    height 120ms ease-out;
+    background-color var(--motion-fast) var(--ease-out),
+    height var(--motion-fast) var(--ease-out);
 }
 
 .app-data-table th:hover .react-resizable-handle,
@@ -1031,7 +977,7 @@
 
 [data-ui="list-refresh"][data-active="true"] {
   opacity: 1;
-  transition: opacity var(--motion-fast) var(--ease-standard) 180ms;
+  transition: opacity var(--motion-fast) var(--ease-standard) var(--motion-base);
 }
 
 [data-ui="page-skeleton"].page-skeleton-page,
@@ -1127,7 +1073,7 @@
 }
 
 /* Shared mobile layout adjustments (migrated from responsive.css). */
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-ui="page-skeleton"] {
     padding: 16px;
   }
@@ -1157,7 +1103,8 @@
   }
 
   .panel {
-    padding: 16px;
+    padding: 24px;
+    border: 1px solid var(--card-border);
   }
 
   .panel.large {
@@ -1167,6 +1114,7 @@
   .panel-head {
     display: grid;
     gap: 8px;
+    min-height: 40px;
   }
 
   .field-cluster {

@@ -11,7 +11,7 @@ import {
   useQuantitySheets,
 } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
-import { ActionButton, CommandBar, DataTable } from "../../../components/ui";
+import { ActionButton, CommandBar, DataTable, RowActions } from "../../../components/ui";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
@@ -121,17 +121,25 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       width: 220,
       align: "right",
       render: (_, item) => (
-        <Space size={4} className="table-actions">
+        <RowActions
+          ariaLabel={`${item.iacuc}更多操作`}
+          lowFrequencyActions={[
+            {
+              key: `delete-${item.id}`,
+              label: "删除",
+              danger: true,
+              disabled: list.isFetching,
+              onClick: () => setDeleteId(item.id),
+            },
+          ]}
+        >
           <Button disabled={list.isFetching} onClick={() => setViewId(item.id)}>
             预览
           </Button>
           <Button disabled={list.isFetching} onClick={() => setEditId(item.id)}>
             编辑
           </Button>
-          <Button danger disabled={list.isFetching} onClick={() => setDeleteId(item.id)}>
-            删除
-          </Button>
-        </Space>
+        </RowActions>
       ),
     },
   ];

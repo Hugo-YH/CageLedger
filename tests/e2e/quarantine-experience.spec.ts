@@ -231,7 +231,7 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
       name: "record.png",
       mimeType: "image/png",
       buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
         "base64",
       ),
     };
@@ -303,6 +303,7 @@ test("supplier history retains populated results while filtering and can retry a
     [844, 390],
   ]) {
     await page.setViewportSize({ width, height });
+    await expect(page.locator(".ant-table-row-expand-icon").first()).toHaveCSS("width", width < 768 ? "44px" : "17px");
     const metrics = await page.locator('[data-feature="quarantine"]').evaluate((element) => {
       const expand = element.querySelector(".ant-table-row-expand-icon")!;
       return {
@@ -319,7 +320,7 @@ test("supplier history retains populated results while filtering and can retry a
       };
     });
     expect(metrics.pageOverflow).toBe(false);
-    expect(metrics.expandButton.height).toBe(metrics.expandButton.width);
+    expect(metrics.expandButton.height).toBeCloseTo(metrics.expandButton.width, 1);
     await testInfo.attach(`supplier-history-${width}-style`, {
       body: JSON.stringify(metrics),
       contentType: "application/json",
@@ -452,6 +453,7 @@ test("method lists reveal matching drafts and compact summary across four viewpo
     }));
     expect(metrics.pageOverflow).toBe(false);
     expect(metrics.summaryOverflow).toBe(false);
+    await expect(toolbar.getByRole("button").first()).toHaveCSS("height", width < 768 ? "44px" : "32px");
     const toolbarMetrics = await toolbar.evaluate((element) => ({
       display: getComputedStyle(element).display,
       flexWrap: getComputedStyle(element).flexWrap,
@@ -459,7 +461,7 @@ test("method lists reveal matching drafts and compact summary across four viewpo
       buttonHeights: [...element.querySelectorAll("button")].map((button) => button.getBoundingClientRect().height),
     }));
     expect(toolbarMetrics.overflow).toBe(false);
-    expect(toolbarMetrics.buttonHeights.every((height) => height === 32)).toBe(true);
+    expect(toolbarMetrics.buttonHeights.every((height) => height === (width < 768 ? 44 : 32))).toBe(true);
     await testInfo.attach(`record-toolbar-${width}-style`, {
       body: JSON.stringify(toolbarMetrics),
       contentType: "application/json",

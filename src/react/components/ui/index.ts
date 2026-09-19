@@ -1,9 +1,10 @@
 export { ActionButton, type ActionButtonProps, type ActionTone } from "./ActionButton";
 export { AntdProvider } from "./AntdProvider";
-export { CommandBar } from "./CommandBar";
+export { CommandBar, type CommandBarProps, type LowFrequencyAction } from "./CommandBar";
 export { DataTable } from "./DataTable";
 export { DateInput } from "./DateInput";
 export { ListRefreshStatus } from "./ListRefreshStatus";
+export { RowActions } from "./RowActions";
 export { Dialog } from "./Dialog";
 export { Feedback } from "./Feedback";
 export { FormField } from "./FormField";

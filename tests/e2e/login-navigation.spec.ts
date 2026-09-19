@@ -65,7 +65,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openWorkflowCenter(page);
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
   const billingMenu = await openBillingNavigation(page);
-  const useMobile = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
+  const useMobile = await page.evaluate(() => window.matchMedia("(max-width: 767px)").matches);
   if (useMobile) {
     await billingMenu.getByText("汇总导出", { exact: true }).click();
   } else {

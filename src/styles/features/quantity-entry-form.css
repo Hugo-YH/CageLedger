@@ -1,6 +1,8 @@
 /* Quantity entry form: one layout owner for the workspace and edit portal. */
 .react-quantity-layout .quantity-sheet-fields {
   container: quantity-form / inline-size;
+  width: 100%;
+  max-width: var(--cl-form-max-width);
   display: grid;
   min-width: 0;
   gap: 16px;
@@ -30,11 +32,11 @@
 }
 
 .react-quantity-layout .quantity-field-group-basic {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .react-quantity-layout .quantity-field-group-project {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .react-quantity-layout .quantity-ant-field {
@@ -57,7 +59,7 @@
 }
 
 .react-quantity-layout .quantity-ant-field-required > span::before {
-  color: var(--danger);
+  color: var(--danger-text);
   content: "*";
 }
 
@@ -77,18 +79,18 @@
   background: var(--surface-soft);
 }
 
-.react-quantity-layout .quantity-readonly-field .ant-input {
-  border-style: dashed;
-  color: var(--muted);
-  background: var(--surface-soft);
-  cursor: default;
+.react-quantity-layout .quantity-readonly-field > .ant-typography {
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
 }
 
 .react-quantity-layout .quantity-ant-field :is(.ant-input, .ant-select, .ant-picker),
 .react-quantity-layout .custom-billing-segment-fields :is(.ant-input, .ant-input-number) {
   width: 100%;
   min-width: 0;
-  height: 32px;
+  height: var(--control-height);
 }
 
 .react-quantity-layout .quantity-animal-control,
@@ -182,7 +184,7 @@
   margin: 0;
   padding-inline: 8px;
   border-radius: 4px;
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 12px;
   line-height: 20px;
   white-space: normal;
@@ -319,30 +321,9 @@
   }
 }
 
-/* Base legacy button rules also match Ant Switch because it renders a button. */
-.react-quantity-layout .ant-switch {
-  box-sizing: border-box;
-  min-width: 44px !important;
-  width: 44px !important;
-  min-height: 22px !important;
-  height: 22px !important;
-  padding: 0 !important;
-  border-radius: 9999px !important;
-  font-size: 0 !important;
-  line-height: 22px !important;
-}
-
-.react-quantity-layout .ant-switch .ant-switch-handle {
-  top: 2px !important;
-  inset-inline-start: 2px !important;
-  width: 18px !important;
-  height: 18px !important;
-}
-
-.react-quantity-layout .ant-switch.ant-switch-checked .ant-switch-handle {
-  inset-inline-start: calc(100% - 20px) !important;
-}
-
-.react-quantity-layout .ant-switch .ant-switch-handle::before {
-  border-radius: 50% !important;
+@media (width < 768px) {
+  .react-quantity-layout .quantity-field-group-basic,
+  .react-quantity-layout .quantity-field-group-project {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -2,24 +2,25 @@
 
 ## 组件来源
 
-- 桌面与平板端使用 `antd`；移动端使用 `antd-mobile`。
+- 通用业务组件使用 `antd`；移动导航使用 `antd-mobile`。
 - `src/react/components/ui/` 是页面使用的统一适配层。
 - 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceToolbar`、Ant `Form`、`Table`、`Card`、`Modal`、`Drawer`、`Empty` 与 `Result`。
 - 笼位图、数量台账网格、巡检评分、图表与打印模板可保留专用 DOM；数量台账中的输入、选择、日期与确认操作使用 Ant `Input`、`Select`、`DatePicker` 或 `Modal`，通用操作、状态与浮层使用适配层。
 
 ## 视觉与交互
 
-- 主操作使用 `primary`；常规操作使用默认按钮；低频操作使用 text/link；破坏性操作使用 danger。主色种子为 `#1677ff`，白字主按钮与正文链接采用 Ant 官方深色阶保证 AA 对比度。
-- 控件高度采用 Ant 默认 `32px`，紧凑操作使用 `24px`，强调操作使用 `40px`。
-- 颜色、阴影、圆角、层级与动效通过 Ant Theme 和 `src/styles/tokens.css` 的语义 Token 提供。
+- 每个操作区最多一个 `primary`；常规操作使用默认按钮；明确标记的低频操作进入“更多”，行内最多两个常用动作；破坏性操作使用 danger 并保留确认。
+- 桌面控件 `32px`、紧凑操作 `24px`；手机表单控件 `40px`、输入文字 `16px`，按钮触控目标至少 `44px`。
+- 主题唯一来源是 `src/theme/visual-system.mjs`。ConfigProvider 直接消费；`scripts/generate_theme.mjs` 从相同算法生成 `brand-tokens.css`，`tokens.css` 只保留语义映射；文档站消费相同变量。
+- 正文 14px/22px，说明 12px/20px；页标题 24px/32px，分区标题 16px/24px；正文 400、标题 600。页面桌面内边距 24px、手机 16px。普通编辑表单最大 1200px，桌面两列、手机一列，专用矩阵独立横向滚动。
 - Tooltip 用于简短说明；Popver 用于可点击说明；Modal 和 Drawer 用于完整任务。
 - 图标按钮提供 `aria-label` 和 Tooltip；表单错误与字段使用 `aria-describedby` 关联。
 - 首屏远程数据、路由懒加载和详情弹窗加载统一使用 `PageSkeleton` 与 Ant `Skeleton`。骨架屏提供 `role="status"`、`aria-busy="true"` 和明确加载名称；错误态继续使用 `PageState`，空态继续使用 `Empty`。
 
 ## 响应式与动效
 
-- `761px` 以上使用桌面 Ant Layout；`760px` 以下使用 antd-mobile TabBar 与 Popup。
-- 动效使用 transform 和 opacity：按压 140ms、常规切换与浮层 220ms、Drawer/Modal 280ms，统一使用 `cubic-bezier(0.2, 0, 0, 1)`，并对应 Ant Design 的 `motionDurationFast`、`motionDurationMid`、`motionDurationSlow`。
+- `768px` 及以上使用桌面 Ant Layout；小于 `768px` 使用 antd-mobile TabBar 与 Popup。
+- 动效由 Ant 官方 `motionDurationFast/Mid/Slow`（100/200/300ms）与命名缓动派生。按钮不统一缩放或位移，不添加整页入场和批量行延迟动画。
 - 运营工作台和公开入口不使用持续循环的装饰动画；无限动画仅允许用于明确的加载指示器。
 - `prefers-reduced-motion` 下保留状态色与透明度，移除位移与缩放。
 

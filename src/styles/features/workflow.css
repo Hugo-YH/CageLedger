@@ -30,30 +30,8 @@
   width: 100%;
 }
 
-/* 交回登记与补录弹窗的表单控件统一为默认 32px 高度，
-   抵消全局 input min-height: 40px 造成的同行控件错位。 */
-.app-modal-root.workflow-registration-modal .ant-input,
-.app-modal-root.workflow-registration-modal .ant-input-number-input,
-.app-modal-root.workflow-reimbursement-recording-modal .ant-input,
-.app-modal-root.workflow-reimbursement-recording-modal .ant-input-number-input {
-  min-height: 32px;
-}
-
-.app-modal-root.workflow-registration-modal .ant-input-number,
-.app-modal-root.workflow-reimbursement-recording-modal .ant-input-number {
-  height: 32px;
-}
-
-/* Form.List 的删除操作与同一行默认表单控件保持同一高度档位。 */
-.app-modal-root.workflow-registration-modal .ant-btn-icon-only,
-.app-modal-root.workflow-reimbursement-recording-modal .ant-btn-icon-only {
-  width: 32px;
-  min-height: 32px;
-  height: 32px;
-}
-
 .workflow-detail-modal .workflow-history-trigger.ant-btn {
-  height: 24px;
+  min-height: var(--control-height-compact);
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-tag);
@@ -155,7 +133,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-feature="workflow"] .ant-table-wrapper {
     overflow-x: auto;
   }

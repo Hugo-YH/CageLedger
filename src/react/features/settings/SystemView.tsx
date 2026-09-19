@@ -146,28 +146,35 @@ function SystemMasthead({
       <CommandBar
         ariaLabel="系统信息操作"
         actions={
-          <>
-            {isAdmin ? (
-              <Button loading={updateLoading} onClick={onCheckUpdate}>
-                检查更新
-              </Button>
-            ) : null}
-            <Button href="/docs/" icon={<BookOutlined aria-hidden />}>
-              项目文档
+          isAdmin ? (
+            <Button loading={updateLoading} onClick={onCheckUpdate}>
+              检查更新
             </Button>
-            <Button href="/docs/releases/">更新记录</Button>
-            {info.data?.repositoryUrl ? (
-              <Button
-                href={info.data.repositoryUrl}
-                icon={<CodeOutlined aria-hidden />}
-                rel="noreferrer"
-                target="_blank"
-              >
-                Gitea 仓库
-              </Button>
-            ) : null}
-          </>
+          ) : undefined
         }
+        lowFrequencyActions={[
+          {
+            key: "docs",
+            label: "项目文档",
+            icon: <BookOutlined aria-hidden />,
+            onClick: () => window.location.assign("/docs/"),
+          },
+          {
+            key: "releases",
+            label: "更新记录",
+            onClick: () => window.location.assign("/docs/releases/"),
+          },
+          ...(info.data?.repositoryUrl
+            ? [
+                {
+                  key: "repository",
+                  label: "Gitea 仓库",
+                  icon: <CodeOutlined aria-hidden />,
+                  onClick: () => window.open(info.data?.repositoryUrl, "_blank", "noopener,noreferrer"),
+                },
+              ]
+            : []),
+        ]}
       />
       {info.isPending ? (
         <Skeleton active className="system-info-skeleton" paragraph={{ rows: 1 }} title={false} />

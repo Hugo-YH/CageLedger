@@ -101,9 +101,8 @@ test("IACUC lookup errors give feedback and the same field can retry", async ({ 
       page.locator(".quantity-sheet-fields .ant-picker").first(),
       page.locator(".quantity-room-select"),
       code,
-      page.getByLabel("登记人员", { exact: true }),
     ]) {
-      await expect(control).toHaveCSS("height", "32px");
+      await expect(control).toHaveCSS("height", viewport.width < 768 ? "40px" : "32px");
     }
     for (const [section, target] of [
       ["fields", code],

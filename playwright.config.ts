@@ -1,8 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolve } from "node:path";
 
 const e2ePort = Number(process.env.CAGELEDGER_E2E_PORT || "5183");
 const e2eApiPort = Number(process.env.CAGELEDGER_E2E_API_PORT || "5184");
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
+const evidence = process.env.CAGELEDGER_E2E_OUTPUT_DIR;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -15,7 +17,17 @@ export default defineConfig({
     timeout: process.env.CI ? 15_000 : 5_000,
   },
   retries: 1,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+  failOnFlakyTests: true,
+  outputDir: evidence ? resolve(evidence, "artifacts") : undefined,
+  reporter: evidence
+    ? [
+        ["list"],
+        ["json", { outputFile: resolve(evidence, "results.json") }],
+        ["html", { outputFolder: resolve(evidence, "report"), open: "never" }],
+      ]
+    : process.env.CI
+      ? [["list"], ["html", { open: "never" }]]
+      : "list",
   use: {
     baseURL: e2eBaseUrl,
     trace: "retain-on-failure",

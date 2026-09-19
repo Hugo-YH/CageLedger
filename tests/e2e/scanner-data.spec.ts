@@ -136,9 +136,9 @@ test("real cage card data follows receipt and placement through internal and ano
       expect(payload.item).toMatchObject({ ...active, qrId: code });
       await publicPage.goto(`/c/${code}`);
       await expect(publicPage.getByRole("heading", { name: batch.batchNo, exact: true })).toBeVisible();
-      await expect(publicPage.locator(".public-scan-status")).toHaveText("已入驻");
+      await expect(publicPage.locator(".public-scan-header .ant-tag")).toHaveText("已入驻");
       for (const value of [batch.iacuc, batch.pi, batch.owner, batch.strainStandard, "5 只", "2026-09-14"]) {
-        await expect(publicPage.locator("dd").getByText(value, { exact: true })).toBeVisible();
+        await expect(publicPage.locator(".ant-descriptions").getByText(value, { exact: true })).toBeVisible();
       }
       await expect(publicPage.locator(".public-scan-card")).not.toContainText("待接收");
     }

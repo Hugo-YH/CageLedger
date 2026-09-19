@@ -59,7 +59,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 - handler 管鉴权与响应，领域 service 管事务、校验、审计与缓存，repository 管 SQL 和兼容读写。新增业务进入 `server_app/domains/`，不扩大历史兼容层。
 - 不直接修改 SQLite、WAL 和运行时 JSON；不手工编辑 `data/`、`web-dist/`、`dist/`、`node_modules/`。测试使用隔离数据，不能仅凭 localhost 判断数据可丢弃。
 - 不删除旧字段、payload 或兼容迁移，除非任务明确包含迁移方案；schema 迁移保持幂等和旧库回填。
-- UI 使用现有 Ant Design 组件与语义 Token：主色 `#1677ff`、4px 间距、14px 正文、6px 控件圆角、8px 容器圆角、32px 默认控件高度。布局以 `src/styles/style-ownership.json` 登记的唯一来源为准，`src/styles.css` 仅作导入入口。
+- UI 使用 Ant Design 组件与唯一主题定义，视觉尺度、对比度及响应式规则见 `docs/contracts/antd-design-language.md`。布局以 `src/styles/style-ownership.json` 登记的唯一来源为准，`src/styles.css` 仅作导入入口。
 - UI 验证按测试契约区分局部小改与结构性改动；文案、间距、提示位置等小改默认只确认受影响页面，不默认四档视口、截图矩阵或完整回归。通知和确认使用站内组件。
 - 结算汇总表同时检查 `src/react/print/settlement.ts` 与 `server_app/pdf/documents.py`，保留前端和 Python 的等价回归，尤其是跨页汇总。
 - 提交和发布前统一通过 `npm run check`；同一最终代码状态已通过的检查可复用，不因进入下一步骤重复运行，发布脚本必需的校验仍保留。开发中只做与改动相关的验证，不默认全套检查、构建或打包；所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。

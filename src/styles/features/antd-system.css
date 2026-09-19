@@ -1,4 +1,20 @@
-:root {
+:root,
+:root[data-theme] {
+  --adm-color-primary: var(--primary-text);
+  --adm-color-success: var(--success-text);
+  --adm-color-warning: var(--warning-text);
+  --adm-color-danger: var(--danger-text);
+  --adm-color-wathet: var(--primary-soft);
+  --adm-color-text: var(--text);
+  --adm-color-text-secondary: var(--muted);
+  --adm-color-weak: var(--muted);
+  --adm-color-border: var(--card-border);
+  --adm-color-background: var(--surface);
+  --adm-color-background-body: var(--bg);
+  --adm-color-box: var(--surface-soft);
+  --adm-font-family: var(--font-sans);
+  --adm-font-size-main: 14px;
+  --adm-radius-l: var(--radius-panel);
   --app-page-bg: var(--bg);
   --app-surface: var(--surface);
   --app-surface-subtle: var(--surface-soft);
@@ -9,33 +25,19 @@
   --app-success: var(--green);
   --app-warning: var(--amber);
   --app-error: var(--danger);
-  --app-shadow: 0 1px 2px rgb(0 0 0 / 3%);
-  --app-shadow-overlay: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%);
+  --app-shadow: none;
+  --app-shadow-overlay: var(--cl-shadow-overlay);
   --app-z-layout: 10;
   --app-z-overlay: 1000;
   --app-dashboard-active: var(--app-primary);
-  --app-dashboard-reserved: #722ed1;
+  --app-dashboard-reserved: var(--reserved);
   --app-dashboard-empty: var(--app-border);
-  --app-sider-bg: #001529;
+  --app-sider-bg: var(--cl-color-sider);
   --app-on-sider: var(--text-inverse);
   --app-processing-bg: var(--primary-soft);
   --app-warning-bg: var(--warning-soft);
   --app-error-bg: var(--danger-soft);
   --app-primary-hover-bg: color-mix(in srgb, var(--app-primary) 5%, transparent);
-}
-
-:root[data-theme="dark"] {
-  --app-page-bg: var(--bg);
-  --app-surface: var(--surface);
-  --app-surface-subtle: var(--surface-soft);
-  --app-border: var(--surface-strong);
-  --app-text: var(--text);
-  --app-text-secondary: var(--muted);
-  --app-primary: var(--primary-text);
-  --app-success: var(--green);
-  --app-warning: var(--amber);
-  --app-error: var(--danger);
-  --app-dashboard-reserved: #b37feb;
 }
 
 .ant-app {
@@ -47,191 +49,12 @@
   color: var(--app-text-secondary) !important;
 }
 
-.ant-shell {
-  min-height: 100dvh;
-  background: var(--app-page-bg);
-}
-
-.ant-sidebar {
-  position: sticky !important;
-  top: 0;
-  height: 100dvh;
-  overflow: hidden;
-  border-right: 1px solid rgb(255 255 255 / 10%);
-  background: var(--app-sider-bg) !important;
-}
-
-.ant-sidebar .ant-layout-sider-children {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-.ant-brand {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 64px;
-  gap: 8px;
-  padding: 12px 16px;
-  color: var(--app-on-sider);
-}
-
-.ant-brand img {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-}
-
-.ant-brand-copy {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.ant-brand-copy strong {
-  overflow: hidden;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ant-brand-copy span {
-  overflow: hidden;
-  color: rgb(255 255 255 / 60%);
-  font-size: 12px;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ant-sidebar-collapse {
-  position: absolute;
-  top: 10px;
-  right: 8px;
-  z-index: var(--z-raised);
-  color: rgb(255 255 255 / 85%) !important;
-}
-
-.ant-shell-collapsed .ant-brand {
-  min-height: 96px;
-  flex-direction: column;
-  gap: 4px;
-  justify-content: center;
-  padding: 8px 0;
-}
-
-.ant-shell-collapsed .ant-brand-copy,
-.ant-shell-collapsed .ant-sidebar-account {
-  display: none;
-}
-
-.ant-shell-collapsed .ant-sidebar-collapse {
-  position: static;
-  flex: 0 0 auto;
-}
-
-.ant-main-menu {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding-bottom: 12px;
-  border-inline-end: 0 !important;
-  overflow: hidden auto;
-}
-
-.ant-main-menu.ant-menu-dark .ant-menu-item,
-.ant-main-menu.ant-menu-dark .ant-menu-submenu-title {
-  width: calc(100% - 16px);
-  margin-inline: 8px;
-  border-radius: 6px;
-}
-
-.ant-sidebar-account {
-  flex: 0 0 auto;
-  display: grid;
-  gap: 8px;
-  margin: 0 12px 16px;
-  padding: 16px 12px 0;
-  border-top: 1px solid rgb(255 255 255 / 12%);
-}
-
-.ant-sidebar-account .ant-typography {
-  color: rgb(255 255 255 / 88%);
-  font-size: 12px;
-}
-
-.ant-sidebar-account .ant-typography-secondary {
-  color: rgb(255 255 255 / 52%);
-}
-
-.ant-workspace-layout,
-.ant-workspace {
-  min-width: 0;
-  background: var(--app-page-bg);
-}
-
-.ant-workspace {
-  padding: 24px;
-}
-
-/* Compatibility layer: legacy views inherit the Ant surface hierarchy during migration. */
-.ant-workspace .panel,
-.ant-workspace .surface {
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow);
-}
-
-/* Ant Card compatibility: legacy workspace panels previously added floating,
-   translucent title shells. Keep card hierarchy flat and predictable. */
-.ant-workspace .panel::before,
-.ant-workspace .panel::after,
-.ant-workspace .panel > .panel-head::after {
-  display: none;
-}
-
-.ant-workspace .panel:hover,
-.ant-workspace .panel:focus-within {
-  border-color: var(--app-border);
-  box-shadow: var(--app-shadow);
-  transform: none;
-}
-
-.ant-workspace .panel > .panel-head {
-  position: relative;
-  top: auto;
-  z-index: auto;
-  align-items: center;
-  min-height: 48px;
-  margin: 0 0 16px;
-  padding: 0 0 16px;
-  border: 0;
-  border-bottom: 1px solid var(--app-border);
-  border-radius: 0;
-  background: transparent;
-  background-image: none;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.ant-workspace .panel > .panel-head h2 {
-  color: var(--app-text);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-  letter-spacing: 0;
-}
-
 .ant-workspace .workspace-title-line .ant-typography {
   margin: 0;
   color: var(--app-text);
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 32px;
 }
 
 .ant-workspace .workspace-summary {
@@ -258,44 +81,6 @@
   transform: none;
 }
 
-.ant-workspace :is(input, select, textarea):not(.ant-input, .ant-select-selector) {
-  border-color: var(--app-border);
-  border-radius: 6px;
-  box-shadow: none;
-}
-
-.ant-workspace :is(input, select, textarea):not(.ant-input, .ant-select-selector):focus {
-  border-color: var(--ant-color-primary);
-  box-shadow: var(--focus-ring);
-}
-
-/* Legacy global input rules add extra height and padding. Restore Ant's
-   standard control geometry so Input, Select and DatePicker align in grids. */
-:is(.ant-workspace, .app-modal-root.quantity-edit-modal) input:not([type="checkbox"], [type="radio"], [type="hidden"]),
-:is(.ant-workspace, .app-modal-root.quantity-edit-modal) textarea {
-  min-height: 0;
-}
-
-/* Affix controls (search, clear and password) own their outer padding and height. */
-:is(.ant-workspace, .app-modal-root.quantity-edit-modal) input.ant-input:not(:where(.ant-input-affix-wrapper input)) {
-  min-height: 32px;
-  padding: 4px 12px;
-  border-radius: var(--ant-border-radius, 6px);
-  background: var(--app-surface);
-}
-
-/* The affix wrapper is the Ant control. Keep its geometry token-driven even
-   when legacy native-input rules are present elsewhere in the cascade. */
-:is(.ant-workspace, .app-modal-root.quantity-edit-modal) .ant-input-affix-wrapper {
-  height: var(--ant-control-height);
-}
-
-:is(.ant-workspace, .app-modal-root.quantity-edit-modal) textarea.ant-input {
-  padding: 4px 12px;
-  border-radius: var(--ant-border-radius, 6px);
-  background: var(--app-surface);
-}
-
 .ant-workspace .intake-ant-field {
   display: grid;
   min-width: 0;
@@ -318,52 +103,6 @@
 
 .ant-workspace .intake-ant-field :is(.ant-input, .ant-select) {
   width: 100%;
-}
-
-.ant-workspace .intake-ant-field .ant-select-single {
-  height: 32px;
-}
-
-.ant-workspace .intake-ant-field .ant-select-single .ant-select-selector {
-  height: 32px;
-  padding-block: 0;
-}
-
-.ant-workspace .intake-ant-field .ant-select-single :is(.ant-select-selection-item, .ant-select-selection-placeholder) {
-  line-height: 30px;
-}
-
-.ant-workspace button.primary,
-.ant-workspace button.secondary,
-.ant-workspace button.tertiary,
-.ant-workspace button.danger,
-.ant-workspace button.info-button,
-.ant-workspace button.flow-button {
-  min-height: 32px;
-  border-radius: 6px;
-  font-weight: 400;
-  box-shadow: none;
-}
-
-.ant-workspace button.primary,
-.ant-workspace button.flow-button {
-  border-color: var(--ant-color-primary);
-  background: var(--ant-color-primary);
-  color: var(--text-inverse);
-}
-
-.ant-workspace button.secondary,
-.ant-workspace button.tertiary,
-.ant-workspace button.info-button {
-  border-color: var(--app-border);
-  background: var(--app-surface);
-  color: var(--app-text);
-}
-
-.ant-workspace button.danger {
-  border-color: var(--ant-color-error-border);
-  background: var(--ant-color-error-bg);
-  color: var(--ant-color-error);
 }
 
 .app-modal-root .ant-modal-content {
@@ -425,7 +164,7 @@
 }
 
 .inspection-finding-modal-title span {
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
   font-size: 12px;
   font-weight: 400;
   line-height: 20px;
@@ -606,7 +345,7 @@
 }
 
 .ant-dashboard-statistic.is-success .ant-statistic-content {
-  color: var(--app-success);
+  color: var(--success-text);
 }
 
 .ant-dashboard-statistic.is-processing .ant-statistic-content {
@@ -614,11 +353,11 @@
 }
 
 .ant-dashboard-statistic.is-warning .ant-statistic-content {
-  color: var(--app-warning);
+  color: var(--warning-text);
 }
 
 .ant-dashboard-statistic.is-error .ant-statistic-content {
-  color: var(--app-error);
+  color: var(--danger-text);
 }
 
 .ant-dashboard-task {
@@ -654,12 +393,12 @@
 
 .ant-dashboard-task.is-warning .ant-dashboard-task-icon {
   background: var(--app-warning-bg);
-  color: var(--app-warning);
+  color: var(--warning-text);
 }
 
 .ant-dashboard-task.is-error .ant-dashboard-task-icon {
   background: var(--app-error-bg);
-  color: var(--app-error);
+  color: var(--danger-text);
 }
 
 .ant-dashboard-task-copy {
@@ -756,7 +495,7 @@
 .ant-dashboard-status-segment {
   display: block;
   min-width: 0;
-  transition: width 160ms ease-out;
+  transition: width var(--motion-base) var(--ease-out);
 }
 
 .ant-dashboard-status-legend {
@@ -873,7 +612,7 @@
 }
 
 .ant-dashboard-pi-row-head .ant-typography {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .ant-dashboard-pi-amount {
@@ -887,30 +626,6 @@
   margin-top: 2px;
 }
 
-.ant-mobile-tabbar {
-  display: none;
-}
-
-.ant-mobile-navigation-sheet {
-  max-height: min(76dvh, 680px);
-  overflow: auto;
-  padding: 8px 0 calc(20px + env(safe-area-inset-bottom));
-}
-
-.ant-mobile-sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 16px 8px;
-  font-size: 16px;
-}
-
-.ant-mobile-sheet-actions {
-  display: grid;
-  gap: 8px;
-  padding: 16px;
-}
-
 .app-help-button {
   display: inline-grid;
   width: 22px;
@@ -920,13 +635,20 @@
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
   cursor: pointer;
 }
 
 .app-help-button:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 2px;
+}
+
+@media (width < 768px) {
+  .app-help-button {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .app-visually-hidden {
@@ -938,19 +660,6 @@
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-
-.ant-btn {
-  transition:
-    color var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
-}
-
-.ant-btn:active:not(:disabled, .ant-btn-loading) {
-  transform: scale(0.98);
 }
 
 /* Ant Table-style server filters: text sorts, the adjacent compact trigger filters. */
@@ -1013,13 +722,34 @@
 .app-data-table .filterable-column-title:focus-within .table-filter-button,
 .app-data-table .filterable-column-title.is-filtered .table-filter-button,
 .app-data-table .filterable-column-title.is-filter-open .table-filter-button {
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
   opacity: 1;
 }
 
 .app-data-table .filterable-column-title.is-filtered .table-filter-button,
 .app-data-table .filterable-column-title.is-filter-open .table-filter-button {
   background: var(--ant-color-primary-bg);
+}
+
+@media (width < 768px) {
+  .app-data-table .filterable-column-title {
+    min-height: 44px;
+  }
+
+  .app-data-table .table-sort-button {
+    height: 44px;
+    min-height: 44px;
+    line-height: 44px;
+  }
+
+  .app-data-table .table-filter-button {
+    flex-basis: 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    margin-inline-start: 0;
+  }
 }
 
 .app-data-table .table-filter-button:focus-visible {
@@ -1071,7 +801,7 @@
   padding: 0 !important;
 }
 
-@media (width > 760px) {
+@media (width >= 768px) {
   .ant-workspace
     .inspection-module-card
     .inspection-section-collapse
@@ -1303,14 +1033,12 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  animation: cageledger-notice-in var(--motion-base) var(--ease-standard) both;
 }
 
 .react-inline-notice .notice-icon {
   flex: 0 0 auto;
   margin-top: 4px;
   font-size: 16px;
-  animation: cageledger-icon-pop var(--motion-slow) var(--ease-standard) both;
 }
 
 .react-inline-notice.is-success {
@@ -1319,50 +1047,21 @@
 }
 
 .react-inline-notice.is-success .notice-icon {
-  color: var(--app-success);
+  color: var(--success-text);
 }
 
 .react-inline-notice.is-error {
   border-color: var(--danger-line);
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .react-inline-notice.is-error .notice-icon {
-  color: var(--app-error);
+  color: var(--danger-text);
 }
 
 .react-inline-notice.is-info .notice-icon {
   color: var(--app-primary);
-}
-
-@keyframes cageledger-notice-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes cageledger-icon-pop {
-  0% {
-    transform: scale(0.4);
-    opacity: 0;
-  }
-
-  55% {
-    transform: scale(1.12);
-    opacity: 1;
-  }
-
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1376,13 +1075,9 @@
     animation: none !important;
     transition-duration: 1ms !important;
   }
-
-  .ant-btn:active:not(:disabled, .ant-btn-loading) {
-    transform: none;
-  }
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .inspection-image-modal .ant-modal {
     max-width: calc(100vw - 24px);
     margin-inline: 12px;
@@ -1424,28 +1119,6 @@
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   }
 
-  .ant-shell {
-    display: block;
-    padding-bottom: calc(56px + env(safe-area-inset-bottom));
-  }
-
-  .ant-sidebar {
-    display: none;
-  }
-
-  .ant-workspace-layout {
-    width: 100%;
-    min-width: 100%;
-    flex: none;
-  }
-
-  .ant-workspace {
-    width: 100%;
-    min-width: 100%;
-    box-sizing: border-box;
-    padding: 16px;
-  }
-
   .ant-workspace .workspace-view {
     width: 100%;
     min-width: 0;
@@ -1459,19 +1132,6 @@
 
   .ant-workspace .workspace-title-line .ant-typography {
     font-size: 24px;
-  }
-
-  .ant-mobile-tabbar {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: var(--app-z-overlay);
-    display: block !important;
-    padding-bottom: env(safe-area-inset-bottom);
-    border-top: 1px solid var(--app-border);
-    background: var(--app-surface);
-    box-shadow: var(--shadow-soft);
   }
 
   .ant-workspace .pager {
@@ -1519,5 +1179,12 @@
 
   .ant-workspace .audit-log-table .ant-table-pagination {
     justify-content: center;
+  }
+}
+
+@media (width < 768px) {
+  .ant-app .ant-table-row-expand-icon {
+    width: 44px;
+    height: 44px;
   }
 }

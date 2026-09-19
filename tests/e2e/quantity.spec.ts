@@ -74,10 +74,12 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await iacucInput.fill("Z202506");
   await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间号", exact: true }));
-  await expect(page.getByLabel("登记人员", { exact: true })).toHaveValue("系统管理员");
-  await expect(page.getByLabel("登记人员", { exact: true })).toHaveAttribute("readonly", "");
-  await expect(page.getByLabel("房间管理员", { exact: true })).toHaveValue("E2E 房间管理员");
-  await expect(page.getByLabel("房间管理员", { exact: true })).toHaveAttribute("readonly", "");
+  await expect(page.getByRole("group", { name: "登记人员 系统带入", exact: true })).toHaveText(
+    "登记人员系统带入系统管理员",
+  );
+  await expect(page.getByRole("group", { name: "房间管理员 系统带入", exact: true })).toHaveText(
+    "房间管理员系统带入E2E 房间管理员",
+  );
   await page.getByRole("button", { name: /计费扩展选项/ }).click();
   await page.getByRole("switch", { name: "全额减免", exact: true }).check();
   await iacucInput.fill("E2E-IACUC-001");
@@ -126,8 +128,14 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   const now = new Date();
   const pdfMonth = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月`;
   expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${pdfMonth} E2E-IACUC-001.pdf`);
-  await savedRow.getByRole("button", { name: "删除", exact: true }).click();
-  await page.getByRole("button", { name: "确认删除", exact: true }).click();
+  await savedRow.getByRole("button", { name: "E2E-IACUC-001更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+  const deleteDialog = page.getByRole("dialog", { name: "删除数量统计表", exact: true });
+  await expect(deleteDialog).toBeVisible();
+  // WebKit can report the first two animation frames as stable before Ant's
+  // zoom starts. Wait for entry to finish so pointer-down/up hit the same button.
+  await expect(deleteDialog).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
+  await deleteDialog.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(savedRow).toHaveCount(0);
 });
 

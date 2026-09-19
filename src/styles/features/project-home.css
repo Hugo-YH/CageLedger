@@ -1,20 +1,7 @@
 .project-home {
   min-height: 100dvh;
   color: var(--app-text);
-  background:
-    radial-gradient(
-      circle at 75% 12%,
-      color-mix(in srgb, var(--ant-color-primary-bg) 72%, transparent),
-      transparent 30rem
-    ),
-    linear-gradient(90deg, color-mix(in srgb, var(--app-border) 52%, transparent) 1px, transparent 1px),
-    linear-gradient(color-mix(in srgb, var(--app-border) 52%, transparent) 1px, transparent 1px), var(--app-page-bg);
-  background-position: center, center, center, center;
-  background-size:
-    auto,
-    48px 48px,
-    48px 48px,
-    auto;
+  background: var(--app-page-bg);
 }
 
 .project-home-header {
@@ -27,9 +14,7 @@
   min-height: 64px;
   padding: 0 max(24px, calc((100vw - 1200px) / 2));
   border-bottom: 1px solid var(--app-border);
-  background: color-mix(in srgb, var(--app-surface) 94%, transparent);
-  box-shadow: 0 1px 0 rgb(0 0 0 / 2%);
-  backdrop-filter: blur(12px);
+  background: var(--app-surface);
 }
 
 .project-home-brand {
@@ -93,25 +78,24 @@
 .project-hero h1.ant-typography {
   max-width: 760px;
   margin-bottom: 16px;
-  font-size: clamp(36px, 5vw, 60px);
-  line-height: 1.16;
-  letter-spacing: -0.035em;
+  font-size: var(--ant-font-size-heading-1);
+  line-height: var(--ant-line-height-heading-1);
 }
 
 .project-hero-copy > .ant-typography {
   max-width: 680px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   color: var(--app-text-secondary);
   font-size: 16px;
-  line-height: 1.75;
+  line-height: 1.5;
 }
 
 .project-hero-panel.ant-card {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 22%, var(--app-border));
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--app-surface) 94%, var(--ant-color-primary-bg));
-  box-shadow: var(--shadow-lift);
+  background: var(--app-surface);
+  box-shadow: none;
 }
 
 .project-hero-panel .ant-card-body {
@@ -122,7 +106,7 @@
 .project-section-heading > span {
   display: block;
   margin-bottom: 8px;
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -305,7 +289,7 @@
   margin: 0;
   border: 0;
   background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
 }
 
 .project-hero-panel .ant-typography {
@@ -373,7 +357,7 @@
   margin-bottom: 20px;
   border-radius: 8px;
   background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
   font-size: 16px;
 }
 
@@ -451,37 +435,10 @@
 }
 
 .project-home-footer a:hover {
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .project-hero-copy,
-  .project-hero-panel,
-  .project-section-heading,
-  .project-capability-grid,
-  .project-workflow-card,
-  .project-resource-grid {
-    animation: project-reveal 220ms var(--ease-out) both;
-  }
-
-  .project-hero-panel {
-    animation-delay: 50ms;
-  }
-}
-
-@keyframes project-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (width <= 760px) {
+@media (width < 768px) {
   .project-home-header {
     min-height: 56px;
     gap: 8px;

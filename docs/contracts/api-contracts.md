@@ -145,23 +145,27 @@ IACUC 汇总表导入仅更新可同步的业务记录：当前结算版本已�
 
 已发起结算项的预览、打印及 PDF/Excel 导出读取当前有效版本的结算快照和完整逐日明细，不随项目主档、有效期或减免配置变化重算。PDF 缓存按结算版本隔离，异步任务使用入队时取得的快照；版本缺失时明确报错，不以实时数据替代。撤回后重新生成或显式修订才采用新数据；导入不会自动修订或回写历史流程。本规则不自动恢复修复前已被改动的源表。
 
-| 方法             | 路径                                               | 说明                                                     |
-| ---------------- | -------------------------------------------------- | -------------------------------------------------------- |
-| `GET` / `POST`   | `/api/users`                                       | 管理账号                                                 |
-| `PUT` / `DELETE` | `/api/users/{id}`                                  | 更新或删除账号                                           |
-| `POST`           | `/api/intake/standardize-strain`                   | 服务端 MGI 品系标准化，登录权限                          |
-| `GET`            | `/api/iacuc-index`                                 | 完整 IACUC 索引                                          |
-| `GET`            | `/api/iacuc-index/expiry`                          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用 |
-| `GET`            | `/api/iacuc-index/status`                          | 索引数量、时间和来源                                     |
-| `POST`           | `/api/iacuc-index/upload`                          | 上传 CSV，更新快照和派生字段                             |
-| `GET`            | `/api/principal-identities`                        | PI 身份和减免配置                                        |
-| `PUT`            | `/api/principal-identities/{name}`                 | 更新 PI 配置                                             |
-| `GET`            | `/api/audit-events`                                | 分页操作日志                                             |
-| `GET`            | `/api/system/update-check`                         | Gitea 最新 Release，管理员权限                           |
-| `GET`            | `/api/system/environment`                          | 兼容运行环境参数与当前进程性能快照，管理员权限           |
-| `GET`            | `/api/system/performance-history`                  | `hours` 内的性能汇总（管理员权限）                       |
-| `GET`            | `/api/release-announcements/{version}`             | 当前账号是否已确认指定版本的更新说明                     |
-| `POST`           | `/api/release-announcements/{version}/acknowledge` | 确认当前账号已阅读指定版本的更新说明                     |
+| 方法             | 路径                                               | 说明                                                       |
+| ---------------- | -------------------------------------------------- | ---------------------------------------------------------- |
+| `GET` / `POST`   | `/api/users`                                       | 管理账号                                                   |
+| `PUT` / `DELETE` | `/api/users/{id}`                                  | 更新或删除账号                                             |
+| `POST`           | `/api/intake/standardize-strain`                   | 服务端 MGI 品系标准化，登录权限                            |
+| `GET`            | `/api/iacuc-index`                                 | 完整 IACUC 索引                                            |
+| `GET`            | `/api/iacuc-index/expiry`                          | 精简 IACUC 到期日索引（编码 + 到期日），列表页批量标记用   |
+| `GET`            | `/api/iacuc-index/status`                          | 索引数量、时间和来源                                       |
+| `POST`           | `/api/iacuc-index/upload`                          | 上传 CSV，更新快照和派生字段                               |
+| `GET`            | `/api/principal-identities`                        | PI 身份和减免配置                                          |
+| `PUT`            | `/api/principal-identities/{name}`                 | 更新 PI 配置                                               |
+| `GET`            | `/api/audit-events`                                | 分页操作日志                                               |
+| `GET`            | `/api/system/update-check`                         | Gitea 最新 Release，管理员权限                             |
+| `GET`            | `/api/system/environment`                          | 兼容运行环境参数与当前进程性能快照，管理员权限             |
+| `GET`            | `/api/system/performance-history`                  | `hours` 内的性能汇总（管理员权限）                         |
+| `GET`            | `/api/release-announcements`                       | 当前账号全部已确认版本，返回 `{ acknowledgedVersions }`    |
+| `POST`           | `/api/release-announcements/acknowledge`           | `{ versions: string[] }`，原子批量确认并返回全部已确认版本 |
+| `GET`            | `/api/release-announcements/{version}`             | 当前账号是否已确认指定版本的更新说明                       |
+| `POST`           | `/api/release-announcements/{version}/acknowledge` | 确认当前账号已阅读指定版本的更新说明                       |
+
+更新提示按账号在服务端保存确认记录，旧单版本接口继续兼容。批量接口仅接受当前会话账号，`versions` 为 1～500 项的数组，每项沿用版本字符串格式限制；重复确认幂等，非法请求不产生部分确认。前端按数字版本排序，展示上次确认版本之后、当前版本以内的更新；没有可用确认基线时仅展示当前版本。一次确认只提交当时弹窗展示的版本，成功后关闭；失败保留内容供重试。读取进度不会因服务版本回退而倒退。
 
 `/api/system/environment.performance` 返回当前服务进程自启动以来的低开销诊断数据：运行时长、HTTP 请求总数/慢请求/最近 512 个样本的 P50/P95/最大耗时、缓存容量/命中/未命中/过期/淘汰/命中率，以及 SQLite 操作/慢操作/锁错误和延迟摘要。指标随进程重启清零，不是 SLA；页面不得向非管理员请求或展示这些字段，也不得用高频自动轮询放大请求统计。
 

@@ -14,7 +14,13 @@ export function WorkspaceToolbar({
   className = "",
   ...props
 }: CommandBarProps & { toolbar?: ReactNode }) {
-  return toolbar || context || props.actions || props.primaryAction || props.selection || props.filters ? (
+  return toolbar ||
+    context ||
+    props.actions ||
+    props.primaryAction ||
+    props.lowFrequencyActions?.length ||
+    props.selection ||
+    props.filters ? (
     <CommandBar {...props} className={`workspace-toolbar ${className}`.trim()} context={context ?? toolbar} />
   ) : null;
 }

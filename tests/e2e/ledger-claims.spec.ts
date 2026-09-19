@@ -106,7 +106,15 @@ test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", a
   await expect(row).toContainText("E2E-LEDGER-001");
   await expect(row).toContainText("系统管理员");
 
-  await page.getByRole("button", { name: "筛选状态", exact: true }).click();
+  await page.setViewportSize({ width: 760, height: 900 });
+  const sortStatus = page.getByRole("button", { name: "状态，点击切换排序", exact: true });
+  const filterStatus = page.getByRole("button", { name: "筛选状态", exact: true });
+  await expect(sortStatus).toHaveCSS("height", "44px");
+  await expect(filterStatus).toHaveCSS("height", "44px");
+  await expect(filterStatus).toHaveCSS("width", "44px");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
+  await filterStatus.click();
   const filterPanel = page.locator(".table-filter-panel:visible");
   await expect(filterPanel).toBeVisible();
   await filterPanel
@@ -120,10 +128,9 @@ test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", a
   await page.locator(".table-filter-panel:visible").getByRole("button", { name: "清空", exact: true }).click();
   await page.locator(".table-filter-panel:visible").getByRole("button", { name: "应用", exact: true }).click();
 
-  await page
-    .getByRole("row", { name: /E2E 台账负责人 1/ })
-    .getByRole("button", { name: "撤回", exact: true })
-    .click();
+  const firstWorkflowRow = page.getByRole("row", { name: /E2E 台账负责人 1/ });
+  await firstWorkflowRow.getByRole("button", { name: "结算流程更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   const revokeModal = page.getByRole("dialog").filter({ hasText: "撤回结算流程" });
   await revokeModal.getByLabel("撤回原因").fill("测试撤回已发起流程");
   await revokeModal.getByRole("button", { name: "确认撤回" }).click();
@@ -273,7 +280,8 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
 
   // 撤回已归档流程
-  await row.getByRole("button", { name: "撤回" }).click();
+  await row.getByRole("button", { name: "结算流程更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   const revokeModal = page.getByRole("dialog").filter({ hasText: "撤回结算流程" });
   await expect(revokeModal.getByRole("button", { name: "确认撤回" })).toBeDisabled();
   await revokeModal.getByLabel("撤回原因").fill("发现登记信息有误");

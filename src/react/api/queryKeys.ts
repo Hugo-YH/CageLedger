@@ -40,6 +40,7 @@ export const queryKeys = {
   systemPerformanceHistory: (hours: number) => ["system", "performance-history", hours] as const,
   systemUpdate: ["system", "update"] as const,
   releaseAnnouncement: (version: string) => ["release-announcement", version] as const,
+  releaseAnnouncementHistory: ["release-announcements"] as const,
   animalInspectionCatalog: ["animal-inspection-catalog"] as const,
   animalInspectionCatalogDraft: ["animal-inspection-catalog", "draft"] as const,
   animalInspectionCatalogVersions: ["animal-inspection-catalog", "versions"] as const,

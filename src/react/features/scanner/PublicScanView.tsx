@@ -1,4 +1,4 @@
-import { Skeleton } from "antd";
+import { Button, Descriptions, Result, Skeleton, Tag } from "antd";
 
 import { usePublicCageCard } from "../../api/cageCard";
 
@@ -21,7 +21,7 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
     ["预计结束日期", item?.endDate],
   ];
   return (
-    <main className="public-scan-page">
+    <main className="public-scan-page" data-feature="public-scan">
       <section className="public-scan-card">
         <div className="public-scan-brand">
           <img src="/cageledger-icon.svg" alt="" />
@@ -36,11 +36,21 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
             <Skeleton active paragraph={{ rows: 5 }} title={{ width: "42%" }} />
           </div>
         ) : details.error ? (
-          <div className="public-scan-state error">
-            <h1>未找到笼卡信息</h1>
-            <p>{details.error.message}</p>
-            <small>{qrId}</small>
-          </div>
+          <Result
+            status="warning"
+            title={<h1>未找到笼卡信息</h1>}
+            subTitle={
+              <>
+                <p>{details.error.message}</p>
+                <small>{qrId}</small>
+              </>
+            }
+            extra={
+              <Button loading={details.isFetching} onClick={() => void details.refetch()}>
+                重试
+              </Button>
+            }
+          />
         ) : (
           <>
             <div className="public-scan-header">
@@ -48,16 +58,17 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
                 <span className="public-scan-eyebrow">当前状态</span>
                 <h1>{item?.batchNo || item?.qrId || "笼卡详情"}</h1>
               </div>
-              <span className="public-scan-status">{item?.statusLabel || "状态未知"}</span>
+              <Tag>{item?.statusLabel || "状态未知"}</Tag>
             </div>
-            <dl className="public-scan-grid">
-              {rows.map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value === "" || value == null ? "-" : String(value)}</dd>
-                </div>
-              ))}
-            </dl>
+            <Descriptions
+              bordered
+              column={{ xs: 1, sm: 1, md: 2 }}
+              items={rows.map(([label, value]) => ({
+                key: label,
+                label,
+                children: value === "" || value == null ? "-" : String(value),
+              }))}
+            />
           </>
         )}
       </section>

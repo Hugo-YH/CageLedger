@@ -95,7 +95,7 @@
 }
 
 [data-feature="quarantine"] .quarantine-record-progress strong {
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
   font-size: 20px;
 }
 
@@ -159,11 +159,11 @@
 }
 
 [data-feature="quarantine"] .quarantine-report-section h5 {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
 }
 
 [data-feature="quarantine"] .quarantine-report-section .ant-table-wrapper {
-  margin-block: 10px;
+  margin-block: 16px;
 }
 
 [data-feature="quarantine"] .quarantine-sample-table .ant-select,
@@ -175,11 +175,11 @@
 [data-feature="quarantine"] .quarantine-report-hint {
   margin: 12px 0 0;
   font-size: 12px;
-  line-height: 1.8;
+  line-height: 1.6667;
 }
 
 [data-feature="quarantine"] .quarantine-result-block {
-  margin-block: 20px;
+  margin-block: 24px;
 }
 
 [data-feature="quarantine"] .quarantine-result-block:first-of-type {
@@ -254,7 +254,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-feature="quarantine"] .quarantine-report-metadata {
     grid-template-columns: 1fr;
   }

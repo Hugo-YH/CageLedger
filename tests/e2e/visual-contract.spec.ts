@@ -124,9 +124,9 @@ test("system status remains usable across supported viewports", async ({ page },
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(download).toBeVisible();
     await expect(pulse).toBeVisible();
-    expect(await pulse.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(
-      viewport.columns,
-    );
+    await expect
+      .poll(() => pulse.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length))
+      .toBe(viewport.columns);
     expect(
       await page.evaluate(() => ({
         clientWidth: document.documentElement.clientWidth,

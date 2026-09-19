@@ -60,6 +60,8 @@ for (const settings of [
       await expect(monthPanel).toBeHidden();
 
       const dateButton = page.getByRole("button", { name: "选择第 1 行日期", exact: true });
+      await expect(dateButton).toHaveCSS("height", settings.width < 768 ? "44px" : "28px");
+      await expect(dateButton).toHaveCSS("width", settings.width < 768 ? "44px" : "28px");
       await activate(dateButton);
       const calendar = page.locator(".quantity-date-calendar");
       await expect(calendar).toBeInViewport();

@@ -32,7 +32,7 @@
   height: 120px;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-feature="cages"] .cage-map-grid {
     overflow-x: auto;
   }
@@ -380,7 +380,7 @@
 }
 
 /* Mobile cage map and slot sizing (migrated from responsive.css). */
-@media (width <= 760px) {
+@media (width < 768px) {
   .cage-preview {
     overflow-x: auto;
     padding-bottom: 8px;

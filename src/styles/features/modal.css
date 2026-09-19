@@ -166,7 +166,7 @@
   overscroll-behavior: contain;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .modal-backdrop > .modal-shell {
     width: 100%;
     max-height: min(86dvh, 760px);

@@ -104,8 +104,8 @@ for (const size of [
         };
       }, buttonStyle);
       expect(styles.overflow).toBe(false);
-      expect(styles.inputHeight).toBe(32);
-      expect(styles.buttonHeight).toBe(32);
+      expect(styles.inputHeight).toBe(size.width < 768 ? 40 : 32);
+      expect(styles.buttonHeight).toBe(size.width < 768 ? 44 : 32);
       expect(styles.animation).toBe("none");
       await testInfo.attach("loading-computed-style", {
         body: JSON.stringify(styles),

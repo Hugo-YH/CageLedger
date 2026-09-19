@@ -147,7 +147,14 @@ export function IntakeBatchList({
   ];
 
   return (
-    <Card className="intake-batch-list-card" title="待接收批次列表">
+    <Card
+      className="intake-batch-list-card"
+      title={
+        <Typography.Title level={3} style={{ margin: 0 }}>
+          待接收批次列表
+        </Typography.Title>
+      }
+    >
       {bulkNotice ? (
         <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
       ) : null}

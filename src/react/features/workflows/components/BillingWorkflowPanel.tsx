@@ -242,11 +242,14 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   登记
                 </Button>
               }
-              revoke={
-                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_generated" })}>
-                  撤回
-                </Button>
-              }
+              lowFrequencyActions={[
+                {
+                  key: `revoke-${item.id}`,
+                  label: "撤回",
+                  danger: true,
+                  onClick: () => setRevokeTarget({ workflow: item, toStatus: "statement_generated" }),
+                },
+              ]}
               lock={
                 user.billingLockAllowed ? (
                   <Popconfirm
@@ -282,11 +285,14 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           return (
             <WorkflowRowActions
               primary={<Button onClick={() => setDetailTarget(item)}>查看</Button>}
-              revoke={
-                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_sent" })}>
-                  撤回
-                </Button>
-              }
+              lowFrequencyActions={[
+                {
+                  key: `revoke-${item.id}`,
+                  label: "撤回",
+                  danger: true,
+                  onClick: () => setRevokeTarget({ workflow: item, toStatus: "statement_sent" }),
+                },
+              ]}
               lock={
                 user.billingLockAllowed ? (
                   <Popconfirm

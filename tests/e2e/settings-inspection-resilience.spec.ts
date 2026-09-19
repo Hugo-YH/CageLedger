@@ -11,6 +11,44 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
 });
 
+test("inspection list refresh feedback stays in the toolbar without a blank grid row", async ({ page }, testInfo) => {
+  for (const [navigation, toolbarName] of [
+    ["巡检记录", "巡检记录操作"],
+    ["异常处置", "异常处置筛选"],
+  ] as const) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openNavigationEntry(page, "动物管理", navigation);
+    const toolbar = page.getByRole("group", { name: toolbarName, exact: true });
+    const panel = page.locator(".inspection-list-panel");
+    await expect(toolbar).toBeVisible();
+    await expect(panel).toBeVisible();
+    const geometry = await panel.evaluate((element) => {
+      const workspace = element.closest("[data-feature='animal-management']");
+      const toolbarElement =
+        workspace?.querySelector<HTMLElement>("[data-ui='workspace-toolbar']") ||
+        workspace?.querySelector<HTMLElement>(".app-command-bar-filters");
+      const refresh = toolbarElement?.querySelector<HTMLElement>("[data-ui='list-refresh']");
+      const toolbarRect = toolbarElement?.getBoundingClientRect();
+      const panelRect = element.getBoundingClientRect();
+      return {
+        gap: panelRect.top - (toolbarRect?.bottom || 0),
+        refreshInToolbar: Boolean(refresh && toolbarElement?.contains(refresh)),
+        pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+    expect(geometry.gap).toBeLessThanOrEqual(24);
+    expect(geometry.refreshInToolbar).toBe(true);
+    expect(geometry.pageOverflow).toBe(false);
+    await testInfo.attach(`${navigation}-toolbar-geometry`, {
+      body: JSON.stringify(geometry),
+      contentType: "application/json",
+    });
+    const screenshot = testInfo.outputPath(`${navigation}-toolbar-layout.png`);
+    await page.screenshot({ path: screenshot });
+    await testInfo.attach(`${navigation}-toolbar-layout`, { path: screenshot, contentType: "image/png" });
+  }
+});
+
 async function reconnectWithStaleData(page: Page) {
   await page.clock.setFixedTime(new Date(Date.now() + 60_000));
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
@@ -38,7 +76,9 @@ async function captureFormEvidence(page: Page, testInfo: TestInfo, name: string,
         target.locator(".ant-picker"),
         target.locator(".ant-select"),
       ]) {
-        await expect(control).toHaveCSS("height", "32px");
+        await expect
+          .poll(() => control.evaluate((el) => parseFloat(getComputedStyle(el).height)))
+          .toBeCloseTo(width < 768 ? 40 : 32, 1);
       }
     }
     const styles = await target.evaluate((root) =>
@@ -188,7 +228,11 @@ test("finding actions serialize requests, keep failed input and announce success
   await expect(dialog.getByRole("alert").filter({ hasText: "处置保存冲突" })).toHaveClass(/ant-alert-error/);
   await expect(dialog.getByLabel("实际措施", { exact: true })).toHaveValue("保留的处置草稿");
   await captureFormEvidence(page, testInfo, "finding-save-error", dialog);
-  await expect(dialog.getByLabel("责任人", { exact: true })).toHaveCSS("height", "32px");
+  // WebKit rounds fractional font metrics to 1/64px; retain the 32px contract
+  // without requiring identical CSS serialization across engines.
+  await expect
+    .poll(() => dialog.getByLabel("责任人", { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).height)))
+    .toBeCloseTo(32, 1);
   await expect(dialog.getByLabel("实际措施", { exact: true })).toBeEnabled();
   refreshFailed = true;
   await dialog.getByRole("button", { name: "保存处置", exact: true }).click();

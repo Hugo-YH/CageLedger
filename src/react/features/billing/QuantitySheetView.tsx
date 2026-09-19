@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
 import { Button, DatePicker, Input, InputNumber, Popover, Select, Space, Switch, Tag, Typography } from "antd";
@@ -731,23 +731,19 @@ function AutoFilledField({
 }
 
 function ReadOnlyField({ label, value, placeholder }: { label: string; value: string; placeholder?: string }) {
+  const labelId = useId();
   return (
-    <label className="quantity-ant-field quantity-readonly-field">
-      <span>
+    <div aria-labelledby={labelId} className="quantity-ant-field quantity-readonly-field" role="group">
+      <span id={labelId}>
         {label}
         <Tag variant="filled" className="quantity-field-source">
           系统带入
         </Tag>
       </span>
-      <Input
-        aria-label={label}
-        className="readonly-field"
-        value={value}
-        placeholder={placeholder}
-        readOnly
-        aria-readonly="true"
-      />
-    </label>
+      <Typography.Text className="readonly-field" type={value ? undefined : "secondary"}>
+        {value || placeholder || "-"}
+      </Typography.Text>
+    </div>
   );
 }
 

@@ -1,14 +1,16 @@
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 
+import { APP_VERSION } from "../../src/react/version";
+
 export { expect };
 
 export const test = base.extend({
   page: async ({ page }, runPage) => {
     const runtimeErrors: string[] = [];
-    await page.route("**/api/release-announcements/*", async (route) => {
+    await page.route("**/api/release-announcements**", async (route) => {
       if (route.request().method() === "GET") {
         const version = route.request().url().split("/").at(-1) || "";
-        await route.fulfill({ json: { version, acknowledged: true } });
+        await route.fulfill({ json: { version, acknowledged: true, acknowledgedVersions: [APP_VERSION] } });
         return;
       }
       await route.fallback();
@@ -104,7 +106,7 @@ export async function openSettingsNavigation(page: Page) {
 async function openNavigationGroup(page: Page, label: string, desktopSelector: string): Promise<Locator> {
   void desktopSelector;
   const desktopGroup = page.getByRole("menuitem", { name: new RegExp(escapeRegExp(label)) }).first();
-  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
+  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 767px)").matches);
   if (useMobileNavigation) {
     await page.getByRole("tab", { name: "更多" }).click();
     const navigation = page.locator(".ant-mobile-navigation-sheet");
@@ -116,7 +118,7 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
 }
 
 export async function openNavigationEntry(page: Page, group: string, label: string) {
-  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 760px)").matches);
+  const useMobileNavigation = await page.evaluate(() => window.matchMedia("(max-width: 767px)").matches);
   if (useMobileNavigation) {
     if (group === "动物管理") {
       await page.getByRole("tab", { name: "动物" }).click();

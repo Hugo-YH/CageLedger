@@ -80,7 +80,7 @@
   margin-top: 4px;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-feature="intake"] .intake-entry-card .ant-card-head,
   [data-feature="intake"] .intake-batch-list-card .ant-card-head,
   [data-feature="intake"] .scanner-card .ant-card-head {
@@ -266,10 +266,16 @@
 
 [data-feature="intake"] .scanner-candidate-options .ant-btn {
   max-width: 100%;
-  min-height: 32px;
+  min-height: var(--ant-button-control-height, var(--control-height));
   height: auto;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+@media (width < 768px) {
+  [data-feature="intake"] .scanner-candidate-options .ant-btn {
+    min-height: 44px;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -369,4 +375,9 @@
 .intake-batch-table .ghost {
   margin-right: 4px;
   padding-inline: 8px;
+}
+
+[data-feature="intake"] .intake-entry-form {
+  max-width: var(--cl-form-max-width);
+  margin-inline: auto;
 }

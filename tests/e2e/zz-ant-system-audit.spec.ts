@@ -245,7 +245,7 @@ test("quarantine detail actions share one toolbar and remain reachable while scr
     expect(metrics.gap).toBeGreaterThanOrEqual(16);
     expect(metrics.overflow).toBe(false);
     for (const control of metrics.controls) {
-      expect(control.height).toBe(32);
+      expect(control.height).toBe(width < 768 ? 44 : 32);
       expect(control.radius).toBe("6px");
       expect(control.font).toBe("14px");
       expect(control.reachable, `${width} ${control.label}`).toBe(true);

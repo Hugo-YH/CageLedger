@@ -227,7 +227,6 @@ export function InspectionCatalogEditor({
         }
         actions={
           <>
-            <Button onClick={onExit}>返回</Button>
             <Button icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
               新增条目
             </Button>
@@ -236,6 +235,7 @@ export function InspectionCatalogEditor({
             </Button>
           </>
         }
+        lowFrequencyActions={[{ key: "back", label: "返回", onClick: onExit }]}
         primaryAction={
           <Button
             type="primary"

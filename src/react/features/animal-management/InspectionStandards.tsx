@@ -67,7 +67,17 @@ export function InspectionStandards({
               {catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
             </Tag>
           }
-          actions={isAdmin ? <Button onClick={() => setVersionsOpen(true)}>版本历史</Button> : undefined}
+          lowFrequencyActions={
+            isAdmin
+              ? [
+                  {
+                    key: "versions",
+                    label: "版本历史",
+                    onClick: () => setVersionsOpen(true),
+                  },
+                ]
+              : undefined
+          }
           primaryAction={
             isAdmin ? (
               <Button type="primary" onClick={() => setEditing(true)}>

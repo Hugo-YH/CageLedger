@@ -27,27 +27,18 @@ if (lint && lint.summary.total > 0) {
 const provider = read("src/react/components/ui/AntdProvider.tsx");
 const tokens = read("src/styles/tokens.css");
 const docsTheme = read("wiki/.vitepress/theme/styles.css");
-const componentContract = read("docs/contracts/ui-component-standard.md");
-const colorContract = read("docs/contracts/ui-color-system.md");
-const wikiContract = read("wiki/UI组件标准.md");
 const required = [
-  [design?.doc.includes("primary: '#1677FF'"), "Ant Design design.md 未提供官方蓝 #1677FF 基线。"],
-  [provider.includes('colorPrimary: "#1677ff"'), "ConfigProvider 主色未使用 #1677ff。"],
-  [provider.includes('colorLink: "#0958d9"'), "ConfigProvider 链接未使用高对比官方蓝阶 #0958d9。"],
-  [provider.includes('colorPrimary: "var(--primary-control)"'), "ConfigProvider 主按钮未使用高对比官方蓝阶。"],
-  [tokens.includes("--primary: #1677ff;"), "应用 CSS 主色未使用 #1677ff。"],
-  [tokens.includes("--primary-dark: #0958d9;"), "应用 CSS 未声明官方蓝 active 阶 #0958d9。"],
-  [docsTheme.includes("--vp-c-brand-1: var(--cl-brand-1);"), "文档站未复用品牌 Token。"],
-  [componentContract.includes("按压 140ms、常规切换与浮层 220ms、Drawer/Modal 280ms"), "组件契约未使用统一动效时长。"],
-  [colorContract.includes("默认高度为 `32px`，紧凑操作为 `24px`，强调操作为 `40px`"), "颜色契约未使用标准控件高度。"],
-  [
-    wikiContract.includes("按压反馈使用 140ms，常规切换与 Tooltip/Popover 使用 220ms，抽屉和 Modal 使用 280ms"),
-    "Wiki 组件标准未同步统一动效。",
-  ],
+  [design?.doc.includes("motionDurationFast"), "Official design baseline unavailable"],
+  [provider.includes("createTheme("), "ConfigProvider must consume the shared theme"],
+  [!provider.includes('componentSize="middle"'), "ConfigProvider middle is deprecated"],
+  [!/(?:#[\da-f]{3,8}\b|cubic-bezier\()/i.test(tokens), "Application aliases must not duplicate the palette or easing"],
+  [docsTheme.includes("src/styles/brand-tokens.css"), "Documentation must consume generated theme variables"],
 ];
 for (const [passes, message] of required) {
   if (!passes) failures.push(message);
 }
+const themeCheck = spawnSync(process.execPath, ["scripts/generate_theme.mjs", "--check"], { encoding: "utf8" });
+if (themeCheck.status !== 0) failures.push(themeCheck.stderr || themeCheck.stdout);
 
 const report = {
   tool: "@ant-design/cli",

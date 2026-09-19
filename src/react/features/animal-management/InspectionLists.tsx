@@ -12,7 +12,7 @@ import {
 import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { MobilePage } from "../../components/ui/MobilePage";
-import { DataTable, ListRefreshStatus } from "../../components/ui";
+import { DataTable, ListRefreshStatus, RowActions } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { FindingDialog } from "./InspectionFindingDialog";
@@ -48,9 +48,10 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
 
   if (query.isPending) return <PageSkeleton label="巡检记录" variant="table" />;
   if (query.isError && !query.data) return <PageState title="巡检记录加载失败" retry={() => void query.refetch()} />;
-  const feedback = (
-    <InspectionListFeedback error={query.isError} refreshing={query.isFetching} retry={() => void query.refetch()} />
-  );
+  const refreshStatus = <ListRefreshStatus active={query.isFetching} />;
+  const feedback = query.isError ? (
+    <InspectionListError refreshing={query.isFetching} retry={() => void query.refetch()} />
+  ) : null;
   const filters = (
     <Form className="inspection-list-filters" component="div" layout={isMobile ? "vertical" : "inline"}>
       <Form.Item label="饲养间">
@@ -89,9 +90,10 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
   if (isMobile) {
     return (
       <>
-        <MobilePage onBack={() => navigate("animal-inspection-entry")} title="巡检记录">
+        <MobilePage feature="animal-management" onBack={() => navigate("animal-inspection-entry")} title="巡检记录">
           <WorkspaceToolbar
             ariaLabel="巡检记录操作"
+            context={refreshStatus}
             filters={filters}
             primaryAction={
               <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
@@ -143,6 +145,14 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
       >
         <WorkspaceToolbar
           ariaLabel="巡检记录操作"
+          context={
+            <>
+              <Typography.Title level={2} style={{ margin: 0 }}>
+                巡检记录
+              </Typography.Title>
+              {refreshStatus}
+            </>
+          }
           filters={filters}
           primaryAction={
             <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
@@ -152,7 +162,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
         />
 
         {feedback}
-        <Card className="animal-ant-card inspection-list-panel" title="巡检记录">
+        <Card className="animal-ant-card inspection-list-panel">
           <DataTable
             className="inspection-table"
             resizeKey="inspection-records"
@@ -180,9 +190,17 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
                 fixed: "right",
                 width: 256,
                 render: (_, item) => (
-                  <Space size={4}>
+                  <RowActions
+                    ariaLabel={`${item.roomName}巡检记录更多操作`}
+                    lowFrequencyActions={[
+                      {
+                        key: `export-${item.id}`,
+                        label: "导出 PDF",
+                        onClick: () => void downloadAnimalInspectionPdf(item.id),
+                      },
+                    ]}
+                  >
                     <Button onClick={() => setSelectedId(item.id)}>详情</Button>
-                    <Button onClick={() => void downloadAnimalInspectionPdf(item.id)}>导出 PDF</Button>
                     {item.status === "draft" && item.createdBy === user.id ? (
                       <Button
                         onClick={() => {
@@ -193,7 +211,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
                         继续编辑
                       </Button>
                     ) : null}
-                  </Space>
+                  </RowActions>
                 ),
               },
             ]}
@@ -232,9 +250,10 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const current = Math.floor(page.offset / page.limit) + 1;
   if (query.isPending) return <PageSkeleton label="异常处置项" variant="table" />;
   if (query.isError && !query.data) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
-  const feedback = (
-    <InspectionListFeedback error={query.isError} refreshing={query.isFetching} retry={() => void query.refetch()} />
-  );
+  const refreshStatus = <ListRefreshStatus active={query.isFetching} />;
+  const feedback = query.isError ? (
+    <InspectionListError refreshing={query.isFetching} retry={() => void query.refetch()} />
+  ) : null;
   const filters = (
     <Form className="inspection-list-filters" component="div" layout={isMobile ? "vertical" : "inline"}>
       <Form.Item label="处置状态">
@@ -251,13 +270,14 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
           }}
         />
       </Form.Item>
+      {refreshStatus}
     </Form>
   );
   if (isMobile) {
     const findings = query.data?.items || [];
     return (
       <>
-        <MobilePage onBack={() => navigate("animal-inspection-entry")} title="异常处置">
+        <MobilePage feature="animal-management" onBack={() => navigate("animal-inspection-entry")} title="异常处置">
           <WorkspaceToolbar ariaLabel="异常处置" filters={filters} />
           {feedback}
           <Card className="animal-ant-card inspection-list-panel">
@@ -300,9 +320,12 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
           feature: "animal-management",
         }}
       >
+        <Typography.Title level={2} style={{ margin: 0 }}>
+          异常处置
+        </Typography.Title>
         <WorkspaceToolbar ariaLabel="异常处置" filters={filters} />
         {feedback}
-        <Card className="animal-ant-card inspection-list-panel" title="异常处置队列">
+        <Card className="animal-ant-card inspection-list-panel">
           <DataTable
             className="inspection-table"
             resizeKey="inspection-findings"
@@ -348,32 +371,19 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   );
 }
 
-function InspectionListFeedback({
-  error,
-  refreshing,
-  retry,
-}: {
-  error: boolean;
-  refreshing: boolean;
-  retry: () => void;
-}) {
+function InspectionListError({ refreshing, retry }: { refreshing: boolean; retry: () => void }) {
   return (
-    <>
-      <ListRefreshStatus active={refreshing} />
-      {error ? (
-        <Alert
-          role="alert"
-          title="巡检信息更新失败，暂显示上次结果"
-          showIcon
-          type="error"
-          action={
-            <Button loading={refreshing} onClick={retry}>
-              重试
-            </Button>
-          }
-        />
-      ) : null}
-    </>
+    <Alert
+      role="alert"
+      title="巡检信息更新失败，暂显示上次结果"
+      showIcon
+      type="error"
+      action={
+        <Button loading={refreshing} onClick={retry}>
+          重试
+        </Button>
+      }
+    />
   );
 }
 

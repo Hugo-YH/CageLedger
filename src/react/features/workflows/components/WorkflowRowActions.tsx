@@ -1,23 +1,19 @@
 import type { ReactNode } from "react";
+import { RowActions, type LowFrequencyAction } from "../../../components/ui";
 
 export function WorkflowRowActions({
   primary,
-  revoke,
   lock,
+  lowFrequencyActions,
 }: {
   primary: ReactNode;
-  revoke?: ReactNode;
   lock?: ReactNode;
+  lowFrequencyActions?: LowFrequencyAction[];
 }) {
   return (
-    <div className="workflow-row-actions">
-      <span className="workflow-row-action-slot">{primary}</span>
-      <span aria-hidden={!revoke} className="workflow-row-action-slot">
-        {revoke}
-      </span>
-      <span aria-hidden={!lock} className="workflow-row-action-slot">
-        {lock}
-      </span>
-    </div>
+    <RowActions ariaLabel="结算流程更多操作" lowFrequencyActions={lowFrequencyActions}>
+      {primary}
+      {lock}
+    </RowActions>
   );
 }

@@ -20,3 +20,28 @@ def insert_release_announcement_acknowledgement(conn, user_id, version, acknowle
         """,
         (user_id, version, acknowledged_at),
     )
+
+
+def insert_release_announcement_acknowledgements(conn, user_id, versions, acknowledged_at):
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO release_announcement_acknowledgements (user_id, version, acknowledged_at)
+        VALUES (?, ?, ?)
+        """,
+        ((user_id, version, acknowledged_at) for version in versions),
+    )
+
+
+def list_release_announcement_acknowledgements(conn, user_id):
+    return [
+        row["version"]
+        for row in conn.execute(
+            """
+            SELECT version
+            FROM release_announcement_acknowledgements
+            WHERE user_id = ?
+            ORDER BY version
+            """,
+            (user_id,),
+        )
+    ]

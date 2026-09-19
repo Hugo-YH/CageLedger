@@ -201,6 +201,114 @@ class ApiContractTests(unittest.TestCase):
         _, other_status, _ = request_json(self.base_url, f"/api/release-announcements/{version}", opener=other_user)
         self.assertEqual(other_status, {"version": version, "acknowledged": False})
 
+    def test_release_announcement_batch_acknowledgements_are_atomic_and_user_scoped(self):
+        version = "legacy-1.0.0"
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.opener,
+        )
+        _, before, _ = request_json(self.base_url, "/api/release-announcements", opener=self.opener)
+        request_json(
+            self.base_url,
+            f"/api/release-announcements/{version}/acknowledge",
+            method="POST",
+            opener=self.opener,
+        )
+
+        status, listed, _ = request_json(self.base_url, "/api/release-announcements", opener=self.opener)
+        self.assertEqual(status, 200)
+        expected_versions = sorted({*before["acknowledgedVersions"], version})
+        self.assertEqual(listed, {"acknowledgedVersions": expected_versions})
+
+        versions = ["batch-2.0.0", "batch-1.0.0", "batch-2.0.0"]
+        status, acknowledged, _ = request_json(
+            self.base_url,
+            "/api/release-announcements/acknowledge",
+            method="POST",
+            body={"versions": versions},
+            opener=self.opener,
+        )
+        self.assertEqual(status, 200)
+        expected_versions = sorted({*expected_versions, "batch-1.0.0", "batch-2.0.0"})
+        self.assertEqual(acknowledged, {"acknowledgedVersions": expected_versions})
+
+        _, repeated, _ = request_json(
+            self.base_url,
+            "/api/release-announcements/acknowledge",
+            method="POST",
+            body={"versions": versions},
+            opener=self.opener,
+        )
+        self.assertEqual(repeated, acknowledged)
+
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/api/release-announcements/acknowledge",
+                method="POST",
+                body={"versions": ["would-be-written", "invalid version"]},
+                opener=self.opener,
+            )
+        with context.exception as response:
+            self.assertEqual(response.code, 400)
+            self.assertIsInstance(json.load(response)["error"], str)
+        _, after_invalid, _ = request_json(self.base_url, "/api/release-announcements", opener=self.opener)
+        self.assertEqual(after_invalid, acknowledged)
+
+        for versions in ([], [f"limit-{index}" for index in range(501)]):
+            with self.subTest(versions=versions), self.assertRaises(urllib.error.HTTPError) as context:
+                request_json(
+                    self.base_url,
+                    "/api/release-announcements/acknowledge",
+                    method="POST",
+                    body={"versions": versions},
+                    opener=self.opener,
+                )
+            with context.exception as response:
+                self.assertEqual(response.code, 400)
+                self.assertIsInstance(json.load(response)["error"], str)
+
+        request_json(
+            self.base_url,
+            "/api/users",
+            method="POST",
+            body={
+                "username": "release-batch-user",
+                "password": "release-batch-password",
+                "displayName": "批量确认测试账号",
+                "role": "room_admin",
+                "roomIds": [],
+            },
+            opener=self.opener,
+        )
+        other_user = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "release-batch-user", "password": "release-batch-password"},
+            opener=other_user,
+        )
+        _, other_versions, _ = request_json(self.base_url, "/api/release-announcements", opener=other_user)
+        self.assertEqual(other_versions, {"acknowledgedVersions": []})
+
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(self.base_url, "/api/release-announcements")
+        self.assertEqual(context.exception.code, 401)
+        context.exception.close()
+        with self.assertRaises(urllib.error.HTTPError) as context:
+            request_json(
+                self.base_url,
+                "/api/release-announcements/acknowledge",
+                method="POST",
+                body={"versions": ["unauthenticated-1.0.0"]},
+            )
+        self.assertEqual(context.exception.code, 401)
+        context.exception.close()
+
     def test_claim_api_rejects_cross_claim_funding_line(self):
         request_json(
             self.base_url,

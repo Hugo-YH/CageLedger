@@ -1,52 +1,172 @@
-/*
- * Cross-surface design primitives. The application tokens and VitePress theme
- * consume these values; this file does not own component layout.
- */
+/* Generated from src/theme/visual-system.mjs. Run node scripts/generate_theme.mjs. */
 :root {
   --cl-font-sans:
-    -apple-system, blinkmacsystemfont, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
-    "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
-  --cl-font-mono: "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
-  --cl-brand-1: #1677ff;
-  --cl-brand-2: #4096ff;
-  --cl-brand-3: #0958d9;
+    -apple-system, blinkmacsystemfont, "Segoe UI", roboto, "Helvetica Neue", arial, "Noto Sans", "PingFang SC",
+    "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --cl-font-mono: "SFMono-Regular", consolas, "Liberation Mono", menlo, courier, monospace;
+  --cl-font-size-body: 14px;
+  --cl-font-size-small: 12px;
+  --cl-font-size-section: 16px;
+  --cl-font-size-page: 24px;
+  --cl-line-height-body: 1.5714;
+  --cl-line-height-small: 1.6667;
+  --cl-line-height-page: 1.3333;
+  --cl-control-height: 32px;
+  --cl-control-height-small: 24px;
+  --cl-control-height-mobile: 40px;
+  --cl-form-max-width: 1200px;
+  --cl-brand-1: #0958d9;
+  --cl-brand-2: #003eb3;
+  --cl-brand-3: #002c8c;
   --cl-color-bg: #f5f5f5;
   --cl-color-surface: #fff;
-  --cl-color-surface-soft: #fafafa;
+  --cl-color-surface-soft: rgb(0 0 0 / 2%);
+  --cl-color-elevated: #fff;
   --cl-color-text: rgb(0 0 0 / 88%);
   --cl-color-text-secondary: rgb(0 0 0 / 65%);
-  --cl-color-text-tertiary: rgb(0 0 0 / 45%);
+  --cl-color-text-tertiary: rgb(0 0 0 / 65%);
+  --cl-color-inverse: #fff;
   --cl-color-border: #d9d9d9;
   --cl-color-border-secondary: #f0f0f0;
+  --cl-color-fill: rgb(0 0 0 / 6%);
+  --cl-color-mask: rgb(0 0 0 / 45%);
+  --cl-color-primary: #1677ff;
+  --cl-color-primary-bg: #e6f4ff;
+  --cl-color-primary-border: #91caff;
+  --cl-color-primary-control: #0958d9;
+  --cl-color-primary-control-hover: #003eb3;
+  --cl-color-primary-control-active: #002c8c;
   --cl-color-success: #52c41a;
   --cl-color-warning: #faad14;
   --cl-color-error: #ff4d4f;
   --cl-color-info: #1677ff;
+  --cl-color-sider: #001529;
+  --cl-color-success-bg: #f6ffed;
+  --cl-color-success-border: #b7eb8f;
+  --cl-color-success-text: #237804;
+  --cl-color-warning-bg: #fffbe6;
+  --cl-color-warning-border: #ffe58f;
+  --cl-color-warning-text: #874d00;
+  --cl-color-error-bg: #fff2f0;
+  --cl-color-error-border: #ffccc7;
+  --cl-color-error-text: #cf1322;
+  --cl-color-info-bg: #e6f4ff;
+  --cl-color-info-border: #91caff;
+  --cl-color-info-text: #0958d9;
+  --cl-color-reserved: #722ed1;
+  --cl-color-reserved-bg: #f9f0ff;
+  --cl-color-reserved-border: #d3adf7;
+  --cl-color-reserved-text: #531dab;
   --cl-space-1: 4px;
   --cl-space-2: 8px;
   --cl-space-4: 16px;
   --cl-space-6: 24px;
   --cl-space-8: 32px;
-  --cl-shadow-card: 0 3px 6px -4px rgb(0 0 0 / 12%), 0 6px 16px 0 rgb(0 0 0 / 8%), 0 9px 28px 8px rgb(0 0 0 / 5%);
   --cl-radius-control: 6px;
   --cl-radius-card: 8px;
+  --cl-shadow-card: none;
+  --cl-shadow-overlay: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%), 0 9px 28px 8px rgb(0 0 0 / 5%);
   --cl-z-base: 0;
   --cl-z-sticky: 10;
   --cl-z-dropdown: 1000;
   --cl-z-modal: 1000;
   --cl-z-toast: 1010;
-  --cl-motion-fast: 140ms;
-  --cl-motion-base: 220ms;
-  --cl-motion-overlay: 280ms;
-  --cl-ease-out: cubic-bezier(0.2, 0, 0, 1);
-  --cl-ease-in-out: cubic-bezier(0.2, 0, 0, 1);
-  --cl-ease-drawer: cubic-bezier(0.2, 0, 0, 1);
+  --cl-motion-fast: 0.1s;
+  --cl-motion-base: 0.2s;
+  --cl-motion-overlay: 0.3s;
+  --cl-ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --cl-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --cl-ease-drawer: cubic-bezier(0.78, 0.14, 0.15, 0.86);
+}
+
+:root[data-theme="dark"],
+:root.dark {
+  --cl-font-sans:
+    -apple-system, blinkmacsystemfont, "Segoe UI", roboto, "Helvetica Neue", arial, "Noto Sans", "PingFang SC",
+    "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --cl-font-mono: "SFMono-Regular", consolas, "Liberation Mono", menlo, courier, monospace;
+  --cl-font-size-body: 14px;
+  --cl-font-size-small: 12px;
+  --cl-font-size-section: 16px;
+  --cl-font-size-page: 24px;
+  --cl-line-height-body: 1.5714;
+  --cl-line-height-small: 1.6667;
+  --cl-line-height-page: 1.3333;
+  --cl-control-height: 32px;
+  --cl-control-height-small: 24px;
+  --cl-control-height-mobile: 40px;
+  --cl-form-max-width: 1200px;
+  --cl-brand-1: #5993d2;
+  --cl-brand-2: #8dc5f8;
+  --cl-brand-3: #3c89e8;
+  --cl-color-bg: #000;
+  --cl-color-surface: #141414;
+  --cl-color-surface-soft: rgb(255 255 255 / 4%);
+  --cl-color-elevated: #1f1f1f;
+  --cl-color-text: rgb(255 255 255 / 85%);
+  --cl-color-text-secondary: rgb(255 255 255 / 65%);
+  --cl-color-text-tertiary: rgb(255 255 255 / 65%);
+  --cl-color-inverse: #fff;
+  --cl-color-border: #424242;
+  --cl-color-border-secondary: #303030;
+  --cl-color-fill: rgb(255 255 255 / 12%);
+  --cl-color-mask: rgb(0 0 0 / 45%);
+  --cl-color-primary: #1668dc;
+  --cl-color-primary-bg: #15325b;
+  --cl-color-primary-border: #15325b;
+  --cl-color-primary-control: #1668dc;
+  --cl-color-primary-control-hover: #1554ad;
+  --cl-color-primary-control-active: #15417e;
+  --cl-color-success: #49aa19;
+  --cl-color-warning: #d89614;
+  --cl-color-error: #dc4446;
+  --cl-color-info: #1668dc;
+  --cl-color-sider: #001529;
+  --cl-color-success-bg: #162312;
+  --cl-color-success-border: #274916;
+  --cl-color-success-text: #8fd460;
+  --cl-color-warning-bg: #2b2111;
+  --cl-color-warning-border: #594214;
+  --cl-color-warning-text: #f3cc62;
+  --cl-color-error-bg: #2c1618;
+  --cl-color-error-border: #5b2526;
+  --cl-color-error-text: #f37370;
+  --cl-color-info-bg: #111a2c;
+  --cl-color-info-border: #15325b;
+  --cl-color-info-text: #5993d2;
+  --cl-color-reserved: #642ab5;
+  --cl-color-reserved-bg: #1a1325;
+  --cl-color-reserved-border: #301c4d;
+  --cl-color-reserved-text: #ab7ae0;
+  --cl-space-1: 4px;
+  --cl-space-2: 8px;
+  --cl-space-4: 16px;
+  --cl-space-6: 24px;
+  --cl-space-8: 32px;
+  --cl-radius-control: 6px;
+  --cl-radius-card: 8px;
+  --cl-shadow-card: none;
+  --cl-shadow-overlay:
+    0 6px 16px 0 rgb(255 255 255 / 1.6%), 0 3px 6px -4px rgb(255 255 255 / 2.4%), 0 9px 28px 8px rgb(255 255 255 / 1%);
+  --cl-z-base: 0;
+  --cl-z-sticky: 10;
+  --cl-z-dropdown: 1000;
+  --cl-z-modal: 1000;
+  --cl-z-toast: 1010;
+  --cl-motion-fast: 0.1s;
+  --cl-motion-base: 0.2s;
+  --cl-motion-overlay: 0.3s;
+  --cl-ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --cl-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --cl-ease-drawer: cubic-bezier(0.78, 0.14, 0.15, 0.86);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --cl-motion-fast: 1ms;
-    --cl-motion-base: 1ms;
-    --cl-motion-overlay: 1ms;
+  :root,
+  :root[data-theme="dark"],
+  :root.dark {
+    --cl-motion-fast: 0s;
+    --cl-motion-base: 0s;
+    --cl-motion-overlay: 0s;
   }
 }

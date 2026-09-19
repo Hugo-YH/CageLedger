@@ -10,6 +10,7 @@ import type {
   PagedResponse,
   PrincipalIdentity,
   ReleaseAnnouncementStatus,
+  ReleaseAnnouncementHistory,
   SystemEnvironment,
   SystemPerformanceHistory,
   SystemInfo,
@@ -166,6 +167,31 @@ export function useReleaseAnnouncement(version: string, enabled = true) {
   });
 }
 
+export function useReleaseAnnouncementHistory() {
+  return useQuery({
+    queryKey: queryKeys.releaseAnnouncementHistory,
+    queryFn: ({ signal }) => requestJson<ReleaseAnnouncementHistory>("/api/release-announcements", { signal }),
+    retry: false,
+  });
+}
+
+export function useAcknowledgeReleaseAnnouncements() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (versions: string[]) =>
+      requestJson<ReleaseAnnouncementHistory>("/api/release-announcements/acknowledge", {
+        method: "POST",
+        body: JSON.stringify({ versions }),
+      }),
+    onSuccess: (history) => {
+      client.setQueryData(queryKeys.releaseAnnouncementHistory, history);
+      for (const version of history.acknowledgedVersions) {
+        client.setQueryData(queryKeys.releaseAnnouncement(version), { version, acknowledged: true });
+      }
+    },
+  });
+}
+
 export function useAcknowledgeReleaseAnnouncement(version: string) {
   const client = useQueryClient();
   return useMutation({
@@ -173,7 +199,10 @@ export function useAcknowledgeReleaseAnnouncement(version: string) {
       requestJson<ReleaseAnnouncementStatus>(`/api/release-announcements/${encodeURIComponent(version)}/acknowledge`, {
         method: "POST",
       }),
-    onSuccess: (status) => client.setQueryData(queryKeys.releaseAnnouncement(version), status),
+    onSuccess: (status) => {
+      client.setQueryData(queryKeys.releaseAnnouncement(version), status);
+      void client.invalidateQueries({ queryKey: queryKeys.releaseAnnouncementHistory });
+    },
   });
 }
 

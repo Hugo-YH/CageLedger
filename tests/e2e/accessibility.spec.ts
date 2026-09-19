@@ -46,7 +46,10 @@ test("core workspaces and dialogs retain accessible semantics", async ({ page })
 
   await openSettingsView(page, "房间管理");
   const openRoomEditor = page.getByRole("button", { name: "新增饲养间", exact: true });
-  await openRoomEditor.click();
+  // Keyboard entry has a focused return target in every engine; WebKit mouse
+  // clicks intentionally do not focus native buttons.
+  await openRoomEditor.focus();
+  await openRoomEditor.press("Enter");
   const dialog = page.getByRole("dialog", { name: "新增饲养间" });
   await expect(dialog).toBeVisible();
   await expect(page.getByRole("button", { name: "关闭", exact: true })).toBeFocused();
@@ -91,5 +94,29 @@ test("populated workflow tags and hidden measuring rows remain accessible in bot
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await expectNoSeriousViolations(page);
+  }
+});
+
+test("public surfaces remain readable on phones in light and dark themes", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/public/cage-card/THEME", (route) =>
+    route.fulfill({
+      json: { item: { qrId: "THEME", batchNo: "笼卡主题检查", statusLabel: "已入驻", pi: "张三", animalCount: 5 } },
+    }),
+  );
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    for (const [path, name] of [
+      ["/", "portal"],
+      ["/app", "login"],
+      ["/c/THEME", "public-scan"],
+    ]) {
+      await page.goto(path);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+      if (name === "public-scan") await expect(page.getByText("5 只", { exact: true })).toBeVisible();
+      await expectNoSeriousViolations(page);
+      await page.screenshot({ path: testInfo.outputPath(`${name}-${colorScheme}.png`), animations: "disabled" });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    }
   }
 });

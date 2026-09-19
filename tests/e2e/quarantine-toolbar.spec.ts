@@ -77,6 +77,15 @@ test("quarantine selection survives pagination and clears when date or status sc
     await page.screenshot({ path: testInfo.outputPath(`selected-toolbar-${width}.png`) });
   }
 
+  await page.setViewportSize({ width: 760, height: 900 });
+  const poolHelp = page.getByRole("button", { name: "待检疫动物说明", exact: true });
+  await expect(poolHelp).toHaveCSS("height", "44px");
+  await expect(poolHelp).toHaveCSS("width", "44px");
+  await poolHelp.click();
+  await expect(page.locator(".ant-popover").filter({ visible: true })).toBeInViewport();
+  await page.keyboard.press("Escape");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const name of ["检疫池接收起始日期", "检疫池接收结束日期"]) {
     await page.getByRole("textbox", { name, exact: true }).fill("2026-09-09");

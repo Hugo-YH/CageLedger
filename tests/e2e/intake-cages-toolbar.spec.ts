@@ -40,7 +40,7 @@ async function captureToolbar(page: Page, testInfo: TestInfo, name: string, tool
   expect(evidence.rect.right).toBeLessThanOrEqual(evidence.viewport.width + 1);
   for (const item of evidence.buttons) {
     expect(item.rect.right).toBeLessThanOrEqual(evidence.viewport.width + 1);
-    expect(item.rect.height).toBe(32);
+    expect(item.rect.height).toBe(evidence.viewport.width < 768 ? 44 : 32);
   }
   const evidencePath = testInfo.outputPath(`${name}-computed-style.json`);
   await writeFile(evidencePath, JSON.stringify(evidence, null, 2));

@@ -86,6 +86,10 @@ async function captureChoices(page: Page, testInfo: TestInfo, entries: CameraCod
   ]) {
     await page.setViewportSize({ width, height });
     await expect(picker.locator(".scanner-candidate-hit")).toHaveCount(entries.length);
+    await expect(picker.locator(".scanner-candidate-options button").first()).toHaveCSS(
+      "height",
+      width < 768 ? "44px" : "32px",
+    );
     await frame.scrollIntoViewIfNeeded();
     const geometry = await picker.evaluate((element) => {
       const container = element.querySelector<HTMLElement>(".scanner-candidate-frame")!;
@@ -135,7 +139,7 @@ async function captureChoices(page: Page, testInfo: TestInfo, entries: CameraCod
     });
     expect(matched.size).toBe(entries.length);
     geometry.options.forEach(({ rect, height: controlHeight }) => {
-      expect(controlHeight).toBe("32px");
+      expect(controlHeight).toBe(width < 768 ? "44px" : "32px");
       expect(rect.x).toBeGreaterThanOrEqual(0);
       expect(rect.right).toBeLessThanOrEqual(width + 1);
     });

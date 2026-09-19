@@ -1,7 +1,4 @@
 /* Workspace view and container primitives. */
-.workspace-view {
-  animation: none;
-}
 
 .workspace {
   padding: 24px 24px 28px;
@@ -30,13 +27,13 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .workspace {
     padding: 16px 16px calc(92px + env(safe-area-inset-bottom));
   }
 
   .workspace-view {
-    gap: 16px;
+    gap: 24px;
   }
 }
 
@@ -211,15 +208,20 @@ p {
 
 h1 {
   font-size: var(--title-lg);
-  line-height: 1.12;
+  line-height: 32px;
+  font-weight: 600;
 }
 
 h2 {
   font-size: var(--title-md);
+  line-height: 24px;
+  font-weight: 600;
 }
 
 h3 {
   font-size: var(--title-sm);
+  line-height: 24px;
+  font-weight: 600;
 }
 
 .topbar p,
@@ -250,8 +252,7 @@ h3 {
 
 .workspace-view {
   display: grid;
-  gap: 20px;
-  animation: workspaceViewIn var(--motion-slow) var(--ease-emphasis);
+  gap: 24px;
 }
 
 .workspace-body {
@@ -264,7 +265,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -331,7 +332,7 @@ h3 {
   justify-content: center;
   width: 19px;
   height: 19px;
-  color: var(--primary);
+  color: var(--primary-text);
   vertical-align: middle;
   z-index: var(--z-float);
 }
@@ -345,7 +346,7 @@ h3 {
   border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
   border-radius: 50%;
   background: var(--surface-soft);
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 12px;
   line-height: 1;
   font-weight: 600;
@@ -377,7 +378,6 @@ h3 {
   pointer-events: none;
   transition:
     opacity var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard),
     visibility var(--motion-fast) var(--ease-standard);
 }
 
@@ -421,7 +421,7 @@ h3 {
 
 .dashboard-view {
   display: grid;
-  gap: 20px;
+  gap: 24px;
 }
 
 .dashboard-metrics {
@@ -447,14 +447,12 @@ h3 {
   gap: 8px;
   box-shadow: var(--shadow-soft), var(--shadow-inset);
   transition:
-    transform var(--motion-base) var(--ease-emphasis),
     box-shadow var(--motion-base) var(--ease-standard),
     border-color var(--motion-base) var(--ease-standard),
     background-color var(--motion-base) var(--ease-standard);
 }
 
 .dashboard-overview-card:hover {
-  transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--primary) 22%, transparent);
   box-shadow: var(--shadow-lift);
 }
@@ -500,14 +498,12 @@ h3 {
   box-shadow: var(--shadow-inset);
   transition:
     border-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard),
-    transform var(--motion-base) var(--ease-emphasis);
+    box-shadow var(--motion-base) var(--ease-standard);
 }
 
 .dashboard-facility-card:hover {
   border-color: color-mix(in srgb, var(--primary) 24%, transparent);
   box-shadow: var(--shadow-soft);
-  transform: translateY(-1px);
 }
 
 .dashboard-facility-head {
@@ -539,13 +535,11 @@ h3 {
   box-shadow: var(--shadow-inset);
   transition:
     border-color var(--motion-base) var(--ease-standard),
-    background-color var(--motion-base) var(--ease-standard),
-    transform var(--motion-base) var(--ease-emphasis);
+    background-color var(--motion-base) var(--ease-standard);
 }
 
 .metric:hover {
   border-color: color-mix(in srgb, var(--primary) 20%, transparent);
-  transform: translateY(-1px);
 }
 
 .metric span,
@@ -563,7 +557,7 @@ h3 {
 }
 
 .metric.active strong {
-  color: var(--green);
+  color: var(--success-text);
 }
 
 .metric.reserved strong {
@@ -633,14 +627,12 @@ h3 {
   background: linear-gradient(180deg, var(--surface), var(--surface-soft));
   transition:
     border-color var(--motion-base) var(--ease-standard),
-    background-color var(--motion-base) var(--ease-standard),
-    transform var(--motion-base) var(--ease-emphasis);
+    background-color var(--motion-base) var(--ease-standard);
 }
 
 .chart-legend-item:hover {
   border-color: color-mix(in srgb, var(--primary) 20%, transparent);
   background: var(--surface-soft);
-  transform: translateY(-1px);
 }
 
 .chart-legend-item small {
@@ -713,10 +705,10 @@ h3 {
   cursor: pointer;
   text-align: left;
   transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
+    border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 
 .billing-guide-card strong {
@@ -736,7 +728,7 @@ h3 {
 }
 
 .billing-guide-card.active {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .billing-scope-banner {
@@ -867,7 +859,7 @@ h3 {
 .billing-settlement-note.empty {
   border-color: color-mix(in srgb, var(--amber) 22%, transparent);
   background: var(--warning-soft);
-  color: var(--amber);
+  color: var(--warning-text);
 }
 
 .stacked-capacity-track {
@@ -1100,95 +1092,12 @@ h3 {
 }
 
 /* Persistent sidebar navigation keeps the active path visible without blocking the workspace. */
-.shell {
-  isolation: isolate;
-}
-
-.sidebar {
-  z-index: var(--z-sticky);
-}
 
 .workspace {
   z-index: var(--z-raised);
 }
 
-.navigation-submenu {
-  display: none;
-  margin: -4px 0 4px 20px;
-  padding: 4px 0 4px 12px;
-  border-left: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
-}
-
-.navigation-submenu.expanded,
-.navigation-submenu.current-group {
-  display: grid;
-}
-
 /* The compact rail carries only top-level destinations. */
-.shell.sidebar-collapsed .navigation-submenu {
-  display: none;
-}
-
-.navigation-submenu .settings-drawer-item {
-  position: relative;
-  min-height: 36px;
-  width: 100%;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px 44px 8px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--line-strong);
-  box-shadow: none;
-  transform: none;
-}
-
-.navigation-submenu .settings-drawer-item svg {
-  width: 15px;
-  height: 15px;
-  grid-row: auto;
-  color: currentcolor;
-}
-
-.navigation-submenu .settings-drawer-item span {
-  grid-column: 2;
-  color: inherit;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.navigation-submenu .settings-drawer-item:hover {
-  background: rgb(255 255 255 / 7%);
-  color: var(--surface-soft);
-  transform: none;
-}
-
-.navigation-submenu .settings-drawer-item.active {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--green) 30%, transparent),
-    color-mix(in srgb, var(--green) 14%, transparent)
-  );
-  color: var(--text-inverse);
-  box-shadow:
-    inset 3px 0 0 var(--success-line),
-    inset 0 0 0 1px color-mix(in srgb, var(--success-line) 16%, transparent);
-}
-
-.navigation-submenu .settings-drawer-item.active::after {
-  content: "当前";
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  padding: 4px;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--green) 14%, transparent);
-  color: var(--success-line);
-  font-size: 12px;
-  font-weight: 600;
-  transform: translateY(-50%);
-}
 
 .mobile-account-actions,
 .mobile-navigation-backdrop {
@@ -1279,20 +1188,13 @@ h3 {
   border-top: 1px solid var(--app-border);
 }
 
+[data-ui="mobile-navigation-sheet"] .adm-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 [data-ui="mobile-navigation-sheet"] .ant-mobile-sheet-actions .adm-button {
   flex: 1;
-}
-
-.nav-submenu-label {
-  margin: 8px 8px 4px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.nav-submenu-label:first-child {
-  margin-top: 4px;
 }
 
 .sr-only {
@@ -1304,47 +1206,6 @@ h3 {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-
-.nav-toggle-rail {
-  left: calc(var(--sidebar-width) - 46px);
-  top: 25px;
-  z-index: var(--z-raised);
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  border: 1px solid color-mix(in srgb, var(--green) 20%, transparent);
-  border-radius: 8px;
-  background: linear-gradient(180deg, var(--text), var(--text));
-  box-shadow: var(--shadow-pop);
-}
-
-.nav-toggle-rail::before {
-  content: "";
-  left: 12px;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border: solid var(--success-line);
-  border-width: 0 0 1.5px 1.5px;
-  border-radius: 0;
-  background: transparent;
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.sidebar-collapsed .nav-toggle-rail::before {
-  left: 10px;
-  transform: translateY(-50%) rotate(225deg);
-}
-
-.sidebar-collapsed .nav-toggle-rail {
-  left: 22px;
-  top: 76px;
-}
-
-[data-ui="release-announcement"] h3.ant-typography {
-  margin-block: 16px 12px;
-  font-size: 20px;
 }
 
 [data-ui="release-announcement"] .release-announcement-items {
@@ -1365,11 +1226,210 @@ h3 {
 
 [data-ui="release-announcement"] .release-announcement-items li > .anticon {
   margin-top: 5px;
-  color: var(--ant-color-primary);
+  color: var(--primary-text);
 }
 
 [data-ui="release-announcement"] .release-announcement-note.ant-typography {
   margin: 16px 0 0;
   padding-top: 12px;
   border-top: 1px solid var(--app-border);
+}
+
+.ant-shell {
+  min-height: 100dvh;
+  background: var(--app-page-bg);
+}
+
+.ant-sidebar {
+  position: sticky !important;
+  top: 0;
+  height: 100dvh;
+  overflow: hidden;
+  border-right: 1px solid rgb(255 255 255 / 10%);
+  background: var(--app-sider-bg) !important;
+}
+
+.ant-sidebar .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.ant-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--app-on-sider);
+}
+
+.ant-brand img {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.ant-brand-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ant-brand-copy strong {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ant-brand-copy span {
+  overflow: hidden;
+  color: rgb(255 255 255 / 65%);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ant-sidebar-collapse {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  z-index: var(--z-raised);
+  color: rgb(255 255 255 / 85%) !important;
+}
+
+.ant-shell-collapsed .ant-brand {
+  min-height: 96px;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.ant-shell-collapsed .ant-brand-copy,
+.ant-shell-collapsed .ant-sidebar-account {
+  display: none;
+}
+
+.ant-shell-collapsed .ant-sidebar-collapse {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.ant-main-menu {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 12px;
+  border-inline-end: 0 !important;
+  overflow: hidden auto;
+}
+
+.ant-main-menu.ant-menu-dark .ant-menu-item,
+.ant-main-menu.ant-menu-dark .ant-menu-submenu-title {
+  width: calc(100% - 16px);
+  margin-inline: 8px;
+  border-radius: 6px;
+}
+
+.ant-sidebar-account {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  margin: 0 12px 16px;
+  padding: 16px 12px 0;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+}
+
+.ant-sidebar-account .ant-typography {
+  color: rgb(255 255 255 / 88%);
+  font-size: 12px;
+}
+
+.ant-sidebar-account .ant-typography-secondary {
+  color: rgb(255 255 255 / 65%);
+}
+
+.ant-workspace-layout,
+.ant-workspace {
+  min-width: 0;
+  background: var(--app-page-bg);
+}
+
+.ant-workspace {
+  padding: 24px;
+}
+
+.ant-mobile-tabbar {
+  display: none;
+}
+
+.ant-mobile-navigation-sheet {
+  max-height: min(76dvh, 680px);
+  overflow: auto;
+  padding: 8px 0 calc(20px + env(safe-area-inset-bottom));
+}
+
+.ant-mobile-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px 8px;
+  font-size: 16px;
+}
+
+.ant-mobile-sheet-actions {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+@media (width < 768px) {
+  .ant-shell {
+    display: block;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (width < 768px) {
+  .ant-sidebar {
+    display: none;
+  }
+}
+
+@media (width < 768px) {
+  .ant-workspace-layout {
+    width: 100%;
+    min-width: 100%;
+    flex: none;
+  }
+}
+
+@media (width < 768px) {
+  .ant-workspace {
+    width: 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 16px;
+  }
+}
+
+@media (width < 768px) {
+  .ant-mobile-tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: var(--app-z-overlay);
+    display: block !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--shadow-soft);
+  }
 }

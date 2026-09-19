@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -31,21 +32,18 @@ for (const path of source) {
   if (/z-index:\s*(?:[1-9]\d{3,}|\d{5,})/.test(text)) failures.push(`${relative(path)} 使用未登记的高层级 z-index`);
 }
 
-const motionContracts = [
-  ["src/styles/tokens.css", "--motion-fast: 140ms;", "应用微交互时长"],
-  ["src/styles/tokens.css", "--motion-base: 220ms;", "应用常规动效时长"],
-  ["src/styles/tokens.css", "--motion-slow: 280ms;", "应用浮层动效时长"],
-  ["src/styles/tokens.css", "--ease-out: cubic-bezier(0.2, 0, 0, 1);", "应用标准缓动"],
-  ["src/styles/brand-tokens.css", "--cl-motion-fast: 140ms;", "跨表面微交互时长"],
-  ["src/styles/brand-tokens.css", "--cl-motion-base: 220ms;", "跨表面常规动效时长"],
-  ["src/styles/brand-tokens.css", "--cl-motion-overlay: 280ms;", "跨表面浮层动效时长"],
-  ["src/react/components/ui/AntdProvider.tsx", 'motionDurationFast: "0.14s"', "Ant 微交互时长"],
-  ["src/react/components/ui/AntdProvider.tsx", 'motionDurationMid: "0.22s"', "Ant 常规动效时长"],
-  ["src/react/components/ui/AntdProvider.tsx", 'motionDurationSlow: "0.28s"', "Ant 浮层动效时长"],
-];
-for (const [path, contract, label] of motionContracts) {
-  const text = readFileSync(join(root, path), "utf8");
-  if (!text.includes(contract)) failures.push(`${path} 缺少${label}契约：${contract}`);
+// Validate actual shared-theme output rather than frozen copies of durations or prose.
+const themeCheck = spawnSync(process.execPath, ["scripts/generate_theme.mjs", "--check"], { encoding: "utf8" });
+if (themeCheck.status !== 0) failures.push(themeCheck.stderr || themeCheck.stdout);
+const provider = readFileSync(join(root, "src/react/components/ui/AntdProvider.tsx"), "utf8");
+if (!provider.includes("createTheme(") || provider.includes('componentSize="middle"')) {
+  failures.push("ConfigProvider must consume the shared theme and the supported medium size API");
+}
+for (const path of source.filter((path) => path.endsWith(".css"))) {
+  const css = readFileSync(path, "utf8");
+  if (/\.ant-btn:active[^{}]*\{[^}]*transform:\s*scale/.test(css)) {
+    failures.push(`${relative(path)} must not add universal Ant button scaling`);
+  }
 }
 
 const projectHomeStyles = readFileSync(join(root, "src/styles/features/project-home.css"), "utf8");

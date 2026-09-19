@@ -49,7 +49,10 @@ test("camera video and input stay mounted across breakpoints and release on leav
       page.locator(".scanner-code-field .ant-input-affix-wrapper"),
       page.getByRole("button", { name: "查询", exact: true }),
     ]) {
-      await expect(control).toHaveCSS("height", "32px");
+      await expect(control).toHaveCSS(
+        "height",
+        viewport.width < 768 ? ((await control.evaluate((el) => el.tagName === "BUTTON")) ? "44px" : "40px") : "32px",
+      );
       const box = await control.boundingBox();
       if (!box) throw new Error("扫码控件不可见");
       expect(box.x).toBeGreaterThanOrEqual(0);

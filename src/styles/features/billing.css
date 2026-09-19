@@ -6,7 +6,7 @@
 .secondary.danger-text {
   background: var(--danger-soft);
   border-color: var(--danger-line);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .ghost.danger-text:hover {
@@ -68,8 +68,7 @@
   overflow: hidden;
   transition:
     border-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard),
-    transform var(--motion-base) var(--ease-emphasis);
+    box-shadow var(--motion-base) var(--ease-standard);
 }
 
 .summary-tile::before {
@@ -89,7 +88,6 @@
 .summary-tile:hover {
   border-color: color-mix(in srgb, var(--primary) 20%, transparent);
   box-shadow: var(--shadow-soft);
-  transform: translateY(-1px);
 }
 
 .summary-tile:hover::before {
@@ -155,8 +153,7 @@ table:not([class^="ant-"], [class*=" ant-"]) {
 .table-wrap table:not(.quantity-template-table) tbody tr {
   transition:
     background-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
+    box-shadow var(--motion-base) var(--ease-standard);
 }
 
 .table-wrap table:not(.quantity-template-table) tbody tr:hover td {
@@ -253,7 +250,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   margin: 16px 0 0;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .monthly-billing-summary-body {
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -319,8 +316,8 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 
 .dense-table tbody tr {
   transition:
-    background 140ms ease,
-    box-shadow 140ms ease;
+    background var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .dense-table tbody tr:hover td {
@@ -435,7 +432,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   margin-top: 4px;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .react-intake-view .intake-action-panel {
     min-width: 0;
   }
@@ -549,10 +546,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 .react-quantity-layout .quantity-date-picker-button:hover:not(:disabled),
 .react-quantity-layout .quantity-date-picker-button:focus-visible {
   transform: translateY(-50%);
-}
-
-.react-quantity-layout .quantity-date-picker-button:active:not(:disabled) {
-  transform: translateY(-50%) scale(0.97);
 }
 
 .react-quantity-layout .quantity-entry-table.animal-details-hidden {
@@ -815,7 +808,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   font-variant-numeric: tabular-nums;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .react-quantity-layout .quantity-sheet-head-actions,
   .settlement-command {
     grid-template-columns: 1fr;
@@ -964,7 +957,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   color: var(--text-soft);
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .react-cage-view .panel-head-actions {
     width: 100%;
     display: grid;
@@ -1205,7 +1198,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   margin-left: auto;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   .ledger-tabs {
     overflow-x: auto;
   }
@@ -1327,7 +1320,9 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 .app-modal-root.settlement-preview-modal .settlement-preview-toolbar-context {
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 8px;
 }
 
@@ -1426,7 +1421,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   align-items: end;
 }
 
-@media (width <= 760px) {
+@media (width < 768px) {
   [data-feature="billing"] .ledger-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -1439,7 +1434,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 
 /* Quantity entry table keeps a scrollable width on mobile (migrated from
  * responsive.css). */
-@media (width <= 760px) {
+@media (width < 768px) {
   .quantity-entry-table {
     min-width: 760px;
   }
@@ -1511,7 +1506,7 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 }
 
 [data-feature="billing"] .quantity-pi-hint-icon {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 [data-feature="billing"] .quantity-pi-hint-actions {

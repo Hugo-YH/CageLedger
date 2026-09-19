@@ -37,12 +37,13 @@
     "lint:python": "node scripts/run_python.mjs -m ruff check .",
     "lint:shell": "bash -n scripts/*.sh && shellcheck scripts/*.sh",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:python && npm run check:architecture -- --enforce && npm run check:ui-contract && npm run check:style-ownership && npm run check:antd-design && npm run check:docs",
-    "verify:full": "npm run check && npm run build && npm run test:e2e",
+    "verify:full": "npm run check && npm run build && npm run test:e2e && npm run test:e2e:compat",
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
     "package:offline:image": "bash scripts/package_offline_image.sh",
     "publish:container:local": "bash scripts/publish_container_local.sh",
-    "release:local": "bash scripts/release_local.sh"
+    "release:local": "bash scripts/release_local.sh",
+    "test:e2e:compat": "node scripts/check_python_runtime.mjs && node scripts/test_desktop_compat.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.2",

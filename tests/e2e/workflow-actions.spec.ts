@@ -103,8 +103,9 @@ test("revoke keeps the reason on failure and ignores the success callback of a c
     pending = route;
   });
   await openWorkflowCenter(page);
-  const trigger = page.getByRole("button", { name: "撤回", exact: true });
+  const trigger = page.getByRole("button", { name: "结算流程更多操作", exact: true });
   await trigger.click();
+  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "撤回结算流程" });
   const submit = dialog.getByRole("button", { name: "确认撤回" });
   await expect(submit).toBeDisabled();
@@ -121,6 +122,7 @@ test("revoke keeps the reason on failure and ignores the success callback of a c
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await trigger.click();
+  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   await pending?.fulfill({ json: { ok: true, item: workflow } });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("撤回原因")).toHaveValue("");

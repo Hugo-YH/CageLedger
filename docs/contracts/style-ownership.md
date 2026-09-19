@@ -8,7 +8,7 @@
 
 ## 固定层级
 
-1. 共享品牌 Token：`brand-tokens.css`
+1. 唯一主题源：`src/theme/visual-system.mjs`；生成共享 Token：`brand-tokens.css`（禁止手工编辑）
 2. 应用 Token 与 Ant reset：`tokens.css`、Ant reset、antd-mobile reset
 3. 元素基线：`base.css`
 4. Shell：`shell.css`

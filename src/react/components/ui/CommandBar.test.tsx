@@ -1,12 +1,34 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { CommandBar } from "./CommandBar";
 
 vi.mock("antd", () => ({
-  Button: ({ children }: { children: ReactNode }) => <button>{children}</button>,
+  Button: ({ children, ...props }: { children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
+  Dropdown: ({
+    children,
+    menu,
+  }: {
+    children: ReactNode;
+    menu?: {
+      items?: Array<{ key: string; label?: ReactNode; disabled?: boolean }>;
+      onClick?: ({ key }: { key: string }) => void;
+    };
+  }) => (
+    <>
+      {children}
+      {menu?.items?.map((item) => (
+        <button disabled={item.disabled} key={item.key} onClick={() => menu.onClick?.({ key: item.key })}>
+          {item.label}
+        </button>
+      ))}
+    </>
+  ),
   Space: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Spin: () => <span>加载中</span>,
   Typography: { Text: ({ children }: { children: ReactNode }) => <span>{children}</span> },
 }));
 
@@ -14,6 +36,26 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("exposes actionable, disabled and loading low-frequency actions with accessible trigger", () => {
+  const onArchive = vi.fn();
+  const onDisabled = vi.fn();
+  render(
+    <CommandBar
+      lowFrequencyActions={[
+        { key: "archive", label: "归档", onClick: onArchive, danger: true },
+        { key: "disabled", label: "已禁用", disabled: true, onClick: onDisabled },
+        { key: "loading", label: "处理中", loading: true, onClick: onDisabled },
+      ]}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "工作区操作更多操作" })).toBeInTheDocument();
+  screen.getByRole("button", { name: "归档" }).click();
+  expect(onArchive).toHaveBeenCalledOnce();
+  expect(screen.getByRole("button", { name: "已禁用" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "处理中" })).toBeDisabled();
+  expect(onDisabled).not.toHaveBeenCalled();
 });
 
 it("registers delayed actions, hands sticky ownership back, and restores scroll offsets when actions disappear", () => {

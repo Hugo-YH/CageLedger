@@ -65,21 +65,24 @@ export function SettlementBatchToolbar({
           >
             {selectedCount > 1 ? "批量导出 Excel" : "导出 Excel"}
           </Button>
-          <Tooltip title={selectedCount && !withdrawableCount ? "所选结算项均为未发起或已归档，无法撤回" : undefined}>
-            <span>
-              <Button
-                danger
-                icon={<UndoOutlined aria-hidden />}
-                loading={batchWithdrawing}
-                disabled={empty || !withdrawableCount}
-                onClick={onWithdraw}
-              >
-                {withdrawableCount > 1 ? "批量撤回" : "撤回"}
-              </Button>
-            </span>
-          </Tooltip>
         </>
       }
+      lowFrequencyActions={[
+        {
+          key: "withdraw",
+          label:
+            selectedCount && !withdrawableCount
+              ? "撤回（所选结算项均为未发起或已归档）"
+              : withdrawableCount > 1
+                ? "批量撤回"
+                : "撤回",
+          icon: <UndoOutlined aria-hidden />,
+          danger: true,
+          loading: batchWithdrawing,
+          disabled: empty || !withdrawableCount,
+          onClick: onWithdraw,
+        },
+      ]}
       primaryAction={
         <Tooltip title={allSelectedNonInitiative ? "所选结算项均已发起或已归档" : undefined}>
           <span>

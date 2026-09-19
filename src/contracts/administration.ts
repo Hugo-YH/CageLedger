@@ -60,6 +60,10 @@ export interface ReleaseAnnouncementStatus {
   acknowledged: boolean;
 }
 
+export interface ReleaseAnnouncementHistory {
+  acknowledgedVersions: string[];
+}
+
 export interface SystemLatencyMetrics {
   sampleCount: number;
   p50Ms: number | null;

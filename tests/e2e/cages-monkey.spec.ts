@@ -62,6 +62,11 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   ]) {
     await page.setViewportSize({ width, height });
     await expect(page.getByRole("dialog")).toHaveCSS("transform", "none");
+    await expect(page.getByLabel("年龄", { exact: true })).toHaveCSS("height", width < 768 ? "40px" : "32px");
+    await expect(page.getByRole("group", { name: "猴个体信息", exact: true }).locator(".ant-select")).toHaveCSS(
+      "height",
+      width < 768 ? "40px" : "32px",
+    );
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     const geometry = await page.getByRole("group", { name: "猴个体信息", exact: true }).evaluate((root) => {
       const birth = root.querySelector('[aria-label="出生日期"]')!;
@@ -108,7 +113,7 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
       contentType: "application/json",
     });
     await page.screenshot({ path: testInfo.outputPath(`cage-editor-${width}.png`), animations: "disabled" });
-    expect(geometry.controls.map((control) => control.height)).toEqual([32, 32, 32]);
+    expect(geometry.controls.map((control) => control.height)).toEqual(Array(3).fill(width < 768 ? 40 : 32));
     expect(geometry.clear.height).toBe(geometry.clear.width);
     expect(geometry.clear.height).toBeLessThan(32);
     expect(geometry.pageOverflow).toBe(false);

@@ -31,16 +31,18 @@ graph LR
 
 ### 会话和公开查询
 
-| 方法   | 路径                                               | 用途                           |
-| ------ | -------------------------------------------------- | ------------------------------ |
-| `GET`  | `/api/health`                                      | 服务、数据库、版本和 revision  |
-| `GET`  | `/api/system/info`                                 | 系统元数据                     |
-| `POST` | `/api/auth/login`                                  | 登录                           |
-| `POST` | `/api/auth/logout`                                 | 退出                           |
-| `GET`  | `/api/auth/me`                                     | 当前会话                       |
-| `GET`  | `/api/release-announcements/{version}`             | 当前账号的版本更新说明确认状态 |
-| `POST` | `/api/release-announcements/{version}/acknowledge` | 确认当前账号已阅读该版本说明   |
-| `GET`  | `/api/public/cage-card/{animalRecordId}`           | 免登录笼卡查询                 |
+| 方法   | 路径                                               | 用途                                   |
+| ------ | -------------------------------------------------- | -------------------------------------- |
+| `GET`  | `/api/health`                                      | 服务、数据库、版本和 revision          |
+| `GET`  | `/api/system/info`                                 | 系统元数据                             |
+| `POST` | `/api/auth/login`                                  | 登录                                   |
+| `POST` | `/api/auth/logout`                                 | 退出                                   |
+| `GET`  | `/api/auth/me`                                     | 当前会话                               |
+| `GET`  | `/api/release-announcements`                       | 当前账号全部已确认版本                 |
+| `POST` | `/api/release-announcements/acknowledge`           | 批量确认本次展示的版本，失败不部分写入 |
+| `GET`  | `/api/release-announcements/{version}`             | 当前账号的版本更新说明确认状态         |
+| `POST` | `/api/release-announcements/{version}/acknowledge` | 确认当前账号已阅读该版本说明           |
+| `GET`  | `/api/public/cage-card/{animalRecordId}`           | 免登录笼卡查询                         |
 
 ### 设施和笼位
 

@@ -42,7 +42,8 @@ test("admin edits the catalog, saves a draft and publishes a new version", async
     page.getByRole("group", { name: "巡检目录编辑操作", exact: true }).getByText("草稿已保存", { exact: true }),
   ).toHaveText("草稿已保存");
 
-  await page.locator(".inspection-editor-panel button").filter({ hasText: "返回" }).click();
+  await page.getByRole("button", { name: "巡检目录编辑操作更多操作" }).click();
+  await page.getByRole("menuitem", { name: "返回", exact: true }).click();
   await expect(page.locator(".inspection-draft-banner")).toBeVisible();
   await page.getByRole("button", { name: "继续编辑" }).click();
   await expect(page.locator(".inspection-editor-panel")).toBeVisible();
@@ -88,7 +89,8 @@ test("admin can review the version history", async ({ page }, testInfo) => {
   test.setTimeout(60000);
   await login(page, "admin", "admin123");
   await openStandards(page);
-  await page.getByRole("button", { name: "版本历史" }).click();
+  await page.getByRole("button", { name: "巡检标准操作更多操作" }).click();
+  await page.getByRole("menuitem", { name: "版本历史", exact: true }).click();
   await expect(page.locator(".inspection-version-modal")).toBeVisible();
   await expect(page.locator(".inspection-version-row").first()).toContainText("当前生效");
   await expect(page.locator(".inspection-version-row").first()).toContainText("233 条巡检内容");

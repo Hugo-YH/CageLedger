@@ -231,8 +231,8 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
           <Typography.Text type="secondary">
             {user.role === "admin" ? "管理员 · 全部饲养间" : `房间管理员 · ${user.roomIds.length} 个饲养间`}
           </Typography.Text>
-          <Space orientation="vertical" size={6}>
-            <Button aria-label="刷新页面" block icon={<ReloadOutlined />} size="small" onClick={clearLocalCache}>
+          <Space orientation="vertical" size={8}>
+            <Button aria-label="刷新页面" block icon={<ReloadOutlined />} onClick={clearLocalCache}>
               刷新
             </Button>
             <Button
@@ -241,7 +241,6 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
               danger
               icon={<LogoutOutlined />}
               loading={logout.isPending}
-              size="small"
               onClick={() => void signOut()}
             >
               退出

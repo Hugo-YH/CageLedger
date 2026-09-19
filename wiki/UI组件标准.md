@@ -32,6 +32,8 @@
 
 ## 动效与可访问性
 
-按压反馈使用 140ms，常规切换与 Tooltip/Popover 使用 220ms，抽屉和 Modal 使用 280ms，统一使用 `cubic-bezier(0.2, 0, 0, 1)`。动画只使用 `transform` 和 `opacity`，`prefers-reduced-motion` 保留状态反馈并移除位移与缩放。交互控件保留可见焦点和键盘路径。
+动效使用 Ant 官方 100/200/300ms 与命名缓动，取消统一按压缩放和整页入场。`prefers-reduced-motion` 保留业务状态反馈，状态推进不依赖动画结束。交互控件保留可见焦点和键盘路径。
+
+主题唯一来源为 `src/theme/visual-system.mjs`。应用直接消费，CSS 与文档站变量由 `node scripts/generate_theme.mjs` 派生。桌面正文 14px/22px、控件 32px；手机输入文字 16px、控件 40px、按钮触控目标至少 44px。页面标题 24px/32px，分区标题 16px/24px。普通表单最大 1200px、桌面两列、手机一列。关键动作保持可见，明确标记的低频操作进入“更多”。报告与打印使用专属版式。
 
 完整约定见 `docs/contracts/ui-component-standard.md`、`docs/contracts/ui-color-system.md` 与 `docs/contracts/ui-interaction-system.md`。

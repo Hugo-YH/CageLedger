@@ -272,7 +272,8 @@ test("quarantine batch workspace provides create, edit and guarded delete action
   await expect(page.getByText("批次建立备注", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "返回列表", exact: true }).click();
   row = page.getByRole("row").filter({ hasText: batchName });
-  await row.getByRole("button", { name: "删除", exact: true }).click();
+  await row.getByRole("button", { name: `${batchName}更多操作`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "删除", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "删除检疫批次" });
   await confirmation.getByRole("button", { name: "删除", exact: true }).click();
   await expect(page.getByText("检疫批次已删除", { exact: true })).toBeVisible();
@@ -506,7 +507,11 @@ test("ELISA report form links sources, symbols and multi-project image metadata"
   await expect(secondDropdown).toContainText("乙组李同学");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "删除样本", exact: true }).last().click();
-  await page.getByRole("button", { name: "确认删除", exact: true }).click();
+  const deleteSampleDialog = page.getByRole("dialog", { name: "删除此实验组？", exact: true });
+  await expect(deleteSampleDialog).toBeVisible();
+  await expect(deleteSampleDialog).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
+  await deleteSampleDialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(deleteSampleDialog).toBeHidden();
   const source = page.getByRole("combobox", { name: "混样来源 1", exact: true });
   await source.click();
   const dropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
@@ -540,7 +545,7 @@ test("ELISA report form links sources, symbols and multi-project image metadata"
     name: "gel.png",
     mimeType: "image/png",
     buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
       "base64",
     ),
   });

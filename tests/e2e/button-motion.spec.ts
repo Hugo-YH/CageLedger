@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test("buttons use one press feedback and stop moving while submitting", async ({ page }, testInfo) => {
+test("buttons preserve geometry while pressed and submitting", async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
@@ -14,9 +14,9 @@ test("buttons use one press feedback and stop moving while submitting", async ({
   await button.hover();
   expect((await read()).transform).toBe("none");
   await page.mouse.down();
-  await expect.poll(async () => (await read()).transform).toBe("matrix(0.98, 0, 0, 0.98, 0, 0)");
+  await expect.poll(async () => (await read()).transform).toBe("none");
   const pressed = await read();
-  expect(pressed.transition.split(", ").every((value) => value === "0.14s")).toBe(true);
+  expect(pressed.transition.split(", ").every((value) => ["0.1s", "0.2s", "0.3s"].includes(value))).toBe(true);
   await page.mouse.move(1, 1);
   await page.mouse.up();
   let release!: () => void;

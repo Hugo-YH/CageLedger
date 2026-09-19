@@ -72,7 +72,17 @@ export function QuarantinePool({
             />
           </>
         }
-        actions={selected.length > 0 && <Button onClick={onNew}>新建检疫批次</Button>}
+        lowFrequencyActions={
+          selected.length > 0
+            ? [
+                {
+                  key: "new-empty-batch",
+                  label: "新建空白检疫批次",
+                  onClick: onNew,
+                },
+              ]
+            : undefined
+        }
         primaryAction={
           selected.length > 0 ? (
             <Button type="primary" onClick={() => onCreate(selected.map((s) => ({ ...s, id: id(), intakeId: s.id })))}>

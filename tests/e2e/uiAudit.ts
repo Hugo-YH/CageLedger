@@ -4,15 +4,19 @@ import { expect } from "./fixtures";
 /** Save responsive evidence at the populated/error state exercised by a business test. */
 export async function captureUiAudit(page: Page, testInfo: TestInfo, name: string, target?: Locator) {
   const original = page.viewportSize();
-  for (const [width, height] of [
+  const viewports = [
     [1440, 900],
     [1180, 900],
     [760, 900],
     [844, 390],
-  ]) {
+  ];
+  for (const [width, height] of viewports.filter(
+    ([width]) => !testInfo.project.metadata.desktopOnly || width >= 1180,
+  )) {
     await page.setViewportSize({ width, height });
     if (target) {
       await expect(target).toBeVisible();
+      await expect(target).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
       // Capture the settled drawer/modal after its entry motion and responsive resize.
       await expect
         .poll(() =>
@@ -23,6 +27,8 @@ export async function captureUiAudit(page: Page, testInfo: TestInfo, name: strin
         )
         .toBe(true);
     }
+    // Resize and modal motion may settle on separate WebKit rendering frames.
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const geometry = await (target || page.locator("main").first()).evaluate((root) => {
       const rect = root.getBoundingClientRect();
       const controls = [

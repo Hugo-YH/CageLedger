@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const MOBILE_BREAKPOINT = "(max-width: 760px)";
+const MOBILE_BREAKPOINT = "(max-width: 767px)";
 
 export function useIsMobileLayout() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_BREAKPOINT).matches);

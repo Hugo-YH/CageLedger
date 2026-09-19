@@ -90,11 +90,14 @@ export function RecordWorklist({
             </Button>
           )
         }
-        actions={
-          <Button loading={query.isFetching} onClick={() => void query.refetch()}>
-            刷新
-          </Button>
-        }
+        lowFrequencyActions={[
+          {
+            key: "refresh",
+            label: "刷新",
+            loading: query.isFetching,
+            onClick: () => void query.refetch(),
+          },
+        ]}
       />
       {!reports && (
         <Space wrap>

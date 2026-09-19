@@ -78,11 +78,17 @@ npm run check
 - 关键流程有变化时补充或更新对应 Playwright 断言，版式变化保留截图；修改完成后运行 `git diff --check`，完整检查留到提交或发布前统一执行。
 - 按 [`ui-change-evidence.md`](../templates/ui-change-evidence.md) 保存组件归属、四档视口、溢出与 computed style 证据。
 
-涉及表单尺寸或样式冲突时，读取受影响的 DatePicker、Select、Input 与只读 Input 的 computed style，统一外框高度档位：默认 32px、紧凑 24px、强调 40px。同一行只用一种档位。涉及 Portal 定位或样式时检查 `.app-modal-root` 的实际作用域；保持单一纵向滚动所有者。修改交互、权限、打印、导出、缓存或加载链路时，浏览器检查实际用户入口中的受影响路径。
+涉及表单尺寸或样式冲突时，读取受影响的 DatePicker、Select、Input 的 computed style：桌面默认 32px、紧凑 24px；手机输入控件 40px/16px 字号、按钮触控目标至少 44px。同一行保持对齐，只读信息优先呈现为文本。主题和动效由 `src/theme/visual-system.mjs` 派生；`node scripts/generate_theme.mjs --check` 校验应用及文档变量没有漂移。跨断点、主题或减少动画切换时同时检查草稿、焦点与浮层。涉及 Portal 定位或样式时检查 `.app-modal-root` 的实际作用域；保持单一纵向滚动所有者。修改交互、权限、打印、导出、缓存或加载链路时，浏览器检查实际用户入口中的受影响路径。
 
 ## 完整门禁
 
-`npm run verify:full` 在基础质量检查后执行 React 应用与 VitePress 文档站的生产构建，并执行完整 Playwright。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
+`npm run verify:full` 在基础质量检查后执行 React 应用与 VitePress 文档站的生产构建、Chromium 完整 Playwright，以及 Firefox／WebKit 桌面兼容专项。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
+
+桌面专项通过 `npm run test:e2e:compat` 单独运行；首次使用执行 `npx playwright install firefox webkit` 安装当前锁定 Playwright 配套的浏览器，不升级依赖。专项串行启动两个独立临时服务及数据库，单 worker、零重试，不允许复用开发服务。默认端口为 5193/5194/5195 与 5203/5204/5205，`CAGELEDGER_COMPAT_PORT` 可调整起始端口；`CAGELEDGER_COMPAT_OUTPUT_DIR` 指定日志报告、截图及样式证据目录，默认位于 `test-results/desktop-compat`。
+
+专项包含 1440px／1180px 下的全部工作入口、公开页面和代表性表单、筛选、权限、异步反馈。Chromium 专用 CDP 和模拟相机用例继续由全量回归覆盖，WebKit 结果仅表示引擎自动化通过，不等同真实 Safari 或手机设备实测。失败不得通过跳过或删除断言消除；重试通过项须定位原因，并对相关用例连续复验两次。
+
+Chromium 设置 `failOnFlakyTests`，重试通过仍使完整门禁失败，避免不稳定用例被报告为全绿；修复后重新取得完整成功结果。`CAGELEDGER_E2E_OUTPUT_DIR` 可将 Chromium 截图、trace、JSON 和 HTML 报告保存至独立目录，不覆盖此前失败证据。
 
 VitePress 文档使用 `wiki/` 作为唯一源目录。`npm run release:notes:sync` 从 `wiki/更新日志.md` 生成系统“关于”页使用的更新记录；发布脚本同时校验 Markdown 版本条目和生成结果。
 

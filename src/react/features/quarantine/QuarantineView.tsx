@@ -23,7 +23,7 @@ import { TestDetail } from "./TestDetail";
 import { SupplierHistoryView } from "./SupplierHistory";
 import { emptyTest, methodLabels } from "./shared";
 import { PageSkeleton } from "../../components/PageSkeleton";
-import { CommandBar, ListRefreshStatus } from "../../components/ui";
+import { CommandBar, ListRefreshStatus, RowActions } from "../../components/ui";
 
 export function QuarantineView({
   mode,
@@ -266,7 +266,22 @@ export function QuarantineView({
                   title: "操作",
                   width: isBatchManagement ? 210 : 130,
                   render: (_, b) => (
-                    <Space size={4} wrap>
+                    <RowActions
+                      ariaLabel={`${b.name}更多操作`}
+                      lowFrequencyActions={
+                        isBatchManagement
+                          ? [
+                              {
+                                key: `delete-${b.id}`,
+                                label: "删除",
+                                danger: true,
+                                disabled: deleteBatch.isPending,
+                                onClick: () => confirmDelete(b),
+                              },
+                            ]
+                          : undefined
+                      }
+                    >
                       <Button type={b.id === batchId ? "primary" : "default"} onClick={() => openBatch(b.id)}>
                         {isBatchManagement ? "查看" : isReports ? "查看报告" : "查看检测记录"}
                       </Button>
@@ -275,12 +290,9 @@ export function QuarantineView({
                           <Button disabled={Boolean(b.completedAt)} onClick={() => setBatchEditor(b)}>
                             编辑
                           </Button>
-                          <Button danger disabled={deleteBatch.isPending} onClick={() => confirmDelete(b)}>
-                            删除
-                          </Button>
                         </>
                       )}
-                    </Space>
+                    </RowActions>
                   ),
                 },
               ]}

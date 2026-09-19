@@ -119,7 +119,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).check();
-  const selectionSummary = page.getByLabel("结算批量操作").getByText(/已选 \d+ 项/, { exact: true });
+  const selectionSummary = page.getByLabel("结算批量操作", { exact: true }).getByText(/已选 \d+ 项/, { exact: true });
   await expect(selectionSummary).toBeVisible();
   const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
   expect(selectedCount).toBeGreaterThan(5);
@@ -132,17 +132,20 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByRole("button", { name: "结算月份，点击切换排序", exact: true }).click();
   await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
   await expect(page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true })).toBeChecked();
-  await page.getByLabel("结算批量操作").getByRole("button", { name: "清空选择", exact: true }).click();
+  await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "清空选择", exact: true }).click();
   await expect(selectionSummary).toHaveText("已选 0 项");
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByLabel("结算批量操作").getByRole("button", { name: "导出 PDF", exact: true }).click();
+  await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "导出 PDF", exact: true }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe(
     `E2E 合表负责人课题组实验动物饲养费核算汇总表 ${month.replace("-", "年")}月.pdf`,
   );
   const xlsxDownloadPromise = page.waitForEvent("download");
-  await page.getByLabel("结算批量操作").getByRole("button", { name: "导出 Excel", exact: true }).click();
+  await page
+    .getByLabel("结算批量操作", { exact: true })
+    .getByRole("button", { name: "导出 Excel", exact: true })
+    .click();
   const xlsxDownload = await xlsxDownloadPromise;
   expect(xlsxDownload.suggestedFilename()).toBe(
     `E2E 合表负责人课题组实验动物饲养费核算汇总表 ${month.replace("-", "年")}月.xlsx`,
@@ -160,7 +163,10 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
 
   const batchRow = page.getByRole("row", { name: /E2E 批量负责人/ });
   await batchRow.getByRole("checkbox", { name: `选择 E2E 批量负责人 ${month} 结算项` }).check();
-  await page.getByLabel("结算批量操作").getByRole("button", { name: "批量发起结算", exact: true }).click();
+  await page
+    .getByLabel("结算批量操作", { exact: true })
+    .getByRole("button", { name: "批量发起结算", exact: true })
+    .click();
   const confirmDialog = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个项目负责人结算项");
   const batchRefreshes: string[] = [];
@@ -268,7 +274,11 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
     .getByRole("row", { name: /E2E 已发起负责人/ })
     .getByRole("checkbox", { name: `选择 E2E 已发起负责人 ${month} 结算项` })
     .check();
-  await page.getByLabel("结算批量操作").getByRole("button", { name: "撤回", exact: true }).click();
+  await page
+    .getByLabel("结算批量操作", { exact: true })
+    .getByRole("button", { name: "结算批量操作更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   await page
     .getByRole("dialog", { name: "批量撤回结算流程", exact: true })
     .getByRole("button", { name: "撤回 1 个流程", exact: true })
@@ -386,7 +396,11 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
     await row.getByRole("checkbox", { name: `选择 ${pi} ${month} 结算项` }).check();
   }
 
-  await page.getByLabel("结算批量操作").getByRole("button", { name: "批量撤回" }).click();
+  await page
+    .getByLabel("结算批量操作", { exact: true })
+    .getByRole("button", { name: "结算批量操作更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "批量撤回", exact: true }).click();
   const confirmDialog = page.getByRole("dialog", { name: "批量撤回结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个");
   const batchRefreshes: string[] = [];
@@ -458,6 +472,7 @@ test("settlement preview toolbar keeps long IACUC lists inside the toolbar", asy
     const toolbar = page.getByRole("group", { name: "结算单预览操作", exact: true });
     await expect(toolbar).toBeVisible();
     await expect(toolbar).not.toHaveAttribute("data-sticky", "true");
+    await expect(toolbar.locator(".ant-btn").first()).toHaveCSS("height", width < 768 ? "44px" : "32px");
     const overflow = await toolbar.evaluate((element) => {
       const modalBody = element.closest(".ant-modal-body");
       const context = element.querySelector<HTMLElement>(".settlement-preview-toolbar-context");
@@ -498,7 +513,9 @@ test("settlement preview toolbar keeps long IACUC lists inside the toolbar", asy
     expect(overflow.contextTruncated).toBe(false);
     expect(overflow.pageOverflows).toBe(false);
     expect(["static", "relative"]).toContain(overflow.computed.position);
-    expect(overflow.actions.every((action) => action.visible && action.height === "32px")).toBe(true);
+    expect(
+      overflow.actions.every((action) => action.visible && action.height === (width < 768 ? "44px" : "32px")),
+    ).toBe(true);
     expect(overflow.actions.at(-1)?.label).toContain("发起结算流程");
     const evidencePath = testInfo.outputPath(`settlement-preview-toolbar-${width}-computed.json`);
     await writeFile(evidencePath, JSON.stringify(overflow, null, 2));
