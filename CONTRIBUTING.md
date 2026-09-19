@@ -72,7 +72,7 @@ npm run typecheck
 
 ## 验证
 
-按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 四档视口、结算双渲染和性能历史要求。纯文档修改在开发中运行文档检查；提交和发布前必须通过完整基础质量检查。
+按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 分级验收、结算双渲染和性能历史要求。相关小改集中完成后统一验证，不每改一个点就跑全套；纯文档修改只检查相关文档。提交和发布前统一通过完整基础质量检查，未受后续改动影响的成功结果可复用。
 
 代理指令与 Skills 的维护约定见 [agent-instructions.md](docs/contracts/agent-instructions.md)。
 

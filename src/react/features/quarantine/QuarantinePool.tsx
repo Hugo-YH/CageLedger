@@ -1,5 +1,5 @@
 import { PageSkeleton } from "../../components/PageSkeleton";
-import { CommandBar, ListRefreshStatus } from "../../components/ui";
+import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useState } from "react";
 import { Alert, Button, DatePicker, Select, Space, Table, Tag } from "antd";
@@ -31,7 +31,14 @@ export function QuarantinePool({
       <CommandBar
         ariaLabel="待检疫列表操作"
         sticky="selection"
-        context="待检疫动物"
+        context={
+          <Space size={4}>
+            <span>待检疫动物</span>
+            <HelpPopover label="待检疫动物说明">
+              接收后自动进入待检疫池。勾选本次覆盖的动物建立检疫批次，再从中登记实际抽样；确认完成后，未直接采样的覆盖动物也统一标记已检疫。
+            </HelpPopover>
+          </Space>
+        }
         selection={{ count: selected.length, onClear: () => setSelected([]) }}
         filters={
           <>
@@ -77,11 +84,6 @@ export function QuarantinePool({
             </Button>
           )
         }
-      />
-      <Alert
-        type="info"
-        showIcon
-        title="接收后自动进入待检疫池。勾选本次覆盖的动物建立检疫批次，再从中登记实际抽样；确认完成后，未直接采样的覆盖动物也统一标记已检疫。"
       />
       {query.error && (
         <Alert

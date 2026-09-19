@@ -35,8 +35,8 @@
 1. 使用 `rg` 检索目标 class、`data-ui`、`data-feature` 和媒体查询。
 2. 在归属清单中定位唯一所有者，修改该文件。
 3. 删除替代规则，禁止以更高选择器追加覆盖。
-4. 在桌面、1180px、760px、手机横屏验证 computed style、溢出、hover、focus-visible、disabled 与 loading。
-5. 运行 `npm run check:style-ownership`、目标 Playwright 与 `git diff --check`。
+4. 按 [测试策略](testing-strategy.md) 区分局部小改与结构性改动，集中修改后检查受影响页面；四档视口、computed style 和状态矩阵只在相应范围需要时执行。
+5. 样式归属或选择器边界变化时运行 `npm run check:style-ownership`；流程变化时运行对应回归，修改完成后运行 `git diff --check`。不为每次间距、文案或提示位置调整默认启动 Playwright 或完整检查。
 
 ## Ant Design 边界
 
