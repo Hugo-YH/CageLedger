@@ -190,7 +190,10 @@ test("applying a workflow filter clears the selection and discards an unconfirme
   await expect(confirmation).toBeVisible();
   await page.getByRole("button", { name: "筛选项目负责人", exact: true }).click();
   const filterPanel = page.locator(".table-filter-panel:visible");
-  await filterPanel.getByRole("checkbox", { name: /分页负责人 12/ }).check();
+  const option = filterPanel.getByRole("checkbox", { name: /分页负责人 12/ });
+  // Ant synchronizes the controlled group value in an effect after the click.
+  await option.click();
+  await expect(option).toBeChecked();
   await expect(toolbar).toContainText("已选 1 项");
   await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
   await expect(toolbar).toContainText("已选 0 项");

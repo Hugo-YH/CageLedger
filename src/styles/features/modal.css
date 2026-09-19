@@ -1,5 +1,23 @@
 /* Modal family (migrated from ux-foundation.css; rule order below preserves
  * the previous cascade winners). */
+.app-modal-root.release-announcement-modal .ant-modal-container {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+}
+
+.app-modal-root.release-announcement-modal .ant-modal-header,
+.app-modal-root.release-announcement-modal .ant-modal-footer {
+  flex: 0 0 auto;
+}
+
+.app-modal-root.release-announcement-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

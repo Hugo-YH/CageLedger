@@ -46,6 +46,22 @@ test("shows each release once for the signed-in account and supports keyboard di
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width + 1);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height + 1);
+    if (viewport.name === "landscape") {
+      const body = dialog.locator(".ant-modal-body");
+      const bodyMetrics = await body.evaluate((element) => ({
+        overflowY: getComputedStyle(element).overflowY,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      }));
+      expect(bodyMetrics.overflowY).toBe("auto");
+      if (bodyMetrics.scrollHeight > bodyMetrics.clientHeight) {
+        await body.evaluate((element) => {
+          element.scrollTop = element.scrollHeight;
+        });
+        await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      }
+      await expect(dialog.getByRole("button", { name: "我知道了", exact: true })).toBeVisible();
+    }
     await testInfo.attach(`release-announcement-${viewport.name}`, {
       body: await page.screenshot(),
       contentType: "image/png",

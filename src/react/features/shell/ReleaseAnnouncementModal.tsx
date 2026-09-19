@@ -36,7 +36,7 @@ export function ReleaseAnnouncementModal() {
         if (isOpen) confirmButtonRef.current?.focus();
       }}
       centered
-      className="release-announcement-modal"
+      className="app-modal-root release-announcement-modal"
       destroyOnHidden
       footer={
         <Flex gap={8} justify="end" wrap>

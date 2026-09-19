@@ -1,7 +1,9 @@
 import { expect, openNavigationEntry, test } from "./fixtures";
 import { randomUUID } from "node:crypto";
 
-test("batch search retains rows, recovers from failure, and loads the catalog on detail entry", async ({ page }) => {
+test("batch search retains rows, recovers from failure, and loads the catalog when creating a record", async ({
+  page,
+}) => {
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
@@ -12,7 +14,8 @@ test("batch search retains rows, recovers from failure, and loads the catalog on
     data: { item: { id: randomUUID(), name: batchName, sources: [{ id: "s", supplier: "哨兵鼠", species: "小鼠" }] } },
   });
   expect(created.ok()).toBe(true);
-  await openNavigationEntry(page, "检疫管理", "寄生虫检测");
+  await openNavigationEntry(page, "检疫管理", "检疫批次");
+  await page.getByRole("tab", { name: "检疫批次列表", exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: batchName });
   await expect(row).toBeVisible();
   let release!: () => void;
@@ -34,9 +37,18 @@ test("batch search retains rows, recovers from failure, and loads the catalog on
   fail = false;
   await page.getByRole("button", { name: "重试", exact: true }).click();
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "查看检测记录" }).click();
-  await expect(page.getByRole("button", { name: "新建检测记录", exact: true })).toBeEnabled();
+  await row.getByRole("button", { name: "查看", exact: true }).click();
+  await expect(page.getByRole("button", { name: "编辑检疫批次", exact: true })).toBeVisible();
+  await openNavigationEntry(page, "检疫管理", "寄生虫检测");
+  const catalogLoaded = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/quarantine/catalog",
+  );
   await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
+  expect((await catalogLoaded).ok()).toBe(true);
+  const batchSearch = page.getByRole("searchbox", { name: "搜索待填写检疫批次", exact: true });
+  await batchSearch.fill(batchName);
+  await batchSearch.press("Enter");
+  await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "选择并填写" }).click();
   await expect(page.getByRole("button", { name: "保存检测草稿", exact: true })).toBeVisible();
 });
 

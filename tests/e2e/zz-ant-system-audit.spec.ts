@@ -138,7 +138,7 @@ for (const viewport of [
   });
 }
 
-test("quarantine detail actions remain separated and reachable while scrolling", async ({ page }, testInfo) => {
+test("quarantine detail actions share one toolbar and remain reachable while scrolling", async ({ page }, testInfo) => {
   test.setTimeout(90000);
   page.setDefaultTimeout(10000);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -193,13 +193,19 @@ test("quarantine detail actions remain separated and reachable while scrolling",
   });
   expect(recordResponse.ok(), await recordResponse.text()).toBe(true);
   await openNavigationEntry(page, "检疫管理", "寄生虫检测");
-  await page.getByLabel("搜索检疫批次", { exact: true }).fill(name);
-  await page.getByLabel("搜索检疫批次", { exact: true }).press("Enter");
+  await page.getByRole("searchbox", { name: "搜索检测记录", exact: true }).fill(name);
+  await page.getByRole("searchbox", { name: "搜索检测记录", exact: true }).press("Enter");
   await page.getByRole("row").filter({ hasText: name }).getByRole("button", { name: "查看检测记录" }).click();
   await page.getByRole("tab", { name: "寄生虫检测 · 2026-09-03 · 草稿", exact: true }).click();
   await expect(page.getByRole("button", { name: "新建寄生虫检测记录", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "新建检测记录", exact: true })).toHaveCount(1);
+  await page.getByRole("button", { name: /复检与版本关联/ }).click();
   await expect(page.getByRole("combobox", { name: "复检供应商" })).toBeVisible();
+  const actions = page.getByRole("group", { name: "检疫批次详情操作", exact: true });
+  await expect(page.getByRole("group", { name: "报告操作", exact: true })).toHaveCount(0);
+  for (const label of ["返回列表", "新建检测记录", "编辑检测", "下载PDF草稿", "出具报告"]) {
+    await expect(actions.getByRole("button", { name: label, exact: true })).toHaveCount(1);
+  }
   for (const [width, height] of [
     [1440, 900],
     [1180, 900],
@@ -208,7 +214,6 @@ test("quarantine detail actions remain separated and reachable while scrolling",
     [390, 844],
   ]) {
     await page.setViewportSize({ width, height });
-    const actions = page.getByRole("group", { name: "报告操作", exact: true });
     await actions.scrollIntoViewIfNeeded();
     await expect(actions).toHaveCSS("position", "relative");
     const metrics = await actions.evaluate((el) => {
@@ -250,6 +255,7 @@ test("quarantine detail actions remain separated and reachable while scrolling",
       contentType: "application/json",
     });
     await page.screenshot({ path: testInfo.outputPath(`quarantine-detail-${width}.png`), animations: "disabled" });
+    await page.getByRole("combobox", { name: "复检供应商" }).scrollIntoViewIfNeeded();
     await expect(page.getByRole("combobox", { name: "复检供应商" })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`quarantine-retest-${width}.png`), animations: "disabled" });
   }
