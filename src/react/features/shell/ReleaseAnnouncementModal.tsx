@@ -52,6 +52,8 @@ export function ReleaseAnnouncementModal() {
           </Button>
           <Button
             ref={confirmButtonRef}
+            aria-label="我知道了"
+            aria-busy={acknowledgement.isPending}
             type="primary"
             loading={acknowledgement.isPending}
             onClick={() => acknowledge()}

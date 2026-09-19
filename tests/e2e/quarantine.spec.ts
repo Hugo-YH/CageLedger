@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ensureTestInfrastructure, expect, openNavigationEntry, test } from "./fixtures";
 import type { Page } from "@playwright/test";
+import { APP_VERSION } from "../../src/react/version";
 
 async function login(page: Page) {
   await page.goto("/app");
@@ -213,7 +214,12 @@ test("room administrator without assigned rooms can manage quarantine", async ({
   expect(created.ok()).toBe(true);
   const context = await browser.newContext();
   const regular = await context.newPage();
-  await regular.route("**/api/release-announcements/*", (route) => route.fulfill({ json: { acknowledged: true } }));
+  await regular.route("**/api/release-announcements**", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ json: { acknowledgedVersions: [APP_VERSION] } });
+    }
+    return route.fallback();
+  });
   await regular.goto("/app");
   await regular.getByLabel("用户名", { exact: true }).fill(username);
   await regular.getByLabel("密码", { exact: true }).fill("Quarantine-test-123");
@@ -225,12 +231,12 @@ test("room administrator without assigned rooms can manage quarantine", async ({
     data: {
       item: {
         id: regularBatchId,
-        name: "普通账号检疫",
+        name: `普通账号检疫-${regularBatchId}`,
         sources: [{ id: "source", supplier: "哨兵鼠供应商", species: "大鼠" }],
       },
     },
   });
-  expect(saved.ok()).toBe(true);
+  expect(saved.ok(), await saved.text()).toBe(true);
   for (const path of [
     "/api/quarantine/records",
     "/api/quarantine/reports",

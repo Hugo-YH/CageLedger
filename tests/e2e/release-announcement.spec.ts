@@ -144,12 +144,14 @@ test("missed releases share one dialog and only become acknowledged after a succ
   });
   await dialog.getByRole("button", { name: "我知道了", exact: true }).click();
   await expect.poll(() => attempts).toBe(1);
+  await expect(dialog.getByRole("button", { name: "我知道了", exact: true })).toHaveAttribute("aria-busy", "true");
   await expect(dialog.getByRole("button", { name: "查看完整更新记录", exact: true })).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeVisible();
   expect(attempts).toBe(1);
   await firstRequest!.fulfill({ status: 503, json: { error: "测试确认失败" } });
   await expect(dialog.getByRole("alert")).toContainText("确认未成功");
+  await expect(dialog.getByRole("button", { name: "我知道了", exact: true })).toHaveAttribute("aria-busy", "false");
   expect(await (await page.request.get("/api/release-announcements")).json()).toEqual({
     acknowledgedVersions: [baseline],
   });
