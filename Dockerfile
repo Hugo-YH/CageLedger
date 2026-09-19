@@ -56,6 +56,8 @@ ENV CAGELEDGER_LIBREOFFICE_BIN=/usr/bin/libreoffice
 
 EXPOSE 5173
 
-RUN mkdir -p /app/data
+RUN python3 -m pip check \
+    && python3 -c "import server" \
+    && mkdir -p /app/data
 
 CMD ["python3", "server.py"]

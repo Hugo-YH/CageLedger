@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.4.1",
+    build: "208",
+    releasedAt: "2026-09-19",
+    title: "容器启动依赖修复",
+    items: [
+      "补齐检疫图片及 TIFF 处理所需的 Pillow 运行依赖，修复容器因缺少图片处理库而无法启动的问题",
+      "镜像构建时检查运行依赖及服务端入口导入，避免本地已有依赖掩盖部署环境中的依赖遗漏",
+      "保留 1.4.0 的界面重构和未读更新汇总功能，容器部署请使用本版本",
+    ],
+  },
+  {
     version: "1.4.0",
     build: "207",
     releasedAt: "2026-09-19",
