@@ -318,9 +318,14 @@ textarea {
   font: inherit;
 }
 
-input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+input:not(
+  [type="checkbox"],
+  [type="radio"],
+  [type="hidden"],
+  :where(.ant-input, .ant-input-number-input, .ant-select input, .ant-picker input, .adm-input-element)
+),
 select,
-textarea {
+textarea:not(:where(.ant-input, .ant-mentions textarea, .adm-text-area-element)) {
   min-height: 40px;
 }
 
@@ -345,10 +350,6 @@ textarea {
     color var(--motion-base) var(--ease-standard),
     opacity var(--motion-base) var(--ease-standard),
     transform var(--motion-fast) var(--ease-standard);
-}
-
-button:not(:disabled):active {
-  transform: translateY(1px);
 }
 
 button:focus-visible,
@@ -1198,10 +1199,15 @@ svg {
     padding: 8px;
   }
 
-  input,
+  input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="hidden"],
+    :where(.ant-input, .ant-input-number-input, .ant-select input, .ant-picker input, .adm-input-element)
+  ),
   select,
-  textarea,
-  button:not(.ant-btn) {
+  textarea:not(:where(.ant-input, .ant-mentions textarea, .adm-text-area-element)),
+  button:not([class^="ant-"], [class*=" ant-"], [class^="adm-"], [class*=" adm-"]) {
     min-height: 44px;
   }
 }
@@ -1227,8 +1233,9 @@ textarea {
   font-family: inherit;
 }
 
-button:not(.ant-switch, .ant-btn),
-[role="button"]:not(.ant-switch, .ant-btn) {
+/* Ant internal buttons (table expand, picker navigation, modal close) own their geometry. */
+button:not([class^="ant-"], [class*=" ant-"], [class^="adm-"], [class*=" adm-"]),
+[role="button"]:not([class^="ant-"], [class*=" ant-"], [class^="adm-"], [class*=" adm-"]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1247,9 +1254,22 @@ button:not(.ant-switch, .ant-btn),
   }
 }
 
-button:not(.ant-switch, :disabled):active,
-[role="button"]:not(.ant-switch, [aria-disabled="true"]):active {
-  transform: scale(0.97);
+button:not(
+    [class^="ant-"],
+    [class*=" ant-"],
+    [class^="adm-"],
+    [class*=" adm-"],
+    :disabled,
+    [aria-disabled="true"]
+  ):active,
+[role="button"]:not(
+    [class^="ant-"],
+    [class*=" ant-"],
+    [class^="adm-"],
+    [class*=" adm-"],
+    [aria-disabled="true"]
+  ):active {
+  transform: scale(0.98);
 }
 
 button:not(.ant-switch):focus-visible,
@@ -1263,9 +1283,14 @@ textarea:focus-visible,
   box-shadow: var(--focus-ring);
 }
 
-input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+input:not(
+  [type="checkbox"],
+  [type="radio"],
+  [type="hidden"],
+  :where(.ant-input, .ant-input-number-input, .ant-select input, .ant-picker input, .adm-input-element)
+),
 select,
-textarea {
+textarea:not(:where(.ant-input, .ant-mentions textarea, .adm-text-area-element)) {
   border-color: var(--line);
   border-radius: var(--radius-control);
   background: var(--control-bg);
@@ -1273,9 +1298,14 @@ textarea {
   box-shadow: var(--shadow-inset);
 }
 
-input:not([type="checkbox"], [type="radio"], [type="hidden"]):hover,
+input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="hidden"],
+    :where(.ant-input, .ant-input-number-input, .ant-select input, .ant-picker input, .adm-input-element)
+  ):hover,
 select:hover,
-textarea:hover {
+textarea:not(:where(.ant-input, .ant-mentions textarea, .adm-text-area-element)):hover {
   border-color: var(--line-strong);
   background: var(--control-bg-hover);
 }

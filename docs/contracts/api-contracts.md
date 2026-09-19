@@ -26,12 +26,14 @@
 | ------ | ---------------------------------------- | ---------------------------- | -------- |
 | `GET`  | `/api/health`                            | `{ ok, database, system }`   | 公开     |
 | `GET`  | `/api/system/info`                       | 系统版本和构建信息           | 公开     |
-| `GET`  | `/api/public/cage-card/{animalRecordId}` | `{ batch, card }`            | 公开只读 |
+| `GET`  | `/api/public/cage-card/{animalRecordId}` | `{ item: CageCardDetails }`  | 公开只读 |
 | `POST` | `/api/auth/login`                        | `{ user }` + Cookie          | 公开     |
 | `POST` | `/api/auth/logout`                       | `{ ok: true }` + 清除 Cookie | 公开     |
 | `GET`  | `/api/auth/me`                           | `{ user }`；未登录返回 401   | 会话     |
 
 公开笼卡响应只提供查询所需信息。经费、账号、审计和报销字段不进入公开响应。
+
+`item` 是笼卡、到货批次、待进驻任务与占用信息的只读投影，前端通过 `usePublicCageCard` 解包后呈现。状态以返回的 `statusLabel` 为准；缺少状态不能自行推断为“待接收”。同一码再次查询或扫描时重新读取，确保接收、预留与入驻后的状态及时更新。扫码回归至少包含真实 API 创建、打印、接收、预留与入驻链路，不能只用模拟响应验证。
 
 ## Bootstrap 和设施
 
@@ -208,3 +210,39 @@ npm run test:e2e
 ```
 
 涉及性能的列表和写入再运行 `npm run benchmark`，并检查 `Server-Timing`、`[perf]` 日志和 SQLite 查询计划。涉及缓存、索引、SQLite 查询、PDF 渲染、批量操作或首屏加载时，还要用相同时间窗口的 `/api/system/performance-history` 对比改动前后，记录版本、HTTP/SQLite P95、慢请求、锁错误和结论；该记录只供管理员趋势与验收使用。
+
+## 检疫管理
+
+`/api/quarantine/` 下所有接口要求登录；第一版全部登录角色可读写，权限集中在检疫领域。批次来源取到货记录快照，检测保存混样及项目判定，不建立单笼采样关联。
+
+`GET batches` 支持可选 `method=parasite|pcr|elisa|elisa_mouse|elisa_rat`，在分页前筛选已有对应检测记录的批次；`elisa` 包含小鼠和大鼠。省略该参数返回全部批次，供批次管理及新建检测选择使用。另支持 `state=open|completed`，返回批次的 `recordCount`、`issuedCount` 和 `methods` 只读汇总。
+
+`GET records` 与 `GET reports` 分别提供检测记录及已出具报告台账，支持 `method`、`state`、`search`、`dateFrom/dateTo`、`limit/offset`，返回分页与当前筛选的 `summary`。日期以检测日期为准，筛选在分页前执行，按更新时间降序及 id 稳定排序；报告保留各版本，不暴露 snapshot 或 storageName。`GET batches/{id}/activity` 返回该批次及其检测、附件、报告的审计摘要分页，仅包含动作、操作人、时间，沿用现有检疫读取权限。已移除附件的下载与预览返回 404。
+
+| 方法       | 相对路径                                      | 行为                                                    |
+| ---------- | --------------------------------------------- | ------------------------------------------------------- |
+| GET        | `catalog`、`supplier-options`、`batch-number` | 项目配置、供应商候选与 `BYYMMDDNN` 建议批次编号         |
+| GET        | `sources`、`batches`                          | 分页来源与检疫批次，支持日期或批次编号筛选              |
+| POST / PUT | `batches[/{id}]`、`tests[/{id}]`              | 创建或编辑，正文 `{ item, expectedUpdatedAt }`          |
+| DELETE     | `batches/{id}`                                | 删除无检测记录的批次，正文 `{ expectedUpdatedAt }`      |
+| GET        | `batches/{id}`                                | 覆盖范围、检测、附件与历史报告版本                      |
+| POST       | `tests/{id}/attachments`                      | multipart字段file；查询参数传关联样本、项目、分类及版本 |
+| GET        | `attachments/{id}`、`reports/{id}`            | 受鉴权下载；报告统一返回 PDF，历史 Word 在下载时转换    |
+| GET        | `tests/{id}/preview`                          | 带草稿标识的 PDF 预览                                   |
+| POST       | `tests/{id}/issue`                            | 传检测和批次版本；成功生成 PDF 后保存不可变快照         |
+| POST       | `tests/{id}/correction`、`tests/{id}/retest`  | 新草稿ID及版本；复检另传供应商                          |
+| GET        | `suppliers`                                   | 供应商、日期范围／类型、种类、方法、结果过滤，含明细    |
+
+编辑必须提供 `expectedUpdatedAt`，缺失或过期返回409；出具另传 `expectedBatchUpdatedAt`。出具重试返回已有报告，生成失败保留草稿。更正新建检测记录并关联原版本；既有 Word 报告保留原件并在下载时转换为 PDF。PDF 渲染不可用、超时或转换结果无效返回503，文件读写失败返回500。事务记录操作者与审计快照。`quarantine_batches/tests/attachments/reports` 与 `files/quarantine/` 共同组成检疫备份范围。
+
+检疫批次编号首次保存后冻结，流水号一经分配不再回收。正式报告按 `{批次编号}{M|E|P}{YYMMDD}{NN}` 编号；ELISA 大小鼠共用 `E` 序列，更正版本沿用报告编号并递增独立版本号。报告下载文件名为 `{检测类型}_{实验日期}_{批次号}_{报告编号}_v{版本}.pdf`，草稿以 `草稿` 替代报告编号和版本；ELISA 文件名区分小鼠和大鼠。
+
+检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
+
+`POST batches/{id}/complete` 接收 `{ expectedUpdatedAt, expectedTestVersions: { [testId]: updatedAt } }`，校验三类正式报告、适用动物种类、异常复检和批次结论，在单事务保存完成时间、确认人、报告关联及审计。重复确认返回已完成记录；并发变化返回409。更正或复检会重新打开该批次，历史完成快照保留。
+
+### 检疫报告表单 v2
+
+检测写入 `reportFormVersion: 2` 后，服务端对每组 `sourceIds` 去重，固定 `poolCount = 1`、`portionCount = sourceIds.length`；`reportMaterial` 与 `reportSpecimenState` 保存报告首节信息。新记录出具不要求额外 `conclusion`，批次完成结论校验不变。
+
+附件上传接受 JSON 字符串 `projectIds`；`PUT /api/quarantine/attachments/{id}` 使用检测记录的 `expectedUpdatedAt` 校验，可修改多个项目关联、图注、顺序和草稿移除标记。返回附件与检测记录的新版本。保留首次 `uploadedBy`、`uploadedAt`，后续修改单独审计。正式版本附件不可修改，更正草稿复制关联，旧文件和报告快照保留。

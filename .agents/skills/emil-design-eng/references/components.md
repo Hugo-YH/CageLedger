@@ -6,7 +6,7 @@ These are design heuristics and examples. CageLedger tokens, accessibility contr
 
 ### Buttons must feel responsive
 
-Add `transform: scale(0.97)` on `:active`. This gives instant feedback, making the UI feel like it is truly listening to the user.
+When existing press feedback is insufficient, a small `:active` scale change can provide an immediate response. The following is an example, not a requirement for every button.
 
 ```css
 .button {
@@ -18,7 +18,7 @@ Add `transform: scale(0.97)` on `:active`. This gives instant feedback, making t
 }
 ```
 
-This applies to any pressable element. The scale should be subtle (0.95-0.98).
+If scale fits the component, keep it subtle and use project tokens. Existing color, focus or other visible feedback may already be sufficient.
 
 ### Never animate from scale(0)
 
@@ -76,17 +76,17 @@ Tooltips should delay before appearing to prevent accidental activation. But onc
 }
 ```
 
-### Use CSS transitions over keyframes for interruptible UI
+### Preserve continuity in interruptible UI
 
-CSS transitions can be interrupted and retargeted mid-animation. Keyframes restart from zero. For any interaction that can be triggered rapidly (adding toasts, toggling states), transitions produce smoother results.
+CSS transitions can retarget an in-progress property change. A fixed-start keyframe animation may jump if cancelled and restarted. For rapid toast updates or toggles, check how the current implementation cancels and resumes from the visible state before choosing an API.
 
 ```css
-/* Interruptible - good for UI */
+/* Retargetable property transition */
 .toast {
   transition: transform 400ms ease;
 }
 
-/* Not interruptible - avoid for dynamic UI */
+/* Fixed-start entry; check continuity when rapidly toggled */
 @keyframes slideIn {
   from {
     transform: translateY(100%);

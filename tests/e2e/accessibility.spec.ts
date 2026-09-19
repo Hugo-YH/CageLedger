@@ -62,3 +62,34 @@ test("core workspaces and dialogs retain accessible semantics", async ({ page })
   await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
 });
+
+test("populated workflow tags and hidden measuring rows remain accessible in both themes", async ({ page }) => {
+  await login(page);
+  await page.route("**/api/billing-workflows?*", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: "accessible-archived",
+            month: "2026-09",
+            pi: "可读性检查",
+            iacucs: ["E2E-AA"],
+            manager: "系统管理员",
+            totalAmount: 20,
+            workflowStatus: "statement_archived",
+            signedStatementReturned: true,
+            reimbursementFormReturned: true,
+          },
+        ],
+        page: { total: 1, offset: 0, limit: 10 },
+      },
+    }),
+  );
+  await openWorkflowCenter(page);
+  await expect(page.getByText("结算单 已交回", { exact: true })).toBeVisible();
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await expectNoSeriousViolations(page);
+  }
+});

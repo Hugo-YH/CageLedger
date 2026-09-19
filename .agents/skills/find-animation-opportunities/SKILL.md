@@ -1,6 +1,6 @@
 ---
 name: find-animation-opportunities
-description: 评估指定页面哪些状态变化值得增加动效；用于动效机会分析，输出建议而不自动实施。
+description: 分析页面状态变化中值得增加的动效；用于机会评估，是否实施以用户请求为准。
 ---
 
 # 动效机会分析

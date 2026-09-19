@@ -1,5 +1,6 @@
 import { ensureTestInfrastructure, expect, openBillingNavigation, test } from "./fixtures";
 import type { Page } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 
 const month = new Date().toISOString().slice(0, 7);
 
@@ -125,9 +126,14 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.locator(".ant-pagination-next").click();
   await expect(page.getByRole("checkbox", { name: /^选择 .+ 结算项$/ }).first()).toBeChecked();
   await page.locator(".ant-pagination-prev").click();
-  await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).uncheck();
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "10 条/页", exact: true }).click();
+  await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
+  await page.getByRole("button", { name: "结算月份，点击切换排序", exact: true }).click();
+  await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
+  await expect(page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true })).toBeChecked();
+  await page.getByLabel("结算批量操作").getByRole("button", { name: "清空选择", exact: true }).click();
+  await expect(selectionSummary).toHaveText("已选 0 项");
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
   const downloadPromise = page.waitForEvent("download");
   await page.getByLabel("结算批量操作").getByRole("button", { name: "导出 PDF", exact: true }).click();
@@ -229,6 +235,9 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
   await expect(initiateButton).toBeEnabled();
   // 操作按钮位于弹窗顶部工具栏，预览 iframe 独立滚动；关闭走右上角 X
   await expect(page.locator(".settlement-preview-modal .settlement-preview-toolbar")).toBeVisible();
+  await expect(
+    page.locator(".settlement-preview-modal").getByRole("button", { name: "确定", exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator(".settlement-preview-modal iframe[title='结算单预览']")).toBeVisible();
   await page.locator(".settlement-preview-modal .ant-modal-close").click();
   await expect(initiateButton).toHaveCount(0);
@@ -392,7 +401,8 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
   await expect(page.getByRole("row", { name: /E2E 批量撤回负责人 2/ })).toContainText("未发起");
 });
 
-test("settlement preview toolbar keeps long IACUC lists inside the toolbar", async ({ page }) => {
+test("settlement preview toolbar keeps long IACUC lists inside the toolbar", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 1098, height: 652 });
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
@@ -438,35 +448,69 @@ test("settlement preview toolbar keeps long IACUC lists inside the toolbar", asy
     timeout: 20_000,
   });
 
-  const overflow = await page.evaluate(() => {
-    const toolbar = document.querySelector<HTMLElement>(".settlement-preview-modal .settlement-preview-toolbar");
-    const modalBody = document.querySelector<HTMLElement>(".settlement-preview-modal .ant-modal-body");
-    const context = document.querySelector<HTMLElement>(
-      ".settlement-preview-modal .settlement-preview-toolbar-context",
-    );
-    const actions = document.querySelector<HTMLElement>(
-      ".settlement-preview-modal .settlement-preview-toolbar-actions",
-    );
-    if (!toolbar || !modalBody || !context || !actions) return { missing: true };
-    const toolbarRect = toolbar.getBoundingClientRect();
-    const bodyRect = modalBody.getBoundingClientRect();
-    const contextRect = context.getBoundingClientRect();
-    const actionsRect = actions.getBoundingClientRect();
-    return {
-      missing: false,
-      toolbarOverflowsModal: toolbarRect.right > bodyRect.right + 1 || toolbarRect.left < bodyRect.left - 1,
-      contextOverlapsActions:
-        contextRect.left < actionsRect.right &&
-        contextRect.right > actionsRect.left &&
-        contextRect.top < actionsRect.bottom &&
-        contextRect.bottom > actionsRect.top,
-      contextTruncated: context.scrollWidth > context.clientWidth || context.scrollHeight > context.clientHeight,
-    };
-  });
-  expect(overflow.missing).toBe(false);
-  expect(overflow.toolbarOverflowsModal).toBe(false);
-  expect(overflow.contextOverlapsActions).toBe(false);
-  expect(overflow.contextTruncated).toBe(false);
+  for (const [width, height] of [
+    [1440, 900],
+    [1180, 900],
+    [760, 900],
+    [844, 390],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const toolbar = page.getByRole("group", { name: "结算单预览操作", exact: true });
+    await expect(toolbar).toBeVisible();
+    await expect(toolbar).not.toHaveAttribute("data-sticky", "true");
+    const overflow = await toolbar.evaluate((element) => {
+      const modalBody = element.closest(".ant-modal-body");
+      const context = element.querySelector<HTMLElement>(".settlement-preview-toolbar-context");
+      const actions = element.querySelector<HTMLElement>(".app-command-bar-actions");
+      if (!modalBody || !context || !actions) throw new Error("预览工具栏结构缺失");
+      const toolbarRect = element.getBoundingClientRect();
+      const bodyRect = modalBody.getBoundingClientRect();
+      const contextRect = context.getBoundingClientRect();
+      const actionsRect = actions.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        toolbarOverflowsModal: toolbarRect.right > bodyRect.right + 1 || toolbarRect.left < bodyRect.left - 1,
+        contextOverlapsActions:
+          contextRect.left < actionsRect.right &&
+          contextRect.right > actionsRect.left &&
+          contextRect.top < actionsRect.bottom &&
+          contextRect.bottom > actionsRect.top,
+        contextTruncated: context.scrollWidth > context.clientWidth || context.scrollHeight > context.clientHeight,
+        pageOverflows: document.documentElement.scrollWidth > innerWidth,
+        computed: {
+          display: style.display,
+          gridTemplateColumns: style.gridTemplateColumns,
+          gap: style.gap,
+          minWidth: style.minWidth,
+          overflow: style.overflow,
+          position: style.position,
+          zIndex: style.zIndex,
+        },
+        actions: [...actions.querySelectorAll<HTMLElement>("button")].map((button) => ({
+          label: button.textContent,
+          height: getComputedStyle(button).height,
+          visible: button.getClientRects().length > 0,
+        })),
+      };
+    });
+    expect(overflow.toolbarOverflowsModal).toBe(false);
+    expect(overflow.contextOverlapsActions).toBe(false);
+    expect(overflow.contextTruncated).toBe(false);
+    expect(overflow.pageOverflows).toBe(false);
+    expect(["static", "relative"]).toContain(overflow.computed.position);
+    expect(overflow.actions.every((action) => action.visible && action.height === "32px")).toBe(true);
+    expect(overflow.actions.at(-1)?.label).toContain("发起结算流程");
+    const evidencePath = testInfo.outputPath(`settlement-preview-toolbar-${width}-computed.json`);
+    await writeFile(evidencePath, JSON.stringify(overflow, null, 2));
+    await testInfo.attach(`settlement-preview-toolbar-${width}-computed`, {
+      path: evidencePath,
+      contentType: "application/json",
+    });
+    await page.screenshot({
+      path: testInfo.outputPath(`settlement-preview-toolbar-${width}.png`),
+      animations: "disabled",
+    });
+  }
 });
 
 const noticeSheetId = "sheet-e2e-notice";

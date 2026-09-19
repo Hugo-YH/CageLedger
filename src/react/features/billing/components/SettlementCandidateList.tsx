@@ -12,6 +12,7 @@ import { exportSettlementXlsx, useSettlementCandidates } from "../../../api/bill
 import { useAdvanceWorkflow } from "../../../api/workflows";
 import { useSettlementBatch } from "../../../api/useSettlementBatch";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
+import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
 import { DataTable } from "../../../components/ui";
 import { useGenerateBillingStatement } from "../../../api/quantitySheets";
@@ -61,6 +62,18 @@ export function SettlementCandidateList({
   const generating = useRef(false);
   const exportingXlsx = useRef(false);
 
+  useSelectionScope(
+    JSON.stringify({ source, filters }),
+    () => {
+      selection.clear();
+      if (!batchActionRef.current) {
+        setBatchConfirmOpen(false);
+        setBatchWithdrawOpen(false);
+      }
+    },
+    selectedCandidates.length > 0 || selectingAll,
+  );
+
   function showNotice(message: string, kind: "success" | "error" | "info" = "info") {
     setNotice(message);
     setNoticeKind(kind);
@@ -91,12 +104,10 @@ export function SettlementCandidateList({
     total,
     onFilter: (column, values) => {
       setFilters((current) => ({ ...current, [column]: values }));
-      selection.clear();
       setPage(1);
     },
     onPreview: (candidate) => void generateFor(candidate, false),
     onSort: (column) => {
-      selection.cancelPending();
       setSort((current) => ({
         key: column,
         dir: current.key === column && current.dir === "asc" ? "desc" : "asc",
@@ -330,6 +341,7 @@ export function SettlementCandidateList({
         onExportXlsx={() => void exportCandidatesXlsx(selectedCandidates)}
         onInitiate={() => setBatchConfirmOpen(true)}
         onWithdraw={() => setBatchWithdrawOpen(true)}
+        onClear={selection.clear}
       />
       <div
         className="ant-table-region settlement-candidate-list"
@@ -339,6 +351,7 @@ export function SettlementCandidateList({
         aria-label="结算管理列表"
       >
         <DataTable
+          refreshing={list.isFetching}
           columns={columns}
           dataSource={items}
           pagination={false}
@@ -353,11 +366,9 @@ export function SettlementCandidateList({
         pages={pages}
         total={total}
         onPage={(nextPage) => {
-          selection.cancelPending();
           setPage(nextPage);
         }}
         onPageSize={(nextSize) => {
-          selection.cancelPending();
           setPageSize(nextSize);
           setPage(1);
         }}

@@ -124,7 +124,14 @@ export function FilterableColumnTitle({
         <span>{label}</span>
       </Button>
       {filterable ? (
-        <Popover content={content} open={open} placement="bottomLeft" trigger="click" onOpenChange={setPopoverOpen}>
+        <Popover
+          content={content}
+          open={open}
+          placement="bottomLeft"
+          align={{ overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
+          trigger="click"
+          onOpenChange={setPopoverOpen}
+        >
           <Button
             className="table-filter-button"
             icon={<FilterOutlined />}

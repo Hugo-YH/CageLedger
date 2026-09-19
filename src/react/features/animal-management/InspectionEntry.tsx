@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button as MobileButton, Selector as MobileSelector } from "antd-mobile";
+import { Selector as MobileSelector } from "antd-mobile";
 import { Alert, Card, Checkbox, Form, Select, Space, Tag, Typography } from "antd";
 
 import type { InspectionAnswer, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
@@ -174,7 +174,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
         }
       >
         <div className="inspection-context-grid">
-          <Form className="inspection-room-picker" component={false} layout="vertical">
+          <Form className="inspection-room-picker" component="div" layout="vertical">
             <Form.Item label="设施">
               <Select
                 aria-label="设施"
@@ -243,16 +243,6 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
       />
     </>
   );
-  const mobileActions = (
-    <>
-      <MobileButton loading={save.isPending} size="mini" onClick={() => void saveDraft()}>
-        草稿
-      </MobileButton>
-      <MobileButton color="primary" loading={submit.isPending} size="mini" onClick={() => void submitInspection()}>
-        提交
-      </MobileButton>
-    </>
-  );
   const dialogs = (
     <>
       {findingDraft ? (
@@ -276,47 +266,52 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
       ) : null}
     </>
   );
-  if (isMobile) {
-    return (
-      <>
-        <MobilePage actions={mobileActions} onBack={() => navigate("animal-inspection-entry")} title="动物巡检">
-          {content}
-        </MobilePage>
-        {dialogs}
-      </>
-    );
-  }
   return (
-    <section className="workspace-view animal-management-workspace" data-feature="animal-management">
+    <MobilePage
+      desktop={
+        isMobile
+          ? undefined
+          : {
+              className: "workspace-view animal-management-workspace",
+              bodyClassName: "workspace-body animal-management-body",
+              feature: "animal-management",
+            }
+      }
+      feature="animal-management"
+      onBack={() => navigate("animal-inspection-entry")}
+      title="动物巡检"
+    >
       <WorkspaceToolbar
+        ariaLabel="巡检录入操作"
+        sticky
         actions={
-          <>
-            <AsyncActionButton
-              className="secondary inspection-save-draft"
-              type="button"
-              pending={save.isPending}
-              pendingLabel="保存中..."
-              disabled={submit.isPending}
-              onClick={() => void saveDraft()}
-            >
-              保存草稿
-            </AsyncActionButton>
-            <AsyncActionButton
-              className="primary inspection-submit"
-              type="button"
-              pending={submit.isPending}
-              pendingLabel="提交中..."
-              disabled={save.isPending}
-              onClick={() => void submitInspection()}
-            >
-              提交巡检
-            </AsyncActionButton>
-          </>
+          <AsyncActionButton
+            className="secondary inspection-save-draft"
+            type="button"
+            pending={save.isPending}
+            pendingLabel="保存中..."
+            disabled={submit.isPending}
+            onClick={() => void saveDraft()}
+          >
+            保存草稿
+          </AsyncActionButton>
+        }
+        primaryAction={
+          <AsyncActionButton
+            className="primary inspection-submit"
+            type="button"
+            pending={submit.isPending}
+            pendingLabel="提交中..."
+            disabled={save.isPending}
+            onClick={() => void submitInspection()}
+          >
+            提交巡检
+          </AsyncActionButton>
         }
       />
-      <div className="workspace-body animal-management-body">{content}</div>
+      {content}
       {dialogs}
-    </section>
+    </MobilePage>
   );
 }
 

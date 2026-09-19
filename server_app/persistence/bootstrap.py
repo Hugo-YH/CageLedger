@@ -4,6 +4,7 @@ from server_app.config import ANIMAL_INSPECTION_CATALOG_PATH, ANIMAL_INSPECTION_
 from server_app.domains.administration import ensure_default_admin
 from server_app.domains.animal_management import ensure_catalog as ensure_animal_inspection_catalog
 from server_app.domains.animal_management.catalog_images import ensure_seed_images
+from server_app.domains.quarantine.repository import ensure_schema as ensure_quarantine_schema
 from server_app.domains.reimbursement.migration import migrate_reimbursement_record_schema
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.occupancy import occupancy_structured_values, occupancy_with_snapshots
@@ -33,6 +34,7 @@ from server_app.persistence.legacy_migrations import (
     ensure_experiment_applications_duplicate_schema,
     ensure_intake_batch_structured_columns,
     ensure_occupancies_history_schema,
+    repair_intake_batch_species,
 )
 from server_app.persistence.legacy_migrations import (
     ensure_occupancies_structured_columns as ensure_occupancies_structured_columns_migration,
@@ -67,6 +69,7 @@ def initialize_schema(conn):
     registry = SchemaRegistry(
         [
             SchemaStep("legacy-schema", initialize_legacy_schema),
+            SchemaStep("quarantine", ensure_quarantine_schema),
             SchemaStep("animal-inspection-catalog", ensure_animal_inspection_catalog),
             SchemaStep(
                 "animal-inspection-images",
@@ -84,6 +87,7 @@ def migrate_schema(conn):
     ensure_occupancies_history_schema(conn)
     ensure_occupancies_structured_columns_migration(conn, backfill_occupancy_structured_columns)
     ensure_intake_batch_structured_columns(conn)
+    repair_intake_batch_species(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)
     migrate_reimbursement_record_schema(conn)

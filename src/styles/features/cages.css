@@ -262,6 +262,7 @@
 
 .compact-form-row {
   display: grid;
+  align-items: start;
   gap: 16px;
 }
 
@@ -273,19 +274,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.compact-slot-form label {
+.compact-slot-form label,
+.monkey-age-field {
   display: grid;
   gap: 8px;
   color: var(--text);
   font-size: 14px;
   line-height: 22px;
-}
-
-.compact-slot-form input,
-.compact-slot-form select,
-.compact-slot-form textarea {
-  min-height: 32px;
-  width: 100%;
 }
 
 .compact-slot-form textarea {
@@ -370,13 +365,6 @@
   line-height: 20px;
 }
 
-/* Controls snap to the 32px design.md control height inside the cage workspace. */
-.react-cage-view .workspace-toolbar button,
-.react-cage-view .cage-reserve-bar button,
-.cage-slot-modal button {
-  min-height: 32px;
-}
-
 .cage-slot-modal .modal-shell-actions {
   gap: 8px;
 }
@@ -389,29 +377,6 @@
   border-radius: 4px;
   font-size: 12px;
   line-height: 20px;
-}
-
-.react-cage-view .cage-reserve-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 12px;
-  padding: 12px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.react-cage-view .cage-reserve-bar strong {
-  color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.react-cage-view .cage-reserve-bar span {
-  color: var(--text-subtle);
-  font-size: 12px;
 }
 
 /* Mobile cage map and slot sizing (migrated from responsive.css). */

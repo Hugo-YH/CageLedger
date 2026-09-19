@@ -1,4 +1,5 @@
 export const queryKeys = {
+  quarantine: ["quarantine"] as const,
   session: ["session"] as const,
   publicCageCard: (qrId: string) => ["public-cage-card", qrId] as const,
   bootstrap: (scope: string, roomId = "") => ["bootstrap", scope, roomId] as const,

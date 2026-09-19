@@ -4,23 +4,36 @@ import { type ReactNode, useEffect, useRef } from "react";
 
 import { ActionButton, CommandBar, type ActionButtonProps, type ActionTone } from "./ui";
 import { useAsyncFormAction } from "../hooks/useAsyncFormAction";
+import type { CommandBarProps } from "./ui/CommandBar";
 
 export { PageSkeleton } from "./PageSkeleton";
 
-export function WorkspaceToolbar({ toolbar, actions }: { toolbar?: ReactNode; actions?: ReactNode }) {
-  return toolbar || actions ? (
-    <CommandBar
-      className="workspace-toolbar"
-      context={toolbar ? <div className="workspace-toolbar-main">{toolbar}</div> : undefined}
-      actions={actions ? <div className="workspace-toolbar-action-group">{actions}</div> : undefined}
-    />
+export function WorkspaceToolbar({
+  toolbar,
+  context,
+  className = "",
+  ...props
+}: CommandBarProps & { toolbar?: ReactNode }) {
+  return toolbar || context || props.actions || props.primaryAction || props.selection || props.filters ? (
+    <CommandBar {...props} className={`workspace-toolbar ${className}`.trim()} context={context ?? toolbar} />
   ) : null;
 }
 
 export function PageState({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {
+  if (retry) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title={title}
+        description={detail}
+        action={<Button onClick={retry}>重新加载</Button>}
+      />
+    );
+  }
   return (
     <div className="empty-state" role="status" aria-live="polite">
-      <Empty description={detail || title}>{retry ? <Button onClick={retry}>重新加载</Button> : null}</Empty>
+      <Empty description={detail || title} />
     </div>
   );
 }

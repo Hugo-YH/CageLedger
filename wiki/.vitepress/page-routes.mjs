@@ -6,6 +6,7 @@ export const pageRoutes = {
   "工作台导航.md": "guide/navigation.md",
   "用户操作手册.md": "guide/user-manual.md",
   "笼卡管理.md": "guide/cage-cards.md",
+  "检疫管理.md": "guide/quarantine.md",
   "笼位与房间管理.md": "guide/rooms-and-cages.md",
   "动物巡检.md": "guide/animal-inspection.md",
   "数量统计表.md": "guide/quantity-sheets.md",

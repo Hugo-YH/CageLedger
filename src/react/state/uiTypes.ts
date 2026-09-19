@@ -1,5 +1,10 @@
 export type WorkspaceView =
   | "dashboard"
+  | "quarantine-batches"
+  | "quarantine-parasite"
+  | "quarantine-elisa"
+  | "quarantine-pcr"
+  | "quarantine-reports"
   | "cages"
   | "intake-entry"
   | "intake-batches"

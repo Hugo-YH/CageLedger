@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
-import { Button, Select } from "antd";
+import { Alert, Button, Select } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, RoomBootstrapResponse } from "../../api/contracts";
-import { currentOccupancy } from "../../../domain/cages";
-import {
-  BatchSlotEditor,
-  PlacementDrawer,
-  ReserveBar,
-  SlotEditor,
-  VirtualRack,
-} from "./components/CageWorkspaceComponents";
+import { cageCode, currentOccupancy } from "../../../domain/cages";
+import { BatchSlotEditor, PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
-import { WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { ActionButton } from "../../components/ui";
+import { PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { ActionButton, ListRefreshStatus } from "../../components/ui";
+import { useReservePlacement } from "../../api/cages";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
+import { useSelectionScope } from "../../hooks/useSelectionScope";
 
 export function CagesView() {
   const summary = useBootstrap("summary");
@@ -40,44 +37,126 @@ export function CagesView() {
   );
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
 
-  useEffect(() => {
-    setRackId("");
+  const reserve = useReservePlacement(selectedRoomId);
+  const scopeOperations = useLatestRequest();
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId);
+  const selectedCount = batchMode ? selectedSlotIds.length : Number(Boolean(selectedSlot));
+
+  function clearSelection() {
+    scopeOperations.invalidate();
     setSelectedSlotId("");
     setSelectedSlotIds([]);
     setSelectedTaskId("");
-  }, [selectedRoomId]);
+    setBatchEditorOpen(false);
+    setTasksOpen(false);
+  }
+  useSelectionScope(
+    JSON.stringify([selectedRoomId, selectedRack?.id || ""]),
+    clearSelection,
+    Boolean(selectedSlotId) || selectedSlotIds.length > 0 || Boolean(selectedTaskId),
+  );
+
+  async function reserveSelected() {
+    if (!selectedTask || !selectedSlot || !selectedRack || selectedSlot.status !== "empty") return;
+    const isCurrent = scopeOperations.begin();
+    // Capture the selected targets before the write; changing rooms only clears the UI selection.
+    const task = selectedTask;
+    const slot = selectedSlot;
+    const code = cageCode(slot, selectedRack.index, selectedRoom?.name || "");
+    try {
+      await reserve.mutateAsync({ taskId: task.id, slotId: slot.id });
+      if (isCurrent()) {
+        setNotice(`已为 ${task.batchNo} 预留笼位 ${code}。`);
+        clearSelection();
+      }
+    } catch (error) {
+      if (isCurrent()) setNotice(error instanceof Error ? error.message : "预留失败");
+    }
+  }
   useEffect(() => {
     if (selectedRack && rackId && !racks.some((rack) => rack.id === rackId)) setRackId(selectedRack.id);
   }, [rackId, racks, selectedRack]);
 
   if (summary.isPending) return <CageLoading />;
-  if (!rooms.length) return <CageEmpty />;
+  if (summary.isError && !rooms.length) {
+    return <PageState title="饲养间加载失败" detail="请重试加载饲养间信息。" retry={() => void summary.refetch()} />;
+  }
+  if (!rooms.length) {
+    return (
+      <>
+        <ListRefreshStatus active={summary.isFetching} />
+        <CageEmpty />
+      </>
+    );
+  }
 
   return (
     <section className="workspace-view cage-workspace react-cage-view" data-feature="cages">
       <WorkspaceToolbar
+        ariaLabel="笼位图操作"
+        sticky={selectedTaskId ? true : "selection"}
+        context={
+          selectedTask ? (
+            <span>
+              {selectedTask.batchNo} ·{" "}
+              {selectedSlot?.status === "empty" && selectedRack
+                ? `预留到 ${cageCode(selectedSlot, selectedRack.index, selectedRoom?.name || "")}`
+                : "请选择空笼位"}
+            </span>
+          ) : (
+            <span>{batchMode ? "多选录入" : "单笼录入"}</span>
+          )
+        }
+        selection={{
+          count: selectedCount,
+          onClear: clearSelection,
+          pending: reserve.isPending,
+        }}
         actions={
           <>
-            <ActionButton onClick={() => setTasksOpen(true)}>待进驻 {tasks.length}</ActionButton>
-            <ActionButton
-              tone="primary"
-              onClick={() => {
-                setBatchMode((value) => !value);
-                setSelectedSlotIds([]);
-                setSelectedSlotId("");
-              }}
-            >
-              多选录入{selectedSlotIds.length ? ` (${selectedSlotIds.length})` : ""}
+            <ActionButton disabled={!data} onClick={() => setTasksOpen(true)}>
+              待进驻 {data ? tasks.length : ""}
             </ActionButton>
+            {selectedTask ? (
+              <ActionButton onClick={clearSelection}>取消预留</ActionButton>
+            ) : (
+              <ActionButton
+                aria-pressed={batchMode}
+                onClick={() => {
+                  clearSelection();
+                  setBatchMode((value) => !value);
+                }}
+              >
+                {batchMode ? "退出多选" : "多选录入"}
+              </ActionButton>
+            )}
             {batchMode ? (
-              <>
-                <Button onClick={() => setSelectedSlotIds(slots.map((slot) => slot.id))}>全选当前</Button>
-                <Button onClick={() => setSelectedSlotIds([])}>清空选择</Button>
-              </>
+              <Button
+                disabled={!slots.length || roomQuery.isFetching}
+                onClick={() => setSelectedSlotIds(slots.map((slot) => slot.id))}
+              >
+                全选当前
+              </Button>
             ) : null}
           </>
         }
-        toolbar={
+        primaryAction={
+          selectedTask ? (
+            <ActionButton
+              disabled={!selectedSlot || selectedSlot.status !== "empty" || reserve.isPending}
+              loading={reserve.isPending}
+              tone="primary"
+              onClick={() => void reserveSelected()}
+            >
+              确认预留
+            </ActionButton>
+          ) : batchMode ? (
+            <ActionButton disabled={!selectedSlotIds.length} tone="primary" onClick={() => setBatchEditorOpen(true)}>
+              批量编辑
+            </ActionButton>
+          ) : null
+        }
+        filters={
           <>
             <label className="workspace-toolbar-field" htmlFor="cages-room-select">
               <span>饲养间</span>
@@ -86,25 +165,39 @@ export function CagesView() {
                 id="cages-room-select"
                 options={rooms.map((room) => ({ label: room.name, value: room.id }))}
                 value={selectedRoomId}
-                onChange={setRoomId}
+                onChange={(value) => {
+                  setRoomId(value);
+                  setRackId("");
+                }}
               />
             </label>
             <label className="workspace-toolbar-field" htmlFor="cages-rack-select">
               <span>笼架</span>
               <Select
                 aria-label="笼架"
+                loading={roomQuery.isPending}
+                disabled={!data}
                 id="cages-rack-select"
                 options={racks.map((rack) => ({ label: rack.name, value: rack.id }))}
                 value={selectedRack?.id || ""}
-                onChange={(value) => {
-                  setRackId(value);
-                  setSelectedSlotId("");
-                }}
+                onChange={setRackId}
               />
             </label>
           </>
         }
       />
+      {summary.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="饲养间更新失败，暂显示上次结果"
+          action={
+            <Button loading={summary.isFetching} onClick={() => void summary.refetch()}>
+              重试
+            </Button>
+          }
+        />
+      ) : null}
       <div className="workspace-body cage-workspace-body">
         <section className="cage-layout">
           <div className="panel large cage-preview">
@@ -126,8 +219,27 @@ export function CagesView() {
                 {notice}
               </div>
             ) : null}
+            <ListRefreshStatus active={roomQuery.isFetching && Boolean(data)} />
+            {roomQuery.isError && data ? (
+              <Alert
+                type="error"
+                showIcon
+                title="笼位信息更新失败，暂显示上次结果"
+                action={
+                  <Button loading={roomQuery.isFetching} onClick={() => void roomQuery.refetch()}>
+                    重试
+                  </Button>
+                }
+              />
+            ) : null}
             {roomQuery.isPending ? (
               <CageLoading />
+            ) : roomQuery.isError && !data ? (
+              <PageState
+                title="笼位信息加载失败"
+                detail="请重试加载当前饲养间。"
+                retry={() => void roomQuery.refetch()}
+              />
             ) : selectedRack ? (
               <VirtualRack
                 rack={selectedRack}
@@ -150,31 +262,6 @@ export function CagesView() {
                 <h3>当前房间尚未创建笼架</h3>
               </div>
             )}
-            {selectedTaskId && selectedSlot?.status === "empty" ? (
-              <ReserveBar
-                task={tasks.find((item) => item.id === selectedTaskId)}
-                slot={selectedSlot}
-                rack={selectedRack}
-                roomName={selectedRoom?.name || ""}
-                roomId={selectedRoomId}
-                onDone={(message) => {
-                  setNotice(message);
-                  setSelectedTaskId("");
-                  setSelectedSlotId("");
-                }}
-              />
-            ) : null}
-            {batchMode && selectedSlotIds.length ? (
-              <div className="cage-reserve-bar">
-                <div>
-                  <strong>已选择 {selectedSlotIds.length} 个笼位</strong>
-                  <span>统一维护项目与饲养日期</span>
-                </div>
-                <ActionButton tone="primary" onClick={() => setBatchEditorOpen(true)}>
-                  批量编辑
-                </ActionButton>
-              </div>
-            ) : null}
           </div>
         </section>
       </div>
@@ -188,6 +275,7 @@ export function CagesView() {
           roomId={selectedRoomId}
           onClose={() => setSelectedSlotId("")}
           onNotice={setNotice}
+          beginOperation={scopeOperations.begin}
         />
       ) : null}
       {batchEditorOpen && selectedRack ? (
@@ -198,6 +286,7 @@ export function CagesView() {
           occupancies={occupancies}
           roomId={selectedRoomId}
           onClose={() => setBatchEditorOpen(false)}
+          beginOperation={scopeOperations.begin}
           onDone={(message) => {
             setNotice(message);
             setBatchEditorOpen(false);
@@ -211,6 +300,8 @@ export function CagesView() {
           selectedTaskId={selectedTaskId}
           roomId={selectedRoomId}
           onSelect={(task) => {
+            clearSelection();
+            setBatchMode(false);
             setSelectedTaskId(task.id);
             setTasksOpen(false);
             setNotice("已选择待进驻任务，请在笼位图中选择空笼位。");

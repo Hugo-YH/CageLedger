@@ -1197,9 +1197,17 @@ h3 {
 
 /* Mobile business page shell and navigation sheet. */
 [data-ui="mobile-page"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   min-height: 100%;
   min-width: 0;
   background: var(--app-page-bg);
+}
+
+[data-ui="mobile-page"] > .adm-nav-bar,
+[data-ui="mobile-page"] > .adm-safe-area {
+  flex-shrink: 0;
 }
 
 [data-ui="mobile-page"] .ant-mobile-page-title {

@@ -1,12 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Button as MobileButton } from "antd-mobile";
 import { useState } from "react";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
 import {
   aiParseIntakeMessage,
-  listAllIntakeBatches,
   standardizeIntakeStrain,
   useConfirmIntakeBatchesReceipt,
   useDeleteIntakeBatch,
@@ -17,8 +15,8 @@ import {
 import { fetchIacucSearch } from "../../api/iacuc";
 import { queryKeys } from "../../api/queryKeys";
 import { ActionButton } from "../../components/ui";
-import { MobilePage } from "../../components/ui/MobilePage";
-import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
+import { useSelectionScope } from "../../hooks/useSelectionScope";
+import { useIntakeSelection } from "./hooks/useIntakeSelection";
 import { AsyncActionButton, ModalShell, PageSkeleton, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
@@ -47,14 +45,12 @@ interface PendingIntakePrintJob {
 
 export function IntakeView({
   user,
-  navigate,
   mode,
 }: {
   user: SessionUser;
   navigate: (view: WorkspaceView) => void;
   mode: "entry" | "batches";
 }) {
-  const isMobile = useIsMobileLayout();
   const queryClient = useQueryClient();
   const bootstrap = useBootstrap("summary");
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
@@ -68,9 +64,8 @@ export function IntakeView({
   const [aiParsing, setAiParsing] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "intakeDate", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);
-  const [selectingAll, setSelectingAll] = useState(false);
-  const [allFilteredSelected, setAllFilteredSelected] = useState(false);
+  const selection = useIntakeSelection();
+  const { selectedItems, selectingAll, allFilteredSelected } = selection;
   const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName, user.phone));
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
@@ -96,6 +91,22 @@ export function IntakeView({
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const selectedPrintPlan = planIntakeCardPrint(selectedItems, printRooms);
+  const selectionScope = JSON.stringify([
+    mode,
+    Object.entries(filters)
+      .filter(([, values]) => values.length)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, values]) => [key, [...values].sort()]),
+  ]);
+  useSelectionScope(
+    selectionScope,
+    () => {
+      selection.clear();
+      setPendingPrint((current) => (current?.saveCurrent ? current : null));
+      setDeleteTarget(null);
+    },
+    selectedItems.length > 0 || selectingAll,
+  );
 
   if (bootstrap.isPending || (mode === "batches" && list.isPending)) {
     return (
@@ -352,86 +363,30 @@ export function IntakeView({
     setPage(1);
   }
 
-  async function toggleAllFiltered() {
-    if (allFilteredSelected) {
-      setSelectedItems([]);
-      setAllFilteredSelected(false);
-      return;
-    }
-    setSelectingAll(true);
-    setAllFilteredSelected(true);
-    try {
-      setSelectedItems(await listAllIntakeBatches(params));
-    } catch (error) {
-      setAllFilteredSelected(false);
-      setNotice(error instanceof Error ? error.message : "无法读取全部待接收批次");
-    } finally {
-      setSelectingAll(false);
-    }
-  }
-  if (isMobile && mode === "entry") {
-    return (
-      <>
-        <MobilePage
-          actions={
-            <>
-              <MobileButton size="mini" onClick={startNew}>
-                新建批次
-              </MobileButton>
-              <MobileButton color="primary" form="intake-entry-panel" size="mini" type="submit">
-                保存待接收批次
-              </MobileButton>
-            </>
-          }
-          onBack={() => navigate("intake-entry")}
-          title="接收笼卡"
-        >
-          <IntakeEntryPanel
-            editing={editing}
-            draft={draft}
-            headActions={null}
-            aiPending={aiParsing}
-            notice={notice}
-            onAiParse={aiParseMessage}
-            onParse={parseMessage}
-            onPrint={printCurrentBatch}
-            onSubmit={submit}
-            onUpdate={update}
-            roomNames={roomNames}
-            saving={save.isPending}
-          />
-        </MobilePage>
-        {pendingPrint ? (
-          <IntakePrintConfirmDialog
-            job={pendingPrint}
-            onClose={() => setPendingPrint(null)}
-            onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
-          />
-        ) : null}
-      </>
-    );
-  }
-
   return (
     <section className="workspace-view intake-workspace react-intake-view" data-feature="intake">
-      <WorkspaceToolbar
-        actions={
-          mode === "entry" ? (
-            <>
-              <ActionButton onClick={startNew}>新建批次</ActionButton>
-              <AsyncActionButton
-                className="primary"
-                type="submit"
-                form="intake-entry-panel"
-                pending={save.isPending}
-                pendingLabel="保存中..."
-              >
-                保存待接收批次
-              </AsyncActionButton>
-            </>
-          ) : null
-        }
-      />
+      {mode === "entry" ? (
+        <WorkspaceToolbar
+          ariaLabel="笼卡录入操作"
+          sticky
+          actions={
+            <ActionButton disabled={save.isPending} onClick={startNew}>
+              新建批次
+            </ActionButton>
+          }
+          primaryAction={
+            <AsyncActionButton
+              className="primary"
+              type="submit"
+              form="intake-entry-panel"
+              pending={save.isPending}
+              pendingLabel="保存中..."
+            >
+              保存待接收批次
+            </AsyncActionButton>
+          }
+        />
+      ) : null}
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">
           {mode === "entry" ? (
@@ -457,8 +412,8 @@ export function IntakeView({
               loading={list.isFetching}
               selectingAll={selectingAll}
               allFilteredSelected={allFilteredSelected}
-              bulkNotice={bulkNotice}
-              bulkNoticeKind={bulkNoticeKind}
+              bulkNotice={selection.error || bulkNotice}
+              bulkNoticeKind={selection.error ? "error" : bulkNoticeKind}
               markingPrinted={markingPrinted}
               markingReceived={markingReceived}
               printDisabledReason={selectedPrintPlan.disabledReason}
@@ -466,20 +421,12 @@ export function IntakeView({
               pageSize={pageSize}
               params={params}
               filters={filters}
-              onToggleAll={() => void toggleAllFiltered()}
-              onToggleItem={(item, checked) => {
-                setAllFilteredSelected(false);
-                setSelectedItems((current) =>
-                  checked
-                    ? [...current.filter((selectedItem) => selectedItem.id !== item.id), item]
-                    : current.filter((selectedItem) => selectedItem.id !== item.id),
-                );
-              }}
+              onClearSelection={selection.clear}
+              onToggleAll={() => void selection.toggleAll(params)}
+              onToggleItem={selection.toggle}
               onSort={toggleSort}
               onFilter={(key, values) => {
                 setFilters((current) => ({ ...current, [key]: values }));
-                setSelectedItems([]);
-                setAllFilteredSelected(false);
                 setPage(1);
               }}
               onPrint={(targets) => requestPrint(targets)}
@@ -546,8 +493,7 @@ export function IntakeView({
               tone="destructive"
               onClick={async () => {
                 await remove.mutateAsync(deleteTarget.id);
-                setSelectedItems((current) => current.filter((item) => item.id !== deleteTarget.id));
-                setAllFilteredSelected(false);
+                selection.remove(deleteTarget.id);
                 setDeleteTarget(null);
               }}
             >

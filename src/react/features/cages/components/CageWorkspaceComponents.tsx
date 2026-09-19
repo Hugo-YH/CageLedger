@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Empty, Input } from "antd";
 
 import type { CageRack, CageSlot, CageSlotStatus, Occupancy, PlacementTask } from "../../../api/contracts";
-import { useMoveInPlacement, useReservePlacement, useSaveOccupancy } from "../../../api/cages";
+import { useMoveInPlacement, useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { ActionButton } from "../../../components/ui";
 import { animalAgeText, cageCode, currentOccupancy, emptyOccupancy, slotPosition } from "../../../../domain/cages";
@@ -104,6 +104,7 @@ export function SlotEditor({
   roomId,
   onClose,
   onNotice,
+  beginOperation,
 }: {
   slot: CageSlot;
   rack: CageRack;
@@ -113,6 +114,7 @@ export function SlotEditor({
   roomId: string;
   onClose: () => void;
   onNotice: (message: string) => void;
+  beginOperation: () => () => boolean;
 }) {
   const [draft, setDraft] = useState(
     () => occupancy || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today),
@@ -125,12 +127,14 @@ export function SlotEditor({
     setDraft((current) => ({ ...current, [key]: value }));
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    const isCurrent = beginOperation();
     try {
       await save.mutateAsync({ item: { ...draft, slotId: slot.id }, exists: Boolean(occupancy) });
+      if (!isCurrent()) return;
       onNotice(`笼位 ${cageCode(slot, rack.index, roomName)} 已保存。`);
       onClose();
     } catch (error) {
-      onNotice(error instanceof Error ? error.message : "保存失败");
+      if (isCurrent()) onNotice(error instanceof Error ? error.message : "保存失败");
     }
   }
   async function clear() {
@@ -138,10 +142,12 @@ export function SlotEditor({
       onClose();
       return;
     }
+    const isCurrent = beginOperation();
     await save.mutateAsync({
       item: { ...occupancy, status: "ended", endDate: today },
       exists: true,
     });
+    if (!isCurrent()) return;
     onNotice(`笼位 ${cageCode(slot, rack.index, roomName)} 已设为空。`);
     onClose();
   }
@@ -316,6 +322,7 @@ export function BatchSlotEditor({
   roomId,
   onClose,
   onDone,
+  beginOperation,
 }: {
   slots: CageSlot[];
   rack: CageRack;
@@ -324,6 +331,7 @@ export function BatchSlotEditor({
   roomId: string;
   onClose: () => void;
   onDone: (message: string) => void;
+  beginOperation: () => () => boolean;
 }) {
   const first = slots.map((slot) => currentOccupancy(slot.id, occupancies)).find(Boolean);
   const [draft, setDraft] = useState({
@@ -340,6 +348,7 @@ export function BatchSlotEditor({
   const save = useSaveOccupancy(roomId);
   const update = (key: keyof typeof draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   async function saveAll() {
+    const isCurrent = beginOperation();
     for (const slot of slots) {
       const current = currentOccupancy(slot.id, occupancies);
       const item = {
@@ -350,9 +359,10 @@ export function BatchSlotEditor({
       } as Occupancy;
       await save.mutateAsync({ item, exists: Boolean(current) });
     }
-    onDone(`已批量保存 ${slots.length} 个笼位。`);
+    if (isCurrent()) onDone(`已批量保存 ${slots.length} 个笼位。`);
   }
   async function clearAll() {
+    const isCurrent = beginOperation();
     for (const slot of slots) {
       const current = currentOccupancy(slot.id, occupancies);
       if (current)
@@ -361,7 +371,7 @@ export function BatchSlotEditor({
           exists: true,
         });
     }
-    onDone(`已将 ${slots.length} 个笼位设为空。`);
+    if (isCurrent()) onDone(`已将 ${slots.length} 个笼位设为空。`);
   }
   return (
     <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" width={720} onClose={onClose}>
@@ -413,43 +423,5 @@ export function BatchSlotEditor({
         </ActionButton>
       </div>
     </ModalShell>
-  );
-}
-
-export function ReserveBar({
-  task,
-  slot,
-  rack,
-  roomName,
-  roomId,
-  onDone,
-}: {
-  task?: PlacementTask;
-  slot: CageSlot;
-  rack?: CageRack;
-  roomName: string;
-  roomId: string;
-  onDone: (message: string) => void;
-}) {
-  const reserve = useReservePlacement(roomId);
-  if (!task || !rack) return null;
-  return (
-    <div className="cage-reserve-bar">
-      <div>
-        <strong>{task.batchNo}</strong>
-        <span>预留到 {cageCode(slot, rack.index, roomName)}</span>
-      </div>
-      <ActionButton
-        disabled={reserve.isPending}
-        loading={reserve.isPending}
-        tone="primary"
-        onClick={async () => {
-          await reserve.mutateAsync({ taskId: task.id, slotId: slot.id });
-          onDone(`已为 ${task.batchNo} 预留笼位 ${cageCode(slot, rack.index, roomName)}。`);
-        }}
-      >
-        确认预留
-      </ActionButton>
-    </div>
   );
 }

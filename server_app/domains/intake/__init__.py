@@ -1,4 +1,5 @@
 from .rules import (
+    SPECIES_CODES,
     animal_age_text,
     cage_card_qr_id,
     cage_card_qr_id_from_batch_card,
@@ -6,6 +7,7 @@ from .rules import (
     collect_cage_card_qr_ids,
     decode_cage_card_sequence,
     encode_cage_card_sequence,
+    infer_species,
     is_cage_card_qr_id,
     legacy_cage_card_qr_id,
     next_cage_card_qr_id,
@@ -20,8 +22,10 @@ __all__ = [
     "collect_cage_card_qr_ids",
     "decode_cage_card_sequence",
     "encode_cage_card_sequence",
+    "infer_species",
     "is_cage_card_qr_id",
     "legacy_cage_card_qr_id",
     "next_cage_card_qr_id",
+    "SPECIES_CODES",
     "species_label",
 ]

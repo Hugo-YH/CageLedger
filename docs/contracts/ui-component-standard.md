@@ -30,12 +30,12 @@
 - 领域组件使用完整的作用域选择器，例如 `.animal-management-workspace .inspection-module-picker`。组件改造同步清理旧 class、旧媒体查询和已失效的同名选择器。
 - 同名 class 出现多个定义时，变更前必须列出来源、加载顺序和适用断点；完成后保留唯一的布局定义，状态样式通过修饰类或 Ant 状态类补充。
 - 自适应网格优先使用 `repeat(auto-fit, minmax(...))`；桌面、平板与移动端分别验证列数、最小宽度、文字截断和操作可达性。固定窄列只用于明确的紧凑控件。
-- 页面级视觉修复完成前检查 computed style：`display`、`grid-template-columns`、`gap`、`min-width`、`overflow`、`position` 和 `z-index` 必须与组件规范一致。
+- 页面结构性改动或样式冲突排查时，检查受影响的 computed style：`display`、`grid-template-columns`、`gap`、`min-width`、`overflow`、`position` 和 `z-index`；局部小改的验证范围按测试策略确定。
 
 ## UI 回归门禁
 
-- 布局、导航、表格、表单、弹窗、浮层和响应式改动都需要桌面、1180px、760px、手机横屏四档验证。
-- 视觉回归同时覆盖默认、hover、focus-visible、disabled、loading 和内容溢出状态；交互组件额外覆盖键盘焦点与关闭/返回路径。
+- 验证范围统一遵守 [测试策略](testing-strategy.md) 的局部小改与结构性改动分级，不因涉及表单、弹窗或浮层就默认四档视口和全套检查。
+- 只覆盖本次受影响的默认、hover、focus-visible、disabled、loading 和内容溢出状态；交互改变时检查对应键盘焦点与关闭/返回路径。
 - 截图差异出现时先定位样式来源与 computed style，再修改组件规则。禁止连续叠加页面级覆盖规则处理同一视觉问题。
 - 组件存在遗留样式时，任务验收包含“旧规则已删除或已迁移”的代码检查；保留规则需写明仍服务的组件与断点。
 
@@ -50,4 +50,4 @@
 ## 质量门禁
 
 - `npm run check:ui-contract` 校验适配层、文档、`transition: all` 与未登记高 z-index；`npm run check:style-ownership` 校验唯一样式归属、Ant 选择器边界与层级 Token；`npm run check:antd-design` 执行本地 `antd doctor`、`antd usage`、`antd lint` 并输出机器可读报告。
-- 新页面和公共组件通过 `npm run check`、键盘导航、浅色/深色与移动端截图验收。
+- 新页面和公共组件按测试策略验证相关交互、主题与移动端表现；`npm run check` 留到提交或发布前统一执行，不在每个局部调整后重跑。

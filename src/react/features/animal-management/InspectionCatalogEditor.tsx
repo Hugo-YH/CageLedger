@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Key } from "react";
-import { App, Button, Card, Form, Modal, Segmented, Select, Space, Tag, Tree, Typography } from "antd";
+import { App, Button, Card, Form, Modal, Segmented, Select, Tag, Tree, Typography } from "antd";
 import { PlusOutlined, SaveOutlined, SendOutlined } from "@ant-design/icons";
 
 import { createClientId } from "../../../domain/id";
@@ -18,6 +18,7 @@ import {
 } from "../../api/animalManagement";
 import { ApiError } from "../../api/client";
 import type { InspectionCatalogDraftResponse, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
+import { CommandBar } from "../../components/ui";
 import { InspectionNodeForm } from "./InspectionNodeForm";
 import { InspectionPublishModal } from "./InspectionPublishModal";
 
@@ -206,17 +207,36 @@ export function InspectionCatalogEditor({
   }
 
   return (
-    <Card
-      className="animal-ant-card inspection-editor-panel"
-      title="编辑巡检标准目录"
-      extra={
-        <Space wrap>
-          <Button icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
-            新增条目
-          </Button>
-          <Button icon={<SaveOutlined />} disabled={!dirty || saveDraft.isPending} onClick={handleSaveClick}>
-            保存草稿
-          </Button>
+    <Card className="animal-ant-card inspection-editor-panel" title="编辑巡检标准目录">
+      <CommandBar
+        ariaLabel="巡检目录编辑操作"
+        sticky
+        context={
+          <Typography.Text type="secondary">
+            {dirty ? <Tag color="orange">有未保存的修改</Tag> : <Tag color="green">草稿已保存</Tag>}
+            上次保存 {savedUpdatedAt.replace("T", " ").slice(5, 16)}
+          </Typography.Text>
+        }
+        filters={
+          <Segmented
+            className="inspection-editor-module-filter"
+            options={moduleOptions}
+            value={moduleFilter}
+            onChange={(value) => setModuleFilter(String(value))}
+          />
+        }
+        actions={
+          <>
+            <Button onClick={onExit}>返回</Button>
+            <Button icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
+              新增条目
+            </Button>
+            <Button icon={<SaveOutlined />} disabled={!dirty || saveDraft.isPending} onClick={handleSaveClick}>
+              保存草稿
+            </Button>
+          </>
+        }
+        primaryAction={
           <Button
             type="primary"
             icon={<SendOutlined />}
@@ -225,22 +245,8 @@ export function InspectionCatalogEditor({
           >
             发布
           </Button>
-          <Button onClick={onExit}>返回</Button>
-        </Space>
-      }
-    >
-      <div className="inspection-editor-toolbar">
-        <Segmented
-          className="inspection-editor-module-filter"
-          options={moduleOptions}
-          value={moduleFilter}
-          onChange={(value) => setModuleFilter(String(value))}
-        />
-        <Typography.Text type="secondary" className="inspection-editor-status">
-          {dirty ? <Tag color="orange">有未保存的修改</Tag> : <Tag color="green">草稿已保存</Tag>}
-          上次保存 {savedUpdatedAt.replace("T", " ").slice(5, 16)}
-        </Typography.Text>
-      </div>
+        }
+      />
       <div className="inspection-editor-body">
         <Tree
           className="inspection-editor-tree"

@@ -4,7 +4,7 @@ These are design heuristics and examples. CageLedger tokens, accessibility contr
 
 ## Stagger Animations
 
-When multiple elements enter together, stagger their appearance. Each element animates in with a small delay after the previous one. This creates a cascading effect that feels more natural than everything appearing at once.
+When a sequence helps communicate order or hierarchy, stagger can give each entering element a small delay. Simultaneous or immediate appearance is also appropriate; choose based on the page's purpose and interaction frequency.
 
 ```css
 .item {
@@ -53,6 +53,6 @@ Things to look for in slow motion:
 
 Step through animations frame by frame in Chrome DevTools (Animations panel). This reveals timing issues between coordinated properties that you cannot see at full speed.
 
-### Test on real devices
+### Device testing when needed
 
-For touch interactions (drawers, swipe gestures), test on physical devices. Connect your phone via USB, visit your local dev server by IP address, and use Safari's remote devtools. The Xcode Simulator is an alternative but real hardware is better for gesture testing.
+For touch interactions, use the available browser or device environment to verify the affected pointer lifecycle and interruptions. Physical hardware can resolve uncertain gesture feel or browser-specific behavior; when available, a phone connected to Safari's remote devtools is one option. Report what the environment could not verify.

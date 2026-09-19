@@ -125,6 +125,9 @@ class HandlerSupportMixin:
             elif table == "intake_batches":
                 filters = self.list_filters()
                 payload = list_intake_batches_page(conn, filters, filtered_where, ENTITY_ORDER_BY)
+                from server_app.domains.quarantine.workflow import decorate_intakes
+
+                decorate_intakes(conn, payload["items"])
                 items = payload["items"]
                 page = payload["page"]
             elif table == "placement_tasks":

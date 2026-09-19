@@ -11,11 +11,6 @@ const apiPort = process.env.CAGELEDGER_DEV_API_PORT || "5174";
 const appPort = process.env.CAGELEDGER_DEV_PORT || "5173";
 const docsPort = process.env.CAGELEDGER_DOCS_PORT || "5175";
 const devBrowserOrigins = [`http://localhost:${appPort}`, `http://127.0.0.1:${appPort}`];
-const configuredCorsOrigins = (process.env.CAGELEDGER_CORS_ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
-const corsAllowedOrigins = [...new Set([...configuredCorsOrigins, ...devBrowserOrigins])].join(",");
 
 function loadDotEnv(root) {
   const path = resolve(root, ".env");
@@ -34,6 +29,15 @@ function loadDotEnv(root) {
 }
 
 const dotEnv = loadDotEnv(resolve(import.meta.dirname, ".."));
+const configuredCorsOrigins = (
+  process.env.CAGELEDGER_CORS_ALLOWED_ORIGINS ||
+  dotEnv.CAGELEDGER_CORS_ALLOWED_ORIGINS ||
+  ""
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const corsAllowedOrigins = [...new Set([...configuredCorsOrigins, ...devBrowserOrigins])].join(",");
 
 function launch(command, args, env = {}) {
   const child = spawn(command, args, {

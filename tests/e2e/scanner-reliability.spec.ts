@@ -90,11 +90,13 @@ test("real camera frames decode and automatically query the cage card", async ({
   await page.route("**/api/public/cage-card/AB12", (route) =>
     route.fulfill({
       json: {
-        qrId: "AB12",
-        batchNo: "扫码回归批次",
-        roomName: "测试饲养间",
-        statusLabel: "已接收",
-        iacuc: "TEST-IACUC",
+        item: {
+          qrId: "AB12",
+          batchNo: "扫码回归批次",
+          roomName: "测试饲养间",
+          statusLabel: "已接收",
+          iacuc: "TEST-IACUC",
+        },
       },
     }),
   );

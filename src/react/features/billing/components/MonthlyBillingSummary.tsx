@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Alert, Button, Card, Flex, Form, Input, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Form, Space, Tag, Typography } from "antd";
 import { FileExcelOutlined } from "@ant-design/icons";
 
 import { exportMonthlyBillingSummary } from "../../../api/billing";
+import { CommandBar, DateInput } from "../../../components/ui";
 
 const currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -47,27 +48,34 @@ export function MonthlyBillingSummary() {
           title="导出范围"
           description="包含当月全部可结算数量统计表，保留金额为 0 的有效记录。"
         />
-        <Flex className="monthly-summary-controls" align="end" gap={16} wrap>
-          <Form layout="vertical">
-            <Form.Item htmlFor="monthly-billing-month" label="结算月份">
-              <Input
-                id="monthly-billing-month"
-                type="month"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-              />
-            </Form.Item>
-          </Form>
-          <Button
-            icon={<FileExcelOutlined aria-hidden />}
-            loading={exporting}
-            disabled={!month}
-            type="primary"
-            onClick={() => void exportWorkbook()}
-          >
-            导出月度汇总 Excel
-          </Button>
-        </Flex>
+        <CommandBar
+          className="monthly-summary-controls"
+          ariaLabel="月度结算汇总操作"
+          filters={
+            <Form className="monthly-summary-form" layout="vertical">
+              <Form.Item htmlFor="monthly-billing-month" label="结算月份">
+                <DateInput
+                  id="monthly-billing-month"
+                  label="结算月份"
+                  picker="month"
+                  value={month}
+                  onChange={setMonth}
+                />
+              </Form.Item>
+            </Form>
+          }
+          primaryAction={
+            <Button
+              icon={<FileExcelOutlined aria-hidden />}
+              loading={exporting}
+              disabled={!month}
+              type="primary"
+              onClick={() => void exportWorkbook()}
+            >
+              导出月度汇总 Excel
+            </Button>
+          }
+        />
       </div>
       <Typography.Paragraph className="monthly-summary-hint" type="secondary">
         伦理经费和实验日期来自 IACUC 索引；报销单经费本编号、单号、金额与备注仅使用单据跟踪已登记报销单。

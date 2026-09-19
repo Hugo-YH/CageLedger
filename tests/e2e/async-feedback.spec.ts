@@ -72,6 +72,11 @@ for (const recording of [false, true]) {
       { width: 844, height: 390 },
     ]) {
       await page.setViewportSize(viewport);
+      if (!recording) {
+        const toggle = dialog.getByRole("switch", { name: "饲养费结算单", exact: true });
+        await expect(toggle).toHaveCSS("height", "22px");
+        await expect(toggle).toHaveCSS("min-width", "44px");
+      }
       const fields = dialog.locator(".workflow-reimbursement-fields");
       await fields.scrollIntoViewIfNeeded();
       for (const selector of [

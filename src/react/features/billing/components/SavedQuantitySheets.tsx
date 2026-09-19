@@ -6,30 +6,31 @@ import { useIacucExpiry } from "../../../api/iacuc";
 import {
   fetchQuantitySheetsForPrint,
   useDeleteQuantitySheet,
-  listAllQuantitySheets,
   useQuantityFilterOptions,
   useQuantitySheetDetail,
   useQuantitySheets,
 } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
-import { ActionButton, DataTable } from "../../../components/ui";
+import { ActionButton, CommandBar, DataTable } from "../../../components/ui";
+import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
+import { useQuantitySheetSelection } from "../hooks/useQuantitySheetSelection";
 
 export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet) => void }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const [selected, setSelected] = useState<string[]>([]);
-  const [selectingAll, setSelectingAll] = useState(false);
+  const selection = useQuantitySheetSelection();
+  const { selected, selectingAll, allFilteredSelected } = selection;
+  useSelectionScope(JSON.stringify(filters), selection.clear, selected.length > 0 || selectingAll);
   const [viewId, setViewId] = useState("");
   const [editId, setEditId] = useState("");
   const [deleteId, setDeleteId] = useState("");
   const [exportError, setExportError] = useState("");
   const [printPending, setPrintPending] = useState(false);
-  const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const pdfExport = usePdfExport();
   const params: QuantitySheetListParams = {
     limit: pageSize,
@@ -48,24 +49,6 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
     (iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
   );
   const initialLoading = list.isPending;
-  const toggleAllFiltered = async () => {
-    if (allFilteredSelected) {
-      setSelected([]);
-      setAllFilteredSelected(false);
-      return;
-    }
-    setSelectingAll(true);
-    setAllFilteredSelected(true);
-    try {
-      const allItems = await listAllQuantitySheets(params);
-      setSelected(allItems.map((item) => item.id));
-    } catch (error) {
-      setAllFilteredSelected(false);
-      setExportError(error instanceof Error ? error.message : "无法读取全部统计表");
-    } finally {
-      setSelectingAll(false);
-    }
-  };
   const columns: TableProps<QuantitySheet>["columns"] = [
     {
       key: "selection",
@@ -75,7 +58,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           aria-label="全选当前筛选结果统计表"
           disabled={list.isFetching || selectingAll || !total}
           checked={total > 0 && allFilteredSelected}
-          onChange={() => void toggleAllFiltered()}
+          onChange={() => void selection.toggleAll(params)}
         />
       ),
       render: (_, item) => (
@@ -83,12 +66,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           aria-label={`选择 ${item.iacuc}`}
           checked={selected.includes(item.id)}
           disabled={list.isFetching}
-          onChange={(event) => {
-            setAllFilteredSelected(false);
-            setSelected((current) =>
-              event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id),
-            );
-          }}
+          onChange={(event) => selection.toggle(item.id, event.target.checked)}
         />
       ),
     },
@@ -117,8 +95,6 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           }}
           onFilter={(values) => {
             setFilters((current) => ({ ...current, [key]: values }));
-            setSelected([]);
-            setAllFilteredSelected(false);
             setPage(1);
           }}
         />
@@ -146,7 +122,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
       align: "right",
       render: (_, item) => (
         <Space size={4} className="table-actions">
-          <Button disabled={list.isFetching} type="primary" onClick={() => setViewId(item.id)}>
+          <Button disabled={list.isFetching} onClick={() => setViewId(item.id)}>
             预览
           </Button>
           <Button disabled={list.isFetching} onClick={() => setEditId(item.id)}>
@@ -193,34 +169,41 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
 
   return (
     <section className="panel quantity-saved-panel">
-      <div className="workspace-toolbar quantity-saved-toolbar" data-ui="workspace-toolbar">
-        <div className="workspace-toolbar-main">
-          <Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `${total} 条 · 已选 ${selected.length}`}</Tag>
-        </div>
-        <div className="workspace-toolbar-actions">
-          <Space className="workspace-toolbar-action-group">
-            <ActionButton
-              disabled={!selected.length || list.isFetching || selectingAll || printPending}
-              loading={printPending}
-              onClick={() => void printSelected()}
-            >
-              {printPending ? "正在准备打印…" : "打印数量统计表"}
-            </ActionButton>
-            <ActionButton
-              disabled={!selected.length || list.isFetching || pdfExport.isExporting || selectingAll}
-              loading={pdfExport.isExporting}
-              tone="primary"
-              onClick={() => void exportSelected()}
-            >
-              {pdfExport.isExporting
-                ? exportProgress(pdfExport.job?.completed, pdfExport.job?.total)
-                : selected.length > 1
-                  ? "批量导出 PDF"
-                  : "导出 PDF"}
-            </ActionButton>
-          </Space>
-        </div>
-      </div>
+      <CommandBar
+        className="quantity-saved-toolbar"
+        ariaLabel="已保存统计表操作"
+        sticky="selection"
+        selection={{
+          count: selected.length,
+          onClear: selection.clear,
+          pending: selectingAll || printPending || pdfExport.isExporting,
+        }}
+        context={<Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `共 ${total} 条`}</Tag>}
+        actions={
+          <ActionButton
+            disabled={!selected.length || list.isFetching || selectingAll || printPending}
+            loading={printPending}
+            onClick={() => void printSelected()}
+          >
+            {printPending ? "正在准备打印…" : "打印数量统计表"}
+          </ActionButton>
+        }
+        primaryAction={
+          <ActionButton
+            disabled={!selected.length || list.isFetching || pdfExport.isExporting || selectingAll}
+            loading={pdfExport.isExporting}
+            tone="primary"
+            onClick={() => void exportSelected()}
+          >
+            {pdfExport.isExporting
+              ? exportProgress(pdfExport.job?.completed, pdfExport.job?.total)
+              : selected.length > 1
+                ? "批量导出 PDF"
+                : "导出 PDF"}
+          </ActionButton>
+        }
+      />
+      {selection.error ? <Alert role="alert" showIcon title={selection.error} type="error" /> : null}
       {pdfExport.isExporting || exportError ? (
         <Alert
           role="status"
@@ -250,6 +233,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         aria-label="已保存数量统计表"
       >
         <DataTable
+          refreshing={list.isFetching}
           className="quantity-saved-table"
           columns={columns}
           dataSource={items}
@@ -267,8 +251,6 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
               if (nextPageSize !== pageSize) {
                 setPageSize(nextPageSize);
                 setPage(1);
-                setSelected([]);
-                setAllFilteredSelected(false);
                 return;
               }
               setPage(nextPage);
@@ -293,7 +275,7 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
                 tone="destructive"
                 onClick={async () => {
                   await remove.mutateAsync(deleteId);
-                  setSelected((current) => current.filter((id) => id !== deleteId));
+                  selection.toggle(deleteId, false);
                   setDeleteId("");
                 }}
               >

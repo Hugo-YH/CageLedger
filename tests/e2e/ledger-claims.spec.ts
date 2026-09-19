@@ -447,7 +447,9 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
 
   // 全选批量锁定
   await page.locator("thead").getByLabel("全选当前页可锁定的结算流程").click();
-  await expect(page.locator(".ledger-toolbar").getByText(/已选 \d+ 条可锁定/)).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "结算流程批量操作", exact: true }).getByText(/已选 [1-9]\d* 项/),
+  ).toBeVisible();
   const batchRefreshes: string[] = [];
   page.on("request", (request) => {
     if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-workflows") {

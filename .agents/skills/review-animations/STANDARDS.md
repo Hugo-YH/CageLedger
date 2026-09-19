@@ -2,18 +2,18 @@
 
 These are reference heuristics, not repository gates. Use the project's existing tokens and accessibility contracts; confirm user impact before reporting a defect. Example durations, curves and library behavior need to fit the current implementation. Read only the relevant sections.
 
-The precise values, curves, and rules behind the review. Cite these in findings instead of approximating. Distilled from Emil Kowalski's design engineering philosophy.
+Design examples informed by Emil Kowalski. Findings need observed impact; use repository tokens for target values.
 
 ## Should it animate? (frequency table)
 
 | Frequency                                                   | Decision                     |
 | ----------------------------------------------------------- | ---------------------------- |
-| 100+ times/day (keyboard shortcuts, command palette toggle) | No animation. Ever.          |
+| 100+ times/day (keyboard shortcuts, command palette toggle) | Prefer immediate feedback.   |
 | Tens of times/day (hover effects, list navigation)          | Remove or drastically reduce |
 | Occasional (modals, drawers, toasts)                        | Standard animation           |
 | Rare / first-time (onboarding, feedback, celebrations)      | Can add delight              |
 
-**Never animate keyboard-initiated actions** — they repeat hundreds of times daily; animation makes them feel slow and disconnected. (Raycast has no open/close animation — correct for something used hundreds of times a day.)
+For frequent keyboard actions, check input latency and focus continuity. Brief feedback is acceptable when it does not delay the operation.
 
 Valid purposes for motion: spatial consistency, state indication, explanation, feedback, preventing jarring change. "It looks cool" on a frequently-seen element is not valid.
 
@@ -27,9 +27,9 @@ Decision order:
 - Constant motion (marquee, progress) → **`linear`**
 - Default → **`ease-out`**
 
-**Never `ease-in` on UI.** It starts slow, delaying the exact moment the user is watching. `ease-out` at 200ms _feels_ faster than `ease-in` at 200ms.
+Check whether slow-start easing delays visible feedback; the easing name alone is not a defect.
 
-Built-in CSS easings are too weak. Use strong custom curves:
+Use existing component curves first. Examples for a task that actually needs a custom curve:
 
 ```css
 --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* strong ease-out for UI */
@@ -49,11 +49,11 @@ Find curves at [easing.dev](https://easing.dev/) or [easings.co](https://easings
 | Modals, drawers          | 200–500ms     |
 | Marketing / explanatory  | Can be longer |
 
-**Rule: UI animations stay under 300ms.** A 180ms dropdown feels more responsive than a 400ms one. Faster spinners make load feel faster (same actual time). Instant tooltips after the first (skip delay + animation) make a toolbar feel faster.
+These ranges are examples, not a duration gate. Use the project motion contract and check perceived delay; do not speed up spinners merely to suggest faster loading.
 
 ## Physicality
 
-- **Never `scale(0)`.** Start from `scale(0.9–0.97)` + `opacity: 0`. Nothing in the real world appears from nothing.
+- Large scale entrances can be abrupt. Consider a small scale change, a fade or no motion according to the component.
 - **Origin-aware popovers.** Scale from the trigger, not center:
 
   ```css
@@ -64,7 +64,7 @@ Find curves at [easing.dev](https://easing.dev/) or [easings.co](https://easings
 
   **Modals are exempt** — they appear centered in the viewport, keep `transform-origin: center`.
 
-- **Button press feedback.** `transform: scale(0.97)` on `:active`, `transition: transform 160ms ease-out`. Subtle (0.95–0.98). Applies to any pressable element.
+- **Button press feedback.** `transform: scale(0.97)` on `:active`, `transition: transform 160ms ease-out`. Subtle (0.95–0.98). Optional when the component already has adequate press feedback.
 
 ## Springs
 
@@ -80,21 +80,21 @@ Feel natural because they simulate physics; no fixed duration — they settle on
 
 ```
 
-Keep bounce subtle (0.1–0.3); avoid bounce in most UI — reserve for drag-to-dismiss and playful interactions. Springs maintain velocity when interrupted (keyframes restart from zero), so they're ideal for gestures users may reverse mid-motion.
+Keep bounce subtle (0.1–0.3); avoid bounce in most UI — reserve for drag-to-dismiss and playful interactions. A spring that preserves position and velocity while retargeting can help gestures users may reverse mid-motion; confirm that behavior in the current implementation.
 
 Mouse interactions: interpolate with `useSpring` rather than tying value directly to mouse position (direct = artificial, no momentum). Only do this when the motion is decorative.
 
 ## Interruptibility
 
-CSS **transitions** can be interrupted and retargeted mid-animation; **keyframes** restart from zero. For anything triggered rapidly (toasts being added, toggles), transitions are smoother.
+CSS **transitions** can retarget an in-progress property change. A fixed-start keyframe animation may jump if cancelled and restarted. For rapid toast updates or toggles, assess cancellation and continuity from the visible state before recommending an API change.
 
 ```css
-/* Interruptible — good for dynamic UI */
+/* Retargetable property transition */
 .toast {
   transition: transform 400ms ease;
 }
 
-/* Not interruptible — avoid for dynamic UI */
+/* Fixed-start entry; check continuity when rapidly toggled */
 @keyframes slideIn {
   from {
     transform: translateY(100%);
@@ -138,33 +138,9 @@ Slow where the user is deciding, fast where the system responds.
 
 ## Performance
 
-- **Only animate `transform` and `opacity`** — they skip layout/paint and run on the GPU. `padding`/`margin`/`height`/`width`/`top`/`left` trigger all three rendering steps.
-- **Don't drive child transforms via a CSS variable on the parent** — it recalcs styles for all children. Set `transform` directly on the element.
+Prefer transform and opacity where they fit the interaction; inspect layout and paint when animating size. Hardware acceleration depends on the property, browser and installed animation-library version. Verify current behavior before recommending different APIs or dependencies.
 
-  ```js
-  element.style.setProperty("--swipe-amount", `${d}px`); // bad: recalc on all children
-  element.style.transform = `translateY(${d}px)`; // good: only this element
-  ```
-
-- **Framer Motion shorthands are NOT hardware-accelerated.** `x`/`y`/`scale` run on the main thread via rAF and drop frames under load. Use the full transform string:
-
-  ```jsx
-
-  <motion.div animate={{ x: 100 }} />                          // drops frames under load
-  <motion.div animate={{ transform: "translateX(100px)" }} />  // hardware accelerated
-
-  ```
-
-- **CSS animations beat JS under load** — they run off the main thread; rAF-based animations stutter while the browser loads/scripts/paints. Use CSS for predetermined motion, JS for dynamic/interruptible.
-- **WAAPI** gives JS control with CSS performance (hardware-accelerated, interruptible, no library):
-
-  ```js
-  element.animate([{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }], {
-    duration: 1000,
-    fill: "forwards",
-    easing: "cubic-bezier(0.77, 0, 0.175, 1)",
-  });
-  ```
+Parent CSS-variable updates and broad transitions are useful profiling candidates, not automatic defects. CSS, WAAPI and JavaScript each have valid uses; assess the actual long tasks, dropped frames and cancellation behavior under realistic load.
 
 ## Transforms & clip-path
 
@@ -187,7 +163,7 @@ When a crossfade shows two overlapping states despite tuning easing/duration, ad
 
 ## Stagger
 
-Stagger group entrances; 30–80ms between items. Longer delays feel slow. Stagger is decorative — never block interaction while it plays.
+If stagger addresses an observed need, keep the delay brief. It is optional decoration and must not block interaction.
 
 ```css
 .item {
@@ -229,14 +205,14 @@ const reduce = useReducedMotion();
 const closedX = reduce ? 0 : "-100%";
 ```
 
-Reduced motion means fewer and gentler animations, not zero — keep transitions that aid comprehension, remove movement/position changes.
+Reduced motion may disable nonessential animation entirely. Preserve visible state and focus feedback; opening, closing and input must not depend on animation completion events.
 
 ## Debugging (recommend in reviews when feel is uncertain)
 
 - **Slow motion**: bump duration 2–5× or use DevTools animation inspector. Check colors crossfade cleanly, easing doesn't stop abruptly, `transform-origin` is right, coordinated properties stay in sync.
 - **Frame-by-frame**: Chrome DevTools Animations panel reveals timing drift between coordinated properties.
-- **Real devices** for gestures (drawers, swipe) — connect a phone, hit the dev server by IP, use Safari remote devtools.
-- **Fresh eyes next day** — imperfections invisible during development surface later.
+- **Available browser or device environments** for gesture lifecycle and interruption checks. Use physical hardware when available to resolve uncertain feel or browser-specific behavior, and report remaining verification limits.
+- **Independent review** can help when the result remains uncertain; do not delay an otherwise validated delivery until the next day.
 
 ## Cohesion
 

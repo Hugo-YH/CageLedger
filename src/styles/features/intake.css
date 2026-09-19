@@ -42,14 +42,8 @@
 }
 
 [data-feature="intake"] .intake-notice,
-[data-feature="intake"] .intake-bulk-alert,
 [data-feature="intake"] .scanner-alert {
   margin: 0;
-}
-
-[data-feature="intake"] .intake-print-button-wrap {
-  display: inline-flex;
-  border-radius: 6px;
 }
 
 [data-feature="intake"] .intake-list-pagination {
@@ -98,10 +92,6 @@
     margin-inline-start: 12px;
   }
 
-  [data-feature="intake"] .intake-bulk-alert .ant-alert-message {
-    width: 100%;
-  }
-
   [data-feature="intake"] .intake-list-pagination {
     flex-direction: column;
     align-items: flex-start;
@@ -140,33 +130,152 @@
   display: none;
 }
 
-[data-feature="intake"] .scanner-camera {
+[data-feature="intake"] .scanner-camera,
+[data-feature="intake"] .scanner-capture {
   position: relative;
-  width: min(640px, 100%);
+  width: min(480px, 100%, 52vh);
+  aspect-ratio: 1;
   margin: 0 auto;
   overflow: hidden;
   border-radius: var(--ant-border-radius-lg, 8px);
   background: var(--text);
 }
 
+[data-feature="intake"] .scanner-capture {
+  /* A photographic QR needs a white quiet area in both application themes. */
+  background: var(--text-inverse);
+}
+
 [data-feature="intake"] .scanner-camera video,
 [data-feature="intake"] .scanner-frozen-frame {
   display: block;
   width: 100%;
-  max-height: 52vh;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
 }
 
-[data-feature="intake"] .scanner-camera span {
+[data-feature="intake"] .scanner-qr-plane {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
-  left: 12px;
-  padding: 8px;
-  border-radius: var(--ant-border-radius, 6px);
-  background: var(--backdrop);
-  color: var(--text-inverse);
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+[data-feature="intake"] .scanner-qr-plane img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+[data-feature="intake"] .scanner-qr-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1;
+}
+
+[data-feature="intake"] .scanner-qr-outline path {
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+[data-feature="intake"] .scanner-source-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+[data-feature="intake"] .scanner-source-outline circle {
+  fill: var(--primary);
+  stroke: var(--text-inverse);
+}
+
+[data-feature="intake"] .scanner-camera-status {
+  color: var(--muted);
   text-align: center;
+}
+
+[data-feature="intake"] .scanner-query-section:not([hidden]),
+[data-feature="intake"] .scanner-candidate-picker {
+  display: grid;
+  gap: 16px;
+}
+
+[data-feature="intake"] .scanner-candidate-map,
+[data-feature="intake"] .scanner-candidate-outlines {
+  position: absolute;
+}
+
+[data-feature="intake"] .scanner-candidate-outlines {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+[data-feature="intake"] .scanner-candidate-hit {
+  position: absolute;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+[data-feature="intake"] .scanner-candidate-number {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--text-inverse);
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--primary);
+  color: var(--text-inverse);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+[data-feature="intake"] .scanner-candidate-hit:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 4px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+[data-feature="intake"] .scanner-candidate-options .ant-btn {
+  max-width: 100%;
+  min-height: 32px;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-feature="intake"] .scanner-candidate-hit:hover {
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+  }
 }
 
 /* Scanner result card and intake batch table (migrated from core.css). */

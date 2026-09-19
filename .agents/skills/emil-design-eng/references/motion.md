@@ -4,7 +4,7 @@ These are design heuristics and examples. CageLedger tokens, accessibility contr
 
 ## The Animation Decision Framework
 
-Before writing any animation code, answer these questions in order:
+Use the relevant questions when choosing feedback; no fixed questionnaire is required.
 
 ### 1. Should this animate at all?
 
@@ -12,12 +12,12 @@ Before writing any animation code, answer these questions in order:
 
 | Frequency                                                   | Decision                     |
 | ----------------------------------------------------------- | ---------------------------- |
-| 100+ times/day (keyboard shortcuts, command palette toggle) | No animation. Ever.          |
+| 100+ times/day (keyboard shortcuts, command palette toggle) | Prefer immediate feedback.   |
 | Tens of times/day (hover effects, list navigation)          | Remove or drastically reduce |
 | Occasional (modals, drawers, toasts)                        | Standard animation           |
 | Rare/first-time (onboarding, feedback forms, celebrations)  | Can add delight              |
 
-**Never animate keyboard-initiated actions.** These actions are repeated hundreds of times daily. Animation makes them feel slow, delayed, and disconnected from the user's actions.
+Frequent keyboard actions should respond immediately. Check that feedback preserves focus and does not delay repeated input.
 
 Raycast has no open/close animation. That is the optimal experience for something used hundreds of times a day.
 
@@ -48,7 +48,7 @@ Is it constant motion (marquee, progress bar)?
 Yes → linear
 Default → ease-out
 
-**Critical: use custom easing curves.** The built-in CSS easings are too weak. They lack the punch that makes animations feel intentional.
+Reuse the project and component easing tokens. These custom curves are examples for a task that needs different motion, not a requirement to replace existing curves.
 
 ```css
 /* Strong ease-out for UI interactions */
@@ -61,7 +61,7 @@ Default → ease-out
 --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 ```
 
-**Never use ease-in for UI animations.** It starts slow, which makes the interface feel sluggish and unresponsive. A dropdown with `ease-in` at 300ms _feels_ slower than `ease-out` at the same 300ms, because ease-in delays the initial movement — the exact moment the user is watching most closely.
+Slow-start easing can delay visible feedback on entry. Assess the actual interaction rather than treating the curve name as a defect.
 
 **Easing curve resources:** Don't create curves from scratch. Use [easing.dev](https://easing.dev/) or [easings.co](https://easings.co/) to find stronger custom variants of standard easings.
 
@@ -75,13 +75,13 @@ Default → ease-out
 | Modals, drawers          | 200-500ms     |
 | Marketing/explanatory    | Can be longer |
 
-**Rule: UI animations should stay under 300ms.** A 180ms dropdown feels more responsive than a 400ms one. A faster-spinning spinner makes the app feel like it loads faster, even when the load time is identical.
+Use the project motion budget and verify responsiveness. Example ranges are not hard limits; do not change a spinner merely to imply faster data loading.
 
 ### Perceived performance
 
 Speed in animation is not just about feeling snappy — it directly affects how users perceive your app's performance:
 
-- A **fast-spinning spinner** makes loading feel faster (same load time, different perception)
+- Use accurate loading states and stable content; animation alone does not demonstrate a performance improvement
 - A **180ms select** animation feels more responsive than a **400ms** one
 - **Instant tooltips** after the first one is open (skip delay + skip animation) make the whole toolbar feel faster
 
@@ -135,4 +135,4 @@ Keep bounce subtle (0.1-0.3) when used. Avoid bounce in most UI contexts. Use it
 
 ### Interruptibility advantage
 
-Springs maintain velocity when interrupted — CSS animations and keyframes restart from zero. This makes springs ideal for gestures users might change mid-motion. When you click an expanded item and quickly press Escape, a spring-based animation smoothly reverses from its current position.
+Springs that preserve position and velocity while retargeting are useful for gestures users may reverse mid-motion. Check the actual interruption behavior: rapidly expanding an item and pressing Escape should continue from the visible state. A transition or other animation can also meet that requirement; a fixed-start animation may jump if restarted.

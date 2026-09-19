@@ -147,6 +147,7 @@ export default defineConfig({
           text: "业务操作",
           items: [
             { text: "笼卡管理", link: "/guide/cage-cards" },
+            { text: "检疫管理", link: "/guide/quarantine" },
             { text: "笼位与房间管理", link: "/guide/rooms-and-cages" },
             { text: "动物巡检", link: "/guide/animal-inspection" },
             { text: "数量统计表", link: "/guide/quantity-sheets" },

@@ -122,6 +122,19 @@ export function inferSpecies(value: string) {
   return "mouse";
 }
 
+export function speciesLabel(value: string) {
+  const labels: Record<string, string> = {
+    mouse: "小鼠",
+    rat: "大鼠",
+    guinea_pig: "豚鼠",
+    rabbit: "兔",
+    monkey: "猴",
+    pig: "猪",
+    dog: "犬",
+  };
+  return labels[value] ?? value;
+}
+
 export function defaultAnimalsPerCage(species: string) {
   if (["guinea_pig", "rabbit", "monkey", "pig", "dog"].includes(species)) return 1;
   return species === "rat" ? 4 : 5;

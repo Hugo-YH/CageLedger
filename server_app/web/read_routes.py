@@ -112,12 +112,15 @@ from server_app.web.pdf_exports import (
     read_pdf_export_job,
 )
 from server_app.web.ports import app_ports
+from server_app.web.quarantine import handle as handle_quarantine
 from server_app.web.router_registry import API_ROUTER
 
 
 class ReadRoutesMixin:
     def do_GET(self):
         path = urlparse(self.path).path
+        if handle_quarantine(self, "GET", path):
+            return
         pdf_job_id, pdf_job_download = pdf_export_job_route(path)
         if pdf_job_id:
             (download_pdf_export_job if pdf_job_download else read_pdf_export_job)(self, pdf_job_id)

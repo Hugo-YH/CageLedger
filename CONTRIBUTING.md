@@ -18,6 +18,16 @@ npm run dev
 
 开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。
 
+通过 Codex 或 SSH 转发开发端口时，浏览器地址中的端口可能不同于 5173。若写入提示“请求来源不受信任”，
+在本地 `.env` 的 `CAGELEDGER_CORS_ALLOWED_ORIGINS` 中添加浏览器实际显示的 origin（例如
+`http://localhost:56519`，不含 `/app`），多个地址用逗号分隔，然后重启 `npm run dev`。
+转发地址变化时更新该配置；只登记实际使用的入口，不使用通配符，也不关闭服务端来源校验。
+
+检疫报告直接下载 PDF，服务端使用 LibreOffice Writer 转换保留的实验室模板。运行环境需有
+`soffice` 或 `libreoffice`；也可在本地 `.env` 配置 `CAGELEDGER_LIBREOFFICE_BIN` 为可执行文件的绝对路径。
+容器已安装 Writer 和 Noto CJK 字体；本机应安装宋体、思源宋体或 Noto Serif CJK 字体。
+转换使用独立临时配置目录，超时或转换失败时不会出具报告。已有 Word 报告下载时转换为 PDF，原存档不覆盖。
+
 ## 分支和提交
 
 - 从最新 `main` 创建短生命周期分支。
@@ -62,7 +72,7 @@ npm run typecheck
 
 ## 验证
 
-按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 四档视口、结算双渲染和性能历史要求。纯文档修改在开发中运行文档检查；提交和发布前必须通过完整基础质量检查。
+按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 分级验收、结算双渲染和性能历史要求。相关小改集中完成后统一验证，不每改一个点就跑全套；纯文档修改只检查相关文档。提交和发布前统一通过完整基础质量检查，未受后续改动影响的成功结果可复用。
 
 代理指令与 Skills 的维护约定见 [agent-instructions.md](docs/contracts/agent-instructions.md)。
 

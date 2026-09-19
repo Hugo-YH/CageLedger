@@ -15,12 +15,7 @@ export function SettlementCandidateActions({
 }) {
   const action = (
     <Space size={4} wrap>
-      <Button
-        loading={previewing}
-        disabled={disabled || candidate.totalAmount == null}
-        type="primary"
-        onClick={onPreview}
-      >
+      <Button loading={previewing} disabled={disabled || candidate.totalAmount == null} onClick={onPreview}>
         预览结算单
       </Button>
     </Space>

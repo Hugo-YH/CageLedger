@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Button, Card, Empty, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Space, Tag, Typography } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
 import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { ListRefreshStatus } from "../../components/ui";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
 
@@ -22,7 +23,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
         <PageSkeleton label="基础设施" variant="detail" />
       </section>
     );
-  if (query.isError || !query.data)
+  if (!query.data)
     return (
       <section className="workspace-view">
         <PageState title="基础设施加载失败" retry={() => query.refetch()} />
@@ -75,23 +76,38 @@ export function RoomsView({ user }: { user: SessionUser }) {
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceToolbar
+        ariaLabel="饲养间与笼架操作"
         actions={
-          <Space>
-            {canManageRooms ? (
-              <Button type="primary" onClick={() => setRoomDraft(newRoomDraft())}>
-                新增饲养间
-              </Button>
-            ) : null}
-            <Button
-              disabled={!visibleRooms.length}
-              onClick={() => setRackDraft(newRackDraft(visibleRooms[0], cageRacks))}
-            >
-              新增笼架
+          <Button
+            disabled={!visibleRooms.length}
+            onClick={() => setRackDraft(newRackDraft(visibleRooms[0], cageRacks))}
+          >
+            新增笼架
+          </Button>
+        }
+        primaryAction={
+          canManageRooms ? (
+            <Button type="primary" onClick={() => setRoomDraft(newRoomDraft())}>
+              新增饲养间
             </Button>
-          </Space>
+          ) : undefined
         }
       />
       <div className="workspace-body settings-workspace-body">
+        <ListRefreshStatus active={query.isFetching} />
+        {query.isError ? (
+          <Alert
+            role="alert"
+            showIcon
+            type="error"
+            title="基础设施更新失败，当前输入已保留"
+            action={
+              <Button loading={query.isFetching} onClick={() => void query.refetch()}>
+                重试
+              </Button>
+            }
+          />
+        ) : null}
         <Card
           className="settings-rooms-card"
           extra={
