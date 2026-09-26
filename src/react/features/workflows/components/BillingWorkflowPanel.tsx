@@ -15,7 +15,7 @@ import { WorkflowDetailModal } from "./WorkflowDetailModal";
 import { WorkflowReimbursementRecordingModal } from "./WorkflowReimbursementRecordingModal";
 import { WorkflowRegistrationModal } from "./WorkflowRegistrationModal";
 import { WorkflowRevokeModal, type WorkflowRevokeTarget } from "./WorkflowRevokeModal";
-import { WorkflowRowActions } from "./WorkflowRowActions";
+import { WorkflowRowActions, WorkflowViewButton } from "./WorkflowRowActions";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 
@@ -242,14 +242,11 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   登记
                 </Button>
               }
-              lowFrequencyActions={[
-                {
-                  key: `revoke-${item.id}`,
-                  label: "撤回",
-                  danger: true,
-                  onClick: () => setRevokeTarget({ workflow: item, toStatus: "statement_generated" }),
-                },
-              ]}
+              revoke={
+                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_generated" })}>
+                  撤回
+                </Button>
+              }
               lock={
                 user.billingLockAllowed ? (
                   <Popconfirm
@@ -270,6 +267,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   >
                     <Button
                       aria-label="锁定"
+                      color="purple"
+                      variant="solid"
                       loading={lockAction.pending && advance.variables?.workflowId === item.id}
                       disabled={batchLocking || lockAction.pending}
                     >
@@ -284,15 +283,12 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         if (item.workflowStatus === "statement_archived") {
           return (
             <WorkflowRowActions
-              primary={<Button onClick={() => setDetailTarget(item)}>查看</Button>}
-              lowFrequencyActions={[
-                {
-                  key: `revoke-${item.id}`,
-                  label: "撤回",
-                  danger: true,
-                  onClick: () => setRevokeTarget({ workflow: item, toStatus: "statement_sent" }),
-                },
-              ]}
+              primary={<WorkflowViewButton onClick={() => setDetailTarget(item)} />}
+              revoke={
+                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_sent" })}>
+                  撤回
+                </Button>
+              }
               lock={
                 user.billingLockAllowed ? (
                   <Popconfirm
@@ -313,6 +309,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   >
                     <Button
                       aria-label="锁定"
+                      color="purple"
+                      variant="solid"
                       disabled={batchLocking || lockAction.pending}
                       loading={lockAction.pending && advance.variables?.workflowId === item.id}
                     >
@@ -329,7 +327,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           const unlockStatusLabel = unlockStatus === "statement_archived" ? "已归档" : "已发起";
           return (
             <WorkflowRowActions
-              primary={<Button onClick={() => setDetailTarget(item)}>查看</Button>}
+              primary={<WorkflowViewButton onClick={() => setDetailTarget(item)} />}
               lock={
                 user.billingLockAllowed ? (
                   <Popconfirm
@@ -350,6 +348,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
                   >
                     <Button
                       aria-label="解锁"
+                      color="purple"
+                      variant="filled"
                       disabled={batchLocking || lockAction.pending}
                       loading={lockAction.pending && advance.variables?.workflowId === item.id}
                     >

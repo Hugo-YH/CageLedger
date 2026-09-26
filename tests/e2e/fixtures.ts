@@ -114,6 +114,13 @@ async function openNavigationGroup(page: Page, label: string, desktopSelector: s
     return navigation;
   }
   if ((await desktopGroup.getAttribute("aria-expanded")) !== "true") await desktopGroup.click();
+  const submenuId = await desktopGroup.getAttribute("aria-controls");
+  if (submenuId) {
+    await expect(desktopGroup).toHaveAttribute("aria-expanded", "true");
+    const submenu = page.locator(`[id="${submenuId}"]`);
+    await expect(submenu).toBeVisible();
+    await expect(submenu).not.toHaveClass(/ant-motion-collapse-(?:enter|appear)(?:\s|-|$)/);
+  }
   return page.locator(".ant-main-menu");
 }
 

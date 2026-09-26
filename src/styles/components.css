@@ -3,18 +3,6 @@
   white-space: nowrap;
 }
 
-.workflow-row-actions .ghost,
-.workflow-row-actions .secondary {
-  min-height: 32px;
-  padding: 8px;
-  white-space: nowrap;
-  font-size: 14px;
-}
-
-.workflow-row-actions .muted {
-  white-space: nowrap;
-}
-
 .workflow-node.done .workflow-node-dot {
   background: var(--green);
 }

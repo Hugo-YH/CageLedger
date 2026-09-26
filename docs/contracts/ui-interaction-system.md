@@ -14,7 +14,7 @@
 - `selection` 提供 `count`、`onClear`、`pending`，统一展示已选数量、清空选择和进行中状态；业务动作和权限仍由页面提供。
 - `sticky=true` 用于长表单编辑；`sticky="selection"` 用于批量操作；其余默认不吸顶。图形工作区有选择或预留任务时启用。一个滚动容器最多一条操作栏吸顶。
 - 控件默认 32px，操作间距 8px，区域间距 16px；辅助在前、主动作在后，每组最多一个主按钮。返回、查询、重置、保存等关键操作直接显示，窄屏按顺序换行；页面明确标记的低频动作通过 `lowFrequencyActions` 进入“更多”，不按屏幕宽度随机隐藏；手机保持顶部。
-- `lowFrequencyActions` 接受 key、label、icon、onClick、disabled、loading、danger，使用 Ant Dropdown。业务回调和危险确认由页面提供；`RowActions` 保留最多两个常用入口。
+- `lowFrequencyActions` 接受 key、label、icon、onClick、disabled、loading、danger，使用 Ant Dropdown。业务回调和危险确认由页面提供；`RowActions` 通常保留最多两个常用入口。单据跟踪使用固定三槽：左侧登记使用实心蓝色主按钮、查看使用淡蓝色按钮，中间撤回使用 danger，右侧锁定使用实心紫色白字，解锁使用淡紫色按钮，与已锁定状态标签保持语义一致；不可用的槽位留空，按钮保持同一尺寸与位置，不为单独一个撤回动作增加“更多”。
 - 可用高度不超过 500px，或操作栏高度超过可用高度的 25% 时取消吸顶。尺寸、缩放和 `visualViewport` 变化重新测量，普通滚动由 CSS 完成，不触发 React 滚动渲染。
 - 实际滚动容器由公共行为设置 `scroll-padding-top`，为章节跳转和错误定位留白；页面不重复写固定顶部偏移。组件卸载或失去吸顶资格时恢复原值。
 - 加载、失败、重试沿用实际业务状态；刷新保留操作栏。只含筛选的页面不渲染空操作框，局部表单和弹窗不强加页面工具栏。

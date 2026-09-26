@@ -61,10 +61,33 @@ for (const status of ["statement_sent", "statement_archived", "statement_locked"
       pending = route;
     });
     await openWorkflowCenter(page);
-    const trigger = page
-      .getByRole("row")
-      .filter({ hasText: "流程负责人" })
-      .getByRole("button", { name: action, exact: true });
+    const row = page.getByRole("row").filter({ hasText: "流程负责人" });
+    const slots = row.locator(".workflow-row-action-slot");
+    await expect(slots).toHaveText([
+      status === "statement_sent" ? "登记" : "查看",
+      status === "statement_locked" ? "" : "撤回",
+      action,
+    ]);
+    const trigger = slots.nth(2).getByRole("button", { name: action, exact: true });
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+      await expect(trigger).toHaveCSS("height", "32px");
+      await expect(trigger).toHaveCSS("width", "64px");
+      await test.info().attach(`${status}-${colorScheme}-actions`, {
+        body: await row.screenshot({ animations: "disabled" }),
+        contentType: "image/png",
+      });
+      await test.info().attach(`${status}-${colorScheme}-style`, {
+        body: JSON.stringify(
+          await trigger.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { color: style.color, background: style.backgroundColor, border: style.borderColor };
+          }),
+        ),
+        contentType: "application/json",
+      });
+    }
     await trigger.click();
     const popup = page.getByRole("tooltip").filter({ hasText: `${action}该结算流程？` });
     const confirm = popup.getByRole("button", { name: action, exact: true });
@@ -102,10 +125,17 @@ test("revoke keeps the reason on failure and ignores the success callback of a c
     writes += 1;
     pending = route;
   });
+  await page.setViewportSize({ width: 1287, height: 652 });
   await openWorkflowCenter(page);
-  const trigger = page.getByRole("button", { name: "结算流程更多操作", exact: true });
+  const row = page.getByRole("row").filter({ hasText: "撤回负责人" });
+  const trigger = row.getByRole("button", { name: "撤回", exact: true });
+  await expect(row.getByRole("button")).toHaveText(["登记", "撤回", "锁定"]);
+  for (const button of await row.getByRole("button").all()) {
+    await expect(button).toHaveCSS("height", "32px");
+    await expect(button).toHaveCSS("width", "64px");
+  }
+  await test.info().attach("workflow-actions", { body: await row.screenshot(), contentType: "image/png" });
   await trigger.click();
-  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "撤回结算流程" });
   const submit = dialog.getByRole("button", { name: "确认撤回" });
   await expect(submit).toBeDisabled();
@@ -122,7 +152,6 @@ test("revoke keeps the reason on failure and ignores the success callback of a c
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
   await pending?.fulfill({ json: { ok: true, item: workflow } });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("撤回原因")).toHaveValue("");

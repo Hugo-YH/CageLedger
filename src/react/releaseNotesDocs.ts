@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.4.2",
+    build: "209",
+    releasedAt: "2026-09-26",
+    title: "单据跟踪操作优化",
+    items: [
+      "恢复固定三列操作位置：左侧登记或查看、中间撤回、右侧锁定或解锁；不可用的位置留空，避免不同状态的按钮跳动",
+      "撤回直接显示，不再收进仅含一个操作的“更多”菜单；行内按钮保持相同尺寸",
+      "登记使用实心蓝色、查看使用淡蓝色；锁定使用实心紫色、解锁使用淡紫色，与已锁定状态标签呼应",
+      "完善淡色按钮在浅色、深色主题下的文字对比度，保留确认、进行中和失败重试反馈",
+    ],
+  },
+  {
     version: "1.4.1",
     build: "208",
     releasedAt: "2026-09-19",

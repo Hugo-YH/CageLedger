@@ -4,12 +4,10 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { type PropsWithChildren, useEffect, useMemo, useState } from "react";
 
-import { createTheme } from "../../../theme/visual-system.mjs";
+import { createButtonConfig, createTheme } from "../../../theme/visual-system.mjs";
 
 import { useResolvedTheme } from "../../state/ui";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-
-const BUTTON_CONFIG = { autoInsertSpace: false };
 
 dayjs.locale("zh-cn");
 
@@ -25,9 +23,10 @@ export function AntdProvider({ children }: PropsWithChildren) {
     () => createTheme(resolvedTheme, { mobile, motion: motionReady && !reducedMotion }),
     [mobile, motionReady, reducedMotion, resolvedTheme],
   );
+  const buttonConfig = useMemo(() => createButtonConfig(resolvedTheme), [resolvedTheme]);
 
   return (
-    <ConfigProvider button={BUTTON_CONFIG} componentSize="medium" locale={zhCN} theme={config}>
+    <ConfigProvider button={buttonConfig} componentSize="medium" locale={zhCN} theme={config}>
       <AntApp>{children}</AntApp>
     </ConfigProvider>
   );

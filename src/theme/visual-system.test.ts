@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTheme, resolveTheme } from "./visual-system.mjs";
+import { createButtonConfig, createTheme, resolveTheme } from "./visual-system.mjs";
 
 function rgb(color: string, background = [255, 255, 255]): number[] {
   if (color.startsWith("#")) {
@@ -57,6 +57,19 @@ describe.each(["light", "dark"] as const)("%s visual system", (mode) => {
     ]);
     expect(createTheme(mode, { motion: false }).token?.motion).toBe(false);
     expect(createTheme(mode, { mobile: true }).components?.Button?.controlHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it.each(["purple", "blue"] as const)("keeps %s filled actions readable and preserves disabled styling", (color) => {
+    const token = resolveTheme(mode);
+    const styles = createButtonConfig(mode).styles;
+    if (typeof styles !== "function") throw new Error("Expected semantic button styles");
+    const props = { color, variant: "filled" } as const;
+    const text = styles({ props })?.root?.color ?? token[`${color}6`];
+    for (const background of [token[`${color}1`], token[`${color}2`], token[`${color}3`]]) {
+      expect(contrast(String(text), background)).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(styles({ props: { ...props, disabled: true } })).toEqual({});
+    expect(styles({ props: { color, variant: "solid" } })).toEqual({});
   });
 
   it("keeps semantic status labels readable without relying on color alone", () => {

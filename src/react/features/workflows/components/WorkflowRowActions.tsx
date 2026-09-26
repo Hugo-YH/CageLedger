@@ -1,19 +1,32 @@
 import type { ReactNode } from "react";
-import { RowActions, type LowFrequencyAction } from "../../../components/ui";
+import { Button } from "antd";
 
 export function WorkflowRowActions({
   primary,
+  revoke,
   lock,
-  lowFrequencyActions,
 }: {
   primary: ReactNode;
+  revoke?: ReactNode;
   lock?: ReactNode;
-  lowFrequencyActions?: LowFrequencyAction[];
 }) {
   return (
-    <RowActions ariaLabel="结算流程更多操作" lowFrequencyActions={lowFrequencyActions}>
-      {primary}
-      {lock}
-    </RowActions>
+    <div className="workflow-row-actions">
+      <span className="workflow-row-action-slot">{primary}</span>
+      <span aria-hidden={!revoke} className="workflow-row-action-slot">
+        {revoke}
+      </span>
+      <span aria-hidden={!lock} className="workflow-row-action-slot">
+        {lock}
+      </span>
+    </div>
+  );
+}
+
+export function WorkflowViewButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button color="blue" variant="filled" onClick={onClick}>
+      查看
+    </Button>
   );
 }

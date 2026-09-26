@@ -90,6 +90,20 @@ export function createTheme(mode, { mobile = false, motion = true } = {}) {
   };
 }
 
+/** @returns {NonNullable<import('antd').ConfigProviderProps['button']>} */
+export function createButtonConfig(mode) {
+  const palette = theme.getDesignToken({ algorithm: mode === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm });
+  return {
+    autoInsertSpace: false,
+    styles: ({ props }) => {
+      if (props.variant !== "filled" || props.disabled) return {};
+      if (props.color === "purple") return { root: { color: mode === "dark" ? palette.purple8 : palette.purple7 } };
+      if (props.color === "blue") return { root: { color: palette.blue8 } };
+      return {};
+    },
+  };
+}
+
 /** Static surfaces use the same algorithm and seed as ConfigProvider. */
 export function resolveTheme(mode) {
   return theme.getDesignToken(createTheme(mode));
