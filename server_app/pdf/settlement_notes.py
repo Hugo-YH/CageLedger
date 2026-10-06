@@ -45,6 +45,7 @@ def custom_billing_note_markup(lines):
                     "quantity": as_number(
                         item.get("animalCount") if billing_unit == "animal_day" else item.get("cageCount")
                     ),
+                    "allQuantity": item.get("customBillingQuantityMode") == "all",
                     "unitPrice": key[4],
                     "billingUnit": billing_unit,
                     "species": species_label(item),
@@ -61,8 +62,13 @@ def custom_billing_note_markup(lines):
         period = f"{item['startDate'] or '-'} 至 {item['endDate'] or '-'}"
         note = f"。{item['note']}" if item["note"] else ""
         species_suffix = item["species"] if item["species"] else ""
+        quantity = (
+            f"按每日实际结余{unit}数计费"
+            if item["allQuantity"]
+            else f"每日{number_text(item['quantity'])}{unit}{species_suffix}"
+        )
         rows.append(
-            f"{item['iacuc']}：{period}，每日{number_text(item['quantity'])}{unit}{species_suffix}，"
+            f"{item['iacuc']}：{period}，{quantity}，"
             f"{number_text(item['unitPrice'])}元/{unit}/日，本月共计{number_text(item['amount'])}元{note}"
         )
     return "".join(note_entry_markup("自定义收费：" if index == 0 else "", row) for index, row in enumerate(rows))

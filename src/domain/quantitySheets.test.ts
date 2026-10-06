@@ -45,4 +45,37 @@ describe("quantity sheet domain", () => {
     sheet.customBillingSegments = [createCustomBillingSegment("2026-07", 5)];
     expect(validateQuantitySheet(sheet)).toContain("请填写自定义收费区间的每日适用数量");
   });
+  it("allows the full daily balance without a fixed quantity and preserves the mode", () => {
+    const sheet = { ...createQuantitySheet("2026-07"), roomId: "r1", iacuc: "Z1" };
+    sheet.customBillingSegments = [{ ...createCustomBillingSegment(sheet.month, 3), quantityMode: "all" }];
+    expect(validateQuantitySheet(sheet)).toEqual([]);
+    expect(normalizeQuantitySheet(sheet).customBillingSegments[0]).toMatchObject({
+      quantityMode: "all",
+      quantity: null,
+    });
+    sheet.customBillingSegments[0].quantityMode = "fixed";
+    expect(validateQuantitySheet(sheet)).toContain("请填写自定义收费区间的每日适用数量");
+  });
+  it("rejects overlapping full-balance pricing but allows adjacent intervals", () => {
+    const sheet = { ...createQuantitySheet("2026-07"), roomId: "r1", iacuc: "Z1" };
+    sheet.customBillingSegments = [
+      { ...createCustomBillingSegment(sheet.month, 3), endDate: "2026-07-10", quantityMode: "all" },
+      { ...createCustomBillingSegment(sheet.month, 4), startDate: "2026-07-10", quantity: 2 },
+    ];
+    expect(validateQuantitySheet(sheet)).toContain("全部结余收费区间不能与其他自定义收费区间重叠");
+    sheet.customBillingSegments[1].startDate = "2026-07-11";
+    expect(validateQuantitySheet(sheet)).toEqual([]);
+  });
+  it("keeps legacy all-quantity intervals editable", () => {
+    const sheet = normalizeQuantitySheet({
+      ...createQuantitySheet("2026-07"),
+      roomId: "r1",
+      iacuc: "Z1",
+      customBillingSegments: [
+        { id: "legacy", startDate: "2026-07-01", endDate: "2026-07-31", quantity: null, unitPrice: 3, note: "" },
+      ],
+    });
+    expect(sheet.customBillingSegments[0].quantityMode).toBe("all");
+    expect(validateQuantitySheet(sheet)).toEqual([]);
+  });
 });

@@ -18,6 +18,7 @@ def normalize_custom_billing_segments(source, month):
             "id": f"legacy-custom-{clean_text((source or {}).get('id', '')) or new_id('custom')}",
             "startDate": f"{month}-01",
             "endDate": dates_in_month(month)[-1],
+            "quantityMode": "all",
             "quantity": None,
             "unitPrice": legacy_price,
             "note": "历史整月自定义收费",
@@ -28,11 +29,13 @@ def normalize_custom_billing_segments(source, month):
 def _normalize_segment(source, month):
     quantity = as_int(source.get("quantity")) if source.get("quantity") not in (None, "") else None
     unit_price = as_float(source.get("unitPrice")) if source.get("unitPrice") not in (None, "") else None
+    mode = source.get("quantityMode") or ("all" if quantity is None else "fixed")
     return {
         "id": clean_text(source.get("id", "")) or new_id("custom"),
         "startDate": clean_text(source.get("startDate", "")) or f"{month}-01",
         "endDate": clean_text(source.get("endDate", "")) or dates_in_month(month)[-1],
-        "quantity": max(quantity, 0) if quantity is not None else None,
+        "quantityMode": mode,
+        "quantity": max(quantity, 0) if mode != "all" and quantity is not None else None,
         "unitPrice": max(unit_price, 0) if unit_price is not None else None,
         "note": clean_text(source.get("note", "")),
     }
@@ -47,10 +50,12 @@ def custom_billing_segments_for_day(sheet, line_date, available_count):
     for segment in segments:
         if not _segment_covers_date(segment, line_date):
             continue
-        quantity = available_count if segment.get("quantity") is None else max(as_int(segment.get("quantity")) or 0, 0)
+        quantity = available_count if _uses_all_quantity(segment) else max(as_int(segment.get("quantity")) or 0, 0)
         if quantity <= 0:
             continue
-        result.append({**segment, "quantity": quantity})
+        result.append(
+            {**segment, "quantity": quantity, "quantityMode": "all" if _uses_all_quantity(segment) else "fixed"}
+        )
     return result
 
 
@@ -68,6 +73,14 @@ def validate_custom_billing_segments(sheets, rooms):
             segments = normalize_custom_billing_segments(sheet, month)
         for segment in segments:
             _validate_segment_shape(segment, month)
+        for index, segment in enumerate(segments):
+            for other in segments[index + 1 :]:
+                if (
+                    (_uses_all_quantity(segment) or _uses_all_quantity(other))
+                    and segment["startDate"] <= other["endDate"]
+                    and other["startDate"] <= segment["endDate"]
+                ):
+                    raise ValueError("全部结余收费区间不能与其他自定义收费区间重叠")
         for line_date, balance in balances.get(sheet.get("id"), {}).items():
             unit = billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit")).get(
                 "unit"
@@ -88,10 +101,18 @@ def _validate_segment_shape(segment, month):
         raise ValueError("自定义收费区间必须位于统计表月份内")
     if start_date > end_date:
         raise ValueError("自定义收费区间的结束日期应晚于开始日期")
-    if segment.get("quantity") is not None and (as_int(segment.get("quantity")) or 0) <= 0:
+    if segment.get("quantityMode") not in (None, "fixed", "all"):
+        raise ValueError("自定义收费数量方式无效")
+    if not _uses_all_quantity(segment) and (as_int(segment.get("quantity")) or 0) <= 0:
         raise ValueError("请填写大于 0 的自定义收费区间每日适用数量")
     if (as_float(segment.get("unitPrice")) or 0) <= 0:
         raise ValueError("请填写大于 0 的自定义收费单价")
+
+
+def _uses_all_quantity(segment):
+    return segment.get("quantityMode") == "all" or (
+        segment.get("quantityMode") is None and segment.get("quantity") is None
+    )
 
 
 def resolve_quantity_sheet_daily_counts(sheets, room_by_id):

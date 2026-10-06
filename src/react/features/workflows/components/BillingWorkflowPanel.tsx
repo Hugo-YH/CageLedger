@@ -1,6 +1,11 @@
+import { useListPageBounds } from "../../../hooks/useListPageBounds";
+import { queryKeys } from "../../../api/queryKeys";
+import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
+import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
+import { ListViewControls, type ListDensity } from "../../../components/ui/ListViewControls";
 import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
 import { LockOutlined } from "@ant-design/icons";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { SessionUser } from "../../../api/contracts";
 import type { BillingWorkflow } from "../../../api/workflows";
@@ -15,7 +20,7 @@ import { WorkflowDetailModal } from "./WorkflowDetailModal";
 import { WorkflowReimbursementRecordingModal } from "./WorkflowReimbursementRecordingModal";
 import { WorkflowRegistrationModal } from "./WorkflowRegistrationModal";
 import { WorkflowRevokeModal, type WorkflowRevokeTarget } from "./WorkflowRevokeModal";
-import { WorkflowRowActions, WorkflowViewButton } from "./WorkflowRowActions";
+import { WorkflowTableActions } from "./WorkflowTableActions";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 
@@ -29,10 +34,18 @@ const workflowStatusMeta: Record<string, { label: string; color: string }> = {
 };
 
 export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [page, setPage] = useWorkspaceMemory("workflow:page", 1);
+  const [pageSize, setPageSize] = useWorkspaceMemory("workflow:pageSize", 10);
+  const [sort, setSort] = useWorkspaceMemory<{ key: string; dir: "asc" | "desc" }>("workflow:sort", {
+    key: "month",
+    dir: "desc",
+  });
+  const [filters, setFilters] = useWorkspaceMemory<Record<string, string[]>>("workflow:filters", {});
+  const [density, setDensity] = useWorkspaceMemory<ListDensity>("workflow:density", "middle");
+  const scopeRef = useRef(JSON.stringify(filters));
+  useEffect(() => {
+    scopeRef.current = JSON.stringify(filters);
+  }, [filters]);
   const query = useBillingWorkflows({
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -54,10 +67,12 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     selectedRows.current.clear();
   };
   useSelectionScope(JSON.stringify([user.id, filters]), clearSelection, selectedLockable.length > 0);
+  const [batchFailures, setBatchFailures] = useState<string[]>([]);
   const [batchLocking, setBatchLocking] = useState(false);
   const [batchLockNotice, setBatchLockNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(
     null,
   );
+  useWorkspaceScroll("workflow-center", !query.isPending && !query.isError);
   const items = query.data?.items || [];
   const total = query.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
@@ -95,6 +110,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       .map((id) => selectedRows.current.get(id))
       .filter((item): item is BillingWorkflow => Boolean(item));
     if (!targets.length) return;
+    const submittedScope = scopeRef.current;
+    setBatchFailures([]);
     setBatchLocking(true);
     setBatchLockNotice({ kind: "info", text: `正在锁定结算流程 ${0}/${targets.length}…` });
     try {
@@ -109,11 +126,18 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         (failure) =>
           `${targets.find((target) => target.id === failure.item.workflowId)?.pi || "结算流程"}（${failure.message}）`,
       );
-      clearSelection();
+      const failedIds = new Set(
+        submittedScope === scopeRef.current ? result.failures.map((failure) => failure.item.workflowId) : [],
+      );
+      setSelectedLockable(targets.filter((target) => failedIds.has(target.id)).map((target) => target.id));
+      selectedRows.current = new Map(
+        targets.filter((target) => failedIds.has(target.id)).map((target) => [target.id, target]),
+      );
+      setBatchFailures(failures);
       setBatchLockNotice({
         kind: failures.length ? "error" : "success",
         text: failures.length
-          ? `已锁定 ${targets.length - failures.length} 条结算流程；${failures.length} 条未完成：${failures.join("、")}`
+          ? `已锁定 ${targets.length - failures.length} 条结算流程；${failures.length} 条未完成。`
           : `已锁定 ${targets.length} 条结算流程。`,
       });
     } catch (error) {
@@ -125,6 +149,14 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       setBatchLocking(false);
     }
   }
+
+  useListPageBounds(
+    page,
+    pages,
+    !query.isPending && !query.isError && !query.isPlaceholderData,
+    setPage,
+    queryKeys.workflowsRoot,
+  );
 
   function toggleSort(key: string) {
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
@@ -178,37 +210,41 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           },
         ]
       : []),
-    { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 110 },
-    { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 180 },
+    { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 100 },
+    { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 140 },
     {
       key: "iacuc",
       title: columnTitle("iacuc", "IACUC"),
-      width: 220,
-      render: (_: unknown, item: BillingWorkflow) => item.iacucs.join("、") || "-",
+      width: 160,
+      render: (_: unknown, item: BillingWorkflow) => (
+        <Typography.Paragraph style={{ margin: 0 }} ellipsis={{ rows: 2, expandable: true, symbol: "展开" }}>
+          {item.iacucs.join("、") || "-"}
+        </Typography.Paragraph>
+      ),
     },
     {
       key: "manager",
       title: columnTitle("manager", "登记人员"),
-      width: 150,
+      width: 110,
       render: (_: unknown, item: BillingWorkflow) => item.manager || "-",
     },
     {
       key: "totalAmount",
       title: columnTitle("totalAmount", "结算金额"),
       align: "right" as const,
-      width: 130,
+      width: 110,
       render: (_: unknown, item: BillingWorkflow) => `¥${Number(item.totalAmount || 0).toFixed(2)}`,
     },
     {
       key: "workflowStatus",
       title: columnTitle("workflowStatus", "状态", "status"),
-      width: 170,
+      width: 160,
       render: (_: unknown, item: BillingWorkflow) => {
         const showSubStatuses =
           item.workflowStatus === "statement_archived" || item.workflowStatus === "statement_locked";
         const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
         return (
-          <Space size={4} wrap>
+          <Space size={4} orientation="vertical">
             {item.workflowStatus === "statement_locked" ? <Tag color="purple">已锁定</Tag> : null}
             {showSubStatuses ? (
               <>
@@ -233,143 +269,40 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       title: "操作",
       fixed: "right" as const,
       width: 240,
-      render: (_: unknown, item: BillingWorkflow) => {
-        if (item.workflowStatus === "statement_sent") {
-          return (
-            <WorkflowRowActions
-              primary={
-                <Button type="primary" onClick={() => setRegisterTarget(item)}>
-                  登记
-                </Button>
-              }
-              revoke={
-                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_generated" })}>
-                  撤回
-                </Button>
-              }
-              lock={
-                user.billingLockAllowed ? (
-                  <Popconfirm
-                    destroyOnHidden
-                    title="锁定该结算流程？"
-                    description="锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
-                    okText="锁定"
-                    cancelText="取消"
-                    onConfirm={() =>
-                      lockAction.run(() =>
-                        advance.mutateAsync({
-                          workflowId: item.id,
-                          toStatus: "statement_locked",
-                          note: "锁定结算流程",
-                        }),
-                      )
-                    }
-                  >
-                    <Button
-                      aria-label="锁定"
-                      color="purple"
-                      variant="solid"
-                      loading={lockAction.pending && advance.variables?.workflowId === item.id}
-                      disabled={batchLocking || lockAction.pending}
-                    >
-                      锁定
-                    </Button>
-                  </Popconfirm>
-                ) : undefined
-              }
-            />
-          );
-        }
-        if (item.workflowStatus === "statement_archived") {
-          return (
-            <WorkflowRowActions
-              primary={<WorkflowViewButton onClick={() => setDetailTarget(item)} />}
-              revoke={
-                <Button danger onClick={() => setRevokeTarget({ workflow: item, toStatus: "statement_sent" })}>
-                  撤回
-                </Button>
-              }
-              lock={
-                user.billingLockAllowed ? (
-                  <Popconfirm
-                    destroyOnHidden
-                    title="锁定该结算流程？"
-                    description="锁定后流程进入只读，仅授权账号可补录或解锁。"
-                    okText="锁定"
-                    cancelText="取消"
-                    onConfirm={() =>
-                      lockAction.run(() =>
-                        advance.mutateAsync({
-                          workflowId: item.id,
-                          toStatus: "statement_locked",
-                          note: "锁定结算流程",
-                        }),
-                      )
-                    }
-                  >
-                    <Button
-                      aria-label="锁定"
-                      color="purple"
-                      variant="solid"
-                      disabled={batchLocking || lockAction.pending}
-                      loading={lockAction.pending && advance.variables?.workflowId === item.id}
-                    >
-                      锁定
-                    </Button>
-                  </Popconfirm>
-                ) : undefined
-              }
-            />
-          );
-        }
-        if (item.workflowStatus === "statement_locked") {
-          const unlockStatus = item.signedStatementReturned ? "statement_archived" : "statement_sent";
-          const unlockStatusLabel = unlockStatus === "statement_archived" ? "已归档" : "已发起";
-          return (
-            <WorkflowRowActions
-              primary={<WorkflowViewButton onClick={() => setDetailTarget(item)} />}
-              lock={
-                user.billingLockAllowed ? (
-                  <Popconfirm
-                    destroyOnHidden
-                    title="解锁该结算流程？"
-                    description={`解锁后依据结算单交回状态回到${unlockStatusLabel}，已补录信息会保留。`}
-                    okText="解锁"
-                    cancelText="取消"
-                    onConfirm={() =>
-                      lockAction.run(() =>
-                        advance.mutateAsync({
-                          workflowId: item.id,
-                          toStatus: unlockStatus,
-                          note: "解锁结算流程",
-                        }),
-                      )
-                    }
-                  >
-                    <Button
-                      aria-label="解锁"
-                      color="purple"
-                      variant="filled"
-                      disabled={batchLocking || lockAction.pending}
-                      loading={lockAction.pending && advance.variables?.workflowId === item.id}
-                    >
-                      解锁
-                    </Button>
-                  </Popconfirm>
-                ) : undefined
-              }
-            />
-          );
-        }
-        return <Typography.Text type="secondary">待发起</Typography.Text>;
-      },
+      render: (_: unknown, item: BillingWorkflow) => (
+        <WorkflowTableActions
+          item={item}
+          canLock={Boolean(user.billingLockAllowed)}
+          disabled={batchLocking || lockAction.pending}
+          loading={lockAction.pending && advance.variables?.workflowId === item.id}
+          onRegister={setRegisterTarget}
+          onDetail={setDetailTarget}
+          onRevoke={setRevokeTarget}
+          onAdvance={(toStatus, note) =>
+            lockAction.run(() => advance.mutateAsync({ workflowId: item.id, toStatus, note }))
+          }
+        />
+      ),
     },
   ];
 
   return (
     <section className="ledger-section" aria-label="结算流程列表">
       <CommandBar
+        className="app-command-bar-list"
         ariaLabel="结算流程批量操作"
+        filters={
+          <ListViewControls
+            filters={filters}
+            onFiltersChange={(next) => {
+              setFilters(next);
+              setPage(1);
+            }}
+            density={density}
+            onDensity={setDensity}
+            disabled={batchLocking || lockAction.pending}
+          />
+        }
         context={<Tag color="blue">{total} 条结算流程</Tag>}
         selection={
           user.billingLockAllowed
@@ -405,6 +338,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           role={batchLockNotice.kind === "error" ? "alert" : "status"}
           showIcon
           title={batchLocking ? `正在锁定结算流程，已处理 ${batchAdvance.completed} 条…` : batchLockNotice.text}
+          description={<BatchFailureDetails key={batchFailures.join("|")} failures={batchFailures} />}
           type={batchLockNotice.kind}
         />
       ) : null}
@@ -416,17 +350,30 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         retry={() => void query.refetch()}
       />
       {!query.isPending && !query.isError ? (
-        <DataTable
-          refreshing={query.isFetching}
-          className="antd-data-table reimbursement-table"
-          columns={columns}
-          dataSource={items}
-          locale={{ emptyText: <Empty description="当前没有结算流程" /> }}
-          pagination={false}
-          resizeKey="billing-workflows"
-          rowKey="id"
-          scroll={{ x: 1180 }}
-        />
+        <div className="ant-table-region" role="region" aria-label="结算流程表格" tabIndex={0}>
+          <DataTable
+            refreshing={query.isFetching}
+            className="antd-data-table reimbursement-table"
+            size={density}
+            columns={columns}
+            dataSource={items}
+            locale={{
+              emptyText: (
+                <Empty
+                  description={
+                    Object.values(filters).some((values) => values.length)
+                      ? "没有符合当前筛选的结算流程"
+                      : "当前没有结算流程"
+                  }
+                />
+              ),
+            }}
+            pagination={false}
+            resizeKey="billing-workflows"
+            rowKey="id"
+            scroll={{ x: 1064 }}
+          />
+        </div>
       ) : null}
       <Pager
         itemLabel="条"

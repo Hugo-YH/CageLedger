@@ -23,6 +23,8 @@ export default defineConfig({
   ],
   testMatch: [
     "desktop-compat.spec.ts",
+    "workflow-actions.spec.ts",
+    "settlement-desktop-ux.spec.ts",
     "zz-ant-system-audit.spec.ts",
     "filter-motion.spec.ts",
     "quantity.spec.ts",
@@ -38,6 +40,12 @@ export default defineConfig({
   ],
   grep: [
     /desktop compatibility:/,
+    /desktop list restores/,
+    /settlement desktop/,
+    /desktop tables expose all columns/,
+    /partial batch lock retains/,
+    /desktop page size and scroll restore/,
+    /shrinking data corrects/,
     /Ant system page inventory (1440|1180)$/,
     /column filters stay onscreen: (no-preference|reduce) (1440|1180)$/,
     /saved quantity filters remain clickable/,

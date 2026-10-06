@@ -4,7 +4,8 @@ export interface CustomBillingSegment {
   id: string;
   startDate: string;
   endDate: string;
-  /** `null` represents the legacy whole-sheet custom price and covers each day's full balance. */
+  /** Missing mode on older payloads is inferred from quantity; null means the full daily balance. */
+  quantityMode?: "fixed" | "all";
   quantity: number | null;
   unitPrice: number | null;
   note: string;

@@ -17,5 +17,7 @@
     "!playwright-report/**",
     "!test-results/**",
     "!.venv/**",
+    "!tmp/**",
+    "!软件著作权申请资料/**",
   ],
 }

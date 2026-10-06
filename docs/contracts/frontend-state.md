@@ -16,6 +16,8 @@
 | 高频录入状态   | 页面局部 state/ref      | 数量统计表单元格、焦点、当前行                 | 输入控件生命周期                |
 | 派生状态       | `useMemo` / pure helper | 汇总数、筛选结果、结算展示值                   | 由源状态重算                    |
 
+结算管理和单据跟踪的已应用筛选、排序、页码、页大小、表格密度与滚动位置由 `WorkspaceMemoryProvider` 在当前账号工作区会话内保留。跨业务页返回恢复这些 UI 状态；退出、切换账号或刷新页面后重置。草稿、弹窗、选择与 API 业务对象不进入此缓存。翻页、排序保留当前页面实例中的选择，应用筛选仍通过 `useSelectionScope` 清空选择。
+
 服务端业务对象不写入 localStorage。旧键 `cageledger.v1` 和 `lahcas.v1` 在 UI 存储迁移时清理。
 
 ## QueryClient 默认策略

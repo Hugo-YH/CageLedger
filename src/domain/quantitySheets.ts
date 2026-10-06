@@ -70,6 +70,7 @@ export function createCustomBillingSegment(month: string, unitPrice: number | nu
     id: createClientId(),
     startDate: `${month}-01`,
     endDate: `${month}-${String(daysInMonth(month)).padStart(2, "0")}`,
+    quantityMode: "fixed",
     quantity: null,
     unitPrice,
     note: "",
@@ -77,14 +78,20 @@ export function createCustomBillingSegment(month: string, unitPrice: number | nu
 }
 
 function normalizeCustomBillingSegment(segment: Partial<CustomBillingSegment>, month: string): CustomBillingSegment {
+  const all = customBillingUsesAllQuantity(segment);
   return {
     id: String(segment.id || createClientId()),
     startDate: String(segment.startDate || `${month}-01`),
     endDate: String(segment.endDate || `${month}-${String(daysInMonth(month)).padStart(2, "0")}`),
-    quantity: numberOrNull(segment.quantity),
+    quantityMode: all ? "all" : "fixed",
+    quantity: all ? null : numberOrNull(segment.quantity),
     unitPrice: numberOrNull(segment.unitPrice),
     note: String(segment.note || "").trim(),
   };
+}
+
+export function customBillingUsesAllQuantity(segment: Partial<CustomBillingSegment>) {
+  return segment.quantityMode === "all" || (segment.quantityMode == null && segment.quantity == null);
 }
 
 function legacyCustomBillingSegment(sheet: Partial<QuantitySheet>, month: string): CustomBillingSegment[] {
@@ -94,6 +101,7 @@ function legacyCustomBillingSegment(sheet: Partial<QuantitySheet>, month: string
       id: `legacy-custom-${String(sheet.id || "sheet")}`,
       startDate: `${month}-01`,
       endDate: `${month}-${String(daysInMonth(month)).padStart(2, "0")}`,
+      quantityMode: "all",
       quantity: null,
       unitPrice: numberOrNull(sheet.customUnitPrice),
       note: "历史整月自定义收费",
@@ -185,9 +193,23 @@ export function validateQuantitySheet(sheet: QuantitySheet) {
     if (!isDateInMonth(segment.startDate, sheet.month) || !isDateInMonth(segment.endDate, sheet.month))
       issues.push("自定义收费区间必须位于统计表月份内");
     if (segment.startDate > segment.endDate) issues.push("自定义收费区间的结束日期应晚于开始日期");
-    if (segment.quantity == null || segment.quantity <= 0) issues.push("请填写自定义收费区间的每日适用数量");
+    if (!customBillingUsesAllQuantity(segment) && (segment.quantity == null || segment.quantity <= 0))
+      issues.push("请填写自定义收费区间的每日适用数量");
     if (segment.unitPrice == null || segment.unitPrice <= 0) issues.push("请填写大于 0 的自定义收费单价");
   }
+  if (
+    sheet.customBillingSegments.some((segment, index, segments) =>
+      segments
+        .slice(index + 1)
+        .some(
+          (other) =>
+            (customBillingUsesAllQuantity(segment) || customBillingUsesAllQuantity(other)) &&
+            segment.startDate <= other.endDate &&
+            other.startDate <= segment.endDate,
+        ),
+    )
+  )
+    issues.push("全部结余收费区间不能与其他自定义收费区间重叠");
   for (const row of sheet.rows) {
     if (Number(row.addedCount || 0) > 0 && !row.addedType) issues.push(`${row.date || "未填日期"} 新增请选择类型`);
     if (Number(row.removedCount || 0) > 0 && !row.removedType) issues.push(`${row.date || "未填日期"} 减少请选择类型`);

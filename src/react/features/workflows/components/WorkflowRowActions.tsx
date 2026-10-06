@@ -25,7 +25,15 @@ export function WorkflowRowActions({
 
 export function WorkflowViewButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button color="blue" variant="filled" onClick={onClick}>
+    <Button
+      color="blue"
+      variant="filled"
+      onClick={(event) => {
+        // Safari does not focus buttons on pointer click; Modal needs an explicit return target.
+        event.currentTarget.focus({ preventScroll: true });
+        onClick();
+      }}
+    >
       查看
     </Button>
   );

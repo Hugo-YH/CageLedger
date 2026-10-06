@@ -1,4 +1,4 @@
-import { Checkbox, Tag, type TableProps } from "antd";
+import { Checkbox, Tag, Typography, type TableProps } from "antd";
 
 import type { SettlementCandidate, SettlementCandidateListParams } from "../../../api/contracts";
 import { SettlementCandidateActions } from "./SettlementCandidateActions";
@@ -7,6 +7,7 @@ import { SettlementColumnTitle } from "./SettlementColumnTitle";
 const candidateWorkflowStatusMeta: Record<string, { label: string; color: string }> = {
   statement_generated: { label: "已生成", color: "gold" },
   statement_sent: { label: "已发起", color: "processing" },
+  statement_locked: { label: "已锁定", color: "purple" },
   statement_archived: { label: "已归档", color: "green" },
 };
 
@@ -90,7 +91,15 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
       render: (_: unknown, candidate: SettlementCandidate) => {
         if (key === "iacuc") {
           const text = candidate.iacucs.join("、") || candidate.error || "待检查";
-          return <span title={text}>{candidate.iacucs.join("、") || "待检查"}</span>;
+          return (
+            <Typography.Paragraph
+              style={{ margin: 0 }}
+              title={text}
+              ellipsis={{ rows: 2, expandable: true, symbol: "展开" }}
+            >
+              {candidate.iacucs.join("、") || "待检查"}
+            </Typography.Paragraph>
+          );
         }
         if (key === "manager") return candidate.manager || "-";
         if (key === "workflow") {

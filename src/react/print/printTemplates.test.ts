@@ -443,6 +443,11 @@ describe("print templates", () => {
     expect(html).toContain("自定义收费明细");
     expect(html).toContain("特殊饲料");
     expect(html).toContain("¥12.00 / 只/天");
+    const allHtml = quantitySheetPagesMarkup([
+      { ...sheet, customBillingSegments: [{ ...sheet.customBillingSegments[0], quantityMode: "all", quantity: null }] },
+    ]);
+    expect(allHtml).toContain('<td class="num">全部</td>');
+    expect(allHtml).toContain("¥12.00 / 只/天");
   });
 
   it("renders settlement columns by iacuc and species with explicit zero amounts", () => {

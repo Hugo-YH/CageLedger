@@ -425,7 +425,11 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 }
 
 .quantity-saved-table .quantity-col-actions {
-  width: 220px;
+  width: 240px;
+}
+
+[data-feature="billing"] .quantity-saved-row-actions .ant-btn {
+  width: 64px;
 }
 
 .quantity-saved-pagination {

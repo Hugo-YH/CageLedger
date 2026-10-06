@@ -694,10 +694,10 @@ def _write_statement_sheet(worksheet, statement, lines):
     worksheet.cell(payable_row, payable_amount_column + 1).border = _BORDER
     worksheet.cell(payable_row, payable_amount_column + 1).fill = _TOTAL_FILL
 
-    _write_custom_appendix(worksheet, custom_rows, payable_row + 2)
+    _, next_row = _write_custom_appendix(worksheet, custom_rows, payable_row + 2)
 
     # 签字区
-    sign_row = payable_row + (2 if not custom_rows else 6)
+    sign_row = next_row + 1 if custom_rows else payable_row + 2
     sign_headers = ["项目负责人", "实验负责人/经办人", "日期"]
     worksheet.merge_cells(start_row=sign_row, start_column=1, end_row=sign_row, end_column=2)
     worksheet.merge_cells(start_row=sign_row, start_column=3, end_row=sign_row, end_column=4)

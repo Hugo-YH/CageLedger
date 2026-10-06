@@ -14,6 +14,7 @@ import {
   createQuantityRow,
   createQuantitySheet,
   createCustomBillingSegment,
+  customBillingUsesAllQuantity,
   normalizeQuantitySheet,
   roomBillingProfile,
   roomBillingUnit,
@@ -767,12 +768,25 @@ function CustomBillingSegmentsEditor({
           <div className="custom-billing-segment-head">
             <div>
               <strong>区间 {index + 1}</strong>
-              <span>预估 ¥{estimateCustomBillingSegment(segment).toFixed(2)}</span>
+              <span>
+                {customBillingUsesAllQuantity(segment)
+                  ? "按每日实际结余核算"
+                  : `预估 ¥${estimateCustomBillingSegment(segment).toFixed(2)}`}
+              </span>
             </div>
             <Button danger size="small" onClick={() => onRemoved(segment.id)}>
               删除
             </Button>
           </div>
+          <Space wrap>
+            <Switch
+              aria-label={`区间 ${index + 1} 全部${unit === "animal_day" ? "动物" : "笼位"}按自定义收费`}
+              checked={customBillingUsesAllQuantity(segment)}
+              onChange={(checked) => onChanged(segment.id, { quantityMode: checked ? "all" : "fixed", quantity: null })}
+            />
+            <span>全部{unit === "animal_day" ? "动物" : "笼位"}按自定义收费</span>
+            <Typography.Text type="secondary">仅在本区间内，按每天实际结余数量计算</Typography.Text>
+          </Space>
           <div className="custom-billing-segment-fields">
             <div className="custom-billing-field">
               <span>开始日期</span>
@@ -790,16 +804,23 @@ function CustomBillingSegmentsEditor({
                 onChange={(value) => onChanged(segment.id, { endDate: value })}
               />
             </div>
-            <label>
-              {quantityLabel}
-              <InputNumber<number>
-                min={1}
-                step={1}
-                value={segment.quantity ?? null}
-                placeholder="每日数量"
-                onChange={(event) => onChanged(segment.id, { quantity: event == null ? null : Number(event) })}
-              />
-            </label>
+            {customBillingUsesAllQuantity(segment) ? (
+              <div className="custom-billing-field">
+                <span>{quantityLabel}</span>
+                <Typography.Text>当天全部实际结余</Typography.Text>
+              </div>
+            ) : (
+              <label>
+                {quantityLabel}
+                <InputNumber<number>
+                  min={1}
+                  step={1}
+                  value={segment.quantity ?? null}
+                  placeholder="每日数量"
+                  onChange={(event) => onChanged(segment.id, { quantity: event == null ? null : Number(event) })}
+                />
+              </label>
+            )}
             <label>
               单价（元/{unitLabel}）
               <InputNumber<number>

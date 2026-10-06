@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import { DownloadOutlined, FileTextOutlined, PlayCircleOutlined, UndoOutlined } from "@ant-design/icons";
 import { Button, Tooltip, Typography } from "antd";
 
 import { CommandBar } from "../../../components/ui";
 
 export function SettlementBatchToolbar({
+  filters,
   total,
   disabled = false,
   selectedCount,
@@ -20,6 +22,7 @@ export function SettlementBatchToolbar({
   onInitiate,
   onClear,
 }: {
+  filters?: ReactNode;
   total: number;
   disabled?: boolean;
   selectedCount: number;
@@ -39,7 +42,8 @@ export function SettlementBatchToolbar({
   const empty = disabled || !selectedCount || selectingAll;
   return (
     <CommandBar
-      className="settlement-action-bar"
+      filters={filters}
+      className="settlement-action-bar app-command-bar-list"
       ariaLabel="结算批量操作"
       sticky="selection"
       selection={{

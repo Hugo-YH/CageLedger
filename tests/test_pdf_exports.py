@@ -313,6 +313,11 @@ class PdfExportTests(unittest.TestCase):
             }
         ]
         self.assertIn("自定义收费明细", quantity_sheet_html(sheet))
+        all_sheet = {
+            **sheet,
+            "customBillingSegments": [{**sheet["customBillingSegments"][0], "quantityMode": "all", "quantity": None}],
+        }
+        self.assertIn('<td class="num">全部</td>', quantity_sheet_html(all_sheet))
         statement_html = billing_statement_html(statement, lines)
         self.assertIn("自定义收费：", statement_html)
         self.assertIn("特殊饲料", statement_html)

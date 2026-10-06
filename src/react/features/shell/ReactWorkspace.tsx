@@ -1,3 +1,5 @@
+import { useSaveWorkspaceScroll } from "../../state/workspaceMemory";
+import { WorkspaceMemoryProvider } from "../../state/WorkspaceMemoryProvider";
 import { useNavigationGuard } from "../../state/ui";
 import {
   AppstoreOutlined,
@@ -79,7 +81,16 @@ function preloadDashboard() {
 }
 
 export function ReactWorkspace({ user }: { user: SessionUser }) {
+  return (
+    <WorkspaceMemoryProvider key={user.id}>
+      <Workspace user={user} />
+    </WorkspaceMemoryProvider>
+  );
+}
+
+function Workspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
+  const saveScroll = useSaveWorkspaceScroll();
   const dispatch = useUiDispatch();
   const logout = useLogout();
   const navigationGuard = useNavigationGuard();
@@ -105,6 +116,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
   async function guardedNavigate(view: WorkspaceView) {
     if (view === ui.activeView) return;
     if (navigationGuard.current && !(await navigationGuard.current())) return;
+    saveScroll(ui.activeView);
     if (view === "dashboard") preloadDashboard();
     persistWorkspaceView(view);
     dispatch({ type: "navigate", view });

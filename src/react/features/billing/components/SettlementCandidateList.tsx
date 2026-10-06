@@ -1,5 +1,10 @@
+import { useListPageBounds } from "../../../hooks/useListPageBounds";
+import { queryKeys } from "../../../api/queryKeys";
+import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
+import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
+import { ListViewControls, type ListDensity } from "../../../components/ui/ListViewControls";
 import { Alert, Button, Empty, Space, Typography } from "antd";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { buildSettlementNoticeEmail, type SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 import type {
@@ -32,13 +37,18 @@ export function SettlementCandidateList({
   source: "quantity_sheet" | "cage_map";
   user: SessionUser;
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [sort, setSort] = useState<{
+  const [page, setPage] = useWorkspaceMemory("settlement:page", 1);
+  const [pageSize, setPageSize] = useWorkspaceMemory("settlement:pageSize", 10);
+  const [sort, setSort] = useWorkspaceMemory<{
     key: SettlementCandidateListParams["sortKey"];
     dir: "asc" | "desc";
-  }>({ key: "month", dir: "desc" });
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  }>("settlement:sort", { key: "month", dir: "desc" });
+  const [filters, setFilters] = useWorkspaceMemory<Record<string, string[]>>("settlement:filters", {});
+  const [density, setDensity] = useWorkspaceMemory<ListDensity>("settlement:density", "middle");
+  const scopeRef = useRef(JSON.stringify(filters));
+  useEffect(() => {
+    scopeRef.current = JSON.stringify(filters);
+  }, [filters]);
   const selection = useSettlementSelection();
   const { selectedCandidates, allFilteredSelected, selectingAll } = selection;
   const [selected, setSelected] = useState<SettlementCandidate | null>(null);
@@ -47,6 +57,7 @@ export function SettlementCandidateList({
     candidate: SettlementCandidate;
     email: SettlementNoticeEmail;
   } | null>(null);
+  const [batchFailures, setBatchFailures] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
@@ -75,6 +86,7 @@ export function SettlementCandidateList({
   );
 
   function showNotice(message: string, kind: "success" | "error" | "info" = "info") {
+    setBatchFailures([]);
     setNotice(message);
     setNoticeKind(kind);
   }
@@ -89,9 +101,18 @@ export function SettlementCandidateList({
   const list = useSettlementCandidates(params, source === "quantity_sheet");
   const generate = useGenerateBillingStatement();
   const advanceWorkflow = useAdvanceWorkflow();
+  useWorkspaceScroll("billing-settlement", !list.isPending && !list.isError);
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
+
+  useListPageBounds(
+    page,
+    pages,
+    !list.isPending && !list.isError && !list.isPlaceholderData,
+    setPage,
+    queryKeys.settlementCandidatesRoot,
+  );
 
   const columns = buildSettlementColumns({
     allFilteredSelected,
@@ -243,8 +264,10 @@ export function SettlementCandidateList({
           (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent"),
     );
     if (!candidates.length) return;
+    const submittedScope = scopeRef.current;
     batchActionRef.current = action;
     setBatchAction(action);
+    setBatchFailures([]);
     setNotice("");
     const verb = action === "start" ? "发起" : "撤回";
     try {
@@ -253,12 +276,13 @@ export function SettlementCandidateList({
       const failures = result.failures.map(({ item, message }) => `${item.candidate.pi}（${message}）`);
       showNotice(
         failures.length
-          ? `已${verb} ${result.completed.length} 个结算流程；${failures.length} 个未完成：${failures.join("、")}`
+          ? `已${verb} ${result.completed.length} 个结算流程；${failures.length} 个未完成。${submittedScope === scopeRef.current ? "失败项仍保留选择。" : "筛选已改变，请在原范围核对结果。"}`
           : action === "start"
             ? `已发起 ${result.completed.length} 个结算流程，可到单据跟踪继续处理。`
             : `已撤回 ${result.completed.length} 个结算流程，可重新发起结算。`,
         failures.length ? "error" : "success",
       );
+      setBatchFailures(failures);
     } catch (error) {
       showNotice(`批量结果未能同步，请刷新列表确认：${error instanceof Error ? error.message : "同步失败"}`, "error");
     } finally {
@@ -321,12 +345,25 @@ export function SettlementCandidateList({
                     ? `正在撤回结算流程 ${batch.completed}/${batch.total}`
                     : "")
           }
+          description={<BatchFailureDetails key={batchFailures.join("|")} failures={batchFailures} />}
           role={noticeKind === "error" ? "alert" : "status"}
           showIcon
           type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
         />
       ) : null}
       <SettlementBatchToolbar
+        filters={
+          <ListViewControls
+            filters={filters}
+            onFiltersChange={(next) => {
+              setFilters(next);
+              setPage(1);
+            }}
+            density={density}
+            onDensity={setDensity}
+            disabled={batch.isPending}
+          />
+        }
         allSelectedNonInitiative={allSelectedNonInitiative}
         disabled={list.isPlaceholderData || batch.isPending}
         batchStarting={batchStarting}
@@ -352,6 +389,7 @@ export function SettlementCandidateList({
       >
         <DataTable
           refreshing={list.isFetching}
+          size={density}
           columns={columns}
           dataSource={items}
           pagination={false}

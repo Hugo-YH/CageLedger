@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { expect, openWorkflowCenter, test } from "./fixtures";
+import { expect, openWorkflowCenter, selectAntOptionByKeyboard, test } from "./fixtures";
 
 async function mockPagedWorkflows(page: Page) {
   const workflows = Array.from({ length: 12 }, (_, index) => {
@@ -237,4 +237,134 @@ test("applying a workflow filter clears the selection and discards an unconfirme
   await confirmation.getByRole("button", { name: "批量锁定", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "已锁定 1 条结算流程。" })).toBeVisible();
   expect(writes).toEqual(["mock-page-12"]);
+});
+
+test("desktop list restores paging sorting density and filters across business navigation without selections", async ({
+  page,
+}) => {
+  await mockPagedWorkflows(page);
+  await openWorkflowCenter(page);
+  const panel = page.getByRole("region", { name: "结算流程列表", exact: true });
+  await page.getByText("紧凑", { exact: true }).click();
+  await page.getByRole("button", { name: "项目负责人，点击切换排序", exact: true }).click();
+  await panel.locator(".ant-pagination-next").click();
+  await page.getByRole("checkbox", { name: "选择 分页负责人 11 2026-08 结算流程", exact: true }).check();
+  await page.getByRole("menuitem", { name: /总览/ }).click();
+  await openWorkflowCenter(page);
+  await expect(
+    page.getByRole("checkbox", { name: "选择 分页负责人 11 2026-08 结算流程", exact: true }),
+  ).not.toBeChecked();
+  await expect(page.getByRole("radio", { name: "紧凑", exact: true })).toBeChecked();
+  await expect(panel.locator(".ant-table")).toHaveClass(/ant-table-small/);
+  await expect(panel.locator(".ant-pagination-item-active")).toHaveText("2");
+  await page.getByRole("button", { name: "筛选项目负责人", exact: true }).click();
+  const filter = page.locator(".table-filter-panel:visible");
+  await filter.getByRole("checkbox", { name: /分页负责人 12/ }).click();
+  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await expect(page.getByLabel("已应用筛选")).toContainText("负责人：分页负责人 12");
+  await page.getByRole("menuitem", { name: /总览/ }).click();
+  await openWorkflowCenter(page);
+  await expect(page.getByLabel("已应用筛选")).toContainText("负责人：分页负责人 12");
+  await expect(panel.locator(".ant-pagination-item-active")).toHaveText("1");
+  await page.getByRole("button", { name: "清除全部筛选", exact: true }).click();
+  await expect(page.getByLabel("已应用筛选")).toContainText("全部结果");
+  await expect(panel.getByRole("checkbox", { name: /选择 分页负责人/ })).toHaveCount(10);
+});
+
+test("partial batch lock retains only failures and deliberate retry never repeats successful writes", async ({
+  page,
+}) => {
+  const workflows = await mockPagedWorkflows(page);
+  const writes: string[] = [];
+  await page.route("**/api/billing-workflows/advance", (route) => {
+    const payload = route.request().postDataJSON() as { workflowId: string };
+    writes.push(payload.workflowId);
+    if (payload.workflowId === "mock-page-02" && writes.length === 2)
+      return route.fulfill({ status: 409, json: { error: "测试版本冲突，请核对" } });
+    const workflow = workflows.find((item) => item.id === payload.workflowId);
+    if (workflow) workflow.workflowStatus = "statement_locked";
+    return route.fulfill({ json: { ok: true, item: workflow } });
+  });
+  await openWorkflowCenter(page);
+  const toolbar = page.getByRole("group", { name: "结算流程批量操作", exact: true });
+  for (const number of ["01", "02"])
+    await page.getByRole("checkbox", { name: `选择 分页负责人 ${number} 2026-08 结算流程`, exact: true }).check();
+  await toolbar.getByRole("button", { name: "批量锁定", exact: true }).click();
+  let popup = page.getByRole("tooltip").filter({ hasText: "批量锁定 2 条结算流程？" });
+  await popup.getByRole("button", { name: "取消", exact: true }).click();
+  expect(writes).toEqual([]);
+  await toolbar.getByRole("button", { name: "批量锁定", exact: true }).click();
+  await popup.getByRole("button", { name: "批量锁定", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "1 条未完成" })).toBeVisible();
+  await expect(toolbar).toContainText("已选 1 项");
+  await expect(
+    page.getByRole("checkbox", { name: "选择 分页负责人 01 2026-08 结算流程", exact: true }),
+  ).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "选择 分页负责人 02 2026-08 结算流程", exact: true })).toBeChecked();
+  await toolbar.getByRole("button", { name: "批量锁定", exact: true }).click();
+  popup = page.getByRole("tooltip").filter({ hasText: "批量锁定 1 条结算流程？" });
+  await popup.getByRole("button", { name: "批量锁定", exact: true }).click();
+  await expect(toolbar).toContainText("已选 0 项");
+  expect(writes).toEqual(["mock-page-01", "mock-page-02", "mock-page-02"]);
+});
+
+test("desktop page size and scroll restore and detail cancellation keeps context", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
+  const workflows = await mockPagedWorkflows(page);
+  workflows[0].workflowStatus = "statement_locked";
+  await page.route("**/api/billing-workflows/mock-page-01", (route) =>
+    route.fulfill({ json: { workflow: workflows[0], events: [] } }),
+  );
+  await openWorkflowCenter(page);
+  const panel = page.getByRole("region", { name: "结算流程列表", exact: true });
+  // Follow the shared Ant virtual-list keyboard contract; DOM option clicks
+  // auto-scroll in Firefox and emit a native APZ diagnostic even on the release baseline.
+  await selectAntOptionByKeyboard(page, page.getByLabel("每页显示条数"));
+  const row = panel.getByRole("row").filter({ hasText: "分页负责人 01" });
+  await row.getByRole("button", { name: "查看", exact: true }).click();
+  const detail = page.getByRole("dialog", { name: /流程记录/ });
+  await expect(detail.getByText("负责人", { exact: true })).toBeVisible();
+  await expect(detail.getByText("¥0.00", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(detail).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "查看", exact: true })).toBeFocused();
+  await page.evaluate(() => {
+    const workspace = document.querySelector<HTMLElement>("[data-ui=workspace]");
+    const target =
+      workspace && /(auto|scroll)/.test(getComputedStyle(workspace).overflowY) ? workspace : document.scrollingElement!;
+    target.scrollTop = 250;
+  });
+  const scroll = () =>
+    page.evaluate(() => {
+      const workspace = document.querySelector<HTMLElement>("[data-ui=workspace]");
+      return workspace && /(auto|scroll)/.test(getComputedStyle(workspace).overflowY)
+        ? workspace.scrollTop
+        : document.scrollingElement!.scrollTop;
+    });
+  await expect.poll(scroll).toBeGreaterThan(150);
+  const before = await scroll();
+  await page.getByRole("menuitem", { name: /总览/ }).click();
+  await openWorkflowCenter(page);
+  await expect(panel.locator(".ant-table-tbody > tr[data-row-key]")).toHaveCount(12);
+  await expect(panel.locator(".ant-pagination-options")).toContainText("20 条/页");
+  await expect.poll(async () => Math.abs((await scroll()) - before)).toBeLessThan(5);
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await expect(panel.locator(".ant-table-tbody > tr[data-row-key]")).toHaveCount(12);
+  await page.emulateMedia({ reducedMotion: "no-preference", colorScheme: "light" });
+  await expect(panel.locator(".ant-pagination-options")).toContainText("20 条/页");
+});
+
+test("shrinking data corrects an out-of-range remembered page", async ({ page }) => {
+  const workflows = await mockPagedWorkflows(page);
+  await openWorkflowCenter(page);
+  const panel = page.getByRole("region", { name: "结算流程列表", exact: true });
+  await page.getByLabel("每页显示条数").click();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await panel.locator(".ant-pagination-next").click();
+  await expect(panel.locator(".ant-pagination-item-active")).toHaveText("2");
+  workflows.splice(2);
+  await panel.locator(".ant-pagination-next").click();
+  await expect(panel.locator(".ant-pagination-item-active")).toHaveText("1");
+  await expect(panel.locator(".ant-table-tbody > tr[data-row-key]")).toHaveCount(2);
 });

@@ -1114,3 +1114,17 @@
     gap: 4px;
   }
 }
+
+.app-list-view-controls {
+  width: 100%;
+  padding: 8px 0;
+  min-width: 0;
+}
+
+.app-command-bar-filters:has(> .app-list-view-controls) {
+  margin-block-end: 0;
+}
+
+.app-command-bar.app-command-bar-list {
+  margin-block-end: 0;
+}

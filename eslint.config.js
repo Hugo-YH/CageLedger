@@ -19,6 +19,8 @@ export default tseslint.config(
       "playwright-report/**",
       "src/vendor/**",
       "test-results/**",
+      "tmp/**",
+      "软件著作权申请资料/**",
       "web-dist/**",
       ".vitepress/**",
       "wiki/.vitepress/**",

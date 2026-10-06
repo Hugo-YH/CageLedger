@@ -202,6 +202,7 @@ def quantity_sheet_breakdown_item(
         "customBillingStartDate": custom_segment.get("startDate", "") if custom else "",
         "customBillingEndDate": custom_segment.get("endDate", "") if custom else "",
         "customBillingNote": custom_segment.get("note", "") if custom else "",
+        "customBillingQuantityMode": custom_segment.get("quantityMode", "fixed") if custom else "",
         "freeCages": 0,
     }
 

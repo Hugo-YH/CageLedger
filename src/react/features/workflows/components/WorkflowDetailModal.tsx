@@ -1,5 +1,5 @@
 import { DownloadOutlined } from "@ant-design/icons";
-import { Button, Flex, Modal, Tag, Timeline, Typography } from "antd";
+import { Button, Descriptions, Flex, Modal, Tag, Timeline, Typography } from "antd";
 import { useState } from "react";
 
 import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
@@ -91,7 +91,7 @@ export function WorkflowDetailModal({
       rootClassName="app-modal-root workflow-detail-modal"
       open={Boolean(target)}
       title={`流程记录 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
-      width={720}
+      width={840}
       onCancel={onCancel}
     >
       {target ? (
@@ -294,6 +294,21 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
 
   return (
     <>
+      <Descriptions
+        size="small"
+        column={2}
+        items={[
+          { key: "pi", label: "负责人", children: workflow.pi },
+          { key: "month", label: "结算月份", children: workflow.month },
+          {
+            key: "amount",
+            label: "结算金额",
+            children: workflow.totalAmount == null ? "—" : formatMoney(Number(workflow.totalAmount)),
+          },
+          { key: "returned", label: "结算单", children: workflow.signedStatementReturned ? "已交回" : "未交回" },
+        ]}
+      />
+      <Typography.Title level={5}>流程记录</Typography.Title>
       <Timeline className="workflow-timeline" items={items} mode="start" />
       <Typography.Title level={5} style={{ marginTop: 16 }}>
         附件

@@ -25,6 +25,7 @@ type CustomBillingBreakdown = {
   customBillingStartDate?: string;
   customBillingEndDate?: string;
   customBillingNote?: string;
+  customBillingQuantityMode?: string;
 };
 
 export function settlementNotesMarkup(
@@ -58,6 +59,7 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
       startDate: string;
       endDate: string;
       quantity: number;
+      allQuantity: boolean;
       unitPrice: number;
       billingUnit: string;
       species: string;
@@ -84,6 +86,7 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
         startDate,
         endDate,
         quantity: Number(billingUnit === "animal_day" ? item.animalCount || 0 : item.cageCount || 0),
+        allQuantity: item.customBillingQuantityMode === "all",
         unitPrice,
         billingUnit,
         species,
@@ -105,9 +108,12 @@ function customBillingNoteMarkup(lines: BillingStatementLine[]) {
     .map((item, index) => {
       const unit = item.billingUnit === "animal_day" ? "只" : "笼";
       const note = item.note ? `。${item.note}` : "";
+      const quantity = item.allQuantity
+        ? `按每日实际结余${unit}数计费`
+        : `每日${numberText(item.quantity)}${unit}${item.species}`;
       return noteEntryMarkup(
         index === 0 ? "自定义收费：" : "",
-        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，每日${numberText(item.quantity)}${unit}${item.species}，${numberText(item.unitPrice)}元/${unit}/日，本月共计${money(item.amount)}元${note}`,
+        `${item.iacuc}：${item.startDate || "-"} 至 ${item.endDate || "-"}，${quantity}，${numberText(item.unitPrice)}元/${unit}/日，本月共计${money(item.amount)}元${note}`,
       );
     })
     .join("");

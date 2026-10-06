@@ -128,8 +128,18 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   const now = new Date();
   const pdfMonth = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月`;
   expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${pdfMonth} E2E-IACUC-001.pdf`);
-  await savedRow.getByRole("button", { name: "E2E-IACUC-001更多操作", exact: true }).click();
-  await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+  const rowActions = savedRow.locator(".quantity-saved-row-actions");
+  await expect(rowActions.getByRole("button")).toHaveText(["预览", "编辑", "删除"]);
+  await expect(rowActions.getByRole("button", { name: "预览", exact: true })).toHaveClass(/ant-btn-variant-filled/);
+  await expect(rowActions.getByRole("button", { name: "预览", exact: true })).toHaveClass(/ant-btn-color-blue/);
+  await expect(rowActions.getByRole("button", { name: "编辑", exact: true })).toHaveClass(/ant-btn-primary/);
+  await expect(rowActions.getByRole("button", { name: "删除", exact: true })).toHaveClass(/ant-btn-dangerous/);
+  for (const button of await rowActions.getByRole("button").all()) {
+    await expect(button).toHaveCSS("width", "64px");
+    await expect(button).toHaveCSS("height", "32px");
+  }
+  await rowActions.screenshot({ path: testInfo.outputPath("saved-quantity-row-actions.png") });
+  await savedRow.getByRole("button", { name: "删除", exact: true }).click();
   const deleteDialog = page.getByRole("dialog", { name: "删除数量统计表", exact: true });
   await expect(deleteDialog).toBeVisible();
   // WebKit can report the first two animation frames as stable before Ant's
