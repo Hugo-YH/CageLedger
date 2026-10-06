@@ -268,6 +268,90 @@ class FeedbackTests(unittest.TestCase):
             page = service.list_page(conn, ACTOR, {"columnFilters": json.dumps({"title": ["' OR 1=1 --"]})})
             self.assertEqual(page["total"], 0)
 
+    def test_list_metadata_matches_detail_projection_and_preserves_task_precedence(self):
+        items = [self.create(submission(title=f"混合同步状态 {index}")) for index in range(8)]
+        with self.connect() as conn:
+            for index, item in enumerate(items):
+                conn.execute("DELETE FROM feedback_tasks WHERE feedback_id=?", (item["id"],))
+                states = [
+                    [],
+                    [("done", "旧错误", 1)],
+                    [("pending", "", 0)],
+                    [("working", "", 0), ("pending", "稍后错误", 0)],
+                    [("pending", "先前错误", 0), ("blocked", "无权限", 0)],
+                    [("blocked", "先核对", 1), ("blocked", "后错误", 0)],
+                    [("blocked", "先错误", 0), ("blocked", "后核对", 1)],
+                    [("done", "旧错误", 1), ("working", "", 0)],
+                ][index]
+                for ordinal, (state, error, uncertain) in enumerate(states):
+                    conn.execute(
+                        "INSERT INTO feedback_tasks(feedback_id,kind,entity_id,state,error,uncertain) VALUES(?,?,?,?,?,?)",
+                        (item["id"], f"task-{ordinal}", item["id"], state, error, uncertain),
+                    )
+                for actor in [ACTOR, ADMIN][: index % 3]:
+                    conn.execute("INSERT INTO feedback_encounters VALUES(?,?,?)", (item["id"], actor["id"], "test"))
+            conn.commit()
+            configured_states = ["synced", "synced", "pending", "error", "error", "uncertain", "error", "pending"]
+            configured_errors = ["", "", "", "稍后错误", "无权限", "先核对", "先错误", ""]
+            for configured in (True, False):
+                with patch.object(service, "CAGELEDGER_GITEA_TOKEN", "mock-token" if configured else ""):
+                    for user in (ACTOR, ADMIN, {**ACTOR, "id": "unrelated"}):
+                        expected = [
+                            service.present(conn, row, user)
+                            for row in repo.list_page(conn, user, {}, configured)["items"]
+                        ]
+                        changes = conn.total_changes
+                        for _ in range(2):
+                            page = service.list_page(conn, user, {})
+                            self.assertEqual(page["items"], expected)
+                            self.assertEqual(conn.total_changes, changes)
+                        by_id = {row["id"]: row for row in page["items"]}
+                        for index, item in enumerate(items):
+                            state = configured_states[index] if configured or index < 2 else "unconfigured"
+                            self.assertEqual(by_id[item["id"]]["syncStatus"], state)
+                            error = (
+                                configured_errors[index]
+                                if configured
+                                else ("" if index < 2 else "未配置共享 Gitea Token，反馈已留档")
+                            )
+                            self.assertEqual(by_id[item["id"]]["syncError"], error if user["role"] == "admin" else "")
+                        if not configured:
+                            self.assertEqual(page["items"][-1]["syncStatus"], "synced")
+                        if user["role"] != "admin":
+                            self.assertTrue(
+                                all(item["syncError"] == "" and item["issueUrl"] == "" for item in page["items"])
+                            )
+
+    def test_list_sql_budget_is_bounded_by_page_and_empty_pages_skip_metadata(self):
+        for index in range(105):
+            self.create(submission(title=f"批量列表 {index}"))
+        with self.connect() as conn:
+            for limit, offset, count in [(1, 0, 1), (20, 0, 20), (100, 0, 100), (200, 100, 5), (20, 105, 0)]:
+                statements = []
+                conn.set_trace_callback(statements.append)
+                try:
+                    page = service.list_page(conn, ACTOR, {"limit": str(limit), "offset": str(offset)})
+                finally:
+                    conn.set_trace_callback(None)
+                self.assertEqual(len(page["items"]), count)
+                self.assertEqual(page["total"], 105)
+                self.assertEqual(len(statements), 4 if count else 2)
+
+    def test_list_observes_remote_deletion_after_pagination(self):
+        item = self.create()
+        with self.connect() as conn:
+            page = repo.list_page(conn, ACTOR, {}, True)
+            with self.connect() as writer:
+                writer.execute("UPDATE feedback SET status='deleted' WHERE id=?", (item["id"],))
+                writer.execute(
+                    "UPDATE feedback_tasks SET state='done',error='',uncertain=0 WHERE feedback_id=?", (item["id"],)
+                )
+            expected = service.present(conn, page["items"][0], ACTOR)
+            with patch.object(repo, "list_page", return_value=page):
+                actual = service.list_page(conn, ACTOR, {})["items"][0]
+            self.assertEqual(actual, expected)
+            self.assertEqual(actual["syncStatus"], "removed")
+
     def test_environment_does_not_accept_query_urls(self):
         with self.assertRaises(ValueError):
             self.create(submission(environment={"page": "https://host/app?token=secret"}))

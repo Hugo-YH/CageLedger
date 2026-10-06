@@ -136,6 +136,10 @@ def sync_state(conn, feedback_id, configured=True):
         "SELECT state,uncertain,error FROM feedback_tasks WHERE feedback_id=? AND state!='done' ORDER BY id",
         (feedback_id,),
     ).fetchall()
+    return task_sync_state(tasks, configured)
+
+
+def task_sync_state(tasks, configured=True):
     if not tasks:
         return "synced", ""
     if not configured:
@@ -145,6 +149,41 @@ def sync_state(conn, feedback_id, configured=True):
             return "uncertain" if row["uncertain"] else "error", row["error"]
     failed = next((row for row in tasks if row["error"]), None)
     return ("error", failed["error"]) if failed else ("pending", "")
+
+
+def page_metadata(conn, rows, actor_id, configured):
+    if not rows:
+        return {}
+    ids = [row["id"] for row in rows]
+    placeholders = ",".join("?" for _ in ids)
+    tasks = {feedback_id: [] for feedback_id in ids}
+    statuses = {}
+    for row in conn.execute(
+        "SELECT f.id feedback_id,f.status feedback_status,t.id task_id,t.state,t.uncertain,t.error "
+        "FROM feedback f LEFT JOIN feedback_tasks t ON t.feedback_id=f.id AND t.state!='done' "
+        f"WHERE f.id IN ({placeholders}) ORDER BY t.id",
+        ids,
+    ):
+        statuses[row["feedback_id"]] = row["feedback_status"]
+        if row["task_id"] is not None:
+            tasks[row["feedback_id"]].append(row)
+    if len(statuses) != len(ids):
+        raise LookupError("反馈不存在")
+    counts = {
+        row["feedback_id"]: row
+        for row in conn.execute(
+            f"SELECT feedback_id,COUNT(*) total,MAX(actor_id=?) encountered FROM feedback_encounters "
+            f"WHERE feedback_id IN ({placeholders}) GROUP BY feedback_id",
+            [actor_id, *ids],
+        )
+    }
+    return {
+        feedback_id: (
+            ("removed", "") if statuses[feedback_id] == "deleted" else task_sync_state(tasks[feedback_id], configured),
+            counts.get(feedback_id, {"total": 0, "encountered": 0}),
+        )
+        for feedback_id in ids
+    }
 
 
 def queue_stale(conn, age=300):

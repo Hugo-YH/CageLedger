@@ -55,13 +55,16 @@ def audit(conn, user, action, feedback_id, before=None, after=None):
     )
 
 
-def present(conn, row, user):
+def present(conn, row, user, metadata=None):
     require_active(row)
-    state, error = repo.sync_state(conn, row["id"], bool(CAGELEDGER_GITEA_TOKEN))
-    counts = conn.execute(
-        "SELECT COUNT(*) total, COALESCE(MAX(actor_id=?),0) encountered FROM feedback_encounters WHERE feedback_id=?",
-        (user["id"], row["id"]),
-    ).fetchone()
+    if metadata is None:
+        state, error = repo.sync_state(conn, row["id"], bool(CAGELEDGER_GITEA_TOKEN))
+        counts = conn.execute(
+            "SELECT COUNT(*) total, COALESCE(MAX(actor_id=?),0) encountered FROM feedback_encounters WHERE feedback_id=?",
+            (user["id"], row["id"]),
+        ).fetchone()
+    else:
+        (state, error), counts = metadata
     return {
         "id": row["id"],
         "number": row["number"],
@@ -91,7 +94,8 @@ def present(conn, row, user):
 
 def list_page(conn, user, params):
     page = repo.list_page(conn, user, params, bool(CAGELEDGER_GITEA_TOKEN))
-    return {**page, "items": [present(conn, row, user) for row in page["items"]]}
+    metadata = repo.page_metadata(conn, page["items"], user["id"], bool(CAGELEDGER_GITEA_TOKEN))
+    return {**page, "items": [present(conn, row, user, metadata[row["id"]]) for row in page["items"]]}
 
 
 def filter_options(conn, user, params):
