@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { PageSkeleton } from "../../components/PageSkeleton";
 import { CommandBar, ListRefreshStatus } from "../../components/ui";
 import { useState } from "react";
@@ -12,6 +13,7 @@ export function SupplierHistoryView({ onOpen }: { onOpen: (batchId: string, test
   return (
     <>
       <CommandBar
+        title="供应商历史"
         ariaLabel="供应商历史查询"
         filters={
           <>
@@ -79,7 +81,11 @@ export function SupplierHistoryView({ onOpen }: { onOpen: (batchId: string, test
         <Alert
           type="error"
           title={query.error.message}
-          action={<Button onClick={() => void query.refetch()}>重试</Button>}
+          action={
+            <Button icon={<ActionIcon name="refresh" />} onClick={() => void query.refetch()}>
+              重试
+            </Button>
+          }
         />
       )}
       <ListRefreshStatus active={query.isFetching && !query.isPending} />

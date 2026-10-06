@@ -1,6 +1,8 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { RecordWorklist } from "./RecordWorklist";
 import { BatchOverview } from "./BatchOverview";
 import { App, Alert, Button, Empty, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 
 import type {
@@ -23,7 +25,7 @@ import { TestDetail } from "./TestDetail";
 import { SupplierHistoryView } from "./SupplierHistory";
 import { emptyTest, methodLabels } from "./shared";
 import { PageSkeleton } from "../../components/PageSkeleton";
-import { CommandBar, ListRefreshStatus, RowActions } from "../../components/ui";
+import { CommandBar, HelpPopover, ListRefreshStatus, RowActions } from "../../components/ui";
 
 export function QuarantineView({
   mode,
@@ -134,18 +136,6 @@ export function QuarantineView({
   }
   return (
     <section data-feature="quarantine" className={editor ? "quarantine-editing" : undefined} aria-label={title}>
-      {!editor && !batchId && (
-        <header className="quarantine-page-heading">
-          <Typography.Title level={3}>{title}</Typography.Title>
-          <Typography.Paragraph type="secondary">
-            {isBatchManagement
-              ? "登记覆盖来源、跟踪检测进展并确认整批检疫完成。"
-              : isReports
-                ? "检索已出具报告、查看历史版本与供应商检测趋势。"
-                : "按检测记录管理样本、结果和原始资料，出具报告后保留完整版本。"}
-          </Typography.Paragraph>
-        </header>
-      )}
       {!editor && !batchId && (isBatchManagement || isReports) && (
         <Tabs
           className="quarantine-page-tabs"
@@ -179,6 +169,12 @@ export function QuarantineView({
         <>
           {listVisible && !isBatchManagement && (
             <RecordWorklist
+              title={title}
+              description={
+                isReports
+                  ? "检索已出具报告、查看历史版本与供应商检测趋势。"
+                  : "按检测记录管理样本、结果和原始资料，出具报告后保留完整版本。"
+              }
               method={isReports ? undefined : mode === "quarantine-elisa" ? "elisa" : method}
               reports={isReports}
               onOpen={openBatch}
@@ -187,6 +183,12 @@ export function QuarantineView({
           )}
           {!editor && !batchId && isBatchManagement && (
             <CommandBar
+              title={title}
+              context={
+                <HelpPopover label="检疫批次说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
+                  登记覆盖来源、跟踪检测进展并确认整批检疫完成。
+                </HelpPopover>
+              }
               ariaLabel={`${title}列表操作`}
               filters={
                 <>
@@ -216,7 +218,11 @@ export function QuarantineView({
               }
               primaryAction={
                 !isReports && (
-                  <Button type="primary" onClick={isBatchManagement ? newBatch : () => setBatchPicker(true)}>
+                  <Button
+                    icon={<ActionIcon name="create" />}
+                    type="primary"
+                    onClick={isBatchManagement ? newBatch : () => setBatchPicker(true)}
+                  >
                     {isBatchManagement ? "新建检疫批次" : `新建${title}记录`}
                   </Button>
                 )
@@ -227,7 +233,11 @@ export function QuarantineView({
             <Alert
               type="error"
               title={batches.error.message}
-              action={<Button onClick={() => void batches.refetch()}>重试</Button>}
+              action={
+                <Button icon={<ActionIcon name="refresh" />} onClick={() => void batches.refetch()}>
+                  重试
+                </Button>
+              }
             />
           )}
           {listVisible && isBatchManagement && !batches.isPending && <ListRefreshStatus active={batches.isFetching} />}
@@ -272,6 +282,7 @@ export function QuarantineView({
                         isBatchManagement
                           ? [
                               {
+                                icon: <ActionIcon name="remove" />,
                                 key: `delete-${b.id}`,
                                 label: "删除",
                                 danger: true,
@@ -300,15 +311,24 @@ export function QuarantineView({
           ) : null}
           {batchId && !editor && !detail.data && (
             <CommandBar
+              title={`${title}详情`}
               ariaLabel="检疫批次详情操作"
-              actions={<Button onClick={() => openBatch("")}>返回列表</Button>}
+              actions={
+                <Button icon={<ActionIcon name="back" />} onClick={() => openBatch("")}>
+                  返回列表
+                </Button>
+              }
             />
           )}
           {batchId && detail.error && (
             <Alert
               type="error"
               title={detail.error.message}
-              action={<Button onClick={() => void detail.refetch()}>重试</Button>}
+              action={
+                <Button icon={<ActionIcon name="refresh" />} onClick={() => void detail.refetch()}>
+                  重试
+                </Button>
+              }
             />
           )}
           {batchId && !editor && detail.data && <ListRefreshStatus active={detail.isFetching} />}
@@ -318,10 +338,10 @@ export function QuarantineView({
               {!editor && (
                 <>
                   <CommandBar
+                    title={`${isBatchManagement || isReports ? title : currentTypeTitle} · ${detail.data.item.name}`}
                     ariaLabel="检疫批次详情操作"
                     context={
                       <Space orientation="vertical" size={0}>
-                        <span>{`${isBatchManagement || isReports ? title : currentTypeTitle} · ${detail.data.item.name}`}</span>
                         {(!isBatchManagement || Boolean(testId)) && selected && (
                           <Typography.Text type="secondary">{`${methodLabels[selected.method]} · ${selected.testDate || "日期未填"} · ${selected.state === "issued" ? "已出具" : "草稿"}${selected.retestOf ? " · 复检" : ""}${selected.correctionOf ? " · 更正" : ""}`}</Typography.Text>
                         )}
@@ -345,11 +365,17 @@ export function QuarantineView({
                     }
                     actions={
                       <>
-                        <Button onClick={() => openBatch("")}>返回列表</Button>
+                        <Button icon={<ActionIcon name="back" />} onClick={() => openBatch("")}>
+                          返回列表
+                        </Button>
                         {(!isBatchManagement || Boolean(testId)) && selected && (
                           <>
                             {!isReports && !detail.data.item.completedAt && (
-                              <Button disabled={!catalog.data} onClick={() => beginTest()}>
+                              <Button
+                                icon={<ActionIcon name="create" />}
+                                disabled={!catalog.data}
+                                onClick={() => beginTest()}
+                              >
                                 新建检测记录
                               </Button>
                             )}
@@ -361,6 +387,7 @@ export function QuarantineView({
                     primaryAction={
                       isBatchManagement && !testId ? (
                         <Button
+                          icon={<ActionIcon name="edit" />}
                           type="primary"
                           disabled={Boolean(detail.data.item.completedAt)}
                           onClick={() => setBatchEditor(detail.data.item)}
@@ -370,7 +397,12 @@ export function QuarantineView({
                       ) : selected ? (
                         <div ref={setRecordPrimary} />
                       ) : !isReports && !detail.data.item.completedAt ? (
-                        <Button type="primary" disabled={!catalog.data} onClick={() => beginTest()}>
+                        <Button
+                          icon={<ActionIcon name="create" />}
+                          type="primary"
+                          disabled={!catalog.data}
+                          onClick={() => beginTest()}
+                        >
                           新建检测记录
                         </Button>
                       ) : undefined
@@ -392,7 +424,11 @@ export function QuarantineView({
                     <Alert
                       type="error"
                       title={catalog.error.message}
-                      action={<Button onClick={() => void catalog.refetch()}>重试</Button>}
+                      action={
+                        <Button icon={<ActionIcon name="refresh" />} onClick={() => void catalog.refetch()}>
+                          重试
+                        </Button>
+                      }
                     />
                   )}
                   {!editor && (
@@ -454,7 +490,12 @@ export function QuarantineView({
                       }
                     >
                       {!isReports && !tests.length && !detail.data.item.completedAt && (
-                        <Button type="primary" disabled={!catalog.data} onClick={() => beginTest()}>
+                        <Button
+                          icon={<ActionIcon name="create" />}
+                          type="primary"
+                          disabled={!catalog.data}
+                          onClick={() => beginTest()}
+                        >
                           新建{methodLabels[method]}记录
                         </Button>
                       )}
@@ -518,7 +559,11 @@ export function QuarantineView({
           <Alert
             type="error"
             title={batches.error.message}
-            action={<Button onClick={() => void batches.refetch()}>重试</Button>}
+            action={
+              <Button icon={<ActionIcon name="refresh" />} onClick={() => void batches.refetch()}>
+                重试
+              </Button>
+            }
           />
         )}
         <ListRefreshStatus active={batches.isFetching && !batches.isPending} />
@@ -551,6 +596,7 @@ export function QuarantineView({
           ]}
         />
         <Button
+          icon={<ActionIcon name="create" />}
           onClick={() => {
             setBatchPicker(false);
             setInitialSources([]);

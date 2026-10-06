@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Checkbox, Flex, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -18,7 +19,13 @@ import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../prin
 import { usePdfExport } from "../hooks/usePdfExport";
 import { useQuantitySheetSelection } from "../hooks/useQuantitySheetSelection";
 
-export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet) => void }) {
+export function SavedQuantitySheets({
+  onEdit,
+  navigationAction,
+}: {
+  onEdit: (sheet: QuantitySheet) => void;
+  navigationAction?: React.ReactNode;
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
@@ -168,10 +175,11 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
   if (initialLoading) return <PageSkeleton label="已保存数量统计表" variant="table" />;
 
   return (
-    <section className="panel quantity-saved-panel">
+    <>
       <CommandBar
         className="quantity-saved-toolbar"
         ariaLabel="已保存统计表操作"
+        title="已保存数量统计表"
         sticky="selection"
         selection={{
           count: selected.length,
@@ -180,16 +188,21 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
         }}
         context={<Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `共 ${total} 条`}</Tag>}
         actions={
-          <ActionButton
-            disabled={!selected.length || list.isFetching || selectingAll || printPending}
-            loading={printPending}
-            onClick={() => void printSelected()}
-          >
-            {printPending ? "正在准备打印…" : "打印数量统计表"}
-          </ActionButton>
+          <>
+            {navigationAction}
+            <ActionButton
+              icon={<ActionIcon name="print" />}
+              disabled={!selected.length || list.isFetching || selectingAll || printPending}
+              loading={printPending}
+              onClick={() => void printSelected()}
+            >
+              {printPending ? "正在准备打印…" : "打印数量统计表"}
+            </ActionButton>
+          </>
         }
         primaryAction={
           <ActionButton
+            icon={<ActionIcon name="download" />}
             disabled={!selected.length || list.isFetching || pdfExport.isExporting || selectingAll}
             loading={pdfExport.isExporting}
             tone="primary"
@@ -203,94 +216,91 @@ export function SavedQuantitySheets({ onEdit }: { onEdit: (sheet: QuantitySheet)
           </ActionButton>
         }
       />
-      {selection.error ? <Alert role="alert" showIcon title={selection.error} type="error" /> : null}
-      {pdfExport.isExporting || exportError ? (
-        <Alert
-          role="status"
-          showIcon
-          title={
-            exportError ||
-            `PDF 正在后台生成，完成后会自动下载。${
-              pdfExport.job && pdfExport.job.total > 1
-                ? `（${exportProgress(pdfExport.job?.completed, pdfExport.job?.total)}）`
-                : ""
-            }`
-          }
-          type={exportError ? "error" : "info"}
-        />
-      ) : null}
-      <div className="panel-head">
-        <div className="panel-title-line">
-          <h2>已保存数量统计表</h2>
-        </div>
-      </div>
-      <div
-        className="table-wrap quantity-saved-list"
-        data-ui="data-table"
-        role="region"
-        tabIndex={0}
-        aria-busy={list.isFetching}
-        aria-label="已保存数量统计表"
-      >
-        <DataTable
-          refreshing={list.isFetching}
-          className="quantity-saved-table"
-          columns={columns}
-          dataSource={items}
-          pagination={false}
-          resizeKey="quantity-saved"
-          rowKey="id"
-        />
-      </div>
-      <Flex align="center" className="quantity-saved-pagination" justify="space-between" wrap>
-        <Typography.Text type="secondary">共 {total} 条</Typography.Text>
-        <div className="quantity-saved-pagination-scroll">
-          <Pagination
-            current={page}
-            onChange={(nextPage, nextPageSize) => {
-              if (nextPageSize !== pageSize) {
-                setPageSize(nextPageSize);
-                setPage(1);
-                return;
-              }
-              setPage(nextPage);
-            }}
-            pageSize={pageSize}
-            pageSizeOptions={[5, 10, 20, 50, 100]}
-            showSizeChanger={{ "aria-label": "每页显示条数" }}
-            total={total}
+      <section className="panel quantity-saved-panel">
+        {selection.error ? <Alert role="alert" showIcon title={selection.error} type="error" /> : null}
+        {pdfExport.isExporting || exportError ? (
+          <Alert
+            role="status"
+            showIcon
+            title={
+              exportError ||
+              `PDF 正在后台生成，完成后会自动下载。${
+                pdfExport.job && pdfExport.job.total > 1
+                  ? `（${exportProgress(pdfExport.job?.completed, pdfExport.job?.total)}）`
+                  : ""
+              }`
+            }
+            type={exportError ? "error" : "info"}
+          />
+        ) : null}
+        <div
+          className="table-wrap quantity-saved-list"
+          data-ui="data-table"
+          role="region"
+          tabIndex={0}
+          aria-busy={list.isFetching}
+          aria-label="已保存数量统计表"
+        >
+          <DataTable
+            refreshing={list.isFetching}
+            className="quantity-saved-table"
+            columns={columns}
+            dataSource={items}
+            pagination={false}
+            resizeKey="quantity-saved"
+            rowKey="id"
           />
         </div>
-      </Flex>
-      {viewId ? (
-        <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
-      ) : null}
-      {deleteId ? (
-        <Modal
-          footer={
-            <Space>
-              <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
-              <ActionButton
-                loading={remove.isPending}
-                tone="destructive"
-                onClick={async () => {
-                  await remove.mutateAsync(deleteId);
-                  selection.toggle(deleteId, false);
-                  setDeleteId("");
-                }}
-              >
-                确认删除
-              </ActionButton>
-            </Space>
-          }
-          onCancel={() => setDeleteId("")}
-          open
-          title="删除数量统计表"
-        >
-          <p>删除后，该统计表将退出结算合表范围。</p>
-        </Modal>
-      ) : null}
-    </section>
+        <Flex align="center" className="quantity-saved-pagination" justify="space-between" wrap>
+          <Typography.Text type="secondary">共 {total} 条</Typography.Text>
+          <div className="quantity-saved-pagination-scroll">
+            <Pagination
+              current={page}
+              onChange={(nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize);
+                  setPage(1);
+                  return;
+                }
+                setPage(nextPage);
+              }}
+              pageSize={pageSize}
+              pageSizeOptions={[5, 10, 20, 50, 100]}
+              showSizeChanger={{ "aria-label": "每页显示条数" }}
+              total={total}
+            />
+          </div>
+        </Flex>
+        {viewId ? (
+          <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
+        ) : null}
+        {deleteId ? (
+          <Modal
+            footer={
+              <Space>
+                <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
+                <ActionButton
+                  loading={remove.isPending}
+                  tone="destructive"
+                  onClick={async () => {
+                    await remove.mutateAsync(deleteId);
+                    selection.toggle(deleteId, false);
+                    setDeleteId("");
+                  }}
+                >
+                  确认删除
+                </ActionButton>
+              </Space>
+            }
+            onCancel={() => setDeleteId("")}
+            open
+            title="删除数量统计表"
+          >
+            <p>删除后，该统计表将退出结算合表范围。</p>
+          </Modal>
+        ) : null}
+      </section>
+    </>
   );
 }
 

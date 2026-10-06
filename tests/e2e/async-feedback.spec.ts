@@ -158,7 +158,10 @@ test("manual selection wins over a slow select-all response", async ({ page }) =
   await expect.poll(() => Boolean(pending)).toBe(true);
   await page.getByRole("checkbox", { name: "选择 甲 2026-08 结算项", exact: true }).check();
   await pending?.fulfill({ json: list });
-  await expect(page.getByLabel("结算批量操作", { exact: true })).toContainText("已选 1 项");
+  await expect(page.getByRole("checkbox", { name: "选择 甲 2026-08 结算项", exact: true })).toBeChecked();
+  await expect(
+    page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "导出 PDF", exact: true }),
+  ).toBeEnabled();
   await expect(all).not.toBeChecked();
   await expect(page.getByRole("checkbox", { name: "选择 乙 2026-08 结算项", exact: true })).not.toBeChecked();
 });

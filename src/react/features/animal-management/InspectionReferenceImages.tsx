@@ -72,13 +72,13 @@ export function InspectionReferenceImages({
             <Space.Compact>
               <Upload {...uploadProps((url) => updateRow(index, { url }))}>
                 <Tooltip title="替换图片">
-                  <Button icon={<SwapOutlined />} disabled={disabled || upload.isPending} />
+                  <Button icon={<SwapOutlined aria-hidden="true" />} disabled={disabled || upload.isPending} />
                 </Tooltip>
               </Upload>
               <Tooltip title="移除该参考图">
                 <Button
                   danger
-                  icon={<DeleteOutlined />}
+                  icon={<DeleteOutlined aria-hidden="true" />}
                   disabled={disabled}
                   onClick={() => onChange?.(value.filter((_, rowIndex) => rowIndex !== index))}
                 />
@@ -90,7 +90,7 @@ export function InspectionReferenceImages({
       <Upload {...uploadProps((url) => onChange?.([...value, { url, desc: "" }]))}>
         <Button
           className="inspection-reference-image-add"
-          icon={<PlusOutlined />}
+          icon={<PlusOutlined aria-hidden="true" />}
           disabled={disabled || upload.isPending}
         >
           添加参考图

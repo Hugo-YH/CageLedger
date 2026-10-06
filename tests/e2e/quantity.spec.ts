@@ -34,7 +34,9 @@ test("saved quantity filters remain clickable while the list refreshes", async (
 
   await page.getByRole("button", { name: "月份，点击切换排序" }).click();
   await requestStarted;
-  await expect(page.getByRole("region", { name: "已保存数量统计表" })).toHaveAttribute("aria-busy", "true");
+  await expect(
+    page.getByRole("region", { name: "已保存数量统计表", exact: true }).and(page.locator('[data-ui="data-table"]')),
+  ).toHaveAttribute("aria-busy", "true");
   await page.getByRole("button", { name: "筛选IACUC" }).click();
   await expect(page.getByPlaceholder("搜索当前列")).toBeVisible();
 
@@ -109,13 +111,16 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
     };
   });
   expect(Math.abs(actionsHeaderRight.headerRight - actionsHeaderRight.tableRight)).toBeLessThanOrEqual(1);
-  const scrollOwners = await page.getByRole("region", { name: "已保存数量统计表" }).evaluate((element) => {
-    const content = element.querySelector<HTMLElement>(".ant-table-content");
-    return {
-      contentCanScroll: Boolean(content && content.scrollWidth > content.clientWidth),
-      regionCanScroll: element.scrollWidth > element.clientWidth,
-    };
-  });
+  const scrollOwners = await page
+    .getByRole("region", { name: "已保存数量统计表", exact: true })
+    .and(page.locator('[data-ui="data-table"]'))
+    .evaluate((element) => {
+      const content = element.querySelector<HTMLElement>(".ant-table-content");
+      return {
+        contentCanScroll: Boolean(content && content.scrollWidth > content.clientWidth),
+        regionCanScroll: element.scrollWidth > element.clientWidth,
+      };
+    });
   expect(scrollOwners).toEqual({ contentCanScroll: true, regionCanScroll: false });
   await captureUiAudit(page, testInfo, "quantity-saved-list");
   const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
@@ -123,7 +128,10 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(savedRow).toContainText("系统管理员");
   await savedRow.getByRole("checkbox", { name: "选择 E2E-IACUC-001" }).check();
   const downloadPromise = page.waitForEvent("download");
-  await page.locator(".quantity-saved-panel").getByRole("button", { name: "导出 PDF", exact: true }).click();
+  await page
+    .getByRole("group", { name: "已保存统计表操作", exact: true })
+    .getByRole("button", { name: "导出 PDF", exact: true })
+    .click();
   const download = await downloadPromise;
   const now = new Date();
   const pdfMonth = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月`;
@@ -135,6 +143,7 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   await expect(rowActions.getByRole("button", { name: "编辑", exact: true })).toHaveClass(/ant-btn-primary/);
   await expect(rowActions.getByRole("button", { name: "删除", exact: true })).toHaveClass(/ant-btn-dangerous/);
   for (const button of await rowActions.getByRole("button").all()) {
+    await expect(button.locator(".ant-btn-icon")).toHaveCount(0);
     await expect(button).toHaveCSS("width", "64px");
     await expect(button).toHaveCSS("height", "32px");
   }

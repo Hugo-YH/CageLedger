@@ -1022,15 +1022,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 }
 
 /* Reimbursement ledger: separate receivables, claims and allocations into focused work areas. */
-.reimbursement-ledger-panel {
-  min-width: 0;
-}
-
-.reimbursement-ledger-context {
-  position: relative;
-  top: auto;
-}
-
 .ledger-tabs {
   display: flex;
   gap: 4px;
@@ -1240,8 +1231,10 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   min-width: 0;
 }
 
-[data-feature="billing"] .monthly-billing-summary-card {
-  max-width: 960px;
+[data-feature="billing"] .monthly-billing-summary-layout {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
 }
 
 [data-feature="billing"] .monthly-billing-summary-card .ant-card-body {
@@ -1257,29 +1250,13 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   margin-bottom: 0;
 }
 
-[data-feature="billing"] .monthly-billing-summary-action {
-  display: grid;
-  gap: 16px;
-  padding: 16px;
-  border-radius: 8px;
-  background: var(--surface-soft);
-}
-
 [data-feature="billing"] .monthly-summary-form .ant-form-item {
   min-width: 220px;
   margin-bottom: 0;
 }
 
-[data-feature="billing"] .settlement-source-card,
-[data-feature="billing"] .settlement-candidate-card,
-[data-feature="billing"] .reimbursement-ledger-panel {
+[data-feature="billing"] .settlement-source-card {
   min-width: 0;
-}
-
-[data-feature="billing"] .settlement-candidate-card .ant-card-body,
-[data-feature="billing"] .reimbursement-ledger-panel .ant-card-body {
-  display: grid;
-  gap: 16px;
 }
 
 [data-feature="billing"] .settlement-source-help,
@@ -1447,18 +1424,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   .quantity-billing-layout {
     grid-template-columns: 1fr;
   }
-}
-
-/* Ledger context and reconciliation picker (migrated from ux-foundation.css). */
-.reimbursement-ledger-panel .reimbursement-ledger-context {
-  position: relative;
-  min-height: 0;
-  padding: 4px 0 16px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
 }
 
 .reimbursement-ledger-context .panel-title-line {

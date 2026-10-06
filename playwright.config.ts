@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 const e2ePort = Number(process.env.CAGELEDGER_E2E_PORT || "5183");
 const e2eApiPort = Number(process.env.CAGELEDGER_E2E_API_PORT || "5184");
+const docsPort = Number(process.env.CAGELEDGER_DOCS_PORT || String(e2ePort + 2));
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 const evidence = process.env.CAGELEDGER_E2E_OUTPUT_DIR;
 
@@ -34,7 +35,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `CAGELEDGER_EPHEMERAL_DB=1 CAGELEDGER_DEV_PORT=${e2ePort} CAGELEDGER_DEV_API_PORT=${e2eApiPort} CAGELEDGER_API_ORIGIN=http://127.0.0.1:${e2eApiPort} npm run dev`,
+    command: `CAGELEDGER_EPHEMERAL_DB=1 CAGELEDGER_DEV_PORT=${e2ePort} CAGELEDGER_DEV_API_PORT=${e2eApiPort} CAGELEDGER_DOCS_PORT=${docsPort} npm run dev`,
     url: `${e2eBaseUrl}/api/health`,
     reuseExistingServer: process.env.CAGELEDGER_E2E_REUSE === "1",
     timeout: 120_000,

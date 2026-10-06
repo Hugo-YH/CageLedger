@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useMemo, useState } from "react";
 import type { Key } from "react";
 import { App, Button, Card, Form, Modal, Segmented, Select, Tag, Tree, Typography } from "antd";
@@ -207,9 +208,10 @@ export function InspectionCatalogEditor({
   }
 
   return (
-    <Card className="animal-ant-card inspection-editor-panel" title="编辑巡检标准目录">
+    <>
       <CommandBar
         ariaLabel="巡检目录编辑操作"
+        title="编辑巡检标准"
         sticky
         context={
           <Typography.Text type="secondary">
@@ -227,19 +229,25 @@ export function InspectionCatalogEditor({
         }
         actions={
           <>
-            <Button icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
+            <Button icon={<ActionIcon name="back" />} onClick={onExit}>
+              返回
+            </Button>
+            <Button icon={<PlusOutlined aria-hidden="true" />} onClick={() => setAddOpen(true)}>
               新增条目
             </Button>
-            <Button icon={<SaveOutlined />} disabled={!dirty || saveDraft.isPending} onClick={handleSaveClick}>
+            <Button
+              icon={<SaveOutlined aria-hidden="true" />}
+              disabled={!dirty || saveDraft.isPending}
+              onClick={handleSaveClick}
+            >
               保存草稿
             </Button>
           </>
         }
-        lowFrequencyActions={[{ key: "back", label: "返回", onClick: onExit }]}
         primaryAction={
           <Button
             type="primary"
-            icon={<SendOutlined />}
+            icon={<SendOutlined aria-hidden="true" />}
             disabled={diff.nodes.length === 0 || saveDraft.isPending || publishCatalog.isPending}
             onClick={handlePublishClick}
           >
@@ -247,72 +255,74 @@ export function InspectionCatalogEditor({
           </Button>
         }
       />
-      <div className="inspection-editor-body">
-        <Tree
-          className="inspection-editor-tree"
-          treeData={treeData}
-          defaultExpandAll
-          showLine
-          selectable
-          selectedKeys={selectedCode ? [selectedCode] : []}
-          titleRender={treeTitle}
-          onSelect={handleTreeSelect}
+      <Card className="animal-ant-card inspection-editor-panel">
+        <div className="inspection-editor-body">
+          <Tree
+            className="inspection-editor-tree"
+            treeData={treeData}
+            defaultExpandAll
+            showLine
+            selectable
+            selectedKeys={selectedCode ? [selectedCode] : []}
+            titleRender={treeTitle}
+            onSelect={handleTreeSelect}
+          />
+        </div>
+        {formState ? (
+          <InspectionNodeForm
+            key={formState.isNew ? "new" : formState.node.code}
+            node={formState.node}
+            isNew={formState.isNew}
+            onSave={handleNodeSave}
+            onClose={closeForm}
+            onDelete={formState.isNew ? undefined : handleNodeDelete}
+          />
+        ) : null}
+        <Modal
+          className="inspection-add-node-modal"
+          open={addOpen}
+          title="新增巡检条目"
+          okText="下一步"
+          cancelText="取消"
+          onOk={handleAddConfirm}
+          onCancel={() => setAddOpen(false)}
+          width={420}
+        >
+          <Form layout="vertical">
+            <Form.Item label="巡检模块" required>
+              <Select
+                value={addModule}
+                onChange={(value) => {
+                  setAddModule(value);
+                  setAddParentCode("");
+                }}
+                options={[
+                  { value: "basicAssessment", label: "基础评估" },
+                  { value: "advancedAssessment", label: "进阶评估" },
+                  { value: "abnormalAnimalAssessment", label: "异常动物（小鼠）评估" },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item label="所属分类 / 子分类" required>
+              <Select
+                value={addParentCode || undefined}
+                placeholder="选择条目归属的分类"
+                onChange={setAddParentCode}
+                options={parentOptions}
+                showSearch={{ optionFilterProp: "label" }}
+              />
+            </Form.Item>
+          </Form>
+          <Typography.Text type="secondary">新条目将在保存草稿后纳入目录，发布后进入巡检录入表单。</Typography.Text>
+        </Modal>
+        <InspectionPublishModal
+          open={publishOpen}
+          diff={publishDiff}
+          pending={publishCatalog.isPending}
+          onCancel={() => setPublishOpen(false)}
+          onConfirm={() => void handleConfirmPublish()}
         />
-      </div>
-      {formState ? (
-        <InspectionNodeForm
-          key={formState.isNew ? "new" : formState.node.code}
-          node={formState.node}
-          isNew={formState.isNew}
-          onSave={handleNodeSave}
-          onClose={closeForm}
-          onDelete={formState.isNew ? undefined : handleNodeDelete}
-        />
-      ) : null}
-      <Modal
-        className="inspection-add-node-modal"
-        open={addOpen}
-        title="新增巡检条目"
-        okText="下一步"
-        cancelText="取消"
-        onOk={handleAddConfirm}
-        onCancel={() => setAddOpen(false)}
-        width={420}
-      >
-        <Form layout="vertical">
-          <Form.Item label="巡检模块" required>
-            <Select
-              value={addModule}
-              onChange={(value) => {
-                setAddModule(value);
-                setAddParentCode("");
-              }}
-              options={[
-                { value: "basicAssessment", label: "基础评估" },
-                { value: "advancedAssessment", label: "进阶评估" },
-                { value: "abnormalAnimalAssessment", label: "异常动物（小鼠）评估" },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label="所属分类 / 子分类" required>
-            <Select
-              value={addParentCode || undefined}
-              placeholder="选择条目归属的分类"
-              onChange={setAddParentCode}
-              options={parentOptions}
-              showSearch={{ optionFilterProp: "label" }}
-            />
-          </Form.Item>
-        </Form>
-        <Typography.Text type="secondary">新条目将在保存草稿后纳入目录，发布后进入巡检录入表单。</Typography.Text>
-      </Modal>
-      <InspectionPublishModal
-        open={publishOpen}
-        diff={publishDiff}
-        pending={publishCatalog.isPending}
-        onCancel={() => setPublishOpen(false)}
-        onConfirm={() => void handleConfirmPublish()}
-      />
-    </Card>
+      </Card>
+    </>
   );
 }

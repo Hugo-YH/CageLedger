@@ -6,6 +6,7 @@ export function MobilePage({
   actions,
   onBack,
   titleAsHeading = true,
+  titleInToolbar = false,
   feature,
   desktop,
   children,
@@ -14,6 +15,8 @@ export function MobilePage({
   actions?: ReactNode;
   onBack?: () => void;
   titleAsHeading?: boolean;
+  /** The page's command bar owns its heading and return action. */
+  titleInToolbar?: boolean;
   feature?: string;
   /** Keep the body mounted when a responsive page switches to its desktop shell. */
   desktop?: { className: string; bodyClassName: string; feature?: string; toolbar?: ReactNode };
@@ -27,7 +30,7 @@ export function MobilePage({
     >
       {desktop ? (
         desktop.toolbar
-      ) : (
+      ) : titleInToolbar ? null : (
         <NavBar back={onBack ? undefined : null} onBack={onBack} right={actions}>
           {titleAsHeading ? (
             <h2 className="ant-mobile-page-title">{title}</h2>
@@ -37,7 +40,7 @@ export function MobilePage({
         </NavBar>
       )}
       {!desktop && <SafeArea position="top" />}
-      <div className={desktop?.bodyClassName || "ant-mobile-page-body"}>{children}</div>
+      <div className={desktop?.bodyClassName || "workspace-body ant-mobile-page-body"}>{children}</div>
       {!desktop && <SafeArea position="bottom" />}
     </section>
   );

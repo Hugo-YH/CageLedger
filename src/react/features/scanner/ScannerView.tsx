@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowLeftOutlined, CameraOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
 import {
@@ -64,114 +65,127 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
   }, []);
 
   const content = (
-    <Card
-      className="scanner-card"
-      extra={
-        <Button
-          ref={cameraButtonRef}
-          aria-label={cameraButtonLabel}
-          danger={cameraActive}
-          icon={cameraActive ? <StopOutlined aria-hidden /> : <CameraOutlined aria-hidden />}
-          type={cameraActive ? "default" : "primary"}
-          loading={cameraPending}
-          disabled={cameraPending}
-          onClick={() => void toggleCamera()}
-        >
-          {cameraButtonLabel}
-        </Button>
-      }
-      title={
-        <Typography.Title level={2} style={{ margin: 0 }}>
-          识别笼卡
-        </Typography.Title>
-      }
-    >
-      <div hidden={!cameraActive && !cameraPending && !cameraSnapshot && !cameraChoices}>
-        <Card className="scanner-camera-card" size="small" title="扫码取景框" type="inner">
-          <div className="scanner-camera" hidden={!cameraActive && !cameraPending}>
-            <video ref={videoRef} muted playsInline aria-label="笼卡扫码画面" />
-          </div>
-          {choosing && cameraChoices ? (
-            <ScannerCandidates
-              choices={cameraChoices}
-              onSelect={(index) => {
-                selectCandidate(index);
-                cameraButtonRef.current?.focus({ preventScroll: true });
-              }}
-            />
-          ) : null}
-          {cameraSnapshot ? <ScannerCapture key={selectionId} snapshot={cameraSnapshot} /> : null}
-          {cameraChoices && !choosing ? <Button onClick={reopenChoices}>重新选择二维码</Button> : null}
-          {cameraActive || cameraPending ? (
-            <div className="scanner-camera-status" role="status">
-              将笼卡二维码置于取景框内
+    <>
+      <WorkspaceToolbar
+        title="识别笼卡"
+        ariaLabel="笼卡识别操作"
+        actions={
+          <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={() => navigate("intake-entry")}>
+            返回笼卡管理
+          </Button>
+        }
+        primaryAction={
+          <Button
+            ref={cameraButtonRef}
+            aria-label={cameraButtonLabel}
+            danger={cameraActive}
+            icon={cameraActive ? <StopOutlined aria-hidden /> : <CameraOutlined aria-hidden />}
+            type={cameraActive ? "default" : "primary"}
+            loading={cameraPending}
+            disabled={cameraPending}
+            onClick={() => void toggleCamera()}
+          >
+            {cameraButtonLabel}
+          </Button>
+        }
+      />
+      <Card className="scanner-card">
+        <div hidden={!cameraActive && !cameraPending && !cameraSnapshot && !cameraChoices}>
+          <Card className="scanner-camera-card" size="small" title="扫码取景框" type="inner">
+            <div className="scanner-camera" hidden={!cameraActive && !cameraPending}>
+              <video ref={videoRef} muted playsInline aria-label="笼卡扫码画面" />
             </div>
-          ) : null}
-        </Card>
-      </div>
-      {cameraError ? (
-        <Alert role="alert" className="scanner-alert" title={`扫码失败：${cameraError}`} showIcon type="error" />
-      ) : null}
-      <div className="scanner-query-section" hidden={choosing}>
-        <form
-          className="scanner-query-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            lookup(input);
-          }}
-        >
-          <Form component={false} layout="vertical">
-            <Flex align="flex-end" gap={12} wrap>
-              <Form.Item className="scanner-code-field" label="笼卡识别码" htmlFor={inputId}>
-                <Input
-                  id={inputId}
-                  ref={inputRef}
-                  allowClear
-                  placeholder="输入 4 位识别码或粘贴笼卡链接"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                />
-              </Form.Item>
-              <Button
-                htmlType="submit"
-                icon={<SearchOutlined aria-hidden />}
-                type="primary"
-                loading={result.isFetching}
-              >
-                查询
+            {choosing && cameraChoices ? (
+              <ScannerCandidates
+                choices={cameraChoices}
+                onSelect={(index) => {
+                  selectCandidate(index);
+                  cameraButtonRef.current?.focus({ preventScroll: true });
+                }}
+              />
+            ) : null}
+            {cameraSnapshot ? <ScannerCapture key={selectionId} snapshot={cameraSnapshot} /> : null}
+            {cameraChoices && !choosing ? (
+              <Button icon={<ActionIcon name="select" />} onClick={reopenChoices}>
+                重新选择二维码
               </Button>
-            </Flex>
-            <Typography.Text type="secondary">支持新笼卡识别码和旧版笼卡链接。</Typography.Text>
-          </Form>
-        </form>
-        {result.isFetching ? (
-          <div aria-busy="true" aria-label="笼卡信息正在加载" className="scanner-loading" role="status">
-            <span className="app-visually-hidden">笼卡信息正在加载</span>
-            <Skeleton active paragraph={{ rows: 3 }} title={{ width: "36%" }} />
-          </div>
-        ) : result.error ? (
-          <Result
-            extra={<Button onClick={() => void result.refetch()}>重新查询</Button>}
-            status="error"
-            subTitle={result.error.message}
-            title="查询失败"
-          />
-        ) : result.data ? (
-          <CageCardResult item={result.data} />
-        ) : (
-          <Empty
-            className="scanner-empty"
-            description="输入识别码或启动摄像头开始查询"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
-        )}
-      </div>
-    </Card>
+            ) : null}
+            {cameraActive || cameraPending ? (
+              <div className="scanner-camera-status" role="status">
+                将笼卡二维码置于取景框内
+              </div>
+            ) : null}
+          </Card>
+        </div>
+        {cameraError ? (
+          <Alert role="alert" className="scanner-alert" title={`扫码失败：${cameraError}`} showIcon type="error" />
+        ) : null}
+        <div className="scanner-query-section" hidden={choosing}>
+          <form
+            className="scanner-query-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              lookup(input);
+            }}
+          >
+            <Form component={false} layout="vertical">
+              <Flex align="flex-end" gap={12} wrap>
+                <Form.Item className="scanner-code-field" label="笼卡识别码" htmlFor={inputId}>
+                  <Input
+                    id={inputId}
+                    ref={inputRef}
+                    allowClear
+                    placeholder="输入 4 位识别码或粘贴笼卡链接"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                  />
+                </Form.Item>
+                <Button
+                  htmlType="submit"
+                  icon={<SearchOutlined aria-hidden />}
+                  type="primary"
+                  loading={result.isFetching}
+                >
+                  查询
+                </Button>
+              </Flex>
+              <Typography.Text type="secondary">支持新笼卡识别码和旧版笼卡链接。</Typography.Text>
+            </Form>
+          </form>
+          {result.isFetching ? (
+            <div aria-busy="true" aria-label="笼卡信息正在加载" className="scanner-loading" role="status">
+              <span className="app-visually-hidden">笼卡信息正在加载</span>
+              <Skeleton active paragraph={{ rows: 3 }} title={{ width: "36%" }} />
+            </div>
+          ) : result.error ? (
+            <Result
+              extra={
+                <Button icon={<ActionIcon name="refresh" />} onClick={() => void result.refetch()}>
+                  重新查询
+                </Button>
+              }
+              status="error"
+              subTitle={result.error.message}
+              title="查询失败"
+            />
+          ) : result.data ? (
+            <CageCardResult item={result.data} />
+          ) : (
+            <Empty
+              className="scanner-empty"
+              description="输入识别码或启动摄像头开始查询"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          )}
+        </div>
+      </Card>
+    </>
   );
   return (
     <MobilePage
       onBack={() => navigate("intake-entry")}
       title="识别笼卡"
+      titleInToolbar
       feature="intake"
       desktop={
         isMobile
@@ -179,15 +193,6 @@ export function ScannerView({ navigate }: { navigate: (view: WorkspaceView) => v
           : {
               className: "workspace-view scanner-workspace",
               bodyClassName: "workspace-body",
-              toolbar: (
-                <WorkspaceToolbar
-                  actions={
-                    <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={() => navigate("intake-entry")}>
-                      返回笼卡管理
-                    </Button>
-                  }
-                />
-              ),
             }
       }
     >

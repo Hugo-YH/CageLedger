@@ -63,6 +63,10 @@ export default defineConfig({
   title: "CageLedger",
   description: "实验动物笼位管理与计费系统文档",
   base: "/docs/",
+  // Concurrent previews and isolated tests must not replace each other's optimized modules.
+  cacheDir: process.env.CAGELEDGER_DOCS_PORT
+    ? `.vitepress/cache/dev-${process.env.CAGELEDGER_DOCS_PORT}`
+    : ".vitepress/cache/standalone",
   cleanUrls: true,
   vite: {
     plugins: [serveLlmIndex()],
@@ -155,6 +159,7 @@ export default defineConfig({
             { text: "结算与报销", link: "/guide/settlement-and-reimbursement" },
             { text: "用户操作手册", link: "/guide/user-manual" },
             { text: "常见问题", link: "/guide/faq" },
+            { text: "帮助与反馈", link: "/guide/feedback" },
           ],
         },
       ],

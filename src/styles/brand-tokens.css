@@ -10,7 +10,9 @@
   --cl-font-size-page: 24px;
   --cl-line-height-body: 1.5714;
   --cl-line-height-small: 1.6667;
+  --cl-line-height-section: 1.5;
   --cl-line-height-page: 1.3333;
+  --cl-font-weight-strong: 600;
   --cl-control-height: 32px;
   --cl-control-height-small: 24px;
   --cl-control-height-mobile: 40px;
@@ -91,7 +93,9 @@
   --cl-font-size-page: 24px;
   --cl-line-height-body: 1.5714;
   --cl-line-height-small: 1.6667;
+  --cl-line-height-section: 1.5;
   --cl-line-height-page: 1.3333;
+  --cl-font-weight-strong: 600;
   --cl-control-height: 32px;
   --cl-control-height-small: 24px;
   --cl-control-height-mobile: 40px;

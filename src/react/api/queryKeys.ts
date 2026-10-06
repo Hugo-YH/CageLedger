@@ -1,4 +1,11 @@
 export const queryKeys = {
+  feedbackRoot: ["feedback"] as const,
+  feedback: (filters: Record<string, unknown>) => ["feedback", "list", filters] as const,
+  feedbackFilterOptions: (column: string, filters: Record<string, unknown>) =>
+    ["feedback", "filter-options", column, filters] as const,
+  feedbackDetail: (id: string) => ["feedback", "detail", id] as const,
+  feedbackIntegration: ["feedback", "integration"] as const,
+  feedbackImport: (state: string, page: number) => ["feedback", "import", state, page] as const,
   quarantine: ["quarantine"] as const,
   session: ["session"] as const,
   publicCageCard: (qrId: string) => ["public-cage-card", qrId] as const,

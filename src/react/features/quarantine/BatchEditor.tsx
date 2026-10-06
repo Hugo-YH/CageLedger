@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { ListRefreshStatus } from "../../components/ui";
 import { useEffect, useRef, useState } from "react";
@@ -179,7 +180,11 @@ export function BatchEditor({
               <Alert
                 type="error"
                 title={sources.error.message}
-                action={<Button onClick={() => void sources.refetch()}>重试</Button>}
+                action={
+                  <Button icon={<ActionIcon name="refresh" />} onClick={() => void sources.refetch()}>
+                    重试
+                  </Button>
+                }
               />
             )}
             <ListRefreshStatus active={sources.isFetching && !sources.isPending} />
@@ -284,7 +289,9 @@ export function BatchEditor({
                           />
                         </Form.Item>
                       </div>
-                      <Button onClick={addManual}>添加手工来源</Button>
+                      <Button icon={<ActionIcon name="create" />} onClick={addManual}>
+                        添加手工来源
+                      </Button>
                       {draft.sources.some((source) => source.manual) && (
                         <>
                           <Typography.Title level={5}>已添加手工来源</Typography.Title>

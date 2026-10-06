@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Component, type ReactNode } from "react";
 import { Button } from "antd";
 
@@ -41,8 +42,11 @@ export class WorkspaceErrorBoundary extends Component<
           <strong>当前工作区未能加载</strong>
           <span>页面资源可能刚完成更新，请重新加载后继续操作。</span>
           <div className="action-row">
-            <Button onClick={() => window.location.reload()}>重新加载</Button>
+            <Button icon={<ActionIcon name="refresh" />} onClick={() => window.location.reload()}>
+              重新加载
+            </Button>
             <Button
+              icon={<ActionIcon name="back" />}
               type="primary"
               onClick={() => {
                 clearUiStorage();

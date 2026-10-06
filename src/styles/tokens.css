@@ -11,8 +11,10 @@
   --text-xl: 20px;
   --text-2xl: var(--cl-font-size-page);
   --leading-tight: var(--cl-line-height-page);
+  --leading-section: var(--cl-line-height-section);
   --leading-normal: var(--cl-line-height-body);
   --leading-relaxed: var(--cl-line-height-small);
+  --weight-strong: var(--cl-font-weight-strong);
   --radius-xs: 4px;
   --radius-sm: var(--cl-radius-card);
   --radius-control: var(--cl-radius-control);

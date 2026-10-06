@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
 
@@ -42,22 +43,23 @@ export function IntakeEntryPanel({
 }) {
   return (
     <form id="intake-entry-panel" className="intake-entry-form" onSubmit={onSubmit}>
-      {headActions ? <CommandBar ariaLabel="编辑笼卡操作" sticky primaryAction={headActions} /> : null}
-      <Card
-        className="intake-entry-card"
-        title={
-          <Typography.Title level={2} style={{ margin: 0 }}>
-            {editing ? "编辑接收笼卡" : "接收笼卡"}
-          </Typography.Title>
-        }
-      >
+      {headActions ? (
+        <CommandBar
+          title={editing ? "编辑接收笼卡" : "接收笼卡"}
+          titleSize="section"
+          ariaLabel="编辑笼卡操作"
+          sticky
+          primaryAction={headActions}
+        />
+      ) : null}
+      <Card className="intake-entry-card">
         <Row className="intake-recognition-row" gutter={[16, 16]}>
           <Col lg={18} md={16} xs={24}>
             <Card
               className="intake-recognition-card"
               extra={
                 <Space wrap>
-                  <Button htmlType="button" onClick={onParse} size="small">
+                  <Button icon={<ActionIcon name="scan" />} htmlType="button" onClick={onParse} size="small">
                     本地识别
                   </Button>
                   <Button
@@ -91,7 +93,13 @@ export function IntakeEntryPanel({
               <Typography.Text ellipsis type="secondary">
                 {draft.batchNo || "尚未识别批次"}
               </Typography.Text>
-              <Button block disabled={!draft.finalCardCount || saving} htmlType="button" onClick={onPrint}>
+              <Button
+                icon={<ActionIcon name="print" />}
+                block
+                disabled={!draft.finalCardCount || saving}
+                htmlType="button"
+                onClick={onPrint}
+              >
                 打印当前笼卡
               </Button>
             </Card>

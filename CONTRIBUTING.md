@@ -18,6 +18,8 @@ npm run dev
 
 开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。
 
+项目文档和更新记录分别位于 `/docs/`、`/docs/releases/`，开发服务同时启动 VitePress 并代理其页面和热更新连接。使用 `CAGELEDGER_DEV_PORT`、`CAGELEDGER_DEV_API_PORT`、`CAGELEDGER_DOCS_PORT` 启动不同端口的实例时，代理默认跟随实际 API／文档端口；文档预构建缓存按端口隔离，避免测试或另一实例导致文档空白。`CAGELEDGER_API_ORIGIN`、`CAGELEDGER_DOCS_ORIGIN` 可显式覆盖代理目标。
+
 通过 Codex 或 SSH 转发开发端口时，浏览器地址中的端口可能不同于 5173。若写入提示“请求来源不受信任”，
 在本地 `.env` 的 `CAGELEDGER_CORS_ALLOWED_ORIGINS` 中添加浏览器实际显示的 origin（例如
 `http://localhost:56519`，不含 `/app`），多个地址用逗号分隔，然后重启 `npm run dev`。

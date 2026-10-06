@@ -5,7 +5,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useAuditEvents } from "../../api/administration";
 import type { AuditEvent } from "../../api/contracts";
 import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
-import { DataTable } from "../../components/ui";
+import { CommandBar, DataTable } from "../../components/ui";
 
 export function LogsView() {
   const [page, setPage] = useState(1);
@@ -39,14 +39,8 @@ export function LogsView() {
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
       <div className="workspace-body settings-workspace-body">
-        <Card
-          className="settings-log-card"
-          title={
-            <Typography.Title level={2} style={{ margin: 0 }}>
-              操作记录
-            </Typography.Title>
-          }
-        >
+        <CommandBar title="操作记录" ariaLabel="操作记录" />
+        <Card className="settings-log-card">
           {query.isPending ? (
             <PageSkeleton label="操作日志" variant="table" />
           ) : query.isError ? (

@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 
 const root = process.cwd();
 const required = [
   "src/react/components/ui/AntdProvider.tsx",
   "src/react/components/ui/ActionButton.tsx",
+  "src/react/components/ui/ActionIcon.tsx",
   "src/react/components/ui/CommandBar.tsx",
   "src/react/components/ui/DataTable.tsx",
   "src/react/components/ui/Dialog.tsx",
@@ -30,6 +32,44 @@ for (const path of source) {
   }
   if (/transition:\s*all\b/.test(text)) failures.push(`${relative(path)} 使用 transition: all`);
   if (/z-index:\s*(?:[1-9]\d{3,}|\d{5,})/.test(text)) failures.push(`${relative(path)} 使用未登记的高层级 z-index`);
+  if (path.endsWith(".tsx") && !path.endsWith(".test.tsx")) checkToolbarIcons(path, text);
+}
+
+// Check explicit toolbar JSX only: dense row actions and confirmation footers stay text-only.
+function checkToolbarIcons(path, text) {
+  const ast = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  function checkButtons(node) {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (["Button", "ActionButton", "AsyncActionButton"].includes(node.tagName.getText(ast))) {
+        if (
+          !node.attributes.properties.some(
+            (attribute) => ts.isJsxAttribute(attribute) && attribute.name.text === "icon",
+          )
+        ) {
+          const { line } = ast.getLineAndCharacterOfPosition(node.getStart(ast));
+          failures.push(`${relative(path)}:${line + 1} 工具栏按钮缺少显式 icon`);
+        }
+      }
+    }
+    ts.forEachChild(node, checkButtons);
+  }
+  function visit(node) {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (["CommandBar", "WorkspaceToolbar"].includes(node.tagName.getText(ast))) {
+        for (const attribute of node.attributes.properties) {
+          if (
+            ts.isJsxAttribute(attribute) &&
+            ["actions", "primaryAction"].includes(attribute.name.text) &&
+            attribute.initializer
+          ) {
+            checkButtons(attribute.initializer);
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
 }
 
 // Validate actual shared-theme output rather than frozen copies of durations or prose.
@@ -56,7 +96,7 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("UI 契约检查通过：Ant 适配层、文档和动画基础规则已就绪。");
+console.log("UI 契约检查通过：Ant 适配层、工具栏图标、文档和动画基础规则已就绪。");
 
 function walk(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

@@ -1,16 +1,22 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Card, DatePicker, Empty, Input, Select, Space, Table, Tag, Typography } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 import type { QuarantineRecordRow, QuarantineWorklist } from "../../../contracts/quarantine";
 import { useQuarantineQuery } from "../../api/quarantine";
-import { CommandBar, ListRefreshStatus } from "../../components/ui";
+import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
 import { methodLabels } from "./shared";
 
 export function RecordWorklist({
+  title = "检测记录",
+  description,
   method,
   reports = false,
   onOpen,
   onNew,
 }: {
+  title?: string;
+  description?: string;
   method?: string;
   reports?: boolean;
   onOpen: (batchId: string, testId: string) => void;
@@ -27,15 +33,22 @@ export function RecordWorklist({
   return (
     <>
       <CommandBar
+        title={title}
         ariaLabel={reports ? "报告台账操作" : "检测记录列表操作"}
         context={
-          <Space wrap>
-            <Typography.Text strong>
-              {reports ? "报告台账" : "检测记录"}
-              <Typography.Text type="secondary"> · {query.data?.page.total ?? 0} 条</Typography.Text>
-            </Typography.Text>
-            <ListRefreshStatus active={query.isFetching && !query.isPending} />
-          </Space>
+          <>
+            {description ? (
+              <HelpPopover label={`${title}说明`} icon={<ExclamationCircleOutlined aria-hidden="true" />}>
+                {description}
+              </HelpPopover>
+            ) : null}
+            <Space wrap>
+              <Typography.Text strong>
+                <Typography.Text type="secondary">{query.data?.page.total ?? 0} 条</Typography.Text>
+              </Typography.Text>
+              <ListRefreshStatus active={query.isFetching && !query.isPending} />
+            </Space>
+          </>
         }
         filters={
           <>
@@ -85,13 +98,14 @@ export function RecordWorklist({
         }
         primaryAction={
           !reports && (
-            <Button type="primary" onClick={onNew}>
+            <Button icon={<ActionIcon name="create" />} type="primary" onClick={onNew}>
               新建检测记录
             </Button>
           )
         }
         lowFrequencyActions={[
           {
+            icon: <ActionIcon name="refresh" />,
             key: "refresh",
             label: "刷新",
             loading: query.isFetching,
@@ -110,7 +124,11 @@ export function RecordWorklist({
         <Alert
           type="error"
           title={query.error.message}
-          action={<Button onClick={() => void query.refetch()}>重试</Button>}
+          action={
+            <Button icon={<ActionIcon name="refresh" />} onClick={() => void query.refetch()}>
+              重试
+            </Button>
+          }
         />
       )}
       <Card size="small">

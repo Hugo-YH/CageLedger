@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Anchor, Button, Card, Descriptions, Form, Modal, Typography } from "antd";
 import type { QuarantineBatch, QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
@@ -192,23 +193,24 @@ export function TestEditor({
   return (
     <div className="quarantine-record-editor" ref={editorRef}>
       <CommandBar
+        title="填写检测记录"
         sticky
         ariaLabel="检测记录编辑操作"
         context={
           <>
-            <Typography.Text strong>填写检测记录</Typography.Text>
             <Typography.Text type="secondary" aria-live="polite">
               {saved && !dirty && !attachmentDirty ? "当前内容已保存" : "内容尚未保存"}
             </Typography.Text>
           </>
         }
         actions={
-          <Button disabled={save.isPending || fileBusy} onClick={() => void leave()}>
+          <Button icon={<ActionIcon name="back" />} disabled={save.isPending || fileBusy} onClick={() => void leave()}>
             返回批次
           </Button>
         }
         primaryAction={
           <Button
+            icon={<ActionIcon name="save" />}
             aria-label="保存检测草稿"
             type="primary"
             disabled={fileBusy}
@@ -254,7 +256,7 @@ export function TestEditor({
                 title="项目与试剂"
                 size="small"
                 extra={
-                  <Button size="small" onClick={addProject}>
+                  <Button icon={<ActionIcon name="create" />} size="small" onClick={addProject}>
                     添加检测项目
                   </Button>
                 }
@@ -275,7 +277,7 @@ export function TestEditor({
                 title="样本"
                 size="small"
                 extra={
-                  <Button size="small" onClick={addSample}>
+                  <Button icon={<ActionIcon name="create" />} size="small" onClick={addSample}>
                     添加样本
                   </Button>
                 }

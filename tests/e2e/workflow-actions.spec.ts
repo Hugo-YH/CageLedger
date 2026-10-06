@@ -68,6 +68,7 @@ for (const status of ["statement_sent", "statement_archived", "statement_locked"
       status === "statement_locked" ? "" : "撤回",
       action,
     ]);
+    await expect(slots.locator(".ant-btn-icon")).toHaveCount(0);
     const trigger = slots.nth(2).getByRole("button", { name: action, exact: true });
     for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });

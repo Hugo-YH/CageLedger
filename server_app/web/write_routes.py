@@ -34,6 +34,7 @@ from server_app.shared import clean_text, now_iso
 from server_app.shared.concurrency import StaleWriteError
 from server_app.web import download_settlement_xlsx
 from server_app.web.entity_contracts import WRITABLE_ENTITY_ENDPOINTS
+from server_app.web.feedback import handle as handle_feedback
 from server_app.web.monthly_summary import export_monthly_billing_summary
 from server_app.web.pdf_exports import (
     export_billing_statement_pdfs,
@@ -50,7 +51,7 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
-        if handle_quarantine(self, "POST", path):
+        if handle_feedback(self, "POST", path) or handle_quarantine(self, "POST", path):
             return
         if routed := API_ROUTER.dispatch("POST", path, self):
             self.send_json(routed.payload, routed.status)
@@ -260,7 +261,7 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
-        if handle_quarantine(self, "PUT", path):
+        if handle_feedback(self, "PUT", path) or handle_quarantine(self, "PUT", path):
             return
         if path == "/api/animal-inspection-catalog/draft":
             self.handle_animal_inspection_catalog_draft_save()
@@ -338,7 +339,7 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
-        if handle_quarantine(self, "DELETE", path):
+        if handle_feedback(self, "DELETE", path) or handle_quarantine(self, "DELETE", path):
             return
         user_id = self.user_route(path)
         if user_id:

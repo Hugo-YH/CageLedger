@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { useState } from "react";
 import { Alert, Button, Form, Input, Modal, Space } from "antd";
@@ -59,6 +60,7 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
     <Space orientation="vertical">
       <Alert type="info" title={reasons.length ? reasons.join("；") : "三类检测已完成，可以确认整批检疫完成"} />
       <Button
+        icon={<ActionIcon name="edit" />}
         onClick={() => {
           setConclusion(detail.item.conclusion);
           setHandling(detail.item.handling);
@@ -67,7 +69,12 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
       >
         {detail.item.conclusion ? "修改检疫结论" : "填写检疫结论"}
       </Button>
-      <Button type="primary" disabled={Boolean(reasons.length)} onClick={() => setOpen(true)}>
+      <Button
+        icon={<ActionIcon name="reserve" />}
+        type="primary"
+        disabled={Boolean(reasons.length)}
+        onClick={() => setOpen(true)}
+      >
         确认检疫完成
       </Button>
       <Modal

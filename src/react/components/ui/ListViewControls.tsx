@@ -1,3 +1,4 @@
+import { ActionIcon } from "./ActionIcon";
 import { Button, Flex, Segmented, Tag, Typography } from "antd";
 
 export type ListDensity = "middle" | "small";
@@ -49,7 +50,13 @@ export function ListViewControls({
           </Tag>
         ))}
         {applied.length ? (
-          <Button type="link" size="small" disabled={disabled} onClick={() => onFiltersChange({})}>
+          <Button
+            icon={<ActionIcon name="clear" />}
+            type="link"
+            size="small"
+            disabled={disabled}
+            onClick={() => onFiltersChange({})}
+          >
             清除全部筛选
           </Button>
         ) : null}

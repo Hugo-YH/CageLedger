@@ -103,6 +103,7 @@ from server_app.shared import clean_text, now_iso
 from server_app.static import send_documentation_asset, send_frontend_asset
 from server_app.web import animal_inspection as animal_inspection_web
 from server_app.web.entity_contracts import ENTITY_ENDPOINTS, WRITABLE_ENTITY_ENDPOINTS
+from server_app.web.feedback import handle as handle_feedback
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
     download_pdf_export_job,
@@ -119,7 +120,7 @@ from server_app.web.router_registry import API_ROUTER
 class ReadRoutesMixin:
     def do_GET(self):
         path = urlparse(self.path).path
-        if handle_quarantine(self, "GET", path):
+        if handle_feedback(self, "GET", path) or handle_quarantine(self, "GET", path):
             return
         pdf_job_id, pdf_job_download = pdf_export_job_route(path)
         if pdf_job_id:

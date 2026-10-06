@@ -2,7 +2,7 @@ import { Button, Popover } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { useState, type ReactNode } from "react";
 
-export function HelpPopover({ label, children }: { label: string; children: ReactNode }) {
+export function HelpPopover({ label, children, icon }: { label: string; children: ReactNode; icon?: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <Popover
@@ -18,7 +18,7 @@ export function HelpPopover({ label, children }: { label: string; children: Reac
         aria-label={label}
         aria-expanded={open}
         className="app-help-button"
-        icon={<QuestionCircleOutlined aria-hidden="true" />}
+        icon={icon ?? <QuestionCircleOutlined aria-hidden="true" />}
         onBlur={() => setOpen(false)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {

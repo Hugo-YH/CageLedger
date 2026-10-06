@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Empty, Tag } from "antd";
 import type { TableProps } from "antd";
@@ -69,7 +70,12 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
       width: 96,
       render: (_, item) =>
         user.role === "admin" && item.migrationEligible ? (
-          <Button type="primary" loading={migrate.isPending} onClick={() => void migrate.mutateAsync(String(item.id))}>
+          <Button
+            icon={<ActionIcon name="import" />}
+            type="primary"
+            loading={migrate.isPending}
+            onClick={() => void migrate.mutateAsync(String(item.id))}
+          >
             迁入
           </Button>
         ) : (

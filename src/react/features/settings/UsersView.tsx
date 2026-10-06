@@ -1,11 +1,12 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useId, useState } from "react";
 import { Alert, Button, Card, Checkbox, Collapse, Form, Input, Select, Space, Tag, Typography } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
 import { useDeleteUser, useSaveUser, useUsers } from "../../api/administration";
-import { ConfirmDialog, PageSkeleton, PageState } from "../../components/WorkspaceUi";
-import { ListRefreshStatus } from "../../components/ui";
+import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { CommandBar, ListRefreshStatus } from "../../components/ui";
 import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 
 const emptyDraft = {
@@ -65,6 +66,7 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
   }
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
+      <WorkspaceToolbar ariaLabel="账号管理" title="账号管理" />
       <div className="workspace-body settings-workspace-body">
         <ListRefreshStatus active={users.isFetching || bootstrap.isFetching} />
         {users.isError || bootstrap.isError ? (
@@ -75,6 +77,7 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
             title="账号与房间信息更新失败，当前输入已保留"
             action={
               <Button
+                icon={<ActionIcon name="refresh" />}
                 loading={users.isFetching || bootstrap.isFetching}
                 onClick={() => {
                   void users.refetch();
@@ -87,20 +90,18 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
           />
         ) : null}
         <section className="settings-split-layout">
-          <Card
-            className="settings-user-list-card"
-            title={
-              <Typography.Title level={2} className="ant-card-section-title">
-                账号列表
-              </Typography.Title>
-            }
-            extra={
-              <Tag>
-                管理员 {items.filter((item) => item.role === "admin").length} · 房间管理员{" "}
-                {items.filter((item) => item.role === "room_admin").length}
-              </Tag>
-            }
-          >
+          <Card className="settings-user-list-card">
+            <CommandBar
+              ariaLabel="账号列表"
+              title="账号列表"
+              titleSize="section"
+              context={
+                <Tag>
+                  管理员 {items.filter((item) => item.role === "admin").length} · 房间管理员{" "}
+                  {items.filter((item) => item.role === "room_admin").length}
+                </Tag>
+              }
+            />
             <Collapse
               className="settings-user-collapse"
               items={items.map((item) => ({
@@ -138,6 +139,7 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
               onChange={setCreateDraft}
             />
             <Button
+              icon={<ActionIcon name="create" />}
               block
               type="primary"
               loading={create.pending}

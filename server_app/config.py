@@ -33,6 +33,7 @@ DATA_ROOT = Path(
 )
 DB_PATH = Path(_configured_db_path or DATA_ROOT / "database" / "cageledger.sqlite")
 QUARANTINE_FILES_PATH = DATA_ROOT / "files" / "quarantine"
+FEEDBACK_FILES_PATH = DATA_ROOT / "files" / "feedback"
 PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DATA_ROOT / "cache" / "pdf"))
 PDF_CACHE_MAX_BYTES = _env_int("CAGELEDGER_PDF_CACHE_MAX_BYTES", 512 * 1024 * 1024, 1024 * 1024, 10 * 1024**3)
 PDF_CACHE_TTL_SECONDS = _env_int("CAGELEDGER_PDF_CACHE_TTL_SECONDS", 30 * 24 * 60 * 60, 60, 365 * 24 * 60 * 60)

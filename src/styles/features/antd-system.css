@@ -49,14 +49,6 @@
   color: var(--app-text-secondary) !important;
 }
 
-.ant-workspace .workspace-title-line .ant-typography {
-  margin: 0;
-  color: var(--app-text);
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 32px;
-}
-
 .ant-workspace .workspace-summary {
   margin: 4px 0 0;
   font-size: 14px;
@@ -428,10 +420,6 @@
   padding-inline: 8px;
   border-radius: 8px;
   line-height: 22px;
-}
-
-.dashboard-skeleton-hero .ant-skeleton {
-  margin-top: 8px;
 }
 
 .dashboard-skeleton-task {
@@ -1122,10 +1110,6 @@
 
   .ant-workspace .workspace-head {
     padding-bottom: 12px;
-  }
-
-  .ant-workspace .workspace-title-line .ant-typography {
-    font-size: 24px;
   }
 
   .ant-workspace .pager {

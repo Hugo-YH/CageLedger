@@ -23,6 +23,7 @@ const WORKSPACE_VIEWS = new Set<WorkspaceView>([
   "billing-settlement",
   "billing-monthly-summary",
   "workflow-center",
+  "feedback",
   "rooms",
   "data",
   "system",

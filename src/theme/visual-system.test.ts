@@ -31,6 +31,20 @@ function contrast(foreground: string, background: string) {
 }
 
 describe.each(["light", "dark"] as const)("%s visual system", (mode) => {
+  it("keeps body, supporting text and section headings at the shared reading scales", () => {
+    const token = resolveTheme(mode);
+    for (const [size, leading, expectedSize, expectedHeight] of [
+      [token.fontSize, token.lineHeight, 14, 22],
+      [token.fontSizeSM, token.lineHeightSM, 12, 20],
+      [token.fontSizeLG, token.lineHeightLG, 16, 24],
+      [token.fontSizeHeading2, token.lineHeightHeading2, 24, 32],
+      [token.fontSizeHeading4, token.lineHeightHeading4, 16, 24],
+    ]) {
+      expect(size).toBe(expectedSize);
+      expect(Number(size) * Number(leading)).toBeCloseTo(Number(expectedHeight));
+    }
+  });
+
   it("keeps normal text and primary controls readable in every interaction state", () => {
     const token = resolveTheme(mode);
     const button = createTheme(mode).components!.Button!;

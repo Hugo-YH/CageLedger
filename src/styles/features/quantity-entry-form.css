@@ -22,7 +22,8 @@
 
 .react-quantity-layout .field-cluster-head > span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
 }
 
 .react-quantity-layout .quantity-field-group {

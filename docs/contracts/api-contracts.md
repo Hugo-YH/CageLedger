@@ -1,5 +1,35 @@
 # CageLedger API 契约
 
+## 帮助与反馈
+
+`/api/feedback` 全部要求登录。所有登录角色可分页查看、创建反馈、追加补充、上传本人原始反馈或本人补充的截图、设置本人遇到状态。`integration`、`retry` 和历史导入仅管理员可用。原始反馈及补充没有修改或删除接口，修正追加说明；`version` 是只读版本，追加写入通过事务和唯一请求标识并发保护，不覆盖原文。
+
+| 方法       | 路径                                                         | 返回                                         |
+| ---------- | ------------------------------------------------------------ | -------------------------------------------- |
+| GET / POST | `/api/feedback`                                              | 分页 `{items,total,limit,offset}` / `{item}` |
+| GET        | `/api/feedback/filter-options?column=...`                    | `{items:[{value,label,count}]}`              |
+| GET        | `/api/feedback/{id}`                                         | `{item,attachments,comments}`                |
+| POST       | `/api/feedback/{id}/comments`                                | `{item}`                                     |
+| POST       | `/api/feedback/{id}/attachments?requestId=...&commentId=...` | multipart `file`，`{item}`                   |
+| GET        | `/api/feedback/attachments/{id}`                             | 鉴权截图下载                                 |
+| PUT        | `/api/feedback/{id}/encounter`                               | `{encountered:boolean}` → `{item}`           |
+| POST       | `/api/feedback/{id}/sync`                                    | 缓存过期后排队检查，`{queued}`               |
+| GET / POST | `/api/feedback/integration` / `/api/feedback/{id}/retry`     | 管理员集成状态 / `{queued}`                  |
+
+历史工单导入：`GET /api/feedback/import/preview?state=all&page=1` 返回 `{repository,items,page,hasMore}`，每页 20 条，可选 `all/open/closed`。`POST /api/feedback/import` 接受 `{requestId,repository,numbers}`，每次 1 至 10 个唯一正整数编号，返回 `{items:[{number,outcome,feedbackId?,message}]}`；结果为 `imported/skipped/failed`。仓库必须与当前预览一致；请求 ID 绑定操作人和导入范围，重放同请求复用逐项结果，失败项通过新请求重试。并发导入按仓库身份和工单编号核对，逻辑删除的关联不重新导入。PR、内部正文和带系统建单标识的工单跳过。
+
+导入仅远端读取，网络调用不占用写事务；每个工单独立落库及审计，部分失败不丢失成功记录，也不创建新工单。`source=gitea` 和 `importMetadata` 区分原提出人、远端登记账号及导入操作人；原正文、原创建时间保留快照，进展和公开评论沿用现有同步。原工单截图关联到无评论的远端附件，鉴权下载时重新验证工单及附件权限、内部标记和实际图片内容。
+
+列表筛选 `keyword,kind,module,status,mine=1,limit,offset`，每页最多 100。创建和补充必须提供稳定 `requestId`，相同用户和标识重复返回同一记录，不同内容拒绝；附件同样以请求标识去重。遇到状态幂等，追加内容不覆盖其他人的记录。截图校验实际像素内容，只接受单帧 PNG/JPEG/WebP，每张 10MiB、每条原始提交或补充最多五张。
+
+列表支持 `columnFilters` JSON 对象、`sortKey`、`sortDir=asc|desc` 及原有分页。列白名单为 `number`、`title`、`kind`、`module`、`status`、`author`、`syncStatus`、`encounterCount`、`createdAt`；列内多选、列间 AND，提出人值为用户 ID。候选项接口遵循同一筛选条件，但忽略自身列的选择，不受分页限制；值、显示名、计数由服务端汇总，删除记录不可见。筛选值仅作 SQL 绑定参数，排序和列名按白名单校验。旧 `keyword`、`kind`、`module`、`status`、`mine` 参数继续兼容。
+
+确认远端工单已删除后，在事务中标记逻辑删除、隐藏全部补充和附件、结束同步任务并记录 `feedback.deleted` 审计。所有列表及总数排除删除记录；详情、附件下载、新增／重放补充和附件、遇到状态、同步及管理员重试返回 `404`，原创建请求重放也返回 `404`，不恢复内容或重建工单。数据库保留原记录和请求去重标记，已有 `deleted` 记录同样从公开接口移除。`deleted`／`removed` 类型保留兼容旧缓存，前端收到旧缓存或详情 `404` 时隐藏旧内容、刷新列表及统计；普通网络故障保留重试。仓库或工单列表不可访问不会推断删除。
+
+共享仓库身份随原始反馈保存；后台持久任务串行同步，不在数据库写事务内访问网络。Gitea 状态、负责人、里程碑单向投影到系统，系统提交与补充同步到工单，不提供本地状态编辑。仅关联工单入库，内部评论及其附件在所有用户响应中隐藏。正文和公开回复保留原始文本，前端通过白名单 React 节点渲染 Markdown；原始 HTML 仅作为文字显示，不加载正文外部图片，仅允许无凭据的 HTTP、HTTPS 和邮件链接。截图仍经附件区的服务端校验与鉴权下载，禁止任意外部附件地址及重定向。
+
+`feedback`、`feedback_comments`、`feedback_encounters`、`feedback_attachments`、`feedback_tasks`、`feedback_import_requests` 与 `files/feedback/` 一同备份恢复。共享 Token 仅来自进程配置，不进入这些表或日志。测试模式必须隔离运行时根目录，清除真实 Token，仅通过显式 `CAGELEDGER_E2E_GITEA_TOKEN`、`CAGELEDGER_E2E_REPOSITORY_URL` 连接模拟 Gitea。
+
 本契约描述 React 前端与 Python 服务之间的稳定边界。后端入口位于 `server.py` 和 `server_app/web/`，前端类型位于 `src/contracts/`，请求 hooks 位于 `src/react/api/`。
 
 ## 通用约定

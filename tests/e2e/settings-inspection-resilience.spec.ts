@@ -27,12 +27,13 @@ test("inspection list refresh feedback stays in the toolbar without a blank grid
       const toolbarElement =
         workspace?.querySelector<HTMLElement>("[data-ui='workspace-toolbar']") ||
         workspace?.querySelector<HTMLElement>(".app-command-bar-filters");
-      const refresh = toolbarElement?.querySelector<HTMLElement>("[data-ui='list-refresh']");
-      const toolbarRect = toolbarElement?.getBoundingClientRect();
+      const filters = workspace?.querySelector<HTMLElement>(".app-command-bar-filters");
+      const refresh = workspace?.querySelector<HTMLElement>("[data-ui='list-refresh']");
+      const toolbarRect = (filters || toolbarElement)?.getBoundingClientRect();
       const panelRect = element.getBoundingClientRect();
       return {
         gap: panelRect.top - (toolbarRect?.bottom || 0),
-        refreshInToolbar: Boolean(refresh && toolbarElement?.contains(refresh)),
+        refreshInToolbar: Boolean(refresh && (toolbarElement?.contains(refresh) || filters?.contains(refresh))),
         pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       };
     });

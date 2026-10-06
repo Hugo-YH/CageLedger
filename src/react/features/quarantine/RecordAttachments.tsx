@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Card, Image, Input, InputNumber, Modal, Select, Space, Typography, Upload } from "antd";
 import type { QuarantineAttachment, QuarantineTest } from "../../../contracts/quarantine";
@@ -101,6 +102,7 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             }}
           >
             <Button
+              icon={<ActionIcon name="upload" />}
               aria-label="上传原始资料"
               disabled={
                 busy ||
@@ -198,6 +200,7 @@ function AttachmentCard({
         />
       ) : (
         <Button
+          icon={<ActionIcon name="download" />}
           type="link"
           onClick={() => {
             void downloadQuarantine(`attachments/${a.id}`).catch((e: Error) => setError(e.message));
@@ -250,10 +253,20 @@ function AttachmentCard({
             />
           </label>
           <Space wrap>
-            <Button disabled={busy || saving} onClick={() => void save()} loading={saving}>
+            <Button
+              icon={<ActionIcon name="save" />}
+              disabled={busy || saving}
+              onClick={() => void save()}
+              loading={saving}
+            >
               保存图片信息
             </Button>
-            <Button danger disabled={busy || saving} onClick={() => setRemove(true)}>
+            <Button
+              icon={<ActionIcon name="remove" />}
+              danger
+              disabled={busy || saving}
+              onClick={() => setRemove(true)}
+            >
               移除附件
             </Button>
           </Space>

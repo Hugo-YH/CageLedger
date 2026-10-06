@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Alert, Button, Card, Collapse, Empty, Form, Modal, Select, Space, Tabs, Tag, Typography } from "antd";
@@ -85,7 +86,13 @@ export function TestDetail({
         <Alert
           type="error"
           title={error}
-          action={failedDownload && <Button onClick={() => void download(failedDownload)}>重试下载</Button>}
+          action={
+            failedDownload && (
+              <Button icon={<ActionIcon name="refresh" />} onClick={() => void download(failedDownload)}>
+                重试下载
+              </Button>
+            )
+          }
         />
       )}
       {downloadStatus && (
@@ -97,8 +104,11 @@ export function TestDetail({
         createPortal(
           test.state === "draft" ? (
             <Space size={8} wrap>
-              <Button onClick={onEdit}>编辑检测</Button>
+              <Button icon={<ActionIcon name="edit" />} onClick={onEdit}>
+                编辑检测
+              </Button>
               <Button
+                icon={<ActionIcon name="download" />}
                 aria-label="下载PDF草稿"
                 loading={Boolean(downloading)}
                 onClick={() => void download(`tests/${test.id}/preview`)}
@@ -108,6 +118,7 @@ export function TestDetail({
             </Space>
           ) : reports.length > 0 ? (
             <Button
+              icon={<ActionIcon name="download" />}
               loading={Boolean(downloading)}
               onClick={() =>
                 void download(
@@ -123,11 +134,16 @@ export function TestDetail({
       {primaryContainer &&
         createPortal(
           test.state === "draft" ? (
-            <Button type="primary" onClick={() => setIssuing(true)}>
+            <Button icon={<ActionIcon name="send" />} type="primary" onClick={() => setIssuing(true)}>
               出具报告
             </Button>
           ) : (
-            <Button type="primary" loading={write.isPending} onClick={() => void action("correction")}>
+            <Button
+              icon={<ActionIcon name="create" />}
+              type="primary"
+              loading={write.isPending}
+              onClick={() => void action("correction")}
+            >
               创建更正草稿
             </Button>
           ),
@@ -168,9 +184,15 @@ export function TestDetail({
                       label: "复检与版本关联",
                       children: (
                         <>
-                          {test.retestOf && <Button onClick={() => onCreated(test.retestOf)}>查看原始检测记录</Button>}
+                          {test.retestOf && (
+                            <Button icon={<ActionIcon name="info" />} onClick={() => onCreated(test.retestOf)}>
+                              查看原始检测记录
+                            </Button>
+                          )}
                           {test.correctionOf && (
-                            <Button onClick={() => onCreated(test.correctionOf)}>查看更正前记录</Button>
+                            <Button icon={<ActionIcon name="info" />} onClick={() => onCreated(test.correctionOf)}>
+                              查看更正前记录
+                            </Button>
                           )}
                           <Form className="quarantine-retest-actions" layout="vertical" aria-label="复检操作">
                             <Form.Item label="复检供应商">
@@ -190,6 +212,7 @@ export function TestDetail({
                               />
                             </Form.Item>
                             <Button
+                              icon={<ActionIcon name="create" />}
                               disabled={!supplier}
                               loading={write.isPending}
                               onClick={() => void action("retest")}
@@ -222,7 +245,11 @@ export function TestDetail({
             children: (
               <>
                 <RecordAttachments test={test} attachments={detail.attachments} />
-                {test.state === "draft" && <Button onClick={onEdit}>上传原始资料</Button>}
+                {test.state === "draft" && (
+                  <Button icon={<ActionIcon name="upload" />} onClick={onEdit}>
+                    上传原始资料
+                  </Button>
+                )}
               </>
             ),
           },
@@ -242,6 +269,7 @@ export function TestDetail({
                         {report.issuedBy.name} · {report.updatedAt.replace("T", " ").slice(0, 19)}
                       </Typography.Text>
                       <Button
+                        icon={<ActionIcon name="download" />}
                         loading={downloading === `reports/${report.id}`}
                         disabled={Boolean(downloading) && downloading !== `reports/${report.id}`}
                         onClick={() => void download(`reports/${report.id}`)}

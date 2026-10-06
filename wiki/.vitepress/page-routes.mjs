@@ -13,6 +13,7 @@ export const pageRoutes = {
   "饲养费核算.md": "guide/billing.md",
   "结算与报销.md": "guide/settlement-and-reimbursement.md",
   "常见问题.md": "guide/faq.md",
+  "帮助与反馈.md": "guide/feedback.md",
   "部署与运行.md": "operations/deployment.md",
   "HTTPS与证书.md": "operations/https-and-certificate.md",
   "系统配置.md": "operations/configuration.md",

@@ -4,6 +4,8 @@
 
 - 通用业务组件使用 `antd`；移动导航使用 `antd-mobile`。
 - `src/react/components/ui/` 是页面使用的统一适配层。
+- 页面标题和常用操作统一通过 `CommandBar` 的 `title`、`description`、`context`、`actions` 与 `primaryAction` 呈现；`description` 统一显示为标题后的叹号说明，`WorkspaceToolbar` 完整转发这些配置。区域工具栏使用 `titleSize="section"`，不重复保留 Card 页标题。
+- 页面级工具栏放在正文卡片外，与工作区内容边界对齐；不通过嵌套 Card、局部背景或重复页面内边距改变标题位置。页面边距由工作区统一提供，移动页面不重复叠加。简短操作说明使用标题后的 `HelpPopover` 叹号提示；独立业务状态和筛选仍留在对应区域。
 - 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceToolbar`、Ant `Form`、`Table`、`Card`、`Modal`、`Drawer`、`Empty` 与 `Result`。
 - 笼位图、数量台账网格、巡检评分、图表与打印模板可保留专用 DOM；数量台账中的输入、选择、日期与确认操作使用 Ant `Input`、`Select`、`DatePicker` 或 `Modal`，通用操作、状态与浮层使用适配层。
 
@@ -15,9 +17,18 @@
 - 桌面控件 `32px`、紧凑操作 `24px`；手机表单控件 `40px`、输入文字 `16px`，按钮触控目标至少 `44px`。
 - 主题唯一来源是 `src/theme/visual-system.mjs`。ConfigProvider 直接消费；`scripts/generate_theme.mjs` 从相同算法生成 `brand-tokens.css`，`tokens.css` 只保留语义映射；文档站消费相同变量。
 - 正文 14px/22px，说明 12px/20px；页标题 24px/32px，分区标题 16px/24px；正文 400、标题 600。页面桌面内边距 24px、手机 16px。普通编辑表单最大 1200px，桌面两列、手机一列，专用矩阵独立横向滚动。
+- 页面工具栏最小高 64px，桌面内边距 12px/24px、手机 12px/16px；区域与无标题工具栏最小高 48px。标题和按钮垂直居中，窄屏换行后高度随内容增加，不通过缩小标题或压缩触控目标来容纳按钮。
+- 工具栏左侧保留标题、说明入口、状态与选择数量；任务操作按钮统一放在右侧操作区，包含“清空选择”。窄屏换行后操作区仍靠右。
 - Tooltip 用于简短说明；Popver 用于可点击说明；Modal 和 Drawer 用于完整任务。
 - 图标按钮提供 `aria-label` 和 Tooltip；表单错误与字段使用 `aria-describedby` 关联。
 - 首屏远程数据、路由懒加载和详情弹窗加载统一使用 `PageSkeleton` 与 Ant `Skeleton`。骨架屏提供 `role="status"`、`aria-busy="true"` 和明确加载名称；错误态继续使用 `PageState`，空态继续使用 `Empty`。
+
+## 按钮与操作菜单图标
+
+- 页面工具栏、任务执行按钮与“更多”菜单使用前置 Ant 图标；同一组避免图标与纯文字混用。同一动作跨页面复用 `src/react/components/ui/ActionIcon.tsx` 的显式语义映射，特殊业务动作可明确指定 Ant 图标。不从按钮文案自动猜测图标，不使用 CSS 伪元素补图标。
+- `lowFrequencyActions.icon` 为必填；只有一个附加操作时直接显示按钮，两个及以上才使用“更多”。加载中保留按钮名称、禁用与防重复机制。辅助图标设为 `aria-hidden`，文字继续作为可访问名称；纯图标操作提供名称与 Tooltip。
+- 紧凑表格行操作保持纯文字，特别是已保存数量统计表、单据跟踪的固定按钮槽；不改变既有尺寸、语义颜色及顺序。筛选弹窗的清空／应用、分页、状态选择和表单确认／取消页脚也保持纯文字；输出与任务执行分组仍按任务动作规则配置图标。
+- 图标只增强动作识别，不新增按钮、不更改权限、确认流程或回调。菜单图标由类型检查约束，工具栏的直接按钮由 UI 契约检查约束。
 
 ## 响应式与动效
 

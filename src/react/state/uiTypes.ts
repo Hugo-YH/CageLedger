@@ -19,6 +19,7 @@ export type WorkspaceView =
   | "billing-settlement"
   | "billing-monthly-summary"
   | "workflow-center"
+  | "feedback"
   | "rooms"
   | "data"
   | "system"

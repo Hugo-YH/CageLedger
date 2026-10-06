@@ -1,3 +1,4 @@
+import { ActionIcon } from "./ui/ActionIcon";
 import { Component, type PropsWithChildren } from "react";
 import { Button, Result } from "antd";
 
@@ -24,7 +25,7 @@ export class AppErrorBoundary extends Component<PropsWithChildren, { error: Erro
           title="页面未能加载"
           subTitle="请重新加载页面。若仍无法打开，请联系管理员检查浏览器错误和服务状态。"
           extra={
-            <Button type="primary" onClick={() => window.location.reload()}>
+            <Button icon={<ActionIcon name="refresh" />} type="primary" onClick={() => window.location.reload()}>
               重新加载
             </Button>
           }

@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useEffect, useState } from "react";
 import { Button, Form, Input, Select, Upload } from "antd";
 
@@ -155,6 +156,7 @@ export function ReimbursementClaimDialog({
           ))}
           {editable ? (
             <Button
+              icon={<ActionIcon name="create" />}
               size="small"
               onClick={() =>
                 setDraft((current) => ({ ...current, fundingLines: [...(current.fundingLines || []), emptyLine()] }))
@@ -181,7 +183,9 @@ export function ReimbursementClaimDialog({
                 maxCount={1}
                 showUploadList={false}
               >
-                <Button loading={uploading}>上传附件</Button>
+                <Button icon={<ActionIcon name="upload" />} loading={uploading}>
+                  上传附件
+                </Button>
               </Upload>
             ) : null}
             <div className="attachment-list">

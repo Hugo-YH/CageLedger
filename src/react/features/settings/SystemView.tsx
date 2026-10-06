@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import {
   ApiOutlined,
   BgColorsOutlined,
@@ -5,9 +6,8 @@ import {
   CodeOutlined,
   DatabaseOutlined,
   DownloadOutlined,
+  ExclamationCircleOutlined,
   FilePdfOutlined,
-  ReloadOutlined,
-  SafetyCertificateOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { useState, type ReactNode } from "react";
@@ -20,7 +20,7 @@ import {
   useSystemUpdate,
 } from "../../api/administration";
 import type { SessionUser, SystemEnvironment, SystemPerformance, SystemRequestBreakdown } from "../../api/contracts";
-import { CommandBar } from "../../components/ui";
+import { CommandBar, HelpPopover } from "../../components/ui";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
@@ -59,7 +59,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
 
   const content = (
     <div className="system-status-page" data-feature="administration" data-ui="system-status-page">
-      <SystemMasthead
+      <SystemStatusToolbar
         environment={environment.data}
         info={info}
         isAdmin={user.role === "admin"}
@@ -68,6 +68,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
           else setCheckEnabled(true);
         }}
         updateLoading={update.isFetching}
+        onBack={isMobile ? () => navigate("rooms") : undefined}
       />
       {checkEnabled ? <UpdateCard update={update} /> : null}
       {user.role === "admin" ? (
@@ -89,6 +90,7 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
 
   return (
     <MobilePage
+      titleInToolbar
       onBack={() => navigate("rooms")}
       title="关于系统"
       titleAsHeading={false}
@@ -104,53 +106,58 @@ export function SystemView({ user, navigate }: { user: SessionUser; navigate: (v
   );
 }
 
-function SystemMasthead({
+function SystemStatusToolbar({
   environment,
   info,
   isAdmin,
   onCheckUpdate,
   updateLoading,
+  onBack,
 }: {
   environment?: SystemEnvironment;
   info: ReturnType<typeof useSystemInfo>;
   isAdmin: boolean;
   onCheckUpdate: () => void;
   updateLoading: boolean;
+  onBack?: () => void;
 }) {
   const health = environment ? runtimeHealth(environment) : null;
   return (
-    <Card className="system-masthead" variant="borderless">
-      <div className="system-masthead-main">
-        <div className="system-brand-mark" aria-hidden>
-          <img alt="" src="/cageledger-icon.svg" />
-        </div>
-        <div className="system-masthead-copy">
-          <Space size={8} wrap>
-            <Typography.Text className="system-eyebrow">CageLedger</Typography.Text>
-            {info.data ? (
-              <Tag color="blue">
-                {info.data.version}
-                {info.data.build ? ` · Build ${info.data.build}` : ""}
-              </Tag>
-            ) : null}
-            {isAdmin && health ? <HealthTag health={health} /> : null}
-          </Space>
-          <Typography.Title level={1}>系统状态</Typography.Title>
-          <Typography.Paragraph>
-            {isAdmin
-              ? "查看当前服务进程的请求、缓存与 SQLite 运行状态，并从异常信号直接定位需要处理的部分。"
-              : "查看 CageLedger 版本、使用文档、客户端证书与本机界面设置。"}
-          </Typography.Paragraph>
-        </div>
-      </div>
+    <>
       <CommandBar
         ariaLabel="系统信息操作"
+        context={
+          <>
+            <HelpPopover label="系统状态说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
+              {isAdmin
+                ? "查看当前服务进程的请求、缓存与 SQLite 运行状态，并从异常信号直接定位需要处理的部分。"
+                : "查看 CageLedger 版本、使用文档、客户端证书与本机界面设置。"}
+            </HelpPopover>
+            <Space size={8} wrap>
+              {info.data ? (
+                <Tag color="blue">
+                  {info.data.version}
+                  {info.data.build ? ` · Build ${info.data.build}` : ""}
+                </Tag>
+              ) : null}
+              {isAdmin && health ? <HealthTag health={health} /> : null}
+            </Space>
+          </>
+        }
+        title="系统状态"
         actions={
-          isAdmin ? (
-            <Button loading={updateLoading} onClick={onCheckUpdate}>
-              检查更新
-            </Button>
-          ) : undefined
+          <>
+            {onBack ? (
+              <Button icon={<ActionIcon name="back" />} onClick={onBack}>
+                返回房间管理
+              </Button>
+            ) : null}
+            {isAdmin ? (
+              <Button icon={<ActionIcon name="refresh" />} loading={updateLoading} onClick={onCheckUpdate}>
+                检查更新
+              </Button>
+            ) : null}
+          </>
         }
         lowFrequencyActions={[
           {
@@ -160,6 +167,7 @@ function SystemMasthead({
             onClick: () => window.location.assign("/docs/"),
           },
           {
+            icon: <ActionIcon name="history" />,
             key: "releases",
             label: "更新记录",
             onClick: () => window.location.assign("/docs/releases/"),
@@ -182,7 +190,7 @@ function SystemMasthead({
       {info.isError ? (
         <Alert
           action={
-            <Button onClick={() => void info.refetch()} size="small">
+            <Button icon={<ActionIcon name="refresh" />} onClick={() => void info.refetch()} size="small">
               重试
             </Button>
           }
@@ -192,7 +200,7 @@ function SystemMasthead({
           type="warning"
         />
       ) : null}
-    </Card>
+    </>
   );
 }
 
@@ -214,7 +222,12 @@ function RuntimeDashboard({
     return (
       <Alert
         action={
-          <Button loading={environment.isFetching} onClick={() => void environment.refetch()} size="small">
+          <Button
+            icon={<ActionIcon name="refresh" />}
+            loading={environment.isFetching}
+            onClick={() => void environment.refetch()}
+            size="small"
+          >
             重新读取
           </Button>
         }
@@ -235,27 +248,27 @@ function RuntimeDashboard({
   const pdf = pdfHealth(performance);
 
   return (
-    <section aria-labelledby="system-runtime-title" className="system-runtime-section">
-      <div className="system-section-heading">
-        <div>
-          <Typography.Title id="system-runtime-title" level={2}>
-            当前服务进程
-          </Typography.Title>
-          <Typography.Text type="secondary">自本次启动以来累计；延迟统计最多保留最近 512 个样本</Typography.Text>
-        </div>
-        <Flex align="center" gap={8} wrap>
+    <section aria-label="当前服务进程" className="system-runtime-section">
+      <CommandBar
+        ariaLabel="当前服务进程"
+        context={
           <Typography.Text className="system-refresh-time" type="secondary">
             更新于 {formatRefreshTime(environment.dataUpdatedAt)}
           </Typography.Text>
+        }
+        description="自本次启动以来累计；延迟统计最多保留最近 512 个样本"
+        title="当前服务进程"
+        titleSize="section"
+        actions={
           <Button
-            icon={<ReloadOutlined aria-hidden />}
+            icon={<ActionIcon name="refresh" />}
             loading={environment.isFetching}
             onClick={() => void environment.refetch()}
           >
             刷新状态
           </Button>
-        </Flex>
-      </div>
+        }
+      />
 
       <div aria-live="polite" className="system-pulse-strip">
         <PulseTile health={overall} icon={<ThunderboltOutlined aria-hidden />} label="服务状态" value={overall.label} />
@@ -294,7 +307,12 @@ function PerformanceHistoryCard({ history }: { history: ReturnType<typeof useSys
     return (
       <Alert
         action={
-          <Button loading={history.isFetching} onClick={() => void history.refetch()} size="small">
+          <Button
+            icon={<ActionIcon name="refresh" />}
+            loading={history.isFetching}
+            onClick={() => void history.refetch()}
+            size="small"
+          >
             重新读取
           </Button>
         }
@@ -314,21 +332,22 @@ function PerformanceHistoryCard({ history }: { history: ReturnType<typeof useSys
   );
   const requestCount = items.reduce((total, item) => total + item.requestCount, 0);
   return (
-    <Card
-      className="system-history-card"
-      extra={
-        <Button loading={history.isFetching} onClick={() => void history.refetch()} size="small">
-          刷新历史
-        </Button>
-      }
-      title={
-        <SectionTitle
-          icon={<ApiOutlined aria-hidden />}
-          subtitle={`每 ${Math.round(intervalSeconds / 60)} 分钟汇总一次，最长保留 ${retentionDays} 天`}
-          title="最近 24 小时性能记录"
-        />
-      }
-    >
+    <Card className="system-history-card">
+      <CommandBar
+        ariaLabel="最近 24 小时性能记录"
+        description={`每 ${Math.round(intervalSeconds / 60)} 分钟汇总一次，最长保留 ${retentionDays} 天`}
+        title="最近 24 小时性能记录"
+        titleSize="section"
+        actions={
+          <Button
+            icon={<ActionIcon name="refresh" />}
+            loading={history.isFetching}
+            onClick={() => void history.refetch()}
+          >
+            刷新历史
+          </Button>
+        }
+      />
       <div aria-live="polite" className="system-history-summary">
         <Statistic title="已记录周期" value={formatCount(items.length)} />
         <Statistic title="周期内请求" value={formatCount(requestCount)} />
@@ -589,30 +608,31 @@ function MetricRows({ items }: { items: Array<[string, string]> }) {
 
 function ClientToolsCard() {
   return (
-    <Card
-      className="system-tool-card"
-      title={
-        <SectionTitle
-          icon={<SafetyCertificateOutlined aria-hidden />}
-          subtitle="启用内网 HTTPS 下的摄像头、剪贴板等安全能力"
-          title="客户端工具"
-        />
-      }
-    >
+    <Card className="system-tool-card">
+      <CommandBar
+        ariaLabel="客户端工具"
+        description="启用内网 HTTPS 下的摄像头、剪贴板等安全能力。"
+        title="客户端工具"
+        titleSize="section"
+        actions={
+          <Button icon={<ActionIcon name="document" />} href="/docs/operations/https-and-certificate">
+            查看安装说明
+          </Button>
+        }
+        primaryAction={
+          <Button
+            download="cageledger.crt"
+            href={CERTIFICATE_DOWNLOAD_URL}
+            icon={<DownloadOutlined aria-hidden />}
+            type="primary"
+          >
+            下载客户端证书
+          </Button>
+        }
+      />
       <Typography.Paragraph type="secondary">
         仅在受控设备上安装 CageLedger 公开根证书。私钥保留在部署端证书管理中，不会包含在下载文件里。
       </Typography.Paragraph>
-      <Flex gap={8} wrap>
-        <Button
-          download="cageledger.crt"
-          href={CERTIFICATE_DOWNLOAD_URL}
-          icon={<DownloadOutlined aria-hidden />}
-          type="primary"
-        >
-          下载客户端证书
-        </Button>
-        <Button href="/docs/operations/https-and-certificate">查看安装说明</Button>
-      </Flex>
     </Card>
   );
 }
@@ -657,7 +677,7 @@ function SectionTitle({ icon, subtitle, title }: { icon: ReactNode; subtitle: st
         {icon}
       </span>
       <span>
-        <Typography.Title level={2}>{title}</Typography.Title>
+        <Typography.Title level={3}>{title}</Typography.Title>
         <Typography.Text type="secondary">{subtitle}</Typography.Text>
       </span>
     </div>
@@ -684,7 +704,13 @@ function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) 
     <Alert
       action={
         update.data?.latestUrl ? (
-          <Button href={update.data.latestUrl} rel="noreferrer" size="small" target="_blank">
+          <Button
+            icon={<ActionIcon name="repository" />}
+            href={update.data.latestUrl}
+            rel="noreferrer"
+            size="small"
+            target="_blank"
+          >
             查看发布页
           </Button>
         ) : undefined

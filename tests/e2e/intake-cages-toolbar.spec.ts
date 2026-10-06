@@ -33,12 +33,14 @@ async function captureToolbar(page: Page, testInfo: TestInfo, name: string, tool
         label: item.textContent,
         rect: item.getBoundingClientRect().toJSON(),
         disabled: item.disabled,
+        inActions: Boolean(item.closest(".app-command-bar-actions")),
       })),
     };
   });
   expect(evidence.overflow).toBe(false);
   expect(evidence.rect.right).toBeLessThanOrEqual(evidence.viewport.width + 1);
   for (const item of evidence.buttons) {
+    if (item.label === "清空选择") expect(item.inActions).toBe(true);
     expect(item.rect.right).toBeLessThanOrEqual(evidence.viewport.width + 1);
     expect(item.rect.height).toBe(evidence.viewport.width < 768 ? 44 : 32);
   }
@@ -46,6 +48,26 @@ async function captureToolbar(page: Page, testInfo: TestInfo, name: string, tool
   await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
   await testInfo.attach(`${name}-computed-style`, { path: evidencePath, contentType: "application/json" });
   await page.screenshot({ path: testInfo.outputPath(`${name}.png`), animations: "disabled" });
+}
+
+async function expectPageHeadingAlignment(toolbar: Locator) {
+  const heading = toolbar.getByRole("heading");
+  await expect(heading).toHaveCSS("font-size", "24px");
+  await expect(heading).toHaveCSS("font-weight", "600");
+  const layout = await heading.evaluate((element) => {
+    const bar = element.closest('[data-ui="workspace-toolbar"]')!;
+    const workspace = element.closest(".workspace-view")!;
+    return {
+      lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+      inset: bar.getBoundingClientRect().left - workspace.getBoundingClientRect().left,
+      topInset: bar.getBoundingClientRect().top - workspace.getBoundingClientRect().top,
+      insideCard: Boolean(bar.closest(".ant-card")),
+    };
+  });
+  expect(layout.lineHeight).toBeCloseTo(32, 1);
+  expect(layout.inset).toBeCloseTo(0, 1);
+  expect(layout.topInset).toBeCloseTo(0, 1);
+  expect(layout.insideCard).toBe(false);
 }
 
 for (const viewport of [
@@ -112,6 +134,7 @@ for (const viewport of [
     await page.reload();
     await openIntakeEntry(page);
     const entry = page.getByRole("group", { name: "笼卡录入操作", exact: true });
+    await expectPageHeadingAlignment(entry);
     await captureToolbar(page, testInfo, "intake-entry", entry);
     await page.getByLabel("结束日期", { exact: true }).scrollIntoViewIfNeeded();
     if (viewport.height > 500) await expect(entry).toBeInViewport({ ratio: 1 });
@@ -120,6 +143,7 @@ for (const viewport of [
     await openNavigationEntry(page, "笼卡管理", "待接收批次");
     await page.getByRole("checkbox", { name: `选择 ${batchNo}`, exact: true }).check();
     const batches = page.getByRole("group", { name: "待接收批次批量操作", exact: true });
+    await expectPageHeadingAlignment(batches);
     await captureToolbar(page, testInfo, "intake-selection", batches);
     await batches.getByRole("button", { name: "清空选择", exact: true }).click();
     await expect(batches).toContainText("已选 0 项");

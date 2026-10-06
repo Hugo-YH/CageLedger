@@ -306,7 +306,9 @@ def latest_remote_release():
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         if exc.code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND):
-            raise ValueError("Gitea 更新检查失败：请确认仓库地址正确，并为私有仓库配置只读 token") from exc
+            raise ValueError(
+                "Gitea 更新检查失败：请确认仓库地址正确，共享 Token 具有 read:repository 及私有仓库访问权限"
+            ) from exc
         raise ValueError(f"Gitea 返回错误：HTTP {exc.code}") from exc
     except URLError as exc:
         raise ValueError(f"无法连接 Gitea：{exc.reason}") from exc

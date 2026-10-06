@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { InboxOutlined } from "@ant-design/icons";
@@ -8,8 +9,8 @@ import type { ColumnsType } from "antd/es/table";
 import { uploadFile, useIacucStatus, usePrincipalIdentities, useSavePrincipalIdentity } from "../../api/administration";
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
 import { queryKeys } from "../../api/queryKeys";
-import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
-import { DataTable } from "../../components/ui";
+import { formatDateTime, PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { CommandBar, DataTable } from "../../components/ui";
 import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 
@@ -92,6 +93,7 @@ export function DataView({ user }: { user: SessionUser }) {
 
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
+      <WorkspaceToolbar ariaLabel="数据管理" title="数据管理" />
       <div className="workspace-body settings-workspace-body">
         {notice ? (
           <Alert
@@ -103,24 +105,22 @@ export function DataView({ user }: { user: SessionUser }) {
           />
         ) : null}
         <section className="settings-split-layout data-settings-layout">
-          <Card
-            className="settings-data-table-card"
-            title={
-              <Typography.Title level={2} style={{ margin: 0 }}>
-                项目负责人身份
-              </Typography.Title>
-            }
-            extra={
-              <Input.Search
-                allowClear
-                aria-label="检索项目负责人"
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="检索负责人"
-                value={filter}
-              />
-            }
-          >
-            <Typography.Paragraph type="secondary">负责人身份决定每日免费笼数额度。</Typography.Paragraph>
+          <Card className="settings-data-table-card">
+            <CommandBar
+              ariaLabel="项目负责人身份"
+              description="负责人身份决定每日免费笼数额度。"
+              title="项目负责人身份"
+              titleSize="section"
+              actions={
+                <Input.Search
+                  allowClear
+                  aria-label="检索项目负责人"
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="检索负责人"
+                  value={filter}
+                />
+              }
+            />
             {identities.isPending ? (
               <PageSkeleton compact label="负责人身份" rows={4} variant="table" />
             ) : identities.isError ? (
@@ -221,6 +221,7 @@ function PrincipalTypeSelect({ item, disabled }: { item: PrincipalIdentity; disa
           value={type}
         />
         <Button
+          icon={<ActionIcon name="save" />}
           aria-label={`保存 ${item.pi} 的负责人身份`}
           disabled={disabled || action.pending}
           loading={action.pending}

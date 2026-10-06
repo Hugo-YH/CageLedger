@@ -398,8 +398,8 @@ svg:not(.anticon svg) {
   display: grid;
   gap: 4px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
 }
 
 .version-meta span {
@@ -473,7 +473,7 @@ svg:not(.anticon svg) {
 
 .flash-notice span {
   font-size: 14px;
-  line-height: 1.45;
+  line-height: var(--leading-normal);
   white-space: pre-line;
 }
 
@@ -522,7 +522,7 @@ svg:not(.anticon svg) {
 
 .client-version-warning span {
   font-size: 14px;
-  line-height: 1.45;
+  line-height: var(--leading-normal);
 }
 
 .confirm-dialog-backdrop {
@@ -581,8 +581,9 @@ svg:not(.anticon svg) {
 
 .quantity-save-confirm-label {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-weight: 600;
+  line-height: var(--leading-relaxed);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -602,8 +603,9 @@ svg:not(.anticon svg) {
   border-radius: 4px;
   background: color-mix(in srgb, var(--success-soft) 82%, transparent);
   color: var(--ink);
-  font-size: 0.92rem;
+  font-size: var(--text-md);
   font-weight: 600;
+  line-height: var(--leading-normal);
 }
 
 .quantity-save-confirm-note {

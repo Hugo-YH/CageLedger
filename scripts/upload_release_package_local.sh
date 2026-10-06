@@ -133,7 +133,7 @@ if [[ "$HTTP_CODE" = "200" ]]; then
 elif [[ "$HTTP_CODE" = "404" ]]; then
   RELEASE_JSON="$(curl -fsS -X POST "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
-    -d "{\"tag_name\":\"${TAG}\",\"name\":\"${RELEASE_DISPLAY}\"}" \
+    -d "{\"tag_name\":\"${TAG}\",\"name\":\"${RELEASE_DISPLAY}\",\"draft\":true}" \
     "${API_BASE}/repos/${REPOSITORY}/releases")"
 else
   cat "$RELEASE_FILE" >&2
@@ -142,6 +142,23 @@ else
 fi
 
 RELEASE_ID="$(printf '%s' "$RELEASE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+
+# Gitea 1.26.1 does not initialize the release date when publishing an
+# existing Git tag directly. Draft creation initializes it; old epoch-dated
+# records can be repaired by briefly returning to draft before publishing.
+RELEASE_NEEDS_DATE="$(printf '%s' "$RELEASE_JSON" | python3 -c '
+import json,sys
+from datetime import datetime
+release = json.load(sys.stdin)
+value = release.get("published_at") or release.get("created_at")
+print("yes" if not value or datetime.fromisoformat(value.replace("Z", "+00:00")).year <= 1970 else "no")
+')"
+if [[ "$RELEASE_NEEDS_DATE" = "yes" ]]; then
+  curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
+    -H 'Content-Type: application/json' \
+    -d '{"draft":true}' \
+    "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}" >/dev/null
+fi
 PACKAGE_NAME="$(basename "$PACKAGE_PATH")"
 ASSETS_JSON="$(curl -fsS "${AUTH_ARGS[@]}" \
   "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets")"
@@ -149,11 +166,27 @@ ASSET_ID="$(printf '%s' "$ASSETS_JSON" | python3 -c 'import json,sys; name=sys.a
 
 if [[ -n "$ASSET_ID" ]]; then
   echo "Release ${TAG} already contains ${PACKAGE_NAME}; keeping the immutable asset."
-  exit 0
+else
+  curl -fsS -X POST "${AUTH_ARGS[@]}" \
+    -F "attachment=@${PACKAGE_PATH}" \
+    "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" >/dev/null
 fi
 
-curl -fsS -X POST "${AUTH_ARGS[@]}" \
-  -F "attachment=@${PACKAGE_PATH}" \
-  "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" >/dev/null
+# Publish only after the requested package is present. Never report success
+# for a draft or an epoch-dated record hidden behind old releases in the list.
+RELEASE_JSON="$(curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
+  -H 'Content-Type: application/json' \
+  -d '{"draft":false}' \
+  "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}")"
+printf '%s' "$RELEASE_JSON" | python3 -c '
+import json,sys
+from datetime import datetime
+release = json.load(sys.stdin)
+value = release.get("published_at") or release.get("created_at")
+if release.get("tag_name") != sys.argv[1] or release.get("draft") or not value:
+    raise SystemExit("Gitea Release publication validation failed")
+if datetime.fromisoformat(value.replace("Z", "+00:00")).year <= 1970:
+    raise SystemExit("Gitea Release has an invalid publication date")
+' "$TAG"
 
-echo "Uploaded ${PACKAGE_NAME} to ${GITEA_URL%/}/${REPOSITORY}/releases/tag/${TAG}"
+echo "Published ${PACKAGE_NAME} at ${GITEA_URL%/}/${REPOSITORY}/releases/tag/${TAG}"

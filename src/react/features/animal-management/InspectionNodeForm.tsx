@@ -1,5 +1,5 @@
 import { Button, Drawer, Form, Input, InputNumber, Popconfirm, Space, Tag, Typography } from "antd";
-import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 
 import { formValuesToNode, nodeToFormValues } from "../../../domain/inspectionCatalog";
 import type { InspectionNodeFormValues } from "../../../domain/inspectionCatalog";
@@ -48,16 +48,14 @@ export function InspectionNodeForm({
               okButtonProps={{ danger: true }}
               onConfirm={() => onDelete(node.code)}
             >
-              <Button danger icon={<DeleteOutlined />}>
-                删除条目
-              </Button>
+              <Button danger>删除条目</Button>
             </Popconfirm>
           ) : (
             <span />
           )}
           <Space>
             <Button onClick={onClose}>取消</Button>
-            <Button type="primary" htmlType="submit" form="inspection-node-form" icon={<SaveOutlined />}>
+            <Button type="primary" htmlType="submit" form="inspection-node-form">
               保存修改
             </Button>
           </Space>
@@ -103,7 +101,7 @@ export function InspectionNodeForm({
                     <Button
                       size="small"
                       type="dashed"
-                      icon={<PlusOutlined />}
+                      icon={<PlusOutlined aria-hidden="true" />}
                       onClick={() => add({ id: "", nameCn: "" })}
                     >
                       添加选项
@@ -127,7 +125,7 @@ export function InspectionNodeForm({
                         className="inspection-scoring-remove"
                         type="text"
                         danger
-                        icon={<DeleteOutlined />}
+                        icon={<DeleteOutlined aria-hidden="true" />}
                         onClick={() => remove(field.name)}
                       />
                     </div>

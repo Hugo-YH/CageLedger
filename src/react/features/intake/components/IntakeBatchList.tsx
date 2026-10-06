@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Card, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useState } from "react";
 
@@ -147,19 +148,10 @@ export function IntakeBatchList({
   ];
 
   return (
-    <Card
-      className="intake-batch-list-card"
-      title={
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          待接收批次列表
-        </Typography.Title>
-      }
-    >
-      {bulkNotice ? (
-        <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
-      ) : null}
+    <>
       <CommandBar
         ariaLabel="待接收批次批量操作"
+        title="待接收批次列表"
         sticky="selection"
         context={
           <Typography.Text type="secondary">
@@ -175,6 +167,7 @@ export function IntakeBatchList({
           selectedItems.length ? (
             <>
               <Button
+                icon={<ActionIcon name="print" />}
                 disabled={loading || markingPrinted || markingReceived}
                 loading={markingPrinted}
                 onClick={() => onMarkPrinted(selectedItems)}
@@ -182,6 +175,7 @@ export function IntakeBatchList({
                 标记已打印
               </Button>
               <Button
+                icon={<ActionIcon name="reserve" />}
                 disabled={loading || markingPrinted || markingReceived}
                 loading={markingReceived}
                 onClick={() => onReceive(selectedItems)}
@@ -194,6 +188,7 @@ export function IntakeBatchList({
         primaryAction={
           selectedItems.length ? (
             <Button
+              icon={<ActionIcon name="print" />}
               aria-describedby={printDisabledReason ? "intake-print-disabled-reason" : undefined}
               disabled={loading || Boolean(printDisabledReason)}
               type="primary"
@@ -204,43 +199,48 @@ export function IntakeBatchList({
           ) : null
         }
       />
-      {selectedItems.length && printDisabledReason ? (
-        <Typography.Text id="intake-print-disabled-reason" type="secondary">
-          {printDisabledReason}
-        </Typography.Text>
-      ) : null}
-      <div aria-busy={loading} aria-label="待接收批次列表" className="ant-table-region" role="region" tabIndex={0}>
-        <DataTable
-          refreshing={loading}
-          className="intake-batch-table"
-          columns={columns}
-          dataSource={items}
-          pagination={false}
-          resizeKey="intake-batch"
-          rowKey="id"
-          scroll={{ x: 998 }}
-        />
-      </div>
-      <Flex align="center" className="intake-list-pagination" justify="space-between" wrap>
-        <Typography.Text type="secondary">共 {total} 条</Typography.Text>
-        <div className="intake-pagination-scroll">
-          <Pagination
-            current={page}
-            pageSize={pageSize}
-            pageSizeOptions={[5, 10, 20, 50, 100]}
-            showSizeChanger={{ "aria-label": "每页显示条数" }}
-            total={total}
-            onChange={(nextPage, nextSize) => {
-              if (nextSize !== pageSize) {
-                onPageSize(nextSize);
-                return;
-              }
-              onPage(nextPage);
-            }}
+      <Card className="intake-batch-list-card">
+        {bulkNotice ? (
+          <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
+        ) : null}
+        {selectedItems.length && printDisabledReason ? (
+          <Typography.Text id="intake-print-disabled-reason" type="secondary">
+            {printDisabledReason}
+          </Typography.Text>
+        ) : null}
+        <div aria-busy={loading} aria-label="待接收批次列表" className="ant-table-region" role="region" tabIndex={0}>
+          <DataTable
+            refreshing={loading}
+            className="intake-batch-table"
+            columns={columns}
+            dataSource={items}
+            pagination={false}
+            resizeKey="intake-batch"
+            rowKey="id"
+            scroll={{ x: 998 }}
           />
         </div>
-      </Flex>
-    </Card>
+        <Flex align="center" className="intake-list-pagination" justify="space-between" wrap>
+          <Typography.Text type="secondary">共 {total} 条</Typography.Text>
+          <div className="intake-pagination-scroll">
+            <Pagination
+              current={page}
+              pageSize={pageSize}
+              pageSizeOptions={[5, 10, 20, 50, 100]}
+              showSizeChanger={{ "aria-label": "每页显示条数" }}
+              total={total}
+              onChange={(nextPage, nextSize) => {
+                if (nextSize !== pageSize) {
+                  onPageSize(nextSize);
+                  return;
+                }
+                onPage(nextPage);
+              }}
+            />
+          </div>
+        </Flex>
+      </Card>
+    </>
   );
 }
 

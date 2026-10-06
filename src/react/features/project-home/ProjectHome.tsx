@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import {
   AppstoreOutlined,
   AuditOutlined,
@@ -85,10 +86,12 @@ export function ProjectHome() {
           <Anchor affix={false} direction="horizontal" items={anchorItems} />
         </nav>
         <Space className="project-home-header-actions" size={8} wrap>
-          <Button href={PROJECT_METADATA.repositoryUrl} icon={<GithubOutlined />} target="_blank">
+          <Button href={PROJECT_METADATA.repositoryUrl} icon={<GithubOutlined aria-hidden="true" />} target="_blank">
             Gitea
           </Button>
-          <Button href="/app">进入系统</Button>
+          <Button icon={<ActionIcon name="enter" />} href="/app">
+            进入系统
+          </Button>
         </Space>
       </header>
 
@@ -99,10 +102,10 @@ export function ProjectHome() {
             <Typography.Title level={1}>{PROJECT_METADATA.productName}</Typography.Title>
             <Typography.Paragraph>{PROJECT_METADATA.summary}</Typography.Paragraph>
             <Space className="project-hero-actions" size={12} wrap>
-              <Button href="/app" size="large" type="primary">
+              <Button icon={<ActionIcon name="enter" />} href="/app" size="large" type="primary">
                 进入系统 <RightOutlined />
               </Button>
-              <Button href={PROJECT_METADATA.docsUrl} size="large">
+              <Button icon={<ActionIcon name="document" />} href={PROJECT_METADATA.docsUrl} size="large">
                 查看文档
               </Button>
             </Space>

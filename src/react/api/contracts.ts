@@ -7,3 +7,4 @@ export * from "../../contracts/infrastructure";
 export * from "../../contracts/intake";
 export * from "../../contracts/quantity";
 export * from "../../contracts/session";
+export * from "../../contracts/feedback";

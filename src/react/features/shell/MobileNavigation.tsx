@@ -25,7 +25,17 @@ import type { WorkspaceView } from "../../state/ui";
 import { billingSidebarItems } from "./workspaceNavigation";
 
 type NavIcon =
-  "tag" | "grid" | "calculator" | "refresh" | "book" | "clipboard" | "building" | "info" | "database" | "users";
+  | "tag"
+  | "grid"
+  | "calculator"
+  | "refresh"
+  | "book"
+  | "clipboard"
+  | "building"
+  | "info"
+  | "database"
+  | "users"
+  | "feedback";
 
 const navIcon: Record<NavIcon, ReactNode> = {
   tag: <TagsOutlined />,
@@ -38,6 +48,7 @@ const navIcon: Record<NavIcon, ReactNode> = {
   info: <InfoCircleOutlined />,
   database: <DatabaseOutlined />,
   users: <TeamOutlined />,
+  feedback: <InfoCircleOutlined />,
 };
 
 const billingIcon: Record<string, ReactNode> = {
@@ -188,6 +199,9 @@ export function MobileNavigation({
                     ]
                   : [],
               )}
+            </List>
+            <List header="帮助与反馈">
+              <MenuItem icon={<InfoCircleOutlined />} label="帮助与反馈" view="feedback" onNavigate={onNavigate} />
             </List>
             <List header="系统设置">
               {settingsViews.map(([view, label, icon]) => (

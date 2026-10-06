@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useState } from "react";
 import { Alert, Button, Select } from "antd";
 
@@ -84,7 +85,11 @@ export function CagesView() {
   if (!rooms.length) {
     return (
       <>
-        <ListRefreshStatus active={summary.isFetching} />
+        <WorkspaceToolbar
+          title="笼位管理"
+          ariaLabel="笼位图操作"
+          context={<ListRefreshStatus active={summary.isFetching} />}
+        />
         <CageEmpty />
       </>
     );
@@ -94,6 +99,7 @@ export function CagesView() {
     <section className="workspace-view cage-workspace react-cage-view" data-feature="cages">
       <WorkspaceToolbar
         ariaLabel="笼位图操作"
+        title="笼位管理"
         sticky={selectedTaskId ? true : "selection"}
         context={
           selectedTask ? (
@@ -114,13 +120,16 @@ export function CagesView() {
         }}
         actions={
           <>
-            <ActionButton disabled={!data} onClick={() => setTasksOpen(true)}>
+            <ActionButton icon={<ActionIcon name="select" />} disabled={!data} onClick={() => setTasksOpen(true)}>
               待进驻 {data ? tasks.length : ""}
             </ActionButton>
             {selectedTask ? (
-              <ActionButton onClick={clearSelection}>取消预留</ActionButton>
+              <ActionButton icon={<ActionIcon name="undo" />} onClick={clearSelection}>
+                取消预留
+              </ActionButton>
             ) : (
               <ActionButton
+                icon={<ActionIcon name={batchMode ? "clear" : "select"} />}
                 aria-pressed={batchMode}
                 onClick={() => {
                   clearSelection();
@@ -132,6 +141,7 @@ export function CagesView() {
             )}
             {batchMode ? (
               <Button
+                icon={<ActionIcon name="select" />}
                 disabled={!slots.length || roomQuery.isFetching}
                 onClick={() => setSelectedSlotIds(slots.map((slot) => slot.id))}
               >
@@ -143,6 +153,7 @@ export function CagesView() {
         primaryAction={
           selectedTask ? (
             <ActionButton
+              icon={<ActionIcon name="reserve" />}
               disabled={!selectedSlot || selectedSlot.status !== "empty" || reserve.isPending}
               loading={reserve.isPending}
               tone="primary"
@@ -151,7 +162,12 @@ export function CagesView() {
               确认预留
             </ActionButton>
           ) : batchMode ? (
-            <ActionButton disabled={!selectedSlotIds.length} tone="primary" onClick={() => setBatchEditorOpen(true)}>
+            <ActionButton
+              icon={<ActionIcon name="edit" />}
+              disabled={!selectedSlotIds.length}
+              tone="primary"
+              onClick={() => setBatchEditorOpen(true)}
+            >
               批量编辑
             </ActionButton>
           ) : null
@@ -192,7 +208,11 @@ export function CagesView() {
           showIcon
           title="饲养间更新失败，暂显示上次结果"
           action={
-            <Button loading={summary.isFetching} onClick={() => void summary.refetch()}>
+            <Button
+              icon={<ActionIcon name="refresh" />}
+              loading={summary.isFetching}
+              onClick={() => void summary.refetch()}
+            >
               重试
             </Button>
           }
@@ -226,7 +246,11 @@ export function CagesView() {
                 showIcon
                 title="笼位信息更新失败，暂显示上次结果"
                 action={
-                  <Button loading={roomQuery.isFetching} onClick={() => void roomQuery.refetch()}>
+                  <Button
+                    icon={<ActionIcon name="refresh" />}
+                    loading={roomQuery.isFetching}
+                    onClick={() => void roomQuery.refetch()}
+                  >
                     重试
                   </Button>
                 }

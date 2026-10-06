@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import {
   Alert,
@@ -43,7 +44,11 @@ export function BatchActivity({ batchId }: { batchId: string }) {
       <Alert
         type="error"
         title={query.error.message}
-        action={<Button onClick={() => void query.refetch()}>重试</Button>}
+        action={
+          <Button icon={<ActionIcon name="refresh" />} onClick={() => void query.refetch()}>
+            重试
+          </Button>
+        }
       />
     );
   return (

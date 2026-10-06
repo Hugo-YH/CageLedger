@@ -1,10 +1,10 @@
-import { Card, Space, Typography } from "antd";
-import { FileTextOutlined } from "@ant-design/icons";
+import { Button } from "antd";
+import { ActionIcon } from "../../components/ui/ActionIcon";
+import { CommandBar } from "../../components/ui";
 
 import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
-import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { SettlementCandidateList } from "./components/SettlementCandidateList";
 import { MonthlyBillingSummary } from "./components/MonthlyBillingSummary";
@@ -22,18 +22,27 @@ export function BillingView({
 }) {
   const isMobile = useIsMobileLayout();
   const title = billingTitle(mode);
+  const navigationAction =
+    isMobile && mode !== "quantity-entry" ? (
+      <Button icon={<ActionIcon name="back" />} onClick={() => navigate("billing-quantity-entry")}>
+        返回数量录入
+      </Button>
+    ) : undefined;
   const body = (
     <div data-feature="billing">
-      {mode === "quantity-entry" ? <QuantitySheetView user={user} mode="entry" /> : null}
-      {mode === "quantity-saved" ? <QuantitySheetView user={user} mode="saved" /> : null}
+      {mode === "quantity-entry" ? (
+        <QuantitySheetView user={user} mode="entry" navigationAction={navigationAction} />
+      ) : null}
+      {mode === "quantity-saved" ? (
+        <QuantitySheetView user={user} mode="saved" navigationAction={navigationAction} />
+      ) : null}
       {mode === "cage-map" ? (
-        <section className="panel billing-unavailable-panel" aria-labelledby="cage-map-panel-title">
-          <div className="panel-head">
-            <div className="panel-title-line">
-              <h2 id="cage-map-panel-title">动态笼位图核算</h2>
-              <p>系统按当前笼位占用时间线生成每日费用。</p>
-            </div>
-          </div>
+        <section className="panel billing-unavailable-panel" aria-label="动态笼位图核算">
+          <CommandBar
+            title="动态笼位图核算"
+            description="系统按当前笼位占用时间线生成每日费用。"
+            actions={navigationAction}
+          />
           <div className="empty-state">
             <h3>选择项目负责人生成结算预览</h3>
             <p>进入“结算管理”，选择动态笼位图来源后生成结算预览。</p>
@@ -48,43 +57,19 @@ export function BillingView({
         </section>
       ) : null}
       {mode === "settlement" ? (
-        <Card
-          className="settlement-candidate-card"
-          title={
-            <Space size={8}>
-              <FileTextOutlined />
-              <Typography.Title level={2} style={{ margin: 0 }}>
-                结算管理
-              </Typography.Title>
-            </Space>
-          }
-        >
-          <Typography.Paragraph className="settlement-card-description" type="secondary">
-            同一负责人、同一月份下的多个伦理号自动合表。
-          </Typography.Paragraph>
-          <SettlementCandidateList source="quantity_sheet" user={user} />
-        </Card>
+        <section className="ledger-section" aria-label="结算管理工作区">
+          <SettlementCandidateList source="quantity_sheet" user={user} navigationAction={navigationAction} />
+        </section>
       ) : null}
-      {mode === "monthly-summary" && user.role === "admin" ? <MonthlyBillingSummary /> : null}
+      {mode === "monthly-summary" && user.role === "admin" ? (
+        <MonthlyBillingSummary navigationAction={navigationAction} />
+      ) : null}
     </div>
   );
   return (
-    <MobilePage
-      desktop={
-        isMobile
-          ? undefined
-          : {
-              className: "workspace-view billing-workspace react-billing-view",
-              bodyClassName: "workspace-body billing-workspace-body",
-              feature: "billing",
-            }
-      }
-      onBack={() => navigate("billing-quantity-entry")}
-      title={title}
-      titleAsHeading={false}
-    >
-      {body}
-    </MobilePage>
+    <section className="workspace-view billing-workspace react-billing-view" data-feature="billing" aria-label={title}>
+      <div className="workspace-body billing-workspace-body">{body}</div>
+    </section>
   );
 }
 

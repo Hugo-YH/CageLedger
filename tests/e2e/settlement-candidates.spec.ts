@@ -30,6 +30,20 @@ test("settlement filters remain clickable while the list refreshes", async ({ pa
   await page.getByRole("menuitem", { name: /结算管理/ }).click();
   await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
 
+  const help = page.getByRole("button", { name: "结算合表说明", exact: true });
+  await help.click();
+  await expect(
+    page.locator(".ant-popover").getByText("同一负责人、同一月份下的多个伦理号自动合表。", { exact: true }),
+  ).toBeVisible();
+  await help.press("Escape");
+  await expect(page.locator(".ant-popover")).toBeHidden();
+  await expect(
+    page.getByRole("group", { name: "结算批量操作", exact: true }).getByText("共 0 项", { exact: true }),
+  ).toHaveCount(0);
+  const toolbar = page.getByRole("group", { name: "结算批量操作", exact: true });
+  await expect(toolbar.getByRole("button", { name: "撤回", exact: true })).toBeDisabled();
+  await expect(toolbar.getByRole("button", { name: "结算批量操作更多操作", exact: true })).toHaveCount(0);
+
   let releaseRefresh: (() => void) | undefined;
   const refreshBlocked = new Promise<void>((resolve) => {
     releaseRefresh = resolve;
@@ -119,21 +133,24 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).check();
-  const selectionSummary = page.getByLabel("结算批量操作", { exact: true }).getByText(/已选 \d+ 项/, { exact: true });
-  await expect(selectionSummary).toBeVisible();
-  const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
-  expect(selectedCount).toBeGreaterThan(5);
+  const bulkToolbar = page.getByRole("group", { name: "结算批量操作", exact: true });
+  await expect(bulkToolbar.getByText(/已选 \d+ 项/, { exact: true })).toHaveCount(0);
+  await expect(bulkToolbar.getByRole("button", { name: "清空选择", exact: true })).toHaveCount(0);
+  await expect(bulkToolbar.getByRole("button", { name: "批量导出 PDF", exact: true })).toBeEnabled();
   await page.locator(".ant-pagination-next").click();
   await expect(page.getByRole("checkbox", { name: /^选择 .+ 结算项$/ }).first()).toBeChecked();
   await page.locator(".ant-pagination-prev").click();
   await page.getByLabel("每页显示条数").click();
   await page.getByRole("option", { name: "10 条/页", exact: true }).click();
-  await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
-  await page.getByRole("button", { name: "结算月份，点击切换排序", exact: true }).click();
-  await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
   await expect(page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true })).toBeChecked();
-  await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "清空选择", exact: true }).click();
-  await expect(selectionSummary).toHaveText("已选 0 项");
+  await page.getByRole("button", { name: "结算月份，点击切换排序", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true })).toBeChecked();
+  await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).uncheck();
+  for (const checkbox of await page.getByRole("checkbox", { name: /^选择 .+ 结算项$/ }).all()) {
+    await expect(checkbox).not.toBeChecked();
+  }
+  await expect(bulkToolbar.getByRole("button", { name: "导出 PDF", exact: true })).toBeDisabled();
   await row.getByRole("checkbox", { name: `选择 E2E 合表负责人 ${month} 结算项` }).check();
   const downloadPromise = page.waitForEvent("download");
   await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "导出 PDF", exact: true }).click();
@@ -274,11 +291,7 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
     .getByRole("row", { name: /E2E 已发起负责人/ })
     .getByRole("checkbox", { name: `选择 E2E 已发起负责人 ${month} 结算项` })
     .check();
-  await page
-    .getByLabel("结算批量操作", { exact: true })
-    .getByRole("button", { name: "结算批量操作更多操作", exact: true })
-    .click();
-  await page.getByRole("menuitem", { name: "撤回", exact: true }).click();
+  await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "撤回", exact: true }).click();
   await page
     .getByRole("dialog", { name: "批量撤回结算流程", exact: true })
     .getByRole("button", { name: "撤回 1 个流程", exact: true })
@@ -396,11 +409,7 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
     await row.getByRole("checkbox", { name: `选择 ${pi} ${month} 结算项` }).check();
   }
 
-  await page
-    .getByLabel("结算批量操作", { exact: true })
-    .getByRole("button", { name: "结算批量操作更多操作", exact: true })
-    .click();
-  await page.getByRole("menuitem", { name: "批量撤回", exact: true }).click();
+  await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "批量撤回", exact: true }).click();
   const confirmDialog = page.getByRole("dialog", { name: "批量撤回结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个");
   const batchRefreshes: string[] = [];

@@ -32,6 +32,7 @@ export function useCommandBarSticky(requested: boolean) {
         scopes.set(owner, scope);
       }
       scope.bars.add(bar);
+      const originalInset = bar.style.getPropertyValue("--cl-command-bar-sticky-inset");
       let frame = 0;
       const measure = () => {
         const viewportHeight = Math.min(
@@ -46,13 +47,16 @@ export function useCommandBarSticky(requested: boolean) {
         eligible.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
         const active = eligible.at(-1);
         for (const item of scope.bars) item.dataset.sticky = String(item === active);
+        // The scrollport's padding already provides space above a sticky bar.
+        // Do not add another inset that shifts an unscrolled page heading.
+        const ownerPadding = parseFloat(getComputedStyle(owner).paddingTop) || 0;
+        for (const item of scope.bars) {
+          item.style.setProperty("--cl-command-bar-sticky-inset", `${Math.max(0, 8 - ownerPadding)}px`);
+        }
         // Sticky insets start below a scroll container's padding; anchor/validation
         // scrolling starts at its scrollport edge, so reserve both coordinates.
         const height = active
-          ? active.getBoundingClientRect().height +
-            (parseFloat(getComputedStyle(owner).paddingTop) || 0) +
-            (parseFloat(getComputedStyle(active).top) || 0) +
-            8
+          ? active.getBoundingClientRect().height + ownerPadding + (parseFloat(getComputedStyle(active).top) || 0) + 8
           : 0;
         if (height) {
           owner.style.setProperty("--cl-workspace-toolbar-offset", `${height}px`);
@@ -79,6 +83,8 @@ export function useCommandBarSticky(requested: boolean) {
         window.visualViewport?.removeEventListener("resize", schedule);
         scope.bars.delete(bar);
         delete bar.dataset.sticky;
+        if (originalInset) bar.style.setProperty("--cl-command-bar-sticky-inset", originalInset);
+        else bar.style.removeProperty("--cl-command-bar-sticky-inset");
         if (scope.bars.size) measure();
         else {
           owner.style.setProperty("--cl-workspace-toolbar-offset", scope.offset);

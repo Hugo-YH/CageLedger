@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useMemo, useState } from "react";
 import { Selector as MobileSelector } from "antd-mobile";
 import { Alert, Card, Checkbox, Form, Select, Space, Tag, Typography } from "antd";
@@ -268,6 +269,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   );
   return (
     <MobilePage
+      titleInToolbar
       desktop={
         isMobile
           ? undefined
@@ -283,9 +285,11 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
     >
       <WorkspaceToolbar
         ariaLabel="巡检录入操作"
+        title="动物巡检"
         sticky
         actions={
           <AsyncActionButton
+            icon={<ActionIcon name="save" />}
             className="secondary inspection-save-draft"
             type="button"
             pending={save.isPending}
@@ -298,6 +302,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
         }
         primaryAction={
           <AsyncActionButton
+            icon={<ActionIcon name="send" />}
             className="primary inspection-submit"
             type="button"
             pending={submit.isPending}

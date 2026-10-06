@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
@@ -28,7 +29,15 @@ import { useQuantityIacuc } from "./hooks/useQuantityIacuc";
 const todayMonth = new Date().toISOString().slice(0, 7);
 const QUANTITY_ROWS_PER_PAGE = 31;
 
-export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "entry" | "saved" }) {
+export function QuantitySheetView({
+  user,
+  mode,
+  navigationAction,
+}: {
+  user: SessionUser;
+  mode: "entry" | "saved";
+  navigationAction?: ReactNode;
+}) {
   const roomsQuery = useQuantitySheetRooms();
   const identitiesQuery = usePrincipalIdentities();
   const rooms = roomsQuery.data?.items || [];
@@ -272,6 +281,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
     mode === "entry" ? (
       <CommandBar
         ariaLabel="数量统计表录入操作"
+        title="录入数量统计表"
         className="quantity-entry-toolbar"
         sticky
         context={
@@ -291,10 +301,18 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             </div>
           </Tooltip>
         }
-        actions={<ActionButton onClick={startNew}>新建</ActionButton>}
+        actions={
+          <>
+            {navigationAction}
+            <ActionButton icon={<ActionIcon name="create" />} onClick={startNew}>
+              新建
+            </ActionButton>
+          </>
+        }
         primaryAction={
           <Tooltip content={saveHint(editorRows, animalDetails)}>
             <AsyncActionButton
+              icon={<ActionIcon name="save" />}
               className="primary quantity-entry-save-button"
               type="submit"
               form="quantity-sheet-entry-form"
@@ -317,12 +335,9 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
         className="panel large quantity-editor-panel quantity-entry-panel"
         onSubmit={requestSave}
       >
-        <div className="panel-head">
-          <div className="panel-title-line">
-            <h2>录入数量统计表</h2>
-          </div>
-          {headActions ? <div className="panel-head-actions">{headActions}</div> : null}
-        </div>
+        {headActions ? (
+          <CommandBar title="数量明细" titleSize="section" ariaLabel="编辑数量统计表操作" actions={headActions} />
+        ) : null}
         {visibleNotice ? (
           <div
             className={`react-inline-notice is-${visibleNoticeKind}`}
@@ -341,7 +356,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
         <div className="quantity-sheet-fields">
           <div className="field-cluster quantity-field-cluster">
             <div className="field-cluster-head">
-              <strong>基础信息</strong>
+              <h3>基础信息</h3>
               <span>月份和房间决定计费口径</span>
             </div>
             <div className="field-cluster-body quantity-field-group quantity-field-group-basic">
@@ -390,7 +405,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
           </div>
           <div className="field-cluster quantity-field-cluster">
             <div className="field-cluster-head">
-              <strong>项目与伦理</strong>
+              <h3>项目与伦理</h3>
             </div>
             <div className="field-cluster-body quantity-field-group quantity-field-group-project">
               <label className="field-required quantity-ant-field quantity-ant-field-required quantity-iacuc-field">
@@ -610,7 +625,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
                       <strong>自定义收费区间</strong>
                       <span>特殊饲养按日期、数量与单价独立计费，不参与减免和梯度累计。</span>
                     </div>
-                    <ActionButton className="compact-action" onClick={addCustomBillingSegment}>
+                    <ActionButton
+                      icon={<ActionIcon name="create" />}
+                      className="compact-action"
+                      onClick={addCustomBillingSegment}
+                    >
                       新增区间
                     </ActionButton>
                   </div>
@@ -634,6 +653,7 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
         </div>
         <div className="quantity-page-toolbar compact">
           <ActionButton
+            icon={<ActionIcon name="create" />}
             className="info-button"
             onClick={() =>
               setEditorRows((rows) => [
@@ -662,7 +682,11 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">
       {entryToolbar}
-      {mode === "entry" ? renderEditor() : <SavedQuantitySheets onEdit={loadForEdit} />}
+      {mode === "entry" ? (
+        renderEditor()
+      ) : (
+        <SavedQuantitySheets onEdit={loadForEdit} navigationAction={navigationAction} />
+      )}
       {mode === "saved" && editingDialog ? (
         <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={closeEditor}>
           <div className="modal-shell-head">
@@ -678,7 +702,13 @@ export function QuantitySheetView({ user, mode }: { user: SessionUser; mode: "en
             <div className="react-quantity-layout quantity-edit-context">
               {renderEditor(
                 <Tooltip content={saveHint(editorRows, animalDetails)}>
-                  <ActionButton form="quantity-sheet-entry-form" loading={save.isPending} tone="primary" type="submit">
+                  <ActionButton
+                    icon={<ActionIcon name="save" />}
+                    form="quantity-sheet-entry-form"
+                    loading={save.isPending}
+                    tone="primary"
+                    type="submit"
+                  >
                     保存统计表
                   </ActionButton>
                 </Tooltip>,

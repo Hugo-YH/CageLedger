@@ -83,7 +83,7 @@ test("dashboard cold skeleton fits narrow screens and reduced motion", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const size = await skeleton.evaluate((root) => {
-    const title = root.querySelector(".workspace-title-line .ant-skeleton-input")!;
+    const title = root.querySelector(".app-command-bar-title .ant-skeleton-input")!;
     return {
       width: title.getBoundingClientRect().width,
       right: title.getBoundingClientRect().right,

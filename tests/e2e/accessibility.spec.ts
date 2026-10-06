@@ -61,7 +61,7 @@ test("core workspaces and dialogs retain accessible semantics", async ({ page })
   await expect(openRoomEditor).toBeFocused();
 
   await openSettingsView(page, "关于系统");
-  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeVisible();
   await expectNoSeriousViolations(page);
 });

@@ -7,6 +7,7 @@ import {
   BookOutlined,
   CalculatorOutlined,
   DashboardOutlined,
+  MessageOutlined,
   DatabaseOutlined,
   HomeOutlined,
   InfoCircleOutlined,
@@ -59,9 +60,22 @@ const UsersView = lazy(() => import("../settings/UsersView").then((module) => ({
 const DataView = lazy(() => import("../settings/DataView").then((module) => ({ default: module.DataView })));
 const LogsView = lazy(() => import("../settings/LogsView").then((module) => ({ default: module.LogsView })));
 const SystemView = lazy(() => import("../settings/SystemView").then((module) => ({ default: module.SystemView })));
+const FeedbackView = lazy(() =>
+  import("../feedback/FeedbackView").then((module) => ({ default: module.FeedbackView })),
+);
 
 type NavIcon =
-  "tag" | "grid" | "calculator" | "refresh" | "book" | "clipboard" | "building" | "info" | "database" | "users";
+  | "tag"
+  | "grid"
+  | "calculator"
+  | "refresh"
+  | "book"
+  | "clipboard"
+  | "building"
+  | "info"
+  | "database"
+  | "users"
+  | "feedback";
 
 const iconFor: Record<NavIcon, ReactNode> = {
   tag: <TagsOutlined />,
@@ -74,6 +88,7 @@ const iconFor: Record<NavIcon, ReactNode> = {
   info: <InfoCircleOutlined />,
   database: <DatabaseOutlined />,
   users: <TeamOutlined />,
+  feedback: <MessageOutlined />,
 };
 
 function preloadDashboard() {
@@ -97,6 +112,9 @@ function Workspace({ user }: { user: SessionUser }) {
   const systemInfo = useSystemInfo();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const isMobileLayout = useIsMobileLayout();
+  const [lastWorkView, setLastWorkView] = useState<WorkspaceView>(
+    ui.activeView === "feedback" ? "dashboard" : ui.activeView,
+  );
 
   const settingsViews: Array<[WorkspaceView, string, NavIcon]> = [
     ["rooms", "房间管理", "building"],
@@ -117,6 +135,7 @@ function Workspace({ user }: { user: SessionUser }) {
     if (view === ui.activeView) return;
     if (navigationGuard.current && !(await navigationGuard.current())) return;
     saveScroll(ui.activeView);
+    if (view !== "feedback") setLastWorkView(view);
     if (view === "dashboard") preloadDashboard();
     persistWorkspaceView(view);
     dispatch({ type: "navigate", view });
@@ -185,6 +204,7 @@ function Workspace({ user }: { user: SessionUser }) {
           : item(entry.view!, entry.label!, iconFor[entry.icon!], entry.dataUi),
       ),
     },
+    item("feedback", "帮助与反馈", <MessageOutlined />),
     {
       key: "settings",
       icon: <SettingOutlined />,
@@ -244,14 +264,14 @@ function Workspace({ user }: { user: SessionUser }) {
             {user.role === "admin" ? "管理员 · 全部饲养间" : `房间管理员 · ${user.roomIds.length} 个饲养间`}
           </Typography.Text>
           <Space orientation="vertical" size={8}>
-            <Button aria-label="刷新页面" block icon={<ReloadOutlined />} onClick={clearLocalCache}>
+            <Button aria-label="刷新页面" block icon={<ReloadOutlined aria-hidden="true" />} onClick={clearLocalCache}>
               刷新
             </Button>
             <Button
               aria-label="退出登录"
               block
               danger
-              icon={<LogoutOutlined />}
+              icon={<LogoutOutlined aria-hidden="true" />}
               loading={logout.isPending}
               onClick={() => void signOut()}
             >
@@ -263,7 +283,9 @@ function Workspace({ user }: { user: SessionUser }) {
       <Layout className="ant-workspace-layout">
         <Layout.Content className="workspace ant-workspace" data-ui="workspace">
           <WorkspaceErrorBoundary resetKey={ui.activeView}>
-            <Suspense fallback={<WorkspaceLoading />}>{renderActiveView(ui.activeView, user, navigate)}</Suspense>
+            <Suspense fallback={<WorkspaceLoading />}>
+              {renderActiveView(ui.activeView, user, navigate, lastWorkView)}
+            </Suspense>
           </WorkspaceErrorBoundary>
           <footer className="workspace-footer ant-workspace-footer">
             <span>
@@ -301,7 +323,12 @@ function item(key: string, label: string, icon: ReactNode, dataUi?: string): Non
   return { key, label: dataUi ? <span data-ui={dataUi}>{label}</span> : label, icon };
 }
 
-function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (view: WorkspaceView) => void) {
+function renderActiveView(
+  view: WorkspaceView,
+  user: SessionUser,
+  navigate: (view: WorkspaceView) => void,
+  feedbackPage: WorkspaceView,
+) {
   if (
     view === "quarantine-batches" ||
     view === "quarantine-parasite" ||
@@ -328,6 +355,7 @@ function renderActiveView(view: WorkspaceView, user: SessionUser, navigate: (vie
   if (view === "billing-monthly-summary" && user.role === "admin")
     return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
   if (view === "workflow-center") return <WorkflowCenterView user={user} />;
+  if (view === "feedback") return <FeedbackView user={user} page={feedbackPage} />;
   if (view === "rooms") return <RoomsView user={user} />;
   if (view === "users") return <UsersView currentUser={user} />;
   if (view === "data") return <DataView user={user} />;

@@ -1,3 +1,4 @@
+import { ActionIcon } from "./components/ui/ActionIcon";
 import { lazy, Suspense, useEffect } from "react";
 import { Button, Result, Skeleton } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,7 +65,7 @@ function ServiceError() {
         subTitle="请检查 Python API 是否正在运行，然后重新加载页面。"
         title="无法连接 CageLedger 服务"
         extra={
-          <Button type="primary" onClick={() => window.location.reload()}>
+          <Button icon={<ActionIcon name="refresh" />} type="primary" onClick={() => window.location.reload()}>
             重新加载
           </Button>
         }

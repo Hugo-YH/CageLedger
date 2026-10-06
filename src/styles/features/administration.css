@@ -493,66 +493,7 @@
   min-width: 0;
 }
 
-.system-masthead {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-inline-start: 4px solid var(--primary);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-
-[data-ui="system-status-page"] .system-masthead .ant-card-body {
-  padding: 24px;
-}
-
-.system-masthead-main {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-}
-
-.system-brand-mark {
-  display: grid;
-  width: 56px;
-  height: 56px;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--primary-soft);
-}
-
-.system-brand-mark img {
-  width: 40px;
-  height: 40px;
-}
-
-.system-masthead-copy {
-  min-width: 0;
-}
-
-.system-eyebrow {
-  color: var(--primary-text);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-[data-ui="system-status-page"] .system-masthead-copy h1.ant-typography {
-  margin: 8px 0 4px;
-  color: var(--text-strong);
-  font-size: 30px;
-  line-height: 1.2;
-}
-
-[data-ui="system-status-page"] .system-masthead-copy h1.ant-typography + .ant-typography {
-  max-width: 760px;
-  margin: 0;
-  color: var(--muted);
-}
-
-.system-info-skeleton,
-[data-ui="system-status-page"] .system-masthead > .ant-card-body > .ant-alert {
+.system-info-skeleton {
   margin-top: 16px;
 }
 
@@ -560,20 +501,6 @@
   display: grid;
   gap: 12px;
   min-width: 0;
-}
-
-.system-section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 0;
-}
-
-[data-ui="system-status-page"] .system-section-heading h2.ant-typography {
-  margin: 0 0 2px;
-  font-size: 20px;
-  line-height: 1.35;
 }
 
 .system-refresh-time {
@@ -746,10 +673,10 @@
   font-size: 16px;
 }
 
-[data-ui="system-status-page"] .system-card-title h2.ant-typography {
+[data-ui="system-status-page"] .system-card-title h3.ant-typography {
   margin: 0;
-  font-size: 18px;
-  line-height: 1.35;
+  font-size: var(--text-lg);
+  line-height: var(--leading-section);
   white-space: nowrap;
 }
 
@@ -757,9 +684,9 @@
   display: block;
   margin-top: 2px;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 400;
-  line-height: 1.45;
+  line-height: var(--leading-relaxed);
 }
 
 [data-ui="system-status-page"] .system-diagnostic-card .ant-statistic {
@@ -905,11 +832,6 @@
   text-overflow: ellipsis;
 }
 
-[data-ui="system-status-page"] .system-history-card .ant-card-head {
-  min-height: 64px;
-  padding-inline: 16px;
-}
-
 [data-ui="system-status-page"] .system-history-card .ant-card-body {
   display: grid;
   gap: 12px;
@@ -936,10 +858,6 @@
 }
 
 @container system-status (width <= 1120px) {
-  .system-masthead-main {
-    grid-template-columns: 56px minmax(0, 1fr);
-  }
-
   .system-pulse-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -966,41 +884,6 @@
 }
 
 @container system-status (width <= 720px) {
-  [data-ui="system-status-page"] .system-masthead .ant-card-body {
-    padding: 16px;
-  }
-
-  .system-masthead-main {
-    grid-template-columns: 44px minmax(0, 1fr);
-    align-items: start;
-    gap: 12px;
-  }
-
-  .system-brand-mark {
-    width: 44px;
-    height: 44px;
-    border-radius: 8px;
-  }
-
-  .system-brand-mark img {
-    width: 32px;
-    height: 32px;
-  }
-
-  [data-ui="system-status-page"] .system-masthead-copy h1.ant-typography {
-    margin-top: 6px;
-    font-size: 24px;
-  }
-
-  .system-section-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  [data-ui="system-status-page"] .system-section-heading > .ant-flex {
-    justify-content: space-between;
-  }
-
   .system-pulse-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1043,11 +926,6 @@
 
   .system-pulse-tile:first-child {
     border-top: 0;
-  }
-
-  [data-ui="system-status-page"] .system-section-heading > .ant-flex {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .system-refresh-time {

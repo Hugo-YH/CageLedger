@@ -17,6 +17,7 @@
     "src/styles/features/cages.css",
     "src/styles/features/workflow.css",
     "src/styles/features/administration.css",
+    "src/styles/features/feedback.css",
     "src/styles/features/project-home.css",
     "src/styles/features/quarantine.css"
   ],
@@ -98,6 +99,12 @@
     "src/styles/features/administration.css": {
       "owner": "administration",
       "status": "complete"
+    },
+    "src/styles/features/feedback.css": {
+      "owner": "feedback",
+      "status": "complete",
+      "scopeRoots": ["[data-feature=\"feedback\"]"],
+      "selectorPrefixes": [".feedback-"]
     },
     "src/styles/features/project-home.css": {
       "owner": "project-home",

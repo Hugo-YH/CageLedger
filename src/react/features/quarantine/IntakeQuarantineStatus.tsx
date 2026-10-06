@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Modal, Select, Space, Tag } from "antd";
 import type { IntakeBatch } from "../../../contracts/intake";
@@ -14,7 +15,7 @@ export function IntakeQuarantineStatus({ item }: { item: IntakeBatch }) {
       <Space orientation="vertical" size={0}>
         <Tag>{item.quarantineStatus || (item.status === "received" ? "待检疫" : "待接收")}</Tag>
         {related.length > 0 && (
-          <Button size="small" type="link" onClick={() => setBatchId(related[0].id)}>
+          <Button icon={<ActionIcon name="info" />} size="small" type="link" onClick={() => setBatchId(related[0].id)}>
             检疫记录
           </Button>
         )}

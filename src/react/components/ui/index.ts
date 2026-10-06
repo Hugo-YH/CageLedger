@@ -1,4 +1,5 @@
 export { ActionButton, type ActionButtonProps, type ActionTone } from "./ActionButton";
+export { ActionIcon, type ActionIconName } from "./ActionIcon";
 export { AntdProvider } from "./AntdProvider";
 export { CommandBar, type CommandBarProps, type LowFrequencyAction } from "./CommandBar";
 export { DataTable } from "./DataTable";

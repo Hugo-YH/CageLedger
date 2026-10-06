@@ -1,4 +1,5 @@
-import { Button, Checkbox, Input, Popover, Skeleton, Space } from "antd";
+import { ActionIcon } from "./ui/ActionIcon";
+import { Alert, Button, Checkbox, Input, Popover, Skeleton, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -13,6 +14,8 @@ export interface FilterableColumnTitleProps {
   values: string[];
   options: TableFilterOption[];
   loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
   filterable?: boolean;
   onOpenChange?: (open: boolean) => void;
   onSort: () => void;
@@ -24,6 +27,8 @@ export function FilterableColumnTitle({
   values,
   options,
   loading = false,
+  error,
+  onRetry,
   filterable = true,
   onOpenChange,
   onSort,
@@ -66,7 +71,7 @@ export function FilterableColumnTitle({
   }
 
   const content = (
-    <div className="table-filter-panel" data-ui="data-table-filter">
+    <div className="table-filter-panel" data-ui="data-table-filter" role="group" aria-label={`筛选${label}选项`}>
       <Input.Search
         allowClear
         placeholder="搜索当前列"
@@ -80,6 +85,20 @@ export function FilterableColumnTitle({
       >
         {loading ? (
           <Skeleton active paragraph={{ rows: 3 }} title={false} />
+        ) : error ? (
+          <Alert
+            type="error"
+            showIcon
+            title="筛选选项加载失败"
+            description={error}
+            action={
+              onRetry ? (
+                <Button icon={<ActionIcon name="refresh" />} size="small" onClick={onRetry}>
+                  重试
+                </Button>
+              ) : undefined
+            }
+          />
         ) : visibleOptions.length ? (
           visibleOptions.map((option) => (
             <Checkbox key={option.value} value={option.value}>

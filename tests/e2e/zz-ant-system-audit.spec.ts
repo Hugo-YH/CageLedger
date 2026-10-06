@@ -24,6 +24,7 @@ const entries = [
   ["饲养费管理", "结算管理"],
   ["饲养费管理", "单据跟踪"],
   ["饲养费管理", "汇总导出"],
+  ["", "帮助与反馈"],
   ["系统设置", "房间管理"],
   ["系统设置", "账号管理"],
   ["系统设置", "数据管理"],
@@ -53,7 +54,7 @@ for (const viewport of [
           await page.getByRole("tab", { name: label === "总览" ? "总览" : "笼位", exact: true }).click();
         } else {
           await page.getByRole("tab", { name: "更多", exact: true }).click();
-          await page.locator(".ant-mobile-navigation-sheet").getByText(label, { exact: true }).click();
+          await page.locator(".ant-mobile-navigation-sheet .adm-list-item").getByText(label, { exact: true }).click();
           await expect(page.locator(".ant-mobile-navigation-sheet")).toBeHidden();
         }
       } else if (group) {
@@ -65,6 +66,7 @@ for (const viewport of [
           .click();
       }
       await expect(page.locator('[data-ui="page-skeleton"]')).toHaveCount(0);
+      await expect(page.locator(".app-command-bar-title-page")).toBeVisible();
       const geometry = await page.evaluate(() => {
         const main = document.querySelector("main.workspace") || document.querySelector("main");
         const controls = [
@@ -99,12 +101,44 @@ for (const viewport of [
             minWidth: style.minWidth,
             zIndex: style.zIndex,
             overflow: style.overflow,
+            titleSize: el.dataset.titleSize,
+            minHeight: parseFloat(style.minHeight),
+            paddingInline: parseFloat(style.paddingInlineStart),
             rect: el.getBoundingClientRect().toJSON(),
           };
         });
         return {
           controls,
           toolbars,
+          typography: [
+            ...(main?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, p, small, .ant-typography-secondary") ??
+              []),
+          ]
+            .filter((el) => el.getClientRects().length)
+            .map((el) => {
+              const style = getComputedStyle(el);
+              return {
+                text: el.textContent?.slice(0, 100),
+                tag: el.tagName,
+                className: el.className,
+                inCommandBar: !!el.closest('[data-ui="workspace-toolbar"]'),
+                supportingCaption:
+                  !!el.closest(".system-card-title") && el.classList.contains("ant-typography-secondary"),
+                diagnosticHeading: el.matches(".system-card-title > span > h3"),
+                formSectionHeading: el.matches(".quantity-field-cluster .field-cluster-head > h3"),
+                font: style.fontFamily,
+                size: style.fontSize,
+                lineHeight: style.lineHeight,
+                weight: style.fontWeight,
+              };
+            }),
+          toolbarButtonsMissingIcons: [
+            ...(main?.querySelectorAll<HTMLElement>(
+              ".app-command-bar-actions .ant-btn, .app-command-bar-context .ant-btn",
+            ) ?? []),
+          ]
+            .filter((el) => el.getClientRects().length && !el.querySelector(".ant-btn-icon"))
+            .map((el) => el.getAttribute("aria-label") || el.textContent),
           selectionLabels: [...document.querySelectorAll<HTMLElement>(".app-command-bar-context .ant-typography")]
             .filter((el) => el.textContent?.startsWith("已选"))
             .map((el) => ({
@@ -112,6 +146,21 @@ for (const viewport of [
               height: el.getBoundingClientRect().height,
               lineHeight: parseFloat(getComputedStyle(el).lineHeight),
             })),
+          separatePageHeaders: main?.querySelectorAll(".adm-nav-bar").length ?? 0,
+          pageToolbar: (() => {
+            const heading = main?.querySelector<HTMLElement>(".app-command-bar-title-page");
+            const toolbar = heading?.closest<HTMLElement>('[data-ui="workspace-toolbar"]');
+            if (!toolbar || !main) return null;
+            const bounds = main.getBoundingClientRect();
+            const style = getComputedStyle(main);
+            return {
+              nestedInCard: !!toolbar.closest(".ant-card"),
+              x: toolbar.getBoundingClientRect().x,
+              width: toolbar.getBoundingClientRect().width,
+              expectedX: bounds.x + parseFloat(style.paddingLeft),
+              expectedWidth: bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+            };
+          })(),
           mobileHeaderGap: (() => {
             const shell = document.querySelector('[data-ui="mobile-page"]');
             const header = shell?.querySelector(".adm-nav-bar");
@@ -132,6 +181,61 @@ for (const viewport of [
           .toBeLessThanOrEqual(selection.lineHeight + 1);
       expect.soft(geometry.pageOverflow, `${label} page overflow`).toBe(false);
       expect.soft(geometry.workspaceOverflow, `${label} workspace overflow`).toBe(false);
+      expect.soft(geometry.toolbarButtonsMissingIcons, `${label} toolbar action icons`).toEqual([]);
+      for (const bar of geometry.toolbars) {
+        expect
+          .soft(bar.minHeight, `${label} ${bar.titleSize ?? "untitled"} toolbar minimum height`)
+          .toBe(bar.titleSize === "page" ? 64 : 48);
+        expect.soft(bar.rect.height, `${label} toolbar accommodates content`).toBeGreaterThanOrEqual(bar.minHeight);
+        if (bar.titleSize === "page")
+          expect
+            .soft(bar.paddingInline, `${label} page toolbar horizontal padding`)
+            .toBe(viewport.width < 768 ? 16 : 24);
+      }
+      expect.soft(geometry.pageToolbar?.nestedInCard, `${label} title bar outside content card`).toBe(false);
+      expect
+        .soft(geometry.pageToolbar?.x, `${label} title bar left edge`)
+        .toBeCloseTo(geometry.pageToolbar?.expectedX ?? 0, 0);
+      expect
+        .soft(geometry.pageToolbar?.width, `${label} title bar width`)
+        .toBeCloseTo(geometry.pageToolbar?.expectedWidth ?? 0, 0);
+      const pageTitles = geometry.typography.filter((item) => item.className.includes("app-command-bar-title-page"));
+      expect.soft(geometry.separatePageHeaders, `${label} has no separate page title bar`).toBe(0);
+      expect.soft(pageTitles.length, `${label} has one page title`).toBe(1);
+      expect
+        .soft(
+          pageTitles.every((item) => item.inCommandBar),
+          `${label} title shares its action bar`,
+        )
+        .toBe(true);
+      for (const title of pageTitles) {
+        expect.soft(title.size, `${label} page heading size`).toBe("24px");
+        expect.soft(parseFloat(title.lineHeight), `${label} page heading line height`).toBeCloseTo(32, 1);
+      }
+      if (viewport.width >= 768 && ["录入数量统计表", "已保存数量统计表", "关于系统"].includes(label)) {
+        const title = geometry.typography.find((item) =>
+          label === "关于系统" ? item.text === "系统状态" : item.text === label,
+        );
+        expect.soft(title?.size, `${label} page title size`).toBe("24px");
+        expect.soft(parseFloat(title?.lineHeight ?? "0"), `${label} page title line height`).toBeCloseTo(32, 1);
+        expect.soft(title?.weight, `${label} page title weight`).toBe("600");
+      }
+      for (const section of geometry.typography.filter(
+        (item) =>
+          item.tag === "H4" ||
+          item.formSectionHeading ||
+          item.diagnosticHeading ||
+          item.className.includes("app-command-bar-title-section"),
+      )) {
+        expect.soft(section.size, `${label} ${section.text} section size`).toBe("16px");
+        expect.soft(parseFloat(section.lineHeight), `${label} ${section.text} section line height`).toBeCloseTo(24, 1);
+      }
+      if (label === "关于系统") {
+        for (const caption of geometry.typography.filter((item) => item.supportingCaption)) {
+          expect.soft(caption.size, `${caption.text} caption size`).toBe("12px");
+          expect.soft(parseFloat(caption.lineHeight), `${caption.text} caption line height`).toBeCloseTo(20, 1);
+        }
+      }
       if (geometry.mobileHeaderGap !== null)
         expect.soft(geometry.mobileHeaderGap, `${label} navigation gap`).toBeLessThanOrEqual(24);
     }

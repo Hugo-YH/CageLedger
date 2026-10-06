@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Card, Empty, Space, Tag, Typography } from "antd";
 
@@ -77,8 +78,10 @@ export function RoomsView({ user }: { user: SessionUser }) {
     <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceToolbar
         ariaLabel="饲养间与笼架操作"
+        title="饲养间与笼架"
         actions={
           <Button
+            icon={<ActionIcon name="create" />}
             disabled={!visibleRooms.length}
             onClick={() => setRackDraft(newRackDraft(visibleRooms[0], cageRacks))}
           >
@@ -87,7 +90,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
         }
         primaryAction={
           canManageRooms ? (
-            <Button type="primary" onClick={() => setRoomDraft(newRoomDraft())}>
+            <Button icon={<ActionIcon name="create" />} type="primary" onClick={() => setRoomDraft(newRoomDraft())}>
               新增饲养间
             </Button>
           ) : undefined
@@ -102,7 +105,11 @@ export function RoomsView({ user }: { user: SessionUser }) {
             type="error"
             title="基础设施更新失败，当前输入已保留"
             action={
-              <Button loading={query.isFetching} onClick={() => void query.refetch()}>
+              <Button
+                icon={<ActionIcon name="refresh" />}
+                loading={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
                 重试
               </Button>
             }
@@ -114,11 +121,6 @@ export function RoomsView({ user }: { user: SessionUser }) {
             <Tag color="processing">
               {visibleRooms.length} 间 · {cageRacks.length} 架 · {cageSlots.length} 笼位
             </Tag>
-          }
-          title={
-            <Typography.Title level={2} style={{ margin: 0 }}>
-              饲养间与笼架
-            </Typography.Title>
           }
         >
           {visibleRooms.length ? (

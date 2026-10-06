@@ -17,7 +17,17 @@ export function RowActions({
   return (
     <Space className="table-actions" size={4}>
       {children}
-      {lowFrequencyActions.length ? (
+      {lowFrequencyActions.length === 1 ? (
+        <Button
+          danger={lowFrequencyActions[0].danger}
+          disabled={lowFrequencyActions[0].disabled || lowFrequencyActions[0].loading}
+          loading={lowFrequencyActions[0].loading}
+          onClick={lowFrequencyActions[0].onClick}
+          size="small"
+        >
+          {lowFrequencyActions[0].label}
+        </Button>
+      ) : lowFrequencyActions.length > 1 ? (
         <Dropdown
           menu={{
             items: lowFrequencyActions.map((action) => ({

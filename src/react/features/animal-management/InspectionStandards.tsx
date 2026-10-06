@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
 
@@ -38,7 +39,7 @@ export function InspectionStandards({
   if (editing) {
     if (draft.isLoading || !draft.data) return <PageSkeleton label="巡检编辑草稿" variant="form" />;
     return (
-      <MobilePage desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
+      <MobilePage titleInToolbar desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
         <InspectionCatalogEditor draft={draft.data} onExit={() => setEditing(false)} />
       </MobilePage>
     );
@@ -53,39 +54,46 @@ export function InspectionStandards({
           title="存在未发布的草稿"
           description="当前目录已有保存但未发布的修改，发布后录入表单与标准页将同步更新。"
           action={
-            <Button size="small" type="primary" onClick={() => setEditing(true)}>
+            <Button icon={<ActionIcon name="edit" />} size="small" type="primary" onClick={() => setEditing(true)}>
               继续编辑
             </Button>
           }
         />
       ) : null}
-      <Card className="animal-ant-card inspection-standards-panel" title="巡检标准目录">
-        <CommandBar
-          ariaLabel="巡检标准操作"
-          context={
-            <Tag color={catalog.data.version.status === "active" ? "green" : "default"}>
-              {catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
-            </Tag>
-          }
-          lowFrequencyActions={
-            isAdmin
-              ? [
-                  {
-                    key: "versions",
-                    label: "版本历史",
-                    onClick: () => setVersionsOpen(true),
-                  },
-                ]
-              : undefined
-          }
-          primaryAction={
-            isAdmin ? (
-              <Button type="primary" onClick={() => setEditing(true)}>
-                编辑目录
-              </Button>
-            ) : undefined
-          }
-        />
+      <CommandBar
+        ariaLabel="巡检标准操作"
+        title="巡检标准目录"
+        actions={
+          <Button icon={<ActionIcon name="back" />} onClick={() => navigate("animal-inspection-entry")}>
+            返回巡检录入
+          </Button>
+        }
+        context={
+          <Tag color={catalog.data.version.status === "active" ? "green" : "default"}>
+            {catalog.data.version.status === "active" ? "当前生效" : catalog.data.version.status}
+          </Tag>
+        }
+        lowFrequencyActions={
+          isAdmin
+            ? [
+                {
+                  icon: <ActionIcon name="history" />,
+                  key: "versions",
+                  label: "版本历史",
+                  onClick: () => setVersionsOpen(true),
+                },
+              ]
+            : undefined
+        }
+        primaryAction={
+          isAdmin ? (
+            <Button icon={<ActionIcon name="edit" />} type="primary" onClick={() => setEditing(true)}>
+              编辑目录
+            </Button>
+          ) : undefined
+        }
+      />
+      <Card className="animal-ant-card inspection-standards-panel">
         <Descriptions bordered className="inspection-catalog-summary" column={{ xs: 1, sm: 2 }} size="small">
           <Descriptions.Item label="当前目录版本">{catalog.data.version.version}</Descriptions.Item>
           <Descriptions.Item label="导入时间">
@@ -117,7 +125,7 @@ export function InspectionStandards({
     </>
   );
   return (
-    <MobilePage desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
+    <MobilePage titleInToolbar desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
       {content}
     </MobilePage>
   );

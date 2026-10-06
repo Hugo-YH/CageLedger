@@ -77,14 +77,14 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openSettingsView(page, "房间管理");
   await expect(page.getByRole("heading", { name: "饲养间与笼架", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "账号管理");
-  await expect(page.getByRole("heading", { name: "账号列表", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "账号管理", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "数据管理");
-  await expect(page.getByRole("heading", { name: "项目负责人身份", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "数据管理", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "操作日志");
   await expect(page.getByRole("heading", { name: "操作记录", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "关于系统");
-  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "当前服务进程", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "当前服务进程", exact: true, level: 3 })).toBeVisible();
   const certificateDownload = page.getByRole("link", { name: "下载客户端证书", exact: true });
   await expect(certificateDownload).toHaveAttribute("href", "/docs/cageledger.crt");
   await expect(certificateDownload).toHaveAttribute("download", "cageledger.crt");

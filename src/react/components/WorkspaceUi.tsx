@@ -1,3 +1,4 @@
+import { ActionIcon } from "./ui/ActionIcon";
 import { Alert, Button, Empty, Flex, Modal, Pagination, Space, Typography } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 import { type ReactNode, useEffect, useRef } from "react";
@@ -14,7 +15,8 @@ export function WorkspaceToolbar({
   className = "",
   ...props
 }: CommandBarProps & { toolbar?: ReactNode }) {
-  return toolbar ||
+  return props.title ||
+    toolbar ||
     context ||
     props.actions ||
     props.primaryAction ||
@@ -33,7 +35,11 @@ export function PageState({ title, detail, retry }: { title: string; detail?: st
         showIcon
         title={title}
         description={detail}
-        action={<Button onClick={retry}>重新加载</Button>}
+        action={
+          <Button icon={<ActionIcon name="refresh" />} onClick={retry}>
+            重新加载
+          </Button>
+        }
       />
     );
   }

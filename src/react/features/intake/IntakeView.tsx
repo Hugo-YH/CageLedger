@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -365,30 +366,32 @@ export function IntakeView({
 
   return (
     <section className="workspace-view intake-workspace react-intake-view" data-feature="intake">
-      {mode === "entry" ? (
-        <WorkspaceToolbar
-          ariaLabel="笼卡录入操作"
-          sticky
-          actions={
-            <ActionButton disabled={save.isPending} onClick={startNew}>
-              新建批次
-            </ActionButton>
-          }
-          primaryAction={
-            <AsyncActionButton
-              className="primary"
-              type="submit"
-              form="intake-entry-panel"
-              pending={save.isPending}
-              pendingLabel="保存中..."
-            >
-              保存待接收批次
-            </AsyncActionButton>
-          }
-        />
-      ) : null}
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">
+          {mode === "entry" ? (
+            <WorkspaceToolbar
+              ariaLabel="笼卡录入操作"
+              title={editing ? "编辑接收笼卡" : "接收笼卡"}
+              sticky
+              actions={
+                <ActionButton icon={<ActionIcon name="create" />} disabled={save.isPending} onClick={startNew}>
+                  新建批次
+                </ActionButton>
+              }
+              primaryAction={
+                <AsyncActionButton
+                  icon={<ActionIcon name="save" />}
+                  className="primary"
+                  type="submit"
+                  form="intake-entry-panel"
+                  pending={save.isPending}
+                  pendingLabel="保存中..."
+                >
+                  保存待接收批次
+                </AsyncActionButton>
+              }
+            />
+          ) : null}
           {mode === "entry" ? (
             <IntakeEntryPanel
               editing={editing}
@@ -462,7 +465,7 @@ export function IntakeView({
               aiPending={aiParsing}
               onSubmit={submit}
               headActions={
-                <ActionButton loading={save.isPending} tone="primary" type="submit">
+                <ActionButton icon={<ActionIcon name="save" />} loading={save.isPending} tone="primary" type="submit">
                   保存待接收批次
                 </ActionButton>
               }
@@ -539,8 +542,10 @@ function IntakePrintConfirmDialog({
         </p>
       </div>
       <div className="modal-shell-actions">
-        <ActionButton onClick={() => onPrint(false)}>直接打印</ActionButton>
-        <ActionButton tone="primary" onClick={() => onPrint(true)}>
+        <ActionButton icon={<ActionIcon name="print" />} onClick={() => onPrint(false)}>
+          直接打印
+        </ActionButton>
+        <ActionButton icon={<ActionIcon name="print" />} tone="primary" onClick={() => onPrint(true)}>
           补空白卡并打印
         </ActionButton>
       </div>

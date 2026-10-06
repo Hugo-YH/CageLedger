@@ -1,8 +1,10 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { PageSkeleton } from "../../components/PageSkeleton";
 import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useState } from "react";
 import { Alert, Button, DatePicker, Select, Space, Table, Tag } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { speciesLabel } from "../../../domain/intake";
 import type { IntakeBatch } from "../../../contracts/intake";
@@ -29,15 +31,21 @@ export function QuarantinePool({
   return (
     <>
       <CommandBar
+        title="检疫批次"
         ariaLabel="待检疫列表操作"
         sticky="selection"
         context={
-          <Space size={4}>
-            <span>待检疫动物</span>
-            <HelpPopover label="待检疫动物说明">
-              接收后自动进入待检疫池。勾选本次覆盖的动物建立检疫批次，再从中登记实际抽样；确认完成后，未直接采样的覆盖动物也统一标记已检疫。
+          <>
+            <HelpPopover label="检疫批次说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
+              登记覆盖来源、跟踪检测进展并确认整批检疫完成。
             </HelpPopover>
-          </Space>
+            <Space size={4}>
+              <span>待检疫动物</span>
+              <HelpPopover label="待检疫动物说明">
+                接收后自动进入待检疫池。勾选本次覆盖的动物建立检疫批次，再从中登记实际抽样；确认完成后，未直接采样的覆盖动物也统一标记已检疫。
+              </HelpPopover>
+            </Space>
+          </>
         }
         selection={{ count: selected.length, onClear: () => setSelected([]) }}
         filters={
@@ -76,6 +84,7 @@ export function QuarantinePool({
           selected.length > 0
             ? [
                 {
+                  icon: <ActionIcon name="create" />,
                   key: "new-empty-batch",
                   label: "新建空白检疫批次",
                   onClick: onNew,
@@ -85,11 +94,15 @@ export function QuarantinePool({
         }
         primaryAction={
           selected.length > 0 ? (
-            <Button type="primary" onClick={() => onCreate(selected.map((s) => ({ ...s, id: id(), intakeId: s.id })))}>
+            <Button
+              icon={<ActionIcon name="create" />}
+              type="primary"
+              onClick={() => onCreate(selected.map((s) => ({ ...s, id: id(), intakeId: s.id })))}
+            >
               用所选动物新建检疫批次（{selected.length}）
             </Button>
           ) : (
-            <Button type="primary" onClick={onNew}>
+            <Button icon={<ActionIcon name="create" />} type="primary" onClick={onNew}>
               新建检疫批次
             </Button>
           )
@@ -99,7 +112,11 @@ export function QuarantinePool({
         <Alert
           type="error"
           title={query.error.message}
-          action={<Button onClick={() => void query.refetch()}>重试</Button>}
+          action={
+            <Button icon={<ActionIcon name="refresh" />} onClick={() => void query.refetch()}>
+              重试
+            </Button>
+          }
         />
       )}
       <ListRefreshStatus active={query.isFetching && !query.isPending} />

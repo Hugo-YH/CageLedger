@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useListPageBounds } from "../../../hooks/useListPageBounds";
 import { queryKeys } from "../../../api/queryKeys";
 import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
@@ -33,9 +34,11 @@ import { buildSettlementColumns } from "./settlementCandidateColumns";
 export function SettlementCandidateList({
   source,
   user,
+  navigationAction,
 }: {
   source: "quantity_sheet" | "cage_map";
   user: SessionUser;
+  navigationAction?: React.ReactNode;
 }) {
   const [page, setPage] = useWorkspaceMemory("settlement:page", 1);
   const [pageSize, setPageSize] = useWorkspaceMemory("settlement:pageSize", 10);
@@ -316,7 +319,11 @@ export function SettlementCandidateList({
         type="error"
         showIcon
         title={`结算列表加载失败：${list.error.message}`}
-        action={<Button onClick={() => void list.refetch()}>重试</Button>}
+        action={
+          <Button icon={<ActionIcon name="refresh" />} onClick={() => void list.refetch()}>
+            重试
+          </Button>
+        }
       />
     );
 
@@ -352,6 +359,7 @@ export function SettlementCandidateList({
         />
       ) : null}
       <SettlementBatchToolbar
+        navigationAction={navigationAction}
         filters={
           <ListViewControls
             filters={filters}
@@ -371,14 +379,12 @@ export function SettlementCandidateList({
         pdfExporting={pdfExport.isExporting}
         selectedCount={selectedCandidates.length}
         selectingAll={selectingAll}
-        total={total}
         withdrawableCount={withdrawableSelected.length}
         xlsxExporting={xlsxExporting}
         onExportPdf={() => void exportCandidates(selectedCandidates)}
         onExportXlsx={() => void exportCandidatesXlsx(selectedCandidates)}
         onInitiate={() => setBatchConfirmOpen(true)}
         onWithdraw={() => setBatchWithdrawOpen(true)}
-        onClear={selection.clear}
       />
       <div
         className="ant-table-region settlement-candidate-list"

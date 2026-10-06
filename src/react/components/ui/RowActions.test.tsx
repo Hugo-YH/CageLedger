@@ -1,3 +1,4 @@
+import { ActionIcon } from "./ActionIcon";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -5,8 +6,15 @@ import { afterEach, expect, it, vi } from "vitest";
 import { RowActions } from "./RowActions";
 
 vi.mock("antd", () => ({
-  Button: ({ children, ...props }: { children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
+  Button: ({
+    children,
+    icon,
+    ...props
+  }: { children: ReactNode; icon?: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>
+      {icon}
+      {children}
+    </button>
   ),
   Dropdown: ({
     children,
@@ -14,7 +22,7 @@ vi.mock("antd", () => ({
   }: {
     children: ReactNode;
     menu?: {
-      items?: Array<{ key: string; label?: ReactNode; disabled?: boolean }>;
+      items?: Array<{ key: string; label?: ReactNode; icon?: ReactNode; disabled?: boolean }>;
       onClick?: ({ key }: { key: string }) => void;
     };
   }) => (
@@ -22,13 +30,14 @@ vi.mock("antd", () => ({
       {children}
       {menu?.items?.map((item) => (
         <button disabled={item.disabled} key={item.key} onClick={() => menu.onClick?.({ key: item.key })}>
+          {item.icon}
           {item.label}
         </button>
       ))}
     </>
   ),
   Space: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  Spin: () => <span>加载中</span>,
+  Spin: () => <span data-testid="action-loading" aria-hidden="true" />,
 }));
 
 afterEach(() => {
@@ -36,12 +45,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("keeps common row actions visible and routes low-frequency actions through the accessible menu", () => {
+it("keeps a single additional row action visible and text-only", () => {
   const onDelete = vi.fn();
   render(
     <RowActions
       ariaLabel="统计表更多操作"
-      lowFrequencyActions={[{ key: "delete", label: "删除", danger: true, onClick: onDelete }]}
+      lowFrequencyActions={[
+        { icon: <ActionIcon name="remove" />, key: "delete", label: "删除", danger: true, onClick: onDelete },
+      ]}
     >
       <button>预览</button>
       <button>编辑</button>
@@ -49,7 +60,9 @@ it("keeps common row actions visible and routes low-frequency actions through th
   );
   expect(screen.getByRole("button", { name: "预览" })).toBeVisible();
   expect(screen.getByRole("button", { name: "编辑" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "统计表更多操作" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "统计表更多操作" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "删除" }).querySelector("svg")).toBeNull();
+  expect(screen.getByRole("button", { name: "预览" }).querySelector("svg")).toBeNull();
   screen.getByRole("button", { name: "删除" }).click();
   expect(onDelete).toHaveBeenCalledOnce();
 });

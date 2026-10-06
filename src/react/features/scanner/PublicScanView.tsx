@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Button, Descriptions, Result, Skeleton, Tag } from "antd";
 
 import { usePublicCageCard } from "../../api/cageCard";
@@ -46,7 +47,11 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
               </>
             }
             extra={
-              <Button loading={details.isFetching} onClick={() => void details.refetch()}>
+              <Button
+                icon={<ActionIcon name="refresh" />}
+                loading={details.isFetching}
+                onClick={() => void details.refetch()}
+              >
                 重试
               </Button>
             }

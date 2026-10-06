@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Empty, Input } from "antd";
@@ -291,11 +292,12 @@ export function PlacementDrawer({
                 </small>
               </div>
               {task.status === "pending" ? (
-                <ActionButton tone="primary" onClick={() => onSelect(task)}>
+                <ActionButton icon={<ActionIcon name="select" />} tone="primary" onClick={() => onSelect(task)}>
                   选择空笼位
                 </ActionButton>
               ) : (
                 <ActionButton
+                  icon={<ActionIcon name="reserve" />}
                   disabled={moveIn.isPending}
                   loading={moveIn.isPending}
                   tone="primary"

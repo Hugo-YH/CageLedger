@@ -68,25 +68,31 @@ launch(resolveProjectPython(), ["server.py"], {
   // Keep the production default same-origin-only and explicitly allow only the
   // two browser-facing loopback origins for this local proxy instance.
   CAGELEDGER_CORS_ALLOWED_ORIGINS: corsAllowedOrigins,
-  ...(ephemeralDir ? { CAGELEDGER_DB: join(ephemeralDir, "cageledger.sqlite") } : {}),
+  ...(ephemeralDir
+    ? {
+        CAGELEDGER_DB: join(ephemeralDir, "cageledger.sqlite"),
+        CAGELEDGER_DATA_ROOT: ephemeralDir,
+        // Isolated runs must not inherit real Gitea credentials from .env.
+        CAGELEDGER_GITEA_TOKEN: process.env.CAGELEDGER_E2E_GITEA_TOKEN || "",
+        CAGELEDGER_REPOSITORY_URL: process.env.CAGELEDGER_E2E_REPOSITORY_URL || "http://127.0.0.1:1/test/feedback",
+        CAGELEDGER_UPDATE_CHECK_ENABLED: "false",
+        CAGELEDGER_ADMIN_USERNAME: "admin",
+        CAGELEDGER_ADMIN_PASSWORD: "admin123",
+      }
+    : {}),
 });
-launch(process.platform === "win32" ? "npm.cmd" : "npm", [
-  "exec",
-  "vite",
-  "--",
-  "--host",
-  "0.0.0.0",
-  "--port",
-  appPort,
-]);
-launch(process.platform === "win32" ? "npm.cmd" : "npm", [
-  "exec",
-  "vitepress",
-  "--",
-  "dev",
-  "wiki",
-  "--host",
-  "127.0.0.1",
-  "--port",
-  docsPort,
-]);
+launch(
+  process.platform === "win32" ? "npm.cmd" : "npm",
+  ["exec", "vite", "--", "--host", "0.0.0.0", "--port", appPort],
+  {
+    CAGELEDGER_API_ORIGIN:
+      process.env.CAGELEDGER_API_ORIGIN || dotEnv.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${apiPort}`,
+    CAGELEDGER_DOCS_ORIGIN:
+      process.env.CAGELEDGER_DOCS_ORIGIN || dotEnv.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${docsPort}`,
+  },
+);
+launch(
+  process.platform === "win32" ? "npm.cmd" : "npm",
+  ["exec", "vitepress", "--", "dev", "wiki", "--host", "127.0.0.1", "--port", docsPort],
+  { CAGELEDGER_DOCS_PORT: docsPort },
+);

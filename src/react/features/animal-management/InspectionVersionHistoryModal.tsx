@@ -60,7 +60,11 @@ export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean
                   disabled={isActive || restore.isPending}
                   onConfirm={() => handleRestore(item.version)}
                 >
-                  <Button size="small" icon={<RollbackOutlined />} disabled={isActive || restore.isPending}>
+                  <Button
+                    size="small"
+                    icon={<RollbackOutlined aria-hidden="true" />}
+                    disabled={isActive || restore.isPending}
+                  >
                     回滚
                   </Button>
                 </Popconfirm>

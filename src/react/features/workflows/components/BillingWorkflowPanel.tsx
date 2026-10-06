@@ -4,14 +4,14 @@ import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
 import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
 import { ListViewControls, type ListDensity } from "../../../components/ui/ListViewControls";
 import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
-import { LockOutlined } from "@ant-design/icons";
+import { ExclamationCircleOutlined, LockOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 
 import type { SessionUser } from "../../../api/contracts";
 import type { BillingWorkflow } from "../../../api/workflows";
 import { useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
 import { useBatchAdvanceWorkflow } from "../../../api/useBatchAdvanceWorkflow";
-import { CommandBar, DataTable } from "../../../components/ui";
+import { CommandBar, DataTable, HelpPopover } from "../../../components/ui";
 import { Pager } from "../../../components/WorkspaceUi";
 import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
 import { QueryFeedback } from "./LedgerListShared";
@@ -289,6 +289,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   return (
     <section className="ledger-section" aria-label="结算流程列表">
       <CommandBar
+        title="单据跟踪"
         className="app-command-bar-list"
         ariaLabel="结算流程批量操作"
         filters={
@@ -303,7 +304,14 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
             disabled={batchLocking || lockAction.pending}
           />
         }
-        context={<Tag color="blue">{total} 条结算流程</Tag>}
+        context={
+          <>
+            <HelpPopover label="单据跟踪说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
+              以饲养费结算单为主线：发起结算流程、交回登记、归档。
+            </HelpPopover>
+            <Tag color="blue">{total} 条结算流程</Tag>
+          </>
+        }
         selection={
           user.billingLockAllowed
             ? { count: selectedLockable.length, onClear: clearSelection, pending: batchLocking }

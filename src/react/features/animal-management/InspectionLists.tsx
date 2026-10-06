@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { List as MobileList } from "antd-mobile";
 import { Alert, Button, Card, Collapse, Descriptions, Empty, Form, Modal, Select, Space, Tag, Typography } from "antd";
@@ -90,13 +91,28 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
   if (isMobile) {
     return (
       <>
-        <MobilePage feature="animal-management" onBack={() => navigate("animal-inspection-entry")} title="巡检记录">
+        <MobilePage
+          titleInToolbar
+          feature="animal-management"
+          onBack={() => navigate("animal-inspection-entry")}
+          title="巡检记录"
+        >
           <WorkspaceToolbar
+            title="巡检记录"
+            actions={
+              <Button icon={<ActionIcon name="back" />} onClick={() => navigate("animal-inspection-entry")}>
+                返回巡检录入
+              </Button>
+            }
             ariaLabel="巡检记录操作"
             context={refreshStatus}
             filters={filters}
             primaryAction={
-              <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
+              <ActionButton
+                icon={<ActionIcon name="create" />}
+                tone="primary"
+                onClick={() => navigate("animal-inspection-entry")}
+              >
                 新建巡检
               </ActionButton>
             }
@@ -145,17 +161,15 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
       >
         <WorkspaceToolbar
           ariaLabel="巡检记录操作"
-          context={
-            <>
-              <Typography.Title level={2} style={{ margin: 0 }}>
-                巡检记录
-              </Typography.Title>
-              {refreshStatus}
-            </>
-          }
+          title="巡检记录"
+          context={refreshStatus}
           filters={filters}
           primaryAction={
-            <ActionButton tone="primary" onClick={() => navigate("animal-inspection-entry")}>
+            <ActionButton
+              icon={<ActionIcon name="create" />}
+              tone="primary"
+              onClick={() => navigate("animal-inspection-entry")}
+            >
               新建巡检
             </ActionButton>
           }
@@ -194,6 +208,7 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
                     ariaLabel={`${item.roomName}巡检记录更多操作`}
                     lowFrequencyActions={[
                       {
+                        icon: <ActionIcon name="download" />,
                         key: `export-${item.id}`,
                         label: "导出 PDF",
                         onClick: () => void downloadAnimalInspectionPdf(item.id),
@@ -277,8 +292,22 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
     const findings = query.data?.items || [];
     return (
       <>
-        <MobilePage feature="animal-management" onBack={() => navigate("animal-inspection-entry")} title="异常处置">
-          <WorkspaceToolbar ariaLabel="异常处置" filters={filters} />
+        <MobilePage
+          titleInToolbar
+          feature="animal-management"
+          onBack={() => navigate("animal-inspection-entry")}
+          title="异常处置"
+        >
+          <WorkspaceToolbar
+            title="异常处置"
+            ariaLabel="异常处置"
+            filters={filters}
+            actions={
+              <Button icon={<ActionIcon name="back" />} onClick={() => navigate("animal-inspection-entry")}>
+                返回巡检录入
+              </Button>
+            }
+          />
           {feedback}
           <Card className="animal-ant-card inspection-list-panel">
             {findings.length ? (
@@ -320,10 +349,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
           feature: "animal-management",
         }}
       >
-        <Typography.Title level={2} style={{ margin: 0 }}>
-          异常处置
-        </Typography.Title>
-        <WorkspaceToolbar ariaLabel="异常处置" filters={filters} />
+        <WorkspaceToolbar title="异常处置" ariaLabel="异常处置" filters={filters} />
         {feedback}
         <Card className="animal-ant-card inspection-list-panel">
           <DataTable
@@ -379,7 +405,7 @@ function InspectionListError({ refreshing, retry }: { refreshing: boolean; retry
       showIcon
       type="error"
       action={
-        <Button loading={refreshing} onClick={retry}>
+        <Button icon={<ActionIcon name="refresh" />} loading={refreshing} onClick={retry}>
           重试
         </Button>
       }
@@ -395,7 +421,11 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
     <Modal
       className="inspection-detail-modal"
       destroyOnHidden
-      footer={<Button onClick={() => void downloadAnimalInspectionPdf(id)}>导出 PDF</Button>}
+      footer={
+        <Button icon={<ActionIcon name="download" />} onClick={() => void downloadAnimalInspectionPdf(id)}>
+          导出 PDF
+        </Button>
+      }
       onCancel={onClose}
       open
       title="巡检记录详情"
@@ -405,7 +435,7 @@ function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => vo
       {query.isError || (query.isSuccess && !query.data) ? (
         <Alert
           action={
-            <Button size="small" onClick={() => void query.refetch()}>
+            <Button icon={<ActionIcon name="refresh" />} size="small" onClick={() => void query.refetch()}>
               重试
             </Button>
           }

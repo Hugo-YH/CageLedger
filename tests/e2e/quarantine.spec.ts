@@ -278,8 +278,7 @@ test("quarantine batch workspace provides create, edit and guarded delete action
   await expect(page.getByText("批次建立备注", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "返回列表", exact: true }).click();
   row = page.getByRole("row").filter({ hasText: batchName });
-  await row.getByRole("button", { name: `${batchName}更多操作`, exact: true }).click();
-  await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+  await row.getByRole("button", { name: "删除", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "删除检疫批次" });
   await confirmation.getByRole("button", { name: "删除", exact: true }).click();
   await expect(page.getByText("检疫批次已删除", { exact: true })).toBeVisible();

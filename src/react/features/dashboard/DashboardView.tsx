@@ -1,12 +1,27 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
-import { Alert, Badge, Button, Card, Col, Progress, Row, Select, Skeleton, Statistic, Tag, Typography } from "antd";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Progress,
+  Row,
+  Select,
+  Skeleton,
+  Statistic,
+  Tag,
+  Typography,
+  theme,
+} from "antd";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
 import { useDashboardOverview } from "../../api/dashboardOverview";
 import { PageState } from "../../components/WorkspaceUi";
-import { ListRefreshStatus } from "../../components/ui";
+import { CommandBar, ListRefreshStatus } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 
@@ -164,20 +179,12 @@ function DashboardContent({
 
   return (
     <section className="workspace-view dashboard-view ant-dashboard-view">
-      <div className="dashboard-hero">
-        <Typography.Text className="workspace-kicker" type="secondary">
-          运营工作台
-        </Typography.Text>
-        <div className="workspace-title-line">
-          <Typography.Title level={1}>实验动物笼位管理与计费系统</Typography.Title>
-          <Tag className="workspace-status-badge" color="blue">
-            {APP_VERSION}
-          </Tag>
-        </div>
-        <Typography.Paragraph className="workspace-summary" type="secondary">
-          接收、饲养与结算的运营概览，数据来自笼卡管理、数量统计表与项目负责人结算。
-        </Typography.Paragraph>
-      </div>
+      <CommandBar
+        title="实验动物笼位管理与计费系统"
+        description="接收、饲养与结算的运营概览，数据来自笼卡管理、数量统计表与项目负责人结算。"
+        ariaLabel="运营工作台"
+        context={<Tag color="blue">{APP_VERSION}</Tag>}
+      />
       <div className="workspace-body dashboard-workspace-body ant-dashboard-body">
         <div className="ant-dashboard-month-bar">
           <Select
@@ -199,7 +206,7 @@ function DashboardContent({
             showIcon
             title="运营数据更新失败，暂显示上次结果"
             action={
-              <Button loading={refreshing} onClick={retry}>
+              <Button icon={<ActionIcon name="refresh" />} loading={refreshing} onClick={retry}>
                 重试
               </Button>
             }
@@ -348,6 +355,7 @@ function IntakeTrend({
 }
 
 function StrainDistribution({ items }: { items: Array<{ strain: string; animals: number }> }) {
+  const { token } = theme.useToken();
   const total = items.reduce((sum, item) => sum + item.animals, 0);
   const sorted = [...items].sort((a, b) => b.animals - a.animals);
   const top = sorted.slice(0, 5);
@@ -401,7 +409,7 @@ function StrainDistribution({ items }: { items: Array<{ strain: string; animals:
           label={{
             text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
             position: "outside",
-            fontSize: 10,
+            fontSize: token.fontSizeSM,
           }}
           legend={{
             color: {
@@ -524,13 +532,11 @@ function DashboardSkeleton() {
       role="status"
     >
       <span className="app-visually-hidden">运营总览正在加载</span>
-      <div aria-hidden="true" className="dashboard-hero dashboard-skeleton-hero">
-        <Skeleton.Input active size="small" style={{ width: 72 }} />
-        <div className="workspace-title-line">
-          <Skeleton.Input active size="large" style={{ width: "min(360px, 100%)" }} />
-          <Skeleton.Button active size="small" />
-        </div>
-        <Skeleton active paragraph={{ rows: 1, width: "48%" }} title={false} />
+      <div aria-hidden="true">
+        <CommandBar
+          title={<Skeleton.Input active size="large" style={{ width: "min(360px, 100%)" }} />}
+          context={<Skeleton.Button active size="small" />}
+        />
       </div>
       <div aria-hidden="true" className="workspace-body dashboard-workspace-body ant-dashboard-body">
         <div className="ant-dashboard-month-bar">

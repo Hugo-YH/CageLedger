@@ -1,3 +1,4 @@
+import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Alert, Button, Form, Input, type InputRef } from "antd";
 import { useEffect, useRef, useState } from "react";
 
@@ -46,7 +47,14 @@ export function LoginView() {
             <Input.Password autoComplete="current-password" placeholder="请输入密码" />
           </Form.Item>
           {message ? <Alert className="login-error" showIcon title={message} type="error" /> : null}
-          <Button aria-label="登录" block htmlType="submit" loading={login.isPending} type="primary">
+          <Button
+            icon={<ActionIcon name="enter" />}
+            aria-label="登录"
+            block
+            htmlType="submit"
+            loading={login.isPending}
+            type="primary"
+          >
             登录
           </Button>
         </Form>

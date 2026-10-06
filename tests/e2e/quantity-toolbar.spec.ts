@@ -1,4 +1,4 @@
-import { expect, openNavigationEntry, openQuantityEntry, test } from "./fixtures";
+import { expect, openNavigationEntry, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
 
 for (const viewport of [
   { width: 1325, height: 644 },
@@ -65,6 +65,19 @@ for (const viewport of [
       contentType: "application/json",
     });
     await page.screenshot({ path: testInfo.outputPath("quantity-toolbar.png") });
+    await scroll(0);
+    const entryBounds = (await toolbar.boundingBox())!;
+    await openSavedQuantitySheets(page);
+    const savedToolbar = page.getByRole("group", { name: "已保存统计表操作", exact: true });
+    await expect(savedToolbar).toBeVisible();
+    const savedBounds = (await savedToolbar.boundingBox())!;
+    expect(savedBounds.x).toBeCloseTo(entryBounds.x, 0);
+    expect(savedBounds.y).toBeCloseTo(entryBounds.y, 0);
+    const title = savedToolbar.getByRole("heading", { name: "已保存数量统计表", exact: true });
+    await expect(title).toHaveCSS("font-size", "24px");
+    await expect(title).toHaveCSS("font-weight", "600");
+    await expect(savedToolbar).toHaveCSS("position", "relative");
+    await page.screenshot({ path: testInfo.outputPath("saved-quantity-toolbar.png") });
   });
 }
 
@@ -126,6 +139,21 @@ test("quantity editor restores sticky layout after zoom and a short visual viewp
   for (const width of [1180, 760]) {
     await page.setViewportSize({ width, height: 1000 });
     await expect(toolbar).toHaveCSS("position", "sticky");
+    // The breakpoint changes the bar's row count. Wait for the resize-driven
+    // scroll reservation before asking the browser to reveal a form field.
+    await expect
+      .poll(() =>
+        toolbar.evaluate((element) => {
+          const owner = element.closest<HTMLElement>('[data-ui="workspace"]')!;
+          const expected =
+            element.getBoundingClientRect().height +
+            Number.parseFloat(getComputedStyle(owner).paddingTop) +
+            Number.parseFloat(getComputedStyle(element).top) +
+            8;
+          return Math.abs(Number.parseFloat(owner.style.scrollPaddingTop) - expected);
+        }),
+      )
+      .toBeLessThan(1);
     const requiredField = page.getByLabel("IACUC 编号", { exact: true });
     await requiredField.evaluate((element) => element.scrollIntoView({ block: "start", behavior: "instant" }));
     const anchorGeometry = await toolbar.evaluate((element) => {

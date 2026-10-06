@@ -1,8 +1,10 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-const apiOrigin = process.env.CAGELEDGER_API_ORIGIN || "http://127.0.0.1:5174";
-const docsOrigin = process.env.CAGELEDGER_DOCS_ORIGIN || "http://127.0.0.1:5175";
+const apiOrigin =
+  process.env.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${process.env.CAGELEDGER_DEV_API_PORT || "5174"}`;
+const docsOrigin =
+  process.env.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${process.env.CAGELEDGER_DOCS_PORT || "5175"}`;
 
 export default defineConfig({
   plugins: [react()],
@@ -14,7 +16,7 @@ export default defineConfig({
     allowedHosts: ["clt.cellnucle.us"],
     proxy: {
       "/api": apiOrigin,
-      "/docs": docsOrigin,
+      "/docs": { target: docsOrigin, ws: true },
     },
   },
   build: {

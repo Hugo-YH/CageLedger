@@ -31,6 +31,7 @@ export function isWorkspaceView(value: string): value is WorkspaceView {
     "billing-settlement",
     "billing-monthly-summary",
     "workflow-center",
+    "feedback",
     "rooms",
     "data",
     "system",
