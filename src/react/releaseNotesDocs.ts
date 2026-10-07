@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.6.1",
+    build: "212",
+    releasedAt: "2026-10-07",
+    title: "反馈列表性能",
+    items: [
+      "按当前页批量读取同步任务、遇到次数和本人遇到状态，减少反馈列表翻页时的重复数据库查询",
+      "保留筛选、排序、分页、权限及同步状态判定；列表读取期间反馈被移除时继续显示原有移除语义",
+      "补充同步任务优先级、并发移除、重复读取和固定查询数量的回归验证",
+    ],
+  },
+  {
     version: "1.6.0",
     build: "211",
     releasedAt: "2026-10-06",
