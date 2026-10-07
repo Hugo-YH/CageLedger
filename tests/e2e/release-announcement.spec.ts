@@ -170,9 +170,11 @@ test("missed releases share one dialog and only become acknowledged after a succ
 test("a long update list exposes every version, supports expansion, and opens the complete history", async ({
   page,
 }, testInfo) => {
-  const baseline = SYSTEM_RELEASE_NOTES[Math.min(7, SYSTEM_RELEASE_NOTES.length - 1)].version;
+  // Keep the oldest unread entry a patch when new releases are added to the catalog.
+  const baseline = "1.2.13";
   const notes = unreadReleaseNotes(SYSTEM_RELEASE_NOTES, APP_VERSION, [baseline]);
   expect(notes.length).toBeGreaterThan(3);
+  expect(notes[0].version).toBe("1.2.14");
   await page.setViewportSize({ width: 844, height: 390 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await loginWithBaseline(page, baseline);
@@ -182,6 +184,14 @@ test("a long update list exposes every version, supports expansion, and opens th
     notes.map((note) => `${note.version} · ${note.title}`),
   );
   await expect(first).toHaveAttribute("aria-expanded", "false");
+  await expect(dialog.locator(".ant-collapse-header").filter({ hasText: "1.3.0 ·" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(dialog.locator(".ant-collapse-header").filter({ hasText: `${APP_VERSION} ·` })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   await first.click();
   await expect(first).toHaveAttribute("aria-expanded", "true");
   await expect(dialog.getByText(notes[0].items[0], { exact: true })).toBeVisible();
