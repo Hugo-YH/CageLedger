@@ -35,21 +35,25 @@ test("feedback saves two distinct originals, appends and keeps encounters idempo
   const title = `反馈流程 ${Date.now()}`;
   for (const suffix of ["甲", "乙"]) {
     await page.getByRole("button", { name: "提交反馈", exact: true }).click();
-    const drawer = page.getByRole("dialog");
+    const drawer = page.getByRole("dialog", { name: "提交反馈", exact: true });
     await drawer.getByLabel("标题", { exact: true }).fill(title + suffix);
     await drawer.getByLabel("涉及模块", { exact: true }).fill("笼卡管理");
     await drawer.getByLabel("问题描述", { exact: true }).fill("<img src=x onerror=alert(1)> 原始反馈\n保留换行");
     await drawer.getByRole("button", { name: "提交", exact: true }).click();
-    await expect(page.getByRole("dialog")).toContainText(title + suffix);
-    await expect(page.getByRole("dialog")).toContainText("原始反馈");
-    await expect(page.getByRole("dialog").locator("img")).toHaveCount(0);
-    await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    const created = page.getByRole("dialog", { name: new RegExp(`^#\\d+ ${title}${suffix}$`) });
+    await expect(created).toContainText(title + suffix);
+    await expect(created).toContainText("原始反馈");
+    await expect(created.locator("img")).toHaveCount(0);
+    await created.getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   }
   await page
     .getByRole("button", { name: /查看反馈/ })
     .filter({ hasText: title + "甲" })
     .click();
-  const detail = page.getByRole("dialog");
+  const detail = page.getByRole("dialog", { name: new RegExp(`^#\\d+ ${title}甲$`) });
   await detail.getByLabel("追加说明内容", { exact: true }).fill("所有同事可以继续补充");
   await detail.getByRole("button", { name: "追加说明", exact: true }).click();
   await expect(detail.getByText("所有同事可以继续补充", { exact: true })).toBeVisible();
