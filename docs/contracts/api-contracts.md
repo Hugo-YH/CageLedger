@@ -270,6 +270,7 @@ npm run test:e2e
 | POST / PUT | `batches[/{id}]`、`tests[/{id}]`              | 创建或编辑，正文 `{ item, expectedUpdatedAt }`          |
 | DELETE     | `batches/{id}`                                | 删除无检测记录的批次，正文 `{ expectedUpdatedAt }`      |
 | GET        | `batches/{id}`                                | 覆盖范围、检测、附件与历史报告版本                      |
+| GET        | `batches/{id}/summary`                        | `kind=quarantine` 或 `self`，下载历史版式批次汇总 PDF   |
 | POST       | `tests/{id}/attachments`                      | multipart字段file；查询参数传关联样本、项目、分类及版本 |
 | GET        | `attachments/{id}`、`reports/{id}`            | 受鉴权下载；报告统一返回 PDF，历史 Word 在下载时转换    |
 | GET        | `tests/{id}/preview`                          | 带草稿标识的 PDF 预览                                   |
@@ -284,6 +285,8 @@ npm run test:e2e
 检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
 
 `POST batches/{id}/complete` 接收 `{ expectedUpdatedAt, expectedTestVersions: { [testId]: updatedAt } }`，校验三类正式报告、适用动物种类、异常复检和批次结论，在单事务保存完成时间、确认人、报告关联及审计。重复确认返回已完成记录；并发变化返回409。更正或复检会重新打开该批次，历史完成快照保留。
+
+`GET batches/{id}/summary` 的 `kind` 默认为 `quarantine`；`self` 仅改变报告标题，不筛除批次来源，其他值返回400。已出具记录读取最新报告的冻结检测快照，更正替代原记录，复检独立列出；含未出具记录时标为汇总草稿，没有检测记录时返回400。结果按阳性实验组数／已检测实验组数统计，混样不折算动物数，可疑、未检测和未填写分别说明。下载沿用登录校验及 PDF 转换错误语义，不推进状态、不创建正式报告编号、不替换已有报告。
 
 ### 检疫报告表单 v2
 

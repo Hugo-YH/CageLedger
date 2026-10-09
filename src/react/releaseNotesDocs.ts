@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.8.0",
+    build: "216",
+    releasedAt: "2026-10-09",
+    title: "检疫报告版式",
+    items: [
+      "按历史报告样式调整 PCR、ELISA 和寄生虫检测记录表，优化样本来源、结果表格、原始图片与签名区域的排版",
+      "批次详情新增汇总 PDF 导出，可选择“实验动物检疫检测报告”或“实验动物自检检测报告”，沿用旧报告的项目分组和结果列",
+      "汇总按阳性实验组数／已检测实验组数展示，明确可疑、未检测、未填写、更正与复检结果，混样不折算动物数",
+      "已出具记录读取冻结快照，包含未出具记录时标为汇总草稿；已有正式报告原件保留",
+    ],
+  },
+  {
     version: "1.7.0",
     build: "215",
     releasedAt: "2026-10-09",

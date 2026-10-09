@@ -1,6 +1,7 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { RecordWorklist } from "./RecordWorklist";
 import { BatchOverview } from "./BatchOverview";
+import { BatchReportExport } from "./BatchReportExport";
 import { App, Alert, Button, Empty, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
@@ -365,6 +366,7 @@ export function QuarantineView({
                     }
                     actions={
                       <>
+                        <BatchReportExport batchId={batchId} disabled={!detail.data.tests.length} />
                         <Button icon={<ActionIcon name="back" />} onClick={() => openBatch("")}>
                           返回列表
                         </Button>

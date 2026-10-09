@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 from server_app.config import QUARANTINE_FILES_PATH
 from server_app.db import connect_db
-from server_app.domains.quarantine import attachment_metadata, files, pdf, service, workflow, worklist
+from server_app.domains.quarantine import attachment_metadata, files, pdf, service, summary, workflow, worklist
 from server_app.domains.quarantine import repository as repo
 from server_app.domains.quarantine.catalog import PROJECTS, TEMPLATE_VERSION
 from server_app.domains.quarantine.history import supplier_history
@@ -49,6 +49,14 @@ def handle(handler, method, path):
 
 
 def get(handler, conn, parts, params):
+    if len(parts) == 3 and parts[0] == "batches" and parts[2] == "summary":
+        document = summary.batch_snapshot(conn, parts[1])
+        kind = params.get("kind", "quarantine")
+        data = pdf.convert_docx(summary.generate(document, kind=kind))
+        handler.send_download(
+            data, files.summary_download_filename(document["batch"], summary.TITLES[kind]), files.PDF_MIME
+        )
+        return None
     if parts in (["records"], ["reports"]):
         return worklist.list_records(conn, params, reports=parts == ["reports"])
     if len(parts) == 3 and parts[0] == "batches" and parts[2] == "activity":

@@ -22,6 +22,44 @@ def picture_extent(cell):
 
 
 class QuarantineDocumentLayoutTests(unittest.TestCase):
+    def test_eighth_short_sample_uses_the_existing_width_without_an_almost_empty_group(self):
+        document = Document()
+        template = document.add_table(rows=2, cols=8)
+        samples = [{"id": str(i), "number": str(i + 1), "sourceIds": []} for i in range(8)]
+        width = sum(c.width for c in template.columns)
+        table = Table(sample_table(template._tbl, document, samples, {}), document)
+        self.assertEqual(len(table.rows), 2)
+        self.assertEqual([c.text for c in table.rows[0].cells[1:]], [str(i + 1) for i in range(8)])
+        self.assertLess(abs(sum(c.width for c in table.columns) - width), 2000)
+
+    def test_eight_results_fit_without_duplicating_controls_or_expanding_the_table(self):
+        document = Document()
+        template = document.add_table(rows=3, cols=10)
+        samples = [{"id": str(i), "number": str(i + 1)} for i in range(8)]
+        project = {"sampleIds": [s["id"] for s in samples], "results": {}, "nc": "negative", "pc": "positive"}
+        width = sum(c.width for c in template.columns)
+        elements = horizontal_result(template._tbl, document, project, samples, controls=True, fit_samples=True)
+        self.assertEqual(len(elements), 1)
+        table = Table(elements[0], document)
+        self.assertEqual([c.text for c in table.rows[0].cells[1:]], [str(i + 1) for i in range(8)] + ["NC", "PC"])
+        self.assertLess(abs(sum(c.width for c in table.columns) - width), 2000)
+
+    def test_pooled_sources_get_wider_slots_without_losing_samples_or_names(self):
+        document = Document()
+        template = document.add_table(rows=2, cols=6)
+        width = sum(c.width for c in template.columns)
+        sources = {f"s{i}": {"supplier": "供应商", "pi": "完整课题组", "owner": f"负责人{i}"} for i in range(15)}
+        samples = [
+            {"id": str(i), "number": str(i + 1), "sourceIds": [f"s{3 * i + j}" for j in range(3)]} for i in range(5)
+        ]
+        table = Table(sample_table(template._tbl, document, samples, sources), document)
+        self.assertEqual(len(table.columns), 4)
+        self.assertLess(abs(sum(c.width for c in table.columns) - width), 2000)
+        text = "\n".join(c.text for row in table.rows for c in row.cells)
+        for i in range(15):
+            self.assertIn(f"负责人{i}", text)
+        self.assertEqual([table.rows[i].cells[1].text for i in (0, 2)], ["1", "4"])
+
     def test_single_column_image_table_keeps_every_caption(self):
         document = Document()
         template = document.add_table(rows=4, cols=1)

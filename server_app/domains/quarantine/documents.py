@@ -127,10 +127,9 @@ def generate(snapshot, root, *, draft=False):
     )
     pools = sum(s["poolCount"] for s in test["samples"])
     portions = sum(s["portionCount"] for s in test["samples"])
-    quantity_material = materials if test.get("reportFormVersion") == 2 else ""
     cell_text(
         metadata.cell(2, 0),
-        f"样品名称：{materials}     样品状态：{states}     样品数量：{pools}样（{portions}份{quantity_material}）",
+        f"样品名称：{materials}     样品状态：{states}     样品数量：{pools}样（{portions}份）",
     )
     sample_element = next(t for t in tables[1:] if Table(t, document).cell(0, 0).text == "样本编号")
     source_map = {s["id"]: s for s in snapshot["batch"]["sources"]}
@@ -187,7 +186,9 @@ def generate(snapshot, root, *, draft=False):
         heading = copy_paragraph(heading_pattern, document, f"{prefix}-{index + 1}{project['name']}")
         Paragraph(heading, document).paragraph_format.keep_with_next = True
         legend.addprevious(heading)
-        for element in horizontal_result(pattern, document, project, test["samples"], controls=method != "parasite"):
+        for element in horizontal_result(
+            pattern, document, project, test["samples"], controls=method != "parasite", fit_samples=True
+        ):
             legend.addprevious(element)
     signature = next(
         el

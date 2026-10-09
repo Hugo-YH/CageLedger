@@ -545,7 +545,8 @@ class QuarantineTests(unittest.TestCase):
         self.assertEqual(record["samples"][0]["portionCount"], 2)
         with ZipFile(BytesIO(generate(files.snapshot(self.conn, record), self.root, draft=True))) as archive:
             xml = archive.read("word/document.xml").decode()
-        self.assertIn("1样（2份血清）", xml)
+        self.assertIn("1样（2份）", xml)
+        self.assertIn("样品名称：血清", xml)
         self.assertNotIn("结果判定：", xml)
         self.assertIn("代表空白", xml)
         self.issue(record)

@@ -100,6 +100,61 @@ async function openRecord(page: Page, batchName: string, method: QuarantineMetho
   await expect(page.getByRole("tab", { name: /报告版本/ })).toBeVisible();
 }
 
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 1180, height: 900 },
+  { width: 760, height: 900 },
+  { width: 844, height: 390 },
+]) {
+  test(`historical summary PDF export at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize(viewport);
+    await login(page);
+    const { batchId, batchName } = await seed(page, "parasite");
+    await openRecord(page, batchName, "parasite");
+    await page.getByRole("button", { name: "下载汇总PDF", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "导出检测汇总报告" });
+    expect(
+      await dialog.evaluate((element) => ({
+        portalScope: Boolean(element.closest(".app-modal-root")),
+        overflow: element.scrollWidth > element.clientWidth,
+        buttonHeights: Array.from(element.querySelectorAll("button")).map((button) => getComputedStyle(button).height),
+      })),
+    ).toEqual({
+      portalScope: true,
+      overflow: false,
+      buttonHeights: viewport.width < 768 ? ["40px", "44px", "44px"] : ["32px", "32px", "32px"],
+    });
+    await expect(dialog.getByText("实验动物检疫检测报告", { exact: true })).toBeVisible();
+    await dialog.getByRole("radio", { name: "实验动物自检检测报告", exact: true }).check();
+    const before = await page.request.get(`/api/quarantine/batches/${batchId}`);
+    const original = await before.json();
+    let failOnce = true;
+    await page.route(`**/api/quarantine/batches/${batchId}/summary?kind=self`, async (route) => {
+      if (failOnce) {
+        failOnce = false;
+        await route.fulfill({ status: 503, json: { error: "测试生成失败，请重试" } });
+      } else await route.continue();
+    });
+    await dialog.getByRole("button", { name: "下载汇总PDF", exact: true }).click();
+    await expect(dialog.getByText("测试生成失败，请重试")).toBeVisible();
+    const downloadPromise = page.waitForEvent("download");
+    await dialog.getByRole("button", { name: "下载汇总PDF", exact: true }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toContain("实验动物自检检测报告");
+    expect(await download.failure()).toBeNull();
+    await expect(dialog.getByRole("status")).toContainText("已下载");
+    await page.screenshot({ path: test.info().outputPath("summary-export.png") });
+    const after = await page.request.get(`/api/quarantine/batches/${batchId}`);
+    expect(await after.json()).toEqual(original);
+    const invalid = await page.request.get(`/api/quarantine/batches/${batchId}/summary?kind=invalid`);
+    expect(invalid.status()).toBe(400);
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "下载汇总PDF", exact: true })).toBeFocused();
+  });
+}
+
 test("batch save locks its submitted draft and recovers from failure", async ({ page }) => {
   await login(page);
   const { batchId, batchName } = await seed(page);

@@ -185,3 +185,5 @@ SQLite 同时保留结构化热字段和兼容 payload。启动迁移会补字�
 检疫入口为 `/api/quarantine/`，全部接口校验登录，第一版所有登录角色可读写。提供批次、检测、原始附件、报告预览／出具／更正、分供应商复检和历史查询。接口细节见项目 `docs/contracts/api-contracts.md` 的检疫管理条目。
 
 SQLite中的 `quarantine_batches` 保存覆盖来源快照和最终结论；`quarantine_tests` 保存各方法混样、项目结果与复检／更正关系；`quarantine_attachments` 保留每次上传人和时间；`quarantine_reports` 保存已出具快照和版本。文件位于 `data/files/quarantine/`，下载要求会话鉴权。编辑按服务端版本校验，操作进入审计日志。
+
+`GET /api/quarantine/batches/{id}/summary?kind=quarantine|self` 下载旧版式汇总 PDF。标题选择不筛除批次来源；已出具检测读取冻结快照，更正替代原记录，复检独立列出，含未出具记录时标为汇总草稿。汇总导出不写入上述业务表，不推进批次状态或替换已有报告。

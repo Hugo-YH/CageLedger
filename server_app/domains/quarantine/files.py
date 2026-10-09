@@ -53,6 +53,10 @@ def next_report_number(conn, batch, method):
     return f"{batch_no}{method_code}{issued_date}{sequence:02d}"
 
 
+def summary_download_filename(batch, title):
+    return f"{title}_{_filename_part(batch.get('batchNo') or batch.get('name'), '未编号批次')}.pdf"
+
+
 def report_download_filename(test, batch, *, number="", version=None, draft=False):
     """Return the one safe, descriptive filename used by preview and report downloads."""
     method = METHOD_FILENAMES.get(test.get("method"), "未知检测")
