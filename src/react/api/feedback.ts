@@ -79,6 +79,8 @@ export function useFeedbackIntegration(enabled: boolean) {
     queryFn: ({ signal }) => requestJson<FeedbackIntegration>("/api/feedback/integration", { signal }),
     enabled,
     retry: false,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 }
 

@@ -1,5 +1,6 @@
 """One serial worker; durable outbox and short transactions around external requests."""
 
+import sqlite3
 import threading
 import time
 
@@ -14,17 +15,46 @@ _lock = threading.Lock()
 _thread = None
 _stop = threading.Event()
 _resume = threading.Event()
+_health_lock = threading.Lock()
+_health_state = "recovering"
+_health_error = ""
+
+
+def _set_health(state, error=""):
+    global _health_state, _health_error
+    with _health_lock:
+        _health_state, _health_error = state, error
+
+
+def health():
+    with _lock, _health_lock:
+        if not CAGELEDGER_GITEA_TOKEN:
+            return {"workerState": "unconfigured", "workerError": ""}
+        if _health_state == "blocked" and not _stop.is_set():
+            return {"workerState": "blocked", "workerError": _health_error}
+        if not _thread or not _thread.is_alive() or _stop.is_set():
+            return {
+                "workerState": "stopped",
+                "workerError": "反馈同步服务已停止，请在反馈详情点击“同步 Gitea”重试",
+            }
+        return {"workerState": _health_state, "workerError": _health_error}
 
 
 def recover(conn):
     # A crashed POST remains uncertain. Restart only reconciles its stable remote marker.
-    conn.execute("UPDATE feedback_tasks SET state='pending',due_at=0 WHERE state='working'")
+    if conn.execute("SELECT 1 FROM feedback_tasks WHERE state='working' LIMIT 1").fetchone():
+        conn.execute("UPDATE feedback_tasks SET state='pending',due_at=0 WHERE state='working'")
 
 
 def run_once(connect, client, root):
     if client.auth_blocked:
         return False
     with connect() as conn:
+        # An idle queue needs no writer lock. Recheck the task after acquiring the transaction.
+        if not conn.execute(
+            "SELECT 1 FROM feedback_tasks WHERE state='pending' AND due_at<=? LIMIT 1", (time.time(),)
+        ).fetchone():
+            return False
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             """SELECT * FROM feedback_tasks WHERE state='pending' AND due_at<=?
@@ -100,20 +130,28 @@ def run_once(connect, client, root):
 
 
 def _run():
-    with connect_db() as conn:
-        recover(conn)
     try:
         client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN)
     except ValueError:
-        with connect_db() as conn:
-            conn.execute(
-                "UPDATE feedback_tasks SET state='blocked',error=? WHERE state!='done'",
-                ("共享仓库地址无效，请管理员检查配置",),
-            )
+        message = "共享仓库地址无效，请管理员检查配置"
+        _set_health("blocked", message)
+        while not _stop.is_set():
+            try:
+                with connect_db() as conn:
+                    conn.execute("UPDATE feedback_tasks SET state='blocked',error=? WHERE state!='done'", (message,))
+                break
+            except Exception:
+                _stop.wait(5)
         return
     last_poll = 0
+    needs_recovery = True
     while not _stop.is_set():
         try:
+            # Recovery belongs to the protected loop too: repeated DB locks must not kill the worker.
+            if needs_recovery:
+                with connect_db() as conn:
+                    recover(conn)
+                needs_recovery = False
             if _resume.is_set():
                 client.auth_blocked = False
                 _resume.clear()
@@ -121,15 +159,22 @@ def _run():
                 with connect_db() as conn:
                     repo.queue_stale(conn)
                 last_poll = time.monotonic()
-            if run_once(connect_db, client, FEEDBACK_FILES_PATH):
-                _stop.wait(0.2)
-            else:
-                _stop.wait(2)
-        except Exception:
-            # Do not log request/response bodies or credentials. Retry local transient DB failures.
+            worked = run_once(connect_db, client, FEEDBACK_FILES_PATH)
+            _set_health(
+                "blocked" if client.auth_blocked else "running",
+                "Gitea 凭据或工单权限不足，请管理员处理后重试同步" if client.auth_blocked else "",
+            )
+            _stop.wait(0.2 if worked else 2)
+        except Exception as exc:
+            # Never expose raw exceptions, request/response bodies, SQL or credentials.
+            needs_recovery = True
+            message = "反馈同步服务暂时受阻，后台正在重试"
+            if isinstance(exc, sqlite3.OperationalError) and any(
+                word in str(exc).lower() for word in ("locked", "busy")
+            ):
+                message = "数据库暂时繁忙，反馈同步服务正在重试"
+            _set_health("recovering", message)
             _stop.wait(5)
-            with connect_db() as conn:
-                recover(conn)
 
 
 def start():
@@ -141,6 +186,7 @@ def start():
         if _thread and _thread.is_alive():
             return
         _stop.clear()
+        _set_health("recovering")
         _thread = threading.Thread(target=_run, name="feedback-gitea", daemon=True)
         _thread.start()
 
@@ -151,3 +197,4 @@ def stop():
 
 def resume():
     _resume.set()
+    start()

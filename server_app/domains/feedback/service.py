@@ -282,11 +282,14 @@ def retry(conn, user, feedback_id):
         (feedback_id,),
     )
     audit(conn, user, "retry", feedback_id)
+    queue_refresh(conn, feedback_id)
     worker.resume()
     return {"queued": True}
 
 
 def integration(conn, user):
+    from . import worker
+
     admin(user)
     pending = conn.execute("SELECT COUNT(*) FROM feedback_tasks WHERE state!='done'").fetchone()[0]
     errors = conn.execute("SELECT COUNT(*) FROM feedback_tasks WHERE error!=''").fetchone()[0]
@@ -297,4 +300,5 @@ def integration(conn, user):
         "pending": pending,
         "errors": errors,
         "lastError": row[0] if row else "",
+        **worker.health(),
     }

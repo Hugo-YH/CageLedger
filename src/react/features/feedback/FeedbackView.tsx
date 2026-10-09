@@ -12,7 +12,13 @@ import type { ColumnsType } from "antd/es/table";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { FeedbackItem, FeedbackKind, FeedbackStatus, FeedbackSyncStatus } from "../../../contracts/feedback";
+import type {
+  FeedbackIntegration,
+  FeedbackItem,
+  FeedbackKind,
+  FeedbackStatus,
+  FeedbackSyncStatus,
+} from "../../../contracts/feedback";
 import {
   uploadFeedbackAttachment,
   useAddFeedbackComment,
@@ -162,13 +168,7 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
               <HelpPopover label="帮助与反馈说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
                 提交使用问题、功能建议或故障；处理状态和 Gitea 同步结果由系统返回。
               </HelpPopover>
-              {user.role === "admin" && integration.data ? (
-                <IntegrationStatus
-                  configured={integration.data.configured}
-                  pending={integration.data.pending}
-                  errors={integration.data.errors}
-                />
-              ) : null}
+              {user.role === "admin" && integration.data ? <IntegrationStatus {...integration.data} /> : null}
               {activeFilters ? (
                 <Space size={8}>
                   <Tag>已筛选 {activeFilters} 列</Tag>
@@ -216,6 +216,24 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
           }
         />
         <Card className="feedback-card">
+          {user.role === "admin" &&
+          integration.data?.configured &&
+          ["recovering", "blocked", "stopped"].includes(integration.data.workerState) ? (
+            <Alert
+              showIcon
+              type="warning"
+              role="status"
+              aria-live="polite"
+              title={
+                integration.data.workerState === "recovering"
+                  ? "反馈同步服务正在恢复"
+                  : integration.data.workerState === "stopped"
+                    ? "反馈同步服务已停止"
+                    : "反馈同步已暂停"
+              }
+              description={integration.data.workerError || "可在反馈详情点击“同步 Gitea”重试。"}
+            />
+          ) : null}
           {user.role === "admin" && integration.isError ? (
             <Alert showIcon type="warning" title="同步集成状态暂时不可用" description={integration.error.message} />
           ) : null}
@@ -742,8 +760,8 @@ function AdminActions({
         <Button
           aria-label="同步 Gitea"
           icon={<ActionIcon name="sync" />}
-          loading={sync.isPending}
-          onClick={() => void onSync(false)}
+          loading={sync.isPending || retry.isPending}
+          onClick={() => void onSync(true)}
         >
           同步 Gitea
         </Button>
@@ -778,10 +796,21 @@ function Attachments({ attachments }: { attachments: Array<{ id: string; name: s
   );
 }
 
-function IntegrationStatus({ configured, pending, errors }: { configured: boolean; pending: number; errors: number }) {
+function IntegrationStatus({ configured, pending, errors, workerState }: FeedbackIntegration) {
   return (
     <div className="feedback-integration">
       <StatusTag tone={configured ? "success" : "warning"}>{configured ? "Gitea 已配置" : "Gitea 未配置"}</StatusTag>
+      {configured ? (
+        <StatusTag tone={workerState === "running" ? "success" : "warning"}>
+          {workerState === "running"
+            ? "同步服务运行中"
+            : workerState === "recovering"
+              ? "同步服务恢复中"
+              : workerState === "blocked"
+                ? "同步服务已暂停"
+                : "同步服务已停止"}
+        </StatusTag>
+      ) : null}
       {configured ? (
         <Typography.Text type="secondary">
           待同步 {pending} · 失败 {errors}

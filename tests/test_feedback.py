@@ -9,7 +9,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError, URLError
 from uuid import uuid4
 
@@ -471,6 +471,117 @@ class FeedbackTests(unittest.TestCase):
         worker.run_once(self.connect, self.client, self.root)
         self.assertEqual(self.detail(item["id"])["item"]["issueNumber"], 7)
         self.assertFalse(any(call[0] == "POST" for call in self.client.calls))
+
+    def test_repeated_database_locks_in_recovery_keep_worker_running(self):
+        item = self.create()
+        stop = threading.Event()
+        states = []
+        original_recover, original_run_once = worker.recover, worker.run_once
+        self.client.after_post = stop.set
+
+        def wait(_timeout):
+            states.append((worker._health_state, worker._health_error))
+            if len(states) > 10:
+                stop.set()
+
+        with (
+            patch.multiple(
+                worker,
+                connect_db=self.connect,
+                FEEDBACK_FILES_PATH=self.root,
+                _stop=stop,
+                _resume=threading.Event(),
+                _health_state="recovering",
+                _health_error="",
+            ),
+            patch.object(worker, "Client", return_value=self.client),
+            patch.object(stop, "wait", side_effect=wait),
+            patch.object(worker, "recover") as recovery,
+            patch.object(worker, "run_once") as run,
+        ):
+            calls = 0
+
+            def recover(conn):
+                nonlocal calls
+                calls += 1
+                if calls in {1, 2, 4}:
+                    raise sqlite3.OperationalError("database is locked")
+                original_recover(conn)
+
+            runs = 0
+
+            def run_once(*args):
+                nonlocal runs
+                runs += 1
+                if runs == 1:
+                    raise sqlite3.OperationalError("database is locked")
+                return original_run_once(*args)
+
+            recovery.side_effect, run.side_effect = recover, run_once
+            worker._run()
+            self.assertEqual(worker._health_state, "running")
+        self.assertEqual(len(self.client.issues), 1)
+        self.assertEqual(self.detail(item["id"])["item"]["issueNumber"], 1)
+        self.assertEqual(sum(state == "recovering" for state, _ in states), 4)
+        self.assertTrue(all("数据库暂时繁忙" in error for state, error in states if state == "recovering"))
+
+    def test_idle_queue_does_not_acquire_writer_lock(self):
+        with self.connect() as writer, self.connect() as reader:
+            writer.execute("BEGIN IMMEDIATE")
+            reader.execute("PRAGMA busy_timeout=0")
+            worker.recover(reader)
+            self.assertFalse(worker.run_once(lambda: reader, self.client, self.root))
+
+    def test_resume_restarts_dead_worker_once(self):
+        dead, replacement = Mock(), Mock()
+        dead.is_alive.return_value = False
+        replacement.is_alive.return_value = True
+        with (
+            patch.multiple(
+                worker,
+                CAGELEDGER_GITEA_TOKEN="mock-token",
+                _thread=dead,
+                _stop=threading.Event(),
+                _resume=threading.Event(),
+                _health_state="running",
+                _health_error="",
+            ),
+            patch.object(worker.threading, "Thread", return_value=replacement) as factory,
+        ):
+            self.assertEqual(worker.health()["workerState"], "stopped")
+            worker.resume()
+            worker.resume()
+            self.assertEqual(worker.health()["workerState"], "recovering")
+            self.assertTrue(worker._resume.is_set())
+            factory.assert_called_once()
+            replacement.start.assert_called_once()
+
+    def test_integration_reports_stopped_worker_even_without_task_errors(self):
+        self.create()
+        with (
+            patch.multiple(
+                worker, CAGELEDGER_GITEA_TOKEN="mock-token", _thread=None, _health_state="running", _health_error=""
+            ),
+            self.connect() as conn,
+        ):
+            state = service.integration(conn, ADMIN)
+            self.assertEqual(state["workerState"], "stopped")
+            self.assertEqual(state["pending"], 1)
+            self.assertEqual(state["errors"], 0)
+            self.assertIn("同步 Gitea", state["workerError"])
+
+    def test_admin_retry_enqueues_stale_refresh_and_resumes_worker(self):
+        item = self.create()
+        self.run_worker()
+        with self.connect() as conn:
+            conn.execute("UPDATE feedback SET last_synced_at='' WHERE id=?", (item["id"],))
+        with patch.object(worker, "resume") as resume, self.connect() as conn:
+            service.retry(conn, ADMIN, item["id"])
+            task = conn.execute("SELECT state FROM feedback_tasks WHERE kind='refresh'").fetchone()
+            self.assertEqual(task[0], "pending")
+            resume.assert_called_once()
+        self.run_worker()
+        self.assertEqual(len(self.client.issues), 1)
 
     def test_comment_and_attachment_timeouts_reconcile(self):
         item = self.create()

@@ -102,4 +102,6 @@ export interface FeedbackIntegration {
   pending: number;
   errors: number;
   lastError: string;
+  workerState: "running" | "recovering" | "blocked" | "stopped" | "unconfigured";
+  workerError: string;
 }

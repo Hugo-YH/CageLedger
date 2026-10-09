@@ -220,7 +220,7 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
         )
         self.request("/api/auth/logout", "POST", {})
         self.request("/api/auth/login", "POST", {"username": "admin", "password": "admin123"})
-        # Admin retry only requeues pending failures; explicit refresh uses stale policy.
+        # Reconcile remote status changes through the durable refresh queue.
         import sqlite3
 
         from server_app.domains.feedback import repository
@@ -231,7 +231,10 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
         final = self.poll(item["id"], lambda value: value["item"]["status"] == "resolved")
         self.assertEqual(final["item"]["fixVersion"], "1.6.0")
         self.assertEqual(final["item"]["issueUrl"], self.repository + "/issues/1")
-        self.assertTrue(self.request("/api/feedback/integration")["configured"])
+        integration = self.request("/api/feedback/integration")
+        self.assertTrue(integration["configured"])
+        self.assertEqual(integration["workerState"], "running")
+        self.assertEqual(integration["workerError"], "")
 
         # Deletion in the mock Gitea removes every public API surface, including old attachment URLs.
         self.fake.issues.clear()

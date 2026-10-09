@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.6.2",
+    build: "213",
+    releasedAt: "2026-10-09",
+    title: "反馈同步恢复",
+    items: [
+      "修复数据库繁忙时反馈同步服务意外停止的问题，任务恢复和重试均在后台保护循环内执行",
+      "管理员点击“同步 Gitea”可重新启动已停止的服务，并核对已关联工单；保留超时后的远端核对和防重复建单机制",
+      "管理员页面显示同步服务的运行、恢复、暂停或停止状态，任务失败数为 0 时也能发现服务异常",
+      "空闲队列不再申请数据库写锁，减少同步服务与其他业务写入的竞争",
+    ],
+  },
+  {
     version: "1.6.1",
     build: "212",
     releasedAt: "2026-10-07",

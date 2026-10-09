@@ -1,5 +1,6 @@
 import { expect, test } from "./fixtures";
 import type { Page } from "@playwright/test";
+import type { FeedbackIntegration } from "../../src/contracts/feedback";
 
 async function login(page: Page) {
   await page.goto("/app");
@@ -28,6 +29,73 @@ async function filterColumn(page: Page, label: string, option: string) {
   await panel.getByRole("button", { name: /应\s*用/ }).click();
   await expect(panel).toBeHidden();
 }
+
+test("administrator sees stopped sync with zero failures and can restart pending feedback", async ({
+  page,
+}, testInfo) => {
+  let workerState: FeedbackIntegration["workerState"] = "stopped";
+  await page.route("**/api/feedback/integration", (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        repository: "https://mock.test/hugo/cageledger",
+        pending: 3,
+        errors: 0,
+        lastError: "",
+        workerState,
+        workerError:
+          workerState === "stopped"
+            ? "反馈同步服务已停止，请在反馈详情点击“同步 Gitea”重试"
+            : workerState === "recovering"
+              ? "数据库暂时繁忙，反馈同步服务正在重试"
+              : "",
+      } satisfies FeedbackIntegration,
+    }),
+  );
+  await login(page);
+  const title = `恢复同步 ${Date.now()}`;
+  const created = await page.request.post("/api/feedback", {
+    data: {
+      requestId: crypto.randomUUID(),
+      title,
+      kind: "bug",
+      module: "反馈",
+      description: "待同步反馈",
+      environment: {},
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  const item = (await created.json()).item;
+  await openFeedback(page);
+  await expect(page.getByRole("status").filter({ hasText: "反馈同步服务已停止" })).toBeVisible();
+  await expect(page.getByText("待同步 3 · 失败 0", { exact: true })).toBeVisible();
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1180, height: 800 },
+    { width: 760, height: 900 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`feedback-worker-${viewport.width}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole("button", { name: `查看反馈 #${item.number}：${title}`, exact: true }).click();
+  // The restart endpoint must be used even when the record has no remote issue or task errors.
+  const retryRequest = page.waitForRequest(
+    (request) => request.url().endsWith(`/api/feedback/${item.id}/retry`) && request.method() === "POST",
+  );
+  await page.getByRole("dialog").getByRole("button", { name: "同步 Gitea", exact: true }).click();
+  await retryRequest;
+  await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
+  workerState = "recovering";
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "数据库暂时繁忙" })).toBeVisible();
+  workerState = "running";
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await expect(page.getByText("同步服务运行中", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "反馈同步服务" })).toHaveCount(0);
+});
 
 test("feedback saves two distinct originals, appends and keeps encounters idempotent", async ({ page }) => {
   await login(page);
