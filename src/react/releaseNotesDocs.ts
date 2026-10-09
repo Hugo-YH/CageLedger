@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.6.3",
+    build: "214",
+    releasedAt: "2026-10-09",
+    title: "反馈连接重试",
+    items: [
+      "历史反馈读取遇到短暂连接或响应超时时，先有限重试，再进入后台退避，减少偶发网络故障造成的同步失败",
+      "区分 HTTPS 连接建立失败与请求发送后的响应丢失，连接阶段失败不再将尚未发送的附件误标为结果不确定",
+      "保留证书校验、远端标识核对和防重复写入机制，已经发送但结果不明的请求不会自动重复提交",
+    ],
+  },
+  {
     version: "1.6.2",
     build: "213",
     releasedAt: "2026-10-09",

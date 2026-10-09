@@ -18,6 +18,8 @@
 
 集成状态返回 `configured`、`repository`、`pending`、`errors`、`lastError`，另含 `workerState`（`running/recovering/blocked/stopped/unconfigured`）和脱敏的 `workerError`。任务失败数和服务健康独立统计；仅管理员可读取。管理员 `retry` 保留任务的不确定标记，唤醒或重新启动串行同步线程，并按现有一分钟缓存规则排队核对已关联的工单。页面在前台每 15 秒刷新集成状态。
 
+Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS 写入仅在连接建立阶段明确失败、尚未发送 API 请求时允许有限重试。连接阶段错误不会标记为发送结果不确定，证书校验不会关闭或降级；发送后的响应超时仍保留不确定标记并核对远端，不自动重复写入。
+
 历史工单导入：`GET /api/feedback/import/preview?state=all&page=1` 返回 `{repository,items,page,hasMore}`，每页 20 条，可选 `all/open/closed`。`POST /api/feedback/import` 接受 `{requestId,repository,numbers}`，每次 1 至 10 个唯一正整数编号，返回 `{items:[{number,outcome,feedbackId?,message}]}`；结果为 `imported/skipped/failed`。仓库必须与当前预览一致；请求 ID 绑定操作人和导入范围，重放同请求复用逐项结果，失败项通过新请求重试。并发导入按仓库身份和工单编号核对，逻辑删除的关联不重新导入。PR、内部正文和带系统建单标识的工单跳过。
 
 导入仅远端读取，网络调用不占用写事务；每个工单独立落库及审计，部分失败不丢失成功记录，也不创建新工单。`source=gitea` 和 `importMetadata` 区分原提出人、远端登记账号及导入操作人；原正文、原创建时间保留快照，进展和公开评论沿用现有同步。原工单截图关联到无评论的远端附件，鉴权下载时重新验证工单及附件权限、内部标记和实际图片内容。

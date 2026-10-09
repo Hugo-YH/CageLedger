@@ -4,9 +4,10 @@ import errno
 import json
 import socket
 import ssl
+from http.client import HTTPSConnection
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from uuid import uuid4
 
 from server_app.domains.administration.system import parse_gitea_repository_url
@@ -23,6 +24,28 @@ class RemoteError(Exception):
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+class ConnectionSetupError(OSError):
+    """The HTTPS connection failed before any API request bytes were sent."""
+
+    def __init__(self, reason):
+        self.certificate_error = isinstance(reason, ssl.SSLCertVerificationError)
+        super().__init__("HTTPS connection setup failed")
+
+
+class TrackedHTTPSConnection(HTTPSConnection):
+    def connect(self):
+        try:
+            super().connect()
+        except OSError as exc:
+            self.close()
+            raise ConnectionSetupError(exc) from None
+
+
+class TrackedHTTPSHandler(HTTPSHandler):
+    def https_open(self, request):
+        return self.do_open(TrackedHTTPSConnection, request, context=self._context)
 
 
 class Client:
@@ -45,7 +68,25 @@ class Client:
         self.api = f"{self.base}/api/v1/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
         self.token = token
         self.auth_blocked = False
-        self.opener = build_opener(NoRedirect())
+        self.opener = build_opener(NoRedirect(), TrackedHTTPSHandler())
+
+    def read_response(self, request, limit):
+        # GETs are safe to repeat. A write is repeated only when connection setup
+        # failed before sending its headers/body; response timeouts remain uncertain.
+        for attempt in range(3):
+            try:
+                with self.opener.open(request, timeout=10) as response:
+                    return response.read(limit + 1)
+            except HTTPError:
+                raise
+            except (URLError, TimeoutError, OSError) as exc:
+                reason = exc.reason if isinstance(exc, URLError) else exc
+                certificate_error = isinstance(reason, ssl.SSLCertVerificationError) or (
+                    isinstance(reason, ConnectionSetupError) and reason.certificate_error
+                )
+                retryable = request.get_method() == "GET" or isinstance(reason, ConnectionSetupError)
+                if attempt == 2 or not retryable or certificate_error:
+                    raise
 
     def request(self, method, path, body=None, *, raw=None, content_type="application/json", binary=False):
         headers = {"Accept": "application/json", "Authorization": "token " + self.token}
@@ -54,12 +95,11 @@ class Client:
             headers["Content-Type"] = content_type
         request = Request(self.api + path, data=data, headers=headers, method=method)
         try:
-            with self.opener.open(request, timeout=10) as response:
-                limit = 10 * 1024 * 1024 if binary else 4 * 1024 * 1024
-                payload = response.read(limit + 1)
-                if len(payload) > limit:
-                    raise RemoteError("Gitea 响应过大，请管理员检查", permanent=True)
-                return payload if binary else json.loads(payload or b"{}")
+            limit = 10 * 1024 * 1024 if binary else 4 * 1024 * 1024
+            payload = self.read_response(request, limit)
+            if len(payload) > limit:
+                raise RemoteError("Gitea 响应过大，请管理员检查", permanent=True)
+            return payload if binary else json.loads(payload or b"{}")
         except HTTPError as exc:
             exc.close()
             if exc.code in (401, 403):
@@ -77,7 +117,7 @@ class Client:
         except (URLError, TimeoutError, OSError) as exc:
             reason = exc.reason if isinstance(exc, URLError) else exc
             not_connected = isinstance(
-                reason, ConnectionRefusedError | socket.gaierror | ssl.SSLCertVerificationError
+                reason, ConnectionSetupError | ConnectionRefusedError | socket.gaierror | ssl.SSLCertVerificationError
             ) or getattr(reason, "errno", None) in {errno.ENETUNREACH, errno.EHOSTUNREACH}
             raise RemoteError("Gitea 连接失败，反馈已留档", uncertain=method == "POST" and not not_connected) from None
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -125,8 +165,7 @@ class Client:
             raise RemoteError("远端附件地址不受信任", permanent=True)
         try:
             request = Request(value, headers={"Authorization": "token " + self.token})
-            with self.opener.open(request, timeout=10) as response:
-                content = response.read(10 * 1024 * 1024 + 1)
+            content = self.read_response(request, 10 * 1024 * 1024)
             if len(content) > 10 * 1024 * 1024:
                 raise RemoteError("远端截图超过 10MiB", permanent=True)
             return content

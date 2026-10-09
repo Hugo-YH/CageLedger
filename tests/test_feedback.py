@@ -3,13 +3,14 @@ import io
 import json
 import shutil
 import sqlite3
+import ssl
 import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from urllib.error import HTTPError, URLError
 from uuid import uuid4
 
@@ -18,7 +19,7 @@ from PIL import Image
 from server_app.domains.administration import system
 from server_app.domains.feedback import files, service, sync, worker
 from server_app.domains.feedback import repository as repo
-from server_app.domains.feedback.gitea import Client, RemoteError
+from server_app.domains.feedback.gitea import Client, ConnectionSetupError, RemoteError
 from server_app.shared.sqlite import ClosingConnection
 from server_app.web import feedback as web
 
@@ -868,6 +869,92 @@ class FeedbackTests(unittest.TestCase):
 
 
 class ClientTests(unittest.TestCase):
+    def response(self, body=b"{}"):
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = body
+        return response
+
+    def test_get_retries_transient_connection_and_response_timeouts(self):
+        client = Client(REPOSITORY, "mock-token")
+        for reason in (TimeoutError("read timed out"), ConnectionResetError("reset")):
+            with (
+                self.subTest(reason=type(reason).__name__),
+                patch.object(
+                    client.opener, "open", side_effect=[URLError(reason), self.response(b'{"number":1}')]
+                ) as opened,
+            ):
+                self.assertEqual(client.request("GET", "/issues/1"), {"number": 1})
+                self.assertEqual(opened.call_count, 2)
+
+    def test_get_retries_are_bounded_and_do_not_leak_transport_details(self):
+        client = Client(REPOSITORY, "mock-token")
+        with (
+            patch.object(
+                client.opener, "open", side_effect=URLError(TimeoutError("sensitive transport detail"))
+            ) as opened,
+            self.assertRaises(RemoteError) as result,
+        ):
+            client.request("GET", "/issues/1")
+        self.assertEqual(opened.call_count, 3)
+        self.assertFalse(result.exception.uncertain)
+        self.assertNotIn("sensitive", str(result.exception))
+
+    def test_tls_handshake_timeout_before_post_is_retryable_not_uncertain(self):
+        client = Client("https://example.test/hugo/cageledger", "mock-token")
+        with (
+            patch(
+                "http.client.HTTPSConnection.connect", side_effect=TimeoutError("TLS handshake timed out")
+            ) as connect,
+            self.assertRaises(RemoteError) as result,
+        ):
+            client.request("POST", "/issues", {"title": "test"})
+        self.assertEqual(connect.call_count, 3)
+        self.assertFalse(result.exception.uncertain)
+        self.assertFalse(result.exception.permanent)
+
+    def test_post_retries_only_confirmed_unsent_connection_failure(self):
+        client = Client(REPOSITORY, "mock-token")
+        with patch.object(
+            client.opener,
+            "open",
+            side_effect=[URLError(ConnectionSetupError(TimeoutError())), self.response(b'{"number":1}')],
+        ) as opened:
+            self.assertEqual(client.request("POST", "/issues", {"title": "test"}), {"number": 1})
+            self.assertEqual(opened.call_count, 2)
+
+    def test_post_response_timeout_does_not_repeat_remote_write(self):
+        client = Client(REPOSITORY, "mock-token")
+        response = self.response()
+        response.read.side_effect = TimeoutError("response lost after write")
+        with (
+            patch.object(client.opener, "open", return_value=response) as opened,
+            self.assertRaises(RemoteError) as result,
+        ):
+            client.request("POST", "/issues", {"title": "test"})
+        self.assertEqual(opened.call_count, 1)
+        self.assertTrue(result.exception.uncertain)
+
+    def test_tls_certificate_verification_is_preserved_without_retry(self):
+        client = Client("https://example.test/hugo/cageledger", "mock-token")
+        with (
+            patch(
+                "http.client.HTTPSConnection.connect", side_effect=ssl.SSLCertVerificationError("invalid certificate")
+            ) as connect,
+            self.assertRaises(RemoteError) as result,
+        ):
+            client.request("POST", "/issues", {"title": "test"})
+        self.assertEqual(connect.call_count, 1)
+        self.assertFalse(result.exception.uncertain)
+
+    def test_attachment_download_retries_safe_reads(self):
+        client = Client(REPOSITORY, "mock-token")
+        with patch.object(
+            client.opener, "open", side_effect=[URLError(TimeoutError()), self.response(b"image")]
+        ) as opened:
+            self.assertEqual(client.download_asset(client.base + "/attachments/id"), b"image")
+            self.assertEqual(opened.call_count, 2)
+
     def test_connection_refusal_is_retryable_but_timeout_is_uncertain(self):
         client = Client(REPOSITORY, "mock-token")
         for reason, uncertain in [(ConnectionRefusedError("refused"), False), (TimeoutError("timed out"), True)]:
