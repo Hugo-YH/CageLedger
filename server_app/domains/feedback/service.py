@@ -10,6 +10,7 @@ from server_app.domains.administration.audit import audit_event, write_audit_eve
 from server_app.shared import now_iso
 
 from . import repository as repo
+from .diagnostics import validate as validate_diagnostics
 
 KINDS = {"bug", "suggestion", "question"}
 STATUSES = {"pending", "in_progress", "verification", "resolved", "closed", "conflict", "deleted"}
@@ -75,7 +76,7 @@ def present(conn, row, user, metadata=None):
         "status": row["status"],
         "syncStatus": state,
         "createdBy": json.loads(row["author"]),
-        "environment": json.loads(row["environment"]),
+        "environment": {key: value for key, value in json.loads(row["environment"]).items() if key != "diagnostics"},
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
         "version": row["version"],
@@ -141,6 +142,7 @@ def detail(conn, user, feedback_id):
         "item": present(conn, row, user),
         "comments": [comment(conn, item) for item in comments],
         "attachments": [attachment(item) for item in attachments],
+        "diagnostics": json.loads(row["environment"]).get("diagnostics"),
     }
 
 
@@ -156,6 +158,9 @@ def create(conn, user, body):
     # Never persist URLs or their query strings from the client context.
     if any("://" in environment[key] or "?" in environment[key] for key in ("page", "browser")):
         raise ValueError("环境信息不能包含网址或查询参数")
+    diagnostics = validate_diagnostics(body.get("diagnostics"))
+    if diagnostics is not None:
+        environment["diagnostics"] = diagnostics
     content = {
         "title": text(body.get("title", ""), 200, True),
         "kind": kind,

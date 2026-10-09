@@ -9,6 +9,7 @@ from server_app.domains.administration.audit import audit_event, write_audit_eve
 from server_app.shared import now_iso
 
 from . import repository as repo
+from .diagnostics import markdown as diagnostics_markdown
 from .gitea import RemoteError
 
 LABELS = {
@@ -48,12 +49,13 @@ def unique_match(items, token):
 def issue_body(feedback):
     user = json.loads(feedback["author"])
     environment = json.loads(feedback["environment"])
-    context = "\n".join(f"- {key}: {value}" for key, value in environment.items())
+    context = "\n".join(f"- {key}: {value}" for key, value in environment.items() if key != "diagnostics")
     return (
         f"{marker('feedback', feedback['id'])}\n"
         f"CageLedger 反馈 #{feedback['number']}\n\n"
         f"提交人：{user['name']}\n类型：{feedback['kind']}\n模块：{feedback['module']}\n"
         f"提交时间：{feedback['created_at']}\n\n{feedback['description']}\n\n环境信息\n{context}"
+        f"{diagnostics_markdown(environment.get('diagnostics'))}"
     )
 
 

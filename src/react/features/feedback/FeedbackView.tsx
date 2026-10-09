@@ -7,7 +7,22 @@ import {
   SendOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Card, Drawer, Form, Input, Select, Skeleton, Space, Tag, Typography, Upload } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Collapse,
+  Drawer,
+  Form,
+  Input,
+  Select,
+  Skeleton,
+  Space,
+  Tag,
+  Typography,
+  Upload,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,6 +33,7 @@ import type {
   FeedbackKind,
   FeedbackStatus,
   FeedbackSyncStatus,
+  FeedbackSubmission,
 } from "../../../contracts/feedback";
 import {
   uploadFeedbackAttachment,
@@ -40,6 +56,8 @@ import { APP_VERSION } from "../../version";
 import { FeedbackImportDrawer } from "./FeedbackImportDrawer";
 import { FeedbackColumnTitle } from "./FeedbackColumnTitle";
 import { FeedbackMarkdown } from "./FeedbackMarkdown";
+import { FeedbackDiagnosticsPreview } from "./FeedbackDiagnosticsPreview";
+import { captureDiagnostics } from "../../diagnostics/collector";
 import { KIND_LABEL, STATUS_LABEL, STATUS_TONE, SYNC_LABEL, SYNC_TONE } from "./feedbackPresentation";
 
 type Draft = { title: string; kind: FeedbackKind; module: string; description: string };
@@ -279,17 +297,19 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
           ) : null}
         </Card>
       </div>
-      <FeedbackCreateDrawer
-        key={createSession}
-        build={systemInfo.data?.build || ""}
-        open={drawer === "create"}
-        page={page}
-        onClose={() => setDrawer(null)}
-        onCreated={(id) => {
-          setSelectedId(id);
-          setDrawer("detail");
-        }}
-      />
+      {drawer === "create" ? (
+        <FeedbackCreateDrawer
+          key={createSession}
+          build={systemInfo.data?.build || ""}
+          open={drawer === "create"}
+          page={page}
+          onClose={() => setDrawer(null)}
+          onCreated={(id) => {
+            setSelectedId(id);
+            setDrawer("detail");
+          }}
+        />
+      ) : null}
       {importOpen && user.role === "admin" ? (
         <FeedbackImportDrawer
           onClose={() => {
@@ -335,17 +355,29 @@ export function FeedbackCreateDrawer({
   const [uploadError, setUploadError] = useState("");
   const [createdId, setCreatedId] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
+  const [previewDiagnostics, setPreviewDiagnostics] = useState(false);
+  const [diagnostics, setDiagnostics] = useState(captureDiagnostics);
+  const submission = useRef<FeedbackSubmission | null>(null);
+  const [submissionLocked, setSubmissionLocked] = useState(false);
   const environment = { appVersion: APP_VERSION, build, page, browser: navigator.userAgent };
   const pending = create.isPending || uploading;
   async function save() {
     if (saving.current) return;
     saving.current = true;
     try {
-      const values = await form.validateFields();
+      const values = submission.current ? null : await form.validateFields();
       setUploadError("");
-      const item = createdId
-        ? { id: createdId }
-        : (await create.mutateAsync({ ...values, requestId: requestId.current, environment })).item;
+      if (!submission.current && values) {
+        submission.current = {
+          ...values,
+          requestId: requestId.current,
+          environment,
+          ...(includeDiagnostics ? { diagnostics } : {}),
+        };
+        setSubmissionLocked(true);
+      }
+      const item = createdId ? { id: createdId } : (await create.mutateAsync(submission.current!)).item;
       if (!createdId) setCreatedId(item.id);
       setUploading(true);
       const failed: UploadFile[] = [];
@@ -370,6 +402,10 @@ export function FeedbackCreateDrawer({
       }
       onCreated(item.id);
     } catch (error) {
+      if (!createdId && error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        submission.current = null;
+        setSubmissionLocked(false);
+      }
       setUploadError(error instanceof Error ? error.message : "提交失败，请重试");
     } finally {
       setUploading(false);
@@ -411,7 +447,7 @@ export function FeedbackCreateDrawer({
       }
     >
       <Form
-        disabled={Boolean(createdId) || pending}
+        disabled={Boolean(createdId) || pending || submissionLocked}
         form={form}
         layout="vertical"
         initialValues={{ kind: "bug", module: "", title: "", description: "" }}
@@ -446,6 +482,36 @@ export function FeedbackCreateDrawer({
         title="将随反馈一并提交的环境信息"
         description={`版本 ${environment.appVersion}${environment.build ? ` · Build ${environment.build}` : ""}；当前页面 ${environment.page}；浏览器 ${environment.browser}`}
       />
+      <section className="feedback-diagnostics" aria-label="反馈诊断选项">
+        <Space wrap>
+          <Checkbox
+            checked={includeDiagnostics}
+            disabled={pending || submissionLocked}
+            onChange={(event) => setIncludeDiagnostics(event.target.checked)}
+          >
+            提交反馈时附带诊断信息
+          </Checkbox>
+          <Button
+            aria-expanded={previewDiagnostics}
+            aria-controls="feedback-diagnostics-preview"
+            onClick={() => setPreviewDiagnostics((value) => !value)}
+          >
+            {previewDiagnostics ? "收起诊断信息" : "预览诊断信息"}
+          </Button>
+        </Space>
+        <Typography.Paragraph type="secondary">
+          仅附带近期错误、失败请求和简短操作轨迹，最多 50
+          条。不会包含表单内容、业务明细或登录凭据；诊断摘要将随反馈同步到项目工单。取消勾选后不会提交该摘要。
+        </Typography.Paragraph>
+        {previewDiagnostics ? (
+          <div id="feedback-diagnostics-preview">
+            <FeedbackDiagnosticsPreview snapshot={diagnostics} />
+            <Button disabled={pending || submissionLocked} onClick={() => setDiagnostics(captureDiagnostics())}>
+              更新诊断信息
+            </Button>
+          </div>
+        ) : null}
+      </section>
       {uploadError ? <Alert className="feedback-submit-error" showIcon type="warning" title={uploadError} /> : null}
     </Drawer>
   );
@@ -680,6 +746,17 @@ export function FeedbackDetailDrawer({
           </div>
           {isAdmin ? <AdminActions item={item} sync={sync} retry={retry} onSync={requestSync} /> : null}
           <Attachments attachments={detail.data?.attachments || []} />
+          {detail.data?.diagnostics ? (
+            <Collapse
+              items={[
+                {
+                  key: "diagnostics",
+                  label: "随反馈提交的诊断信息",
+                  children: <FeedbackDiagnosticsPreview snapshot={detail.data.diagnostics} />,
+                },
+              ]}
+            />
+          ) : null}
           <section className="feedback-comments">
             <Typography.Title level={4}>讨论</Typography.Title>
             {detail.data?.comments.length ? (

@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.7.0",
+    build: "215",
+    releasedAt: "2026-10-09",
+    title: "反馈诊断信息",
+    items: [
+      "提交反馈时默认附带诊断摘要，可先预览、更新摘要，也可取消勾选；提交后在反馈详情中查看，并随关联 Gitea 工单同步",
+      "摘要仅保留最近五分钟、最多 50 条的错误类型、失败请求和简短操作轨迹，接口路径脱敏，不包含表单内容、业务明细、登录凭据和完整日志",
+      "提交结果不明时，重试沿用原内容和诊断摘要，避免新产生的错误改变提交内容并导致重复反馈",
+    ],
+  },
+  {
     version: "1.6.3",
     build: "214",
     releasedAt: "2026-10-09",

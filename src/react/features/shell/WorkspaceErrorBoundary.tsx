@@ -6,6 +6,7 @@ import { clearUiStorage } from "../../state/uiStorage";
 import { claimChunkRecovery, clearChunkRecovery } from "../../state/chunkRecovery";
 import type { WorkspaceView } from "../../state/ui";
 import { PageSkeleton } from "../../components/PageSkeleton";
+import { recordDiagnosticError } from "../../diagnostics/collector";
 
 export function WorkspaceLoading() {
   return (
@@ -26,6 +27,7 @@ export class WorkspaceErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
+    recordDiagnosticError(error, "react");
     if (claimChunkRecovery(error)) window.location.reload();
   }
 

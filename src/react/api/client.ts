@@ -1,3 +1,31 @@
+import { diagnosticRoute, recordDiagnosticAction, recordDiagnosticRequest } from "../diagnostics/collector";
+
+export async function requestFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const startedAt = performance.now();
+  const method = (init.method || "GET").toUpperCase();
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    if (!init.signal?.aborted && !(error instanceof DOMException && error.name === "AbortError")) {
+      recordDiagnosticRequest(url, method, 0, performance.now() - startedAt);
+    }
+    throw error;
+  }
+  if (!response.ok) {
+    recordDiagnosticRequest(
+      url,
+      method,
+      response.status,
+      performance.now() - startedAt,
+      response.headers.get("X-Request-ID"),
+    );
+  } else if (diagnosticRoute(url) && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    recordDiagnosticAction(method === "DELETE" ? "delete" : "save");
+  }
+  return response;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -10,7 +38,7 @@ export class ApiError extends Error {
 }
 
 export async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await requestFetch(url, {
     cache: "no-store",
     credentials: "same-origin",
     ...init,
@@ -30,7 +58,7 @@ export async function requestJson<T>(url: string, init: RequestInit = {}): Promi
 }
 
 export async function requestDownload(url: string, init: RequestInit = {}): Promise<string> {
-  const response = await fetch(url, {
+  const response = await requestFetch(url, {
     cache: "no-store",
     credentials: "same-origin",
     ...init,
@@ -45,6 +73,7 @@ export async function requestDownload(url: string, init: RequestInit = {}): Prom
   }
   const filename = downloadFilename(response.headers.get("Content-Disposition")) || "CageLedger-export";
   const body = await response.blob();
+  recordDiagnosticAction("download");
   const href = URL.createObjectURL(body);
   const anchor = document.createElement("a");
   anchor.href = href;
@@ -83,6 +112,7 @@ export function getPdfExportJob(jobId: string) {
 }
 
 export function downloadFromUrl(url: string) {
+  if (diagnosticRoute(url)) recordDiagnosticAction("download");
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = "";

@@ -182,6 +182,89 @@ class FeedbackTests(unittest.TestCase):
             results = list(pool.map(lambda _: self.create(body), range(8)))
         self.assertEqual(len({item["id"] for item in results}), 1)
 
+    def test_diagnostics_survive_storage_and_sync_without_expanding_list_payloads(self):
+        snapshot = {
+            "schemaVersion": 1,
+            "capturedAt": 1000000,
+            "windowSeconds": 300,
+            "events": [
+                {
+                    "at": 999999,
+                    "kind": "request",
+                    "page": "billing",
+                    "method": "GET",
+                    "route": "/api/quantity-sheets/:id",
+                    "status": 500,
+                    "durationMs": 30,
+                    "requestId": "0123456789abcdef",
+                }
+            ],
+        }
+        body = submission(diagnostics=snapshot)
+        item = self.create(body)
+        self.assertEqual(self.create(copy.deepcopy(body))["id"], item["id"])
+        self.assertNotIn("diagnostics", item["environment"])
+        self.assertEqual(self.detail(item["id"])["diagnostics"], snapshot)
+        with self.connect() as conn:
+            repo.ensure_schema(conn)
+            self.assertNotIn("diagnostics", service.list_page(conn, ACTOR, {})["items"][0]["environment"])
+            self.assertEqual(json.loads(repo.get(conn, item["id"])["environment"])["diagnostics"], snapshot)
+        self.run_worker()
+        remote_body = self.client.issues[0]["body"]
+        self.assertIn("诊断信息（用户选择附带）", remote_body)
+        self.assertEqual(json.loads(remote_body.split("```json\n")[1].split("\n```")[0]), snapshot)
+
+    def test_omitted_diagnostics_keep_legacy_replays_and_remote_body_compatible(self):
+        body = submission()
+        item = self.create(body)
+        self.assertEqual(self.create({**body, "diagnostics": None})["id"], item["id"])
+        self.assertIsNone(self.detail(item["id"])["diagnostics"])
+        self.run_worker()
+        self.assertNotIn("诊断信息", self.client.issues[0]["body"])
+
+    def test_diagnostics_reject_sensitive_or_unbounded_fields_before_writing(self):
+        snapshot = {"schemaVersion": 1, "capturedAt": 1000000, "windowSeconds": 300, "events": []}
+        invalid = [
+            {**snapshot, "token": "SECRET"},
+            {**snapshot, "schemaVersion": True},
+            {
+                **snapshot,
+                "events": [
+                    {
+                        "at": 999999,
+                        "page": "billing",
+                        "kind": "error",
+                        "errorType": "TypeError",
+                        "source": "runtime",
+                        "message": "SECRET",
+                    }
+                ],
+            },
+            {
+                **snapshot,
+                "events": [
+                    {
+                        "at": 999999,
+                        "page": "billing",
+                        "kind": "request",
+                        "method": "GET",
+                        "route": "/api/quantity-sheets/SECRET?token=SECRET",
+                        "status": 500,
+                        "durationMs": 3,
+                    }
+                ],
+            },
+            {**snapshot, "events": [{"at": 999999, "page": "SECRET", "kind": "navigation"}]},
+            {**snapshot, "events": [{"at": 600000, "page": "billing", "kind": "navigation"}]},
+            {**snapshot, "events": [{"at": 999999, "page": "billing", "kind": "navigation"}] * 51},
+        ]
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(ValueError) as raised:
+                self.create(submission(diagnostics=value))
+            self.assertNotIn("SECRET", str(raised.exception))
+        with self.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM feedback").fetchone()[0], 0)
+
     def test_pagination_filters_and_everyone_can_view(self):
         for title in ("需要帮助", "%特殊_文本", "建议功能"):
             self.create(submission(title=title))

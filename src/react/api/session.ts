@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SessionResponse } from "./contracts";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { clearDiagnostics } from "../diagnostics/collector";
 
 export function useSession() {
   return useQuery({
@@ -20,7 +21,10 @@ export function useLogin() {
         method: "POST",
         body: JSON.stringify(credentials),
       }),
-    onSuccess: (session) => client.setQueryData(queryKeys.session, session),
+    onSuccess: (session) => {
+      clearDiagnostics();
+      client.setQueryData(queryKeys.session, session);
+    },
   });
 }
 
@@ -29,6 +33,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => requestJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
     onSuccess: () => {
+      clearDiagnostics();
       client.removeQueries({ predicate: (query) => query.queryKey[0] !== "session" });
       client.setQueryData<SessionResponse>(queryKeys.session, { user: null });
     },

@@ -8,10 +8,10 @@ import type {
   FeedbackImportPreview,
   FeedbackImportResult,
   FeedbackItem,
-  FeedbackKind,
   FeedbackListResponse,
+  FeedbackSubmission,
 } from "../../contracts/feedback";
-import { ApiError, requestJson } from "./client";
+import { ApiError, requestFetch, requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export type FeedbackListColumn =
@@ -107,14 +107,8 @@ export function useImportFeedback() {
 export function useCreateFeedback() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (body: {
-      requestId: string;
-      title: string;
-      kind: FeedbackKind;
-      module: string;
-      description: string;
-      environment: FeedbackItem["environment"];
-    }) => requestJson<{ item: FeedbackItem }>("/api/feedback", { method: "POST", body: JSON.stringify(body) }),
+    mutationFn: (body: FeedbackSubmission) =>
+      requestJson<{ item: FeedbackItem }>("/api/feedback", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.feedbackRoot }),
   });
 }
@@ -166,7 +160,7 @@ export async function uploadFeedbackAttachment(id: string, requestId: string, fi
   if (commentId) query.set("commentId", commentId);
   const body = new FormData();
   body.set("file", file);
-  const response = await fetch(`/api/feedback/${encodeURIComponent(id)}/attachments?${query}`, {
+  const response = await requestFetch(`/api/feedback/${encodeURIComponent(id)}/attachments?${query}`, {
     method: "POST",
     body,
     credentials: "same-origin",

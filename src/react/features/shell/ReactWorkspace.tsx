@@ -22,7 +22,7 @@ import {
   TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Space, Tooltip, Typography, type MenuProps } from "antd";
-import { lazy, Suspense, type ReactNode, useState } from "react";
+import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo } from "../../api/administration";
@@ -33,6 +33,7 @@ import { APP_VERSION } from "../../version";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { WorkspaceErrorBoundary, WorkspaceLoading } from "./WorkspaceErrorBoundary";
 import { billingSidebarItems, isWorkspaceView } from "./workspaceNavigation";
+import { setDiagnosticPage } from "../../diagnostics/collector";
 
 const QuarantineView = lazy(() =>
   import("../quarantine/QuarantineView").then((module) => ({ default: module.QuarantineView })),
@@ -105,6 +106,7 @@ export function ReactWorkspace({ user }: { user: SessionUser }) {
 
 function Workspace({ user }: { user: SessionUser }) {
   const ui = useUiState();
+  useEffect(() => setDiagnosticPage(ui.activeView), [ui.activeView]);
   const saveScroll = useSaveWorkspaceScroll();
   const dispatch = useUiDispatch();
   const logout = useLogout();

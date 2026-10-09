@@ -2,6 +2,26 @@
   min-width: 0;
 }
 
+[data-feature="feedback"] .feedback-diagnostics {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+[data-feature="feedback"] .feedback-diagnostics-preview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-feature="feedback"] .feedback-diagnostics-preview ul {
+  padding-inline-start: var(--space-5);
+}
+
+[data-feature="feedback"] .feedback-diagnostics-preview li + li {
+  margin-top: var(--space-3);
+}
+
 [data-feature="feedback"] .feedback-integration {
   display: flex;
   flex-wrap: wrap;

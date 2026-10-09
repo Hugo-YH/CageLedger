@@ -3,6 +3,7 @@ import { Component, type PropsWithChildren } from "react";
 import { Button, Result } from "antd";
 
 import { claimChunkRecovery } from "../state/chunkRecovery";
+import { recordDiagnosticError } from "../diagnostics/collector";
 
 /** Remains outside application providers so their initialization errors also get a recovery screen. */
 export class AppErrorBoundary extends Component<PropsWithChildren, { error: Error | null }> {
@@ -13,6 +14,7 @@ export class AppErrorBoundary extends Component<PropsWithChildren, { error: Erro
   }
 
   componentDidCatch(error: Error) {
+    recordDiagnosticError(error, "react");
     if (claimChunkRecovery(error)) window.location.reload();
   }
 

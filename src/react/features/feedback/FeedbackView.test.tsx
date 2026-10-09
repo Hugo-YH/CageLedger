@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { FeedbackCreateDrawer, FeedbackDetailDrawer } from "./FeedbackView";
 import { ApiError } from "../../api/client";
+import { clearDiagnostics, recordDiagnosticError } from "../../diagnostics/collector";
 
 const api = vi.hoisted(() => ({ create: vi.fn(), upload: vi.fn(), comment: vi.fn() }));
 
@@ -44,6 +45,7 @@ vi.mock("../../api/feedback", () => ({
 vi.mock("../../api/administration", () => ({ useSystemInfo: () => ({ data: { build: "210" } }) }));
 
 afterEach(() => {
+  clearDiagnostics();
   cleanup();
   api.create.mockReset();
   api.upload.mockReset();
@@ -92,6 +94,41 @@ function fillDraft() {
   fireEvent.change(screen.getByLabelText("涉及模块"), { target: { value: "笼位管理" } });
   fireEvent.change(screen.getByLabelText("问题描述"), { target: { value: "点击保存后出现错误" } });
 }
+
+it("includes diagnostics by default, previews the exact snapshot, and supports opting out", async () => {
+  recordDiagnosticError(new TypeError("SECRET"), "react");
+  api.create.mockResolvedValue({ item: { id: "with-diagnostics" } });
+  const view = render(drawer("with-diagnostics"));
+  expect(screen.getByRole("checkbox", { name: "提交反馈时附带诊断信息" })).toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "预览诊断信息" }));
+  expect(screen.getByRole("region", { name: "诊断信息预览" })).toHaveTextContent("TypeError");
+  expect(screen.getByRole("region", { name: "诊断信息预览" })).not.toHaveTextContent("SECRET");
+  fillDraft();
+  fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+  await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+  expect(api.create.mock.calls[0][0].diagnostics.events).toHaveLength(1);
+  view.rerender(drawer("without-diagnostics"));
+  fireEvent.click(screen.getByRole("checkbox", { name: "提交反馈时附带诊断信息" }));
+  fillDraft();
+  fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+  await waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
+  expect(api.create.mock.calls[1][0]).not.toHaveProperty("diagnostics");
+});
+
+it("retries an unknown submission with the same payload after new diagnostic events occur", async () => {
+  api.create
+    .mockRejectedValueOnce(new TypeError("connection lost"))
+    .mockResolvedValueOnce({ item: { id: "reconciled" } });
+  render(drawer("uncertain"));
+  fillDraft();
+  fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+  await waitFor(() => expect(screen.getByText("connection lost")).toBeVisible());
+  expect(screen.getByRole("checkbox", { name: "提交反馈时附带诊断信息" })).toBeDisabled();
+  recordDiagnosticError(new Error("another private error"), "runtime");
+  fireEvent.click(screen.getByRole("button", { name: /提\s*交/ }));
+  await waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
+  expect(api.create.mock.calls[1][0]).toEqual(api.create.mock.calls[0][0]);
+});
 
 it("starts each new creation with a fresh request id", async () => {
   api.create.mockResolvedValue({ item: { id: "feedback-1" } });

@@ -1,7 +1,19 @@
+import type { FeedbackDiagnostics } from "./feedbackDiagnostics";
+
 export type FeedbackKind = "bug" | "suggestion" | "question";
 export type FeedbackStatus =
   "pending" | "in_progress" | "verification" | "resolved" | "closed" | "conflict" | "deleted";
 export type FeedbackSyncStatus = "pending" | "synced" | "error" | "uncertain" | "unconfigured" | "removed";
+
+export interface FeedbackSubmission {
+  requestId: string;
+  title: string;
+  kind: FeedbackKind;
+  module: string;
+  description: string;
+  environment: FeedbackItem["environment"];
+  diagnostics?: FeedbackDiagnostics;
+}
 
 export interface FeedbackAttachment {
   id: string;
@@ -87,6 +99,7 @@ export interface FeedbackDetail {
   item: FeedbackItem;
   attachments: FeedbackAttachment[];
   comments: FeedbackComment[];
+  diagnostics?: FeedbackDiagnostics | null;
 }
 
 export interface FeedbackListResponse {
