@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.9.0",
+    build: "218",
+    releasedAt: "2026-10-10",
+    title: "Word 接收汇总",
+    items: [
+      "待接收批次新增“导出汇总”，可按预约接收日期区间导出 Word，包含起止当天的全部批次，不受列表筛选、分页或勾选影响",
+      "按日期、房间和预约明细分组，保留采购单号、IACUC、品系、数量、笼数及备注，显示当前批次状态；导出不改变打印或接收状态",
+      "采用 A4 纵向、宋体和紧凑明细排版，字段名加粗、字段值保持正常字重，房间和批次标题使用浅绿、浅黄底色",
+    ],
+  },
+  {
     version: "1.8.1",
     build: "217",
     releasedAt: "2026-10-10",
