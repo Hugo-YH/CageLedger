@@ -1,10 +1,12 @@
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import openpyxl
 
@@ -12,10 +14,13 @@ from server_app.domains.iacuc.auto_import import (
     _archive_imported,
     import_summary_file,
     latest_summary_path,
+    scan_and_import_once,
     xlsx_to_csv_bytes,
 )
 from server_app.legacy import initialize_schema
 from server_app.persistence.legacy_migrations import repair_intake_batch_species
+from server_app.repositories.iacuc import save_iacuc_index_file
+from server_app.web.workflow_actions import WorkflowActionsMixin
 
 
 def build_summary_xlsx(path, rows):
@@ -143,6 +148,213 @@ class IacucAutoImportTests(unittest.TestCase):
             self.conn.execute("SELECT payload FROM intake_batches WHERE id='intake'").fetchone()["payload"]
         )
         self.assertEqual(stored["species"], "mouse")
+
+    def summary_csv(self, name="summary.csv", iacuc="Z2026001"):
+        path = Path(self.tmpdir.name) / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "动物伦理编号,动物实验名称,项目负责人,实验负责人,动物品系\n"
+            f"{iacuc},近视研究,张三,李四,C57小鼠600只、SD大鼠72只\n",
+            encoding="utf-8-sig",
+        )
+        return path
+
+    @patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file")
+    def test_occupancy_sync_preserves_species_and_records_audit(self, _save_index):
+        for species in ("mouse", "rat"):
+            payload = {"id": species, "iacuc": "Z2026001", "species": species, "pi": "原负责人"}
+            self.conn.execute(
+                "INSERT INTO occupancies (id, status, iacuc, pi, species, payload) VALUES (?, ?, ?, ?, ?, ?)",
+                (species, "occupied", "Z2026001", "原负责人", species, json.dumps(payload)),
+            )
+        self.conn.commit()
+        result = import_summary_file(self.summary_csv(), conn=self.conn, now="2026-10-10T06:00:00+00:00")
+        self.assertEqual(result["syncSummary"]["tableCounts"]["occupancies"], 2)
+        for row in self.conn.execute("SELECT id, species, pi, payload FROM occupancies"):
+            self.assertEqual(row["species"], row["id"])
+            self.assertEqual(json.loads(row["payload"])["species"], row["id"])
+            self.assertEqual(row["pi"], "张三")
+            self.assertEqual(json.loads(row["payload"])["pi"], "张三")
+        snapshot = self.conn.execute(
+            "SELECT payload FROM project_sync_snapshots WHERE id = ?", (result["syncSummary"]["snapshotId"],)
+        ).fetchone()
+        changes = json.loads(snapshot["payload"])["changes"]
+        self.assertEqual({change["id"] for change in changes}, {"mouse", "rat"})
+        self.assertTrue(all("species" not in change["changedFields"] for change in changes))
+
+    @patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file")
+    def test_failed_sync_keeps_database_and_index_unchanged(self, save_index):
+        import_summary_file(self.summary_csv(iacuc="Z2026001"), conn=self.conn, now="before")
+        save_index.reset_mock()
+        with patch(
+            "server_app.domains.iacuc.auto_import.sync_project_derived_fields_after_iacuc_upload",
+            side_effect=RuntimeError("sync failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "sync failed"), self.conn:
+                import_summary_file(self.summary_csv(iacuc="Z2026002"), conn=self.conn, now="after")
+        save_index.assert_not_called()
+        self.assertEqual(self.conn.execute("SELECT iacuc FROM experiment_applications").fetchone()[0], "Z2026001")
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 1)
+
+    @patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file")
+    def test_failed_commit_does_not_publish_index(self, save_index):
+        connection = Mock(wraps=self.conn)
+        connection.commit.side_effect = sqlite3.OperationalError("commit failed")
+        with self.assertRaisesRegex(sqlite3.OperationalError, "commit failed"), self.conn:
+            import_summary_file(self.summary_csv(), conn=connection, now="after")
+        save_index.assert_not_called()
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM experiment_applications").fetchone()[0], 0)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 0)
+
+    def test_index_publication_failure_keeps_committed_import_successful(self):
+        with (
+            patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file", side_effect=OSError("disk full")),
+            patch("builtins.print") as warning,
+        ):
+            result = import_summary_file(self.summary_csv(), conn=self.conn, now="after")
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM experiment_applications").fetchone()[0], 1)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 1)
+        warning.assert_called_once()
+
+    def test_index_replace_failure_preserves_existing_file_and_cleans_temporary(self):
+        path = Path(self.tmpdir.name) / "index.json"
+        save_iacuc_index_file(path, [{"iacuc": "old"}])
+        with patch("server_app.repositories.iacuc.os.replace", side_effect=OSError("replace failed")):
+            with self.assertRaisesRegex(OSError, "replace failed"):
+                save_iacuc_index_file(path, [{"iacuc": "new"}])
+        self.assertEqual(json.loads(path.read_text()), [{"iacuc": "old"}])
+        self.assertEqual(list(path.parent.glob(".iacuc-index-*")), [])
+
+    def scan(self, inbox, archive, **kwargs):
+        with (
+            patch("server_app.domains.iacuc.auto_import.connect_db", return_value=self.conn),
+            patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file"),
+        ):
+            return scan_and_import_once(inbox, archive, now="2026-10-10T06:00:00+00:00", **kwargs)
+
+    def test_scan_imports_latest_and_preserves_superseded_files_without_replaying(self):
+        old = self.summary_csv("inbox/old.csv", "Z2026001")
+        latest = self.summary_csv("inbox/latest.csv", "Z2026002")
+        os.utime(old, (10, 10))
+        os.utime(latest, (20, 20))
+        archive = Path(self.tmpdir.name) / "archive"
+        result = self.scan(latest.parent, archive)
+        self.assertEqual(result["source"], "latest.csv")
+        self.assertEqual(result["supersededSources"], ["old.csv"])
+        self.assertEqual(len(list((archive / "superseded").glob("*.csv"))), 1)
+        self.assertEqual(len(list(archive.glob("*.csv"))), 1)
+        self.assertIsNone(self.scan(latest.parent, archive))
+        self.assertEqual(self.conn.execute("SELECT iacuc FROM experiment_applications").fetchone()[0], "Z2026002")
+
+    def test_scan_failure_retains_all_pending_files(self):
+        old = self.summary_csv("inbox/old.csv")
+        latest = self.summary_csv("inbox/latest.csv", "Z2026002")
+        with patch(
+            "server_app.domains.iacuc.auto_import.sync_project_derived_fields_after_iacuc_upload",
+            side_effect=RuntimeError("sync failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "sync failed"):
+                self.scan(latest.parent, Path(self.tmpdir.name) / "archive")
+        self.assertTrue(old.exists())
+        self.assertTrue(latest.exists())
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM experiment_applications").fetchone()[0], 0)
+
+    def test_scan_retains_arriving_and_replaced_files(self):
+        old = self.summary_csv("inbox/old.csv")
+        latest = self.summary_csv("inbox/latest.csv", "Z2026002")
+        os.utime(old, (10, 10))
+        os.utime(latest, (20, 20))
+
+        def import_with_arrivals(*args, **kwargs):
+            result = import_summary_file(*args, **kwargs)
+            self.summary_csv("inbox/arrived.csv", "Z2026003")
+            self.summary_csv("inbox/old.csv", "Z2026004")
+            return result
+
+        with patch("server_app.domains.iacuc.auto_import.import_summary_file", side_effect=import_with_arrivals):
+            result = self.scan(latest.parent, Path(self.tmpdir.name) / "archive")
+        self.assertEqual(result["supersededSources"], [])
+        self.assertTrue(old.exists())
+        self.assertTrue((old.parent / "arrived.csv").exists())
+        self.assertFalse(latest.exists())
+
+    def test_archive_failure_leaves_latest_for_retry(self):
+        old = self.summary_csv("inbox/old.csv")
+        latest = self.summary_csv("inbox/latest.csv", "Z2026002")
+        os.utime(old, (10, 10))
+        os.utime(latest, (20, 20))
+        with (
+            patch("server_app.domains.iacuc.auto_import._archive_imported", side_effect=OSError("archive failed")),
+            patch("server_app.domains.iacuc.auto_import.invalidate_data_cache") as invalidate,
+        ):
+            with self.assertRaisesRegex(OSError, "archive failed"):
+                self.scan(latest.parent, Path(self.tmpdir.name) / "archive")
+        invalidate.assert_called_once_with(
+            "assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi"
+        )
+        self.assertTrue(latest.exists())
+        self.assertTrue(old.exists())
+        self.assertEqual(self.conn.execute("SELECT iacuc FROM experiment_applications").fetchone()[0], "Z2026002")
+
+    def test_manual_upload_failure_does_not_publish_index(self):
+        path = self.summary_csv()
+        handler = SimpleNamespace(
+            require_user=lambda: {"id": "admin", "username": "admin", "role": "admin", "displayName": "管理员"},
+            read_raw_body=lambda: b"multipart",
+            headers={"Content-Type": "multipart/form-data"},
+            send_json=Mock(),
+        )
+        ports = SimpleNamespace(save_iacuc_index_file=Mock())
+        with (
+            patch("server_app.web.workflow_actions.app_ports", return_value=ports),
+            patch(
+                "server_app.web.workflow_actions.parse_multipart_upload",
+                return_value=("summary.csv", path.read_bytes()),
+            ),
+            patch("server_app.web.workflow_actions.connect_db", return_value=self.conn),
+            patch(
+                "server_app.web.workflow_actions.sync_project_derived_fields_after_iacuc_upload",
+                side_effect=ValueError("sync failed"),
+            ),
+        ):
+            WorkflowActionsMixin.handle_iacuc_upload(handler)
+        ports.save_iacuc_index_file.assert_not_called()
+        self.assertEqual(handler.send_json.call_args.args[0], {"error": "sync failed"})
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM experiment_applications").fetchone()[0], 0)
+
+    def test_manual_upload_publishes_only_after_database_and_audit_commit(self):
+        path = self.summary_csv()
+        handler = SimpleNamespace(
+            require_user=lambda: {"id": "admin", "username": "admin", "role": "admin", "displayName": "管理员"},
+            read_raw_body=lambda: b"multipart",
+            headers={"Content-Type": "multipart/form-data"},
+            send_json=Mock(),
+        )
+
+        def check_committed(items):
+            self.assertFalse(self.conn.in_transaction)
+            self.assertEqual(items[0]["iacuc"], "Z2026001")
+            self.assertEqual(self.conn.execute("SELECT count(*) FROM experiment_applications").fetchone()[0], 1)
+            self.assertEqual(
+                self.conn.execute("SELECT count(*) FROM audit_events WHERE action='iacuc_index.uploaded'").fetchone()[
+                    0
+                ],
+                1,
+            )
+
+        ports = SimpleNamespace(save_iacuc_index_file=Mock(side_effect=check_committed))
+        with (
+            patch("server_app.web.workflow_actions.app_ports", return_value=ports),
+            patch(
+                "server_app.web.workflow_actions.parse_multipart_upload",
+                return_value=("summary.csv", path.read_bytes()),
+            ),
+            patch("server_app.web.workflow_actions.connect_db", return_value=self.conn),
+        ):
+            WorkflowActionsMixin.handle_iacuc_upload(handler)
+        ports.save_iacuc_index_file.assert_called_once()
+        self.assertTrue(handler.send_json.call_args.args[0]["ok"])
 
     def test_repairs_polluted_intake_species_from_its_own_strain(self):
         payload = {

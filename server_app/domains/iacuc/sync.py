@@ -36,6 +36,14 @@ def write_experiment_applications(conn, items, imported_at):
     replace_experiment_applications(conn, items, imported_at, application_payload)
 
 
+def publish_committed_iacuc_index(items, save_index):
+    """发布已提交的兼容索引；文件故障不将成功的数据库事务报告为失败。"""
+    try:
+        save_index(items)
+    except OSError as exc:
+        print(f"[iacuc-index] 数据库已提交，兼容索引文件更新失败：{exc}")
+
+
 PROJECT_DERIVED_FIELDS = (
     "project",
     "pi",
@@ -138,7 +146,7 @@ def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imp
             conn.execute(
                 """
                 UPDATE occupancies
-                SET project = ?, pi = ?, owner = ?, funding = ?, species = ?, updated_at = ?, payload = ?
+                SET project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
                 WHERE id = ?
                 """,
                 (
@@ -146,7 +154,6 @@ def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imp
                     after["pi"],
                     after["owner"],
                     after["funding"],
-                    after["species"],
                     imported_at,
                     payload_json,
                     row["id"],

@@ -1,5 +1,8 @@
 import json
+import os
+import tempfile
 from datetime import UTC, datetime
+from pathlib import Path
 
 from server_app.cache import cache_get, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes
 
@@ -93,4 +96,16 @@ def replace_experiment_applications(conn, items, imported_at, application_payloa
 
 def save_iacuc_index_file(iacuc_index_path, items):
     iacuc_index_path.parent.mkdir(parents=True, exist_ok=True)
-    iacuc_index_path.write_text(json.dumps(items, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=iacuc_index_path.parent, prefix=".iacuc-index-", delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(json.dumps(items, ensure_ascii=False, indent=2) + "\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, iacuc_index_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)

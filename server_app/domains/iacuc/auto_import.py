@@ -24,6 +24,7 @@ from server_app.domains.iacuc.importer import parse_iacuc_csv
 from server_app.domains.iacuc.sync import (
     application_payload,
     invalidate_all_quantity_sheet_candidate_snapshots,
+    publish_committed_iacuc_index,
     read_current_applications,
     sync_project_derived_fields_after_iacuc_upload,
     write_experiment_applications,
@@ -104,7 +105,6 @@ def import_summary_file(path, *, conn, now, actor=SYSTEM_ACTOR):
     file_items = [application_payload(item, now) for item in parsed["items"]]
     old_items = read_current_applications(conn)
     write_experiment_applications(conn, parsed["items"], now)
-    save_iacuc_index_file(file_items)
     sync_summary = sync_project_derived_fields_after_iacuc_upload(conn, old_items, file_items, actor, now)
     invalidate_all_quantity_sheet_candidate_snapshots(conn)
     event = audit_event(
@@ -127,6 +127,7 @@ def import_summary_file(path, *, conn, now, actor=SYSTEM_ACTOR):
     )
     write_audit_events(conn, [event])
     conn.commit()
+    publish_committed_iacuc_index(file_items, save_iacuc_index_file)
     return {"source": Path(path).name, **parsed["summary"], "syncSummary": sync_summary}
 
 
@@ -139,26 +140,36 @@ def _archive_imported(path, archive_dir, now):
     return target
 
 
-def latest_summary_path(inbox_dir):
-    """返回 inbox 中修改时间最新的汇总表文件；目录不存在或为空返回 None。"""
+def _summary_candidates(inbox_dir):
+    """记录本轮文件身份，避免归档扫描后新增或被替换的文件。"""
     inbox = Path(inbox_dir)
     if not inbox.is_dir():
-        return None
-    candidates = [item for item in inbox.iterdir() if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES]
+        return []
+    candidates = []
+    for item in inbox.iterdir():
+        if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES:
+            stat = item.stat()
+            candidates.append((item, (stat.st_mtime_ns, stat.st_size, stat.st_ino, stat.st_dev)))
+    return sorted(candidates, key=lambda candidate: (candidate[1][0], candidate[0].name))
+
+
+def latest_summary_path(inbox_dir):
+    """返回 inbox 中修改时间最新的汇总表文件；目录不存在或为空返回 None。"""
+    candidates = _summary_candidates(inbox_dir)
     if not candidates:
         return None
-    return max(candidates, key=lambda item: item.stat().st_mtime)
+    return candidates[-1][0]
 
 
 def scan_and_import_once(inbox_dir=DEFAULT_INBOX_DIR, archive_dir=DEFAULT_ARCHIVE_DIR, now=None):
     """扫描 inbox 取最新汇总表并导入，成功返回摘要，无文件返回 None。"""
-    latest = latest_summary_path(inbox_dir)
-    if latest is None:
+    candidates = _summary_candidates(inbox_dir)
+    if not candidates:
         return None
+    latest = candidates[-1][0]
     current = now or now_iso()
     with connect_db() as conn:
         result = import_summary_file(latest, conn=conn, now=current)
-        _archive_imported(latest, archive_dir, current)
     invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi")
     invalidate_data_cache_prefixes(
         "bootstrap_summary::",
@@ -170,6 +181,21 @@ def scan_and_import_once(inbox_dir=DEFAULT_INBOX_DIR, archive_dir=DEFAULT_ARCHIV
         "intake_batches::",
         "placement_tasks::",
     )
+    # 旧副本保留在 superseded 中；先处理旧文件、最后移走最新文件，归档失败时
+    # 下轮仍重试最新汇总表，不能退回旧版本。
+    superseded = []
+    for path, identity in candidates:
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        if (stat.st_mtime_ns, stat.st_size, stat.st_ino, stat.st_dev) != identity:
+            continue
+        target_dir = archive_dir if path == latest else Path(archive_dir) / "superseded"
+        _archive_imported(path, target_dir, current)
+        if path != latest:
+            superseded.append(path.name)
+    result["supersededSources"] = superseded
     return result
 
 

@@ -46,6 +46,8 @@ IACUC 索引是系统自动回填项目、负责人和结算快照的基础数�
 
 系统启动后每 5 分钟扫描 `data/inbox/iacuc/`，取其中修改时间最新的汇总表（xlsx 或 csv）自动导入，成功后把文件移入 `data/archive/iacuc/`（文件名带时间戳），避免重复导入。
 
+同一轮扫描中积压的旧副本在最新汇总表成功导入后移入 `data/archive/iacuc/superseded/` 保留，不再依次导入，避免旧数据覆盖最新结果。导入失败时保留待处理文件，下轮重试；扫描期间新增或被替换的文件留待下轮处理。
+
 群晖侧用 `scripts/sync_iacuc_summary_nas.sh` 监听「动物实验申请汇总表」内容变化，变化后复制一份到 `data/inbox/iacuc/`：
 
 ```bash
@@ -56,6 +58,8 @@ bash scripts/sync_iacuc_summary_nas.sh watch
 ```
 
 导入逻辑与手动上传一致：写 `experiment_applications`、同步数量统计表等派生字段、作废结算候选快照并写审计事件 `iacuc_index.auto_imported`。xlsx 支持带标题行和空行的表，自动定位包含「动物伦理编号」等必填列的表头行。
+
+占用和接收记录保留自身的动物品种，不使用汇总表中的混合品系描述覆盖。SQLite 事务提交成功后才更新兼容 JSON 索引，文件采用临时文件原子替换；派生字段同步或提交失败时，数据库回滚且不发布新索引。兼容索引文件写入故障会记录 `[iacuc-index]` 警告，已提交的数据库仍是系统查询的数据源。
 
 自动导入可用环境变量控制：
 

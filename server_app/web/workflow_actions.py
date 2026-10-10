@@ -51,6 +51,7 @@ from server_app.domains.iacuc import (
 from server_app.domains.iacuc.sync import (
     application_payload,
     invalidate_all_quantity_sheet_candidate_snapshots,
+    publish_committed_iacuc_index,
     read_current_applications,
     sync_project_derived_fields_after_iacuc_upload,
     write_experiment_applications,
@@ -182,7 +183,6 @@ class WorkflowActionsMixin:
             parsed = parse_iacuc_csv(file_body)
             now = now_iso()
             file_items = [application_payload(item, now) for item in parsed["items"]]
-            app_ports().save_iacuc_index_file(file_items)
             event = audit_event(
                 user,
                 "iacuc_index.uploaded",
@@ -201,6 +201,7 @@ class WorkflowActionsMixin:
                 invalidate_all_quantity_sheet_candidate_snapshots(conn)
                 write_audit_events(conn, [event])
                 conn.commit()
+            publish_committed_iacuc_index(file_items, app_ports().save_iacuc_index_file)
             invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi")
             invalidate_data_cache_prefixes(
                 "bootstrap_summary::",
