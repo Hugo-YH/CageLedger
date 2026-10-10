@@ -150,6 +150,43 @@ class IntakeSummaryTests(unittest.TestCase):
             self.assertIn(value, content)
         self.assertNotIn("预约原文：", content)
 
+    def test_field_labels_are_bold_but_values_with_colons_and_line_breaks_stay_normal(self):
+        item = reservation(
+            purchaseOrderNo="PO202610005",
+            strainRaw="品系：A <B>",
+            project="示例项目",
+            receiverName="示例接收人",
+            vetPhone="020-12345678",
+            notes="供应商：按预约原样记录\n第二行备注",
+        )
+        document = Document(
+            BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-12", "batches": [item]}))
+        )
+        details = next(p for p in document.paragraphs if p.text.startswith("采购单号："))
+        labels = {run.text for run in details.runs if run.bold}
+        self.assertEqual(
+            labels,
+            {
+                "采购单号",
+                "批次号",
+                "供应商",
+                "品系",
+                "数量",
+                "饲养房间",
+                "IACUC",
+                "动物种类",
+                "性别",
+                "饲养天数",
+                "项目名称",
+                "接收人",
+                "兽医电话",
+                "预约备注",
+            },
+        )
+        for value in ("：PO202610005", "：品系：A <B>", "：供应商：按预约原样记录\n第二行备注"):
+            run = next(run for run in details.runs if run.text == value)
+            self.assertFalse(run.bold)
+
     def test_template_contains_only_blank_layout_and_all_status_tags_are_exported(self):
         template = Document(summary.TEMPLATE)
         self.assertFalse(template.paragraphs)

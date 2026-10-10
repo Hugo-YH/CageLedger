@@ -64,6 +64,19 @@ def paragraph(document, value, *, bold=False, size=12, after=0, keep_next=False)
     return p
 
 
+def detail_paragraph(document, lines):
+    p = paragraph(document, "", after=12)
+    for line_index, fields in enumerate(lines):
+        if line_index:
+            p.add_run("\n")
+        for field_index, (label, value) in enumerate(fields):
+            if field_index:
+                p.add_run("　")
+            p.add_run(label).bold = True
+            p.add_run(f"：{text(value)}").bold = False
+    return p
+
+
 def batch_block(document, batch):
     owner, pi = text(batch.get("owner")), text(batch.get("pi"))
     person = f"{owner}（{pi}）" if owner and pi and owner != pi else owner or pi or "负责人未填写"
@@ -79,31 +92,34 @@ def batch_block(document, batch):
         {"printed": "0958D9", "received": "237804", "draft": "595959", "pending_print": "595959"}.get(status, "595959")
     )
     lines = [
-        f"采购单号：{field(batch.get('purchaseOrderNo'))}　批次号：{field(batch.get('batchNo'))}",
-        f"供应商：{field(batch.get('supplier'))}　品系：{field(batch.get('strainRaw') or batch.get('strainStandard'))}"
-        f"　数量：{field(batch.get('quantity'))}　饲养房间：{field(batch.get('roomName'))}",
+        [("采购单号", field(batch.get("purchaseOrderNo"))), ("批次号", field(batch.get("batchNo")))],
+        [
+            ("供应商", field(batch.get("supplier"))),
+            ("品系", field(batch.get("strainRaw") or batch.get("strainStandard"))),
+            ("数量", field(batch.get("quantity"))),
+            ("饲养房间", field(batch.get("roomName"))),
+        ],
     ]
-    optional = [f"IACUC：{field(batch.get('iacuc'))}"]
+    optional = [("IACUC", field(batch.get("iacuc")))]
     if batch.get("species"):
-        optional.append(f"动物种类：{species_label(batch['species'])}")
+        optional.append(("动物种类", species_label(batch["species"])))
     if batch.get("sex"):
-        optional.append(f"性别：{text(batch['sex'])}")
+        optional.append(("性别", text(batch["sex"])))
     if batch.get("husbandryDays") is not None:
-        optional.append(f"饲养天数：{text(batch['husbandryDays'])}")
-    if optional:
-        lines.append("　".join(optional))
+        optional.append(("饲养天数", text(batch["husbandryDays"])))
+    lines.append(optional)
     if batch.get("project"):
-        lines.append(f"项目名称：{text(batch['project'])}")
+        lines.append([("项目名称", text(batch["project"]))])
     contacts = [
-        f"{label}：{text(batch[key])}"
+        (label, text(batch[key]))
         for key, label in (("receiverName", "接收人"), ("vetPhone", "兽医电话"))
         if batch.get(key)
     ]
     if contacts:
-        lines.append("　".join(contacts))
+        lines.append(contacts)
     if batch.get("notes"):
-        lines.append(f"预约备注：{text(batch['notes'])}")
-    paragraph(document, "\n".join(lines), after=12)
+        lines.append([("预约备注", text(batch["notes"]))])
+    detail_paragraph(document, lines)
 
 
 def generate(document_snapshot):
