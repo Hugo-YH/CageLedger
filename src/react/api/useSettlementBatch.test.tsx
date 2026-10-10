@@ -59,18 +59,20 @@ describe("settlement batch", () => {
     ]);
   });
 
-  it("deletes generated workflows, reverts sent workflows, and retains missing IDs as failures", async () => {
+  it("passes the withdrawal reason to deletes and reversions, and retains missing IDs as failures", async () => {
     const { wrapper, invalidate } = setup();
     const { result } = renderHook(useSettlementBatch, { wrapper });
     const targets: SettlementBatchItem[] = [
       {
         ...items[0],
         action: "withdraw",
+        note: "结算资料需要补充后重新生成",
         candidate: { ...items[0].candidate, workflowId: "w1", workflowStatus: "statement_generated" },
       },
       {
         ...items[1],
         action: "withdraw",
+        note: "收件人信息有误，需要重新发起",
         candidate: { ...items[1].candidate, workflowId: "w2", workflowStatus: "statement_sent" },
       },
       { ...items[0], action: "withdraw" },
@@ -82,10 +84,13 @@ describe("settlement batch", () => {
       });
     });
     expect(requestJson).toHaveBeenCalledTimes(2);
-    expect(requestJson).toHaveBeenNthCalledWith(1, "/api/billing-workflows/w1", { method: "DELETE" });
+    expect(requestJson).toHaveBeenNthCalledWith(1, "/api/billing-workflows/w1", {
+      method: "DELETE",
+      body: JSON.stringify({ note: "结算资料需要补充后重新生成" }),
+    });
     expect(requestJson).toHaveBeenNthCalledWith(2, "/api/billing-workflows/advance", {
       method: "POST",
-      body: JSON.stringify({ workflowId: "w2", toStatus: "statement_generated", note: "批量撤回，退回已生成" }),
+      body: JSON.stringify({ workflowId: "w2", toStatus: "statement_generated", note: "收件人信息有误，需要重新发起" }),
     });
     expect(invalidate).toHaveBeenCalledTimes(4);
   });

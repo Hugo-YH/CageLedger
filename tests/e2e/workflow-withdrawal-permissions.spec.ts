@@ -101,8 +101,16 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   const ownId = (await initiated.json()).workflow.id as string;
   await page.reload();
   await openWorkflowCenter(page);
+  await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  const monthFilter = page.locator(".table-filter-panel:visible");
+  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await monthOption.click();
+  await expect(monthOption).toBeChecked();
+  await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
   const ownWorkflow = page.getByRole("row").filter({ hasText: ownPi });
   const foreignWorkflow = page.getByRole("row").filter({ hasText: foreignPi });
+  await expect(ownWorkflow).toBeVisible();
+  await expect(foreignWorkflow).toBeVisible();
   await expect(ownWorkflow.getByRole("button", { name: "登记", exact: true })).toHaveCount(0);
   await expect(foreignWorkflow.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);
   await ownWorkflow.getByRole("button", { name: "撤回", exact: true }).click();

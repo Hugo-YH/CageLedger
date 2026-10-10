@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.9.1",
+    build: "219",
+    releasedAt: "2026-10-10",
+    title: "结算流程撤回权限",
+    items: [
+      "房间管理员可撤销本人生成的当前版本，或将本人发起且未归档的流程撤回至已生成状态；操作须填写原因",
+      "结算列表、预览和单据跟踪按当前账号显示撤回能力，批量操作仅处理有权限的流程，避免误操作他人单据",
+      "以账号 ID 和当前版本事件核对归属，保留归档、锁定和管理员授权边界；撤回原因同步记录到流程事件或审计，台账状态与相关缓存同步更新",
+    ],
+  },
+  {
     version: "1.9.0",
     build: "218",
     releasedAt: "2026-10-10",
