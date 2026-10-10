@@ -8,6 +8,7 @@ import { FilterableColumnTitle } from "../../../components/FilterableTableHeader
 import { CommandBar, DataTable } from "../../../components/ui";
 import { IntakeQuarantineStatus } from "../../quarantine/IntakeQuarantineStatus";
 import { intakeStatusLabel } from "../../../../domain/intake";
+import { IntakeSummaryExport } from "./IntakeSummaryExport";
 
 export function IntakeBatchList({
   total,
@@ -164,26 +165,29 @@ export function IntakeBatchList({
           pending: selectingAll || markingPrinted || markingReceived,
         }}
         actions={
-          selectedItems.length ? (
-            <>
-              <Button
-                icon={<ActionIcon name="print" />}
-                disabled={loading || markingPrinted || markingReceived}
-                loading={markingPrinted}
-                onClick={() => onMarkPrinted(selectedItems)}
-              >
-                标记已打印
-              </Button>
-              <Button
-                icon={<ActionIcon name="reserve" />}
-                disabled={loading || markingPrinted || markingReceived}
-                loading={markingReceived}
-                onClick={() => onReceive(selectedItems)}
-              >
-                标记已接收
-              </Button>
-            </>
-          ) : null
+          <>
+            <IntakeSummaryExport />
+            {selectedItems.length ? (
+              <>
+                <Button
+                  icon={<ActionIcon name="print" />}
+                  disabled={loading || markingPrinted || markingReceived}
+                  loading={markingPrinted}
+                  onClick={() => onMarkPrinted(selectedItems)}
+                >
+                  标记已打印
+                </Button>
+                <Button
+                  icon={<ActionIcon name="reserve" />}
+                  disabled={loading || markingPrinted || markingReceived}
+                  loading={markingReceived}
+                  onClick={() => onReceive(selectedItems)}
+                >
+                  标记已接收
+                </Button>
+              </>
+            ) : null}
+          </>
         }
         primaryAction={
           selectedItems.length ? (

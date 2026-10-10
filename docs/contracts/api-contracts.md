@@ -93,6 +93,7 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 | -------- | ------------------------------------------ | -------------------------------------------------------- | --------------------------------------- |
 | `GET`    | `/api/intake-batches`                      | `limit`、`offset`、`sortKey`、`sortDir`、`columnFilters` | 分页批次                                |
 | `GET`    | `/api/intake-batches/filter-options`       | `column` + 当前筛选                                      | 筛选候选值                              |
+| `GET`    | `/api/intake-batches/summary.docx`         | `startDate`、`endDate`（`YYYY-MM-DD`）                   | 接收汇总 Word 下载                      |
 | `POST`   | `/api/intake-batches`                      | `{ item }`                                               | `{ item, placementTasks?, auditLogs? }` |
 | `PUT`    | `/api/intake-batches/{id}`                 | `{ item, expectedUpdatedAt }`                            | `{ item, placementTasks?, auditLogs? }` |
 | `DELETE` | `/api/intake-batches/{id}`                 | 空                                                       | 删除结果与受影响任务                    |
@@ -106,6 +107,8 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 | `POST`   | `/api/placement-tasks/{id}/reassign-room`  | `{ roomId }`                                             | 更新任务和审计                          |
 
 Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开扫码之间保持唯一、持久和可追溯。
+
+接收汇总与待接收列表沿用相同登录读取权限，按预约接收日期包含起止当天的全部批次和状态，不受分页、表头筛选或勾选限制；无预约日期的记录排除。无效日期、逆序区间或空区间返回 `400`，不生成空文档。响应为鉴权 `.docx` 附件，`Cache-Control: no-store`。汇总保留当前批次状态、原始品系和已填写的预约备注，不输出预约原文或签收等空栏；导出不写入批次、接收记录、待进驻任务或审计，不推进打印或接收状态。
 
 ## 数量统计表与结算
 

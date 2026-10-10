@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { IntakeBatch, IntakeListParams, IntakeWriteResponse, PagedResponse } from "./contracts";
-import { requestJson } from "./client";
+import type {
+  IntakeBatch,
+  IntakeListParams,
+  IntakeSummaryExportParams,
+  IntakeWriteResponse,
+  PagedResponse,
+} from "./contracts";
+import { requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
@@ -18,6 +24,13 @@ function intakeListUrl(params: IntakeListParams) {
 
 export function listIntakeBatches(params: IntakeListParams, signal?: AbortSignal) {
   return requestJson<PagedResponse<IntakeBatch>>(intakeListUrl(params), { signal });
+}
+
+export function useExportIntakeSummary() {
+  return useMutation({
+    mutationFn: (params: IntakeSummaryExportParams) =>
+      requestDownload(`/api/intake-batches/summary.docx?${new URLSearchParams({ ...params }).toString()}`),
+  });
 }
 
 export function useIntakeBatches(params: IntakeListParams, enabled = true) {

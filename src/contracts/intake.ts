@@ -59,6 +59,11 @@ export interface IntakeListParams {
   columnFilters?: Record<string, string[]>;
 }
 
+export interface IntakeSummaryExportParams {
+  startDate: string;
+  endDate: string;
+}
+
 export interface IntakeWriteResponse {
   item: IntakeBatch;
   placementTasks?: Record<string, unknown>[];
