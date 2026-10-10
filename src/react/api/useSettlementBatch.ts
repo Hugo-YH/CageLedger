@@ -10,12 +10,13 @@ export interface SettlementBatchItem {
   candidate: SettlementCandidate;
   action: "start" | "withdraw";
   source: "quantity_sheet" | "cage_map";
+  note?: string;
 }
 
 export function useSettlementBatch() {
   const client = useQueryClient();
   return useSequentialBatch({
-    execute: async ({ candidate, action, source }: SettlementBatchItem) => {
+    execute: async ({ candidate, action, source, note }: SettlementBatchItem) => {
       if (action === "start") {
         return generateBillingStatement({
           month: candidate.month,
@@ -25,11 +26,11 @@ export function useSettlementBatch() {
         });
       }
       if (!candidate.workflowId) throw new Error("缺少流程编号");
-      if (candidate.workflowStatus === "statement_generated") return deleteBillingWorkflow(candidate.workflowId);
+      if (candidate.workflowStatus === "statement_generated") return deleteBillingWorkflow(candidate.workflowId, note);
       return advanceWorkflow({
         workflowId: candidate.workflowId,
         toStatus: "statement_generated",
-        note: "批量撤回，退回已生成",
+        note,
       });
     },
     reconcile: () =>

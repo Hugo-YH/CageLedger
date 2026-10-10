@@ -45,6 +45,7 @@ export interface BillingWorkflow {
   month: string;
   sourceType: string;
   workflowStatus: string;
+  canWithdraw?: boolean;
   currentVersionNo?: number;
   pi: string;
   project: string;
@@ -291,7 +292,7 @@ export async function uploadWorkflowAttachment(workflowId: string, kind: "settle
 export function useDeleteBillingWorkflow() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: deleteBillingWorkflow,
+    mutationFn: (id: string) => deleteBillingWorkflow(id),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
       void client.invalidateQueries({ queryKey: ["billing-workflows"] });
@@ -314,6 +315,9 @@ export async function recordWorkflowReimbursement(
   return payload;
 }
 
-export function deleteBillingWorkflow(workflowId: string) {
-  return requestJson<{ ok: true }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`, { method: "DELETE" });
+export function deleteBillingWorkflow(workflowId: string, note?: string) {
+  return requestJson<{ ok: true }>(`/api/billing-workflows/${encodeURIComponent(workflowId)}`, {
+    method: "DELETE",
+    ...(note ? { body: JSON.stringify({ note }) } : {}),
+  });
 }

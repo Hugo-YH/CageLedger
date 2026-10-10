@@ -69,12 +69,14 @@ from server_app.domains.workflow.application import (
     update_workflow_status,
 )
 from server_app.domains.workflow.constants import (
+    WORKFLOW_STATUS_GENERATED,
     WORKFLOW_STATUS_LOCKED,
 )
 from server_app.domains.workflow.facade import (
     delete_billing_workflow,
     get_billing_workflow,
 )
+from server_app.domains.workflow.permissions import require_own_withdrawal
 from server_app.repositories.reimbursement import (
     reimbursement_record_list_item,
 )
@@ -385,6 +387,7 @@ class WorkflowActionsMixin:
             note = clean_text(body.get("note", ""))
             registration = body.get("registration") if isinstance(body.get("registration"), dict) else None
             with connect_db() as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 current = get_billing_workflow(conn, workflow_id)
                 if not current:
                     raise LookupError("结算流程不存在")
@@ -396,8 +399,9 @@ class WorkflowActionsMixin:
                         self.send_json({"error": "需要结算锁定授权"}, HTTPStatus.FORBIDDEN)
                         return
                 elif user["role"] != "admin":
-                    self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-                    return
+                    if to_status != WORKFLOW_STATUS_GENERATED:
+                        raise PermissionError("需要管理员权限")
+                    require_own_withdrawal(conn, user, current)
                 workflow, version, event = update_workflow_status(
                     conn, workflow_id, to_status, user, note, registration
                 )
@@ -435,6 +439,8 @@ class WorkflowActionsMixin:
                     "auditLogs": merge_audit_logs([], [audit]),
                 }
             )
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -510,12 +516,17 @@ class WorkflowActionsMixin:
         user = self.require_user()
         if not user:
             return
-        if user["role"] != "admin":
-            self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
-            return
         try:
+            body = self.read_optional_json_body()
+            note = clean_text(body.get("note", ""))
             with connect_db() as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 existing = get_billing_workflow(conn, workflow_id)
+                if not existing:
+                    raise LookupError("结算流程不存在")
+                require_own_withdrawal(conn, user, existing, delete=True)
+                if user["role"] != "admin" and not note:
+                    raise ValueError("撤销结算流程时请填写撤回原因")
                 if existing and existing.get("workflowStatus") == WORKFLOW_STATUS_LOCKED:
                     raise ValueError("已锁定流程不允许撤销，请先解锁")
                 workflow = delete_billing_workflow(conn, workflow_id)
@@ -538,7 +549,8 @@ class WorkflowActionsMixin:
                     "billing_workflow.deleted",
                     "billing_workflow",
                     workflow_id,
-                    f"{user['displayName']} 删除 {workflow.get('pi') or workflow.get('iacuc', '')} {workflow.get('month', '')} 结算流程",
+                    f"{user['displayName']} 删除 {workflow.get('pi') or workflow.get('iacuc', '')} {workflow.get('month', '')} 结算流程"
+                    + (f"；撤回原因：{note}" if note else ""),
                     [],
                     at,
                     workflow,
@@ -564,5 +576,9 @@ class WorkflowActionsMixin:
                     "auditLogs": merge_audit_logs([], [audit]),
                 }
             )
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)

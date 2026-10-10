@@ -1,9 +1,11 @@
 import { DownloadOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from "@ant-design/icons";
-import { Alert, Button, Modal, Popconfirm, Tooltip, Typography } from "antd";
+import { Alert, Button, Modal, Tooltip, Typography } from "antd";
+import { useState } from "react";
 
 import type { BillingStatementResponse, SettlementCandidate } from "../../../api/contracts";
 import { CommandBar } from "../../../components/ui";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
+import { BatchWithdrawConfirmModal } from "./BatchWithdrawConfirmModal";
 
 export function SettlementPreviewModal({
   selected,
@@ -15,6 +17,7 @@ export function SettlementPreviewModal({
   hasWorkflow,
   workflowStatus,
   revertPending,
+  canWithdraw,
   onClose,
   onExportPdf,
   onRevert,
@@ -29,13 +32,14 @@ export function SettlementPreviewModal({
   hasWorkflow: boolean;
   workflowStatus?: string;
   revertPending: boolean;
+  canWithdraw: boolean;
   onClose: () => void;
   onExportPdf: () => void;
-  onRevert: () => void;
+  onRevert: (note: string) => Promise<void>;
   onStartSettlement: () => void;
 }) {
   const canInitiate = !hasWorkflow || workflowStatus === "statement_generated";
-  const canWithdraw = hasWorkflow && workflowStatus === "statement_sent";
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const workflowActionLabel = canInitiate
     ? "发起结算流程"
     : {
@@ -78,18 +82,15 @@ export function SettlementPreviewModal({
             <Button icon={<DownloadOutlined aria-hidden />} loading={pdfExporting} onClick={onExportPdf}>
               导出 PDF
             </Button>
-            {canWithdraw ? (
-              <Popconfirm
-                description="撤回后该结算流程退回已生成状态，可重新发起结算。"
-                okButtonProps={{ danger: true }}
-                okText="撤回"
-                title="将该流程撤回？"
-                onConfirm={onRevert}
+            {canWithdraw && hasWorkflow && workflowStatus === "statement_sent" ? (
+              <Button
+                danger
+                icon={<UndoOutlined aria-hidden />}
+                loading={revertPending}
+                onClick={() => setWithdrawOpen(true)}
               >
-                <Button danger icon={<UndoOutlined aria-hidden />} loading={revertPending}>
-                  撤回
-                </Button>
-              </Popconfirm>
+                撤回
+              </Button>
             ) : null}
           </>
         }
@@ -120,6 +121,14 @@ export function SettlementPreviewModal({
       <div className="settlement-preview settlement-document-preview">
         <iframe title="结算单预览" srcDoc={settlementStatementHtml(result, false)} />
       </div>
+      <BatchWithdrawConfirmModal
+        count={1}
+        open={withdrawOpen}
+        pending={revertPending}
+        title="撤回结算流程"
+        onCancel={() => setWithdrawOpen(false)}
+        onConfirm={onRevert}
+      />
     </Modal>
   );
 }

@@ -7,6 +7,8 @@ import { WorkflowRowActions, WorkflowViewButton } from "./WorkflowRowActions";
 export function WorkflowTableActions({
   item,
   canLock,
+  canWithdraw,
+  canRegister,
   disabled,
   loading,
   onRegister,
@@ -16,6 +18,8 @@ export function WorkflowTableActions({
 }: {
   item: BillingWorkflow;
   canLock: boolean;
+  canWithdraw: boolean;
+  canRegister: boolean;
   disabled: boolean;
   loading: boolean;
   onRegister: (item: BillingWorkflow) => void;
@@ -38,7 +42,7 @@ export function WorkflowTableActions({
   return (
     <WorkflowRowActions
       primary={
-        sent ? (
+        sent && canRegister ? (
           <Button type="primary" onClick={() => onRegister(item)}>
             登记
           </Button>
@@ -47,7 +51,7 @@ export function WorkflowTableActions({
         )
       }
       revoke={
-        !locked ? (
+        !locked && canWithdraw ? (
           <Button
             danger
             onClick={() => onRevoke({ workflow: item, toStatus: sent ? "statement_generated" : "statement_sent" })}

@@ -72,7 +72,7 @@ export function SettlementBatchToolbar({
           >
             {selectedCount > 1 ? "批量导出 Excel" : "导出 Excel"}
           </Button>
-          <Tooltip title={selectedCount && !withdrawableCount ? "所选结算项均为未发起或已归档" : undefined}>
+          <Tooltip title={selectedCount && !withdrawableCount ? "所选结算项没有可撤回的流程或无撤回权限" : undefined}>
             <span>
               <Button
                 icon={<UndoOutlined aria-hidden />}

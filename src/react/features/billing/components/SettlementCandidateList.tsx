@@ -142,20 +142,24 @@ export function SettlementCandidateList({
     onToggleAll: () => void selection.toggleAll(params),
   });
 
-  async function revertFor(candidate: SettlementCandidate) {
+  function canWithdraw(candidate: SettlementCandidate) {
+    return Boolean(
+      candidate.hasWorkflow &&
+      (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent") &&
+      (candidate.canWithdraw ?? user.role === "admin"),
+    );
+  }
+
+  async function revertFor(candidate: SettlementCandidate, note: string) {
     if (!candidate.workflowId) return;
-    try {
-      await advanceWorkflow.mutateAsync({
-        workflowId: candidate.workflowId,
-        toStatus: "statement_generated",
-        note: "退回已生成",
-      });
-      setSelected(null);
-      setResult(null);
-      showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，退回已生成状态。`, "success");
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "撤回结算流程失败", "error");
-    }
+    await advanceWorkflow.mutateAsync({
+      workflowId: candidate.workflowId,
+      toStatus: "statement_generated",
+      note,
+    });
+    setSelected(null);
+    setResult(null);
+    showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，退回已生成状态。`, "success");
   }
 
   async function generateFor(candidate: SettlementCandidate, persist: boolean): Promise<boolean> {
@@ -257,14 +261,13 @@ export function SettlementCandidateList({
     }
   }
 
-  async function runSelectedBatch(action: "start" | "withdraw") {
+  async function runSelectedBatch(action: "start" | "withdraw", note?: string) {
     if (batchActionRef.current) return;
     const candidates = selectedCandidates.filter((candidate) =>
       action === "start"
         ? candidate.totalAmount != null &&
           (!candidate.hasWorkflow || candidate.workflowStatus === "statement_generated")
-        : candidate.hasWorkflow &&
-          (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent"),
+        : canWithdraw(candidate),
     );
     if (!candidates.length) return;
     const submittedScope = scopeRef.current;
@@ -274,7 +277,7 @@ export function SettlementCandidateList({
     setNotice("");
     const verb = action === "start" ? "发起" : "撤回";
     try {
-      const result = await batch.run(candidates.map((candidate) => ({ candidate, action, source })));
+      const result = await batch.run(candidates.map((candidate) => ({ candidate, action, source, note })));
       selection.removeCompleted(new Set(result.completed.map((item) => item.candidate.id)));
       const failures = result.failures.map(({ item, message }) => `${item.candidate.pi}（${message}）`);
       showNotice(
@@ -330,11 +333,7 @@ export function SettlementCandidateList({
   const allSelectedNonInitiative =
     selectedCandidates.length > 0 &&
     selectedCandidates.every((item) => item.hasWorkflow && item.workflowStatus !== "statement_generated");
-  const withdrawableSelected = selectedCandidates.filter(
-    (candidate) =>
-      candidate.hasWorkflow &&
-      (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent"),
-  );
+  const withdrawableSelected = selectedCandidates.filter(canWithdraw);
   return (
     <>
       {selection.error ? <Alert role="alert" type="error" showIcon title={selection.error} /> : null}
@@ -435,13 +434,14 @@ export function SettlementCandidateList({
         onCancel={() => {
           if (!batchWithdrawing) setBatchWithdrawOpen(false);
         }}
-        onConfirm={() => void runSelectedBatch("withdraw")}
+        onConfirm={(note) => runSelectedBatch("withdraw", note)}
       />
       {selected && result ? (
         <SettlementPreviewModal
           generatePending={generate.isPending}
           hasWorkflow={Boolean(selected.hasWorkflow)}
           revertPending={advanceWorkflow.isPending}
+          canWithdraw={canWithdraw(selected)}
           workflowStatus={selected.workflowStatus}
           notice={notice}
           noticeKind={noticeKind}
@@ -453,7 +453,7 @@ export function SettlementCandidateList({
             setSelected(null);
           }}
           onExportPdf={() => void exportCandidates([selected])}
-          onRevert={() => void revertFor(selected)}
+          onRevert={(note) => revertFor(selected, note)}
           onStartSettlement={() => void prepareNoticeEmail(selected)}
         />
       ) : null}

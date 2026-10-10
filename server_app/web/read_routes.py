@@ -89,6 +89,7 @@ from server_app.domains.workflow.facade import (
     list_billing_workflow_lines,
     list_billing_workflow_versions,
 )
+from server_app.domains.workflow.permissions import with_withdrawal_capabilities
 from server_app.repositories.billing import (
     find_latest_quantity_sheet_pi as find_latest_quantity_sheet_pi_repository,
 )
@@ -452,7 +453,8 @@ class ReadRoutesMixin:
             if not user:
                 return
             with connect_db() as conn:
-                self.send_json(app_ports().list_billing_workflows_page(conn, self.list_filters()))
+                payload = app_ports().list_billing_workflows_page(conn, self.list_filters())
+                self.send_json({**payload, "items": with_withdrawal_capabilities(conn, user, payload["items"])})
             return
         if path == "/api/reimbursement-records":
             user = self.require_user()
@@ -497,7 +499,7 @@ class ReadRoutesMixin:
                     return
                 self.send_json(
                     {
-                        "workflow": workflow,
+                        "workflow": with_withdrawal_capabilities(conn, user, [workflow])[0],
                         "versions": list_billing_workflow_versions(conn, workflow_id),
                         "events": list_billing_workflow_events(conn, workflow_id),
                     }
@@ -533,7 +535,13 @@ class ReadRoutesMixin:
                     payload = {"month": month, "pi": pi, "sourceType": "quantity_sheet"}
                     return app_ports().generate_billing_statement_by_pi(conn, payload, user)[0]
 
-                self.send_json(list_settlement_candidates(conn, filters, calculate, "quantity_sheet", now_iso()))
+                payload = list_settlement_candidates(conn, filters, calculate, "quantity_sheet", now_iso())
+                self.send_json(
+                    {
+                        **payload,
+                        "items": with_withdrawal_capabilities(conn, user, payload["items"], id_key="workflowId"),
+                    }
+                )
             return
         if path == "/api/billing-settlements/pdf":
             download_billing_statement_pdf(

@@ -292,6 +292,7 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
     .getByRole("checkbox", { name: `选择 E2E 已发起负责人 ${month} 结算项` })
     .check();
   await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "撤回", exact: true }).click();
+  await page.getByRole("dialog", { name: "批量撤回结算流程", exact: true }).getByLabel("撤回原因").fill("测试重新核算");
   await page
     .getByRole("dialog", { name: "批量撤回结算流程", exact: true })
     .getByRole("button", { name: "撤回 1 个流程", exact: true })
@@ -356,7 +357,10 @@ test("项目负责人结算列表可撤回已发起流程退回已生成", async
   const previewModal = page.locator(".settlement-preview-modal");
   await expect(previewModal.getByRole("button", { name: "撤回", exact: true })).toBeVisible();
   await previewModal.getByRole("button", { name: "撤回", exact: true }).click();
-  await page.locator(".ant-popconfirm").getByRole("button", { name: "撤回", exact: true }).click();
+  const withdrawDialog = page.getByRole("dialog", { name: "撤回结算流程", exact: true });
+  await expect(withdrawDialog.getByRole("button", { name: "撤回 1 个流程", exact: true })).toBeDisabled();
+  await withdrawDialog.getByLabel("撤回原因").fill("核对金额后重新发起");
+  await withdrawDialog.getByRole("button", { name: "撤回 1 个流程", exact: true }).click();
   await expect(row).toContainText("已生成", { timeout: 10_000 });
 });
 
@@ -412,6 +416,7 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
   await page.getByLabel("结算批量操作", { exact: true }).getByRole("button", { name: "批量撤回", exact: true }).click();
   const confirmDialog = page.getByRole("dialog", { name: "批量撤回结算流程", exact: true });
   await expect(confirmDialog).toContainText("2 个");
+  await confirmDialog.getByLabel("撤回原因").fill("批量重新核算");
   const batchRefreshes: string[] = [];
   page.on("request", (request) => {
     if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-settlement-candidates")

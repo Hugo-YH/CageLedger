@@ -57,6 +57,7 @@ export interface SettlementCandidate {
   hasWorkflow?: boolean;
   workflowId?: string;
   workflowStatus?: string;
+  canWithdraw?: boolean;
 }
 
 export interface SettlementCandidateListParams {

@@ -152,13 +152,15 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 | `GET`    | `/api/billing-workflows/{id}/lines`               | `versionId`                                                    | 指定版本明细                                                                                                        |
 | `POST`   | `/api/billing-workflows/advance`                  | `{ workflowId, toStatus, note?, registration? }`               | workflow、event、auditLogs；`registration` 含结算单/报销单交回开关、报销单号与金额，实收金额由后端按报销单自动汇总  |
 | `POST`   | `/api/billing-workflows/{id}/reimbursement-forms` | `{ reimbursementForms: [{ formNo, amount }] }`                 | 已归档流程补录报销单，追加到现有报销单并重算实收金额                                                                |
-| `DELETE` | `/api/billing-workflows/{id}`                     | 空                                                             | 删除结果和审计                                                                                                      |
+| `DELETE` | `/api/billing-workflows/{id}`                     | `{ note }`（管理员兼容空请求）                                 | 删除结果和审计                                                                                                      |
 | `GET`    | `/api/reimbursement-records`                      | `status`、`month`、`pi`、`onlyUnpaid`、分页                    | 分页台账                                                                                                            |
 | `GET`    | `/api/reimbursement-records/{id}`                 | 空                                                             | item、workflow、versions、events、history                                                                           |
 | `PUT`    | `/api/reimbursement-records/{id}`                 | 台账可编辑字段                                                 | 更新后的完整详情                                                                                                    |
 | `DELETE` | `/api/reimbursement-records/{id}`                 | 空                                                             | `{ ok: true }`                                                                                                      |
 | `POST`   | `/api/reimbursement-records/import-monthly`       | Excel 文件                                                     | 导入摘要                                                                                                            |
 | `POST`   | `/api/reimbursement-records/import-arrears`       | Excel 文件                                                     | 导入摘要                                                                                                            |
+
+结算候选列表、流程列表和流程详情返回当前登录账号的 `canWithdraw`；能力字段在共享缓存之后投影，不写入流程或共享缓存。房间管理员仅能撤销本人生成的当前版本（`DELETE`、已生成状态、必须填写 `note`），或撤回本人发起的未归档流程（`advance`、已发起 → 已生成、必须填写 `note`）。生成者由当前版本最新生成／修订事件的账号 ID 判定；发起者取 `sentBy.id`，旧记录缺失时取当前版本最新发起事件。禁止按姓名推断，无有效账号证据则拒绝。接口在同一写事务中重新校验身份及当前状态；已有管理员和结算锁定授权规则保留。撤回原因写入流程事件和审计，撤销原因写入删除审计；候选、流程、台账及 PDF 缓存按现有范围失效。
 
 ### 多对多核销台账
 
