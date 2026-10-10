@@ -8,7 +8,7 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
@@ -77,13 +77,21 @@ def detail_paragraph(document, lines):
     return p
 
 
+def shade_run(run, fill):
+    shading = OxmlElement("w:shd")
+    shading.set(qn("w:val"), "clear")
+    shading.set(qn("w:color"), "auto")
+    shading.set(qn("w:fill"), fill)
+    run._r.get_or_add_rPr().append(shading)
+
+
 def batch_block(document, batch):
     owner, pi = text(batch.get("owner")), text(batch.get("pi"))
     person = f"{owner}（{pi}）" if owner and pi and owner != pi else owner or pi or "负责人未填写"
     cage_count = batch.get("finalCardCount")
     cages = f"　{cage_count}笼" if cage_count is not None else ""
     heading = paragraph(document, f"□ {person}{cages}", bold=True, keep_next=True)
-    heading.runs[0].font.highlight_color = WD_COLOR_INDEX.YELLOW
+    shade_run(heading.runs[0], "F8F4E3")
     status = text(batch.get("status"))
     tag = heading.add_run(f"　【{STATUS_LABELS.get(status, status or '状态未填写')}】")
     tag.bold = True
@@ -160,7 +168,7 @@ def generate(document_snapshot):
         paragraph(document, f"{day.year}年{day.month}月{day.day}日", bold=True, size=14, after=4, keep_next=True)
         for room, batches in sorted(rooms.items()):
             p = paragraph(document, room or "房间未填写", bold=True, after=4, keep_next=True)
-            p.runs[0].font.highlight_color = WD_COLOR_INDEX.BRIGHT_GREEN
+            shade_run(p.runs[0], "EAF3EA")
             for batch in batches:
                 batch_block(document, batch)
     footer = section.footer.paragraphs[0]
