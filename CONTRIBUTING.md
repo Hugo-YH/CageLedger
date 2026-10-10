@@ -74,11 +74,11 @@ npm run typecheck
 
 ## 验证
 
-按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 分级验收、结算双渲染和性能历史要求。相关小改集中完成后统一验证，不每改一个点就跑全套；纯文档修改只检查相关文档。提交和发布前统一通过完整基础质量检查，未受后续改动影响的成功结果可复用。
+按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 分级验收、结算双渲染和性能历史要求。相关小改集中完成后统一验证；纯文档修改只检查相关文档。日常提交和推送不要求完整检查，简单修改不执行全量测试、生产构建或打包；高风险改动保留受影响业务的回归。完整检查在 Mac mini 发布前执行，未受后续改动影响的成功结果可复用。
 
 代理指令与 Skills 的维护约定见 [agent-instructions.md](docs/contracts/agent-instructions.md)。
 
-基础质量检查：
+Mac mini 发布前的基础质量检查：
 
 ```bash
 npm run check
@@ -92,7 +92,7 @@ npm run verify:full
 
 `npm run dev`、`npm run check`、`npm run test:e2e` 和 Python 质量工具统一解析项目 `.venv`。`CAGELEDGER_PYTHON_BIN` 可覆盖为其他 Python 3.13 可执行文件。
 
-Gitea Pull Request 运行轻量质量门禁：格式、lint、类型、Vitest、构建和架构检查。Mac mini 在发布前运行 Python 全量测试、Playwright、API 冒烟与 PDF 验收。
+MacBook 默认完成修改、针对性验证、提交并推送到 Gitea。Mac mini 同步待发布代码，负责完整检查、标签、构建、打包、Release 和镜像发布。Gitea 托管代码和发布产物，不承担发布验证与构建；代码推送不自动触发 Mac mini 完整检查或发布。
 
 ## 可访问性
 
@@ -103,6 +103,8 @@ Gitea Pull Request 运行轻量质量门禁：格式、lint、类型、Vitest、
 - toast、加载和错误状态使用合适的 live region。
 
 ## 发布
+
+以下步骤在 Mac mini 执行；MacBook 日常提交和推送不执行这些步骤。
 
 1. 在 `wiki/更新日志.md` 增加版本、日期和面向使用者的说明，再运行 `npm run release:notes:sync`。
 2. 正式版本在 `main` 上发布，预发布经 `beta → rc → main` 推进。

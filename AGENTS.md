@@ -62,7 +62,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 - UI 使用 Ant Design 组件与唯一主题定义，视觉尺度、对比度及响应式规则见 `docs/contracts/antd-design-language.md`。布局以 `src/styles/style-ownership.json` 登记的唯一来源为准，`src/styles.css` 仅作导入入口。
 - UI 验证按测试契约区分局部小改与结构性改动；文案、间距、提示位置等小改默认只确认受影响页面，不默认四档视口、截图矩阵或完整回归。通知和确认使用站内组件。
 - 结算汇总表同时检查 `src/react/print/settlement.ts` 与 `server_app/pdf/documents.py`，保留前端和 Python 的等价回归，尤其是跨页汇总。
-- 提交和发布前统一通过 `npm run check`；同一最终代码状态已通过的检查可复用，不因进入下一步骤重复运行，发布脚本必需的校验仍保留。开发中只做与改动相关的验证，不默认全套检查、构建或打包；所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。
+- 日常修改、提交和推送只做与改动相关的验证；简单修改不运行完整 `npm run check`、`npm run verify:full`、生产构建或打包。结算、权限、迁移等高风险改动按影响范围补充回归，不因提交而自动升级为全量检查。完整检查放到发布前，由 Mac mini 执行；同一最终代码状态已通过的结果可复用，发布脚本必需的校验仍保留。所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。
 
 ## Skill 与发布边界
 
@@ -70,4 +70,6 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。正式上游为 `http://ddns.cellnucle.us:3333/hugo/cageledger`，镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
 
-发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序。Mac mini 是发布验证、制品生成、Release 上传和 Wiki 同步执行端；Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+MacBook 默认负责修改代码、针对性验证、提交并推送到 Gitea；推送代码不代表授权发布，不自动连接 Mac mini 执行完整检查或发布。交付时说明提交、验证结果及留待发布验证的项目。
+
+Mac mini 负责从 Gitea 同步待发布代码、发布前完整检查、版本与标签、构建打包、镜像及 Release 上传和 Wiki 同步。发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。

@@ -88,7 +88,7 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 | Git HTTPS 凭据文件       | `~/.git-cageledger-credentials`（权限 600） | 后台会话与代理执行 Git fetch/push；已配置 per-host `credential.http://ddns.cellnucle.us:3333.helper store --file=...` |
 | 容器仓库凭据             | Mac mini 本地凭据                           | 本地发布多架构容器镜像                                                                                                |
 
-Mac mini 是检查、验证、制品生成与上传的唯一执行端。Gitea 保存 Git 代码、Wiki、Release 离线包和容器镜像，不运行 CI、打包、镜像校验或 Wiki 同步任务。
+MacBook 默认负责代码修改、针对性验证、提交和推送到 Gitea；简单修改不运行完整检查、生产构建或打包，推送不自动触发发布。Mac mini 同步待发布代码，是发布前完整检查、打标签、生产构建、制品生成与上传及 Wiki 同步的执行端。Gitea 保存 Git 代码、Wiki、Release 离线包和容器镜像，不运行 CI、打包、镜像校验或 Wiki 同步任务。
 
 后台会话（`launchctl managername` 返回 `Background`）无法读取 macOS 登录钥匙串（`-25308`），
 因此代理或非交互终端执行发布前，确认 `~/.git-cageledger-credentials` 存在且权限为 600。

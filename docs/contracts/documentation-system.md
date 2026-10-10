@@ -35,7 +35,7 @@
 2. 修改环境变量、端口、部署、测试或发布脚本时，同步修改运维或开发页面。
 3. 修改 API、权限、缓存或数据模型时，同步修改开发参考页和相关契约。
 4. 发布前在 `wiki/更新日志.md` 写入面向使用者的版本说明，再运行 `npm run release:notes:sync`。
-5. 按 [测试策略](testing-strategy.md) 验证修改的文档；`wiki/` 或文档站配置变化运行 `npm run check:docs`。完整 `npm run check` 已包含文档构建，不重复运行。
+5. 按 [测试策略](testing-strategy.md) 验证修改的文档；纯文字修改只检查修改文件的格式、lint、链接与 diff，不默认文档构建或完整检查。文档导航、结构、配置或渲染能力变化时按需运行 `npm run check:docs`。Mac mini 发布前的完整 `npm run check` 已包含文档构建，不重复运行。
 
 ## 写作规则
 

@@ -64,4 +64,4 @@
 ## 质量门禁
 
 - `npm run check:ui-contract` 校验适配层、文档、`transition: all` 与未登记高 z-index；`npm run check:style-ownership` 校验唯一样式归属、Ant 选择器边界与层级 Token；`npm run check:antd-design` 执行本地 `antd doctor`、`antd usage`、`antd lint` 并输出机器可读报告。
-- 新页面和公共组件按测试策略验证相关交互、主题与移动端表现；`npm run check` 留到提交或发布前统一执行，不在每个局部调整后重跑。
+- 新页面和公共组件按测试策略验证相关交互、主题与移动端表现；日常提交只做相关验证，完整 `npm run check` 留到发布前在 Mac mini 执行。

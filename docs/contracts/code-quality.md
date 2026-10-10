@@ -67,6 +67,8 @@
 
 ## 命令
 
+日常修改和提交按 [测试策略](testing-strategy.md) 只检查受影响文件与业务；简单修改不执行完整检查。下面的 `npm run check` 与 `npm run verify:full` 用于 Mac mini 发布前的完整验证，不作为每次提交和推送的前置条件。
+
 ```bash
 npm run format
 npm run check
