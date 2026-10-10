@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.8.1",
+    build: "217",
+    releasedAt: "2026-10-10",
+    title: "IACUC 汇总表导入修复",
+    items: [
+      "修复更新已有笼位关联项目资料时导致 IACUC 汇总表自动导入失败的问题",
+      "导入最新汇总表后保留并归档积压旧文件，避免后续扫描把伦理资料回退到旧版本",
+      "兼容索引在数据库提交成功后原子更新，文件写入异常不再把已成功的数据库导入误报为失败",
+    ],
+  },
+  {
     version: "1.8.0",
     build: "216",
     releasedAt: "2026-10-09",
