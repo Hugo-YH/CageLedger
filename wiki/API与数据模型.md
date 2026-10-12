@@ -105,26 +105,26 @@ graph LR
 
 ### 流程和报销
 
-| 方法                     | 路径                                                 | 用途                 |
-| ------------------------ | ---------------------------------------------------- | -------------------- |
-| `GET`                    | `/api/billing-workflows`                             | 结算流程列表         |
-| `GET`                    | `/api/billing-workflows/{id}`                        | 流程、版本和事件     |
-| `GET`                    | `/api/billing-workflows/{id}/funding-options`        | 最新经费本候选项     |
-| `GET`                    | `/api/billing-workflows/{id}/lines`                  | 指定版本逐日明细     |
-| `POST`                   | `/api/billing-workflows/advance`                     | 推进流程             |
-| `POST`                   | `/api/billing-workflows/{id}/reimbursement-forms`    | 已归档流程补录报销单 |
-| `GET`                    | `/api/reimbursement-records`                         | 报销台账列表         |
-| `GET` / `PUT` / `DELETE` | `/api/reimbursement-records/{id}`                    | 台账详情、登记和删除 |
-| `POST`                   | `/api/reimbursement-records/import-monthly`          | 导入历史月汇总 Excel |
-| `POST`                   | `/api/reimbursement-records/import-arrears`          | 导入历史欠缴 Excel   |
-| `GET`                    | `/api/reimbursement-ledger/obligations`              | 结算应收列表         |
-| `GET` / `POST`           | `/api/reimbursement-ledger/claims`                   | 报销单列表和新建     |
-| `GET` / `PUT`            | `/api/reimbursement-ledger/claims/{id}`              | 报销单详情和编辑     |
-| `POST`                   | `/api/reimbursement-ledger/claims/{id}/attachments`  | 上传报销单附件       |
-| `GET`                    | `/api/reimbursement-ledger/attachments/{id}`         | 鉴权下载报销单附件   |
-| `POST`                   | `/api/reimbursement-ledger/claims/{id}/allocations`  | 创建核销草稿         |
-| `POST`                   | `/api/reimbursement-ledger/allocations/{id}/confirm` | 确认核销             |
-| `POST`                   | `/api/reimbursement-ledger/allocations/{id}/reverse` | 撤销核销             |
+| 方法                     | 路径                                                 | 用途                               |
+| ------------------------ | ---------------------------------------------------- | ---------------------------------- |
+| `GET`                    | `/api/billing-workflows`                             | 结算流程列表                       |
+| `GET`                    | `/api/billing-workflows/{id}`                        | 流程、版本和事件                   |
+| `GET`                    | `/api/billing-workflows/{id}/funding-options`        | 最新经费本候选项                   |
+| `GET`                    | `/api/billing-workflows/{id}/lines`                  | 指定版本逐日明细                   |
+| `POST`                   | `/api/billing-workflows/advance`                     | 推进流程                           |
+| `POST`                   | `/api/billing-workflows/{id}/reimbursement-forms`    | 已登记或已归档流程按授权补录报销单 |
+| `GET`                    | `/api/reimbursement-records`                         | 报销台账列表                       |
+| `GET` / `PUT` / `DELETE` | `/api/reimbursement-records/{id}`                    | 台账详情、登记和删除               |
+| `POST`                   | `/api/reimbursement-records/import-monthly`          | 导入历史月汇总 Excel               |
+| `POST`                   | `/api/reimbursement-records/import-arrears`          | 导入历史欠缴 Excel                 |
+| `GET`                    | `/api/reimbursement-ledger/obligations`              | 结算应收列表                       |
+| `GET` / `POST`           | `/api/reimbursement-ledger/claims`                   | 报销单列表和新建                   |
+| `GET` / `PUT`            | `/api/reimbursement-ledger/claims/{id}`              | 报销单详情和编辑                   |
+| `POST`                   | `/api/reimbursement-ledger/claims/{id}/attachments`  | 上传报销单附件                     |
+| `GET`                    | `/api/reimbursement-ledger/attachments/{id}`         | 鉴权下载报销单附件                 |
+| `POST`                   | `/api/reimbursement-ledger/claims/{id}/allocations`  | 创建核销草稿                       |
+| `POST`                   | `/api/reimbursement-ledger/allocations/{id}/confirm` | 确认核销                           |
+| `POST`                   | `/api/reimbursement-ledger/allocations/{id}/reverse` | 撤销核销                           |
 
 > 当前“单据跟踪”以 `/api/billing-workflows` 为主（发起 → 登记归档 → 补录）；`/api/reimbursement-ledger` 与旧报销单/核销分摊接口保留为兼容入口，界面已不再使用。
 

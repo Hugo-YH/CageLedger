@@ -52,7 +52,7 @@ def workflow_column_expr(source_type):
         f"WHEN NOT {workflow_exists_sql(source_type)} THEN '未发起' "
         f"WHEN {workflow_status_sql(source_type)} = 'statement_generated' THEN '已生成' "
         f"WHEN {workflow_status_sql(source_type)} = 'statement_sent' THEN '已发起' "
-        f"WHEN {workflow_status_sql(source_type)} = 'statement_archived' THEN '已归档' "
+        f"WHEN {workflow_status_sql(source_type)} = 'statement_archived' THEN '已登记' "
         "ELSE '已发起' END"
     )
 
@@ -525,7 +525,7 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
     working_filters = filters or {}
     where_parts = ["billing_candidate_snapshots.source_type = ?"]
     params = [source_type]
-    # 按项目负责人结算只展示已生成-已发起阶段；已归档/已锁定流程在单据跟踪处理。
+    # 按项目负责人结算只展示已生成-已发起阶段；已登记/已归档流程在单据跟踪处理。
     where_parts.append(
         "NOT EXISTS (SELECT 1 FROM billing_workflows w "
         "WHERE w.source_type = 'pi_merged_quantity_sheet' "

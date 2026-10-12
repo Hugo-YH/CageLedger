@@ -142,7 +142,7 @@ test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", a
   await expect(page.getByRole("row", { name: /E2E 台账负责人 2/ })).toContainText("已发起");
 });
 
-test("已归档流程可补录报销单并更新状态标签", async ({ page }) => {
+test("已登记流程可补录报销单并更新状态标签", async ({ page }) => {
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
@@ -188,7 +188,7 @@ test("已归档流程可补录报销单并更新状态标签", async ({ page }) 
   const modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
   await modal.getByRole("switch", { name: "饲养费结算单" }).click();
   await expect(modal.locator('button:has-text("上传扫描件")')).toBeVisible();
-  await modal.getByRole("button", { name: "登记并归档" }).click();
+  await modal.getByRole("button", { name: "保存登记" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
   await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
   await expect(row).toContainText("报销单 未交回");
@@ -278,11 +278,11 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await row.getByRole("button", { name: "登记" }).click();
   let modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
   await modal.getByRole("switch", { name: "饲养费结算单" }).click();
-  await modal.getByRole("button", { name: "登记并归档" }).click();
+  await modal.getByRole("button", { name: "保存登记" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
   await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
 
-  // 撤回已归档流程
+  // 撤回已登记流程
   await row.getByRole("button", { name: "撤回", exact: true }).click();
   const revokeModal = page.getByRole("dialog").filter({ hasText: "撤回结算流程" });
   await expect(revokeModal.getByRole("button", { name: "确认撤回" })).toBeDisabled();
@@ -299,7 +299,7 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await modal.getByLabel("报销单备注").fill("报销单材料齐全");
   await modal.locator('input[placeholder="报销单号"]').first().fill("BX-RE-001");
   await modal.locator('input[placeholder="金额（元）"]').first().fill("60");
-  await modal.getByRole("button", { name: "登记并归档" }).click();
+  await modal.getByRole("button", { name: "保存登记" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
   await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
 
@@ -377,10 +377,10 @@ test("结算金额为 0 的交回登记不显示报销单开关", async ({ page 
   await expect(zeroModal.locator(".ant-switch").first()).toHaveAttribute("aria-checked", "false");
   await expect(zeroModal.locator('input[placeholder*="无需交费"]')).toHaveCount(0);
   await expect(zeroModal.getByText("报销单", { exact: true })).toHaveCount(0);
-  await zeroModal.getByRole("button", { name: "登记并归档" }).click();
+  await zeroModal.getByRole("button", { name: "保存登记" }).click();
   await expect(zeroModal.getByText("请确认已交回饲养费结算单")).toBeVisible();
   await zeroModal.getByRole("switch", { name: "饲养费结算单" }).click();
-  await zeroModal.getByRole("button", { name: "登记并归档" }).click();
+  await zeroModal.getByRole("button", { name: "保存登记" }).click();
   await expect(zeroModal).toHaveCount(0);
   await expect(zeroRow.getByText("报销单", { exact: false })).toHaveCount(0);
   await expect(zeroRow.getByRole("button", { name: "补录" })).toHaveCount(0);
@@ -399,7 +399,7 @@ test("结算金额为 0 的交回登记不显示报销单开关", async ({ page 
   await paidModal.getByRole("button", { name: "取消" }).click();
 });
 
-test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => {
+test("已登记流程支持锁定、批量锁定与解锁", async ({ page }) => {
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
@@ -407,7 +407,7 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
   await ensureTestInfrastructure(page);
 
-  const pis = ["E2E 锁定负责人 1", "E2E 锁定负责人 2"];
+  const pis = ["E2E 归档负责人 1", "E2E 归档负责人 2"];
   for (const [index, id] of lockSheetIds.entries()) {
     const pi = pis[index];
     await page.request.post("/api/quantity-sheets", {
@@ -419,7 +419,7 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
           roomName: "8014",
           manager: "系统管理员",
           iacuc: `E2E-LOCK-00${index + 1}`,
-          project: `锁定项目 ${index + 1}`,
+          project: `归档项目 ${index + 1}`,
           pi,
           owner: "E2E 实验负责人",
           funding: `E2E-FUND-LOCK-${index + 1}`,
@@ -443,14 +443,14 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
   await page.getByRole("menuitem", { name: /单据跟踪/ }).click();
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true })).toBeVisible();
 
-  // 两条流程先登记归档（只交回结算单）
+  // 两条流程先保存交回登记（只交回结算单）
   for (const pi of pis) {
     const row = page.getByRole("row", { name: new RegExp(pi) });
     await expect(row).toContainText("已发起");
     await row.getByRole("button", { name: "登记" }).click();
     const modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
     await modal.getByRole("switch", { name: "饲养费结算单" }).click();
-    await modal.getByRole("button", { name: "登记并归档" }).click();
+    await modal.getByRole("button", { name: "保存登记" }).click();
     await expect(modal).toHaveCount(0, { timeout: 10_000 });
     await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
   }
@@ -470,18 +470,18 @@ test("已归档流程支持锁定、批量锁定与解锁", async ({ page }) => 
   await page.locator(".ant-popconfirm").getByRole("button", { name: "批量锁定", exact: true }).click();
   await expect(page.getByText(/已锁定 \d+ 条结算流程/)).toBeVisible({ timeout: 10_000 });
   for (const pi of pis) {
-    await expect(page.getByRole("row", { name: new RegExp(pi) })).toContainText("已锁定", { timeout: 10_000 });
+    await expect(page.getByRole("row", { name: new RegExp(pi) })).toContainText("已归档", { timeout: 10_000 });
   }
   expect(batchRefreshes).toHaveLength(1);
 
-  // 已锁定流程不允许撤回，可解锁回到已归档
+  // 已归档流程不允许撤回，可解锁回到已登记
   const lockedRow = page.getByRole("row", { name: new RegExp(pis[0]) });
   await expect(lockedRow.getByRole("button", { name: "撤回" })).toHaveCount(0);
   await lockedRow.getByRole("button", { name: "解锁" }).click();
   await page.locator(".ant-popconfirm").getByRole("button", { name: "解锁", exact: true }).click();
-  await expect(lockedRow).not.toContainText("已锁定", { timeout: 10_000 });
+  await expect(lockedRow).not.toContainText("已归档", { timeout: 10_000 });
   await expect(lockedRow).toContainText("结算单 已交回");
-  await expect(page.getByRole("row", { name: new RegExp(pis[1]) })).toContainText("已锁定");
+  await expect(page.getByRole("row", { name: new RegExp(pis[1]) })).toContainText("已归档");
 
   await lockedRow.getByRole("button", { name: "查看" }).click();
   const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();

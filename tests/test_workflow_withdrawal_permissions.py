@@ -6,7 +6,12 @@ from http import HTTPStatus
 from unittest.mock import patch
 
 from server_app.cache import cache_get, cache_set, invalidate_data_cache_prefixes
-from server_app.domains.workflow.application import save_billing_statement_workflow, update_workflow_status
+from server_app.domains.administration import audit_event, write_audit_events
+from server_app.domains.workflow.application import (
+    record_archived_reimbursement,
+    save_billing_statement_workflow,
+    update_workflow_status,
+)
 from server_app.domains.workflow.facade import get_billing_version, get_billing_workflow
 from server_app.domains.workflow.permissions import with_withdrawal_capabilities, withdrawal_capabilities
 from server_app.legacy import initialize_schema
@@ -124,9 +129,10 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
             self.assertEqual(self.request(OTHER, delete=delete).status, 403)
             self.assertEqual(self.state(), before)
 
-    def test_actor_must_be_latest_initiator_not_generator(self):
+    def test_generator_and_initiator_are_both_handlers(self):
         self.advance("statement_sent", OTHER)
-        self.assertEqual(self.request(OWNER).status, 403)
+        self.assertEqual(self.request(OWNER).status, 200)
+        self.advance("statement_sent", OTHER)
         self.assertEqual(self.request(OTHER).status, 200)
 
     def test_missing_reason_and_wrong_action_are_rejected_without_writes(self):
@@ -145,10 +151,10 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.advance("statement_archived", ADMIN, registration={"signedStatementReturned": True})
         before = self.state()
         self.assertEqual(self.request(OWNER).status, 403)
-        self.assertEqual(self.request(OWNER, status="statement_sent").status, 403)
+        self.assertEqual(self.request(OTHER, status="statement_sent").status, 403)
         self.assertEqual(self.request(OWNER, delete=True).status, 403)
         self.assertEqual(self.state(), before)
-        self.assertEqual(self.request(ADMIN, status="statement_sent").status, 200)
+        self.assertEqual(self.request(OWNER, status="statement_sent").status, 200)
         self.advance("statement_locked", ADMIN)
         before = self.state()
         self.assertEqual(self.request(OWNER).status, 403)
@@ -156,21 +162,21 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.assertEqual(self.request(ADMIN, delete=True).status, 400)
         self.assertEqual(self.state(), before)
         authorized = {**ADMIN, "billingLockAllowed": True}
-        self.assertEqual(self.request(authorized, status="statement_archived").status, 200)
+        self.assertEqual(self.request(authorized, status="statement_sent").status, 200)
 
-    def test_legacy_event_ids_work_but_names_or_old_versions_cannot_claim_ownership(self):
+    def test_legacy_account_ids_work_but_names_cannot_claim_ownership(self):
         self.assertTrue(withdrawal_capabilities(self.conn, OWNER, [self.workflow_id])[self.workflow_id])
         self.advance("statement_sent", OTHER)
         self.conn.execute("UPDATE billing_workflows SET payload=json_remove(payload, '$.sentBy')")
         self.conn.commit()
         self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
-        self.assertFalse(withdrawal_capabilities(self.conn, OWNER, [self.workflow_id])[self.workflow_id])
+        self.assertTrue(withdrawal_capabilities(self.conn, OWNER, [self.workflow_id])[self.workflow_id])
         self.conn.execute("UPDATE billing_workflow_events SET payload=json_remove(payload, '$.actor.id')")
         self.conn.commit()
         self.assertFalse(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
         self.assertTrue(withdrawal_capabilities(self.conn, ADMIN, [self.workflow_id])[self.workflow_id])
 
-    def test_revision_and_reinitiation_use_current_version_and_latest_actor(self):
+    def test_handlers_from_previous_versions_and_initiations_remain_authorized(self):
         self.advance("statement_sent")
         workflow, version, *_ = save_billing_statement_workflow(
             self.conn,
@@ -181,11 +187,12 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.conn.commit()
         self.assertNotEqual(version["id"], self.version["id"])
         self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [workflow["id"]])[workflow["id"]])
-        self.assertFalse(withdrawal_capabilities(self.conn, OWNER, [workflow["id"]])[workflow["id"]])
+        self.assertTrue(withdrawal_capabilities(self.conn, OWNER, [workflow["id"]])[workflow["id"]])
         self.advance("statement_sent", OWNER)
         self.assertEqual(self.request(OWNER).status, 200)
         self.advance("statement_sent", OTHER)
-        self.assertEqual(self.request(OWNER).status, 403)
+        self.assertEqual(self.request(OWNER).status, 200)
+        self.advance("statement_sent", OTHER)
         self.assertEqual(self.request(OTHER).status, 200)
 
     def test_capability_projection_never_contaminates_shared_cached_data(self):
@@ -247,6 +254,7 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
             self.request(OTHER, status="statement_archived", registration={"signedStatementReturned": True}).status, 403
         )
         self.assertEqual(self.state(), before)
+
         self.advance("statement_sent")
         before = self.state()
         for registration in (
@@ -262,6 +270,119 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
             self.request(OTHER, status="statement_archived", registration={"signedStatementReturned": True}).status, 403
         )
         self.assertEqual(self.state(), before)
+
+    def source_audit(self, source_id, actor, action="quantity_sheet.created"):
+        write_audit_events(
+            self.conn,
+            [
+                audit_event(
+                    actor,
+                    action,
+                    "quantity_sheet",
+                    source_id,
+                    "录入测试统计表",
+                    [],
+                    "2026-07-01T00:00:00+00:00",
+                    None,
+                    {"id": source_id, "manager": actor["displayName"]},
+                )
+            ],
+        )
+        self.conn.commit()
+
+    def set_sources(self, source_ids):
+        payload = get_billing_version(self.conn, self.version["id"])
+        payload["statement"]["sourceIds"] = source_ids
+        self.conn.execute(
+            "UPDATE billing_statement_versions SET payload=? WHERE id=?", (json.dumps(payload), self.version["id"])
+        )
+        self.conn.commit()
+
+    def test_quantity_sheet_creator_and_editor_can_revoke_without_name_matching(self):
+        self.set_sources(["source-a", "source-b"])
+        self.source_audit("unrelated", OTHER)
+        self.assertFalse(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+        self.source_audit("source-a", OTHER)
+        editor = {**OTHER, "id": "another-editor", "username": "editor"}
+        self.source_audit("source-b", editor, "quantity_sheet.updated")
+        for actor in (OTHER, editor):
+            self.assertTrue(withdrawal_capabilities(self.conn, actor, [self.workflow_id])[self.workflow_id])
+        stranger = {**OTHER, "id": "same-name-stranger", "username": "stranger"}
+        self.assertFalse(withdrawal_capabilities(self.conn, stranger, [self.workflow_id])[self.workflow_id])
+        self.advance("statement_sent")
+        self.assertEqual(self.request(OTHER).status, 200)
+        self.assertEqual(self.request(editor, delete=True).status, 200)
+
+    def test_legacy_sources_resolve_by_frozen_business_keys_and_audit_actor(self):
+        self.conn.execute(
+            "INSERT INTO quantity_sheets(id,month,pi,iacuc,updated_at,payload) VALUES ('legacy','2026-07','测试负责人','Z2026001','2026-07-01','{}')"
+        )
+        self.conn.execute(
+            "INSERT INTO quantity_sheets(id,month,pi,iacuc,updated_at,payload) VALUES ('unrelated','2026-07','测试负责人','Z2026002','2026-07-01','{}')"
+        )
+        self.conn.commit()
+        self.source_audit("unrelated", OTHER)
+        self.assertFalse(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+        self.source_audit("legacy", OTHER)
+        plans = self.conn.execute(
+            "EXPLAIN QUERY PLAN SELECT entity_id FROM audit_events WHERE entity_type='quantity_sheet' AND entity_id=? AND actor_user_id=?",
+            ("legacy", OTHER["id"]),
+        ).fetchall()
+        self.assertTrue(any("idx_audit_events_entity_actor" in row["detail"] for row in plans))
+        before = self.state()
+        self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+        self.assertEqual(self.state(), before)
+
+    def test_registration_handler_can_revoke_and_original_initiator_is_preserved(self):
+        self.advance("statement_sent")
+        self.advance("statement_archived", OTHER, registration={"signedStatementReturned": True})
+        self.assertEqual(self.request(OTHER, status="statement_sent").status, 200)
+        self.assertEqual(get_billing_version(self.conn, self.version["id"])["statement"]["sentBy"]["id"], OWNER["id"])
+        self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+
+    def test_reimbursement_handler_is_authorized_only_after_unlocking(self):
+        self.advance("statement_sent")
+        self.advance("statement_archived", ADMIN, registration={"signedStatementReturned": True})
+        record_archived_reimbursement(self.conn, self.workflow_id, [{"formNo": "LATE", "amount": 100}], OTHER)
+        self.conn.commit()
+        self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+        self.advance("statement_locked", ADMIN)
+        self.assertFalse(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+        self.assertEqual(self.request(OTHER, status="statement_sent").status, 403)
+        self.assertEqual(self.request({**ADMIN, "billingLockAllowed": True}, status="statement_archived").status, 200)
+        self.assertEqual(self.request(OTHER, status="statement_sent").status, 200)
+
+    def test_unlock_restores_previous_stage_without_reviving_withdrawn_registration(self):
+        self.advance("statement_sent")
+        self.advance("statement_archived", OWNER, registration={"signedStatementReturned": True})
+        self.assertEqual(self.request(OWNER, status="statement_sent").status, 200)
+        self.advance("statement_locked", ADMIN)
+        self.assertEqual(self.request({**ADMIN, "billingLockAllowed": True}, status="statement_sent").status, 200)
+
+    def test_legacy_archive_target_matches_server_transition_even_without_old_flags(self):
+        self.advance("statement_sent")
+        self.advance("statement_locked", ADMIN)
+        self.conn.execute(
+            "UPDATE billing_statement_versions SET payload=json_remove(payload, '$.statement.lockedFromStatus', '$.statement.signedStatementReturned')"
+        )
+        self.conn.commit()
+        projected = with_withdrawal_capabilities(
+            self.conn, ADMIN, [{"id": self.workflow_id, "workflowStatus": "statement_locked"}]
+        )[0]
+        self.assertEqual(projected["unlockStatus"], "statement_archived")
+        self.assertFalse(projected["canWithdraw"])
+        self.assertEqual(
+            self.request({**ADMIN, "billingLockAllowed": True}, status=projected["unlockStatus"]).status, 200
+        )
+
+    def test_large_source_sets_do_not_exceed_sqlite_bind_limit(self):
+        self.set_sources([f"source-{index}" for index in range(1001)])
+        self.source_audit("source-1000", OTHER)
+        limit = self.conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 500)
+        try:
+            self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
+        finally:
+            self.conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, limit)
 
 
 if __name__ == "__main__":

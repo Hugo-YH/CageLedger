@@ -29,14 +29,19 @@ export function WorkflowTableActions({
   const archived = item.workflowStatus === "statement_archived";
   const locked = item.workflowStatus === "statement_locked";
   if (!sent && !archived && !locked) return <Typography.Text type="secondary">待发起</Typography.Text>;
-  const unlockStatus = item.signedStatementReturned ? "statement_archived" : "statement_sent";
-  const unlockLabel = unlockStatus === "statement_archived" ? "已归档" : "已发起";
+  const unlockStatus =
+    item.unlockStatus ??
+    (item.lockedFromStatus === "statement_archived" ||
+    (item.lockedFromStatus !== "statement_sent" && item.signedStatementReturned)
+      ? "statement_archived"
+      : "statement_sent");
+  const unlockLabel = unlockStatus === "statement_archived" ? "已登记" : "已发起";
   const action = locked ? "解锁" : "锁定";
   const description = locked
-    ? `解锁后依据结算单交回状态回到${unlockLabel}，已补录信息会保留。`
+    ? `解锁后恢复未归档，流程回到${unlockLabel}，已补录信息会保留。`
     : sent
-      ? "锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
-      : "锁定后流程进入只读，仅授权账号可补录或解锁。";
+      ? "锁定后标记为已归档，流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
+      : "锁定后标记为已归档，流程进入只读，仅授权账号可补录或解锁。";
   return (
     <WorkflowRowActions
       primary={

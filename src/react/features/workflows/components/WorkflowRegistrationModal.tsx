@@ -265,7 +265,7 @@ function WorkflowRegistrationForm({
       <Flex justify="flex-end" gap={8} style={{ marginTop: 16 }}>
         <Button onClick={onCancel}>取消</Button>
         <Button disabled={upload.pending} loading={save.pending} type="primary" onClick={() => void form.submit()}>
-          登记并归档
+          保存登记
         </Button>
       </Flex>
       <FundingBookConfirmationModal

@@ -225,7 +225,7 @@ class BillingWorkflowListTests(unittest.TestCase):
             "wf-1",
             "statement_archived",
             ADMIN,
-            "交回登记并归档",
+            "交回保存登记",
             {
                 "signedStatementReturned": True,
                 "signedStatementNote": "结算单备注",
@@ -266,7 +266,7 @@ class BillingWorkflowListTests(unittest.TestCase):
             "wf-1",
             "statement_archived",
             ADMIN,
-            "交回登记并归档",
+            "交回保存登记",
             {
                 "signedStatementReturned": True,
                 "reimbursementFormReturned": True,
@@ -287,7 +287,7 @@ class BillingWorkflowListTests(unittest.TestCase):
             "wf-1",
             "statement_archived",
             ADMIN,
-            "交回登记并归档",
+            "交回保存登记",
             {
                 "signedStatementReturned": True,
                 "reimbursementFormReturned": True,
@@ -322,14 +322,14 @@ class BillingWorkflowListTests(unittest.TestCase):
 
     def test_locked_sent_workflow_keeps_reimbursement_when_unlocked(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
-        update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "锁定流程")
+        update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "归档流程")
 
         workflow, version, event = record_archived_reimbursement(
             self.conn,
             "wf-1",
             [{"formNo": "BX-LOCKED", "amount": 100}],
             ADMIN,
-            "锁定后补录",
+            "归档后补录",
         )
 
         self.assertEqual(workflow["workflowStatus"], "statement_locked")
@@ -386,7 +386,7 @@ class BillingWorkflowListTests(unittest.TestCase):
 
     def test_archived_workflow_can_lock_and_unlock(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_archived")
-        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "锁定流程")
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "归档流程")
         statement = version["statement"]
         self.assertEqual(workflow["workflowStatus"], "statement_locked")
         self.assertEqual(statement["lockedBy"]["displayName"], "系统管理员")
@@ -402,7 +402,7 @@ class BillingWorkflowListTests(unittest.TestCase):
 
     def test_sent_workflow_can_lock_and_unlock_back_to_sent(self):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_sent")
-        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "锁定流程")
+        workflow, version, event = update_workflow_status(self.conn, "wf-1", "statement_locked", ADMIN, "归档流程")
         statement = version["statement"]
         self.assertEqual(workflow["workflowStatus"], "statement_locked")
         self.assertEqual(statement["lockedFromStatus"], "statement_sent")
@@ -427,7 +427,7 @@ class BillingWorkflowListTests(unittest.TestCase):
         self._insert_workflow("wf-1", "v-1", "2026-07", "张教授", "李登记", "Z2026001", 100, "statement_locked")
         statuses = list_billing_workflow_filter_options(self.conn, {"columnFilters": {}}, "status")
         labels = {item["value"]: item["label"] for item in statuses}
-        self.assertEqual(labels["statement_locked"], "已锁定")
+        self.assertEqual(labels["statement_locked"], "已归档")
 
 
 if __name__ == "__main__":

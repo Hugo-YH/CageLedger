@@ -7,11 +7,11 @@
     <rect x="222" y="92" width="150" height="74" rx="14" fill="#DDEDE8"/>
     <text x="297" y="136" fill="#213437">已生成结算单</text>
     <rect x="404" y="92" width="150" height="74" rx="14" fill="#D2E7E1"/>
-    <text x="479" y="136" fill="#213437">已发送</text>
+    <text x="479" y="136" fill="#213437">已发起</text>
     <rect x="586" y="92" width="150" height="74" rx="14" fill="#C7E0D9"/>
-    <text x="661" y="136" fill="#213437">已签回</text>
+    <text x="661" y="136" fill="#213437">已登记</text>
     <rect x="768" y="92" width="150" height="74" rx="14" fill="#BDD9D1"/>
-    <text x="843" y="136" fill="#213437">已交财务</text>
+    <text x="843" y="136" fill="#213437">锁定（已归档）</text>
   </g>
   <g stroke="#2F7A72" stroke-width="4" stroke-linecap="round">
     <path d="M190 129H222"/>

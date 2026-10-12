@@ -27,8 +27,8 @@ import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 const workflowStatusMeta: Record<string, { label: string; color: string }> = {
   statement_generated: { label: "已生成", color: "gold" },
   statement_sent: { label: "已发起", color: "blue" },
-  statement_archived: { label: "已归档", color: "green" },
-  statement_locked: { label: "已锁定", color: "purple" },
+  statement_archived: { label: "未归档", color: "green" },
+  statement_locked: { label: "已归档", color: "purple" },
   statement_signed_returned: { label: "已交回登记（历史）", color: "default" },
   submitted_to_finance: { label: "已提交财务（历史）", color: "default" },
 };
@@ -245,7 +245,9 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
         return (
           <Space size={4} orientation="vertical">
-            {item.workflowStatus === "statement_locked" ? <Tag color="purple">已锁定</Tag> : null}
+            <Tag color={item.workflowStatus === "statement_locked" ? "purple" : "default"}>
+              {item.workflowStatus === "statement_locked" ? "已归档" : "未归档"}
+            </Tag>
             {showSubStatuses ? (
               <>
                 <Tag color={item.signedStatementReturned ? "success" : "default"}>
@@ -308,7 +310,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         context={
           <>
             <HelpPopover label="单据跟踪说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-              以饲养费结算单为主线：发起结算流程、交回登记、归档。
+              以饲养费结算单为主线：发起结算流程、交回登记、锁定归档；解锁后恢复未归档，经手人可撤回。
             </HelpPopover>
             <Tag color="blue">{total} 条结算流程</Tag>
           </>
@@ -323,7 +325,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           user.billingLockAllowed && selectedLockable.length ? (
             <Popconfirm
               title={`批量锁定 ${selectedLockable.length} 条结算流程？`}
-              description="锁定后流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
+              description="锁定后标记为已归档，流程进入只读，单据交回状态保持当前记录；仅授权账号可解锁。"
               okText="批量锁定"
               cancelText="取消"
               onConfirm={lockSelected}

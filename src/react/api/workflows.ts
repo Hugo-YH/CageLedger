@@ -46,6 +46,7 @@ export interface BillingWorkflow {
   sourceType: string;
   workflowStatus: string;
   canWithdraw?: boolean;
+  unlockStatus?: "statement_sent" | "statement_archived";
   currentVersionNo?: number;
   pi: string;
   project: string;

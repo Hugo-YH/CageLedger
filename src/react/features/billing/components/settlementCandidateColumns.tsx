@@ -7,8 +7,8 @@ import { SettlementColumnTitle } from "./SettlementColumnTitle";
 const candidateWorkflowStatusMeta: Record<string, { label: string; color: string }> = {
   statement_generated: { label: "已生成", color: "gold" },
   statement_sent: { label: "已发起", color: "processing" },
-  statement_locked: { label: "已锁定", color: "purple" },
-  statement_archived: { label: "已归档", color: "green" },
+  statement_locked: { label: "已归档", color: "purple" },
+  statement_archived: { label: "未归档（已登记）", color: "green" },
 };
 
 export interface SettlementColumnsOptions {

@@ -44,13 +44,13 @@ export function SettlementPreviewModal({
     ? "发起结算流程"
     : {
         statement_sent: "已发起结算流程",
-        statement_archived: "已归档结算流程",
+        statement_archived: "已登记结算流程",
       }[workflowStatus || ""] || "已发起结算流程";
   const workflowTooltip = canInitiate
     ? undefined
     : {
         statement_sent: "该负责人本月已发起结算流程",
-        statement_archived: "该负责人本月已归档结算流程",
+        statement_archived: "该负责人本月已登记结算流程",
       }[workflowStatus || ""] || "该负责人本月已发起结算流程";
   return (
     <Modal

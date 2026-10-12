@@ -88,7 +88,7 @@ export function SettlementBatchToolbar({
         </>
       }
       primaryAction={
-        <Tooltip title={allSelectedNonInitiative ? "所选结算项均已发起或已归档" : undefined}>
+        <Tooltip title={allSelectedNonInitiative ? "所选结算项均已发起或已登记" : undefined}>
           <span>
             <Button
               icon={<PlayCircleOutlined aria-hidden />}

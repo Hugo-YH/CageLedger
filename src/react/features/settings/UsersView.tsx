@@ -323,7 +323,7 @@ function UserFields({
           checked={draft.billingLockAllowed}
           onChange={(event) => update("billingLockAllowed", event.target.checked)}
         >
-          允许锁定、解锁结算流程，并可为已锁定流程补录报销单
+          允许锁定、解锁结算流程，并可为已归档流程补录报销单
         </Checkbox>
       </Form.Item>
     </Form>

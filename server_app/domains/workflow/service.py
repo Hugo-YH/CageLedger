@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .rules import unlock_status
+
 
 @dataclass(frozen=True)
 class WorkflowServicePorts:
@@ -263,14 +265,7 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
     if not version:
         raise LookupError("当前有效结算单不存在")
     statement = dict(version.get("statement") or {})
-    locked_from_status = statement.get("lockedFromStatus") or deps.WORKFLOW_STATUS_ARCHIVED
-    signed_statement_returned = statement.get("signedStatementReturned")
-    restore_status = (
-        deps.WORKFLOW_STATUS_ARCHIVED
-        if signed_statement_returned
-        or (signed_statement_returned is None and locked_from_status == deps.WORKFLOW_STATUS_ARCHIVED)
-        else deps.WORKFLOW_STATUS_SENT
-    )
+    restore_status = unlock_status(statement)
     allowed_transitions = {
         (deps.WORKFLOW_STATUS_GENERATED, deps.WORKFLOW_STATUS_SENT),
         (deps.WORKFLOW_STATUS_SENT, deps.WORKFLOW_STATUS_ARCHIVED),
@@ -282,13 +277,10 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
     if current_status == deps.WORKFLOW_STATUS_LOCKED and next_status == restore_status:
         allowed_transitions.add((current_status, next_status))
     if (current_status, next_status) not in allowed_transitions:
-        if current_status in (
-            deps.WORKFLOW_STATUS_SIGNED,
-            deps.WORKFLOW_STATUS_FINANCE,
-            deps.WORKFLOW_STATUS_ARCHIVED,
-            deps.WORKFLOW_STATUS_LOCKED,
-        ):
-            raise ValueError("该流程已结束或已锁定，仅可查看归档")
+        if current_status == deps.WORKFLOW_STATUS_LOCKED:
+            raise ValueError("该流程已归档，请先解锁再操作")
+        if current_status in (deps.WORKFLOW_STATUS_SIGNED, deps.WORKFLOW_STATUS_FINANCE):
+            raise ValueError("该历史流程已结束，仅可查看")
         raise ValueError("当前流程状态不允许执行该操作")
     if (current_status, next_status) in {
         (deps.WORKFLOW_STATUS_SENT, deps.WORKFLOW_STATUS_GENERATED),
@@ -306,7 +298,7 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
                 "username": actor.get("username", ""),
                 "displayName": actor.get("displayName", ""),
             }
-        else:
+        elif current_status != deps.WORKFLOW_STATUS_ARCHIVED:
             statement["sentAt"] = at
             statement["sentBy"] = {
                 "id": actor.get("id", ""),
@@ -450,7 +442,7 @@ def record_archived_reimbursement(conn, workflow_id, reimbursement_forms, actor,
         deps.WORKFLOW_STATUS_ARCHIVED,
         deps.WORKFLOW_STATUS_LOCKED,
     ):
-        raise ValueError("仅已归档或已锁定流程可以补录报销单")
+        raise ValueError("仅已登记或已归档流程可以补录报销单")
     version = deps.get_billing_version(conn, workflow.get("currentVersionId", ""))
     if not version:
         raise LookupError("当前有效结算单不存在")

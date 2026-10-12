@@ -51,7 +51,7 @@ function WorkflowRevokeForm({ target, onCancel }: { target: WorkflowRevokeTarget
       <Typography.Paragraph type="secondary">
         {target.toStatus === "statement_generated"
           ? "流程将退回已生成状态，可重新发起。"
-          : "流程将退回等待交回登记状态，原归档信息保留。"}
+          : "流程将退回等待交回登记状态，原登记信息保留。"}
       </Typography.Paragraph>
       {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
       <label htmlFor="workflow-revoke-reason">撤回原因</label>

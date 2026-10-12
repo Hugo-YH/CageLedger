@@ -153,6 +153,130 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   expect((await ownerList.json()).items.find((item: { id: string }) => item.id === foreignId).canWithdraw).toBe(false);
 });
 
+test("统计表录入人和交回登记人均可撤回，锁定后先解锁", async ({ page }) => {
+  test.setTimeout(60_000);
+  await login(page, "admin", "admin123");
+  await ensureTestInfrastructure(page);
+  const suffix = Date.now();
+  const accounts = [`writer-${suffix}`, `registrar-${suffix}`, `stranger-${suffix}`];
+  for (const username of accounts) {
+    expect(
+      (
+        await page.request.post("/api/users", {
+          data: {
+            username,
+            displayName: "同名经手人员",
+            password: "e2e-password",
+            role: "room_admin",
+            roomIds: ["room-e2e-8014"],
+          },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+  const month = "2026-07";
+  const pi = `E2E 多经手人 ${suffix}`;
+  await login(page, accounts[0]);
+  expect(
+    (
+      await page.request.post("/api/quantity-sheets", {
+        data: {
+          sheet: {
+            id: `handled-sheet-${suffix}`,
+            month,
+            roomId: "room-e2e-8014",
+            roomName: "8014",
+            manager: "伪造姓名应被忽略",
+            iacuc: `E2E-HANDLED-${suffix}`,
+            pi,
+            project: "经手人测试",
+            owner: "实验负责人",
+            funding: "TEST",
+            billingUnit: "cage_day",
+            animalDetailEnabled: false,
+            initialAnimalCount: 0,
+            initialCageCount: 15,
+            pageCount: 1,
+            rows: [],
+          },
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await login(page, "admin", "admin123");
+  const generated = await page.request.post("/api/billing-statements/generate-by-pi", {
+    data: { pi, month, sourceType: "quantity_sheet", persist: true, initiate: true },
+  });
+  expect(generated.ok()).toBeTruthy();
+  const initial = await generated.json();
+  const workflowId = initial.workflow.id as string;
+  const initiatorId = initial.workflow.sentBy.id as string;
+  await login(page, accounts[1]);
+  expect(
+    (
+      await page.request.post("/api/billing-workflows/advance", {
+        data: { workflowId, toStatus: "statement_archived", registration: { signedStatementReturned: true } },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const registrarDetail = await (await page.request.get(`/api/billing-workflows/${workflowId}`)).json();
+  expect(registrarDetail.workflow.canWithdraw).toBe(true);
+  await login(page, accounts[2]);
+  const strangerDetail = await (await page.request.get(`/api/billing-workflows/${workflowId}`)).json();
+  expect(strangerDetail.workflow.canWithdraw).toBe(false);
+  expect(
+    (
+      await page.request.post("/api/billing-workflows/advance", {
+        data: { workflowId, toStatus: "statement_sent", note: "同名账号不能越权" },
+      })
+    ).status(),
+  ).toBe(403);
+  await login(page, accounts[0]);
+  await openWorkflowCenter(page);
+  const row = page.getByRole("row").filter({ hasText: pi });
+  await expect(row.getByText("未归档", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "撤回", exact: true })).toBeVisible();
+  await login(page, "admin", "admin123");
+  expect(
+    (
+      await page.request.post("/api/billing-workflows/advance", {
+        data: { workflowId, toStatus: "statement_locked", note: "归档核对完成的单据" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await login(page, accounts[0]);
+  await openWorkflowCenter(page);
+  await expect(row.getByText("已归档", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);
+  expect(
+    (
+      await page.request.post("/api/billing-workflows/advance", {
+        data: { workflowId, toStatus: "statement_sent", note: "归档期间不可撤回" },
+      })
+    ).status(),
+  ).toBe(403);
+  await login(page, "admin", "admin123");
+  expect(
+    (
+      await page.request.post("/api/billing-workflows/advance", {
+        data: { workflowId, toStatus: "statement_archived", note: "解锁以修正单据" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await login(page, accounts[0]);
+  await openWorkflowCenter(page);
+  await expect(row.getByText("未归档", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "撤回", exact: true }).click();
+  const revoke = page.getByRole("dialog", { name: "撤回结算流程", exact: true });
+  await revoke.getByLabel("撤回原因").fill("统计表录入人核对后撤回登记");
+  await revoke.getByRole("button", { name: "确认撤回", exact: true }).click();
+  await expect(revoke).not.toBeVisible();
+  const final = await (await page.request.get(`/api/billing-workflows/${workflowId}`)).json();
+  expect(final.workflow.workflowStatus).toBe("statement_sent");
+  expect(final.workflow.sentBy.id).toBe(initiatorId);
+  expect(final.events[0].note).toBe("统计表录入人核对后撤回登记");
+});
+
 test("房间管理员可登记他人发起的结算流程，登记信息和台账同步归档", async ({ page }) => {
   await login(page, "admin", "admin123");
   await ensureTestInfrastructure(page);
@@ -221,7 +345,7 @@ test("房间管理员可登记他人发起的结算流程，登记信息和台�
   const modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
   await modal.getByRole("switch", { name: "饲养费结算单", exact: true }).click();
   await modal.getByLabel("饲养费结算单备注").fill("房间管理员核对后登记");
-  await modal.getByRole("button", { name: "登记并归档", exact: true }).click();
+  await modal.getByRole("button", { name: "保存登记", exact: true }).click();
   await expect(modal).not.toBeVisible();
   await expect(row).toContainText("结算单 已交回");
   await expect(row.getByRole("button", { name: "登记", exact: true })).toHaveCount(0);
@@ -240,8 +364,8 @@ test("房间管理员可登记他人发起的结算流程，登记信息和台�
   expect(
     (
       await page.request.post("/api/billing-workflows/advance", {
-        data: { workflowId, toStatus: "statement_sent", note: "房间管理员不可撤回归档" },
+        data: { workflowId, toStatus: "statement_sent", note: "交回登记人撤回已登记单据" },
       })
     ).status(),
-  ).toBe(403);
+  ).toBe(200);
 });

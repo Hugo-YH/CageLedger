@@ -70,7 +70,6 @@ from server_app.domains.workflow.application import (
 )
 from server_app.domains.workflow.constants import (
     WORKFLOW_STATUS_ARCHIVED,
-    WORKFLOW_STATUS_GENERATED,
     WORKFLOW_STATUS_LOCKED,
     WORKFLOW_STATUS_SENT,
 )
@@ -78,7 +77,7 @@ from server_app.domains.workflow.facade import (
     delete_billing_workflow,
     get_billing_workflow,
 )
-from server_app.domains.workflow.permissions import require_own_withdrawal
+from server_app.domains.workflow.permissions import require_workflow_withdrawal
 from server_app.repositories.reimbursement import (
     reimbursement_record_list_item,
 )
@@ -407,9 +406,7 @@ class WorkflowActionsMixin:
                         and to_status == WORKFLOW_STATUS_ARCHIVED
                     )
                     if not is_registration:
-                        if to_status != WORKFLOW_STATUS_GENERATED:
-                            raise PermissionError("需要管理员权限")
-                        require_own_withdrawal(conn, user, current)
+                        require_workflow_withdrawal(conn, user, current, to_status=to_status)
                 workflow, version, event = update_workflow_status(
                     conn, workflow_id, to_status, user, note, registration
                 )
@@ -470,7 +467,7 @@ class WorkflowActionsMixin:
                     raise LookupError("结算流程不存在")
                 if current.get("workflowStatus") == WORKFLOW_STATUS_LOCKED:
                     if not user.get("billingLockAllowed"):
-                        self.send_json({"error": "已锁定流程补录需要结算锁定授权"}, HTTPStatus.FORBIDDEN)
+                        self.send_json({"error": "已归档流程补录需要结算锁定授权"}, HTTPStatus.FORBIDDEN)
                         return
                 elif user["role"] != "admin":
                     self.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
@@ -532,11 +529,11 @@ class WorkflowActionsMixin:
                 existing = get_billing_workflow(conn, workflow_id)
                 if not existing:
                     raise LookupError("结算流程不存在")
-                require_own_withdrawal(conn, user, existing, delete=True)
+                require_workflow_withdrawal(conn, user, existing, delete=True)
                 if user["role"] != "admin" and not note:
                     raise ValueError("撤销结算流程时请填写撤回原因")
                 if existing and existing.get("workflowStatus") == WORKFLOW_STATUS_LOCKED:
-                    raise ValueError("已锁定流程不允许撤销，请先解锁")
+                    raise ValueError("已归档流程不允许撤销，请先解锁")
                 workflow = delete_billing_workflow(conn, workflow_id)
                 reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
                 deleted_reimbursement_id = ""
