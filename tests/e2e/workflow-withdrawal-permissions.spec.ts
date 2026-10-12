@@ -7,6 +7,16 @@ async function login(page: Page, username: string, password = "e2e-password") {
   await page.goto("/app");
 }
 
+async function openWorkflowMonth(page: Page, month: string) {
+  await openWorkflowCenter(page);
+  await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  const filter = page.locator(".table-filter-panel:visible");
+  const option = filter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  if (!(await option.isChecked())) await option.click();
+  await expect(option).toBeChecked();
+  await filter.getByRole("button", { name: "应用", exact: true }).click();
+}
+
 test("房间管理员按账号撤回本人流程，按钮与接口权限一致，原因和台账同步", async ({ page }) => {
   test.setTimeout(60_000);
   await login(page, "admin", "admin123");
@@ -232,7 +242,7 @@ test("统计表录入人和交回登记人均可撤回，锁定后先解锁", as
     ).status(),
   ).toBe(403);
   await login(page, accounts[0]);
-  await openWorkflowCenter(page);
+  await openWorkflowMonth(page, month);
   const row = page.getByRole("row").filter({ hasText: pi });
   await expect(row.getByText("未归档", { exact: true })).toBeVisible();
   await expect(row.getByRole("button", { name: "撤回", exact: true })).toBeVisible();
@@ -245,7 +255,7 @@ test("统计表录入人和交回登记人均可撤回，锁定后先解锁", as
     ).ok(),
   ).toBeTruthy();
   await login(page, accounts[0]);
-  await openWorkflowCenter(page);
+  await openWorkflowMonth(page, month);
   await expect(row.getByText("已归档", { exact: true })).toBeVisible();
   await expect(row.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);
   expect(
@@ -264,7 +274,7 @@ test("统计表录入人和交回登记人均可撤回，锁定后先解锁", as
     ).ok(),
   ).toBeTruthy();
   await login(page, accounts[0]);
-  await openWorkflowCenter(page);
+  await openWorkflowMonth(page, month);
   await expect(row.getByText("未归档", { exact: true })).toBeVisible();
   await row.getByRole("button", { name: "撤回", exact: true }).click();
   const revoke = page.getByRole("dialog", { name: "撤回结算流程", exact: true });

@@ -99,7 +99,7 @@ for (const recording of [false, true]) {
       await page.screenshot({ path, animations: "disabled" });
       await testInfo.attach(`workflow-form-${viewport.width}`, { path, contentType: "image/png" });
     }
-    const submit = dialog.getByRole("button", { name: recording ? "保存补录" : "登记并归档" });
+    const submit = dialog.getByRole("button", { name: recording ? "保存补录" : "保存登记" });
     await submit.click();
     await expect.poll(() => writes).toBe(1);
     await expect(submit).toHaveClass(/ant-btn-loading/);
