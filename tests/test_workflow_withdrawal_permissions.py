@@ -68,8 +68,10 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.conn.commit()
         return result
 
-    def request(self, actor, *, delete=False, note="金额核对有误", status="statement_generated"):
+    def request(self, actor, *, delete=False, note="金额核对有误", status="statement_generated", registration=None):
         body = {"workflowId": self.workflow_id, "toStatus": status, "note": note}
+        if registration is not None:
+            body["registration"] = registration
         handler = Handler(actor, body)
         with patch("server_app.web.workflow_actions.connect_db", return_value=self.conn):
             if delete:
@@ -135,7 +137,7 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         before = self.state()
         self.assertEqual(self.request(OWNER, note=" ").status, 400)
         self.assertEqual(self.request(OWNER, delete=True).status, 403)
-        self.assertEqual(self.request(OWNER, status="statement_archived").status, 403)
+        self.assertEqual(self.request(OWNER, status="statement_archived").status, 400)
         self.assertEqual(self.state(), before)
 
     def test_archive_lock_and_admin_boundaries(self):
@@ -202,6 +204,64 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
     def test_admin_empty_delete_request_remains_compatible(self):
         response = self.request(ADMIN, delete=True, note="")
         self.assertEqual(response.status, 200)
+
+    def assert_registration(self, actor):
+        self.advance("statement_sent")
+        response = self.request(
+            actor,
+            status="statement_archived",
+            registration={
+                "signedStatementReturned": True,
+                "signedStatementNote": "结算单已交回",
+                "reimbursementFormReturned": True,
+                "reimbursementForms": [{"formNo": "REGISTER-001", "amount": 100, "fundingBookNo": "FUND-001"}],
+            },
+        )
+        self.assertEqual(response.status, 200)
+        workflow = get_billing_workflow(self.conn, self.workflow_id)
+        self.assertEqual(workflow["workflowStatus"], "statement_archived")
+        self.assertEqual(workflow["registeredBy"]["id"], actor["id"])
+        statement = get_billing_version(self.conn, self.version["id"])["statement"]
+        self.assertEqual(statement["totalAmount"], 100)
+        self.assertEqual(statement["receivedAmount"], 100)
+        self.assertEqual(statement["reimbursementFormNos"], ["REGISTER-001"])
+        self.assertEqual(response.response["event"]["actor"]["id"], actor["id"])
+        audit = json.loads(
+            self.conn.execute("SELECT payload FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+        )
+        self.assertEqual(audit["actorUserId"], actor["id"])
+        self.assertEqual(audit["after"]["version"]["statement"]["registeredBy"]["id"], actor["id"])
+
+    def test_room_admin_can_register_own_sent_workflow(self):
+        self.assert_registration(OWNER)
+
+    def test_room_admin_can_register_other_initiators_sent_workflow(self):
+        self.assert_registration(OTHER)
+
+    def test_system_admin_registration_remains_available(self):
+        self.assert_registration(ADMIN)
+
+    def test_registration_still_validates_required_fields_status_and_lock(self):
+        before = self.state()
+        self.assertEqual(
+            self.request(OTHER, status="statement_archived", registration={"signedStatementReturned": True}).status, 403
+        )
+        self.assertEqual(self.state(), before)
+        self.advance("statement_sent")
+        before = self.state()
+        for registration in (
+            {},
+            {"signedStatementReturned": False},
+            {"signedStatementReturned": True, "reimbursementFormReturned": True},
+        ):
+            self.assertEqual(self.request(OTHER, status="statement_archived", registration=registration).status, 400)
+            self.assertEqual(self.state(), before)
+        self.advance("statement_locked", ADMIN)
+        before = self.state()
+        self.assertEqual(
+            self.request(OTHER, status="statement_archived", registration={"signedStatementReturned": True}).status, 403
+        )
+        self.assertEqual(self.state(), before)
 
 
 if __name__ == "__main__":

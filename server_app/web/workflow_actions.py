@@ -69,8 +69,10 @@ from server_app.domains.workflow.application import (
     update_workflow_status,
 )
 from server_app.domains.workflow.constants import (
+    WORKFLOW_STATUS_ARCHIVED,
     WORKFLOW_STATUS_GENERATED,
     WORKFLOW_STATUS_LOCKED,
+    WORKFLOW_STATUS_SENT,
 )
 from server_app.domains.workflow.facade import (
     delete_billing_workflow,
@@ -399,9 +401,15 @@ class WorkflowActionsMixin:
                         self.send_json({"error": "需要结算锁定授权"}, HTTPStatus.FORBIDDEN)
                         return
                 elif user["role"] != "admin":
-                    if to_status != WORKFLOW_STATUS_GENERATED:
-                        raise PermissionError("需要管理员权限")
-                    require_own_withdrawal(conn, user, current)
+                    is_registration = (
+                        user["role"] == "room_admin"
+                        and current.get("workflowStatus") == WORKFLOW_STATUS_SENT
+                        and to_status == WORKFLOW_STATUS_ARCHIVED
+                    )
+                    if not is_registration:
+                        if to_status != WORKFLOW_STATUS_GENERATED:
+                            raise PermissionError("需要管理员权限")
+                        require_own_withdrawal(conn, user, current)
                 workflow, version, event = update_workflow_status(
                     conn, workflow_id, to_status, user, note, registration
                 )

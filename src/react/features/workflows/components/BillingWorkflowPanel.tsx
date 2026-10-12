@@ -274,7 +274,6 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           item={item}
           canLock={Boolean(user.billingLockAllowed)}
           canWithdraw={item.canWithdraw ?? user.role === "admin"}
-          canRegister={user.role === "admin"}
           disabled={batchLocking || lockAction.pending}
           loading={lockAction.pending && advance.variables?.workflowId === item.id}
           onRegister={setRegisterTarget}

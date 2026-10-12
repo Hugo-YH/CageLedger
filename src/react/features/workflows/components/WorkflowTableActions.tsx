@@ -8,7 +8,6 @@ export function WorkflowTableActions({
   item,
   canLock,
   canWithdraw,
-  canRegister,
   disabled,
   loading,
   onRegister,
@@ -19,7 +18,6 @@ export function WorkflowTableActions({
   item: BillingWorkflow;
   canLock: boolean;
   canWithdraw: boolean;
-  canRegister: boolean;
   disabled: boolean;
   loading: boolean;
   onRegister: (item: BillingWorkflow) => void;
@@ -42,7 +40,7 @@ export function WorkflowTableActions({
   return (
     <WorkflowRowActions
       primary={
-        sent && canRegister ? (
+        sent ? (
           <Button type="primary" onClick={() => onRegister(item)}>
             登记
           </Button>

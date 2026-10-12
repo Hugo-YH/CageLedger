@@ -111,7 +111,8 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   const foreignWorkflow = page.getByRole("row").filter({ hasText: foreignPi });
   await expect(ownWorkflow).toBeVisible();
   await expect(foreignWorkflow).toBeVisible();
-  await expect(ownWorkflow.getByRole("button", { name: "登记", exact: true })).toHaveCount(0);
+  await expect(ownWorkflow.getByRole("button", { name: "登记", exact: true })).toBeVisible();
+  await expect(foreignWorkflow.getByRole("button", { name: "登记", exact: true })).toBeVisible();
   await expect(foreignWorkflow.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);
   await ownWorkflow.getByRole("button", { name: "撤回", exact: true }).click();
   const revokeDialog = page.getByRole("dialog", { name: "撤回结算流程", exact: true });
@@ -150,4 +151,91 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   await login(page, username);
   const ownerList = await page.request.get(`/api/billing-workflows?month=${month}&limit=100`);
   expect((await ownerList.json()).items.find((item: { id: string }) => item.id === foreignId).canWithdraw).toBe(false);
+});
+
+test("房间管理员可登记他人发起的结算流程，登记信息和台账同步归档", async ({ page }) => {
+  await login(page, "admin", "admin123");
+  await ensureTestInfrastructure(page);
+  const suffix = Date.now();
+  const username = `register-room-${suffix}`;
+  const account = await page.request.post("/api/users", {
+    data: {
+      username,
+      displayName: "交回登记员",
+      password: "e2e-password",
+      role: "room_admin",
+      roomIds: ["room-e2e-8014"],
+    },
+  });
+  expect(account.ok()).toBeTruthy();
+  const registrarId = (await account.json()).user.id as string;
+  const month = "2026-07";
+  const pi = `E2E 交回登记 ${suffix}`;
+  const sheet = await page.request.post("/api/quantity-sheets", {
+    data: {
+      sheet: {
+        id: `registration-sheet-${suffix}`,
+        month,
+        roomId: "room-e2e-8014",
+        roomName: "8014",
+        manager: "系统管理员",
+        iacuc: `E2E-REGISTER-${suffix}`,
+        pi,
+        project: "交回登记测试",
+        owner: "实验负责人",
+        funding: "TEST",
+        billingUnit: "cage_day",
+        animalDetailEnabled: false,
+        initialAnimalCount: 0,
+        initialCageCount: 15,
+        pageCount: 1,
+        rows: [],
+      },
+    },
+  });
+  expect(sheet.ok()).toBeTruthy();
+  const generated = await page.request.post("/api/billing-statements/generate-by-pi", {
+    data: { pi, month, sourceType: "quantity_sheet", persist: true, initiate: true },
+  });
+  expect(generated.ok()).toBeTruthy();
+  const generatedData = await generated.json();
+  const workflowId = generatedData.workflow.id as string;
+  const totalAmount = generatedData.workflow.totalAmount as number;
+
+  await login(page, username);
+  const invalid = await page.request.post("/api/billing-workflows/advance", {
+    data: { workflowId, toStatus: "statement_archived", registration: { signedStatementReturned: false } },
+  });
+  expect(invalid.status()).toBe(400);
+  await openWorkflowCenter(page);
+  const row = page.getByRole("row").filter({ hasText: pi });
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);
+  await row.getByRole("button", { name: "登记", exact: true }).click();
+  const modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
+  await modal.getByRole("switch", { name: "饲养费结算单", exact: true }).click();
+  await modal.getByLabel("饲养费结算单备注").fill("房间管理员核对后登记");
+  await modal.getByRole("button", { name: "登记并归档", exact: true }).click();
+  await expect(modal).not.toBeVisible();
+  await expect(row).toContainText("结算单 已交回");
+  await expect(row.getByRole("button", { name: "登记", exact: true })).toHaveCount(0);
+  const detail = await (await page.request.get(`/api/billing-workflows/${workflowId}`)).json();
+  expect(detail.workflow.workflowStatus).toBe("statement_archived");
+  expect(detail.workflow.registeredBy.id).toBe(registrarId);
+  expect(detail.workflow.signedStatementReturned).toBe(true);
+  expect(detail.workflow.signedStatementNote).toBe("房间管理员核对后登记");
+  expect(detail.workflow.totalAmount).toBe(totalAmount);
+  const event = detail.events.find((item: { eventType: string }) => item.eventType === "statement_registered_archived");
+  expect(event.actor.id).toBe(registrarId);
+  const records = await (await page.request.get(`/api/reimbursement-records?month=${month}&limit=100`)).json();
+  expect(records.items.find((item: { workflowId: string }) => item.workflowId === workflowId).workflowStatus).toBe(
+    "statement_archived",
+  );
+  expect(
+    (
+      await page.request.post("/api/billing-workflows/advance", {
+        data: { workflowId, toStatus: "statement_sent", note: "房间管理员不可撤回归档" },
+      })
+    ).status(),
+  ).toBe(403);
 });
