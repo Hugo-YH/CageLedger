@@ -208,6 +208,12 @@ test("房间管理员可登记他人发起的结算流程，登记信息和台�
   });
   expect(invalid.status()).toBe(400);
   await openWorkflowCenter(page);
+  await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  const monthFilter = page.locator(".table-filter-panel:visible");
+  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await monthOption.click();
+  await expect(monthOption).toBeChecked();
+  await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: pi });
   await expect(row).toBeVisible();
   await expect(row.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);

@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.9.2",
+    build: "220",
+    releasedAt: "2026-10-12",
+    title: "结算单交回登记权限修复",
+    items: [
+      "恢复房间管理员对已发起结算流程的交回登记权限，可登记本人或他人发起的流程",
+      "登记结算单及报销单交回信息后同步归档，并更新台账、操作人和审计记录",
+      "保留登记必填校验、锁定限制和撤回权限边界，房间管理员不能撤回他人流程或已归档流程",
+    ],
+  },
+  {
     version: "1.9.1",
     build: "219",
     releasedAt: "2026-10-10",
