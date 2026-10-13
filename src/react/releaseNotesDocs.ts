@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.10.0",
+    build: "222",
+    releasedAt: "2026-10-13",
+    title: "运行日志持久化",
+    items: [
+      "新增独立于数据库的运行诊断日志，默认保存在数据目录的 logs/runtime.jsonl，容器重建后随数据卷保留",
+      "统一记录请求、后台任务、数据库异常、IACUC 导入及文档导出等诊断事件，携带请求编号、版本和错误位置，便于关联排查",
+      "日志字段采用白名单，不记录请求正文、查询参数、凭据、原始 SQL、异常消息和局部变量；重复后台错误限频汇总",
+      "默认每份日志 10 MiB、总计 5 份轮转，支持配置容量和关闭持久化；目录不可写或写入失败时回退到控制台，不中断业务操作",
+      "更新容器配置及维护说明，正常运行只写一处日志，避免文件与控制台重复输出",
+    ],
+  },
+  {
     version: "1.9.3",
     build: "221",
     releasedAt: "2026-10-12",
