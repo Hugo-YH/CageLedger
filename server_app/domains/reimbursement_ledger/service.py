@@ -6,6 +6,7 @@ import shutil
 
 from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
+from server_app.runtime_logging import log_operation
 from server_app.shared import clean_text, new_id, now_iso
 
 from .listing import (
@@ -388,6 +389,7 @@ def reverse_allocation(conn, actor, allocation_id, reason):
     }
 
 
+@log_operation("reimbursement_upload", component="files")
 def add_attachment(conn, actor, claim_id, filename, body, content_type):
     claim = _claim_row(conn, claim_id)
     _require_claim_edit(actor, claim)

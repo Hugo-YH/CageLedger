@@ -32,6 +32,10 @@ DATA_ROOT = Path(
     os.environ.get("CAGELEDGER_DATA_ROOT", _configured_db_path and Path(_configured_db_path).parent or ROOT / "data")
 )
 DB_PATH = Path(_configured_db_path or DATA_ROOT / "database" / "cageledger.sqlite")
+LOG_DIR = Path(os.environ.get("CAGELEDGER_LOG_DIR", "").strip() or DATA_ROOT / "logs")
+LOG_PERSISTENCE_ENABLED = _env_bool("CAGELEDGER_LOG_PERSISTENCE_ENABLED", True)
+LOG_MAX_BYTES = _env_int("CAGELEDGER_LOG_MAX_BYTES", 10 * 1024 * 1024, 64 * 1024, 100 * 1024 * 1024)
+LOG_FILE_COUNT = _env_int("CAGELEDGER_LOG_FILE_COUNT", 5, 2, 20)
 QUARANTINE_FILES_PATH = DATA_ROOT / "files" / "quarantine"
 FEEDBACK_FILES_PATH = DATA_ROOT / "files" / "feedback"
 PDF_CACHE_PATH = Path(os.environ.get("CAGELEDGER_PDF_CACHE", DATA_ROOT / "cache" / "pdf"))

@@ -10,6 +10,8 @@ from zipfile import BadZipFile, ZipFile
 from docx.image.image import Image
 from PIL import Image as PillowImage
 
+from server_app.runtime_logging import log_operation
+
 from . import pdf
 from . import repository as repo
 from .attachment_metadata import validate as validate_attachment
@@ -82,6 +84,7 @@ def _report_version(value):
     return f"v{version}" if version > 0 else "v未知版本"
 
 
+@log_operation("quarantine_upload", component="files")
 def upload(conn, user, test_id, params, name, content, root):
     authorize(user)
     conn.execute("BEGIN IMMEDIATE")
@@ -214,6 +217,7 @@ def validate_issue(test):
         raise ValueError("每个样本需填写材料并配置适用项目")
 
 
+@log_operation("quarantine_issue", component="files")
 def issue(conn, user, test_id, body, root):
     authorize(user)
     conn.execute("BEGIN IMMEDIATE")

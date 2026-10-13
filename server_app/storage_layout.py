@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from server_app.runtime_logging import emit_event
 
 LAYOUT_VERSION = 1
 _LOCK = threading.Lock()
@@ -104,8 +107,9 @@ def _migrate_legacy_layout(layout: StorageLayoutPaths) -> None:
             + "\n",
             encoding="utf-8",
         )
-        print(f"[storage] migrated {len(migrations)} legacy data entries; rollback retained at {rollback_root}")
+        emit_event("storage_migration_completed", count=len(migrations))
     except Exception as exc:
+        emit_event("storage_migration_failed", level=logging.ERROR, error=exc)
         for source, target in reversed(moved):
             if target.exists() and not source.exists():
                 source.parent.mkdir(parents=True, exist_ok=True)
@@ -170,7 +174,7 @@ def _clear_completed_rollback(layout: StorageLayoutPaths, marker: Path) -> None:
     rollback = layout.root / state.get("rollbackPath", "")
     if state.get("status") == "completed" and rollback.is_dir():
         shutil.rmtree(rollback)
-        print(f"[storage] removed confirmed rollback copy {rollback}")
+        emit_event("storage_rollback_copy_removed")
 
 
 def _copy_for_rollback(source: Path, destination: Path) -> None:

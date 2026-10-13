@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
 
+from server_app.runtime_logging import log_operation
 from server_app.shared import now_iso
 
 from . import repository as repo
@@ -49,6 +50,7 @@ def store(root, name, content):
         temporary.unlink(missing_ok=True)
 
 
+@log_operation("feedback_upload", component="files")
 def upload(conn, user, feedback_id, params, name, content, root):
     identity = service.request_id(params)
     mime, suffix = validate(content)

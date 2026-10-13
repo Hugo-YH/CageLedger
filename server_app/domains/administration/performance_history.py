@@ -16,10 +16,10 @@ from server_app.config import (
     PERFORMANCE_HISTORY_RETENTION_DAYS,
 )
 from server_app.repositories.system_performance import delete_expired_snapshots, insert_snapshot, list_snapshots
+from server_app.runtime_logging import emit_event
 from server_app.shared import new_id, now_iso
 from server_app.shared.sqlite import ClosingConnection
 
-_LOGGER = logging.getLogger(__name__)
 _PROCESS_STARTED_AT = now_iso()
 _SAMPLER_LOCK = threading.Lock()
 _SAMPLER_STARTED = False
@@ -65,8 +65,8 @@ def _run_sampler(snapshot_factory):
 def _capture_safely(snapshot_factory):
     try:
         _capture(snapshot_factory())
-    except Exception:  # noqa: BLE001 - monitoring must never affect the application.
-        _LOGGER.exception("[performance-history] snapshot skipped")
+    except Exception as exc:  # noqa: BLE001 - monitoring must never affect the application.
+        emit_event("performance_snapshot_failed", level=logging.WARNING, error=exc, rate_limit=True)
 
 
 def _capture(environment):

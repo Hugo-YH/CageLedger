@@ -1,5 +1,6 @@
 """Feedback HTTP boundary: every endpoint is authenticated; administration is role checked."""
 
+import logging
 import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -8,6 +9,7 @@ from server_app.config import CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL,
 from server_app.db import connect_db
 from server_app.domains.feedback import files, importer, repository, service
 from server_app.domains.feedback.gitea import Client, RemoteError
+from server_app.runtime_logging import emit_event
 from server_app.web.multipart import parse_multipart_upload
 from server_app.web.request_body import read_body
 
@@ -36,8 +38,10 @@ def handle(handler, method, path):
     except (ValueError, TypeError, KeyError) as exc:
         handler.send_json({"error": str(exc) or "反馈数据无效"}, 400)
     except RemoteError as exc:
+        emit_event("feedback_remote_failed", level=logging.WARNING, error=exc, rate_limit=True)
         handler.send_json({"error": str(exc)}, 503)
-    except OSError:
+    except OSError as exc:
+        emit_event("file_operation_failed", level=logging.ERROR, error=exc, component="feedback", rate_limit=True)
         handler.send_json({"error": "截图文件处理失败，请稍后重试"}, 500)
     return True
 

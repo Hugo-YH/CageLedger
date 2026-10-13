@@ -8,6 +8,7 @@
 
 import csv
 import io
+import logging
 import os
 import shutil
 import threading
@@ -29,6 +30,7 @@ from server_app.domains.iacuc.sync import (
     sync_project_derived_fields_after_iacuc_upload,
     write_experiment_applications,
 )
+from server_app.runtime_logging import emit_event
 from server_app.shared import now_iso
 
 try:
@@ -223,9 +225,9 @@ def start_auto_import_watcher(*, enabled=None, interval_seconds=None):
             try:
                 result = scan_and_import_once()
                 if result:
-                    print(f"[auto-import] 已导入 {result['source']}：{result['count']} 条 IACUC")
+                    emit_event("iacuc_auto_import_completed", count=result["count"], rowCount=result["rowCount"])
             except Exception as exc:  # 后台扫描不因单次失败退出
-                print(f"[auto-import] 导入失败：{exc}")
+                emit_event("iacuc_auto_import_failed", level=logging.WARNING, error=exc, rate_limit=True)
             time.sleep(interval_seconds)
 
     thread = threading.Thread(target=loop, name="iacuc-auto-import", daemon=True)

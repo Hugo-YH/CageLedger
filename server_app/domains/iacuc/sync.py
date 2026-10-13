@@ -1,6 +1,7 @@
 """IACUC-derived field synchronization and principal identity commands."""
 
 import json
+import logging
 
 from server_app.cache import cache_get, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes
 from server_app.db import connect_db
@@ -28,6 +29,7 @@ from server_app.repositories.entities import (
 from server_app.repositories.iacuc import replace_experiment_applications
 from server_app.repositories.payload import dump_json
 from server_app.repositories.workflow_documents import protected_quantity_sheet_ids
+from server_app.runtime_logging import emit_event
 from server_app.shared import clean_text, new_id, now_iso
 from server_app.shared.concurrency import require_current_version
 
@@ -41,7 +43,7 @@ def publish_committed_iacuc_index(items, save_index):
     try:
         save_index(items)
     except OSError as exc:
-        print(f"[iacuc-index] 数据库已提交，兼容索引文件更新失败：{exc}")
+        emit_event("iacuc_index_publish_failed", level=logging.WARNING, error=exc, rate_limit=True)
 
 
 PROJECT_DERIVED_FIELDS = (

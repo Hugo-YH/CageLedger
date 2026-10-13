@@ -1,9 +1,11 @@
+import logging
 import sqlite3
 import threading
 import time
 
 from .config import DB_PATH, SLOW_DATABASE_THRESHOLD_MS
 from .performance import record_database_operation
+from .runtime_logging import emit_event
 from .shared.sqlite import ClosingConnection
 from .storage_layout import ensure_storage_layout
 
@@ -29,10 +31,14 @@ class ObservedConnection(ClosingConnection):
     def _observe(operation, *args, **kwargs):
         started_at = time.perf_counter()
         locked = False
+        failure = None
         try:
             return operation(*args, **kwargs)
-        except sqlite3.OperationalError as exc:
-            locked = "locked" in str(exc).lower() or "busy" in str(exc).lower()
+        except sqlite3.Error as exc:
+            locked = isinstance(exc, sqlite3.OperationalError) and (
+                "locked" in str(exc).lower() or "busy" in str(exc).lower()
+            )
+            failure = exc
             raise
         finally:
             elapsed_ms = (time.perf_counter() - started_at) * 1000
@@ -41,6 +47,18 @@ class ObservedConnection(ClosingConnection):
                 slow=elapsed_ms >= SLOW_DATABASE_THRESHOLD_MS,
                 locked=locked,
             )
+            if failure is not None:
+                tokens = args[0].split(None, 1) if args and isinstance(args[0], str) else []
+                sql = tokens[0].upper() if tokens else ""
+                emit_event(
+                    "database_lock_error" if locked else "database_operation_failed",
+                    level=logging.WARNING if locked or isinstance(failure, sqlite3.IntegrityError) else logging.ERROR,
+                    error=failure,
+                    rate_limit=True,
+                    operation=operation.__name__,
+                    sqlOperation=sql if sql in {"SELECT", "INSERT", "UPDATE", "DELETE", "BEGIN", "PRAGMA"} else "OTHER",
+                    durationMs=round(elapsed_ms, 1),
+                )
 
 
 def configure_database(schema_initializer):

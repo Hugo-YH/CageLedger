@@ -4,6 +4,7 @@ import threading
 import time
 
 from server_app.performance import performance_snapshot, record_cache
+from server_app.runtime_logging import emit_event
 
 CACHE_TTL_SECONDS = 15
 CACHE_MAX_ENTRIES = 512
@@ -62,9 +63,7 @@ def invalidate_data_cache_prefixes(*prefixes):
 
 def log_perf(label, started_at, **fields):
     elapsed_ms = round((time.perf_counter() - started_at) * 1000, 1)
-    details = " ".join(f"{key}={value}" for key, value in fields.items() if value not in (None, ""))
-    suffix = f" {details}" if details else ""
-    print(f"[perf] {label} {elapsed_ms}ms{suffix}", flush=True)
+    emit_event("performance_operation", operation=label, durationMs=elapsed_ms, **fields)
 
 
 def cache_key(prefix, **fields):

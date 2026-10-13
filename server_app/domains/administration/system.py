@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import platform
 import re
@@ -33,6 +34,7 @@ from server_app.config import (
 )
 from server_app.pdf.cache import pdf_export_cache
 from server_app.pdf.renderer import pdf_renderer_snapshot
+from server_app.runtime_logging import emit_event
 from server_app.shared import now_iso
 
 
@@ -305,14 +307,17 @@ def latest_remote_release():
         with urlopen(request, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
+        emit_event("update_check_failed", level=logging.WARNING, error=exc, rate_limit=True, status=exc.code)
         if exc.code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND):
             raise ValueError(
                 "Gitea 更新检查失败：请确认仓库地址正确，共享 Token 具有 read:repository 及私有仓库访问权限"
             ) from exc
         raise ValueError(f"Gitea 返回错误：HTTP {exc.code}") from exc
     except URLError as exc:
+        emit_event("update_check_failed", level=logging.WARNING, error=exc, rate_limit=True)
         raise ValueError(f"无法连接 Gitea：{exc.reason}") from exc
     except TimeoutError as exc:
+        emit_event("update_check_failed", level=logging.WARNING, error=exc, rate_limit=True)
         raise ValueError("连接 Gitea 超时") from exc
 
     tag_name = str(payload.get("tag_name") or "").strip()

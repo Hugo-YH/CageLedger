@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from server_app.config import DEEPSEEK_API_KEY, DEEPSEEK_API_URL, DEEPSEEK_MODEL, DEEPSEEK_TIMEOUT_SECONDS
+from server_app.runtime_logging import log_operation
 
 _CA_BUNDLE_CANDIDATES = (
     "/etc/ssl/cert.pem",
@@ -29,6 +30,7 @@ def _ssl_context():
     return ssl.create_default_context()
 
 
+@log_operation("ai_request", component="ai")
 def deepseek_chat_json(system_prompt: str, user_prompt: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """Send a chat request and return the parsed JSON object and token usage."""
     if not DEEPSEEK_API_KEY:

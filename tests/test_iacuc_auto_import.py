@@ -209,7 +209,7 @@ class IacucAutoImportTests(unittest.TestCase):
     def test_index_publication_failure_keeps_committed_import_successful(self):
         with (
             patch("server_app.domains.iacuc.auto_import.save_iacuc_index_file", side_effect=OSError("disk full")),
-            patch("builtins.print") as warning,
+            patch("server_app.domains.iacuc.sync.emit_event") as warning,
         ):
             result = import_summary_file(self.summary_csv(), conn=self.conn, now="after")
         self.assertEqual(result["count"], 1)

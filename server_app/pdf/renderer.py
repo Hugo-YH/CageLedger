@@ -1,5 +1,6 @@
 """Chromium-backed PDF rendering for printable server documents."""
 
+import logging
 import os
 import shutil
 import subprocess
@@ -10,6 +11,8 @@ from itertools import count
 from pathlib import Path
 from queue import PriorityQueue
 from threading import Event, Lock, Thread
+
+from server_app.runtime_logging import capture_log_context, emit_event, log_context, log_operation
 
 RENDER_TIMEOUT_SECONDS = 120
 PDF_RENDER_PRIORITY_USER = 0
@@ -28,6 +31,7 @@ class RenderJob:
     result: bytes | None = None
     error: Exception | None = None
     cancelled: bool = False
+    log_fields: dict = field(default_factory=capture_log_context)
 
 
 @dataclass(order=True)
@@ -126,6 +130,8 @@ class PersistentChromiumRenderer:
                         job.result = page.pdf(print_background=True, prefer_css_page_size=True)
                         self._record_render(time.perf_counter() - started_at)
                 except Exception as exc:  # Browser process recovery belongs to the next queued job.
+                    with log_context(**job.log_fields):
+                        emit_event("pdf_browser_failed", level=logging.WARNING, error=exc, rate_limit=True)
                     job.error = RuntimeError(f"PDF 渲染失败：{str(exc).splitlines()[0]}")
                     self._record_render(time.perf_counter() - started_at, failed=True)
                     if browser:
@@ -159,6 +165,7 @@ class PersistentChromiumRenderer:
 _PERSISTENT_RENDERER = PersistentChromiumRenderer()
 
 
+@log_operation("pdf_render", component="exports")
 def html_to_pdf(markup, *, priority=PDF_RENDER_PRIORITY_USER):
     """Render HTML through a reused Chromium browser process."""
     try:

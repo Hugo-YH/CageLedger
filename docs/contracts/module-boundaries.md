@@ -40,19 +40,20 @@ graph TD
 
 ## 后端边界
 
-| 路径                       | 责任                                               | 约束                                    |
-| -------------------------- | -------------------------------------------------- | --------------------------------------- |
-| `server.py`                | 服务启动、应用装配和历史导出兼容入口               | 保持短小，不放业务实现                  |
-| `server_app/web/`          | Router、HTTP 生命周期、请求解析和响应              | 只调用领域入口                          |
-| `server_app/persistence/`  | schema 注册、幂等迁移和索引                        | 迁移顺序固定                            |
-| `server_app/domains/`      | 领域 route、service、repository、rules 和 importer | 领域内保持 route → service → repository |
-| `server_app/config.py`     | 环境变量、路径、系统元数据                         | 配置读取集中管理                        |
-| `server_app/http.py`       | JSON、gzip、缓存头和计时响应                       | 统一响应行为                            |
-| `server_app/static.py`     | `web-dist/` 静态资源、ETag、gzip 和 SPA fallback   | 只处理前端传输                          |
-| `server_app/db.py`         | SQLite 连接辅助                                    | 连接参数和事务入口一致                  |
-| `server_app/cache.py`      | 15 秒短缓存和失效辅助                              | key 包含 scope、filter 和 actor         |
-| `server_app/repositories/` | SQL、分页、结构化列、payload 兼容、行级读写        | 返回可序列化 dict/list，不承载 HTTP     |
-| `server_app/services/`     | 迁移期 service 兼容导出                            | 新业务直接进入 domains                  |
+| 路径                            | 责任                                               | 约束                                    |
+| ------------------------------- | -------------------------------------------------- | --------------------------------------- |
+| `server.py`                     | 服务启动、应用装配和历史导出兼容入口               | 保持短小，不放业务实现                  |
+| `server_app/web/`               | Router、HTTP 生命周期、请求解析和响应              | 只调用领域入口                          |
+| `server_app/persistence/`       | schema 注册、幂等迁移和索引                        | 迁移顺序固定                            |
+| `server_app/domains/`           | 领域 route、service、repository、rules 和 importer | 领域内保持 route → service → repository |
+| `server_app/config.py`          | 环境变量、路径、系统元数据                         | 配置读取集中管理                        |
+| `server_app/http.py`            | JSON、gzip、缓存头和计时响应                       | 统一响应行为                            |
+| `server_app/static.py`          | `web-dist/` 静态资源、ETag、gzip 和 SPA fallback   | 只处理前端传输                          |
+| `server_app/db.py`              | SQLite 连接辅助                                    | 连接参数和事务入口一致                  |
+| `server_app/runtime_logging.py` | 持久化运行日志、轮转、脱敏和请求关联               | 不写业务数据库，不改变事务或响应结果    |
+| `server_app/cache.py`           | 15 秒短缓存和失效辅助                              | key 包含 scope、filter 和 actor         |
+| `server_app/repositories/`      | SQL、分页、结构化列、payload 兼容、行级读写        | 返回可序列化 dict/list，不承载 HTTP     |
+| `server_app/services/`          | 迁移期 service 兼容导出                            | 新业务直接进入 domains                  |
 
 ## 服务端数据与本地状态
 

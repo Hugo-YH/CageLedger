@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from threading import BoundedSemaphore
 
+from server_app.runtime_logging import log_operation
+
 from .documents import generate as generate_docx
 
 TIMEOUT_SECONDS = 120
@@ -30,6 +32,7 @@ def generate(snapshot, root, *, draft=False):
     return convert_docx(generate_docx(snapshot, root, draft=draft))
 
 
+@log_operation("word_pdf_conversion", component="exports")
 def convert_docx(content):
     binary = libreoffice_binary()
     if not _RENDER_SLOT.acquire(timeout=TIMEOUT_SECONDS):

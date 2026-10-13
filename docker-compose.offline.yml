@@ -18,5 +18,15 @@ services:
       - CAGELEDGER_BRANCH=${CAGELEDGER_BRANCH:-main}
       - CAGELEDGER_UPDATE_CHECK_ENABLED=${CAGELEDGER_UPDATE_CHECK_ENABLED:-false}
       - CAGELEDGER_GITEA_TOKEN=${CAGELEDGER_GITEA_TOKEN:-}
+      - CAGELEDGER_LOG_PERSISTENCE_ENABLED=${CAGELEDGER_LOG_PERSISTENCE_ENABLED:-true}
+      - CAGELEDGER_LOG_MAX_BYTES=${CAGELEDGER_LOG_MAX_BYTES:-10485760}
+      - CAGELEDGER_LOG_FILE_COUNT=${CAGELEDGER_LOG_FILE_COUNT:-5}
     volumes:
       - ./data:/app/data
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+        mode: non-blocking
+        max-buffer-size: "1m"

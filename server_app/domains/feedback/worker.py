@@ -1,11 +1,13 @@
 """One serial worker; durable outbox and short transactions around external requests."""
 
+import logging
 import sqlite3
 import threading
 import time
 
 from server_app.config import CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL, FEEDBACK_FILES_PATH
 from server_app.db import connect_db
+from server_app.runtime_logging import emit_event, log_context
 
 from . import repository as repo
 from . import sync
@@ -96,7 +98,8 @@ def run_once(connect, client, root):
         )
     try:
         try:
-            result = sync.perform(client, task, feedback, entity, root)
+            with log_context(stage=task["kind"]):
+                result = sync.perform(client, task, feedback, entity, root)
         except RemoteError as exc:
             if exc.http_status != 404 or not feedback["issue_number"] or not sync.confirmed_deleted(client, feedback):
                 raise
@@ -130,9 +133,11 @@ def run_once(connect, client, root):
 
 
 def _run():
+    stage = "initialize"
     try:
         client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN)
-    except ValueError:
+    except ValueError as exc:
+        emit_event("feedback_worker_failed", level=logging.ERROR, error=exc, stage=stage, rate_limit=True)
         message = "共享仓库地址无效，请管理员检查配置"
         _set_health("blocked", message)
         while not _stop.is_set():
@@ -140,7 +145,14 @@ def _run():
                 with connect_db() as conn:
                     conn.execute("UPDATE feedback_tasks SET state='blocked',error=? WHERE state!='done'", (message,))
                 break
-            except Exception:
+            except Exception as failure:
+                emit_event(
+                    "feedback_worker_failed",
+                    level=logging.WARNING,
+                    error=failure,
+                    stage="block_invalid_repository",
+                    rate_limit=True,
+                )
                 _stop.wait(5)
         return
     last_poll = 0
@@ -149,6 +161,7 @@ def _run():
         try:
             # Recovery belongs to the protected loop too: repeated DB locks must not kill the worker.
             if needs_recovery:
+                stage = "recover"
                 with connect_db() as conn:
                     recover(conn)
                 needs_recovery = False
@@ -156,9 +169,11 @@ def _run():
                 client.auth_blocked = False
                 _resume.clear()
             if time.monotonic() - last_poll >= 300:
+                stage = "queue_stale"
                 with connect_db() as conn:
                     repo.queue_stale(conn)
                 last_poll = time.monotonic()
+            stage = "claim_or_sync"
             worked = run_once(connect_db, client, FEEDBACK_FILES_PATH)
             _set_health(
                 "blocked" if client.auth_blocked else "running",
@@ -166,6 +181,7 @@ def _run():
             )
             _stop.wait(0.2 if worked else 2)
         except Exception as exc:
+            emit_event("feedback_worker_failed", level=logging.WARNING, error=exc, stage=stage, rate_limit=True)
             # Never expose raw exceptions, request/response bodies, SQL or credentials.
             needs_recovery = True
             message = "反馈同步服务暂时受阻，后台正在重试"

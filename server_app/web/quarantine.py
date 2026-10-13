@@ -1,5 +1,6 @@
 """Authenticated quarantine HTTP boundary; authorization is intentionally centralized."""
 
+import logging
 import sqlite3
 from urllib.parse import parse_qs, urlparse
 
@@ -9,6 +10,7 @@ from server_app.domains.quarantine import attachment_metadata, files, pdf, servi
 from server_app.domains.quarantine import repository as repo
 from server_app.domains.quarantine.catalog import PROJECTS, TEMPLATE_VERSION
 from server_app.domains.quarantine.history import supplier_history
+from server_app.runtime_logging import emit_event
 from server_app.shared.concurrency import StaleWriteError
 from server_app.web.multipart import parse_multipart_upload
 from server_app.web.request_body import read_body
@@ -42,8 +44,10 @@ def handle(handler, method, path):
     except (ValueError, TypeError, KeyError) as exc:
         handler.send_json({"error": str(exc) or "检疫数据格式无效"}, 400)
     except pdf.PdfRenderError as exc:
+        emit_event("quarantine_export_failed", level=logging.WARNING, error=exc, rate_limit=True)
         handler.send_json({"error": str(exc) or "PDF 渲染服务暂不可用，请稍后重试"}, 503)
-    except OSError:
+    except OSError as exc:
+        emit_event("file_operation_failed", level=logging.ERROR, error=exc, component="quarantine", rate_limit=True)
         handler.send_json({"error": "文件处理失败，未完成出具，请稍后重试"}, 500)
     return True
 

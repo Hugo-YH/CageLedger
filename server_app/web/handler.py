@@ -1,4 +1,3 @@
-import json
 import logging
 import secrets
 import time
@@ -9,10 +8,9 @@ from server_app.config import SLOW_REQUEST_THRESHOLD_MS, frontend_root
 from server_app.http import add_default_headers, send_download
 from server_app.http import send_json as send_json_response
 from server_app.performance import record_request, request_observability
+from server_app.runtime_logging import emit_event, log_context, update_log_context
 from server_app.web.origin import is_origin_allowed
 from server_app.web.request_body import RequestBodyError, parse_json_object, read_body
-
-_LOGGER = logging.getLogger("cageledger.http")
 
 
 class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
@@ -29,23 +27,28 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
         self._response_bytes = 0
         self._response_is_download = False
         self._response_started_at = None
+        with log_context(requestId=self._request_id, component="http"):
+            self._handle_observed_request()
+
+    def _handle_observed_request(self):
         try:
             super().handle_one_request()
         except RequestBodyError as exc:
             self.close_connection = True
             if not self._response_status:
                 self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            emit_event("client_disconnected", error=exc, rate_limit=True)
             self.close_connection = True
         except Exception as exc:  # noqa: BLE001 - outer HTTP boundary must contain failures.
             self.close_connection = True
             path = getattr(self, "path", "").split("?", 1)[0]
-            _LOGGER.exception(
-                "request_failed request_id=%s method=%s route=%s error_type=%s",
-                self._request_id,
-                getattr(self, "command", ""),
-                request_observability(path)[1],
-                type(exc).__name__,
+            emit_event(
+                "request_failed",
+                level=logging.ERROR,
+                error=exc,
+                method=getattr(self, "command", ""),
+                route=request_observability(path)[1],
             )
             if not self._response_status and path.startswith("/api/"):
                 self.send_json(
@@ -72,27 +75,30 @@ class CageLedgerHttpHandler(SimpleHTTPRequestHandler):
                     response_bytes=getattr(self, "_response_bytes", 0),
                     status=getattr(self, "_response_status", 0),
                 )
-                if path.startswith("/api/") or slow:
-                    print(
-                        json.dumps(
-                            {
-                                "event": "http_request",
-                                "requestId": self._request_id,
-                                "method": getattr(self, "command", ""),
-                                "route": route,
-                                "status": self._response_status or 0,
-                                "durationMs": round(elapsed_ms, 1),
-                                "applicationMs": round(application_ms, 1),
-                                "responseBytes": self._response_bytes or 0,
-                                "actorId": self._actor_id,
-                                "category": category,
-                                "slow": slow,
-                            },
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                        flush=True,
+                if path.startswith("/api/") or slow or self._response_status >= 400:
+                    emit_event(
+                        "http_request",
+                        level=logging.ERROR
+                        if self._response_status >= 500
+                        else logging.WARNING
+                        if self._response_status >= 400
+                        else logging.INFO,
+                        method=getattr(self, "command", ""),
+                        route=route,
+                        status=self._response_status or 0,
+                        durationMs=round(elapsed_ms, 1),
+                        applicationMs=round(application_ms, 1),
+                        responseBytes=self._response_bytes or 0,
+                        actorId=self._actor_id,
+                        category=category,
+                        slow=slow,
                     )
+
+    def parse_request(self):
+        parsed = super().parse_request()
+        if parsed:
+            update_log_context(method=self.command, route=request_observability(self.path.split("?", 1)[0])[1])
+        return parsed
 
     def send_response(self, code, message=None):
         self._response_status = int(code)

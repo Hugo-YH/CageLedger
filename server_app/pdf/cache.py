@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import tempfile
 import time
@@ -15,6 +16,7 @@ from queue import PriorityQueue
 from threading import Lock, Thread
 
 from server_app.config import PDF_CACHE_MAX_BYTES, PDF_CACHE_PATH, PDF_CACHE_TTL_SECONDS
+from server_app.runtime_logging import bind_log_context, emit_event
 
 PDF_JOB_TTL_SECONDS = 24 * 60 * 60
 PDF_CACHE_PRUNE_INTERVAL_SECONDS = 60
@@ -160,7 +162,8 @@ class PdfExportCache:
                 started_at = time.perf_counter()
                 try:
                     body = render()
-                except Exception:
+                except Exception as exc:
+                    emit_event("pdf_cache_render_failed", level=logging.WARNING, error=exc, rate_limit=True)
                     self._record_render(time.perf_counter() - started_at, failed=True)
                     raise
                 self._record_render(time.perf_counter() - started_at)
@@ -243,11 +246,13 @@ class PdfExportCache:
             if self._version_for(key) == version:
                 self._write(path, body)
                 self._complete(job_id, path, 1)
+                emit_event("pdf_export_completed", jobId=job_id, count=1)
                 self._record_render(time.perf_counter() - started_at)
             else:
                 self._fail(job_id, "源数据已更新，正在刷新 PDF")
                 self._record_render(time.perf_counter() - started_at, failed=True)
         except Exception as exc:
+            emit_event("pdf_export_failed", level=logging.WARNING, error=exc, rate_limit=True, jobId=job_id)
             self._fail(job_id, str(exc))
             self._record_render(time.perf_counter() - started_at, failed=True)
         finally:
@@ -264,8 +269,10 @@ class PdfExportCache:
             self._write(path, body)
             job = self._jobs[job_id]
             self._complete(job_id, path, job.total)
+            emit_event("pdf_batch_export_completed", jobId=job_id, count=job.total)
             self._record_render(time.perf_counter() - started_at)
         except Exception as exc:
+            emit_event("pdf_batch_export_failed", level=logging.WARNING, error=exc, rate_limit=True, jobId=job_id)
             self._fail(job_id, str(exc))
             self._record_render(time.perf_counter() - started_at, failed=True)
 
@@ -364,7 +371,7 @@ class PdfExportCache:
                 self._worker = Thread(target=self._work, name="cageledger-pdf-export", daemon=True)
                 self._worker.start()
             sequence = next(self._task_sequence)
-        self._tasks.put(_ScheduledTask(priority, sequence, callback))
+        self._tasks.put(_ScheduledTask(priority, sequence, bind_log_context(callback)))
 
     def _work(self):
         while True:

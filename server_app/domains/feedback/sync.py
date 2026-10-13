@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from server_app.domains.administration.audit import audit_event, write_audit_events
+from server_app.runtime_logging import log_operation
 from server_app.shared import now_iso
 
 from . import repository as repo
@@ -65,6 +66,7 @@ def asset_path(feedback, comment=None):
     return f"/issues/{feedback['issue_number']}/assets"
 
 
+@log_operation("feedback_remote_sync", component="feedback")
 def perform(client, task, feedback, entity, root):
     """Return a remote result without touching SQLite. Ambiguous POSTs only reconcile."""
     kind = task["kind"]
