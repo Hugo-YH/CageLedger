@@ -12,6 +12,10 @@ Options:
   --version <ver>    Release version without the v prefix.
   --package <path>   Local offline package to upload.
 
+Release notes:
+  Reads the matching version from wiki/更新日志.md for both creation and updates.
+  Missing notes abort before any Gitea request; publication verifies the saved body.
+
 Authentication:
   Uses CAGELEDGER_GITEA_TOKEN when set. Otherwise reads the HTTPS credential
   already configured for the origin remote through git credential fill.
@@ -54,6 +58,17 @@ if [[ -z "$PACKAGE_PATH" ]] || [[ ! -f "$PACKAGE_PATH" ]]; then
 fi
 
 cd "$ROOT"
+
+TAG="v${VERSION}"
+RELEASE_BUILD="$(node -p "require('${ROOT}/package.json').build || ''")"
+RELEASE_DISPLAY="${VERSION}${RELEASE_BUILD:+（Build ${RELEASE_BUILD}）}"
+REQUEST_DIR="$(mktemp -d)"
+RELEASE_FILE="${REQUEST_DIR}/release-response.json"
+cleanup() {
+  rm -rf "$REQUEST_DIR"
+}
+trap cleanup EXIT
+node scripts/release_notes_payload.mjs --version "$VERSION" --name "$RELEASE_DISPLAY" --output-dir "$REQUEST_DIR"
 
 ORIGIN_URL="$(git remote get-url --push origin)"
 REPOSITORY="${CAGELEDGER_GITEA_REPOSITORY:-}"
@@ -112,15 +127,6 @@ else
   AUTH_ARGS=(-u "${CREDENTIAL_USERNAME}:${CREDENTIAL_PASSWORD}")
 fi
 
-TAG="v${VERSION}"
-RELEASE_BUILD="$(node -p "require('${ROOT}/package.json').build || ''")"
-RELEASE_DISPLAY="${VERSION}${RELEASE_BUILD:+（Build ${RELEASE_BUILD}）}"
-RELEASE_FILE="$(mktemp)"
-cleanup() {
-  rm -f "$RELEASE_FILE"
-}
-trap cleanup EXIT
-
 HTTP_CODE="$(curl -sS -o "$RELEASE_FILE" -w '%{http_code}' "${AUTH_ARGS[@]}" \
   "${API_BASE}/repos/${REPOSITORY}/releases/tags/${TAG}")"
 if [[ "$HTTP_CODE" = "200" ]]; then
@@ -128,18 +134,21 @@ if [[ "$HTTP_CODE" = "200" ]]; then
   EXISTING_RELEASE_ID="$(printf '%s' "$RELEASE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
   RELEASE_JSON="$(curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
-    -d "{\"name\":\"${RELEASE_DISPLAY}\"}" \
+    --data-binary "@${REQUEST_DIR}/release-update.json" \
     "${API_BASE}/repos/${REPOSITORY}/releases/${EXISTING_RELEASE_ID}")"
 elif [[ "$HTTP_CODE" = "404" ]]; then
   RELEASE_JSON="$(curl -fsS -X POST "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
-    -d "{\"tag_name\":\"${TAG}\",\"name\":\"${RELEASE_DISPLAY}\",\"draft\":true}" \
+    --data-binary "@${REQUEST_DIR}/release-create.json" \
     "${API_BASE}/repos/${REPOSITORY}/releases")"
 else
   cat "$RELEASE_FILE" >&2
   echo "Unable to load Gitea Release for ${TAG}: HTTP ${HTTP_CODE}" >&2
   exit 1
 fi
+
+printf '%s' "$RELEASE_JSON" >"$RELEASE_FILE"
+node scripts/release_notes_payload.mjs --verify "$RELEASE_FILE" --expected "${REQUEST_DIR}/release-create.json"
 
 RELEASE_ID="$(printf '%s' "$RELEASE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 
@@ -178,6 +187,10 @@ RELEASE_JSON="$(curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
   -H 'Content-Type: application/json' \
   -d '{"draft":false}' \
   "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}")"
+# Read back persisted metadata, rather than trusting the publish response alone.
+RELEASE_JSON="$(curl -fsS "${AUTH_ARGS[@]}" "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}")"
+printf '%s' "$RELEASE_JSON" >"$RELEASE_FILE"
+node scripts/release_notes_payload.mjs --verify "$RELEASE_FILE" --expected "${REQUEST_DIR}/release-create.json"
 printf '%s' "$RELEASE_JSON" | python3 -c '
 import json,sys
 from datetime import datetime

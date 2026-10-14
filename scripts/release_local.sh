@@ -201,6 +201,7 @@ echo "Next build number: ${NEXT_BUILD}"
 
 run node scripts/set_version.mjs --version "$VERSION" --build "$NEXT_BUILD"
 run node scripts/sync_release_notes_from_docs.mjs
+run node scripts/release_notes_payload.mjs --version "$VERSION" --check
 
 if ! rg -q -F "version: \"${VERSION}\"" src/react/releaseNotesDocs.ts; then
   echo "src/react/releaseNotesDocs.ts is missing a generated ${VERSION} release note. Update wiki/更新日志.md first." >&2
