@@ -29,7 +29,7 @@ test("单据跟踪展示以结算流程为主线的面板", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "单据跟踪", exact: true })).toBeVisible();
   const help = page.getByRole("button", { name: "单据跟踪说明", exact: true });
   await help.click();
-  await expect(page.getByText("以饲养费结算单为主线")).toBeVisible();
+  await expect(page.getByText(/饲养费与技术服务费分别出单，共用流程/)).toBeVisible();
   await help.press("Escape");
   await expect(help).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("columnheader", { name: /结算月份/ })).toBeVisible();

@@ -349,7 +349,7 @@ class ApiContractTests(unittest.TestCase):
         _, detail, _ = request_json(self.base_url, endpoint + "/" + original["id"], opener=self.opener)
         self.assertEqual(detail["item"], original)
 
-    def test_monthly_billing_summary_requires_available_quantity_sheets(self):
+    def test_monthly_billing_summary_requires_available_billing_details(self):
         request_json(
             self.base_url,
             "/api/auth/login",
@@ -366,7 +366,7 @@ class ApiContractTests(unittest.TestCase):
                 opener=self.opener,
             )
         self.assertEqual(context.exception.code, 400)
-        self.assertEqual(json.load(context.exception), {"error": "该月份没有已保存的数量统计表"})
+        self.assertEqual(json.load(context.exception), {"error": "该月份没有已保存的计费明细"})
 
         with self.assertRaises(urllib.error.HTTPError) as context:
             request_json(

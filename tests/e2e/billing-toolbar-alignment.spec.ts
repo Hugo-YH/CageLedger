@@ -40,11 +40,11 @@ for (const viewport of [
     await openQuantityEntry(page);
     const baseline = await headingGeometry(page.getByRole("group", { name: "数量统计表录入操作", exact: true }));
     for (const [title, group, help] of [
-      ["结算管理", "结算批量操作", "结算合表说明"],
+      ["结算列表", "结算批量操作", "结算合表说明"],
       ["单据跟踪", "结算流程批量操作", "单据跟踪说明"],
       ["汇总导出", "月度结算汇总操作", "汇总导出说明"],
     ]) {
-      await openNavigationEntry(page, "饲养费管理", title);
+      await openNavigationEntry(page, "结算管理", title);
       const toolbar = page.getByRole("group", { name: group, exact: true });
       const geometry = await headingGeometry(toolbar);
       expect(geometry.barX).toBeCloseTo(baseline.barX, 0);

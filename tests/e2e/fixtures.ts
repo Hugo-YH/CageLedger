@@ -97,8 +97,12 @@ export async function openWorkflowCenter(page: Page) {
 
 export async function openBillingNavigation(page: Page) {
   if (!(await page.evaluate(() => window.matchMedia("(max-width: 767px)").matches)))
-    await openNavigationGroup(page, "结算管理", "");
+    await openSettlementNavigation(page);
   return openNavigationGroup(page, "饲养费管理", "#nav-billing");
+}
+
+export async function openSettlementNavigation(page: Page) {
+  return openNavigationGroup(page, "结算管理", "");
 }
 
 export async function openSettingsNavigation(page: Page) {

@@ -50,7 +50,7 @@ async function mockCandidates(page: Page) {
       },
     });
   });
-  await page.route("**/api/filter-options?*", (route) =>
+  await page.route("**/api/settlement-candidates/filter-options?*", (route) =>
     route.fulfill({ json: { items: items.map((item) => ({ value: item.pi, label: item.pi, count: 1 })) } }),
   );
   await page.route("**/api/billing-workflows?*", (route) =>
