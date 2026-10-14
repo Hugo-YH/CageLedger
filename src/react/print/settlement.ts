@@ -1,4 +1,5 @@
 import type { BillingStatement, BillingStatementLine, BillingStatementResponse } from "../api/contracts";
+import { technicalServiceMarkup, technicalServiceHtml } from "./technicalServices";
 import { settlementNotesMarkup } from "./settlementNotes";
 import {
   displayUnitLabel,
@@ -77,6 +78,7 @@ type SettlementRow = {
 };
 
 export function settlementStatementMarkup(result: BillingStatementResponse) {
+  if (result.statement.sourceType === "pi_merged_technical_service") return technicalServiceMarkup(result.statement);
   const { statement } = result;
   const lines = result.lines.filter(
     (line) => line.animalCount || line.cageCount || line.amount || Boolean(line.quantitySheetRowIds?.length),
@@ -260,6 +262,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
 }
 
 export function settlementStatementHtml(result: BillingStatementResponse, autoPrint = true) {
+  if (result.statement.sourceType === "pi_merged_technical_service") return technicalServiceHtml(result, autoPrint);
   const title = settlementStatementDocumentTitle(result);
   return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title><style>${settlementPrintStyles()}.summary-table .summary-total-money{font-weight:800}.note-line .note-entry{line-height:1.35}.note-line .note-entry strong{font-weight:700}.note-line .note-detail{margin-left:0}</style></head><body>${settlementStatementMarkup(result)}${autoPrint ? "<script>window.onload=()=>window.print()</script>" : ""}</body></html>`;
 }

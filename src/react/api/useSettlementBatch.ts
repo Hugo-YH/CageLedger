@@ -2,14 +2,13 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import type { SettlementCandidate } from "./contracts";
 import { generateBillingStatement } from "./quantitySheets";
-import { queryKeys } from "./queryKeys";
 import { useSequentialBatch } from "./useSequentialBatch";
 import { advanceWorkflow, deleteBillingWorkflow, invalidateWorkflowQueries } from "./workflows";
 
 export interface SettlementBatchItem {
   candidate: SettlementCandidate;
   action: "start" | "withdraw";
-  source: "quantity_sheet" | "cage_map";
+  source: "quantity_sheet" | "cage_map" | "pi_merged_technical_service";
   note?: string;
 }
 
@@ -33,10 +32,6 @@ export function useSettlementBatch() {
         note,
       });
     },
-    reconcile: () =>
-      Promise.all([
-        invalidateWorkflowQueries(client),
-        client.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot }),
-      ]),
+    reconcile: () => invalidateWorkflowQueries(client),
   });
 }

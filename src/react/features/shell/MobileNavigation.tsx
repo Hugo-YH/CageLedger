@@ -12,6 +12,7 @@ import {
   QrcodeOutlined,
   ReloadOutlined,
   ShopOutlined,
+  TableOutlined,
   TagsOutlined,
   TeamOutlined,
   UnorderedListOutlined,
@@ -22,7 +23,8 @@ import { useEffect, type ReactNode } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
-import { billingSidebarItems } from "./workspaceNavigation";
+import { billingSidebarItems, technicalServiceSidebarItems, settlementSidebarItems } from "./workspaceNavigation";
+import { SyringeOutlined } from "../../components/ui/SyringeOutlined";
 
 type NavIcon =
   | "tag"
@@ -55,6 +57,7 @@ const billingIcon: Record<string, ReactNode> = {
   grid: <AppstoreOutlined />,
   calculator: <CalculatorOutlined />,
   book: <BookOutlined />,
+  refresh: <ReloadOutlined />,
 };
 
 export function MobileNavigation({
@@ -185,21 +188,34 @@ export function MobileNavigation({
                 onNavigate={onNavigate}
               />
             </List>
-            <List header="饲养费管理">
-              {billingSidebarItems(user.role === "admin").flatMap((entry) =>
-                entry.view
-                  ? [
-                      <MenuItem
-                        icon={billingIcon[entry.icon || ""] || <CalculatorOutlined />}
-                        key={entry.view}
-                        label={entry.label!}
-                        onNavigate={onNavigate}
-                        view={entry.view}
-                      />,
-                    ]
-                  : [],
-              )}
-            </List>
+            {[
+              { label: "饲养费管理", icon: <TableOutlined aria-hidden />, items: billingSidebarItems() },
+              { label: "技术服务费管理", icon: <SyringeOutlined />, items: technicalServiceSidebarItems() },
+              {
+                label: "结算管理",
+                icon: <CalculatorOutlined aria-hidden />,
+                items: settlementSidebarItems(user.role === "admin"),
+              },
+            ].map(({ label, icon, items }) => (
+              <List
+                key={label}
+                header={
+                  <>
+                    {icon} {label}
+                  </>
+                }
+              >
+                {items.map((entry) => (
+                  <MenuItem
+                    icon={billingIcon[entry.icon || ""] || <CalculatorOutlined />}
+                    key={entry.view}
+                    label={entry.label!}
+                    onNavigate={onNavigate}
+                    view={entry.view!}
+                  />
+                ))}
+              </List>
+            ))}
             <List header="帮助与反馈">
               <MenuItem icon={<InfoCircleOutlined />} label="帮助与反馈" view="feedback" onNavigate={onNavigate} />
             </List>

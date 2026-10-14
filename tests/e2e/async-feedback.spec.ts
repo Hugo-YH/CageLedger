@@ -131,11 +131,11 @@ test.beforeEach(async ({ page }) => {
 
 test("failed settlement list has a retry instead of an empty table", async ({ page }) => {
   let recovered = false;
-  await page.route("**/api/billing-settlement-candidates?*", (route) =>
+  await page.route("**/api/settlement-candidates?*", (route) =>
     route.fulfill(recovered ? { json: list } : { status: 403, json: { error: "暂时无法读取结算资料" } }),
   );
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
   const error = page.getByRole("alert").filter({ hasText: "结算列表加载失败：暂时无法读取结算资料" });
   await expect(error).toBeVisible();
   await expect(page.getByText("暂无数据", { exact: true })).toHaveCount(0);
@@ -147,12 +147,12 @@ test("failed settlement list has a retry instead of an empty table", async ({ pa
 
 test("manual selection wins over a slow select-all response", async ({ page }) => {
   let pending: Route | undefined;
-  await page.route("**/api/billing-settlement-candidates?*", async (route) => {
+  await page.route("**/api/settlement-candidates?*", async (route) => {
     if (new URL(route.request().url()).searchParams.get("limit") === "100") pending = route;
     else await route.fulfill({ json: list });
   });
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
   const all = page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true });
   await all.check();
   await expect.poll(() => Boolean(pending)).toBe(true);

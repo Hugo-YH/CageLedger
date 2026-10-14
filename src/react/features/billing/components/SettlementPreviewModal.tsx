@@ -56,7 +56,7 @@ export function SettlementPreviewModal({
     <Modal
       open
       rootClassName="app-modal-root settlement-preview-modal"
-      title={`${selected.pi} · ${selected.month}`}
+      title={`${selected.pi} · ${selected.month} · ${selected.feeType === "technical_service" ? "技术服务费" : "饲养费"}`}
       width={1200}
       footer={null}
       onCancel={onClose}

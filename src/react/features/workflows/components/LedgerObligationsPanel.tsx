@@ -40,6 +40,11 @@ export function ObligationsPanel() {
 
   const columns: TableProps<SettlementObligation>["columns"] = [
     { key: "month", title: title("month", "结算月份"), dataIndex: "month" },
+    {
+      key: "feeType",
+      title: "费用类型",
+      render: (_, row) => (row.feeType === "technical_service" ? "技术服务费" : "饲养费"),
+    },
     { key: "sourcePi", title: title("sourcePi", "费用产生项目负责人"), dataIndex: "sourcePi" },
     {
       key: "iacuc",

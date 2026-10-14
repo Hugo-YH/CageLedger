@@ -19,7 +19,7 @@ function settlementCandidateSearch(params: SettlementCandidateListParams) {
 
 export function fetchSettlementCandidates(params: SettlementCandidateListParams, signal?: AbortSignal) {
   return requestJson<SettlementCandidateListResponse>(
-    `/api/billing-settlement-candidates?${settlementCandidateSearch(params).toString()}`,
+    `/api/settlement-candidates?${settlementCandidateSearch(params).toString()}`,
     { signal },
   );
 }
@@ -63,5 +63,19 @@ export function exportSettlementXlsx(items: Array<{ month: string; pi: string; s
   return requestDownload("/api/billing-settlements/xlsx", {
     method: "POST",
     body: JSON.stringify({ items }),
+  });
+}
+
+export function useSettlementFilterOptions(params: SettlementCandidateListParams, column: string, enabled: boolean) {
+  const filters = params.columnFilters || {};
+  const search = new URLSearchParams({ column, columnFilters: JSON.stringify(filters) });
+  return useQuery({
+    queryKey: [...queryKeys.settlementCandidatesRoot, "filter-options", column, filters],
+    queryFn: ({ signal }) =>
+      requestJson<{ items: Array<{ value: string; label: string; count: number }> }>(
+        `/api/settlement-candidates/filter-options?${search}`,
+        { signal },
+      ),
+    enabled,
   });
 }

@@ -7,6 +7,7 @@ import { ListViewControls, type ListDensity } from "../../../components/ui/ListV
 import { Alert, Button, Empty, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 
+import { settlementCandidateScope } from "../../../../domain/settlementCandidateScope";
 import { buildSettlementNoticeEmail, type SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 import type {
   BillingStatementResponse,
@@ -168,10 +169,9 @@ export function SettlementCandidateList({
     const isCurrent = previewRequest.begin();
     try {
       const response = await generate.mutateAsync({
-        month: candidate.month,
-        pi: candidate.pi,
-        sourceType: source,
+        ...settlementCandidateScope(candidate, source),
         persist,
+        sourceVersions: persist && selected?.id === candidate.id ? result?.sourceVersions : undefined,
       });
       if (!isCurrent()) return false;
       setSelected(candidate);
@@ -192,9 +192,7 @@ export function SettlementCandidateList({
     const isCurrent = previewRequest.begin();
     try {
       const response = await generate.mutateAsync({
-        month: candidate.month,
-        pi: candidate.pi,
-        sourceType: source,
+        ...settlementCandidateScope(candidate, source),
         persist: false,
       });
       if (!isCurrent()) return;
@@ -204,6 +202,8 @@ export function SettlementCandidateList({
       setNoticeEmail({
         candidate,
         email: buildSettlementNoticeEmail({
+          feeType: candidate.feeType,
+          pi: response.statement.pi,
           month: response.statement.month,
           totalAmount: response.statement.totalAmount,
           staffName: user.displayName,
@@ -235,7 +235,7 @@ export function SettlementCandidateList({
     try {
       await pdfExport.exportPdf({
         kind: "billing_statement",
-        items: candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
+        items: candidates.map((candidate) => settlementCandidateScope(candidate, source)),
       });
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "PDF 导出失败", "error");
@@ -250,7 +250,7 @@ export function SettlementCandidateList({
     try {
       showNotice(`正在导出 ${candidates.length > 1 ? `${candidates.length} 份` : ""}Excel…`, "info");
       const filename = await exportSettlementXlsx(
-        candidates.map((candidate) => ({ month: candidate.month, pi: candidate.pi, sourceType: source })),
+        candidates.map((candidate) => settlementCandidateScope(candidate, source)),
       );
       showNotice(`已导出 Excel：${filename}`, "success");
     } catch (error) {
@@ -277,7 +277,9 @@ export function SettlementCandidateList({
     setNotice("");
     const verb = action === "start" ? "发起" : "撤回";
     try {
-      const result = await batch.run(candidates.map((candidate) => ({ candidate, action, source, note })));
+      const result = await batch.run(
+        candidates.map((candidate) => ({ candidate, action, source: candidate.sourceType || source, note })),
+      );
       selection.removeCompleted(new Set(result.completed.map((item) => item.candidate.id)));
       const failures = result.failures.map(({ item, message }) => `${item.candidate.pi}（${message}）`);
       showNotice(

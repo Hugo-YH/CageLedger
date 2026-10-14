@@ -46,7 +46,7 @@ export function SettlementBatchToolbar({
   const empty = disabled || !selectedCount || selectingAll;
   return (
     <CommandBar
-      title="结算管理"
+      title="结算列表"
       filters={filters}
       className="settlement-action-bar app-command-bar-list"
       ariaLabel="结算批量操作"
@@ -55,7 +55,7 @@ export function SettlementBatchToolbar({
       )}
       context={
         <HelpPopover label="结算合表说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-          同一负责人、同一月份下的多个伦理号自动合表。
+          同一负责人、同一月份、同一费用类型下的多个伦理号自动合表。饲养费与技术服务费分别出单。
         </HelpPopover>
       }
       actions={

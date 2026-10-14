@@ -320,6 +320,13 @@ def generate_billing_statement(conn, payload, actor):
 
 
 def generate_billing_statement_by_pi(conn, payload, actor):
+    if payload.get("sourceType") == "pi_merged_technical_service":
+        from server_app.domains.technical_services.settlement import preview
+
+        if payload.get("persist"):
+            raise ValueError("技术服务结算请通过技术服务发起接口提交来源版本")
+        result = preview(conn, actor, payload)
+        return result["statement"], result["lines"], []
     return generate_billing_statement_by_pi_command(conn, payload, actor, billing_generation_ports())
 
 

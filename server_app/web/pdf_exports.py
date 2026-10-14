@@ -152,9 +152,17 @@ def download_billing_statement_pdf(
     )
     try:
         with connect_db() as conn:
-            frozen = frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
-            sheets = [frozen[0]] if frozen else list_quantity_sheets_by_month_pi(conn, payload["month"], payload["pi"])
-            if not sheets:
+            frozen = frozen_statement(conn, payload["month"], payload["pi"], _workflow_source(payload))
+            if payload["sourceType"] == "pi_merged_technical_service":
+                from server_app.domains.technical_services.settlement import preview
+
+                preview(conn, user, payload)
+                sheets = []
+            else:
+                sheets = (
+                    [frozen[0]] if frozen else list_quantity_sheets_by_month_pi(conn, payload["month"], payload["pi"])
+                )
+            if not sheets and payload["sourceType"] != "pi_merged_technical_service":
                 raise ValueError("未找到该 PI 在结算月份内的数量统计表")
             for sheet in sheets:
                 validate_permission(user, sheet)
@@ -377,8 +385,7 @@ def _start_billing_export(
 
     with connect_db() as conn:
         documents = [
-            frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
-            for payload in items
+            frozen_statement(conn, payload["month"], payload["pi"], _workflow_source(payload)) for payload in items
         ]
 
     def render(progress):
@@ -431,9 +438,15 @@ def _read_billing_items(requested, user, connect_db, list_sheets, validate_permi
                     "sourceType": clean_text(item.get("sourceType", "quantity_sheet")) or "quantity_sheet",
                 }
             )
+            if payload["sourceType"] == "pi_merged_technical_service":
+                from server_app.domains.technical_services.settlement import preview
+
+                preview(conn, user, payload)
+                items.append(payload)
+                continue
             if payload["sourceType"] != "quantity_sheet":
                 raise ValueError("当前仅支持数量统计表来源的结算导出")
-            frozen = frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
+            frozen = frozen_statement(conn, payload["month"], payload["pi"], _workflow_source(payload))
             sheets = [frozen[0]] if frozen else list_sheets(conn, payload["month"], payload["pi"])
             if not sheets:
                 raise ValueError("未找到该 PI 在结算月份内的数量统计表")
@@ -484,12 +497,19 @@ def _render_quantity_pdf(sheet):
     return pdf_export_cache.render_cached(quantity_pdf_cache_key(sheet), lambda: render_quantity_sheet_pdf(sheet))
 
 
+def _workflow_source(payload):
+    source = payload["sourceType"]
+    return source if source == "pi_merged_technical_service" else f"pi_merged_{source}"
+
+
 def _render_billing_pdf(payload, *, connect_db, generate_statement, actor, frozen=None):
     frozen = frozen if frozen is not None else _frozen_billing_pdf(payload, connect_db)
     if frozen:
         return pdf_export_cache.render_cached(
             _frozen_pdf_cache_key(frozen), lambda: render_billing_statement_pdf(*frozen)
         )
+    if payload["sourceType"] == "pi_merged_technical_service":
+        return _generate_billing_pdf(payload, connect_db=connect_db, generate_statement=generate_statement, actor=actor)
     key = billing_pdf_cache_key(payload["month"], payload["pi"], payload["sourceType"])
     return pdf_export_cache.render_cached(
         key,
@@ -501,7 +521,7 @@ def _render_billing_pdf(payload, *, connect_db, generate_statement, actor, froze
 
 def _frozen_billing_pdf(payload, connect_db):
     with connect_db() as conn:
-        return frozen_statement(conn, payload["month"], payload["pi"], f"pi_merged_{payload['sourceType']}")
+        return frozen_statement(conn, payload["month"], payload["pi"], _workflow_source(payload))
 
 
 def _frozen_pdf_cache_key(document):

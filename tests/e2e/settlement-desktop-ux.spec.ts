@@ -32,7 +32,7 @@ async function mockCandidates(page: Page) {
     workflowStatus: "statement_sent",
   }));
   let lastQuery = new URLSearchParams();
-  await page.route("**/api/billing-settlement-candidates?*", (route) => {
+  await page.route("**/api/settlement-candidates?*", (route) => {
     const params = new URL(route.request().url()).searchParams;
     lastQuery = params;
     const filters = JSON.parse(params.get("columnFilters") || "{}") as Record<string, string[]>;
@@ -61,8 +61,8 @@ async function mockCandidates(page: Page) {
 
 async function openSettlement(page: Page) {
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {

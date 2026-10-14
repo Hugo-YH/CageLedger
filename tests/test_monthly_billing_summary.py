@@ -84,7 +84,7 @@ class MonthlyBillingSummaryTests(unittest.TestCase):
         )
         workbook = openpyxl.load_workbook(io.BytesIO(build_monthly_summary_xlsx("2026-06", rows)), data_only=False)
         worksheet = workbook.active
-        self.assertEqual(worksheet["A1"].value, "2026年6月动物饲养费汇总")
+        self.assertEqual(worksheet["A1"].value, "2026年6月实验动物费用汇总")
         self.assertEqual(worksheet["D2"].value, "IACUC编号")
         self.assertEqual(worksheet["I3"].value, "=G3-H3")
         self.assertEqual(worksheet["G3"].number_format, "0.00")
@@ -204,8 +204,8 @@ class MonthlyBillingSummaryTests(unittest.TestCase):
         self.assertEqual(worksheet["M3"].value, 12.34)
         self.assertEqual(worksheet["N3"].value, "报销备注")
         self.assertEqual(worksheet["M3"].number_format, "0.00")
-        self.assertEqual({str(item) for item in worksheet.merged_cells.ranges}, {"A1:R1"})
-        self.assertEqual(worksheet.auto_filter.ref, "A2:R3")
+        self.assertEqual({str(item) for item in worksheet.merged_cells.ranges}, {"A1:S1"})
+        self.assertEqual(worksheet.auto_filter.ref, "A2:S3")
 
 
 def sheet(sheet_id, iacuc, room_id, room_name, cages):

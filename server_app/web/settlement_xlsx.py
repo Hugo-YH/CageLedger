@@ -2,7 +2,7 @@
 
 from http import HTTPStatus
 
-from server_app.domains.billing.settlement_xlsx import build_settlement_workbook
+from server_app.domains.billing.settlement_export import build_settlement_workbook
 from server_app.pdf.documents import billing_statement_filename
 from server_app.pdf.packages import build_pdf_zip
 

@@ -698,7 +698,7 @@
 [data-ui="data-table-filter"] .table-filter-options {
   display: grid;
   gap: var(--cl-space-1);
-  max-height: 220px;
+  max-height: min(220px, calc(100dvh - 220px));
   overflow: auto;
   margin: var(--cl-space-2) 0;
   padding-inline-end: 4px;

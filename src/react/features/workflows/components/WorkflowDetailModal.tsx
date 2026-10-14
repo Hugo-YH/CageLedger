@@ -148,7 +148,9 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
       title: <Typography.Text type="secondary">{timeLabel(workflow?.sheetUpdatedAt)}</Typography.Text>,
       content: (
         <>
-          <Typography.Text strong>录入数量统计表</Typography.Text>
+          <Typography.Text strong>
+            {workflow?.sourceType === "pi_merged_technical_service" ? "录入技术服务明细" : "录入数量统计表"}
+          </Typography.Text>
           {personName(workflow?.manager || "")}
           {revised ? (
             <>
@@ -165,7 +167,9 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
       title: <Typography.Text type="secondary">{timeLabel(workflow?.generatedAt)}</Typography.Text>,
       content: (
         <>
-          <Typography.Text strong>生成饲养费汇总表</Typography.Text>
+          <Typography.Text strong>
+            {workflow?.sourceType === "pi_merged_technical_service" ? "生成技术服务结算单" : "生成饲养费汇总表"}
+          </Typography.Text>
           <div>
             <Typography.Text type="secondary">系统</Typography.Text>
           </div>
@@ -324,7 +328,12 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
               rel="noreferrer"
               type="link"
             >
-              {attachment.kind === "settlement" ? "饲养费结算单" : "报销单"} · {attachment.originalName}
+              {attachment.kind === "settlement"
+                ? workflow?.sourceType === "pi_merged_technical_service"
+                  ? "技术服务费结算单"
+                  : "饲养费结算单"
+                : "报销单"}{" "}
+              · {attachment.originalName}
             </Button>
           ))}
         </Flex>

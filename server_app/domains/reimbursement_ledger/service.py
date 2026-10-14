@@ -6,6 +6,7 @@ import shutil
 
 from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
+from server_app.repositories.workflow_sources import source_fee_type
 from server_app.runtime_logging import log_operation
 from server_app.shared import clean_text, new_id, now_iso
 
@@ -590,6 +591,7 @@ def sync_settlement_obligations(conn):
                     "iacuc": statement_iacuc,
                     "payableAmount": payable,
                     "obligationKind": "statement",
+                    "feeType": source_fee_type(statement.get("sourceType")),
                     "status": "open",
                     "createdAt": now,
                     "updatedAt": now,
@@ -641,6 +643,7 @@ def sync_settlement_obligations(conn):
                 "iacuc": statement_iacuc,
                 "payableAmount": delta,
                 "obligationKind": "adjustment",
+                "feeType": source_fee_type(statement.get("sourceType")),
                 "status": "open",
                 "createdAt": now,
                 "updatedAt": now,

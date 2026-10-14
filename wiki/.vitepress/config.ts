@@ -156,6 +156,7 @@ export default defineConfig({
             { text: "动物巡检", link: "/guide/animal-inspection" },
             { text: "数量统计表", link: "/guide/quantity-sheets" },
             { text: "饲养费核算", link: "/guide/billing" },
+            { text: "技术服务费管理", link: "/guide/technical-services" },
             { text: "结算与报销", link: "/guide/settlement-and-reimbursement" },
             { text: "用户操作手册", link: "/guide/user-manual" },
             { text: "常见问题", link: "/guide/faq" },

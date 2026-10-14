@@ -10,6 +10,7 @@ export const pageRoutes = {
   "笼位与房间管理.md": "guide/rooms-and-cages.md",
   "动物巡检.md": "guide/animal-inspection.md",
   "数量统计表.md": "guide/quantity-sheets.md",
+  "技术服务费管理.md": "guide/technical-services.md",
   "饲养费核算.md": "guide/billing.md",
   "结算与报销.md": "guide/settlement-and-reimbursement.md",
   "常见问题.md": "guide/faq.md",

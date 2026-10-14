@@ -44,6 +44,7 @@ from server_app.web.pdf_exports import (
 from server_app.web.ports import app_ports
 from server_app.web.quarantine import handle as handle_quarantine
 from server_app.web.router_registry import API_ROUTER
+from server_app.web.technical_services import handle as handle_technical_services
 
 
 class WriteRoutesMixin:
@@ -51,7 +52,11 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
-        if handle_feedback(self, "POST", path) or handle_quarantine(self, "POST", path):
+        if (
+            handle_technical_services(self, "POST", path)
+            or handle_feedback(self, "POST", path)
+            or handle_quarantine(self, "POST", path)
+        ):
             return
         if routed := API_ROUTER.dispatch("POST", path, self):
             self.send_json(routed.payload, routed.status)
@@ -261,7 +266,11 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
-        if handle_feedback(self, "PUT", path) or handle_quarantine(self, "PUT", path):
+        if (
+            handle_technical_services(self, "PUT", path)
+            or handle_feedback(self, "PUT", path)
+            or handle_quarantine(self, "PUT", path)
+        ):
             return
         if path == "/api/animal-inspection-catalog/draft":
             self.handle_animal_inspection_catalog_draft_save()
@@ -339,7 +348,11 @@ class WriteRoutesMixin:
         if not self.require_safe_origin():
             return
         path = urlparse(self.path).path
-        if handle_feedback(self, "DELETE", path) or handle_quarantine(self, "DELETE", path):
+        if (
+            handle_technical_services(self, "DELETE", path)
+            or handle_feedback(self, "DELETE", path)
+            or handle_quarantine(self, "DELETE", path)
+        ):
             return
         user_id = self.user_route(path)
         if user_id:

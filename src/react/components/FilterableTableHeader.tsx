@@ -147,7 +147,7 @@ export function FilterableColumnTitle({
           content={content}
           open={open}
           placement="bottomLeft"
-          align={{ overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
+          align={{ offset: [0, 0], overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
           trigger="click"
           onOpenChange={setPopoverOpen}
         >

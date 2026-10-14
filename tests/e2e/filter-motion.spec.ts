@@ -19,8 +19,8 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       for (const [group, label, filter] of [
         ["笼卡管理", "待接收批次", "批次号"],
         ["饲养费管理", "已保存数量统计表", "IACUC"],
-        ["饲养费管理", "结算管理", "项目负责人姓名"],
-        ["饲养费管理", "单据跟踪", "状态"],
+        ["结算管理", "结算列表", "项目负责人姓名"],
+        ["结算管理", "单据跟踪", "状态"],
       ]) {
         await openNavigationEntry(page, group, label);
         const trigger = page.getByRole("button", { name: `筛选${filter}`, exact: true });

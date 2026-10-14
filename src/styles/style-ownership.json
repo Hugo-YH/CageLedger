@@ -19,7 +19,8 @@
     "src/styles/features/administration.css",
     "src/styles/features/feedback.css",
     "src/styles/features/project-home.css",
-    "src/styles/features/quarantine.css"
+    "src/styles/features/quarantine.css",
+    "src/styles/features/technical-services.css"
   ],
   "stylesheets": {
     "src/styles/brand-tokens.css": {
@@ -117,6 +118,11 @@
       "status": "complete",
       "scopeRoots": ["[data-feature=\"quarantine\"]"],
       "selectorPrefixes": [".quarantine-"]
+    },
+    "src/styles/features/technical-services.css": {
+      "owner": "technical-services",
+      "status": "complete",
+      "selectorPrefixes": [".technical-service-"]
     }
   },
   "componentFamilies": {

@@ -10,6 +10,7 @@ from server_app.domains.reimbursement.migration import migrate_reimbursement_rec
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.occupancy import occupancy_structured_values, occupancy_with_snapshots
 from server_app.domains.state.persistence import assemble_state, read_applications_by_iacuc
+from server_app.domains.technical_services.repository import ensure_schema as ensure_technical_service_schema
 from server_app.domains.workflow.constants import (
     VERSION_STATUS_ACTIVE,
     VERSION_STATUS_VOIDED,
@@ -72,6 +73,7 @@ def initialize_schema(conn):
             SchemaStep("legacy-schema", initialize_legacy_schema),
             SchemaStep("quarantine", ensure_quarantine_schema),
             SchemaStep("feedback", ensure_feedback_schema),
+            SchemaStep("technical-services", ensure_technical_service_schema),
             SchemaStep("animal-inspection-catalog", ensure_animal_inspection_catalog),
             SchemaStep(
                 "animal-inspection-images",

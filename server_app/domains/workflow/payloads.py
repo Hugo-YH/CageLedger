@@ -1,5 +1,6 @@
 """Billing workflow payload contracts and business keys."""
 
+import hashlib
 import re
 
 from server_app.shared import as_float, clean_text
@@ -32,10 +33,13 @@ def make_statement_document_number(statement, version_no):
     source_code = {
         "quantity_sheet": "QS",
         "pi_merged_quantity_sheet": "PQS",
+        "pi_merged_technical_service": "PTS",
         "pi_merged_cage_map": "PCM",
     }.get(source, "CM")
     month = re.sub(r"\D", "", clean_text(statement.get("month", "")) or "000000")
     iacuc = re.sub(r"[^A-Za-z0-9]", "", clean_text(statement.get("iacuc", "")) or "UNKNOWN").upper()
+    if source == "pi_merged_technical_service":
+        iacuc = hashlib.sha256(clean_text(statement.get("pi", "")).encode()).hexdigest()[:16].upper()
     return f"CL-{source_code}-{month}-{iacuc}-V{int(version_no):02d}"
 
 

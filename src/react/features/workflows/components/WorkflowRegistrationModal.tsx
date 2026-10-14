@@ -111,6 +111,7 @@ function WorkflowRegistrationForm({
     otherProjectOptions: FundingBookReference[];
     unknownFundingBookNos: string[];
   }>({ otherProjectOptions: [], unknownFundingBookNos: [] });
+  const settlementLabel = target.sourceType === "pi_merged_technical_service" ? "技术服务费结算单" : "饲养费结算单";
   const hasPayableAmount = Number(target.totalAmount || 0) > 0;
   const fundingBookOptions = useWorkflowFundingBookOptions(target.id);
   const fundingOptions = fundingBookOptions.data?.items ?? [];
@@ -216,19 +217,19 @@ function WorkflowRegistrationForm({
         rules={[
           {
             validator: (_, value) =>
-              value ? Promise.resolve() : Promise.reject(new Error("请确认已交回饲养费结算单")),
+              value ? Promise.resolve() : Promise.reject(new Error(`请确认已交回${settlementLabel}`)),
           },
         ]}
         valuePropName="checked"
       >
-        <RegistrationSwitch label="饲养费结算单" returnedLabel="已交回" unreturnedLabel="未交回" />
+        <RegistrationSwitch label={settlementLabel} returnedLabel="已交回" unreturnedLabel="未交回" />
       </Form.Item>
       {signedStatementReturned ? (
         <>
-          <Form.Item label="饲养费结算单扫描件">
+          <Form.Item label={`${settlementLabel}扫描件`}>
             {attachmentField("非必填", settlementAttachment, "settlement")}
           </Form.Item>
-          <Form.Item label="饲养费结算单备注" name="signedStatementNote">
+          <Form.Item label={`${settlementLabel}备注`} name="signedStatementNote">
             <Input.TextArea maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
           </Form.Item>
         </>

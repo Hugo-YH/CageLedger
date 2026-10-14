@@ -27,13 +27,17 @@ test("settlement filters remain clickable while the list refreshes", async ({ pa
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
 
   const help = page.getByRole("button", { name: "结算合表说明", exact: true });
   await help.click();
   await expect(
-    page.locator(".ant-popover").getByText("同一负责人、同一月份下的多个伦理号自动合表。", { exact: true }),
+    page
+      .locator(".ant-popover")
+      .getByText("同一负责人、同一月份、同一费用类型下的多个伦理号自动合表。饲养费与技术服务费分别出单。", {
+        exact: true,
+      }),
   ).toBeVisible();
   await help.press("Escape");
   await expect(page.locator(".ant-popover")).toBeHidden();
@@ -52,7 +56,7 @@ test("settlement filters remain clickable while the list refreshes", async ({ pa
   const requestStarted = new Promise<void>((resolve) => {
     requestBlocked = resolve;
   });
-  await page.route("**/api/billing-settlement-candidates?**", async (route) => {
+  await page.route("**/api/settlement-candidates?**", async (route) => {
     requestBlocked?.();
     await refreshBlocked;
     await route.continue();
@@ -109,8 +113,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
   const settlementRegion = page.getByRole("region", { name: "结算管理列表" });
   const settlementGeometry = await settlementRegion.evaluate((element) => {
     const content = element.querySelector<HTMLElement>(".ant-table-content");
@@ -126,6 +130,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   expect(Math.abs(settlementGeometry.regionRight - settlementGeometry.contentRight)).toBeLessThanOrEqual(1);
   expect(settlementGeometry.pageOverflows).toBe(false);
   const row = page.getByRole("row", { name: /E2E 合表负责人/ });
+  await row.getByText("展开", { exact: true }).click();
   await expect(row).toContainText("E2E-SETTLEMENT-001");
   await expect(row).toContainText("E2E-SETTLEMENT-002");
   await expect(row).toContainText("系统管理员");
@@ -188,7 +193,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await expect(confirmDialog).toContainText("2 个项目负责人结算项");
   const batchRefreshes: string[] = [];
   page.on("request", (request) => {
-    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-settlement-candidates")
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/settlement-candidates")
       batchRefreshes.push(request.url());
   });
   await confirmDialog.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
@@ -242,8 +247,8 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
 
   await expect(page.getByRole("row", { name: /E2E 已发起负责人/ })).toContainText("已生成");
   await expect(page.getByRole("row", { name: /E2E 未发起负责人/ })).toContainText("未发起");
@@ -348,8 +353,8 @@ test("项目负责人结算列表可撤回已发起流程退回已生成", async
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
 
   const row = page.getByRole("row", { name: new RegExp(pi) });
   await expect(row).toContainText("已发起");
@@ -404,8 +409,8 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
 
   for (const pi of ["E2E 批量撤回负责人 1", "E2E 批量撤回负责人 2"]) {
     const row = page.getByRole("row", { name: new RegExp(pi) });
@@ -419,7 +424,7 @@ test("项目负责人结算列表支持批量撤回已生成流程", async ({ pa
   await confirmDialog.getByLabel("撤回原因").fill("批量重新核算");
   const batchRefreshes: string[] = [];
   page.on("request", (request) => {
-    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/billing-settlement-candidates")
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/settlement-candidates")
       batchRefreshes.push(request.url());
   });
   await confirmDialog.getByRole("button", { name: "撤回 2 个流程", exact: true }).click();
@@ -466,8 +471,8 @@ test("settlement preview toolbar keeps long IACUC lists inside the toolbar", asy
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
   await page
     .getByRole("row", { name: /E2E 多伦理号负责人/ })
     .getByRole("button", { name: "预览结算单" })
@@ -583,16 +588,16 @@ test("发起结算流程 generates the notification email template", async ({ pa
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
   const noticeRow = page.getByRole("row", { name: /E2E 邮件通知负责人/ });
   await expect(noticeRow).toBeVisible();
   // 重试场景：上一次运行留下的流程已是“已发起”，通过接口清理后回到未发起
   await cleanupWorkflow(page, "E2E 邮件通知负责人");
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
-  await expect(page.getByRole("heading", { name: "结算管理", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /E2E 邮件通知负责人/ })).toContainText("未发起");
   await noticeRow.getByRole("button", { name: "预览结算单" }).click();
   await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({

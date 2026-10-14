@@ -66,12 +66,13 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
     },
     ...(
       [
-        { key: "month", label: "结算月份", width: 120 },
-        { key: "pi", label: "项目负责人姓名", width: 160 },
-        { key: "iacuc", label: "IACUC", width: 300 },
-        { key: "manager", label: "登记人员", width: 150 },
+        { key: "month", label: "结算月份", width: 110 },
+        { key: "feeType", label: "费用类型", width: 110 },
+        { key: "pi", label: "项目负责人姓名", width: 150 },
+        { key: "iacuc", label: "IACUC", width: 140 },
+        { key: "manager", label: "登记人员", width: 110 },
         { key: "workflow", label: "结算状态", width: 110 },
-        { key: "amount", label: "金额", width: 150 },
+        { key: "amount", label: "金额", width: 130 },
       ] as const
     ).map(({ key, label, width }) => ({
       key,
@@ -89,6 +90,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         />
       ),
       render: (_: unknown, candidate: SettlementCandidate) => {
+        if (key === "feeType") return <Tag>{candidate.feeType === "technical_service" ? "技术服务费" : "饲养费"}</Tag>;
         if (key === "iacuc") {
           const text = candidate.iacucs.join("、") || candidate.error || "待检查";
           return (

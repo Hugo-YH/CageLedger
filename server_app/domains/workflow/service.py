@@ -335,7 +335,12 @@ def update_workflow_status(conn, workflow_id, next_status, actor, note, deps, re
             statement.pop("unlockedBy", None)
             registration = registration or {}
             if not registration.get("signedStatementReturned"):
-                raise ValueError("交回登记时请确认已交回饲养费结算单")
+                label = (
+                    "技术服务费结算单"
+                    if statement.get("sourceType") == "pi_merged_technical_service"
+                    else "饲养费结算单"
+                )
+                raise ValueError(f"交回登记时请确认已交回{label}")
             reimbursement_forms = []
             for entry in registration.get("reimbursementForms") or []:
                 form_no = deps.clean_text(entry.get("formNo", ""))

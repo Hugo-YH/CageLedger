@@ -1,5 +1,38 @@
 # CageLedger API 契约
 
+## 技术服务计费
+
+桌面与手机导航统一分为“饲养费管理、技术服务费管理、结算管理”。录入页采用“录入数量统计表／录入技术服务明细”；结算入口统一为“结算列表”。原技术服务结算视图标识兼容渲染共用列表，业务接口保留。
+
+`GET /api/settlement-candidates` 返回共用分页列表；`GET /api/settlement-candidates/filter-options?column=...` 返回列头筛选选项。列支持 `month/pi/iacuc/manager/amount/workflow/feeType`，筛选与排序在两类记录合并后执行、再分页。`feeType=feeding|technical_service`，每条记录另带 `sourceType=quantity_sheet|pi_merged_technical_service`；ID包含费用类型，同月同负责人两类费用不会覆盖。已登记和已归档记录沿用饲养费候选规则，仅在单据跟踪继续处理。技术服务读取沿用管理员／房间管理员授权。
+
+预览、发起、邮件及导出按行内来源分派。技术服务发起仍使用技术服务接口和预览返回的 `sourceVersions`，确认时校验版本；批量发起逐项预览并提交。共用PDF任务及Excel导出接受技术服务来源，按技术服务版式输出单位、数量和金额，已发起单据读取有效账单快照。`POST /api/billing-statements/generate-by-pi` 对技术服务仅支持只读预览，发起需使用技术服务版本校验接口。
+
+`/api/technical-services/*` 要求管理员或房间管理员登录，沿用数量统计表业务录入授权；写入保留来源校验、事务及审计。
+
+| 方法               | 路径                                                                     | 输入与响应                                                 |
+| ------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| GET                | `/api/technical-services/catalog`                                        | `{items}`，21项版本化收费标准                              |
+| GET / POST         | `/api/technical-services/sheets`                                         | 分页筛选 / `{sheet}` → `{item}`                            |
+| GET / PUT / DELETE | `/api/technical-services/sheets/{id}`                                    | 详情 / `{sheet,expectedUpdatedAt}` / `{expectedUpdatedAt}` |
+| GET                | `/api/technical-services/settlement-candidates`                          | 按月按负责人分页，含金额与流程状态                         |
+| GET                | `/api/technical-services/{sheets\|settlement-candidates}/filter-options` | 列头筛选选项 `{items:[{value,label,count}]}`               |
+| POST               | `/api/technical-services/settlements/preview`                            | `{month,pi}` → `{statement,lines,sourceVersions}`          |
+| POST               | `/api/technical-services/settlements`                                    | `{month,pi,sourceVersions}` → 有效账单与共用workflow       |
+| POST               | `/api/technical-services/settlements/pdf`                                | `{month,pi}` → 技术服务PDF，已发起时使用账单快照           |
+
+明细固定为月份、IACUC、设施、服务项目及院内／院外类别组合，相同组合返回409并提示编辑已有记录。IACUC必须匹配现有数据，项目负责人和项目来源由服务端校验。服务数量和金额不使用笼位减免算法。
+
+列表支持 `columnFilters` JSON对象（列名对应多选字符串数组）、`sortKey`、`sortDir=asc|desc`、`limit`及`offset`。明细列为 `month/iacuc/pi/facility/serviceName/serviceDayCount/quantity/amount/status`；结算列为 `month/pi/iacuc/amount/workflow`。筛选选项传 `column`，统计全部匹配记录，并排除本列当前筛选、保留其他列筛选；筛选在分页前执行。结算伦理号按任一选中伦理匹配整张负责人结算单，金额筛选与排序沿用有效账单快照，未发起时按完整负责人来源汇总。旧 `month/keyword` 参数仍可用；未知字段及无效筛选返回400。
+
+日期必须属于月份且不可重复。数量须为有限非负数；整数单位拒绝小数，小时类由用户填写已确认计费数量，正值至少1，不自动取整或按日截为12小时。零数量不计服务日。每张表1至31行。
+
+创建使用稳定草稿ID；同一账号同ID同输入重试复用记录，不重复审计。编辑和删除必须提供正确的`expectedUpdatedAt`，缺失或过期返回409。删除保留去重标记，旧创建请求不能恢复记录。
+
+单价与项目信息保存快照，普通编辑保留原价格，更换服务项目或类别重新匹配目录。发起前完整核对`sourceVersions`，变化返回409。来源`pi_merged_technical_service`按月按负责人使用独立业务键，编号前缀`CL-PTS`，复用既有流程状态、经手权限、账单快照及来源保护。
+
+共用流程列表支持`sourceType=pi_merged_technical_service`与`sourceType=feeding`筛选；结算应收返回`feeType=technical_service|feeding`。旧记录默认饲养费。共用月度汇总保持原饲养费列语义，新增技术服务费列，零值按0.00显示，支持技术服务独有月份。
+
 ## 帮助与反馈
 
 `/api/feedback` 全部要求登录。所有登录角色可分页查看、创建反馈、追加补充、上传本人原始反馈或本人补充的截图、设置本人遇到状态。`integration`、`retry` 和历史导入仅管理员可用。原始反馈及补充没有修改或删除接口，修正追加说明；`version` 是只读版本，追加写入通过事务和唯一请求标识并发保护，不覆盖原文。
@@ -160,7 +193,7 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 | `POST`   | `/api/reimbursement-records/import-monthly`       | Excel 文件                                                     | 导入摘要                                                                                                            |
 | `POST`   | `/api/reimbursement-records/import-arrears`       | Excel 文件                                                     | 导入摘要                                                                                                            |
 
-结算候选列表、流程列表和流程详情返回当前登录账号的 `canWithdraw`；能力字段在共享缓存之后投影，不写入流程或共享缓存。未归档单据允许实际经手人填写 `note` 后撤回：已登记 → 已发起、已发起 → 已生成；已生成可经 `DELETE` 撤销。经手人由各历史版本的生成、修订、发起、交回登记和报销单补录事件的账号 ID，以及来源数量统计表创建、修改和转移入账审计的账号 ID 判定；兼容已有 `sentBy`、`registeredBy` 和 `reimbursementRecordedBy`。来源优先使用版本保存的 `sourceIds/sourceId`，旧版本缺失时严格匹配冻结的月份、PI 和 IACUC 范围；不能按登记人员姓名推断。查询批量处理，审计查询使用实体／账号联合索引；无有效账号证据则拒绝。接口在同一写事务中重新校验身份及当前状态。撤回交回登记保留原发起人，撤回原因写入事件和审计，撤销原因写入删除审计；候选、流程、台账及 PDF 缓存按现有范围失效。
+结算候选列表、流程列表和流程详情返回当前登录账号的 `canWithdraw`；能力字段在共享缓存之后投影，不写入流程或共享缓存。未归档单据允许实际经手人填写 `note` 后撤回：已登记 → 已发起、已发起 → 已生成；已生成可经 `DELETE` 撤销。经手人由各历史版本的生成、修订、发起、交回登记和报销单补录事件的账号 ID，以及来源数量统计表创建、修改和转移入账审计的账号 ID 判定；兼容已有 `sentBy`、`registeredBy` 和 `reimbursementRecordedBy`。来源优先使用版本保存的 `sourceIds/sourceId`，旧版本缺失时严格匹配账单快照中保存的月份、PI 和 IACUC 范围；不能按登记人员姓名推断。查询批量处理，审计查询使用实体／账号联合索引；无有效账号证据则拒绝。接口在同一写事务中重新校验身份及当前状态。撤回交回登记保留原发起人，撤回原因写入事件和审计，撤销原因写入删除审计；候选、流程、台账及 PDF 缓存按现有范围失效。
 
 交回登记（`advance`、已发起 → 已登记）允许系统管理员和房间管理员操作，不限制发起人或授权房间。登记所需字段、报销金额汇总、台账同步、审计及缓存失效保持原规则。内部状态值兼容旧库：`statement_archived` 为已登记且未归档，`statement_locked` 为已锁定且已归档。页面操作称为锁定／解锁，归档状态称为已归档／未归档。锁定和解锁继续要求 `billingLockAllowed`；锁定后必须先解锁恢复未归档才能撤回。已归档响应额外返回 `unlockStatus`，页面和状态转换服务共用恢复规则：优先保存的锁定前状态，旧记录兼容交回标记，历史缺失标记时保留旧默认已登记阶段。该字段只在响应投影中生成，不写入共享缓存或旧记录。已登记／已归档补录报销单沿用原授权，补录不改变归档状态。
 
@@ -190,7 +223,7 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 
 IACUC 汇总表导入仅更新可同步的业务记录：当前结算版本已发起、已登记或已归档（包括旧库已交回、已提交财务阶段）时，其关联数量统计表不被导入覆盖（包括项目字段、负责人及更新时间）。优先按版本中的 `sourceIds/sourceId` 确定关联；旧版本缺少来源 ID 时按月份、负责人及已有伦理范围兼容匹配。未发起或已撤回到已生成状态的记录沿用原同步规则。
 
-已发起结算项的预览、打印及 PDF/Excel 导出读取当前有效版本的结算快照和完整逐日明细，不随项目主档、有效期或减免配置变化重算。PDF 缓存按结算版本隔离，异步任务使用入队时取得的快照；版本缺失时明确报错，不以实时数据替代。撤回后重新生成或显式修订才采用新数据；导入不会自动修订或回写历史流程。本规则不自动恢复修复前已被改动的源表。
+已发起结算项的预览、打印及 PDF/Excel 导出读取当前有效版本的账单快照和完整逐日明细，不随项目主档、有效期或减免配置变化重算。PDF 缓存按结算版本隔离，异步任务使用入队时取得的账单快照；版本缺失时明确报错，不以实时数据替代。撤回后重新生成或显式修订才采用新数据；导入不会自动修订或回写历史流程。本规则不自动恢复修复前已被改动的源表。
 
 | 方法             | 路径                                               | 说明                                                       |
 | ---------------- | -------------------------------------------------- | ---------------------------------------------------------- |

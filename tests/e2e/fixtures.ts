@@ -92,10 +92,12 @@ export async function selectAntOptionByKeyboard(page: Page, combobox: Locator, d
 }
 
 export async function openWorkflowCenter(page: Page) {
-  await openNavigationEntry(page, "饲养费管理", "单据跟踪");
+  await openNavigationEntry(page, "结算管理", "单据跟踪");
 }
 
 export async function openBillingNavigation(page: Page) {
+  if (!(await page.evaluate(() => window.matchMedia("(max-width: 767px)").matches)))
+    await openNavigationGroup(page, "结算管理", "");
   return openNavigationGroup(page, "饲养费管理", "#nav-billing");
 }
 

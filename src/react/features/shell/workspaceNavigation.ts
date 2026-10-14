@@ -25,6 +25,9 @@ export function isWorkspaceView(value: string): value is WorkspaceView {
     "animal-inspection-findings",
     "animal-inspection-records",
     "animal-inspection-standards",
+    "technical-service-entry",
+    "technical-service-saved",
+    "technical-service-settlement",
     "billing-cage-map",
     "billing-quantity-entry",
     "billing-quantity-saved",
@@ -40,9 +43,8 @@ export function isWorkspaceView(value: string): value is WorkspaceView {
   ].includes(value);
 }
 
-export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSidebarItem[] {
-  const items: BillingSidebarItem[] = [
-    { section: "数量统计表" },
+export function billingSidebarItems(): BillingSidebarItem[] {
+  return [
     {
       view: "billing-quantity-entry",
       label: "录入数量统计表",
@@ -57,10 +59,14 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
       icon: "book",
       dataUi: "nav-billing-quantity-saved",
     },
-    { section: "结算管理" },
+  ];
+}
+
+export function settlementSidebarItems(canExportMonthlySummary: boolean): BillingSidebarItem[] {
+  const items: BillingSidebarItem[] = [
     {
       view: "billing-settlement",
-      label: "结算管理",
+      label: "结算列表",
       description: "自动合并负责人名下伦理并出单",
       icon: "calculator",
       dataUi: "nav-billing-settlement",
@@ -83,4 +89,21 @@ export function billingSidebarItems(canExportMonthlySummary: boolean): BillingSi
     });
   }
   return items;
+}
+
+export function technicalServiceSidebarItems(): BillingSidebarItem[] {
+  return [
+    {
+      view: "technical-service-entry",
+      label: "录入技术服务明细",
+      icon: "calculator",
+      dataUi: "nav-technical-service-entry",
+    },
+    {
+      view: "technical-service-saved",
+      label: "已保存技术服务明细",
+      icon: "book",
+      dataUi: "nav-technical-service-saved",
+    },
+  ];
 }

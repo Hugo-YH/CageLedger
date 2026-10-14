@@ -52,9 +52,14 @@ def list_workflow_handlers(conn, workflow_ids, actor_id):
         ids,
     ).fetchall()
     sources = {}
+    technical_sources = {}
     legacy = {}
     for row in versions:
         statement = json.loads(row["payload"]).get("statement") or {}
+        if statement.get("sourceType") == "pi_merged_technical_service":
+            for source_id in statement.get("sourceIds", []):
+                technical_sources.setdefault(source_id, set()).add(row["workflow_id"])
+            continue
         if statement.get("sourceType") not in ("quantity_sheet", "pi_merged_quantity_sheet"):
             continue
         source_ids = statement.get("sourceIds")
@@ -95,4 +100,13 @@ def list_workflow_handlers(conn, workflow_ids, actor_id):
             ).fetchall()
             for audit in audits:
                 handled.update(sources[audit["entity_id"]])
+    for identity, workflows in technical_sources.items():
+        audit = conn.execute(
+            """SELECT 1 FROM audit_events WHERE entity_type='technical_service_sheet'
+            AND entity_id=? AND actor_user_id=? AND action IN ('technical_service.created','technical_service.updated')
+            LIMIT 1""",
+            (identity, actor_id),
+        ).fetchone()
+        if audit:
+            handled.update(workflows)
     return statuses, handled

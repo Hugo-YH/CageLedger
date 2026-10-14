@@ -114,11 +114,38 @@ export function useDeleteQuantitySheet() {
 export interface GenerateBillingStatementPayload {
   pi: string;
   month: string;
-  sourceType: "quantity_sheet" | "cage_map";
+  sourceType: "quantity_sheet" | "cage_map" | "pi_merged_technical_service";
+  sourceVersions?: Record<string, string>;
   persist?: boolean;
 }
 
-export function generateBillingStatement({ pi, month, sourceType, persist = false }: GenerateBillingStatementPayload) {
+export async function generateBillingStatement({
+  pi,
+  month,
+  sourceType,
+  persist = false,
+  sourceVersions,
+}: GenerateBillingStatementPayload) {
+  if (sourceType === "pi_merged_technical_service") {
+    const body = { pi, month };
+    if (!persist)
+      return requestJson<BillingStatementResponse>("/api/technical-services/settlements/preview", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    const versions =
+      sourceVersions ??
+      (
+        await requestJson<BillingStatementResponse>("/api/technical-services/settlements/preview", {
+          method: "POST",
+          body: JSON.stringify(body),
+        })
+      ).sourceVersions;
+    return requestJson<BillingStatementResponse>("/api/technical-services/settlements", {
+      method: "POST",
+      body: JSON.stringify({ ...body, sourceVersions: versions }),
+    });
+  }
   return requestJson<BillingStatementResponse>("/api/billing-statements/generate-by-pi", {
     method: "POST",
     body: JSON.stringify({ pi, month, sourceType, status: "draft", persist, initiate: persist }),
@@ -131,10 +158,7 @@ export function useGenerateBillingStatement() {
     mutationFn: generateBillingStatement,
     onSuccess: (_data, variables) => {
       if (!variables.persist) return;
-      return Promise.all([
-        invalidateWorkflowQueries(queryClient),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot }),
-      ]);
+      return invalidateWorkflowQueries(queryClient);
     },
   });
 }

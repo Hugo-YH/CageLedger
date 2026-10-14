@@ -83,7 +83,7 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
 
   await page.reload();
   await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算管理/ }).click();
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
   const ownRow = page.getByRole("row").filter({ hasText: ownPi });
   const foreignRow = page.getByRole("row").filter({ hasText: foreignPi });
   await foreignRow.getByRole("checkbox").check();

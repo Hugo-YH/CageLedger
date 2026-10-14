@@ -55,6 +55,7 @@ describe("settlement batch", () => {
       queryKeys.reimbursementRoot,
       queryKeys.settlementCandidatesRoot,
       queryKeys.workflowsRoot,
+      ["technical-services"],
       queryKeys.reimbursementLedgerRoot,
     ]);
   });
@@ -92,7 +93,7 @@ describe("settlement batch", () => {
       method: "POST",
       body: JSON.stringify({ workflowId: "w2", toStatus: "statement_generated", note: "收件人信息有误，需要重新发起" }),
     });
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
   });
 
   it("continues after a server failure without retrying the write", async () => {
@@ -106,7 +107,7 @@ describe("settlement batch", () => {
       });
     });
     expect(requestJson).toHaveBeenCalledTimes(2);
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
   });
 
   it("does not invalidate on preview but refreshes workflow data when a single settlement starts", async () => {
@@ -120,6 +121,46 @@ describe("settlement batch", () => {
     await act(async () => {
       await result.current.mutateAsync({ ...payload, persist: true });
     });
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
+  });
+  it("routes mixed fees separately and submits confirmed service versions", async () => {
+    const { wrapper, invalidate } = setup();
+    vi.mocked(requestJson)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ sourceVersions: { "service-1": "v1" } })
+      .mockResolvedValueOnce({});
+    const { result } = renderHook(useSettlementBatch, { wrapper });
+    const mixed: SettlementBatchItem[] = [items[0], { ...items[1], source: "pi_merged_technical_service" }];
+    await act(async () => {
+      expect((await result.current.run(mixed)).completed).toEqual(mixed);
+    });
+    expect(requestJson).toHaveBeenNthCalledWith(2, "/api/technical-services/settlements/preview", {
+      method: "POST",
+      body: JSON.stringify({ pi: "b", month: "2026-08" }),
+    });
+    expect(requestJson).toHaveBeenNthCalledWith(3, "/api/technical-services/settlements", {
+      method: "POST",
+      body: JSON.stringify({ pi: "b", month: "2026-08", sourceVersions: { "service-1": "v1" } }),
+    });
+    expect(invalidate).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not replace reviewed service versions when confirmation conflicts", async () => {
+    const { wrapper, invalidate } = setup();
+    vi.mocked(requestJson).mockRejectedValueOnce(new Error("来源版本变化"));
+    const { result } = renderHook(useGenerateBillingStatement, { wrapper });
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          pi: "b",
+          month: "2026-08",
+          sourceType: "pi_merged_technical_service",
+          persist: true,
+          sourceVersions: { "service-1": "reviewed-v1" },
+        }),
+      ).rejects.toThrow("来源版本变化");
+    });
+    expect(requestJson).toHaveBeenCalledTimes(1);
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

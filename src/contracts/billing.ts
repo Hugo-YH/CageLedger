@@ -25,8 +25,21 @@ export interface BillingStatement {
   owner: string;
   funding: string;
   roomName?: string;
-  sourceType: "quantity_sheet" | "cage_map" | "pi_merged_quantity_sheet" | "pi_merged_cage_map";
+  sourceType:
+    "quantity_sheet" | "cage_map" | "pi_merged_quantity_sheet" | "pi_merged_cage_map" | "pi_merged_technical_service";
   sourceIds?: string[];
+  serviceDayCount?: number;
+  workflowStatus?: string;
+  technicalServiceRows?: Array<{
+    date: string;
+    iacuc: string;
+    facility: string;
+    serviceName: string;
+    quantity: number;
+    unit: string;
+    unitPrice: number;
+    amount: number;
+  }>;
   billingUnit?: BillingUnit | "mixed";
   freeCageAllowance?: number;
   totalTier2CageDays?: number;
@@ -44,9 +57,12 @@ export interface BillingStatementResponse {
   statement: BillingStatement;
   lines: BillingStatementLine[];
   workflow?: Record<string, unknown>;
+  sourceVersions?: Record<string, string>;
 }
 
 export interface SettlementCandidate {
+  feeType?: "feeding" | "technical_service";
+  sourceType?: "quantity_sheet" | "pi_merged_technical_service";
   id: string;
   month: string;
   pi: string;
@@ -63,7 +79,7 @@ export interface SettlementCandidate {
 export interface SettlementCandidateListParams {
   limit: number;
   offset: number;
-  sortKey?: "month" | "pi" | "iacuc" | "manager" | "amount" | "workflow";
+  sortKey?: "month" | "pi" | "iacuc" | "manager" | "amount" | "workflow" | "feeType";
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
 }
@@ -139,6 +155,7 @@ export interface SettlementObligation {
   outstandingAmount: number;
   claimCount: number;
   obligationKind: "statement" | "adjustment";
+  feeType?: "feeding" | "technical_service";
   status: "open" | "settled";
   createdAt: string;
   updatedAt: string;

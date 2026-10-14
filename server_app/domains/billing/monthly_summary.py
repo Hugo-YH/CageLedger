@@ -57,6 +57,16 @@ def build_pi_reimbursement_context(workflows):
             "reimbursementAmount": 0.0,
             "notes": "",
         }
+    forms = list(
+        {
+            (
+                clean_text(entry.get("formNo", "")),
+                clean_text(entry.get("fundingBookNo", "")),
+                entry.get("amount", 0),
+            ): entry
+            for entry in forms
+        }.values()
+    )
     fund_book_nos = [
         clean_text(entry.get("fundingBookNo", "")) for entry in forms if clean_text(entry.get("fundingBookNo", ""))
     ]
@@ -77,6 +87,8 @@ def build_monthly_summary_rows(
     applications_by_iacuc,
     principal_type_by_pi,
     reimbursement_by_pi,
+    *,
+    frozen_lines_by_pi=None,
 ):
     """Build monthly export rows from the same daily breakdown used by PI settlement."""
     if not MONTH_PATTERN.fullmatch(str(month or "")):
@@ -123,7 +135,9 @@ def build_monthly_summary_rows(
 
     for pi_name, pi_sheets in sheets_by_pi.items():
         free_cages = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
-        lines = quantity_sheet_statement_lines(pi_sheets, free_cages, rooms, applications_by_iacuc)
+        lines = (frozen_lines_by_pi or {}).get(pi_name)
+        if lines is None:
+            lines = quantity_sheet_statement_lines(pi_sheets, free_cages, rooms, applications_by_iacuc)
         for line in lines:
             for item in line.get("iacucBreakdown", []):
                 iacuc = normalize_iacuc_number(item.get("iacuc", ""))
@@ -178,8 +192,8 @@ def build_monthly_summary_xlsx(month, rows):
     worksheet = workbook.active
     worksheet.title = "Sheet1"
     worksheet.sheet_view.showGridLines = False
-    worksheet.merge_cells("A1:R1")
-    worksheet["A1"] = f"{year}年{int(month_number)}月动物饲养费汇总"
+    worksheet.merge_cells("A1:S1")
+    worksheet["A1"] = f"{year}年{int(month_number)}月实验动物费用汇总"
     worksheet["A1"].font = Font(name="Microsoft YaHei", size=14, bold=True)
     worksheet["A1"].alignment = Alignment(horizontal="center", vertical="center")
     worksheet.row_dimensions[1].height = 28
@@ -203,6 +217,7 @@ def build_monthly_summary_xlsx(month, rows):
         "实验结束时间",
         "备注",
         "房间号",
+        "技术服务费（元）",
     ]
     header_fill = PatternFill("solid", fgColor="D9EAD3")
     thin = Side(style="thin", color="000000")
@@ -215,7 +230,7 @@ def build_monthly_summary_xlsx(month, rows):
         cell.border = border
     worksheet.row_dimensions[2].height = 36
 
-    widths = [9, 13, 9, 13, 33.5, 16.25, 17, 17, 15, 10, 18.5, 19.25, 15, 20, 13.25, 16, 24, 14]
+    widths = [9, 13, 9, 13, 33.5, 16.25, 17, 17, 15, 10, 18.5, 19.25, 15, 20, 13.25, 16, 24, 14, 19]
     for index, width in enumerate(widths, start=1):
         worksheet.column_dimensions[_excel_column(index)].width = width
 
@@ -240,18 +255,19 @@ def build_monthly_summary_xlsx(month, rows):
             row["projectEndDate"],
             row["notes"],
             row["roomNames"],
+            row.get("technicalServiceAmount", 0),
         ]
         for column, value in enumerate(values, start=1):
             cell = worksheet.cell(excel_row, column, value)
             cell.font = Font(name="Microsoft YaHei", size=10)
             cell.border = border
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=column in (5, 6, 14, 17, 18))
-            if column in (7, 8, 9, 13):
+            if column in (7, 8, 9, 13, 19):
                 cell.number_format = "0.00"
         worksheet.row_dimensions[excel_row].height = 24
 
     worksheet.freeze_panes = "A3"
-    worksheet.auto_filter.ref = f"A2:R{max(2, len(rows) + 2)}"
+    worksheet.auto_filter.ref = f"A2:S{max(2, len(rows) + 2)}"
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
     output = io.BytesIO()
@@ -261,7 +277,7 @@ def build_monthly_summary_xlsx(month, rows):
 
 def monthly_summary_filename(month):
     year, month_number = month.split("-")
-    return f"{year}年{int(month_number)}月动物饲养费汇总.xlsx"
+    return f"{year}年{int(month_number)}月实验动物费用汇总.xlsx"
 
 
 def _month_days(month):

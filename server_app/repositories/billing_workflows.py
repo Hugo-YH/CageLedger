@@ -1,6 +1,7 @@
 import json
 
 from server_app.cache import cache_get, cache_key, cache_set
+from server_app.repositories.workflow_sources import append_workflow_source_filter
 
 from .payload import dump_json
 
@@ -139,9 +140,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         else:
             # 核销工作台只展示已发起之后的阶段，已生成在按项目负责人结算处理。
             clauses.append("workflow_status <> 'statement_generated'")
-    if clean_text(filters.get("sourceType", "")):
-        clauses.append("source_type = ?")
-        params.append(filters["sourceType"])
+    append_workflow_source_filter(clauses, params, clean_text(filters.get("sourceType", "")))
     if clean_text(filters.get("iacuc", "")):
         clauses.append("iacuc = ?")
         params.append(filters["iacuc"])

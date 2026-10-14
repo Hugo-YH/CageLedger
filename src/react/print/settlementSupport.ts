@@ -23,7 +23,7 @@ export function settlementStatementDocumentTitle(result: BillingStatementRespons
   const pi = String(result.statement.pi || "未命名课题组").trim();
   const month = String(result.statement.month || "").trim();
   const monthLabel = month ? `${month.slice(0, 4)}年${month.slice(5, 7)}月` : "";
-  return `${pi}课题组实验动物饲养费核算汇总表${monthLabel ? ` ${monthLabel}` : ""}`;
+  return `${pi}课题组${result.statement.sourceType === "pi_merged_technical_service" ? "技术服务费结算单" : "实验动物饲养费核算汇总表"}${monthLabel ? ` ${monthLabel}` : ""}`;
 }
 
 export function numberText(value: unknown) {

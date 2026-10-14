@@ -34,6 +34,7 @@ def allocation_row(conn, allocation_id):
 
 def obligation_payload(conn, row):
     payload = load(row["payload"])
+    payload.setdefault("feeType", "feeding")
     payload.update(
         {
             "id": row["id"],

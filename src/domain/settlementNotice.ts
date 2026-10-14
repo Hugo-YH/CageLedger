@@ -1,4 +1,7 @@
+import { technicalServiceNotice } from "./technicalServiceNotice";
 export interface SettlementNoticeInput {
+  feeType?: "feeding" | "technical_service";
+  pi?: string;
   /** 结算月份，格式 YYYY-MM。 */
   month: string;
   /** 当月应交总额。 */
@@ -33,6 +36,8 @@ function formatAmount(value: number | null) {
  * 生成"实验动物饲养费结算通知"邮件模版，随发起结算流程一并提供。
  */
 export function buildSettlementNoticeEmail(input: SettlementNoticeInput): SettlementNoticeEmail {
+  if (input.feeType === "technical_service")
+    return technicalServiceNotice(input.month, input.pi || "", Number(input.totalAmount || 0));
   const [year, monthNumber] = String(input.month || "")
     .split("-")
     .map(Number);

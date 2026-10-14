@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { SettlementCandidateListParams } from "../../../api/contracts";
-import { useColumnFilterOptions } from "../../../api/filterOptions";
+import { useSettlementFilterOptions } from "../../../api/billing";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 
 export function SettlementColumnTitle({
@@ -20,11 +20,13 @@ export function SettlementColumnTitle({
   onFilter: (values: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const options = useColumnFilterOptions("settlement-candidates", column, params.columnFilters, open);
+  const options = useSettlementFilterOptions(params, column, open);
   return (
     <FilterableColumnTitle
       label={label}
       loading={options.isFetching}
+      error={options.isError ? "无法读取筛选选项" : undefined}
+      onRetry={() => void options.refetch()}
       options={options.data?.items || []}
       values={values}
       onFilter={onFilter}

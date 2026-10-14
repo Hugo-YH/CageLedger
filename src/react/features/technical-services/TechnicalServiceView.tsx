@@ -1,0 +1,69 @@
+import { useMemo } from "react";
+import { AuditOutlined, FileExcelOutlined } from "@ant-design/icons";
+import { Button, ConfigProvider, Space } from "antd";
+
+import { createTheme } from "../../../theme/visual-system.mjs";
+import type { WorkspaceView } from "../../state/ui";
+import { useUiState } from "../../state/ui";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { CommandBar } from "../../components/ui";
+import { SavedServices } from "./SavedServices";
+import { ServiceEditor } from "./ServiceEditor";
+
+export function TechnicalServiceView({
+  mode,
+  navigate,
+  canExport,
+}: {
+  mode: "entry" | "saved";
+  navigate: (view: WorkspaceView) => void;
+  canExport: boolean;
+}) {
+  const touch = useMediaQuery("(max-width: 767px), (max-height: 480px) and (orientation: landscape)");
+  const ui = useUiState();
+  const dark = useMediaQuery("(prefers-color-scheme: dark)");
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const themeMode = ui.theme === "system" ? (dark ? "dark" : "light") : ui.theme;
+  const serviceTheme = useMemo(
+    () => createTheme(themeMode, { mobile: touch, motion: !reducedMotion }),
+    [themeMode, touch, reducedMotion],
+  );
+  const title = mode === "entry" ? "录入技术服务明细" : "已保存技术服务明细";
+  const actions = (
+    <Space wrap>
+      <Button icon={<AuditOutlined aria-hidden />} onClick={() => navigate("workflow-center")}>
+        单据跟踪
+      </Button>
+      {canExport ? (
+        <Button icon={<FileExcelOutlined aria-hidden />} onClick={() => navigate("billing-monthly-summary")}>
+          汇总导出
+        </Button>
+      ) : null}
+    </Space>
+  );
+  return (
+    <ConfigProvider theme={serviceTheme}>
+      <section
+        className="workspace-view technical-service-workspace"
+        data-feature="technical-services"
+        aria-label={title}
+      >
+        <div className="workspace-body technical-service-layout">
+          {mode === "entry" ? (
+            <ServiceEditor toolbarActions={actions} />
+          ) : (
+            <>
+              <CommandBar
+                title={title}
+                description="技术服务费独立计费，与饲养费共用单据跟踪及汇总导出。"
+                ariaLabel={`${title}操作`}
+                actions={actions}
+              />
+              <SavedServices />
+            </>
+          )}
+        </div>
+      </section>
+    </ConfigProvider>
+  );
+}

@@ -1,0 +1,62 @@
+.technical-service-layout,
+.technical-service-editor,
+.technical-service-form-panel,
+.technical-service-details {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.technical-service-form-panel {
+  gap: var(--space-6);
+}
+
+.technical-service-field-cluster {
+  min-width: 0;
+}
+
+.technical-service-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-4);
+  max-width: var(--cl-form-max-width);
+  min-width: 0;
+}
+
+.technical-service-section-title.ant-typography {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+}
+
+.technical-service-readonly.ant-input {
+  background: var(--surface-soft);
+}
+
+.technical-service-table-region {
+  min-width: 0;
+}
+
+.technical-service-row-actions .ant-btn {
+  width: 64px;
+}
+
+.technical-service-list-panel .pager {
+  margin-top: var(--space-4);
+}
+
+.technical-service-preview {
+  width: 100%;
+  height: 720px;
+  border: 0;
+  margin-top: var(--space-4);
+}
+
+.technical-service-mail {
+  width: 100%;
+}
+
+@media (width <= 760px) {
+  .technical-service-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

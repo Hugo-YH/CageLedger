@@ -93,6 +93,7 @@ export interface WorkflowFundingBookOptionsResponse {
 }
 
 export interface WorkflowListParams {
+  sourceType?: string;
   limit: number;
   offset: number;
   status?: string;
@@ -188,6 +189,8 @@ export async function invalidateWorkflowQueries(client: QueryClient) {
     client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
     client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot }),
     client.invalidateQueries({ queryKey: queryKeys.workflowsRoot }),
+    client.invalidateQueries({ queryKey: ["technical-services"] }),
+    client.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot }),
   ]);
 }
 
@@ -226,6 +229,7 @@ export function useWorkflowFundingBookOptions(workflowId: string) {
 
 function billingWorkflowSearch(params: WorkflowListParams) {
   const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
+  if (params.sourceType) query.set("sourceType", params.sourceType);
   if (params.status) query.set("status", params.status);
   if (params.month) query.set("month", params.month);
   if (params.sortKey) query.set("sortKey", params.sortKey);

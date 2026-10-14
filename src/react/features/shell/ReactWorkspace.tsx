@@ -18,6 +18,7 @@ import {
   ReloadOutlined,
   SettingOutlined,
   ShopOutlined,
+  TableOutlined,
   TagsOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
@@ -32,8 +33,14 @@ import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
 import { APP_VERSION } from "../../version";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import { WorkspaceErrorBoundary, WorkspaceLoading } from "./WorkspaceErrorBoundary";
-import { billingSidebarItems, isWorkspaceView } from "./workspaceNavigation";
+import {
+  billingSidebarItems,
+  technicalServiceSidebarItems,
+  settlementSidebarItems,
+  isWorkspaceView,
+} from "./workspaceNavigation";
 import { setDiagnosticPage } from "../../diagnostics/collector";
+import { SyringeOutlined } from "../../components/ui/SyringeOutlined";
 
 const QuarantineView = lazy(() =>
   import("../quarantine/QuarantineView").then((module) => ({ default: module.QuarantineView })),
@@ -51,6 +58,9 @@ const ReleaseAnnouncementModal = lazy(() =>
 );
 const AnimalManagementView = lazy(() =>
   import("../animal-management/AnimalManagementView").then((module) => ({ default: module.AnimalManagementView })),
+);
+const TechnicalServiceView = lazy(() =>
+  import("../technical-services/TechnicalServiceView").then((module) => ({ default: module.TechnicalServiceView })),
 );
 const BillingView = lazy(() => import("../billing/BillingView").then((module) => ({ default: module.BillingView })));
 const WorkflowCenterView = lazy(() =>
@@ -198,12 +208,28 @@ function Workspace({ user }: { user: SessionUser }) {
     },
     {
       key: "billing",
-      icon: <CalculatorOutlined />,
+      icon: <TableOutlined />,
       label: "饲养费管理",
-      children: billingSidebarItems(user.role === "admin").map((entry) =>
+      children: billingSidebarItems().map((entry) =>
         entry.section
           ? { type: "group" as const, key: `billing-section-${entry.section}`, label: entry.section }
           : item(entry.view!, entry.label!, iconFor[entry.icon!], entry.dataUi),
+      ),
+    },
+    {
+      key: "technical-services",
+      icon: <SyringeOutlined />,
+      label: "技术服务费管理",
+      children: technicalServiceSidebarItems().map((entry) =>
+        item(entry.view!, entry.label!, iconFor[entry.icon!], entry.dataUi),
+      ),
+    },
+    {
+      key: "settlement",
+      icon: <CalculatorOutlined />,
+      label: "结算管理",
+      children: settlementSidebarItems(user.role === "admin").map((entry) =>
+        item(entry.view!, entry.label!, iconFor[entry.icon!], entry.dataUi),
       ),
     },
     item("feedback", "帮助与反馈", <MessageOutlined />),
@@ -350,6 +376,11 @@ function renderActiveView(
     return <AnimalManagementView mode="records" user={user} navigate={navigate} />;
   if (view === "animal-inspection-standards")
     return <AnimalManagementView mode="standards" user={user} navigate={navigate} />;
+  if (view === "technical-service-entry")
+    return <TechnicalServiceView mode="entry" navigate={navigate} canExport={user.role === "admin"} />;
+  if (view === "technical-service-saved")
+    return <TechnicalServiceView mode="saved" navigate={navigate} canExport={user.role === "admin"} />;
+  if (view === "technical-service-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
   if (view === "billing-cage-map") return <BillingView mode="cage-map" user={user} navigate={navigate} />;
   if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} navigate={navigate} />;
   if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} navigate={navigate} />;

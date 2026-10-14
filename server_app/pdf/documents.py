@@ -31,6 +31,8 @@ def quantity_sheet_filename(sheet):
 
 
 def billing_statement_filename(statement):
+    if statement.get("sourceType") == "pi_merged_technical_service":
+        return f"{clean_filename(statement.get('pi'))}技术服务费结算单 {month_label(statement.get('month'))}.pdf"
     return f"{clean_filename(statement.get('pi') or '未命名课题组')}课题组实验动物饲养费核算汇总表 {month_label(statement.get('month'))}.pdf"
 
 
@@ -162,6 +164,12 @@ def quantity_day_cells(row):
 
 
 def billing_statement_html(statement, lines):
+    if statement.get("sourceType") == "pi_merged_technical_service":
+        from server_app.pdf.technical_services import technical_service_markup, technical_service_styles
+
+        return document_html(
+            "实验动物技术服务费结算单", technical_service_styles(), technical_service_markup(statement)
+        )
     kept_lines = [
         line
         for line in lines

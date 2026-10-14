@@ -3,7 +3,7 @@ import { queryKeys } from "../../../api/queryKeys";
 import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
 import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
 import { ListViewControls, type ListDensity } from "../../../components/ui/ListViewControls";
-import { Alert, Button, Checkbox, Empty, Popconfirm, Space, Tag, Typography } from "antd";
+import { Alert, Button, Checkbox, Empty, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import { ExclamationCircleOutlined, LockOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 
@@ -46,7 +46,9 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   useEffect(() => {
     scopeRef.current = JSON.stringify(filters);
   }, [filters]);
+  const [sourceType, setSourceType] = useWorkspaceMemory("workflow:feeType", "");
   const query = useBillingWorkflows({
+    sourceType,
     limit: pageSize,
     offset: (page - 1) * pageSize,
     sortKey: sort.key,
@@ -210,6 +212,14 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           },
         ]
       : []),
+    {
+      key: "feeType",
+      title: "费用类型",
+      width: 110,
+      render: (_: unknown, item: BillingWorkflow) => (
+        <Tag>{item.sourceType === "pi_merged_technical_service" ? "技术服务费" : "饲养费"}</Tag>
+      ),
+    },
     { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 100 },
     { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 140 },
     {
@@ -310,9 +320,23 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         context={
           <>
             <HelpPopover label="单据跟踪说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-              以饲养费结算单为主线：发起结算流程、交回登记、锁定归档；解锁后恢复未归档，经手人可撤回。
+              饲养费与技术服务费分别出单，共用流程：发起结算流程、交回登记、锁定归档；解锁后恢复未归档，经手人可撤回。
             </HelpPopover>
             <Tag color="blue">{total} 条结算流程</Tag>
+            <Select
+              aria-label="费用类型"
+              value={sourceType}
+              onChange={(value) => {
+                setSourceType(value);
+                setPage(1);
+                clearSelection();
+              }}
+              options={[
+                { value: "", label: "全部费用" },
+                { value: "feeding", label: "饲养费" },
+                { value: "pi_merged_technical_service", label: "技术服务费" },
+              ]}
+            />
           </>
         }
         selection={

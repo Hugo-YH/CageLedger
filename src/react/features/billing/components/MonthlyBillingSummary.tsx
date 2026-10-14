@@ -32,7 +32,7 @@ export function MonthlyBillingSummary({ navigationAction }: { navigationAction?:
         context={
           <>
             <HelpPopover label="汇总导出说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-              按 IACUC 和设施汇总数量统计表的当月费用，供线下报销登记使用。
+              按 IACUC 和设施汇总当月饲养费及技术服务费，供线下报销登记使用。
             </HelpPopover>
             <Tag color="blue">管理员导出</Tag>
           </>
@@ -64,7 +64,7 @@ export function MonthlyBillingSummary({ navigationAction }: { navigationAction?:
           type="info"
           showIcon
           title="导出范围"
-          description="包含当月全部可结算数量统计表，保留金额为 0 的有效记录。"
+          description="包含当月饲养费及技术服务费明细；新增技术服务费列，无该费用时显示0.00，保留零金额有效记录。"
         />
         <Typography.Paragraph className="monthly-summary-hint" type="secondary">
           伦理经费和实验日期来自 IACUC 索引；报销单经费本编号、单号、金额与备注仅使用单据跟踪已登记报销单。

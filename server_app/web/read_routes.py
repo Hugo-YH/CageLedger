@@ -117,13 +117,17 @@ from server_app.web.pdf_exports import (
 from server_app.web.ports import app_ports
 from server_app.web.quarantine import handle as handle_quarantine
 from server_app.web.router_registry import API_ROUTER
+from server_app.web.settlement_candidates import handle as handle_settlement_candidates
+from server_app.web.technical_services import handle as handle_technical_services
 
 
 class ReadRoutesMixin:
     def do_GET(self):
         path = urlparse(self.path).path
         if (
-            handle_feedback(self, "GET", path)
+            handle_settlement_candidates(self, "GET", path)
+            or handle_technical_services(self, "GET", path)
+            or handle_feedback(self, "GET", path)
             or handle_quarantine(self, "GET", path)
             or handle_intake_summary(self, path)
         ):
