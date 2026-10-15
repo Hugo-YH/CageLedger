@@ -1,11 +1,11 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { listAllSettlementCandidates } from "../../../api/billing";
+import { listAllSettlementCandidates } from "../../../api/settlements";
 import type { SettlementCandidate } from "../../../api/contracts";
 import { useSettlementSelection } from "./useSettlementSelection";
 
-vi.mock("../../../api/billing", () => ({ listAllSettlementCandidates: vi.fn() }));
+vi.mock("../../../api/settlements", () => ({ listAllSettlementCandidates: vi.fn() }));
 const items: SettlementCandidate[] = ["a", "b"].map((id) => ({
   id,
   month: "2026-08",

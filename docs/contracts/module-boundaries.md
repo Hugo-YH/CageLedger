@@ -96,6 +96,8 @@ graph TD
 - `src/styles/index.css` 固定导入顺序；新增规则归入对应层或业务域文件。
 - `src/react/api/contracts.ts` 保留兼容 re-export；新增类型进入 `src/contracts/<domain>.ts`。
 - `ENTITY_ENDPOINTS` 保留旧通用实体接口；新高频流程优先使用专用 service endpoint。
+- 共用结算请求归入 `src/react/api/settlements.ts`，原模块保留兼容导出；预览与发起分开调用，技术服务源版本和两类账单业务键保持独立。
+- HTTP路由由 `server_app/web/router_registry.py` 装配，领域声明位于 `route_definitions/`；原HTTP动作与纯路径匹配器分别保留。路由登记不承担领域权限、金额计算、事务和审计。
 
 ## 验收标准
 

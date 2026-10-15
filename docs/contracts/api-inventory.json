@@ -239,9 +239,12 @@
     }
   },
   "routingSurface": {
+    "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
     "server_app/web/router_registry.py": "86b807f71a686dd132ed04b15b679eebed7b94ac24181edb9120d79f0c7404c1",
-    "server_app/web/read_routes.py": "7d37398f6e4776eb2cec2e1cde2953f0feb47c5fbc2ef068b289e3d0883c9a8f",
-    "server_app/web/write_routes.py": "0cf2130a325f7715be0e2f06e560cb0bf86fd9950fb2f374151bf044c90eabf8",
+    "server_app/web/route_registration.py": "23eaf9ba49f96963c151b5890b19c88f8dfe9d44e30cb5d63f6b4d2755f55161",
+    "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
+    "server_app/web/read_routes.py": "d635092b9c9db6395b0e2f22407d9511fb18cf3b01d741cc2335e3ebe7a2b106",
+    "server_app/web/write_routes.py": "24da022f8716d711ab9769582ec1fe156317aa0eec2daacdc323a84dac4638b7",
     "server_app/web/entity_contracts.py": "eff3ad76da49a345636bd533912801cfd7268afd73002a0cb6cef36b078f6086",
     "server_app/web/route_matchers.py": "66db439ae4460f041f2907fb01ff976553d686cded3eea044b367660a0f3baca",
     "server_app/web/technical_services.py": "1e1366584826fbba027c0317fb6824ae648586fc26cbac1226407c30c6e20610",
@@ -251,7 +254,12 @@
     "server_app/web/settlement_candidates.py": "98e30330864a812c12ed8e5e0e6eecedb837a5efb6f620f7fdac74b56c9c3ae4",
     "server_app/web/intake_summary.py": "33eba7143c5f9be95dbf9c6fd0378ba4e1f8c8aa81dc204f47d632f1e2ed2eb8",
     "server_app/web/pdf_exports.py": "1a50e319d150ac4fd056a588be8551809b9ef76f4b0865d2c2ca445cfeece20b",
-    "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774"
+    "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774",
+    "server_app/web/route_definitions/__init__.py": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "server_app/web/route_definitions/operations.py": "578927167a21a6e89fd91d152ba05e4946be8a7b59ee2adff73c7c173939adc8",
+    "server_app/web/route_definitions/platform.py": "19c8c2db83d9a1e8ca79dc50a3e49cbb037cdad5a42ea37045bb04f44b7a0f86",
+    "server_app/web/route_definitions/settlement.py": "6204780e4c4b085d94dc6168f670793f7f284da27dc6eab540c1fce3b83d22ed",
+    "server_app/web/route_definitions/support.py": "a564886c988b1a3c0ba932e5035d9ea643a9b34657c93923d8e11a64403dc212"
   },
   "groups": [
     {
@@ -560,7 +568,12 @@
       "id": "rooms",
       "title": "房间",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -611,7 +624,12 @@
       "id": "racks",
       "title": "笼架",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -662,7 +680,12 @@
       "id": "cage-slots",
       "title": "笼位",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -713,7 +736,12 @@
       "id": "occupancies",
       "title": "占用",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -764,7 +792,12 @@
       "id": "placement-tasks",
       "title": "进驻任务",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -815,7 +848,12 @@
       "id": "billing-rules",
       "title": "计费规则",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -866,7 +904,12 @@
       "id": "billing-adjustments",
       "title": "计费调整",
       "permission": "entity",
-      "clients": ["src/react/api/cages.ts", "src/react/api/billing.ts", "src/react/api/administration.ts"],
+      "clients": [
+        "src/react/api/cages.ts",
+        "src/react/api/billing.ts",
+        "src/react/api/administration.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -1086,7 +1129,7 @@
       "id": "quantity",
       "title": "数量统计表",
       "permission": "login",
-      "clients": ["src/react/api/quantitySheets.ts", "src/react/api/billing.ts"],
+      "clients": ["src/react/api/quantitySheets.ts", "src/react/api/billing.ts", "src/react/api/settlements.ts"],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -1191,7 +1234,7 @@
       "id": "quantity-rooms",
       "title": "计费房间",
       "permission": "login",
-      "clients": ["src/react/api/quantitySheets.ts"],
+      "clients": ["src/react/api/quantitySheets.ts", "src/react/api/settlements.ts"],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -1208,7 +1251,12 @@
       "id": "billing",
       "title": "结算与导出",
       "permission": "login",
-      "clients": ["src/react/api/billing.ts", "src/react/api/quantitySheets.ts", "src/react/api/client.ts"],
+      "clients": [
+        "src/react/api/billing.ts",
+        "src/react/api/quantitySheets.ts",
+        "src/react/api/client.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {
@@ -1343,7 +1391,11 @@
       "id": "technical",
       "title": "技术服务",
       "permission": "staff",
-      "clients": ["src/react/api/technicalServices.ts", "src/react/api/quantitySheets.ts"],
+      "clients": [
+        "src/react/api/technicalServices.ts",
+        "src/react/api/quantitySheets.ts",
+        "src/react/api/settlements.ts"
+      ],
       "lifecycle": "supported",
       "endpoints": [
         {

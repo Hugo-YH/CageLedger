@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Alert, Button, Card, Form, Tag, Typography } from "antd";
 import { ExclamationCircleOutlined, FileExcelOutlined } from "@ant-design/icons";
 
-import { exportMonthlyBillingSummary } from "../../../api/billing";
+import { exportMonthlyBillingSummary } from "../../../api/settlements";
 import { CommandBar, DateInput, HelpPopover } from "../../../components/ui";
 
 const currentMonth = new Date().toISOString().slice(0, 7);

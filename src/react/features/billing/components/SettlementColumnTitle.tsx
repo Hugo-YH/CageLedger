@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { SettlementCandidateListParams } from "../../../api/contracts";
-import { useSettlementFilterOptions } from "../../../api/billing";
+import { useSettlementFilterOptions } from "../../../api/settlements";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 
 export function SettlementColumnTitle({

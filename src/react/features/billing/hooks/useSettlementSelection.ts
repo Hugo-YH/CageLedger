@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listAllSettlementCandidates } from "../../../api/billing";
+import { listAllSettlementCandidates } from "../../../api/settlements";
 import type { SettlementCandidate, SettlementCandidateListParams } from "../../../api/contracts";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 

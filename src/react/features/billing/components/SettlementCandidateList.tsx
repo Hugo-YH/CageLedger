@@ -15,14 +15,13 @@ import type {
   SettlementCandidate,
   SettlementCandidateListParams,
 } from "../../../api/contracts";
-import { exportSettlementXlsx, useSettlementCandidates } from "../../../api/billing";
+import { exportSettlementXlsx, useSettlementCandidates, useSettlementActions } from "../../../api/settlements";
 import { useAdvanceWorkflow } from "../../../api/workflows";
 import { useSettlementBatch } from "../../../api/useSettlementBatch";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
 import { DataTable } from "../../../components/ui";
-import { useGenerateBillingStatement } from "../../../api/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
 import { useSettlementSelection } from "../hooks/useSettlementSelection";
 import { BatchStartConfirmModal } from "./BatchStartConfirmModal";
@@ -103,7 +102,7 @@ export function SettlementCandidateList({
     columnFilters: filters,
   };
   const list = useSettlementCandidates(params, source === "quantity_sheet");
-  const generate = useGenerateBillingStatement();
+  const { preview, initiate, isPending: generatePending } = useSettlementActions();
   const advanceWorkflow = useAdvanceWorkflow();
   useWorkspaceScroll("billing-settlement", !list.isPending && !list.isError);
   const items = list.data?.items || [];
@@ -122,7 +121,7 @@ export function SettlementCandidateList({
     allFilteredSelected,
     filters,
     params,
-    previewing: generate.isPending,
+    previewing: generatePending,
     selectedCandidates,
     selectingAll,
     disabled: list.isPlaceholderData || batch.isPending,
@@ -168,11 +167,13 @@ export function SettlementCandidateList({
     generating.current = true;
     const isCurrent = previewRequest.begin();
     try {
-      const response = await generate.mutateAsync({
-        ...settlementCandidateScope(candidate, source),
-        persist,
-        sourceVersions: persist && selected?.id === candidate.id ? result?.sourceVersions : undefined,
-      });
+      const target = settlementCandidateScope(candidate, source);
+      const response = persist
+        ? await initiate.mutateAsync({
+            ...target,
+            sourceVersions: selected?.id === candidate.id ? result?.sourceVersions : undefined,
+          })
+        : await preview.mutateAsync(target);
       if (!isCurrent()) return false;
       setSelected(candidate);
       setResult(response);
@@ -191,10 +192,7 @@ export function SettlementCandidateList({
     generating.current = true;
     const isCurrent = previewRequest.begin();
     try {
-      const response = await generate.mutateAsync({
-        ...settlementCandidateScope(candidate, source),
-        persist: false,
-      });
+      const response = await preview.mutateAsync(settlementCandidateScope(candidate, source));
       if (!isCurrent()) return;
       setSelected(candidate);
       setResult(response);
@@ -440,7 +438,7 @@ export function SettlementCandidateList({
       />
       {selected && result ? (
         <SettlementPreviewModal
-          generatePending={generate.isPending}
+          generatePending={generatePending}
           hasWorkflow={Boolean(selected.hasWorkflow)}
           revertPending={advanceWorkflow.isPending}
           canWithdraw={canWithdraw(selected)}
@@ -462,7 +460,7 @@ export function SettlementCandidateList({
       {noticeEmail ? (
         <SettlementNoticeModal
           email={noticeEmail.email}
-          pending={generate.isPending}
+          pending={generatePending}
           onCancel={() => {
             previewRequest.invalidate();
             setNoticeEmail(null);

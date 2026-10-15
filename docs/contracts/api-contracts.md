@@ -6,6 +6,16 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 上传使用 `requestMultipart`，文件字段和业务参数保持原状，由浏览器填写multipart边界，不手工设置JSON Content-Type。上传与JSON请求共用会话、诊断脱敏和错误处理；文件下载继续保留二进制响应，不包裹为统一JSON成功格式。
 
+## 共用结算调用与路由登记
+
+`src/react/api/settlements.ts` 集中结算候选查询、筛选、预览、发起和导出；请求类型在 `src/contracts/settlements.ts`。页面使用 `usePreviewSettlement`、`useInitiateSettlement`，批量发起复用 `initiateSettlement`，沿用现有查询失效范围与零自动重试。`billing.ts`、`quantitySheets.ts` 和 `technicalServices.ts` 中原有结算导出函数继续兼容。
+
+饲养费仍调用 `/api/billing-statements/generate-by-pi`，保留 `status=draft`、`persist` 和 `initiate` 参数；技术服务仍使用 `/api/technical-services/settlements/preview` 与 `/api/technical-services/settlements`。共用发起动作优先提交已预览的 `sourceVersions`；仅调用方未提供版本时先获取预览，409后不重新预览、不自动重试。原技术服务mutation仍要求调用方提供版本，缺失时交由旧接口校验，不新增预览补齐。同月同负责人两种费用继续生成独立账单与业务键。Excel、PDF及异步导出任务的原URL、参数和账单快照读取规则不变。
+
+后端入口统一由 `server_app/web/router_registry.py` 装配。`route_definitions/` 按领域登记方法、路径、动作及旧匹配器，`route_registration.py` 绑定原处理函数；`read_actions.py`、`write_actions.py` 保留原HTTP动作。`read_routes.py` 管理API与静态资源的分流，`write_routes.py` 在所有写请求分发前执行来源检查。命名空间代理保留原来的登录、未知路径响应和路径解析；已有匹配器继续控制ID解码和路径分隔符，不全局二次解码。
+
+`npm run check:api` 要求清单与全部路由登记双向对应，检查动作入口和路由条件指纹；运行时回归另外核对实际装配表、固定路径优先级、下载只响应一次及来源检查。新增接口须同时登记路由、更新清单与调用类型，不能仅刷新指纹绕过登记。
+
 ## 技术服务计费
 
 桌面与手机导航统一分为“饲养费管理、技术服务费管理、结算管理”。录入页采用“录入数量统计表／录入技术服务明细”；结算入口统一为“结算列表”。原技术服务结算视图标识兼容渲染共用列表，业务接口保留。

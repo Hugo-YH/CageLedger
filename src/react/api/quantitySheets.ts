@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
-  BillingStatementResponse,
   CageRoom,
   PagedResponse,
   QuantitySheet,
@@ -12,7 +11,12 @@ import { requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
-import { invalidateWorkflowQueries } from "./workflows";
+
+export {
+  generateBillingStatement,
+  useGenerateBillingStatement,
+  type GenerateBillingStatementPayload,
+} from "./settlements";
 
 function listUrl(params: QuantitySheetListParams) {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
@@ -107,58 +111,6 @@ export function useDeleteQuantitySheet() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
       void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
-    },
-  });
-}
-
-export interface GenerateBillingStatementPayload {
-  pi: string;
-  month: string;
-  sourceType: "quantity_sheet" | "cage_map" | "pi_merged_technical_service";
-  sourceVersions?: Record<string, string>;
-  persist?: boolean;
-}
-
-export async function generateBillingStatement({
-  pi,
-  month,
-  sourceType,
-  persist = false,
-  sourceVersions,
-}: GenerateBillingStatementPayload) {
-  if (sourceType === "pi_merged_technical_service") {
-    const body = { pi, month };
-    if (!persist)
-      return requestJson<BillingStatementResponse>("/api/technical-services/settlements/preview", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-    const versions =
-      sourceVersions ??
-      (
-        await requestJson<BillingStatementResponse>("/api/technical-services/settlements/preview", {
-          method: "POST",
-          body: JSON.stringify(body),
-        })
-      ).sourceVersions;
-    return requestJson<BillingStatementResponse>("/api/technical-services/settlements", {
-      method: "POST",
-      body: JSON.stringify({ ...body, sourceVersions: versions }),
-    });
-  }
-  return requestJson<BillingStatementResponse>("/api/billing-statements/generate-by-pi", {
-    method: "POST",
-    body: JSON.stringify({ pi, month, sourceType, status: "draft", persist, initiate: persist }),
-  });
-}
-
-export function useGenerateBillingStatement() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: generateBillingStatement,
-    onSuccess: (_data, variables) => {
-      if (!variables.persist) return;
-      return invalidateWorkflowQueries(queryClient);
     },
   });
 }

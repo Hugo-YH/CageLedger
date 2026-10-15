@@ -1,5 +1,7 @@
 # API 与数据模型
 
+共用结算请求由 `src/react/api/settlements.ts` 提供候选、预览、发起与导出入口，原数量统计表和技术服务接口继续兼容。两类费用的原URL、业务键、版本核对和账单快照规则不变。后端按领域集中登记到 `server_app/web/router_registry.py`；登记方法与路径须和 [[API接口清单]] 双向对应。
+
 完整接口目录、权限及写入保护摘要见 [[API接口清单]]。该页由仓库 `docs/contracts/api-inventory.json` 生成，支持按领域核对方法、路径、调用模块、兼容入口及读写副作用；维护命令为 `npm run api:inventory` 和 `npm run check:api`。
 
 本页提供 API 和数据模型概览。完整工程契约见 `docs/contracts/api-contracts.md`，前端类型源位于 `src/react/api/contracts.ts`。

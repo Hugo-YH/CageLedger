@@ -4,11 +4,13 @@ import type { PagedResponse } from "../../contracts/common";
 import type {
   TechnicalServiceCandidate,
   TechnicalServiceCatalogItem,
-  TechnicalServicePreview,
   TechnicalServiceListParams,
   TechnicalServiceSheet,
 } from "../../contracts/technicalServices";
-import { requestDownload, requestJson } from "./client";
+import { requestJson } from "./client";
+import { initiateReviewedServiceSettlement, previewSettlement } from "./settlements";
+
+export { exportTechnicalServicePdf as exportServicesPdf } from "./settlements";
 
 const root = ["technical-services"] as const;
 const base = "/api/technical-services";
@@ -77,11 +79,7 @@ export function useServiceMutation() {
         | { kind: "delete"; sheet: TechnicalServiceSheet }
         | { kind: "initiate"; month: string; pi: string; sourceVersions: Record<string, string> },
     ) => {
-      if (action.kind === "initiate")
-        return requestJson<TechnicalServicePreview>(`${base}/settlements`, {
-          method: "POST",
-          body: JSON.stringify(action),
-        });
+      if (action.kind === "initiate") return initiateReviewedServiceSettlement(action);
       const { sheet } = action;
       return requestJson<{ item?: TechnicalServiceSheet }>(
         `${base}/sheets${action.kind === "delete" || action.editing ? `/${encodeURIComponent(sheet.id)}` : ""}`,
@@ -106,12 +104,5 @@ export function useServiceMutation() {
 }
 
 export function previewServices(month: string, pi: string) {
-  return requestJson<TechnicalServicePreview>(`${base}/settlements/preview`, {
-    method: "POST",
-    body: JSON.stringify({ month, pi }),
-  });
-}
-
-export function exportServicesPdf(month: string, pi: string) {
-  return requestDownload(`${base}/settlements/pdf`, { method: "POST", body: JSON.stringify({ month, pi }) });
+  return previewSettlement({ month, pi, sourceType: "pi_merged_technical_service" });
 }

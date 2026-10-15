@@ -13,7 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "docs/contracts/api-inventory.json"
 REFERENCE = ROOT / "wiki/API接口清单.md"
 ROUTING_SOURCES = (
+    "server_app/web/router.py",
     "server_app/web/router_registry.py",
+    "server_app/web/route_registration.py",
+    "server_app/web/route_specs.py",
     "server_app/web/read_routes.py",
     "server_app/web/write_routes.py",
     "server_app/web/entity_contracts.py",
@@ -26,6 +29,7 @@ ROUTING_SOURCES = (
     "server_app/web/intake_summary.py",
     "server_app/web/pdf_exports.py",
     "server_app/repositories/filter_options.py",
+    *tuple(str(path.relative_to(ROOT)) for path in sorted((ROOT / "server_app/web/route_definitions").glob("*.py"))),
 )
 METHODS = {"GET", "POST", "PUT", "DELETE", "PATCH"}
 EFFECTS = {
@@ -61,8 +65,18 @@ def routing_surface(root=ROOT):
                 isinstance(item, ast.Name) and item.id in names for item in ast.walk(node.test)
             ):
                 surface.append(["condition", ast.dump(node.test, include_attributes=False)])
-            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "add":
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"add", "add_handled"}
+            ):
                 surface.append(["registration", ast.dump(node, include_attributes=False)])
+            elif filename.startswith("server_app/web/route_definitions/") and isinstance(node, ast.Assign):
+                surface.append(["declarations", ast.dump(node, include_attributes=False)])
+            elif filename.endswith(("/route_registration.py", "/route_specs.py", "/router.py")) and isinstance(
+                node, ast.FunctionDef | ast.ImportFrom
+            ):
+                surface.append(["dispatcher", ast.dump(node, include_attributes=False)])
             elif isinstance(node, ast.FunctionDef) and (
                 node.name.endswith("_route") or node.name in {"_between", "_after_prefix", "_single_segment"}
             ):
@@ -76,33 +90,12 @@ def normalized_path(value):
 
 
 def primary_boundary(method, path, registered):
-    for prefix, module in (
-        ("/api/technical-services/", "technical_services"),
-        ("/api/quarantine/", "quarantine"),
-        ("/api/feedback", "feedback"),
-        ("/api/intake-batches/summary.docx", "intake_summary"),
-        ("/api/settlement-candidates", "settlement_candidates"),
-    ):
-        if path == prefix or path.startswith(prefix if prefix.endswith("/") else prefix + "/"):
-            return f"server_app/web/{module}.py:handle"
-    if (method, path) in registered:
-        return "server_app/web/router_registry.py"
-    if path == "/api/filter-options":
-        return "server_app/repositories/filter_options.py:route_column_filter_options"
-    if method == "GET" and path in {
-        "/api/animal-inspection-catalog",
-        "/api/animal-inspection-catalog/draft",
-        "/api/animal-inspection-catalog/versions",
-        "/api/animal-inspections",
-        "/api/animal-inspection-findings",
-    }:
-        return "server_app/web/animal_inspection.py:handle_get"
-    return f"server_app/web/{'read' if method == 'GET' else 'write'}_routes.py:do_{method}"
+    return registered.get((method, path), "server_app/web/router_registry.py")
 
 
 def registered_routes(root=ROOT):
-    return {
-        (node.args[0].value, normalized_path(node.args[1].value))
+    registered = {
+        (node.args[0].value, normalized_path(node.args[1].value)): "server_app/web/router_registry.py"
         for node in ast.walk(tree(root, "server_app/web/router_registry.py"))
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
@@ -110,6 +103,28 @@ def registered_routes(root=ROOT):
         and len(node.args) >= 2
         and all(isinstance(arg, ast.Constant) for arg in node.args[:2])
     }
+    for filename in ROUTING_SOURCES:
+        if not filename.startswith("server_app/web/route_definitions/"):
+            continue
+        for node in tree(root, filename).body:
+            if not isinstance(node, ast.Assign):
+                continue
+            for specs in ast.literal_eval(node.value).values():
+                for spec in specs:
+                    if name := spec.get("delegate"):
+                        boundary = (
+                            "server_app/repositories/filter_options.py:route_column_filter_options"
+                            if name == "filter_options"
+                            else f"server_app/web/{name}.py:{'handle_get' if name == 'animal_inspection' else 'handle'}"
+                        )
+                    else:
+                        boundary = f"server_app/web/{'read' if spec['method'] == 'GET' else 'write'}_actions.py:{spec['action']}"
+                    for path in spec["paths"]:
+                        identity = spec["method"], path
+                        if identity in registered:
+                            raise ValueError(f"重复路由登记: {identity}")
+                        registered[identity] = boundary
+    return registered
 
 
 def expanded(catalog, root=ROOT):
@@ -169,8 +184,11 @@ def validate(catalog, root=ROOT):
             )
         ):
             errors.append(f"{label}: HTTP入口不存在 {item['boundary']}")
-    if not registered_routes(root) <= identities:
+    registered = registered_routes(root)
+    if not registered.keys() <= identities:
         errors.append("注册表中的接口未全部登记")
+    if not identities <= registered.keys():
+        errors.append("清单中的接口未全部注册到共用路由")
     paths = {entry["path"] for entry in entries}
     for filename in ROUTING_SOURCES:
         for node in ast.walk(tree(root, filename)):

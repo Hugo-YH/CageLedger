@@ -1,4 +1,4 @@
-"""Stable lightweight router registrations used before legacy path matching."""
+"""API assembly: namespace delegates, lightweight system routes, then domain actions."""
 
 from http import HTTPStatus
 
@@ -15,6 +15,7 @@ from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler
 from server_app.web.intake_strain import intake_strain_standardize_handler
 from server_app.web.response import JsonResponse
+from server_app.web.route_registration import register_domain_routes
 from server_app.web.router import Router
 
 
@@ -67,6 +68,7 @@ def post_release_announcement_acknowledgements(handler, _params):
 
 
 API_ROUTER = Router()
+register_domain_routes(API_ROUTER, early=True)
 API_ROUTER.add(
     "GET", r"/api/health", lambda h, p: JsonResponse({"ok": True, "database": str(DB_PATH), "system": system_info()})
 )
@@ -88,3 +90,4 @@ API_ROUTER.add(
     r"/api/release-announcements/(?P<version>[A-Za-z0-9][A-Za-z0-9._-]{0,63})/acknowledge",
     post_release_announcement_acknowledgement,
 )
+register_domain_routes(API_ROUTER)
