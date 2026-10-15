@@ -19,7 +19,7 @@ from server_app.domains.state.persistence import assemble_state, read_applicatio
 from server_app.repositories.infrastructure import update_slot_record
 from server_app.repositories.state import upsert_occupancy_record as upsert_occupancy_record_repository
 from server_app.shared import clean_text
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 
 @dataclass(frozen=True)
@@ -37,9 +37,10 @@ def upsert_occupancy_record(conn, occupancy):
 
 def write_occupancy_entity_state(method, item_id, payload, actor, spec, ports):
     started_at = time.perf_counter()
-    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.OK
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         old_item = next((item for item in old_state.get("occupancies", []) if item.get("id") == item_id), None)

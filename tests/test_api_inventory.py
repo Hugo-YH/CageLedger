@@ -74,7 +74,8 @@ class ApiInventoryTests(unittest.TestCase):
         self.assertEqual(entries["/api/technical-services/sheets/{id}"]["protection"], "strict_edit")
         self.assertEqual(self.catalog["protections"]["compat_edit"]["effects"], "business_write")
         self.assertIn("缺省兼容", self.catalog["protections"]["compat_edit"]["version"])
-        self.assertIn("原子CAS", self.catalog["protections"]["quantity_save"]["transaction"])
+        self.assertIn("BEGIN IMMEDIATE", self.catalog["protections"]["quantity_save"]["transaction"])
+        self.assertIn("不新增必填版本", self.catalog["protections"]["compat_edit"]["transaction"])
 
     def test_generated_reference_contains_every_method_path_and_is_deterministic(self):
         reference = render(self.catalog)

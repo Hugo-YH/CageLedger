@@ -32,6 +32,7 @@ from server_app.repositories.infrastructure import (
     update_slot_record,
 )
 from server_app.shared import new_id
+from server_app.shared.concurrency import begin_write
 
 
 def _normalize_payload(collection, payload, item_id, method, id_prefix):
@@ -83,9 +84,10 @@ def _invalidate():
 
 def write_infrastructure_entity(collection, method, item_id, payload, actor, spec):
     started_at = time.perf_counter()
-    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.CREATED if method == "POST" else HTTPStatus.OK
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         item = _normalize_payload(collection, payload, item_id, method, spec["id_prefix"])
@@ -136,8 +138,9 @@ def write_infrastructure(payload, actor):
         "slots": normalize_entity_batch("slots", payload.get("slots", []), "POST", _normalize_payload),
         "slotDeletes": normalize_id_batch(payload.get("slotDeletes", []), "slotDeletes"),
     }
-    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         for key, collection in (("rooms", "rooms"), ("racks", "racks"), ("slots", "slots")):

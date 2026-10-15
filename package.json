@@ -27,6 +27,7 @@
     "check:architecture": "node scripts/check_architecture.mjs",
     "api:inventory": "node scripts/run_python.mjs scripts/api_inventory.py --write",
     "check:api": "node scripts/run_python.mjs scripts/api_inventory.py --check",
+    "verify:database": "node scripts/run_python.mjs scripts/verify_database_copy.py",
     "check:ui-contract": "node scripts/check_ui_contract.mjs",
     "check:style-ownership": "node scripts/check_style_ownership.mjs",
     "check:antd-design": "node scripts/check_antd_design.mjs",

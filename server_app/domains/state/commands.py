@@ -1,5 +1,6 @@
 """State aggregate command dispatch and full-state persistence transaction."""
 
+import copy
 from datetime import UTC, datetime
 from http import HTTPStatus
 
@@ -14,22 +15,33 @@ from server_app.domains.state.entity_mutations import (
     replace_entity,
 )
 from server_app.domains.state.entity_rules import empty_state
-from server_app.domains.state.persistence import assemble_state, read_state, write_normalized_state
+from server_app.domains.state.persistence import assemble_state, migrate_legacy_state, write_normalized_state
 from server_app.shared import now_iso
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 
 def write_state(state, actor, skip_permission=False):
-    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or {}
-        if not skip_permission:
-            validate_state_write_permission(actor, old_state, state)
-        events = build_audit_events(actor, old_state, state, updated_at)
-        state["auditLogs"] = merge_audit_logs(state.get("auditLogs", []), events)
-        write_normalized_state(conn, state, updated_at)
-        write_audit_events(conn, events)
+        result = _persist_state(conn, old_state, state, actor, updated_at, skip_permission)
         conn.commit()
+    _invalidate_state()
+    return result
+
+
+def _persist_state(conn, old_state, state, actor, updated_at, skip_permission=False):
+    if not skip_permission:
+        validate_state_write_permission(actor, old_state, state)
+    events = build_audit_events(actor, old_state, state, updated_at)
+    state["auditLogs"] = merge_audit_logs(state.get("auditLogs", []), events)
+    write_normalized_state(conn, state, updated_at)
+    write_audit_events(conn, events)
+    return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
+
+
+def _invalidate_state():
     invalidate_data_cache("assembled_state", "principal_identities")
     invalidate_data_cache_prefixes(
         "bootstrap_summary::",
@@ -38,7 +50,6 @@ def write_state(state, actor, skip_permission=False):
         "billing_workflows::",
         "dashboard_overview::",
     )
-    return {"ok": True, "updatedAt": updated_at, "auditLogs": merge_audit_logs([], events)}
 
 
 def write_entity_state(endpoint, method, item_id, payload, actor, endpoints, writers):
@@ -47,22 +58,29 @@ def write_entity_state(endpoint, method, item_id, payload, actor, endpoints, wri
     if collection in writers:
         return writers[collection](method, item_id, payload, actor, spec)
 
-    current = read_state()
-    state = current.get("state") or empty_state()
-    item = normalize_entity_payload(collection, payload, item_id, method, spec["id_prefix"])
-    status = HTTPStatus.OK
-    if method == "POST":
-        item["updatedAt"] = now_iso()
-        insert_entity(state, collection, item)
-        status = HTTPStatus.CREATED
-    elif method == "PUT":
-        existing = next((entry for entry in state.get(collection, []) if entry.get("id") == item_id), None)
-        require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "该记录")
-        item["updatedAt"] = now_iso()
-        replace_entity(state, collection, item_id, item)
-    elif method == "DELETE":
-        item = delete_entity(state, collection, item_id)
-    else:
-        raise ValueError("Unsupported entity write method")
-    result = write_state(state, actor)
+    with connect_db() as conn:
+        begin_write(conn)
+        migrate_legacy_state(conn)
+        old_state = assemble_state(conn) or empty_state()
+        # Mutate the latest aggregate under this same writer reservation.
+        # A second connection would reintroduce a read/check/write race.
+        state = copy.deepcopy(old_state)
+        item = normalize_entity_payload(collection, payload, item_id, method, spec["id_prefix"])
+        status = HTTPStatus.OK
+        if method == "POST":
+            item["updatedAt"] = now_iso()
+            insert_entity(state, collection, item)
+            status = HTTPStatus.CREATED
+        elif method == "PUT":
+            existing = next((entry for entry in state.get(collection, []) if entry.get("id") == item_id), None)
+            require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "该记录")
+            item["updatedAt"] = now_iso()
+            replace_entity(state, collection, item_id, item)
+        elif method == "DELETE":
+            item = delete_entity(state, collection, item_id)
+        else:
+            raise ValueError("Unsupported entity write method")
+        result = _persist_state(conn, old_state, state, actor, datetime.now(UTC).isoformat())
+        conn.commit()
+    _invalidate_state()
     return {"item": item, "updatedAt": result["updatedAt"], "auditLogs": result["auditLogs"]}, status

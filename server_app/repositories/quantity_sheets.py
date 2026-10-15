@@ -209,8 +209,13 @@ def get_quantity_sheet(conn, sheet_id):
     cached = cache_get(key, CACHE_MISS)
     if cached is not CACHE_MISS:
         return cached
+    return cache_set(key, get_quantity_sheet_for_write(conn, sheet_id))
+
+
+def get_quantity_sheet_for_write(conn, sheet_id):
+    """Read the transaction's actual row; cached detail is never a write version."""
     row = conn.execute("SELECT payload FROM quantity_sheets WHERE id = ?", (sheet_id,)).fetchone()
-    return cache_set(key, json.loads(row["payload"]) if row else None)
+    return json.loads(row["payload"]) if row else None
 
 
 def list_quantity_sheets_by_month_iacuc(conn, month, iacuc):

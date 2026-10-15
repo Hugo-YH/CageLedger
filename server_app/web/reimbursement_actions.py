@@ -61,7 +61,7 @@ from server_app.services.reimbursement import (
     merge_reimbursement_edit,
 )
 from server_app.shared import clean_text, now_iso
-from server_app.shared.concurrency import StaleWriteError, require_current_version
+from server_app.shared.concurrency import StaleWriteError, begin_write, require_current_version
 from server_app.web import animal_inspection as animal_inspection_web
 from server_app.web.multipart import parse_multipart_upload
 
@@ -115,6 +115,7 @@ class ReimbursementActionsMixin:
         try:
             patch = self.read_json_body()
             with connect_db() as conn:
+                begin_write(conn)
                 existing = get_reimbursement_record(conn, record_id)
                 if not existing:
                     raise LookupError("报销台账不存在")

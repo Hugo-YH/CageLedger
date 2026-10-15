@@ -29,9 +29,6 @@ from server_app.repositories.billing import (
     get_current_billing_statement as get_current_billing_statement_repository,
 )
 from server_app.repositories.billing import (
-    get_quantity_sheet as get_quantity_sheet_repository,
-)
-from server_app.repositories.billing import (
     insert_quantity_sheet as insert_quantity_sheet_repository,
 )
 from server_app.repositories.billing import (
@@ -42,9 +39,12 @@ from server_app.repositories.billing import (
 )
 from server_app.repositories.entities import read_principal_type_by_pi as read_principal_type_by_pi_repository
 from server_app.repositories.payload import dump_json, placeholders
+from server_app.repositories.quantity_sheets import (
+    get_quantity_sheet_for_write as get_quantity_sheet_repository,
+)
 from server_app.services.quantity import sync_quantity_sheet_transfer_rows as sync_quantity_sheet_transfer_rows_service
 from server_app.shared import as_float, as_int, clean_text, new_id, now_iso
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 
 def quantity_service_deps():
@@ -103,6 +103,7 @@ def get_current_billing_statement(conn, statement_id):
 
 def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     started_at = time.perf_counter()
+    begin_write(conn)
     now = now_iso()
     sheet = normalize_quantity_sheet(payload, sheet_id, now)
     room = read_room_payload(conn, sheet.get("roomId", "")) or {}

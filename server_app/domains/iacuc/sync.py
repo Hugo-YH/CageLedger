@@ -31,7 +31,7 @@ from server_app.repositories.payload import dump_json
 from server_app.repositories.workflow_documents import protected_quantity_sheet_ids
 from server_app.runtime_logging import emit_event
 from server_app.shared import clean_text, new_id, now_iso
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 
 def write_experiment_applications(conn, items, imported_at):
@@ -282,6 +282,7 @@ def save_principal_identity(conn, payload, actor, pi_name):
     if not pi_name:
         raise ValueError("项目负责人不能为空")
     principal_type = normalize_principal_type(payload.get("principalType", ""))
+    begin_write(conn)
     existing = next(
         (item for item in read_principal_identity_payloads(conn) if clean_text(item.get("pi", "")) == pi_name),
         None,

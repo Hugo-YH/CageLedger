@@ -10,7 +10,7 @@ from server_app.repositories.users import (
     update_user_without_password,
 )
 from server_app.shared import new_id, now_iso
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 from .auth import hash_password, sanitize_user
 
@@ -54,6 +54,7 @@ def create_user(conn, payload):
 
 
 def update_user(conn, actor, user_id, payload):
+    begin_write(conn)
     row = get_user_by_id(conn, user_id)
     if not row:
         raise LookupError("账号不存在")

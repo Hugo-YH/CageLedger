@@ -86,7 +86,7 @@
     "compat_edit": {
       "version": "可选 expectedUpdatedAt；缺省兼容，提供后拒绝过期",
       "idempotency": "不是 requestId 幂等协议",
-      "transaction": "原领域事务、权限与校验顺序不变；可选版本辅助函数不建立事务，不宣称统一原子CAS",
+      "transaction": "原版本口径、权限与审计保留；现有可选版本入口在写锁内读取待修改记录、比对并保存，调用方提交/回滚；不新增必填版本",
       "audit": "原创建/编辑前后审计",
       "effects": "business_write"
     },
@@ -107,7 +107,7 @@
     "quantity_save": {
       "version": "已有ID时 expectedUpdatedAt 可选，缺省兼容",
       "idempotency": "重复 POST 相同ID可能按编辑处理并新增审计；不宣称幂等",
-      "transaction": "原统计表、转移镜像、校验和审计时序保留；HTTP入口未统一将版本读取前置到写锁内，不宣称统一原子CAS",
+      "transaction": "HTTP保存入口在BEGIN IMMEDIATE后直接读取数据库版本；原统计表、转移镜像、候选失效和审计在同一事务，不以详情缓存作版本依据",
       "audit": "quantity_sheet.created/updated 及转移审计",
       "effects": "business_write"
     },

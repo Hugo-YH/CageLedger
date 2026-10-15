@@ -5,7 +5,7 @@ from datetime import datetime
 
 from server_app.domains.administration import audit_event, write_audit_events
 from server_app.shared import clean_text, now_iso
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 from .catalog import active_version, version_nodes
 from .catalog_schema import validate_catalog
@@ -32,6 +32,7 @@ def save_draft(conn, actor, body, image_root=None):
     modules = body.get("modules")
     nodes = body.get("nodes")
     validate_catalog(modules, nodes, image_root=image_root)
+    begin_write(conn)
     row = _draft_row(conn)
     if row:
         require_current_version({"updatedAt": row["imported_at"]}, body.get("expectedUpdatedAt"), "巡检标准草稿")

@@ -27,7 +27,7 @@ from server_app.repositories.entities import (
     upsert_placement_task as upsert_placement_task_repository,
 )
 from server_app.shared import clean_text
-from server_app.shared.concurrency import require_current_version
+from server_app.shared.concurrency import begin_write, require_current_version
 
 
 @dataclass(frozen=True)
@@ -42,9 +42,10 @@ class IntakeCommandPorts:
 
 def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports):
     started_at = time.perf_counter()
-    updated_at = datetime.now(UTC).isoformat()
     status = HTTPStatus.OK
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         item = ports.normalize_entity_payload("intakeBatches", payload, item_id, method, spec["id_prefix"])
@@ -117,8 +118,9 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
 
 def persist_intake_receipt_confirmation(batch_id, body, actor, ports):
     started_at = time.perf_counter()
-    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         batch, receipt, tasks = ports.confirm_intake_receipt(state, batch_id, body, actor)
@@ -164,8 +166,9 @@ def intake_batch_action_ids(body):
 def persist_intake_batches_mark_printed(body, actor, ports):
     started_at = time.perf_counter()
     batch_ids = intake_batch_action_ids(body)
-    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         batches_by_id = {batch.get("id"): batch for batch in state.get("intakeBatches", [])}
@@ -206,8 +209,9 @@ def persist_intake_batches_mark_printed(body, actor, ports):
 def persist_intake_receipt_confirmations(body, actor, ports):
     started_at = time.perf_counter()
     batch_ids = intake_batch_action_ids(body)
-    updated_at = datetime.now(UTC).isoformat()
     with connect_db() as conn:
+        begin_write(conn)
+        updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         batches_by_id = {batch.get("id"): batch for batch in state.get("intakeBatches", [])}
