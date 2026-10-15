@@ -67,6 +67,35 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/react/api/**/*.{ts,tsx}"],
+    ignores: ["src/react/api/client.ts", "**/*.test.*", "**/*.spec.*"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "./client",
+              importNames: ["requestFetch"],
+              message: "请使用 requestJson/requestMultipart/requestDownload 保留统一响应及错误处理。",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        { name: "fetch", message: "API调用请使用统一客户端 requestJson/requestMultipart/requestDownload。" },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.object.name=/^(globalThis|window)$/][callee.property.name='fetch']",
+          message: "API调用请使用统一客户端，不绕过错误、会话和诊断处理。",
+        },
+      ],
+    },
+  },
+  {
     files: ["**/*.{test,spec}.{ts,tsx}", "tests/e2e/**/*.{ts,tsx}"],
     languageOptions: {
       globals: {

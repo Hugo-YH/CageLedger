@@ -127,7 +127,8 @@ def _after_prefix(path, prefix):
 def _between(path, prefix, suffix):
     if not path.startswith(prefix) or not path.endswith(suffix):
         return None
-    return _single_segment(path[len(prefix) : -len(suffix)])
+    stop = -len(suffix) if suffix else None
+    return _single_segment(path[len(prefix) : stop])
 
 
 def _single_segment(value):

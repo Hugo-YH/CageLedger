@@ -1,5 +1,11 @@
 # CageLedger API 契约
 
+接口总清单见仓库 `docs/contracts/api-inventory.json`，开发参考由 `scripts/api_inventory.py` 生成到 `wiki/API接口清单.md`。清单记录方法、路径、用途、鉴权、请求／响应摘要、前端调用模块线索、兼容状态，以及版本、幂等、事务、审计与GET副作用；当前HTTP路由及业务规则保持不变。使用 `npm run check:api` 检查，`npm run api:inventory` 重新生成参考页。写入版本的可选兼容、必填精确版本及现有事务限制以 [write-safety.md](write-safety.md) 为准。
+
+JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留原 `status`、`message`、`payload`，增加 `code`、`requestId` 和可选 `details`。优先使用服务端错误码，无错误码时使用 `HTTP_<status>`；请求编号从响应头 `X-Request-ID` 或兼容响应体读取，只接受现有16位十六进制格式。服务端原 `error` 文案及返回结构不作全量改写。合法204明确表示无内容；其他成功JSON响应解析失败抛出 `INVALID_JSON_RESPONSE`，不当作成功空对象，网络中断与取消继续向上传播。所有写请求仍默认零自动重试。
+
+上传使用 `requestMultipart`，文件字段和业务参数保持原状，由浏览器填写multipart边界，不手工设置JSON Content-Type。上传与JSON请求共用会话、诊断脱敏和错误处理；文件下载继续保留二进制响应，不包裹为统一JSON成功格式。
+
 ## 技术服务计费
 
 桌面与手机导航统一分为“饲养费管理、技术服务费管理、结算管理”。录入页采用“录入数量统计表／录入技术服务明细”；结算入口统一为“结算列表”。原技术服务结算视图标识兼容渲染共用列表，业务接口保留。

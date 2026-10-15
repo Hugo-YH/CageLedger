@@ -16,7 +16,7 @@ import type {
   SystemInfo,
   SystemUpdateStatus,
 } from "./contracts";
-import { requestJson } from "./client";
+import { requestJson, requestMultipart } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export function useUsers(enabled = true) {
@@ -209,8 +209,5 @@ export function useAcknowledgeReleaseAnnouncement(version: string) {
 export async function uploadFile<T>(url: string, file: File) {
   const body = new FormData();
   body.set("file", file);
-  const response = await fetch(url, { method: "POST", body, credentials: "same-origin", cache: "no-store" });
-  const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(payload.error || `上传失败 (${response.status})`);
-  return payload;
+  return requestMultipart<T>(url, body);
 }

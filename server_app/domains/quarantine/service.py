@@ -9,7 +9,8 @@ from server_app.domains.administration.audit import audit_event, write_audit_eve
 from server_app.domains.intake import SPECIES_CODES, infer_species
 from server_app.domains.intake.strain_standard import abbreviate_supplier
 from server_app.shared import clean_text
-from server_app.shared.concurrency import StaleWriteError
+from server_app.shared.concurrency import StaleWriteError as StaleWriteError
+from server_app.shared.concurrency import require_exact_version
 
 from . import repository as repo
 from .catalog import PROJECTS, RESULTS
@@ -31,8 +32,8 @@ def identifier(value):
 
 
 def check_version(before, body):
-    if not body.get("expectedUpdatedAt") or body["expectedUpdatedAt"] != before["updatedAt"]:
-        raise StaleWriteError("记录已更新或缺少版本，请刷新后重新编辑")
+    expected = body.get("expectedUpdatedAt")
+    require_exact_version(before["updatedAt"] if expected else None, expected, "记录已更新或缺少版本，请刷新后重新编辑")
 
 
 def audit(conn, user, action, before, after):

@@ -28,6 +28,7 @@ export const pageRoutes = {
   "前端架构.md": "development/frontend-architecture.md",
   "后端架构.md": "development/backend-architecture.md",
   "API与数据模型.md": "development/api-and-data-model.md",
+  "API接口清单.md": "development/api-inventory.md",
   "UI组件标准.md": "development/ui-component-standard.md",
   "测试与质量.md": "development/testing-and-quality.md",
   "开发规范.md": "development/contributing.md",

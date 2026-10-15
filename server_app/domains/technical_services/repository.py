@@ -3,7 +3,8 @@
 import json
 
 from server_app.domains.workflow.constants import FROZEN_WORKFLOW_STATUSES
-from server_app.shared.concurrency import StaleWriteError
+from server_app.shared.concurrency import StaleWriteError as StaleWriteError
+from server_app.shared.concurrency import require_exact_version
 
 from . import listing
 
@@ -94,8 +95,7 @@ def sheet_filter_options(conn, filters):
 
 
 def require_version(row, expected):
-    if not expected or row["updated_at"] != expected:
-        raise StaleWriteError("技术服务明细已更新，请刷新后重新编辑。")
+    require_exact_version(row["updated_at"] if expected else None, expected, "技术服务明细已更新，请刷新后重新编辑。")
 
 
 def candidate_scopes(conn, filters):

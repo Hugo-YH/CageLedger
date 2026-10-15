@@ -11,7 +11,7 @@ import type {
   FeedbackListResponse,
   FeedbackSubmission,
 } from "../../contracts/feedback";
-import { ApiError, requestFetch, requestJson } from "./client";
+import { ApiError, requestJson, requestMultipart } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export type FeedbackListColumn =
@@ -160,13 +160,13 @@ export async function uploadFeedbackAttachment(id: string, requestId: string, fi
   if (commentId) query.set("commentId", commentId);
   const body = new FormData();
   body.set("file", file);
-  const response = await requestFetch(`/api/feedback/${encodeURIComponent(id)}/attachments?${query}`, {
-    method: "POST",
+  const payload = await requestMultipart<{ item?: FeedbackAttachment; error?: string }>(
+    `/api/feedback/${encodeURIComponent(id)}/attachments?${query}`,
     body,
-    credentials: "same-origin",
-    cache: "no-store",
-  });
-  const payload = (await response.json().catch(() => ({}))) as { item?: FeedbackAttachment; error?: string };
-  if (!response.ok || !payload.item) throw new Error(payload.error || `上传失败 (${response.status})`);
+  );
+  if (!payload.item)
+    throw new ApiError(payload.error || "附件上传响应缺少信息，请刷新后重试", 200, payload, {
+      code: "INVALID_RESPONSE",
+    });
   return payload.item;
 }

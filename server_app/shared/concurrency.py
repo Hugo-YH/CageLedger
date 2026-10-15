@@ -3,6 +3,7 @@ class StaleWriteError(Exception):
 
 
 def require_current_version(existing, expected_updated_at, label):
+    """Legacy-compatible check: omitted versions remain allowed on these callers."""
     expected = str(expected_updated_at or "").strip()
     if not expected:
         return
@@ -10,5 +11,10 @@ def require_current_version(existing, expected_updated_at, label):
         actual = str(existing.get("updatedAt") or existing.get("updated_at") or "").strip()
     else:
         actual = str(existing["updated_at"] or "").strip()
-    if actual != expected:
-        raise StaleWriteError(f"{label}已被其他操作更新，请刷新后重新编辑。")
+    require_exact_version(actual, expected, f"{label}已被其他操作更新，请刷新后重新编辑。")
+
+
+def require_exact_version(actual, expected, message):
+    """Strict write boundary: require the exact version, without coercion or trimming."""
+    if not expected or actual != expected:
+        raise StaleWriteError(message)

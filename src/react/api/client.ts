@@ -27,49 +27,107 @@ export async function requestFetch(url: string, init: RequestInit = {}): Promise
 }
 
 export class ApiError extends Error {
+  readonly code: string;
+  readonly requestId?: string;
+  readonly details?: unknown;
+
   constructor(
     message: string,
     readonly status: number,
     readonly payload: unknown,
+    metadata: { code?: string; requestId?: string | null } = {},
   ) {
     super(message);
     this.name = "ApiError";
+    const fields = errorFields(payload);
+    this.code = metadata.code || (typeof fields.code === "string" && fields.code ? fields.code : `HTTP_${status}`);
+    this.requestId = traceId(metadata.requestId) || traceId(fields.requestId);
+    this.details = fields.details;
   }
+}
+
+function traceId(value: unknown): string | undefined {
+  return typeof value === "string" && /^[a-f0-9]{16}$/.test(value) ? value : undefined;
+}
+
+function errorFields(payload: unknown): Record<string, unknown> {
+  return payload !== null && typeof payload === "object" && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : {};
+}
+
+function requestOptions(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers);
+  if (typeof init.body === "string" && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  return {
+    cache: "no-store",
+    credentials: "same-origin",
+    ...init,
+    headers,
+  };
+}
+
+async function responseJson(
+  response: Response,
+  init: RequestInit,
+  context?: { url: string; startedAt: number },
+): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (init.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+    if (!(error instanceof SyntaxError)) throw error;
+    if (!response.ok) return {};
+    if (context)
+      recordDiagnosticRequest(
+        context.url,
+        (init.method || "GET").toUpperCase(),
+        response.status,
+        performance.now() - context.startedAt,
+        response.headers.get("X-Request-ID"),
+      );
+    throw new ApiError(
+      "服务器返回的数据格式无效，请刷新后重试",
+      response.status,
+      {},
+      {
+        code: "INVALID_JSON_RESPONSE",
+        requestId: response.headers.get("X-Request-ID"),
+      },
+    );
+  }
+}
+
+function responseError(response: Response, payload: unknown): ApiError {
+  const message = errorFields(payload).error;
+  return new ApiError(
+    typeof message === "string" && message ? message : `Request failed with ${response.status}`,
+    response.status,
+    payload,
+    { requestId: response.headers.get("X-Request-ID") },
+  );
 }
 
 export async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await requestFetch(url, {
-    cache: "no-store",
-    credentials: "same-origin",
-    ...init,
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-  const payload = (await response.json().catch((error: unknown) => {
-    if (init.signal?.aborted) throw error;
-    return {};
-  })) as T & { error?: string };
-  if (!response.ok) {
-    throw new ApiError(payload.error || `Request failed with ${response.status}`, response.status, payload);
-  }
-  return payload;
+  const startedAt = performance.now();
+  const response = await requestFetch(url, requestOptions(init));
+  if (response.status === 204) return undefined as T;
+  const payload = await responseJson(response, init, { url, startedAt });
+  if (!response.ok) throw responseError(response, payload);
+  return payload as T;
+}
+
+export function requestMultipart<T>(url: string, form: FormData, init: Omit<RequestInit, "body"> = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  // The browser supplies the multipart boundary for the actual FormData body.
+  headers.delete("Content-Type");
+  return requestJson<T>(url, { method: "POST", ...init, headers, body: form });
 }
 
 export async function requestDownload(url: string, init: RequestInit = {}): Promise<string> {
-  const response = await requestFetch(url, {
-    cache: "no-store",
-    credentials: "same-origin",
-    ...init,
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
+  const response = await requestFetch(url, requestOptions(init));
   if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(payload.error || `Request failed with ${response.status}`, response.status, payload);
+    throw responseError(response, await responseJson(response, init));
   }
   const filename = downloadFilename(response.headers.get("Content-Disposition")) || "CageLedger-export";
   const body = await response.blob();

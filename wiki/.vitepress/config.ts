@@ -188,6 +188,7 @@ export default defineConfig({
             { text: "前端架构", link: "/development/frontend-architecture" },
             { text: "后端架构", link: "/development/backend-architecture" },
             { text: "API 与数据模型", link: "/development/api-and-data-model" },
+            { text: "API 接口清单", link: "/development/api-inventory" },
             { text: "UI 组件标准", link: "/development/ui-component-standard" },
             { text: "测试与质量", link: "/development/testing-and-quality" },
             { text: "开发规范", link: "/development/contributing" },

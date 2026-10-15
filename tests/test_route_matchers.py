@@ -4,6 +4,17 @@ from server_app.web import route_matchers
 
 
 class RouteMatcherTests(unittest.TestCase):
+    def test_workflow_attachment_download_accepts_empty_suffix_and_preserves_single_segment_rules(self):
+        route = route_matchers.billing_workflow_attachment_download_route
+        prefix = "/api/billing-workflows/attachments/"
+        self.assertEqual(route(prefix + "bwf-att-1"), "bwf-att-1")
+        self.assertEqual(route(prefix + "%E9%99%84%E4%BB%B6%201"), "附件 1")
+        self.assertEqual(route(prefix + "opaque%252Fid"), "opaque%2Fid")
+        for suffix in ("", "nested/id", "opaque%2Fid"):
+            with self.subTest(suffix=suffix):
+                self.assertIsNone(route(prefix + suffix))
+        self.assertIsNone(route("/api/other/bwf-att-1"))
+
     def test_decodes_single_segment_and_rejects_nested_values(self):
         self.assertEqual(route_matchers.quantity_sheet_route("/api/quantity-sheets/%E7%AC%BC%201"), "笼 1")
         self.assertIsNone(route_matchers.quantity_sheet_route("/api/quantity-sheets/a%2Fb"))

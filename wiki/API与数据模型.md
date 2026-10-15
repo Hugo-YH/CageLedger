@@ -1,5 +1,7 @@
 # API 与数据模型
 
+完整接口目录、权限及写入保护摘要见 [[API接口清单]]。该页由仓库 `docs/contracts/api-inventory.json` 生成，支持按领域核对方法、路径、调用模块、兼容入口及读写副作用；维护命令为 `npm run api:inventory` 和 `npm run check:api`。
+
 本页提供 API 和数据模型概览。完整工程契约见 `docs/contracts/api-contracts.md`，前端类型源位于 `src/react/api/contracts.ts`。
 
 ## 架构链路
@@ -145,17 +147,18 @@ node scripts/run_python.mjs scripts/compact_billing_snapshots.py --database /pat
 
 ### 管理
 
-| 方法             | 路径                                 | 用途                   |
-| ---------------- | ------------------------------------ | ---------------------- |
-| `GET` / `POST`   | `/api/users`                         | 账号查询和创建         |
-| `PUT` / `DELETE` | `/api/users/{id}`                    | 账号维护               |
-| `POST`           | `/api/intake/standardize-strain`     | 服务端 MGI 品系标准化  |
-| `GET`            | `/api/iacuc-index`                   | 完整项目索引           |
-| `GET`            | `/api/iacuc-index/status`            | 索引状态               |
-| `POST`           | `/api/iacuc-index/upload`            | CSV 上传和派生数据同步 |
-| `GET` / `PUT`    | `/api/principal-identities[/{name}]` | PI 身份与减免配置      |
-| `GET`            | `/api/audit-events`                  | 分页审计日志           |
-| `GET`            | `/api/system/update-check`           | Gitea Release 更新检查 |
+| 方法             | 路径                               | 用途                   |
+| ---------------- | ---------------------------------- | ---------------------- |
+| `GET` / `POST`   | `/api/users`                       | 账号查询和创建         |
+| `PUT` / `DELETE` | `/api/users/{id}`                  | 账号维护               |
+| `POST`           | `/api/intake/standardize-strain`   | 服务端 MGI 品系标准化  |
+| `GET`            | `/api/iacuc-index`                 | 完整项目索引           |
+| `GET`            | `/api/iacuc-index/status`          | 索引状态               |
+| `POST`           | `/api/iacuc-index/upload`          | CSV 上传和派生数据同步 |
+| `GET`            | `/api/principal-identities`        | PI 身份与减免配置列表  |
+| `PUT`            | `/api/principal-identities/{name}` | 保存 PI 身份与减免配置 |
+| `GET`            | `/api/audit-events`                | 分页审计日志           |
+| `GET`            | `/api/system/update-check`         | Gitea Release 更新检查 |
 
 ### 离线账务一致性检查
 

@@ -12,7 +12,7 @@ import type {
   InspectionFinding,
 } from "./contracts";
 import { uploadFile } from "./administration";
-import { requestDownload, requestJson } from "./client";
+import { requestDownload, requestJson, requestMultipart } from "./client";
 import { queryKeys } from "./queryKeys";
 
 function url(path: string, params: object) {
@@ -232,18 +232,10 @@ export function useResolveFinding() {
 export async function uploadAnimalInspectionPhoto(inspectionId: string, findingId: string, file: File) {
   const form = new FormData();
   form.set("file", file);
-  const response = await fetch(
+  return requestMultipart<{ item?: unknown; error?: string }>(
     `/api/animal-inspections/${encodeURIComponent(inspectionId)}/attachments?findingId=${encodeURIComponent(findingId)}`,
-    {
-      method: "POST",
-      body: form,
-      credentials: "same-origin",
-      cache: "no-store",
-    },
+    form,
   );
-  const payload = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new Error(payload.error || `上传失败 (${response.status})`);
-  return payload;
 }
 
 export function downloadAnimalInspectionPdf(id: string) {

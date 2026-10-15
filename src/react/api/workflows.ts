@@ -1,7 +1,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { PagedResponse, ReimbursementDetailResponse, ReimbursementRecord, ReimbursementStatus } from "./contracts";
-import { requestJson } from "./client";
+import { requestJson, requestMultipart } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export interface ReimbursementListParams {
@@ -280,17 +280,10 @@ export function useWorkflowDetail(workflowId: string) {
 export async function uploadWorkflowAttachment(workflowId: string, kind: "settlement" | "reimbursement", file: File) {
   const form = new FormData();
   form.set("file", file);
-  const response = await fetch(
+  const payload = await requestMultipart<{ item?: BillingWorkflowAttachment }>(
     `/api/billing-workflows/${encodeURIComponent(workflowId)}/attachments?kind=${encodeURIComponent(kind)}`,
-    {
-      method: "POST",
-      body: form,
-      credentials: "same-origin",
-      cache: "no-store",
-    },
+    form,
   );
-  const payload = (await response.json().catch(() => ({}))) as { item?: BillingWorkflowAttachment; error?: string };
-  if (!response.ok) throw new Error(payload.error || `上传失败 (${response.status})`);
   return payload.item;
 }
 
