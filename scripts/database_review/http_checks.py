@@ -1,7 +1,9 @@
 """Authenticated loopback HTTP checks against a worker-owned copy only."""
 
+import hashlib
 import json
 import threading
+import zlib
 from http.server import ThreadingHTTPServer
 from urllib.parse import quote
 from urllib.request import ProxyHandler, Request, build_opener
@@ -34,8 +36,48 @@ def plaintext_audit_facts(rows):
     result = {}
     for identity, raw in rows:
         value = json.loads(raw)
-        if isinstance(value, dict) and "before" in value and "after" in value:
+        if isinstance(value, dict) and "_auditStorage" not in value and "before" in value and "after" in value:
             result[identity] = digest(value)
+    return result
+
+
+def source_audit_facts(conn):
+    """Independently decode the source format before invoking app migrations/readers."""
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    blocks = {}
+    if "audit_event_payload_blocks" in tables:
+        blocks = {
+            row[0]: row[1:]
+            for row in conn.execute(
+                "SELECT event_id,codec,raw_bytes,raw_sha256,payload FROM audit_event_payload_blocks"
+            )
+        }
+    result = {}
+    for identity, stored in conn.execute("SELECT id,payload FROM audit_events"):
+        event = json.loads(stored)
+        if identity in blocks:
+            codec, size, sha, blob = blocks[identity]
+            if codec != "zlib-audit-json-v1" or not isinstance(size, int) or not 0 < size <= 128 * 1024 * 1024:
+                raise ValueError("原审计压缩块格式无效")
+            decoder = zlib.decompressobj()
+            raw = decoder.decompress(blob, size + 1)
+            if (
+                len(raw) != size
+                or not decoder.eof
+                or decoder.unused_data
+                or decoder.unconsumed_tail
+                or hashlib.sha256(raw).hexdigest() != sha
+            ):
+                raise ValueError("原审计压缩块内容校验失败")
+            envelope = json.loads(raw)
+            if envelope["eventId"] != identity or not isinstance(envelope["payload"], str):
+                raise ValueError("原审计压缩块标识无效")
+            event = json.loads(envelope["payload"])
+        elif "_auditStorage" in event:
+            raise ValueError("原审计详情压缩块缺失")
+        if not isinstance(event, dict) or event.get("id") != identity or "_auditStorage" in event:
+            raise ValueError("原审计正文标识无效")
+        result[identity] = digest(event)
     return result
 
 

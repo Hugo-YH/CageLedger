@@ -11,7 +11,12 @@ from unittest.mock import patch
 
 from scripts.database_review import runner
 from scripts.database_review.exports import clean_calculation
-from scripts.database_review.http_checks import normalize_obligation, normalize_sync_event, plaintext_audit_facts
+from scripts.database_review.http_checks import (
+    normalize_obligation,
+    normalize_sync_event,
+    plaintext_audit_facts,
+    source_audit_facts,
+)
 from scripts.database_review.storage import (
     backup_copy,
     digest,
@@ -132,6 +137,32 @@ class DatabaseCopyReviewTests(unittest.TestCase):
         self.assertEqual(plaintext_audit_facts([("audit", json.dumps(event))]), {"audit": digest(event)})
         with self.assertRaises(json.JSONDecodeError):
             plaintext_audit_facts([("audit", "bad JSON")])
+
+    def test_source_audit_reference_decodes_existing_blocks_without_treating_summaries_as_fulltext(self):
+        import hashlib
+        import zlib
+
+        event = {"id": "audit", "before": None, "after": {"complete": "原始完整内容" * 1000}}
+        raw = json.dumps({"eventId": "audit", "payload": json.dumps(event)}).encode()
+        summary = json.dumps(
+            {"id": "audit", "before": None, "after": {"truncated": True}, "_auditStorage": "zlib-audit-json-v1"}
+        )
+        with closing(sqlite3.connect(":memory:")) as conn:
+            conn.executescript(
+                "CREATE TABLE audit_events(id TEXT,payload TEXT); CREATE TABLE audit_event_payload_blocks(event_id TEXT,codec TEXT,raw_bytes INTEGER,raw_sha256 TEXT,payload BLOB);"
+            )
+            conn.execute("INSERT INTO audit_events VALUES('audit',?)", (summary,))
+            self.assertEqual(plaintext_audit_facts([("audit", summary)]), {})
+            with self.assertRaisesRegex(ValueError, "压缩块缺失"):
+                source_audit_facts(conn)
+            conn.execute(
+                "INSERT INTO audit_event_payload_blocks VALUES('audit','zlib-audit-json-v1',?,?,?)",
+                (len(raw), hashlib.sha256(raw).hexdigest(), zlib.compress(raw)),
+            )
+            self.assertEqual(source_audit_facts(conn), {"audit": digest(event)})
+            conn.execute("UPDATE audit_event_payload_blocks SET payload=?", (zlib.compress(raw[:-1] + b"x"),))
+            with self.assertRaisesRegex(ValueError, "校验失败"):
+                source_audit_facts(conn)
 
     def test_pdf_sampling_cannot_silently_skip_validation(self):
         for value in ("1", "3", "all"):

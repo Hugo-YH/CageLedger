@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from database_review.exports import calculations, stored_bills  # noqa: E402
-from database_review.http_checks import audit_payloads, check_http, plaintext_audit_facts  # noqa: E402
+from database_review.http_checks import audit_payloads, check_http, source_audit_facts  # noqa: E402
 from database_review.storage import digest, original_records, quote, require_original_rows, write_json  # noqa: E402
 
 
@@ -38,11 +38,7 @@ def check(request):
             for table, spec in scope.items()
             if "id" in spec["columns"]
         }
-        source_audits = (
-            plaintext_audit_facts(conn.execute("SELECT id,payload FROM audit_events"))
-            if "audit_events" in scope
-            else {}
-        )
+        source_audits = source_audit_facts(conn) if "audit_events" in scope else {}
     ensure_database_ready()
     print(json.dumps({"stage": "initialized", "case": request["case"]}), flush=True)
     with closing(sqlite3.connect(database)) as conn:
