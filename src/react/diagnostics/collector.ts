@@ -169,7 +169,7 @@ export function setDiagnosticPage(view: string) {
                     ? "feedback"
                     : view === "cage-card-scanner"
                       ? "scanner"
-                      : ["rooms", "data", "system", "users", "logs"].includes(view)
+                      : ["rooms", "data", "data-quality", "system", "users", "logs"].includes(view)
                         ? "settings"
                         : "unknown";
   if (currentPage === page) return;

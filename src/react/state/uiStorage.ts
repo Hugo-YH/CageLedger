@@ -26,6 +26,7 @@ const WORKSPACE_VIEWS = new Set<WorkspaceView>([
   "feedback",
   "rooms",
   "data",
+  "data-quality",
   "system",
   "users",
   "logs",

@@ -1,6 +1,18 @@
 """Platform API registrations, preserving existing matchers and handlers."""
 
 ROUTE_GROUPS = {
+    "data_quality": [
+        {
+            "method": "GET",
+            "paths": (
+                "/api/data-quality/scans",
+                "/api/data-quality/scans/{scanId}/issues",
+                "/api/data-quality/scans/{scanId}/issues/{issueId}",
+            ),
+            "prefix": "/api/data-quality/",
+            "delegate": "data_quality",
+        }
+    ],
     "filter_options": [
         {
             "method": "GET",

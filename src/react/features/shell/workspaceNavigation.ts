@@ -37,6 +37,7 @@ export function isWorkspaceView(value: string): value is WorkspaceView {
     "feedback",
     "rooms",
     "data",
+    "data-quality",
     "system",
     "users",
     "logs",

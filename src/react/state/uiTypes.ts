@@ -25,6 +25,7 @@ export type WorkspaceView =
   | "feedback"
   | "rooms"
   | "data"
+  | "data-quality"
   | "system"
   | "users"
   | "logs";

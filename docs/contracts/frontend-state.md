@@ -54,6 +54,7 @@ IACUC 搜索先去除首尾空白并转大写，再做 250ms 防抖；查询键�
 | `principal-identities`  | PI 身份与减免配置                    |
 | `iacuc-index`           | IACUC 数据和状态                     |
 | `audit-events`          | 操作日志分页                         |
+| `data-quality`          | 管理员核查留档、当次问题和只读证据   |
 | `system`                | 系统信息、管理员运行状态和更新检查   |
 
 查询键参数包含服务端筛选、排序、分页和 actor scope。对象参数保持可序列化与稳定。

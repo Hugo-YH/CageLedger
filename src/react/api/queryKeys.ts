@@ -1,4 +1,7 @@
 export const queryKeys = {
+  dataQualityScans: ["data-quality", "scans"] as const,
+  dataQualityIssues: (scanId: string, filters: object) => ["data-quality", "issues", scanId, filters] as const,
+  dataQualityIssue: (scanId: string, issueId: string) => ["data-quality", "detail", scanId, issueId] as const,
   feedbackRoot: ["feedback"] as const,
   feedback: (filters: Record<string, unknown>) => ["feedback", "list", filters] as const,
   feedbackFilterOptions: (column: string, filters: Record<string, unknown>) =>

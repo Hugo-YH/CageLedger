@@ -149,12 +149,14 @@
   --modal-width: 1180px;
 }
 
-.app-modal-root.intake-edit-modal .ant-modal {
+.app-modal-root.intake-edit-modal .ant-modal,
+.app-modal-root.data-quality-detail-modal .ant-modal {
   height: min(920px, calc(100dvh - 32px));
   margin-block: 16px;
 }
 
-.app-modal-root.intake-edit-modal .ant-modal-container {
+.app-modal-root.intake-edit-modal .ant-modal-container,
+.app-modal-root.data-quality-detail-modal .ant-modal-container {
   display: grid;
   height: 100%;
   grid-template-rows: auto minmax(0, 1fr);
@@ -162,21 +164,27 @@
 
 .app-modal-root.intake-edit-modal .ant-modal-body,
 .app-modal-root.intake-edit-modal .modal-shell,
-.app-modal-root.intake-edit-modal .modal-shell-body {
+.app-modal-root.intake-edit-modal .modal-shell-body,
+.app-modal-root.data-quality-detail-modal .ant-modal-body,
+.app-modal-root.data-quality-detail-modal .modal-shell,
+.app-modal-root.data-quality-detail-modal .modal-shell-body {
   min-height: 0;
 }
 
-.app-modal-root.intake-edit-modal .ant-modal-body {
+.app-modal-root.intake-edit-modal .ant-modal-body,
+.app-modal-root.data-quality-detail-modal .ant-modal-body {
   overflow: hidden;
   padding: 0;
 }
 
-.app-modal-root.intake-edit-modal .modal-shell {
+.app-modal-root.intake-edit-modal .modal-shell,
+.app-modal-root.data-quality-detail-modal .modal-shell {
   height: 100%;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.app-modal-root.intake-edit-modal .modal-shell-body {
+.app-modal-root.intake-edit-modal .modal-shell-body,
+.app-modal-root.data-quality-detail-modal .modal-shell-body {
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -936,5 +944,43 @@
 @media (width < 768px) {
   [data-ui="system-status-page"] {
     gap: 12px;
+  }
+}
+
+[data-feature="administration"] .data-quality-scan-select {
+  width: min(100%, 520px);
+}
+
+[data-feature="administration"] .data-quality-scope {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+[data-feature="administration"] .data-quality-record,
+[data-feature="administration"] .data-quality-evidence {
+  overflow-wrap: anywhere;
+}
+
+[data-feature="administration"] .data-quality-evidence {
+  max-width: 100%;
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+[data-feature="administration"] .data-quality-archive-info {
+  margin-top: 16px;
+}
+
+.data-quality-detail-modal [data-feature="administration"] .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (width < 768px), (height < 500px) {
+  [data-feature="administration"].data-quality-page .ant-btn,
+  .app-modal-root.data-quality-detail-modal .ant-btn {
+    min-height: 44px;
   }
 }

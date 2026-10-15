@@ -5,6 +5,7 @@ from urllib.parse import unquote
 from server_app.repositories.filter_options import route_column_filter_options
 from server_app.web import (
     animal_inspection,
+    data_quality,
     feedback,
     intake_summary,
     quarantine,
@@ -16,6 +17,7 @@ from server_app.web.route_specs import ROUTE_GROUPS
 from server_app.web.router import HANDLED
 
 DELEGATES = {
+    "data_quality": data_quality.handle,
     "settlement_candidates": settlement_candidates.handle,
     "technical_services": technical_services.handle,
     "feedback": feedback.handle,

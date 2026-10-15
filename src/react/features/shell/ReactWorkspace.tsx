@@ -69,6 +69,9 @@ const WorkflowCenterView = lazy(() =>
 const RoomsView = lazy(() => import("../settings/RoomsView").then((module) => ({ default: module.RoomsView })));
 const UsersView = lazy(() => import("../settings/UsersView").then((module) => ({ default: module.UsersView })));
 const DataView = lazy(() => import("../settings/DataView").then((module) => ({ default: module.DataView })));
+const DataQualityView = lazy(() =>
+  import("../settings/DataQualityView").then((module) => ({ default: module.DataQualityView })),
+);
 const LogsView = lazy(() => import("../settings/LogsView").then((module) => ({ default: module.LogsView })));
 const SystemView = lazy(() => import("../settings/SystemView").then((module) => ({ default: module.SystemView })));
 const FeedbackView = lazy(() =>
@@ -134,6 +137,7 @@ function Workspace({ user }: { user: SessionUser }) {
     ...(user.role === "admin"
       ? ([
           ["data", "数据管理", "database"],
+          ["data-quality", "数据核查", "clipboard"],
           ["users", "账号管理", "users"],
         ] as Array<[WorkspaceView, string, NavIcon]>)
       : []),
@@ -392,6 +396,7 @@ function renderActiveView(
   if (view === "rooms") return <RoomsView user={user} />;
   if (view === "users") return <UsersView currentUser={user} />;
   if (view === "data") return <DataView user={user} />;
+  if (view === "data-quality" && user.role === "admin") return <DataQualityView />;
   if (view === "logs") return <LogsView />;
   if (view === "system") return <SystemView user={user} navigate={navigate} />;
   return <DashboardView navigate={navigate} />;

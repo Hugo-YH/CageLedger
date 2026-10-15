@@ -241,13 +241,14 @@
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
     "server_app/web/router_registry.py": "86b807f71a686dd132ed04b15b679eebed7b94ac24181edb9120d79f0c7404c1",
-    "server_app/web/route_registration.py": "23eaf9ba49f96963c151b5890b19c88f8dfe9d44e30cb5d63f6b4d2755f55161",
+    "server_app/web/route_registration.py": "2d41ba8c7a3e8051e40928569a4a31fcbf2b6822e9b843f15b037220a16060f9",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "d635092b9c9db6395b0e2f22407d9511fb18cf3b01d741cc2335e3ebe7a2b106",
     "server_app/web/write_routes.py": "24da022f8716d711ab9769582ec1fe156317aa0eec2daacdc323a84dac4638b7",
     "server_app/web/entity_contracts.py": "eff3ad76da49a345636bd533912801cfd7268afd73002a0cb6cef36b078f6086",
     "server_app/web/route_matchers.py": "66db439ae4460f041f2907fb01ff976553d686cded3eea044b367660a0f3baca",
     "server_app/web/technical_services.py": "1e1366584826fbba027c0317fb6824ae648586fc26cbac1226407c30c6e20610",
+    "server_app/web/data_quality.py": "93a56a39d8d7a77a20e62a11b30a2f99de5ef3f905b0bb5721d5ad2717524057",
     "server_app/web/feedback.py": "5f3c5ae8649e67d0ecd3487968115d483f35ed93b229e9e776743a092e0ef6bf",
     "server_app/web/quarantine.py": "b095887a751eba79fe40d8d794a461a60cbe3e67488b1ba4c4201132efcde3af",
     "server_app/web/animal_inspection.py": "060d2232c66d953e17e1fdc9ba7cac84a70e1fdfc02d1fcfa6ebf676e825f5be",
@@ -257,7 +258,7 @@
     "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774",
     "server_app/web/route_definitions/__init__.py": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "server_app/web/route_definitions/operations.py": "578927167a21a6e89fd91d152ba05e4946be8a7b59ee2adff73c7c173939adc8",
-    "server_app/web/route_definitions/platform.py": "19c8c2db83d9a1e8ca79dc50a3e49cbb037cdad5a42ea37045bb04f44b7a0f86",
+    "server_app/web/route_definitions/platform.py": "3a44c5edb05259d133d48b8850d5e0f994523ae53d80dc0950bb5479070138e6",
     "server_app/web/route_definitions/settlement.py": "6204780e4c4b085d94dc6168f670793f7f284da27dc6eab540c1fce3b83d22ed",
     "server_app/web/route_definitions/support.py": "a564886c988b1a3c0ba932e5035d9ea643a9b34657c93923d8e11a64403dc212"
   },
@@ -2293,6 +2294,39 @@
           "request": "当前版本字段",
           "response": "{item}",
           "protection": "strict_edit"
+        }
+      ]
+    },
+    {
+      "id": "data_quality",
+      "title": "数据核查留档",
+      "permission": "admin",
+      "clients": ["src/react/api/dataQuality.ts"],
+      "lifecycle": "supported",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/data-quality/scans",
+          "purpose": "分页读取核查留档摘要；不扫描或修改记录",
+          "request": "limit,offset",
+          "response": "{items,page}，不含逐项证据",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-quality/scans/{scanId}/issues",
+          "purpose": "读取指定留档的问题、分类筛选及分页",
+          "request": "scanId,limit,offset,columnFilters,sortKey,sortDir",
+          "response": "{scan,items,page,filterOptions}，按当次留档状态展示",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-quality/scans/{scanId}/issues/{issueId}",
+          "purpose": "读取问题的关联快照及校验后的留档证据",
+          "request": "scanId,issueId",
+          "response": "{scan,item,evidence,evidenceSha256}；证据缺失或校验失败409",
+          "protection": "read"
         }
       ]
     }

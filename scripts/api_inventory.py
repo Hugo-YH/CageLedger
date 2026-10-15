@@ -22,6 +22,7 @@ ROUTING_SOURCES = (
     "server_app/web/entity_contracts.py",
     "server_app/web/route_matchers.py",
     "server_app/web/technical_services.py",
+    "server_app/web/data_quality.py",
     "server_app/web/feedback.py",
     "server_app/web/quarantine.py",
     "server_app/web/animal_inspection.py",
