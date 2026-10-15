@@ -77,6 +77,41 @@ class ObligationSnapshotSyncTests(unittest.TestCase):
             "SELECT * FROM audit_events WHERE action='reimbursement_ledger.obligation_snapshot_synced' ORDER BY rowid"
         ).fetchall()
 
+    def test_unchanged_receivables_do_not_run_per_statement_allocation_queries(self):
+        for index in range(60):
+            self.base._insert_statement(
+                f"workflow-scale-{index}", f"version-scale-{index}", "2026-06", f"PI-{index}", f"ETH-{index}", index
+            )
+        sync_settlement_obligations(self.conn)
+        before = list(self.conn.iterdump())
+        queries = []
+        self.conn.set_trace_callback(queries.append)
+        try:
+            for actor in (fixture.ADMIN, fixture.ROOM_ADMIN):
+                result = list_obligations(self.conn, actor, {"limit": 10, "offset": 10})
+                self.assertEqual((len(result["items"]), result["page"]["total"]), (10, 62))
+                self.assertEqual(get_obligation(self.conn, actor, self.obligation)["item"]["payableAmount"], 100)
+        finally:
+            self.conn.set_trace_callback(None)
+        allocation_queries = [query for query in queries if "FROM reimbursement_allocations" in query]
+        self.assertEqual(allocation_queries, [])
+        self.assertEqual(list(self.conn.iterdump()), before)
+        # A warm read must not conceal a later same-version snapshot change.
+        self.amount(75)
+        self.assertEqual(get_obligation(self.conn, fixture.ROOM_ADMIN, self.obligation)["item"]["payableAmount"], 75)
+        self.assertEqual(len(self.audit()), 1)
+
+    def test_unchanged_amount_still_backfills_pi_placeholder_with_confirmed_payment(self):
+        _, allocation = self.allocation(80)
+        confirm_allocation(self.conn, fixture.ADMIN, allocation["id"])
+        self.conn.execute(
+            "UPDATE reimbursement_settlement_obligations SET iacuc='pi::测试' WHERE id=?", (self.obligation,)
+        )
+        self.conn.commit()
+        result = get_obligation(self.conn, fixture.ADMIN, self.obligation)["item"]
+        self.assertEqual((result["iacuc"], result["payableAmount"], result["allocatedAmount"]), ("Z2026001", 100, 80))
+        self.assertEqual(len(self.audit()), 0)
+
     def test_same_version_reprices_unconfirmed_only_and_audits_once(self):
         original = self.row()
         self.amount(60)

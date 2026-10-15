@@ -593,11 +593,16 @@ def sync_settlement_obligations(conn, actor=None):
             )
             changed = True
             continue
-        confirmed = _confirmed_amount_for_obligation(conn, existing["id"])
         if existing["statement_version_id"] == row["current_version_id"]:
+            # Equal snapshots need no allocation aggregate. Still inspect each
+            # current snapshot on every read, including same-version repricing.
+            if existing["payable_amount"] == payable and not existing["iacuc"].startswith("pi::"):
+                continue
+            confirmed = _confirmed_amount_for_obligation(conn, existing["id"])
             if (confirmed <= 0.00001 and existing["payable_amount"] != payable) or existing["iacuc"].startswith("pi::"):
                 changed = sync_same_version_obligation(conn, existing["id"], actor) or changed
             continue
+        confirmed = _confirmed_amount_for_obligation(conn, existing["id"])
         if confirmed <= 0.00001:
             payload = _obligation_payload(conn, existing)
             payload.update(

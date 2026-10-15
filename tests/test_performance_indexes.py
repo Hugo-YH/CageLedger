@@ -5,9 +5,46 @@ from contextlib import closing
 import server
 from server_app.domains.quarantine.repository import ensure_schema as ensure_quarantine_schema
 from server_app.persistence.indexes import create_performance_indexes
+from server_app.repositories.billing_candidates import workflow_id_sql
 
 
 class PerformanceIndexTests(unittest.TestCase):
+    def test_feeding_candidate_scope_index_preserves_first_match_and_separate_fee_types(self):
+        with closing(sqlite3.connect(":memory:")) as conn:
+            conn.row_factory = sqlite3.Row
+            server.initialize_schema(conn)
+            for identity, source in (
+                ("technical", "pi_merged_technical_service"),
+                ("feeding-first", "pi_merged_quantity_sheet"),
+                ("feeding-second", "pi_merged_quantity_sheet"),
+                ("technical-second", "pi_merged_technical_service"),
+            ):
+                conn.execute(
+                    """INSERT INTO billing_workflows
+                    (id,business_key,iacuc,month,source_type,workflow_status,payload)
+                    VALUES (?,?,'pi::PI','2026-10',?,'statement_sent','{"pi":"PI"}')""",
+                    (identity, identity, source),
+                )
+            query = f"SELECT {workflow_id_sql('quantity_sheet')} FROM (SELECT '2026-10' month,'PI' pi) billing_candidate_snapshots"
+            technical = "SELECT id FROM billing_workflows w WHERE w.month=? AND json_extract(w.payload,'$.pi')=? AND w.source_type=?"
+            technical_params = ("2026-10", "PI", "pi_merged_technical_service")
+            for _ in range(2):
+                create_performance_indexes(conn)
+                self.assertEqual(conn.execute(query).fetchone()[0], "feeding-first")
+                plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + query)]
+                self.assertTrue(
+                    any("idx_billing_workflows_feeding_scope (month=? AND iacuc=?)" in step for step in plan), plan
+                )
+                technical_plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + technical, technical_params)]
+                self.assertTrue(
+                    any("idx_billing_workflows_technical_month (month=?)" in step for step in technical_plan)
+                )
+                self.assertFalse(any("idx_billing_workflows_feeding_scope" in step for step in technical_plan))
+                self.assertEqual(
+                    [row[0] for row in conn.execute(technical, technical_params)], ["technical", "technical-second"]
+                )
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM billing_workflows").fetchone()[0], 4)
+
     def test_workflow_ordering_uses_indexes_and_preserves_date_ties(self):
         with closing(sqlite3.connect(":memory:")) as conn:
             conn.row_factory = sqlite3.Row
