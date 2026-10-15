@@ -87,6 +87,21 @@ graph LR
 
 ### 数量统计表和结算
 
+系统对已核算金额使用兼容的整数分字段：原有元字段与JSON保留，接口和导出仍按元及既有金额格式展示。整分金额的核销累计、余额和限额校验采用整数计算，避免 `0.10 + 0.20` 等二进制浮点误差；历史非整分值保留原值并走兼容路径，不强制取整。单价、比例和数量精度及原有舍入规则保持不变，历史账单快照不重算。
+
+数量统计表以 `id` 标识，月份、IACUC和房间的组合允许多张记录，不设置组合唯一约束。账单明细、账单版本及流程事件分别使用“版本＋日期”“流程＋版本号”“流程＋事件时间”复合索引；日期或版本号相同时沿用原有行顺序。旧库初始化先建立替代索引，再移除被覆盖的非唯一索引，保留已有唯一约束和历史账单内容。
+
+账单快照支持旧JSON和按版本无损压缩的明细块，接口继续返回完整项目、日期、单位、数量、单价和金额。`billing_statement_line_blocks`保存codec、原始长度、SHA-256、行数和压缩数据，逐日表保留列表摘要；小快照沿用JSON，历史数据不在启动时自动重写。压缩块校验失败或缺失时明确报错，不用实时项目数据替代历史账单。
+
+离线副本可通过 `scripts/compact_billing_snapshots.py` 转换，输入和输出必须为不同文件，输出文件不能已存在：
+
+```bash
+node scripts/run_python.mjs scripts/compact_billing_snapshots.py --database /path/to/offline-copy.sqlite --output /path/to/compact-copy.sqlite --mode compact --vacuum
+node scripts/run_python.mjs scripts/compact_billing_snapshots.py --database /path/to/compact-copy.sqlite --output /path/to/legacy-copy.sqlite --mode expand --vacuum
+```
+
+工具逐版本核对快照内容及顺序，只修改输出副本。回退到不支持压缩快照的旧版系统时，先生成并校验 `expand` 旧格式副本。
+
 自定义收费区间 `customBillingSegments` 支持 `quantityMode: "fixed" | "all"`。固定模式填写每日数量；全部模式保存 `quantity: null`，按区间内每天实际结余计费。旧区间未提供模式时由数量兼容推断。全部模式与其他自定义区间不能重叠；账单快照保存模式及每天实际计费数量，不改变既有历史版本。
 
 | 方法                     | 路径                                     | 用途                           |
@@ -141,6 +156,55 @@ graph LR
 | `GET` / `PUT`    | `/api/principal-identities[/{name}]` | PI 身份与减免配置      |
 | `GET`            | `/api/audit-events`                  | 分页审计日志           |
 | `GET`            | `/api/system/update-check`           | Gitea Release 更新检查 |
+
+### 离线账务一致性检查
+
+维护工具仅检查和生成报告，不执行迁移、修复、删除、核销或重新计费：
+
+```bash
+node scripts/run_python.mjs scripts/check_billing_consistency.py --database /path/to/offline-copy.sqlite --report /path/to/new-report.json
+```
+
+输入必须是稳定的离线SQLite副本；存在非空WAL时拒绝检查，应先用SQLite备份生成完整副本。工具通过只读连接将输入备份到临时库，再以只读方式检查临时库，最后核对输入SQLite、WAL及SHM的大小与SHA-256。报告不能覆盖已有文件、数据库或数据库附属文件。临时库在检查结束后自动清理。
+
+报告包含SQLite完整性、已声明外键、结算流程当前版本归属、应收来源、已确认核销累计、报销单及经费明细余额、原报销台账余额、元与分字段一致性，以及旧JSON／压缩账单快照校验。只计入已确认核销，草稿和已撤销核销不计金额；应收的核销计数沿用不同经费明细数。已撤销应收允许保留历史，但应收余额、已核销金额和核销计数应为零，不能存在已确认核销。负数调整应收及关联旧版本的有效应收不视为异常。
+
+无已确认核销的历史孤立应收列为警告，现行有效应收列表已排除这些记录；存在已确认核销时列为错误。尚无整数分字段的旧库仍可检查；合法历史非整分金额只记录兼容路径覆盖情况，不强制取整。原报销台账与核销体系并行，不将原台账已缴金额强行等同核销金额。累计金额只检查存储的应缴、已缴与未缴关系，不重建跨月累计；账单快照只检查完整读取及存储校验，不重新计算收费和减免规则。
+
+退出码：`0` 表示检查完成且无错误，仍可能有警告；`1` 表示发现错误或检查项未完成；`2` 表示输入、输出或执行失败。报告的 `status`、`summary`、`checks` 与 `coverage` 区分错误、警告和旧库字段覆盖，不能只看退出码忽略警告。报告包含记录ID及异常金额，应按业务数据保管；不输出项目负责人、经费本号或原始JSON。
+
+### 历史问题标记与留档
+
+需要保留待核对的问题时，使用独立工具生成带标记的数据库新副本及JSON清单：
+
+```bash
+node scripts/run_python.mjs scripts/archive_data_quality_issues.py --database /path/to/offline-copy.sqlite --output /path/to/marked-copy.sqlite --report /path/to/new-review.json --actor-name "核查操作者"
+```
+
+工具检查活动占用的笼位引用、进驻任务的父批次及分次接收明细、重复的旧格式二维码别名、失去来源流程的历史应收。批量“确认已接收”没有分次明细属于现有业务规则，不单独标记；接收明细须在任务自己的父批次中匹配，不能用其他批次的同名ID替代。
+
+`data_quality_issues` 保存问题标记和业务记录ID，`data_quality_scans` 保存来源库SHA-256、检查器版本、操作者和核查范围，`data_quality_observations` 追加各次证据及校验和。证据包含原业务正文；来源明细只在审计中存在时，保留完整明细快照及审计事件ID。普通问题标记为 `needs_review`；无已确认核销且已被现行规则排除的孤立应收标记为 `retained_history`。这些标记独立于业务状态，不改变有效应收、核销、收费和权限规则。
+
+启动仅幂等创建空登记表，不自动扫描或标记业务数据。显式留档在一个事务中保存标记、证据及 `data_quality.issues_archived` 审计；同一来源、检查版本和检测结果重试不重复登记。新的扫描追加证据，不覆盖旧观察，也不因本次未检出而自动销项。源记录、旧审计、旧二维码和孤立应收均不删除或改写，恢复接收明细、重新关联笼位等业务修复应另行核对。
+
+输入应为完整离线备份，非空WAL及已有输出均拒绝处理。工具核对原字段和记录不变，最后核对输入SQLite、WAL、SHM指纹；失败删除本次未完成输出。副本和清单权限为 `0600`，含生产业务原文，须与备份一起保管，不提交到Git。`latestBusinessAt` 仅表示库内已有实际写入时间，计划服务／接收日期不证明之后记录已包含；本工具的退出成功表示留档完成，不等于所有业务数据无异常。数据库外附件仍须结合本地文件备份及远端附件另行核验。
+
+### 审计详情存储与转移关联索引
+
+较大的新审计记录使用 `audit_event_payload_blocks` 无损保存完整原始JSON，`audit_events` 保留原有检索字段和摘要。读取列表仍按原来的规则裁剪前后快照，完整维护读取使用 `server_app.repositories.audit_storage.read_payload`，不直接把摘要当作完整审计。压缩块保存编码、原始字节数和SHA-256，并校验事件ID与摘要；缺失或损坏时明确报错。小记录和压缩收益不足的记录沿用JSON，启动只创建结构，不自动重写历史。
+
+历史审计可在离线副本上压缩或还原：
+
+```bash
+node scripts/run_python.mjs scripts/compact_audit_events.py --database /path/to/offline-copy.sqlite --output /path/to/compact-copy.sqlite --mode compact --vacuum
+node scripts/run_python.mjs scripts/compact_audit_events.py --database /path/to/compact-copy.sqlite --output /path/to/legacy-copy.sqlite --mode expand --vacuum
+```
+
+工具拒绝覆盖文件、输入输出相同和非空WAL，逐事件验证原始JSON字节摘要，只修改输出副本。旧版系统或直接读取原JSON的外部工具应使用校验后的 `expand` 副本。
+
+`quantity_sheet_transfer_links` 是可重建的镜像关联索引，保存来源表、来源行、目标表、目标行、方向及原有贡献数量；正文JSON仍是业务数据来源。首次启动从原镜像字段回填，保存表时同步更新关联，不设置“月份＋IACUC＋房间”唯一约束。旧SQL写入正文时由触发器标记待刷新，转移查询前刷新；删除目标表清理其关联，即使连接未开启外键也不会留下目标索引。来源不设置删除级联外键，历史来源缺失不会导致已有正文被改写。
+
+转移查询按来源表ID精确匹配并覆盖该来源已删除的旧行，随后沿用现有镜像清理和重建算法。不再依靠JSON文本中的ID片段或SQL通配符匹配，备注中的相似ID不产生关联。存储优化不改变数量、收费、已有账单快照、房间权限或经手人判断。
 
 ## 核心数据对象
 

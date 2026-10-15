@@ -2,6 +2,8 @@ import json
 
 from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
 
+from .quantity_transfer_links import has_index, replace_links, select_target_sheets, transfer_write
+
 QUANTITY_SHEET_LIST_COLUMNS = {
     "month": {"expr": "month", "order": "month"},
     "iacuc": {"expr": "iacuc", "order": "iacuc"},
@@ -238,28 +240,34 @@ def list_quantity_sheets_by_month_pi(conn, month, pi):
 
 
 def insert_quantity_sheet(conn, sheet, db_values):
-    conn.execute(
-        """
-        INSERT INTO quantity_sheets (
-            month, iacuc, room_id, room_name, manager, project, pi, owner,
-            funding, updated_at, payload, id
+    with transfer_write(conn):
+        conn.execute(
+            """
+            INSERT INTO quantity_sheets (
+                month, iacuc, room_id, room_name, manager, project, pi, owner,
+                funding, updated_at, payload, id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            db_values + (sheet["id"],),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        db_values + (sheet["id"],),
-    )
+        if has_index(conn):
+            replace_links(conn, sheet)
 
 
 def update_quantity_sheet(conn, sheet, db_values):
-    conn.execute(
-        """
-        UPDATE quantity_sheets
-        SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
-            project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
-        WHERE id = ?
-        """,
-        db_values + (sheet["id"],),
-    )
+    with transfer_write(conn):
+        conn.execute(
+            """
+            UPDATE quantity_sheets
+            SET month = ?, iacuc = ?, room_id = ?, room_name = ?, manager = ?,
+                project = ?, pi = ?, owner = ?, funding = ?, updated_at = ?, payload = ?
+            WHERE id = ?
+            """,
+            db_values + (sheet["id"],),
+        )
+        if has_index(conn):
+            replace_links(conn, sheet)
 
 
 def delete_quantity_sheet_by_id(conn, sheet_id):
@@ -267,19 +275,6 @@ def delete_quantity_sheet_by_id(conn, sheet_id):
 
 
 def select_quantity_sheets_for_transfer(conn, month, source_sheet_id, target_iacucs, source_row_ids):
-    where_parts = ["month = ?", "id != ?"]
-    params = [month, source_sheet_id]
-    mirror_clauses = ["payload LIKE ?" for _ in source_row_ids] if source_row_ids else ["payload LIKE ?"]
-    if target_iacucs:
-        placeholders = ", ".join("?" for _ in target_iacucs)
-        where_parts.append(f"(iacuc IN ({placeholders}) OR {' OR '.join(mirror_clauses)})")
-        params.extend(target_iacucs)
-        params.extend([f"%{source_sheet_id}:{row_id}:%" for row_id in source_row_ids] or [f"%{source_sheet_id}%"])
-    else:
-        where_parts.append(f"({' OR '.join(mirror_clauses)})")
-        params.extend([f"%{source_sheet_id}:{row_id}:%" for row_id in source_row_ids] or [f"%{source_sheet_id}%"])
-    rows = conn.execute(
-        f"SELECT id, payload FROM quantity_sheets WHERE {' AND '.join(where_parts)}",
-        params,
-    ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    # Include references to removed rows too: cleanup removes every contribution
+    # from this source before rebuilding the current transfers.
+    return select_target_sheets(conn, month, source_sheet_id, target_iacucs)

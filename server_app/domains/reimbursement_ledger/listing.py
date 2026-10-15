@@ -7,6 +7,8 @@ API can never drive arbitrary SQL.
 
 from server_app.shared import clean_text
 
+from .repository import EFFECTIVE_OBLIGATION_WHERE
+
 OBLIGATION_LIST_COLUMNS = {
     "month": {"expr": "month", "order": "month"},
     "sourcePi": {"expr": "source_pi", "order": "source_pi"},
@@ -84,6 +86,8 @@ def list_column_options(conn, table, columns, filters, column):
     if not spec:
         return {"items": []}
     clauses, params = list_column_where(filters, columns, exclude_column=column)
+    if table == "reimbursement_settlement_obligations":
+        clauses.append(EFFECTIVE_OBLIGATION_WHERE)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
         f"""

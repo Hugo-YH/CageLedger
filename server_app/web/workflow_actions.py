@@ -534,7 +534,7 @@ class WorkflowActionsMixin:
                     raise ValueError("撤销结算流程时请填写撤回原因")
                 if existing and existing.get("workflowStatus") == WORKFLOW_STATUS_LOCKED:
                     raise ValueError("已归档流程不允许撤销，请先解锁")
-                workflow = delete_billing_workflow(conn, workflow_id)
+                workflow = delete_billing_workflow(conn, workflow_id, user)
                 reimbursement = get_reimbursement_record_by_workflow_id(conn, workflow_id)
                 deleted_reimbursement_id = ""
                 if reimbursement:

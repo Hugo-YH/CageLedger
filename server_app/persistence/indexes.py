@@ -18,16 +18,12 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_experiment_applications_iacuc ON experiment_applications(iacuc)",
     "CREATE INDEX IF NOT EXISTS idx_experiment_applications_raw_iacuc ON experiment_applications(raw_iacuc)",
     "CREATE INDEX IF NOT EXISTS idx_experiment_applications_pi ON experiment_applications(pi)",
-    "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month ON quantity_sheets(month)",
-    "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc ON quantity_sheets(iacuc)",
-    "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_pi ON quantity_sheets(pi)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month_updated ON quantity_sheets(month DESC, updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month_iacuc_updated ON quantity_sheets(month DESC, iacuc, updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_iacuc_month ON quantity_sheets(iacuc, month DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_pi_month ON quantity_sheets(pi, month DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_room_month ON quantity_sheets(room_name, month DESC)",
     "CREATE INDEX IF NOT EXISTS idx_quantity_sheets_month_room ON quantity_sheets(month, room_name)",
-    "CREATE INDEX IF NOT EXISTS idx_intake_batches_status ON intake_batches(status)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_intake_date ON intake_batches(intake_date)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_iacuc ON intake_batches(iacuc)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_status_date ON intake_batches(status, intake_date DESC)",
@@ -47,12 +43,11 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshot_iacucs_lookup ON billing_candidate_snapshot_iacucs(source_type, iacuc, month DESC, pi COLLATE NOCASE)",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_month ON billing_workflows(month)",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_status ON billing_workflows(workflow_status)",
-    "CREATE INDEX IF NOT EXISTS idx_billing_versions_workflow_id ON billing_statement_versions(workflow_id)",
-    "CREATE INDEX IF NOT EXISTS idx_billing_version_lines_version_id ON billing_statement_version_lines(version_id)",
-    "CREATE INDEX IF NOT EXISTS idx_billing_events_workflow_id ON billing_workflow_events(workflow_id)",
+    "CREATE INDEX IF NOT EXISTS idx_billing_versions_workflow_number ON billing_statement_versions(workflow_id, version_no)",
+    "CREATE INDEX IF NOT EXISTS idx_billing_version_lines_version_date ON billing_statement_version_lines(version_id, line_date)",
+    "CREATE INDEX IF NOT EXISTS idx_billing_events_workflow_at ON billing_workflow_events(workflow_id, at)",
     "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_month ON reimbursement_records(month)",
     "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_pi ON reimbursement_records(pi)",
-    "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_status ON reimbursement_records(reimbursement_status)",
     "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_month_latest ON reimbursement_records(month DESC, latest_event_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_status_month_latest ON reimbursement_records(reimbursement_status, month DESC, latest_event_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_reimbursement_records_workflow_id ON reimbursement_records(workflow_id)",
@@ -82,7 +77,31 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_animal_attachments_finding ON animal_inspection_attachments(finding_id, created_at)",
 )
 
+# Only non-unique indexes with equivalent leading columns are retired. Create
+# their replacements first so old databases retain coverage throughout startup.
+SUPERSEDED_INDEXES = (
+    ("idx_quantity_sheets_month", "idx_quantity_sheets_month_room"),
+    ("idx_quantity_sheets_iacuc", "idx_quantity_sheets_iacuc_month"),
+    ("idx_quantity_sheets_pi", "idx_quantity_sheets_pi_month"),
+    ("idx_intake_batches_status", "idx_intake_batches_status_date"),
+    ("idx_reimbursement_records_status", "idx_reimbursement_records_status_month_latest"),
+    ("idx_billing_versions_workflow_id", "idx_billing_versions_workflow_number"),
+    ("idx_billing_version_lines_version_id", "idx_billing_version_lines_version_date"),
+    ("idx_billing_events_workflow_id", "idx_billing_events_workflow_at"),
+)
+
 
 def create_performance_indexes(conn):
     for statement in INDEX_STATEMENTS:
         conn.execute(statement)
+    for previous, replacement in SUPERSEDED_INDEXES:
+        table = conn.execute("SELECT tbl_name FROM sqlite_master WHERE type='index' AND name=?", (previous,)).fetchone()
+        if (
+            table
+            and conn.execute('SELECT "unique" FROM pragma_index_list(?) WHERE name=?', (table[0], previous)).fetchone()[
+                0
+            ]
+        ):
+            continue
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?", (replacement,)).fetchone():
+            conn.execute(f'DROP INDEX IF EXISTS "{previous}"')

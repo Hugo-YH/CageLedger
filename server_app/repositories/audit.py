@@ -1,7 +1,13 @@
+from .audit_storage import audit_write, compact_event
 from .payload import dump_json
 
 
 def insert_audit_events(conn, events):
+    with audit_write(conn):
+        _insert_audit_events(conn, events)
+
+
+def _insert_audit_events(conn, events):
     for event in events:
         conn.execute(
             """
@@ -25,3 +31,4 @@ def insert_audit_events(conn, events):
                 dump_json(event),
             ),
         )
+        compact_event(conn, event["id"])

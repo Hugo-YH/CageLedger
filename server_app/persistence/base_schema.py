@@ -1,3 +1,8 @@
+from server_app.persistence.audit_storage import ensure_schema as ensure_audit_storage
+from server_app.persistence.billing_snapshot_storage import ensure_schema as ensure_bill_snapshot_storage
+from server_app.persistence.money_fields import ensure_schema as ensure_money_fields
+
+
 def initialize_base_schema(
     conn, *, migrate_schema, repair_missing_cage_slots, create_performance_indexes, ensure_default_admin
 ):
@@ -688,7 +693,10 @@ def initialize_base_schema(
         )
         """
     )
+    ensure_bill_snapshot_storage(conn)
     migrate_schema(conn)
+    ensure_money_fields(conn)
+    ensure_audit_storage(conn)
     repair_missing_cage_slots(conn)
     create_performance_indexes(conn)
     conn.commit()

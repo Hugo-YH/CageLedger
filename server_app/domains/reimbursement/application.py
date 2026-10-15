@@ -39,6 +39,7 @@ from server_app.services.reimbursement import (
     coerce_money as coerce_reimbursement_money,
 )
 from server_app.shared import clean_text, now_iso
+from server_app.shared.money_fields import money_difference, money_sum
 
 
 def upsert_reimbursement_record_from_statement(
@@ -67,11 +68,13 @@ def recalculate_reimbursement_accumulations(conn, pi_name):
         payable_amount = coerce_reimbursement_money(record.get("payableAmount", 0))
         paid_amount = coerce_reimbursement_money(record.get("paidAmount", 0))
         record["unpaidAmount"] = coerce_reimbursement_money(max(payable_amount - paid_amount, 0))
-        accumulated_payable += payable_amount
-        accumulated_paid += paid_amount
+        accumulated_payable = money_sum((accumulated_payable, payable_amount))
+        accumulated_paid = money_sum((accumulated_paid, paid_amount))
         record["accumulatedPayable"] = coerce_reimbursement_money(accumulated_payable)
         record["accumulatedPaid"] = coerce_reimbursement_money(accumulated_paid)
-        record["accumulatedUnpaid"] = coerce_reimbursement_money(accumulated_payable - accumulated_paid)
+        record["accumulatedUnpaid"] = coerce_reimbursement_money(
+            money_difference(accumulated_payable, accumulated_paid)
+        )
         record["updatedAt"] = now_iso()
         upsert_reimbursement_record(conn, record)
 
@@ -132,7 +135,9 @@ def import_monthly_reimbursement_workbook(conn, file_body, actor):
             "owner": clean_text(existing.get("owner", "")),
             "funding": "；".join(distinct_text_list(entry["funding"])) or clean_text(existing.get("funding", "")),
         }
-        payload["unpaidAmount"] = coerce_reimbursement_money(max(payload["payableAmount"] - payload["paidAmount"], 0))
+        payload["unpaidAmount"] = coerce_reimbursement_money(
+            max(money_difference(payload["payableAmount"], payload["paidAmount"]), 0)
+        )
         if (
             payload["reimbursementStatus"] == REIMBURSEMENT_STATUS_COMPLETED
             and payload["paidAmount"] + 1e-9 < payload["payableAmount"]
@@ -260,7 +265,7 @@ def import_arrears_reimbursement_workbook(conn, file_body, actor):
                 "funding": funding or clean_text(existing.get("funding", "")),
             }
             payload["unpaidAmount"] = coerce_reimbursement_money(
-                max(payload["payableAmount"] - payload["paidAmount"], 0)
+                max(money_difference(payload["payableAmount"], payload["paidAmount"]), 0)
             )
             upsert_reimbursement_record(conn, payload)
             saved.append(payload)

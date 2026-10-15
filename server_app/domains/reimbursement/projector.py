@@ -23,6 +23,7 @@ from server_app.services.reimbursement import (
     coerce_money as coerce_reimbursement_money,
 )
 from server_app.shared import clean_text, now_iso
+from server_app.shared.money_fields import money_difference
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,9 @@ def build_reimbursement_record_payload(existing, workflow, statement, lines, det
     business_key = reimbursement_business_key(month, pi_name)
     current_month_amount = coerce_reimbursement_money(statement.get("totalAmount", 0))
     support_amount = coerce_reimbursement_money(summary.get("supportAmount", 0))
-    payable_amount = coerce_reimbursement_money(summary.get("payableAmount", current_month_amount - support_amount))
+    payable_amount = coerce_reimbursement_money(
+        summary.get("payableAmount", money_difference(current_month_amount, support_amount))
+    )
     paid_amount = coerce_reimbursement_money(existing.get("paidAmount", 0) if existing else 0)
     reimbursement_status = normalize_reimbursement_status(existing.get("reimbursementStatus") if existing else "")
     payload = {
@@ -191,7 +194,7 @@ def build_reimbursement_record_payload(existing, workflow, statement, lines, det
         "supportAmount": support_amount,
         "payableAmount": payable_amount,
         "paidAmount": paid_amount,
-        "unpaidAmount": coerce_reimbursement_money(max(payable_amount - paid_amount, 0)),
+        "unpaidAmount": coerce_reimbursement_money(max(money_difference(payable_amount, paid_amount), 0)),
         "accumulatedPayable": coerce_reimbursement_money(existing.get("accumulatedPayable", 0) if existing else 0),
         "accumulatedPaid": coerce_reimbursement_money(existing.get("accumulatedPaid", 0) if existing else 0),
         "accumulatedUnpaid": coerce_reimbursement_money(existing.get("accumulatedUnpaid", 0) if existing else 0),

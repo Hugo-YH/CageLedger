@@ -18,6 +18,13 @@ from .listing import (
     list_sort_order,
 )
 from .repository import (
+    EFFECTIVE_OBLIGATION_WHERE,
+    confirm_allocation_if_effective,
+    effective_obligation_row,
+    require_effective_obligation,
+    validate_funding_line_ownership,
+)
+from .repository import (
     allocation_payload as _allocation_payload,
 )
 from .repository import (
@@ -74,7 +81,7 @@ from .repository import (
 from .repository import (
     upsert_obligation as _upsert_obligation,
 )
-from .repository import validate_funding_line_ownership
+from .snapshot_sync import sync_same_version_obligation
 
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 MAX_ATTACHMENTS_PER_CLAIM = 10
@@ -85,8 +92,9 @@ ALLOCATION_STATUSES = {"draft", "confirmed", "reversed"}
 
 def list_obligations(conn, actor, filters):
     _require_authenticated(actor)
-    sync_settlement_obligations(conn)
+    sync_settlement_obligations(conn, actor)
     clauses, params = _obligation_filters(filters)
+    clauses.append(EFFECTIVE_OBLIGATION_WHERE)
     column_clauses, column_params = list_column_where(filters, OBLIGATION_LIST_COLUMNS)
     clauses.extend(column_clauses)
     params.extend(column_params)
@@ -103,11 +111,8 @@ def list_obligations(conn, actor, filters):
 
 def get_obligation(conn, actor, obligation_id):
     _require_authenticated(actor)
-    sync_settlement_obligations(conn)
-    row = conn.execute("SELECT * FROM reimbursement_settlement_obligations WHERE id = ?", (obligation_id,)).fetchone()
-    if not row:
-        raise LookupError("结算应收不存在")
-    return {"item": _obligation_payload(conn, row)}
+    sync_settlement_obligations(conn, actor)
+    return {"item": _obligation_payload(conn, effective_obligation_row(conn, obligation_id))}
 
 
 def list_claims(conn, actor, filters):
@@ -266,6 +271,7 @@ def create_allocation(conn, actor, payload):
         raise ValueError("核销经费明细与报销单不匹配")
     _require_claim_edit(actor, claim)
     obligation = _obligation_row(conn, clean_text(payload.get("obligationId", "")))
+    require_effective_obligation(conn, obligation["id"])
     amount = _input_money(payload.get("amount"), "核销金额")
     if amount <= 0:
         raise ValueError("核销金额应大于 0")
@@ -308,22 +314,10 @@ def confirm_allocation(conn, actor, allocation_id):
         raise ValueError("只有核销草稿可以确认")
     line = _funding_line_row(conn, allocation["funding_line_id"])
     obligation = _obligation_row(conn, allocation["obligation_id"])
+    require_effective_obligation(conn, obligation["id"])
     now = now_iso()
-    updated = conn.execute(
-        """UPDATE reimbursement_allocations AS target
-           SET status = 'confirmed', confirmed_by = ?, confirmed_at = ?, updated_at = ?
-           WHERE target.id = ? AND target.status = 'draft'
-             AND target.amount + (
-               SELECT COALESCE(SUM(other.amount), 0) FROM reimbursement_allocations AS other
-               WHERE other.funding_line_id = target.funding_line_id AND other.status = 'confirmed'
-             ) <= (SELECT reimbursement_amount FROM reimbursement_claim_funding_lines WHERE id = target.funding_line_id)
-             AND target.amount + (
-               SELECT COALESCE(SUM(other.amount), 0) FROM reimbursement_allocations AS other
-               WHERE other.obligation_id = target.obligation_id AND other.status = 'confirmed'
-             ) <= (SELECT payable_amount FROM reimbursement_settlement_obligations WHERE id = target.obligation_id)""",
-        (actor["id"], now, now, allocation_id),
-    )
-    if updated.rowcount != 1:
+    if not confirm_allocation_if_effective(conn, allocation_id, actor["id"], now):
+        require_effective_obligation(conn, obligation["id"])
         current = _allocation_row(conn, allocation_id)
         if current["status"] != "draft":
             raise ValueError("只有核销草稿可以确认")
@@ -553,7 +547,7 @@ def migrate_legacy_record(conn, actor, record_id):
     return get_claim(conn, actor, claim["id"])
 
 
-def sync_settlement_obligations(conn):
+def sync_settlement_obligations(conn, actor=None):
     rows = conn.execute(
         """SELECT workflows.id AS workflow_id, workflows.month, workflows.iacuc, workflows.current_version_id,
                   workflows.current_version_no, versions.payload
@@ -601,11 +595,8 @@ def sync_settlement_obligations(conn):
             continue
         confirmed = _confirmed_amount_for_obligation(conn, existing["id"])
         if existing["statement_version_id"] == row["current_version_id"]:
-            if existing["iacuc"].startswith("pi::") and statement_iacuc:
-                payload = _obligation_payload(conn, existing)
-                payload.update({"iacuc": statement_iacuc, "updatedAt": now})
-                _upsert_obligation(conn, payload)
-                changed = True
+            if (confirmed <= 0.00001 and existing["payable_amount"] != payable) or existing["iacuc"].startswith("pi::"):
+                changed = sync_same_version_obligation(conn, existing["id"], actor) or changed
             continue
         if confirmed <= 0.00001:
             payload = _obligation_payload(conn, existing)

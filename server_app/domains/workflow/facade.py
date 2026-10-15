@@ -1,5 +1,6 @@
 """Compatibility-facing workflow queries backed by the canonical repository."""
 
+from server_app.domains.reimbursement_ledger.lifecycle import cancel_workflow_obligations
 from server_app.repositories.billing_statements import list_billing_statement_line_summaries_for_version
 from server_app.repositories.billing_workflows import (
     billing_workflow_detail_item,
@@ -45,10 +46,11 @@ def list_billing_workflow_lines(conn, workflow_id, version_id=""):
     }
 
 
-def delete_billing_workflow(conn, workflow_id):
+def delete_billing_workflow(conn, workflow_id, actor):
     workflow = get_billing_workflow(conn, workflow_id)
     if not workflow:
         raise LookupError("结算流程不存在")
+    cancel_workflow_obligations(conn, workflow_id, actor)
     delete_billing_workflow_tree(conn, workflow_id)
     return workflow
 

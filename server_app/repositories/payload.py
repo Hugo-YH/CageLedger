@@ -2,6 +2,8 @@ import json
 
 from server_app.cache import cache_get, cache_key, cache_set
 
+from .audit_storage import payloads_for_rows
+
 
 def dump_json(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
@@ -12,6 +14,9 @@ def placeholders(values):
 
 
 def read_payloads(conn, table, order_by):
+    if table == "audit_events":
+        rows = conn.execute(f"SELECT id,payload FROM {table} ORDER BY {order_by}").fetchall()
+        return [json.loads(payload) for payload in payloads_for_rows(conn, rows)]
     rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {order_by}").fetchall()
     return [json.loads(row["payload"]) for row in rows]
 
@@ -19,12 +24,17 @@ def read_payloads(conn, table, order_by):
 def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200, offset=0):
     where_clause = f" WHERE {where_sql}" if where_sql else ""
     total = conn.execute(f"SELECT COUNT(*) AS total FROM {table}{where_clause}", params).fetchone()["total"]
+    columns = "id,payload" if table == "audit_events" else "payload"
     rows = conn.execute(
-        f"SELECT payload FROM {table}{where_clause} ORDER BY {order_by} LIMIT ? OFFSET ?",
+        f"SELECT {columns} FROM {table}{where_clause} ORDER BY {order_by} LIMIT ? OFFSET ?",
         (*params, limit, offset),
     ).fetchall()
+    if table == "audit_events":
+        payloads = payloads_for_rows(conn, rows)
+    else:
+        payloads = [row["payload"] for row in rows]
     return {
-        "items": [json.loads(row["payload"]) for row in rows],
+        "items": [json.loads(payload) for payload in payloads],
         "page": {
             "limit": limit,
             "offset": offset,

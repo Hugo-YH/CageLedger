@@ -701,15 +701,9 @@ def insert_billing_workflow_event(conn, payload):
 
 
 def delete_billing_workflow_tree(conn, workflow_id):
-    conn.execute(
-        """
-        DELETE FROM billing_statement_version_lines
-        WHERE version_id IN (
-            SELECT id FROM billing_statement_versions WHERE workflow_id = ?
-        )
-        """,
-        (workflow_id,),
-    )
+    from .billing_snapshot_storage import delete_workflow_snapshot_data
+
+    delete_workflow_snapshot_data(conn, workflow_id)
     conn.execute("DELETE FROM billing_workflow_events WHERE workflow_id = ?", (workflow_id,))
     conn.execute("DELETE FROM billing_statement_versions WHERE workflow_id = ?", (workflow_id,))
     conn.execute("DELETE FROM billing_workflows WHERE id = ?", (workflow_id,))

@@ -2,6 +2,83 @@ import json
 import math
 
 from server_app.shared import now_iso
+from server_app.shared.money_fields import money_difference, money_sum
+
+from .money_storage import allocation_fits_sql, confirmed_total
+
+EFFECTIVE_OBLIGATION_WHERE = """
+reimbursement_settlement_obligations.status <> 'void'
+AND EXISTS (
+    SELECT 1 FROM billing_workflows AS source_workflow
+    JOIN billing_statement_versions AS source_version ON source_version.workflow_id = source_workflow.id
+    WHERE source_workflow.id = reimbursement_settlement_obligations.workflow_id
+      AND source_version.id = reimbursement_settlement_obligations.statement_version_id
+)
+"""
+
+
+def require_effective_obligation(conn, obligation_id):
+    if not conn.execute(
+        f"SELECT 1 FROM reimbursement_settlement_obligations WHERE id = ? AND {EFFECTIVE_OBLIGATION_WHERE}",
+        (obligation_id,),
+    ).fetchone():
+        raise ValueError("结算应收已撤销或来源不存在，不能继续核销")
+
+
+def effective_obligation_row(conn, obligation_id):
+    row = conn.execute(
+        f"SELECT * FROM reimbursement_settlement_obligations WHERE id = ? AND {EFFECTIVE_OBLIGATION_WHERE}",
+        (obligation_id,),
+    ).fetchone()
+    if not row:
+        raise LookupError("结算应收不存在或已撤销")
+    return row
+
+
+def workflow_obligations(conn, workflow_id):
+    return conn.execute(
+        """SELECT obligations.*,
+           (SELECT COUNT(*) FROM reimbursement_allocations WHERE obligation_id = obligations.id) AS allocation_count,
+           (SELECT COUNT(*) FROM reimbursement_allocations
+            WHERE obligation_id = obligations.id AND status = 'confirmed') AS confirmed_count
+           FROM reimbursement_settlement_obligations AS obligations WHERE workflow_id = ?""",
+        (workflow_id,),
+    ).fetchall()
+
+
+def current_snapshot_obligation(conn, obligation_id):
+    return conn.execute(
+        """SELECT obligations.*, versions.payload AS snapshot_payload, workflows.iacuc AS workflow_iacuc,
+           (SELECT COUNT(*) FROM reimbursement_allocations
+            WHERE obligation_id=obligations.id AND status='confirmed') AS confirmed_count
+           FROM reimbursement_settlement_obligations AS obligations
+           JOIN billing_workflows AS workflows ON workflows.id=obligations.workflow_id
+           JOIN billing_statement_versions AS versions
+             ON versions.id=obligations.statement_version_id AND versions.workflow_id=workflows.id
+           WHERE obligations.id=? AND obligations.status<>'void' AND obligations.obligation_kind='statement'
+             AND workflows.current_version_id=versions.id AND versions.version_status<>'voided'""",
+        (obligation_id,),
+    ).fetchone()
+
+
+def confirm_allocation_if_effective(conn, allocation_id, actor_id, now):
+    return (
+        conn.execute(
+            f"""UPDATE reimbursement_allocations AS target
+           SET status = 'confirmed', confirmed_by = ?, confirmed_at = ?, updated_at = ?
+           WHERE target.id = ? AND target.status = 'draft'
+             AND EXISTS (SELECT 1 FROM reimbursement_settlement_obligations
+                         WHERE id = target.obligation_id AND {EFFECTIVE_OBLIGATION_WHERE})
+             AND ({allocation_fits_sql("funding_line_id", "reimbursement_claim_funding_lines", "reimbursement_amount")})
+             AND ({allocation_fits_sql("obligation_id", "reimbursement_settlement_obligations", "payable_amount")})""",
+            (actor_id, now, now, allocation_id),
+        ).rowcount
+        == 1
+    )
+
+
+def delete_unreferenced_obligation(conn, obligation_id):
+    conn.execute("DELETE FROM reimbursement_settlement_obligations WHERE id = ?", (obligation_id,))
 
 
 def claim_row(conn, claim_id):
@@ -329,18 +406,20 @@ def refresh_line_balance(conn, line_id):
     allocated = confirmed_amount_for_line(conn, line_id)
     conn.execute(
         "UPDATE reimbursement_claim_funding_lines SET allocated_amount = ?, unallocated_amount = ?, updated_at = ? WHERE id = ?",
-        (allocated, round(float(row["reimbursement_amount"]) - allocated, 2), now_iso(), line_id),
+        (allocated, money_difference(row["reimbursement_amount"], allocated), now_iso(), line_id),
     )
 
 
 def refresh_obligation_balance(conn, obligation_id):
     row = obligation_row(conn, obligation_id)
+    if row["status"] == "void":
+        return
     allocated = confirmed_amount_for_obligation(conn, obligation_id)
     claims = conn.execute(
         "SELECT COUNT(DISTINCT funding_line_id) FROM reimbursement_allocations WHERE obligation_id = ? AND status = 'confirmed'",
         (obligation_id,),
     ).fetchone()[0]
-    outstanding = round(float(row["payable_amount"]) - allocated, 2)
+    outstanding = money_difference(row["payable_amount"], allocated)
     status = "settled" if abs(outstanding) < 0.00001 else "open"
     conn.execute(
         "UPDATE reimbursement_settlement_obligations SET allocated_amount = ?, outstanding_amount = ?, claim_count = ?, status = ?, updated_at = ? WHERE id = ?",
@@ -354,33 +433,23 @@ def refresh_claim_balances(conn, claim_id):
     ).fetchall()
     for line in lines:
         refresh_line_balance(conn, line["id"])
-    total = round(sum(float(item["reimbursement_amount"]) for item in lines), 2)
-    allocated = round(sum(confirmed_amount_for_line(conn, item["id"]) for item in lines), 2)
+    total = money_sum(item["reimbursement_amount"] for item in lines)
+    allocated = money_sum(confirmed_amount_for_line(conn, item["id"]) for item in lines)
     attachments = conn.execute(
         "SELECT COUNT(*) FROM reimbursement_claim_attachments WHERE claim_id = ?", (claim_id,)
     ).fetchone()[0]
     conn.execute(
         "UPDATE reimbursement_claims SET total_amount = ?, allocated_amount = ?, unallocated_amount = ?, attachment_count = ?, updated_at = ? WHERE id = ?",
-        (total, allocated, round(total - allocated, 2), attachments, now_iso(), claim_id),
+        (total, allocated, money_difference(total, allocated), attachments, now_iso(), claim_id),
     )
 
 
 def confirmed_amount_for_line(conn, line_id):
-    return money(
-        conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM reimbursement_allocations WHERE funding_line_id = ? AND status = 'confirmed'",
-            (line_id,),
-        ).fetchone()[0]
-    )
+    return confirmed_total(conn, "funding_line_id", line_id)
 
 
 def confirmed_amount_for_obligation(conn, obligation_id):
-    return money(
-        conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM reimbursement_allocations WHERE obligation_id = ? AND status = 'confirmed'",
-            (obligation_id,),
-        ).fetchone()[0]
-    )
+    return confirmed_total(conn, "obligation_id", obligation_id)
 
 
 def claim_has_confirmed_allocations(conn, claim_id):

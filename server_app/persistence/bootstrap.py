@@ -28,6 +28,7 @@ from server_app.domains.workflow.payloads import (
 )
 from server_app.persistence import SchemaRegistry, SchemaStep, backfills
 from server_app.persistence.base_schema import initialize_base_schema
+from server_app.persistence.data_quality import ensure_schema as ensure_data_quality_schema
 from server_app.persistence.indexes import create_performance_indexes
 from server_app.persistence.legacy_migrations import (
     backfill_occupancy_structured_columns as backfill_occupancy_structured_columns_migration,
@@ -41,6 +42,7 @@ from server_app.persistence.legacy_migrations import (
 from server_app.persistence.legacy_migrations import (
     ensure_occupancies_structured_columns as ensure_occupancies_structured_columns_migration,
 )
+from server_app.persistence.quantity_transfer_links import ensure_schema as ensure_quantity_transfer_links
 from server_app.persistence.workflow_migration import (
     BillingWorkflowMigrationPorts,
 )
@@ -51,6 +53,7 @@ from server_app.persistence.workflow_migration import (
     migrate_billing_workflow_schema as migrate_billing_workflow_schema_migration,
 )
 from server_app.repositories.payload import dump_json, read_setting, set_setting, table_has_rows
+from server_app.repositories.quantity_transfer_links import refresh_pending as refresh_quantity_transfer_links
 from server_app.shared import as_int, new_id, now_iso
 
 REIMBURSEMENT_MIGRATION_KEY = "reimbursementRecordMigrationDone"
@@ -71,6 +74,8 @@ def initialize_schema(conn):
     registry = SchemaRegistry(
         [
             SchemaStep("legacy-schema", initialize_legacy_schema),
+            SchemaStep("data-quality-registry", ensure_data_quality_schema),
+            SchemaStep("quantity-transfer-links", initialize_quantity_transfer_links),
             SchemaStep("quarantine", ensure_quarantine_schema),
             SchemaStep("feedback", ensure_feedback_schema),
             SchemaStep("technical-services", ensure_technical_service_schema),
@@ -84,6 +89,11 @@ def initialize_schema(conn):
         ]
     )
     registry.apply(conn)
+
+
+def initialize_quantity_transfer_links(conn):
+    ensure_quantity_transfer_links(conn)
+    refresh_quantity_transfer_links(conn)
 
 
 def migrate_schema(conn):

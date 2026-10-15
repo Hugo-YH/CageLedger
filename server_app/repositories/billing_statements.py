@@ -2,18 +2,16 @@ import json
 
 from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
 
+from .billing_snapshot_storage import insert_records, read_records, snapshot_write, validate_summary_storage
 from .payload import dump_json
 
 
 def list_billing_statement_lines_for_version(conn, version_id):
-    rows = conn.execute(
-        "SELECT payload FROM billing_statement_version_lines WHERE version_id = ? ORDER BY line_date, rowid",
-        (version_id,),
-    ).fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    return [json.loads(row[2]) for row in read_records(conn, version_id)]
 
 
 def list_billing_statement_line_summaries_for_version(conn, version_id):
+    validate_summary_storage(conn, version_id)
     key = cache_key("billing_workflows::lines", version_id=version_id)
     cached = cache_get(key)
     if cached is not None:
@@ -123,14 +121,12 @@ def get_current_billing_statement(conn, statement_id):
 
 
 def replace_billing_statement_version_lines(conn, version_id, lines):
-    conn.execute("DELETE FROM billing_statement_version_lines WHERE version_id = ?", (version_id,))
+    records = []
     for index, line in enumerate(lines, start=1):
         normalized = {**line, "versionId": version_id}
         line_id = normalized.get("id") or f"{version_id}-line-{index}"
-        conn.execute(
-            """
-            INSERT INTO billing_statement_version_lines (id, version_id, line_date, payload)
-            VALUES (?, ?, ?, ?)
-            """,
-            (line_id, version_id, normalized.get("date", ""), dump_json(normalized)),
-        )
+        records.append([line_id, normalized.get("date", ""), dump_json(normalized)])
+    records.sort(key=lambda record: record[1])
+    with snapshot_write(conn):
+        conn.execute("DELETE FROM billing_statement_version_lines WHERE version_id = ?", (version_id,))
+        insert_records(conn, version_id, records)

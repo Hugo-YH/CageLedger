@@ -15,6 +15,7 @@ from server_app.domains.workflow.application import (
 from server_app.domains.workflow.facade import get_billing_version, get_billing_workflow
 from server_app.domains.workflow.permissions import with_withdrawal_capabilities, withdrawal_capabilities
 from server_app.legacy import initialize_schema
+from server_app.repositories.audit_storage import read_payload as read_audit_payload
 from server_app.web.workflow_actions import WorkflowActionsMixin
 
 ADMIN = {"id": "admin", "username": "admin", "displayName": "系统管理员", "role": "admin"}
@@ -96,7 +97,9 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.assertIsNone(get_billing_version(self.conn, self.version["id"]))
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM billing_workflow_events").fetchone()[0], 0)
         audit = json.loads(
-            self.conn.execute("SELECT payload FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+            read_audit_payload(
+                self.conn, self.conn.execute("SELECT id FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+            )
         )
         self.assertEqual(audit["actorUserId"], OWNER["id"])
         self.assertIn("金额核对有误", audit["message"])
@@ -113,7 +116,9 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.assertEqual(statement["totalAmount"], 100)
         self.assertEqual(response.response["event"]["note"], "金额核对有误")
         audit = json.loads(
-            self.conn.execute("SELECT payload FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+            read_audit_payload(
+                self.conn, self.conn.execute("SELECT id FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+            )
         )
         self.assertEqual(audit["after"]["event"]["note"], "金额核对有误")
         self.assertEqual(audit["actorUserId"], OWNER["id"])
@@ -234,7 +239,9 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.assertEqual(statement["reimbursementFormNos"], ["REGISTER-001"])
         self.assertEqual(response.response["event"]["actor"]["id"], actor["id"])
         audit = json.loads(
-            self.conn.execute("SELECT payload FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+            read_audit_payload(
+                self.conn, self.conn.execute("SELECT id FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+            )
         )
         self.assertEqual(audit["actorUserId"], actor["id"])
         self.assertEqual(audit["after"]["version"]["statement"]["registeredBy"]["id"], actor["id"])

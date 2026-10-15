@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from server_app import legacy
+from server_app.repositories.audit_storage import payloads_for_rows
 from server_app.shared.identifiers import new_id
 
 
@@ -44,10 +45,11 @@ def load_snapshots(entity_id):
             """,
             (entity_id,),
         ).fetchall()
+        payloads = payloads_for_rows(conn, [(row["id"], row["payload"]) for row in rows])
 
     snapshots = []
-    for row in rows:
-        payload = json.loads(row["payload"] or "{}")
+    for row, stored_payload in zip(rows, payloads, strict=True):
+        payload = json.loads(stored_payload or "{}")
         after = payload.get("after")
         if not isinstance(after, dict) or not after.get("batchNo"):
             continue

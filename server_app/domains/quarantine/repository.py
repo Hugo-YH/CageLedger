@@ -19,8 +19,18 @@ def ensure_schema(conn):
         conn.execute(
             f"CREATE TABLE IF NOT EXISTS quarantine_{table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL {extra})"
         )
-    for table, field in (("tests", "batch_id"), ("attachments", "test_id"), ("reports", "test_id")):
+    for table, field in (("tests", "batch_id"), ("attachments", "test_id")):
         conn.execute(f"CREATE INDEX IF NOT EXISTS idx_quarantine_{table}_{field} ON quarantine_{table}({field})")
+    # Keep older schemas covered unless their version uniqueness is present.
+    version_unique = conn.execute("""SELECT 1 FROM pragma_index_list('quarantine_reports') AS indexes
+        WHERE indexes."unique" = 1 AND indexes.partial = 0
+        AND (SELECT group_concat(name, ',') FROM pragma_index_info(indexes.name)) = 'test_id,version'""").fetchone()
+    lookup_unique = conn.execute("""SELECT "unique" FROM pragma_index_list('quarantine_reports')
+        WHERE name = 'idx_quarantine_reports_test_id'""").fetchone()
+    if version_unique and (not lookup_unique or not lookup_unique[0]):
+        conn.execute("DROP INDEX IF EXISTS idx_quarantine_reports_test_id")
+    else:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_quarantine_reports_test_id ON quarantine_reports(test_id)")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS quarantine_number_sequences (
                scope TEXT PRIMARY KEY,

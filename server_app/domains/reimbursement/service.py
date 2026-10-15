@@ -1,5 +1,7 @@
 import re
 
+from server_app.shared.money_fields import money_difference, money_sum
+
 REIMBURSEMENT_STATUS_PENDING = "pending_submission"
 REIMBURSEMENT_STATUS_REIMBURSING = "reimbursing"
 REIMBURSEMENT_STATUS_COMPLETED = "completed"
@@ -182,8 +184,8 @@ def summarize_statement(statement, lines, detail_context_by_iacuc, tier_limit):
                 "statementVersionId": statement.get("versionId", "") or statement.get("id", ""),
             }
         )
-    support_total = sum(item["supportAmount"] for item in details)
-    payable_total = sum(item["payableAmount"] for item in details)
+    support_total = money_sum(item["supportAmount"] for item in details)
+    payable_total = money_sum(item["payableAmount"] for item in details)
     return {
         "billingUnit": billing_unit,
         "details": details,
@@ -206,7 +208,7 @@ def merge_reimbursement_edit(existing, patch):
         patch.get("reimbursementStatus", existing.get("reimbursementStatus", REIMBURSEMENT_STATUS_PENDING))
     )
     payable_amount = coerce_money(next_record.get("payableAmount", 0))
-    next_record["unpaidAmount"] = coerce_money(max(payable_amount - next_record["paidAmount"], 0))
+    next_record["unpaidAmount"] = coerce_money(max(money_difference(payable_amount, next_record["paidAmount"]), 0))
     if requested_status == REIMBURSEMENT_STATUS_COMPLETED and next_record["paidAmount"] + 1e-9 < payable_amount:
         raise ValueError("已缴金额达到本月应缴金额后才能标记完成")
     if requested_status == REIMBURSEMENT_STATUS_REIMBURSING and not (
