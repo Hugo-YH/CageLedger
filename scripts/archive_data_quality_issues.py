@@ -15,7 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.check_billing_consistency import fingerprint  # noqa: E402
 from server_app.domains.data_quality.service import archive_issues  # noqa: E402
 
-REGISTRY_TABLES = {"data_quality_scans", "data_quality_issues", "data_quality_observations"}
+REGISTRY_TABLES = {
+    "data_quality_scans",
+    "data_quality_issues",
+    "data_quality_observations",
+    "data_quality_upgrade_runs",
+}
 
 
 def quote_identifier(value):

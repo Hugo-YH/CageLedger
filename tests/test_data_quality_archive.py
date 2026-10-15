@@ -24,7 +24,8 @@ class DataQualityArchiveTests(unittest.TestCase):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys=ON")
-        initialize_schema(self.conn)
+        with patch("server_app.persistence.bootstrap.archive_upgrade_issues"):
+            initialize_schema(self.conn)
         self.conn.row_factory = None
         for identity in ("batch-a", "batch-b"):
             batch = {

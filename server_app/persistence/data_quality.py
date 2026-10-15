@@ -44,6 +44,15 @@ def ensure_schema(conn):
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS data_quality_upgrade_runs (
+            detector_version TEXT PRIMARY KEY,
+            scan_id TEXT NOT NULL UNIQUE REFERENCES data_quality_scans(id),
+            completed_at TEXT NOT NULL
+        )
+        """
+    )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_data_quality_entity ON data_quality_issues(entity_type,entity_id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_data_quality_review ON data_quality_issues(review_status,code,last_seen_at)"

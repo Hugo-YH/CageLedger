@@ -6,6 +6,19 @@ from datetime import UTC, datetime
 
 from server_app.repositories.audit_storage import payloads_for_rows
 
+SNAPSHOT_INPUTS = {
+    "intake_batches": "id,payload,updated_at",
+    "placement_tasks": "id,payload,updated_at",
+    "occupancies": "id,payload,updated_at",
+    "cage_slots": "id",
+    "billing_workflows": "id,latest_event_at",
+    "reimbursement_settlement_obligations": "id,workflow_id,payload",
+    "reimbursement_allocations": "id,obligation_id,status",
+    "quantity_sheets": "id,updated_at",
+    "reimbursement_records": "id,updated_at",
+    "audit_events": "id,at,entity_type,entity_id,action,payload",
+}
+
 
 def canonical_json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -13,6 +26,51 @@ def canonical_json(value):
 
 def digest(value):
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
+
+
+def source_snapshot(conn):
+    """Hash review inputs under the caller's write lock, including committed WAL rows.
+
+    This is a logical row fingerprint, not a hash of a live SQLite main file.
+    Review audit entries and physical compression details are deliberately excluded.
+    """
+    checksum = hashlib.sha256()
+    counts = {}
+    for table, fields in SNAPSHOT_INPUTS.items():
+        checksum.update(canonical_json([table, fields]).encode() + b"\n")
+        where = " WHERE action<>'data_quality.issues_archived'" if table == "audit_events" else ""
+        cursor = conn.execute(f"SELECT {fields} FROM {table}{where} ORDER BY id")
+        count = 0
+        while rows := cursor.fetchmany(200):
+            values = [list(row) for row in rows]
+            if table == "audit_events":
+                raw = payloads_for_rows(conn, [(row[0], row[-1]) for row in rows])
+                for value, payload in zip(values, raw, strict=True):
+                    value[-1] = payload
+            for value in values:
+                checksum.update(canonical_json(value).encode() + b"\n")
+            count += len(rows)
+        counts[table] = count
+    return {"format": "sqlite-review-inputs-v1", "sha256": checksum.hexdigest(), "tables": counts}
+
+
+def completed_upgrade_scan(conn, detector_version):
+    row = conn.execute(
+        "SELECT scan_id FROM data_quality_upgrade_runs WHERE detector_version=?", (detector_version,)
+    ).fetchone()
+    if not row:
+        return None
+    report = existing_scan(conn, row[0])
+    if not report or report["detectorVersion"] != detector_version or report.get("trigger") != "upgrade":
+        raise ValueError("升级数据检查的完成标记与留档不一致")
+    return report
+
+
+def complete_upgrade_scan(conn, report):
+    conn.execute(
+        "INSERT INTO data_quality_upgrade_runs(detector_version,scan_id,completed_at) VALUES (?,?,?)",
+        (report["detectorVersion"], report["scanId"], report["scannedAt"]),
+    )
 
 
 def payload_rows(conn, table):
