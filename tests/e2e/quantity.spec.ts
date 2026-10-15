@@ -1,12 +1,5 @@
 import { captureUiAudit } from "./uiAudit";
-import {
-  ensureTestInfrastructure,
-  expect,
-  openQuantityEntry,
-  openSavedQuantitySheets,
-  selectAntOptionByKeyboard,
-  test,
-} from "./fixtures";
+import { ensureTestInfrastructure, expect, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
 
 const bulkSheetIds = Array.from({ length: 7 }, (_, index) => `sheet-e2e-quantity-bulk-${index + 1}`);
 
@@ -75,7 +68,8 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
   const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
   await iacucInput.fill("Z202506");
   await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
-  await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间号", exact: true }));
+  await page.getByRole("combobox", { name: "房间号", exact: true }).click();
+  await page.locator(".ant-select-dropdown").getByText("8014", { exact: true }).click();
   await expect(page.getByRole("group", { name: "登记人员 系统带入", exact: true })).toHaveText(
     "登记人员系统带入系统管理员",
   );

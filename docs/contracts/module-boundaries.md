@@ -97,6 +97,8 @@ graph TD
 - `src/react/api/contracts.ts` 保留兼容 re-export；新增类型进入 `src/contracts/<domain>.ts`。
 - `ENTITY_ENDPOINTS` 保留旧通用实体接口；新高频流程优先使用专用 service endpoint。
 - 共用结算请求归入 `src/react/api/settlements.ts`，原模块保留兼容导出；预览与发起分开调用，技术服务源版本和两类账单业务键保持独立。
+- 数量统计表由 `QuantitySheetView.tsx` 编排录入与已保存入口；`useQuantitySheetEditor` 持有同一份局部草稿、行引用、IACUC请求保护及保存动作，基础字段与计费扩展分别由 `QuantitySheetEditorForm`、`QuantityBillingOptions` 展示。组件拆分不新建草稿或业务缓存，不改变页面布局及保存接口。
+- 结算Excel保留 `server_app/domains/billing/settlement_xlsx.py` 的工作簿入口及原辅助函数兼容导出；列身份、逐日投影和公式位于 `settlement_xlsx_model.py`，单表与自定义附表版式位于 `settlement_xlsx_layout.py`。两类费用的共用导出仍由 `settlement_export.py` 分流，渲染层不读取数据库、不重新计费。
 - HTTP路由由 `server_app/web/router_registry.py` 装配，领域声明位于 `route_definitions/`；原HTTP动作与纯路径匹配器分别保留。路由登记不承担领域权限、金额计算、事务和审计。
 
 ## 验收标准
