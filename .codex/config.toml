@@ -1,7 +1,9 @@
-# CageLedger: Astra plans and reviews; Terra handles bounded implementation.
+# CageLedger: GPT-6.1 Sol plans and reviews; Terra handles bounded implementation.
 # Invocation-level overrides may take precedence. See docs/contracts/agent-instructions.md.
-model = "gpt-6-astra"
-model_reasoning_effort = "medium"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+# Maximum supported by the local model catalog (2026-10-13).
+model_context_window = 872000
 
 [agents]
 enabled = true

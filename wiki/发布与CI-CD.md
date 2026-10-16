@@ -8,10 +8,10 @@
 release notes
 -> check
 -> offline package
--> local multi-arch container publish
--> update latest multi-arch manifest
 -> commit
 -> v<version> tag
+-> local multi-arch container publish
+-> update latest multi-arch manifest
 -> push main and tag
 -> local upload to Gitea Release
 -> local Gitea Wiki sync
@@ -28,7 +28,7 @@ Git tag 与容器镜像 tag 只带版本号：Git tag 使用 `v<version>`（例�
 - 版本格式 `a.b.c[-betaN | -rcN]`：`a` 重大/代际版本，`b` 功能更新，`c` 补丁修复，`-betaN` 内测后缀，`-rcN` 公测后缀。
 - `build` 为纯数字构建号，从最早记录 `0.2.0（Build 1）` 起按发布顺序逐次递增，带后缀的小版本（如 `0.5.16a`、`0.5.16b`）各占一个 build；系统统一显示为 `a.b.c（Build N）`。
 - 版本唯一源 `package.json`（含 `build` 字段）；发布脚本从更新记录推导下一个 build 并写入 `package.json`，`/api/health` 与 `/api/system/info` 返回 `build` 与 `revisionShort`。
-- 未显式指定版本时，发布脚本按 `--bump`（支持 `beta|rc|patch|minor|major`，默认 `beta`）从最近 `v*` tag 自动推导下一个版本，并自动打标签与推送。
+- 未显式指定版本时，发布脚本按 `--bump`（支持 `beta|rc|patch|minor|major`，默认 `beta`）从最近 `v*` tag 自动推导下一个版本，并自动打标签；指定 `--push` 才执行镜像发布、Git 推送、Release 上传和 Wiki 同步。
 - `--bump patch` 从 `-betaN` / `-rcN` 预发布转正式时保留 `a.b.c` 并去掉后缀；正式版从 `main` 发布，并要求当前 `main` 已包含 `origin/rc`。从正式版本继续补丁时 `a.b.c` 加一。
 - 显示规则：支持括号的位置显示 `a.b.c（Build N）`（例如 `1.0.0-beta7（Build 135）`）；软件包 tag 只带版本号。
 
@@ -96,7 +96,22 @@ MacBook 默认负责代码修改、针对性验证、提交和推送到 Gitea；
 
 ## 本地发布门禁
 
-发布脚本默认执行 `npm run verify:full`，覆盖基础质量检查、生产构建与完整 Playwright。Playwright 使用独立的 `5183/5184` 端口和临时 SQLite，不影响日常运行在 `5173/5174` 的服务。`--skip-full-verify` 用于同版本验证完成后的上传重试。Mac mini 继续执行 API 冒烟、PDF/打印验收和多架构镜像构建。
+发布脚本默认执行 `npm run verify:full`，覆盖基础质量检查、生产构建、Chromium 完整回归和 Firefox／WebKit 桌面兼容专项。Chromium 使用独立的 `5183/5184` 端口和临时 SQLite，桌面兼容专项使用另外两组独立端口，详见 `docs/contracts/testing-strategy.md`。Mac mini 继续执行 API 冒烟、PDF/打印验收和多架构镜像构建。
+
+`--skip-full-verify` 只将发布前验证改为 `npm run check`，仍会打包、提交和创建标签；仅在同一最终代码状态已完成完整验证且尚未创建目标 tag 时使用。本地或远端已有同版本 tag 时，发布脚本会退出，不能用此参数续传。
+
+## 上传中断后的续传
+
+Git 分支与 tag 已推送、镜像已发布，只有 Release 附件上传或 Wiki 同步失败时，在 Mac mini 使用对应的独立脚本续传。先核对当前检出提交与 `vX.Y.Z` 指向同一提交、`package.json` 的版本和 build 与该 tag 一致，并保留原发布生成的离线包；不要删除或移动已有 tag，也不要重新生成该版本制品。
+
+下面的命令只执行尚未完成的步骤，`X.Y.Z` 替换为目标版本：
+
+```bash
+bash scripts/upload_release_package_local.sh --version X.Y.Z --package "$PWD/dist/CageLedger-offline-X.Y.Z.tar.gz"
+bash scripts/sync_wiki_local.sh
+```
+
+上传脚本会复用同版本 Release 与已有同名附件，补传缺失附件并完成发布；完成后按下方“发布结果检查”核对附件与发布时间。若中断发生在镜像发布或 Git 推送阶段，先根据已完成步骤补齐对应产物及分支、tag 推送，再续传 Release 和 Wiki。
 
 ## 常见失败与处理
 

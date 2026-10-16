@@ -4,7 +4,7 @@
 
 ## 文件职责
 
-- `AGENTS.md` 保留全项目适用的业务约束、执行边界、完成标准和文档入口。按用户授权，`.codex/config.toml` 提供 Astra 主代理、Terra 执行子代理及 medium 推理强度的项目默认值；调用端显式覆盖仍优先，不修改个人配置。分工与升级规则统一维护在 `AGENTS.md`。
+- `AGENTS.md` 保留全项目适用的业务约束、执行边界、完成标准和文档入口。按用户授权，`.codex/config.toml` 提供 GPT-6.1 Sol 主代理（high 推理强度、872,000 tokens 上下文）与 Terra 执行子代理（medium 推理强度）的项目默认值；调用端显式覆盖仍优先，不修改个人配置。分工与升级规则统一维护在 `AGENTS.md`。
 - `docs/contracts/` 维护按领域生效的规则；验证矩阵只在 `testing-strategy.md` 维护。CONTRIBUTING 和 Wiki 提供入口，避免复制多套要求。
 - `.agents/skills/*/SKILL.md` 描述能力、准确触发条件和必需边界。较长的示例、参数表按主题放入 `references/`，入口说明何时读取。
 - `.agents/skills/*/agents/openai.yaml` 维护展示信息及调用策略。保留原有自动/显式调用意图，不因精简指令批量禁用技能。
