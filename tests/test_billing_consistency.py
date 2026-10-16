@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import closing
@@ -255,7 +256,7 @@ class BillingConsistencyTests(unittest.TestCase):
             self.assertTrue(report["inputUnchanged"])
             self.assertEqual(fingerprint(source), before)
             cli = [
-                str(Path(".venv/bin/python").resolve()),
+                sys.executable,
                 "scripts/check_billing_consistency.py",
                 "--database",
                 str(source),

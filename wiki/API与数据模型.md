@@ -190,11 +190,11 @@ npm run verify:database -- --database /absolute/path/offline-backup.sqlite --bas
 
 系统管理员通过“系统设置 → 系统功能”维护七组入口显示开关。`GET /api/system/features` 允许已登录账号读取，默认全开；`PUT` 仅管理员可写，提交完整开关与 `expectedUpdatedAt`，并发冲突409。独立的 `system_feature_settings` 表保存配置，旧的全量数据接口不会清除此配置。更新和 `system_features.updated` 审计在同一事务，记录账号及完整前后设置；无实际变化不重复审计。
 
-这些设置只驱动入口可见性，原业务接口和权限不改变，已有数据、账单及历史统计保留。参数详见仓库 `docs/contracts/api-contracts.md` 和[API接口清单](API接口清单.md)。
+这些设置只驱动入口可见性，原业务接口和权限不改变，已有数据、账单及历史统计保留。参数详见仓库 `docs/contracts/api-contracts.md` 和[API接口清单](/development/api-inventory)。
 
 ### 升级检查与历史问题留档
 
-管理员可在“系统设置 → 数据核查”查看已有留档、问题分类、关联记录及原始证据。三个只读接口为 `GET /api/data-quality/scans`、`GET /api/data-quality/scans/{scanId}/issues` 和 `GET /api/data-quality/scans/{scanId}/issues/{issueId}`；支持历史留档分页、问题分页与分类筛选，证据按需加载并核对指纹。房间管理员无权访问；查看与刷新不触发扫描、修复或新增审计。列表使用所选留档当时的分类，不能把后续留档中未出现的问题当作已解决。接口参数详见[API接口清单](API接口清单.md)。
+管理员可在“系统设置 → 数据核查”查看已有留档、问题分类、关联记录及原始证据。三个只读接口为 `GET /api/data-quality/scans`、`GET /api/data-quality/scans/{scanId}/issues` 和 `GET /api/data-quality/scans/{scanId}/issues/{issueId}`；支持历史留档分页、问题分页与分类筛选，证据按需加载并核对指纹。房间管理员无权访问；查看与刷新不触发扫描、修复或新增审计。列表使用所选留档当时的分类，不能把后续留档中未出现的问题当作已解决。接口参数详见[API接口清单](/development/api-inventory)。
 
 升级后首次启动会在结构迁移完成后，按运行库当时的实际记录自动检查并留档，无需手工搬库。检查范围包括活动占用的笼位引用、进驻任务的父批次及分次接收明细、重复的旧格式二维码别名、失去来源流程的历史应收。批量“确认已接收”没有分次明细属于现有业务规则，不单独标记；接收明细须在任务自己的父批次中匹配，不能用其他批次的同名ID替代。
 

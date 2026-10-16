@@ -123,6 +123,8 @@ test("settlement desktop partial batch failure retains only failures for confirm
   await second.check();
   await page.getByRole("button", { name: "批量发起结算", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
+  // Firefox may expose the dialog before its enter transform reaches the final geometry.
+  await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
   await confirm.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
   await expect(page.getByText(/已发起 1 个结算流程；1 个未完成/)).toBeVisible();
   await expect(page.getByText(/合成冲突，请核对后重试/)).toBeVisible();
@@ -131,10 +133,12 @@ test("settlement desktop partial batch failure retains only failures for confirm
   await expect(second).toBeChecked();
   expect(writes).toEqual([data.items[0].pi, data.items[1].pi]);
   await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
+  await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
   await confirm.getByRole("button", { name: "取消", exact: true }).click();
   await expect(confirm).toBeHidden();
   expect(writes).toHaveLength(2);
   await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
+  await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
   // Ant can retain the leaving loading icon in the accessible name after reuse.
   const retry = confirm.getByRole("button", { name: /发起 1 个流程$/ });
   await expect(retry).not.toHaveClass(/ant-btn-loading/);
