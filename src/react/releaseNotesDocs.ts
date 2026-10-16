@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.12.1",
+    build: "225",
+    releasedAt: "2026-10-16",
+    title: "结算锁定授权与汇总导出",
+    items: [
+      "有结算锁定授权的账号可处理他人未归档单据：撤销已生成流程，或按阶段撤回已发起、已登记流程；操作仍须填写原因并保留审计",
+      "已归档单据仍须先解锁，保留状态转换及已确认核销保护，普通经手人的撤回范围不变",
+      "月度汇总导出向管理员及有结算锁定授权的账号开放，桌面、移动端入口与后端权限保持一致",
+      "更新账号授权说明和接口清单，补充跨账号撤回、授权撤销和汇总访问的回归覆盖",
+    ],
+  },
+  {
     version: "1.12.0",
     build: "224",
     releasedAt: "2026-10-16",
