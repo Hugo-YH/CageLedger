@@ -14,18 +14,19 @@
 
 ## 鉴权代号
 
-| 代号              | 现有权限                                               |
-| ----------------- | ------------------------------------------------------ |
-| `public`          | 无需登录；公开投影及参数规则仍由原接口限制             |
-| `login`           | 登录账号；继续执行领域内的可见范围校验                 |
-| `admin`           | 管理员                                                 |
-| `staff`           | 管理员或房间管理员                                     |
-| `entity`          | 登录并通过现有实体、授权房间及变更范围校验             |
-| `workflow`        | 登录；按当前单据状态、经手账号和锁定授权校验           |
-| `claim`           | 登录；报销单归属、管理员及资金状态规则按原服务校验     |
-| `inspection`      | 登录；巡检领域的角色、房间和记录归属规则按原服务校验   |
-| `own_feedback`    | 登录；上传本人原反馈或本人补充，服务端复核可见性与归属 |
-| `settlement_view` | 登录；技术服务候选仅在 role=admin 或 room_admin 时合并 |
+| 代号                        | 现有权限                                               |
+| --------------------------- | ------------------------------------------------------ |
+| `public`                    | 无需登录；公开投影及参数规则仍由原接口限制             |
+| `login`                     | 登录账号；继续执行领域内的可见范围校验                 |
+| `admin`                     | 管理员                                                 |
+| `staff`                     | 管理员或房间管理员                                     |
+| `entity`                    | 登录并通过现有实体、授权房间及变更范围校验             |
+| `workflow`                  | 登录；按当前单据状态、经手账号和锁定授权校验           |
+| `claim`                     | 登录；报销单归属、管理员及资金状态规则按原服务校验     |
+| `inspection`                | 登录；巡检领域的角色、房间和记录归属规则按原服务校验   |
+| `own_feedback`              | 登录；上传本人原反馈或本人补充，服务端复核可见性与归属 |
+| `settlement_view`           | 登录；技术服务候选仅在 role=admin 或 room_admin 时合并 |
+| `settlement_summary_export` | 系统管理员或具有 billingLockAllowed 授权的账号         |
 
 ## 接口目录
 
@@ -255,23 +256,23 @@
 
 调用模块线索：`src/react/api/billing.ts`、`src/react/api/quantitySheets.ts`、`src/react/api/client.ts`、`src/react/api/settlements.ts`。
 
-| 方法 | 路径                                        | 用途／生命周期                     | 鉴权              | 请求 → 响应                                                                                     | 保护／读写属性                                              | HTTP入口                                                                 |
-| ---- | ------------------------------------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| GET  | `/api/settlement-candidates`                | 共用结算候选 / supported           | `settlement_view` | 列筛选、排序、分页 → {items,page}                                                               | [cache_read](#cache-read) / `derived_write`                 | `server_app/web/settlement_candidates.py:handle`                         |
-| GET  | `/api/settlement-candidates/filter-options` | 共用候选筛选项 / supported         | `settlement_view` | column及列表条件 → {items}                                                                      | [cache_read](#cache-read) / `derived_write`                 | `server_app/web/settlement_candidates.py:handle`                         |
-| GET  | `/api/billing-settlement-candidates`        | 旧饲养费候选 / compatibility       | `login`           | 筛选与分页 → {items,page}                                                                       | [cache_read](#cache-read) / `derived_write`                 | `server_app/web/read_actions.py:get_billing_settlement_candidates`       |
-| GET  | `/api/billing-statements`                   | 当前结算单 / supported             | `login`           | 列表参数 → {items}                                                                              | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_billing_statements`                  |
-| GET  | `/api/billing-statements/{id}`              | 当前结算单详情 / supported         | `login`           | id → {item}                                                                                     | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_billing_statement`                   |
-| GET  | `/api/billing-statement-lines`              | 旧实时结算行列表 / compatibility   | `login`           | 列表参数 → {items,page}                                                                         | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_entity_list`                         |
-| POST | `/api/billing-statements/generate`          | 按伦理生成兼容结算 / compatibility | `login`           | month,iacuc,sourceType,persist等 → {statement,lines,workflow,auditLogs}                         | [billing_generate](#billing-generate) / `conditional_write` | `server_app/web/write_actions.py:post_billing_statements_generate`       |
-| POST | `/api/billing-statements/generate-by-pi`    | 负责人结算预览或发起 / supported   | `login`           | month,pi,sourceType,persist,initiate等 → {statement,lines,workflow,reimbursementItem,auditLogs} | [billing_generate](#billing-generate) / `conditional_write` | `server_app/web/write_actions.py:post_billing_statements_generate_by_pi` |
-| GET  | `/api/billing-settlements/pdf`              | 结算PDF / supported                | `login`           | month,pi,sourceType → PDF下载                                                                   | [download](#download) / `file_cache`                        | `server_app/web/read_actions.py:get_billing_settlements_pdf`             |
-| POST | `/api/billing-settlements/pdf-export`       | 批量结算PDF / supported            | `login`           | {items} → PDF或ZIP下载                                                                          | [download](#download) / `file_cache`                        | `server_app/web/write_actions.py:post_billing_settlements_pdf_export`    |
-| POST | `/api/billing-settlements/xlsx`             | 结算明细Excel / supported          | `login`           | 结算参数 → XLSX下载                                                                             | [download](#download) / `file_cache`                        | `server_app/web/write_actions.py:post_billing_settlements_xlsx`          |
-| POST | `/api/billing-monthly-summary/export`       | 月度汇总Excel / supported          | `admin`           | 月份、设施等条件 → XLSX下载                                                                     | [export_audited](#export-audited) / `export_audit`          | `server_app/web/write_actions.py:post_billing_monthly_summary_export`    |
-| POST | `/api/pdf-exports`                          | 排队导出PDF / supported            | `login`           | {kind,ids或items} → 导出任务                                                                    | [download](#download) / `file_cache`                        | `server_app/web/write_actions.py:post_pdf_exports`                       |
-| GET  | `/api/pdf-export-jobs/{id}`                 | 导出任务状态 / supported           | `login`           | id → 导出任务                                                                                   | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_pdf_export_job`                      |
-| GET  | `/api/pdf-export-jobs/{id}/download`        | 下载导出结果 / supported           | `login`           | id → 文件下载                                                                                   | [download](#download) / `file_cache`                        | `server_app/web/read_actions.py:get_pdf_export_job`                      |
+| 方法 | 路径                                        | 用途／生命周期                     | 鉴权                        | 请求 → 响应                                                                                     | 保护／读写属性                                              | HTTP入口                                                                 |
+| ---- | ------------------------------------------- | ---------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| GET  | `/api/settlement-candidates`                | 共用结算候选 / supported           | `settlement_view`           | 列筛选、排序、分页 → {items,page}                                                               | [cache_read](#cache-read) / `derived_write`                 | `server_app/web/settlement_candidates.py:handle`                         |
+| GET  | `/api/settlement-candidates/filter-options` | 共用候选筛选项 / supported         | `settlement_view`           | column及列表条件 → {items}                                                                      | [cache_read](#cache-read) / `derived_write`                 | `server_app/web/settlement_candidates.py:handle`                         |
+| GET  | `/api/billing-settlement-candidates`        | 旧饲养费候选 / compatibility       | `login`                     | 筛选与分页 → {items,page}                                                                       | [cache_read](#cache-read) / `derived_write`                 | `server_app/web/read_actions.py:get_billing_settlement_candidates`       |
+| GET  | `/api/billing-statements`                   | 当前结算单 / supported             | `login`                     | 列表参数 → {items}                                                                              | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_billing_statements`                  |
+| GET  | `/api/billing-statements/{id}`              | 当前结算单详情 / supported         | `login`                     | id → {item}                                                                                     | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_billing_statement`                   |
+| GET  | `/api/billing-statement-lines`              | 旧实时结算行列表 / compatibility   | `login`                     | 列表参数 → {items,page}                                                                         | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_entity_list`                         |
+| POST | `/api/billing-statements/generate`          | 按伦理生成兼容结算 / compatibility | `login`                     | month,iacuc,sourceType,persist等 → {statement,lines,workflow,auditLogs}                         | [billing_generate](#billing-generate) / `conditional_write` | `server_app/web/write_actions.py:post_billing_statements_generate`       |
+| POST | `/api/billing-statements/generate-by-pi`    | 负责人结算预览或发起 / supported   | `login`                     | month,pi,sourceType,persist,initiate等 → {statement,lines,workflow,reimbursementItem,auditLogs} | [billing_generate](#billing-generate) / `conditional_write` | `server_app/web/write_actions.py:post_billing_statements_generate_by_pi` |
+| GET  | `/api/billing-settlements/pdf`              | 结算PDF / supported                | `login`                     | month,pi,sourceType → PDF下载                                                                   | [download](#download) / `file_cache`                        | `server_app/web/read_actions.py:get_billing_settlements_pdf`             |
+| POST | `/api/billing-settlements/pdf-export`       | 批量结算PDF / supported            | `login`                     | {items} → PDF或ZIP下载                                                                          | [download](#download) / `file_cache`                        | `server_app/web/write_actions.py:post_billing_settlements_pdf_export`    |
+| POST | `/api/billing-settlements/xlsx`             | 结算明细Excel / supported          | `login`                     | 结算参数 → XLSX下载                                                                             | [download](#download) / `file_cache`                        | `server_app/web/write_actions.py:post_billing_settlements_xlsx`          |
+| POST | `/api/billing-monthly-summary/export`       | 月度汇总Excel / supported          | `settlement_summary_export` | 月份、设施等条件 → XLSX下载                                                                     | [export_audited](#export-audited) / `export_audit`          | `server_app/web/write_actions.py:post_billing_monthly_summary_export`    |
+| POST | `/api/pdf-exports`                          | 排队导出PDF / supported            | `login`                     | {kind,ids或items} → 导出任务                                                                    | [download](#download) / `file_cache`                        | `server_app/web/write_actions.py:post_pdf_exports`                       |
+| GET  | `/api/pdf-export-jobs/{id}`                 | 导出任务状态 / supported           | `login`                     | id → 导出任务                                                                                   | [read](#read) / `read`                                      | `server_app/web/read_actions.py:get_pdf_export_job`                      |
+| GET  | `/api/pdf-export-jobs/{id}/download`        | 下载导出结果 / supported           | `login`                     | id → 文件下载                                                                                   | [download](#download) / `file_cache`                        | `server_app/web/read_actions.py:get_pdf_export_job`                      |
 
 ### 技术服务
 

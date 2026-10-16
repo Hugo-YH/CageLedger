@@ -108,19 +108,19 @@ node scripts/run_python.mjs scripts/compact_billing_snapshots.py --database /pat
 
 自定义收费区间 `customBillingSegments` 支持 `quantityMode: "fixed" | "all"`。固定模式填写每日数量；全部模式保存 `quantity: null`，按区间内每天实际结余计费。旧区间未提供模式时由数量兼容推断。全部模式与其他自定义区间不能重叠；账单快照保存模式及每天实际计费数量，不改变既有历史版本。
 
-| 方法                     | 路径                                     | 用途                           |
-| ------------------------ | ---------------------------------------- | ------------------------------ |
-| `GET`                    | `/api/quantity-sheet-rooms`              | 统计表跨房间录入候选           |
-| `GET` / `POST`           | `/api/quantity-sheets`                   | 分页查询或新建统计表           |
-| `GET` / `PUT` / `DELETE` | `/api/quantity-sheets/{id}`              | 详情、编辑和删除               |
-| `POST`                   | `/api/quantity-sheets/pdf-export`        | 创建统计表 PDF 导出任务        |
-| `GET`                    | `/api/billing-settlement-candidates`     | 按 PI 结算候选、筛选与排序     |
-| `POST`                   | `/api/billing-statements/generate-by-pi` | 按 PI 汇总结算                 |
-| `POST`                   | `/api/billing-settlements/pdf-export`    | 创建结算单 PDF 或批量 ZIP 任务 |
-| `POST`                   | `/api/billing-monthly-summary/export`    | 管理员导出月度饲养费汇总 Excel |
-| `GET`                    | `/api/billing-statements/{id}`           | 单张结算单                     |
-| `GET`                    | `/api/pdf-export-jobs/{id}`              | 查询 PDF 导出任务状态          |
-| `GET`                    | `/api/pdf-export-jobs/{id}/download`     | 下载已完成 PDF 或 ZIP          |
+| 方法                     | 路径                                     | 用途                                       |
+| ------------------------ | ---------------------------------------- | ------------------------------------------ |
+| `GET`                    | `/api/quantity-sheet-rooms`              | 统计表跨房间录入候选                       |
+| `GET` / `POST`           | `/api/quantity-sheets`                   | 分页查询或新建统计表                       |
+| `GET` / `PUT` / `DELETE` | `/api/quantity-sheets/{id}`              | 详情、编辑和删除                           |
+| `POST`                   | `/api/quantity-sheets/pdf-export`        | 创建统计表 PDF 导出任务                    |
+| `GET`                    | `/api/billing-settlement-candidates`     | 按 PI 结算候选、筛选与排序                 |
+| `POST`                   | `/api/billing-statements/generate-by-pi` | 按 PI 汇总结算                             |
+| `POST`                   | `/api/billing-settlements/pdf-export`    | 创建结算单 PDF 或批量 ZIP 任务             |
+| `POST`                   | `/api/billing-monthly-summary/export`    | 管理员或锁定授权账号导出月度费用汇总 Excel |
+| `GET`                    | `/api/billing-statements/{id}`           | 单张结算单                                 |
+| `GET`                    | `/api/pdf-export-jobs/{id}`              | 查询 PDF 导出任务状态                      |
+| `GET`                    | `/api/pdf-export-jobs/{id}/download`     | 下载已完成 PDF 或 ZIP                      |
 
 ### 流程和报销
 

@@ -217,7 +217,7 @@ export function MobileNavigation({
               {
                 label: "结算管理",
                 icon: <CalculatorOutlined aria-hidden />,
-                items: settlementSidebarItems(user.role === "admin"),
+                items: settlementSidebarItems(user.role === "admin" || Boolean(user.billingLockAllowed)),
               },
             ]
               .filter(({ items }) => items.some((entry) => entry.view && visible(entry.view)))

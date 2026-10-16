@@ -124,6 +124,15 @@ class WorkflowObligationCancellationTests(unittest.TestCase):
         self.assertEqual(list(self.conn.iterdump()), before)
         self.assertEqual(get_claim(self.conn, workflow_fixture.ADMIN, claim["id"])["item"]["allocatedAmount"], 50)
 
+    def test_lock_operator_cannot_cancel_foreign_workflow_with_confirmed_allocation(self):
+        _, draft = self.allocation()
+        confirm_allocation(self.conn, workflow_fixture.ADMIN, draft["id"])
+        before = list(self.conn.iterdump())
+        result = self.delete({**workflow_fixture.OTHER, "billingLockAllowed": True})
+        self.assertEqual(result.status, 400)
+        self.assertIn("先撤销相关核销", result.response["error"])
+        self.assertEqual(list(self.conn.iterdump()), before)
+
     def test_draft_history_survives_but_cannot_be_confirmed_after_cancellation(self):
         claim, draft = self.allocation()
         before = get_claim(self.conn, workflow_fixture.ADMIN, claim["id"])["item"]

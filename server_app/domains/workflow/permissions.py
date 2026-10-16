@@ -11,7 +11,7 @@ def withdrawal_capabilities(conn, actor, workflow_ids):
     actor_id = actor.get("id")
     result = {}
     for workflow_id, status in statuses.items():
-        if actor.get("role") == "admin":
+        if actor.get("role") == "admin" or actor.get("billingLockAllowed"):
             allowed = status in (WORKFLOW_STATUS_GENERATED, WORKFLOW_STATUS_SENT, WORKFLOW_STATUS_ARCHIVED)
         else:
             allowed = (
@@ -58,4 +58,4 @@ def require_workflow_withdrawal(conn, actor, workflow, *, delete=False, to_statu
         }
     )
     if not action_allowed or not withdrawal_capabilities(conn, actor, [workflow["id"]]).get(workflow["id"]):
-        raise PermissionError("仅经手人可撤回未归档的结算流程；已归档流程须先解锁")
+        raise PermissionError("仅经手人或有结算锁定授权的账号可撤回未归档的结算流程；已归档流程须先解锁")

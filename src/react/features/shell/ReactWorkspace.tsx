@@ -274,7 +274,7 @@ function Workspace({ user }: { user: SessionUser }) {
       key: "settlement",
       icon: <CalculatorOutlined />,
       label: "结算管理",
-      children: settlementSidebarItems(user.role === "admin").map((entry) =>
+      children: settlementSidebarItems(user.role === "admin" || Boolean(user.billingLockAllowed)).map((entry) =>
         item(entry.view!, entry.label!, iconFor[entry.icon!], entry.dataUi),
       ),
     },
@@ -436,15 +436,27 @@ function renderActiveView(
   if (view === "animal-inspection-standards")
     return <AnimalManagementView mode="standards" user={user} navigate={navigate} />;
   if (view === "technical-service-entry")
-    return <TechnicalServiceView mode="entry" navigate={navigate} canExport={user.role === "admin"} />;
+    return (
+      <TechnicalServiceView
+        mode="entry"
+        navigate={navigate}
+        canExport={user.role === "admin" || Boolean(user.billingLockAllowed)}
+      />
+    );
   if (view === "technical-service-saved")
-    return <TechnicalServiceView mode="saved" navigate={navigate} canExport={user.role === "admin"} />;
+    return (
+      <TechnicalServiceView
+        mode="saved"
+        navigate={navigate}
+        canExport={user.role === "admin" || Boolean(user.billingLockAllowed)}
+      />
+    );
   if (view === "technical-service-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
   if (view === "billing-cage-map") return <BillingView mode="cage-map" user={user} navigate={navigate} />;
   if (view === "billing-quantity-entry") return <BillingView mode="quantity-entry" user={user} navigate={navigate} />;
   if (view === "billing-quantity-saved") return <BillingView mode="quantity-saved" user={user} navigate={navigate} />;
   if (view === "billing-settlement") return <BillingView mode="settlement" user={user} navigate={navigate} />;
-  if (view === "billing-monthly-summary" && user.role === "admin")
+  if (view === "billing-monthly-summary" && (user.role === "admin" || user.billingLockAllowed))
     return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
   if (view === "workflow-center") return <WorkflowCenterView user={user} />;
   if (view === "feedback") return <FeedbackView user={user} page={feedbackPage} />;

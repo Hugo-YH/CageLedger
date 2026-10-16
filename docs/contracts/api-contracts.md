@@ -198,7 +198,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 | `POST`   | `/api/billing-statements/generate-by-pi`       | `{ pi, month, sourceType, persist }`     | `{ statement, lines, workflow? }`                                      |
 | `GET`    | `/api/billing-settlements/pdf`                 | `month`、`pi`、`sourceType`              | 单份项目负责人结算汇总表 PDF 下载                                      |
 | `POST`   | `/api/billing-settlements/pdf-export`          | `{ items: [{ month, pi, sourceType }] }` | 单份 PDF 或多份 PDF ZIP 下载                                           |
-| `POST`   | `/api/billing-monthly-summary/export`          | `{ month }`                              | 管理员下载按 IACUC 与设施汇总的月度饲养费 Excel                        |
+| `POST`   | `/api/billing-monthly-summary/export`          | `{ month }`                              | 管理员或锁定授权账号下载按 IACUC 与设施汇总的月度费用 Excel            |
 | `POST`   | `/api/pdf-exports`                             | `kind` + 数量统计表或结算项数组          | PDF 后台任务；缓存命中时返回 `ready`，其余返回 `queued` 或 `rendering` |
 | `GET`    | `/api/pdf-export-jobs/{id}`                    | 空                                       | `{ status, completed, total, downloadUrl?, error? }`                   |
 | `GET`    | `/api/pdf-export-jobs/{id}/download`           | 空                                       | 已完成后台任务的 PDF 或 ZIP 下载                                       |
@@ -207,7 +207,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 数量统计表保存会同步转入转出镜像，并使受影响的单表 PDF 与按 PI 汇总 PDF 失效后后台预热。按 PI 结算自动纳入同月同负责人的全部有效 IACUC 和统计表。
 PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只生成一次；磁盘缓存按容量与保留时长自动淘汰。管理员可从 `/api/system/environment` 的 `performance.pdf` 查看队列、渲染延迟、失败、超时、缓存命中率和容量。
 `fullExemption=true` 表示当前 IACUC 在项目有效期内按每日实际饲养量全额减免；该减免独立于 PI 普通减免额度，并保留在结算明细、PDF 和报销台账中。
-月度饲养费汇总仅覆盖数量统计表来源，实时复用按 PI 合表的计费、减免和梯度规则。工作簿按 `IACUC + 设施` 分行，IACUC 索引提供经费和实验日期，结算单列显示单据跟踪登记的结算单交回状态，报销单的经费本编号、报销单编号、报销金额和报销备注仅取单据跟踪交回登记或补录且未撤回的报销单，报销金额为登记报销单金额汇总，无登记时为空，单号列填入全部报销单号；每次导出写入审计日志。
+月度汇总导出允许系统管理员或具有 `billingLockAllowed` 授权的账号访问，菜单、页面与 API 使用同一授权口径。饲养费汇总覆盖数量统计表来源，实时复用按 PI 合表的计费、减免和梯度规则。工作簿按 `IACUC + 设施` 分行，IACUC 索引提供经费和实验日期，结算单列显示单据跟踪登记的结算单交回状态，报销单的经费本编号、报销单编号、报销金额和报销备注仅取单据跟踪交回登记或补录且未撤回的报销单，报销金额为登记报销单金额汇总，无登记时为空，单号列填入全部报销单号；每次导出写入审计日志。
 
 ## 流程与报销台账
 
@@ -227,7 +227,7 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 | `POST`   | `/api/reimbursement-records/import-monthly`       | Excel 文件                                                     | 导入摘要                                                                                                            |
 | `POST`   | `/api/reimbursement-records/import-arrears`       | Excel 文件                                                     | 导入摘要                                                                                                            |
 
-结算候选列表、流程列表和流程详情返回当前登录账号的 `canWithdraw`；能力字段在共享缓存之后投影，不写入流程或共享缓存。未归档单据允许实际经手人填写 `note` 后撤回：已登记 → 已发起、已发起 → 已生成；已生成可经 `DELETE` 撤销。经手人由各历史版本的生成、修订、发起、交回登记和报销单补录事件的账号 ID，以及来源数量统计表创建、修改和转移入账审计的账号 ID 判定；兼容已有 `sentBy`、`registeredBy` 和 `reimbursementRecordedBy`。来源优先使用版本保存的 `sourceIds/sourceId`，旧版本缺失时严格匹配账单快照中保存的月份、PI 和 IACUC 范围；不能按登记人员姓名推断。查询批量处理，审计查询使用实体／账号联合索引；无有效账号证据则拒绝。接口在同一写事务中重新校验身份及当前状态。撤回交回登记保留原发起人，撤回原因写入事件和审计，撤销原因写入删除审计；候选、流程、台账及 PDF 缓存按现有范围失效。
+结算候选列表、流程列表和流程详情返回当前登录账号的 `canWithdraw`；能力字段在共享缓存之后投影，不写入流程或共享缓存。未归档单据允许实际经手人或具有 `billingLockAllowed` 授权的账号填写 `note` 后撤回；锁定授权账号不受创建人或经手人限制：已登记 → 已发起、已发起 → 已生成；已生成可经 `DELETE` 撤销；新增锁定授权不允许跨状态直接删除，已归档仍须先解锁，删除时保留已确认核销保护。经手人由各历史版本的生成、修订、发起、交回登记和报销单补录事件的账号 ID，以及来源数量统计表创建、修改和转移入账审计的账号 ID 判定；兼容已有 `sentBy`、`registeredBy` 和 `reimbursementRecordedBy`。来源优先使用版本保存的 `sourceIds/sourceId`，旧版本缺失时严格匹配账单快照中保存的月份、PI 和 IACUC 范围；不能按登记人员姓名推断。查询批量处理，审计查询使用实体／账号联合索引；无有效账号证据则拒绝。接口在同一写事务中重新校验身份及当前状态。撤回交回登记保留原发起人，撤回原因写入事件和审计，撤销原因写入删除审计；候选、流程、台账及 PDF 缓存按现有范围失效。
 
 交回登记（`advance`、已发起 → 已登记）允许系统管理员和房间管理员操作，不限制发起人或授权房间。登记所需字段、报销金额汇总、台账同步、审计及缓存失效保持原规则。内部状态值兼容旧库：`statement_archived` 为已登记且未归档，`statement_locked` 为已锁定且已归档。页面操作称为锁定／解锁，归档状态称为已归档／未归档。锁定和解锁继续要求 `billingLockAllowed`；锁定后必须先解锁恢复未归档才能撤回。已归档响应额外返回 `unlockStatus`，页面和状态转换服务共用恢复规则：优先保存的锁定前状态，旧记录兼容交回标记，历史缺失标记时保留旧默认已登记阶段。该字段只在响应投影中生成，不写入共享缓存或旧记录。已登记／已归档补录报销单沿用原授权，补录不改变归档状态。
 

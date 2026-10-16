@@ -320,7 +320,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         context={
           <>
             <HelpPopover label="单据跟踪说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-              饲养费与技术服务费分别出单，共用流程：发起结算流程、交回登记、锁定归档；解锁后恢复未归档，经手人可撤回。
+              饲养费与技术服务费分别出单，共用流程：发起结算流程、交回登记、锁定归档；解锁后恢复未归档，经手人或锁定授权账号可撤回。
             </HelpPopover>
             <Tag color="blue">{total} 条结算流程</Tag>
             <Select

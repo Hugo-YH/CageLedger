@@ -126,6 +126,76 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.assertEqual(self.request(OWNER).status, 403)
         self.assertEqual(self.state(), before)
 
+    def test_lock_operator_can_cancel_foreign_generated_workflow_and_audit(self):
+        operator = {**OTHER, "billingLockAllowed": True}
+        self.assertTrue(withdrawal_capabilities(self.conn, operator, [self.workflow_id])[self.workflow_id])
+        self.assertEqual(self.request(operator, delete=True).status, 200)
+        self.assertIsNone(get_billing_workflow(self.conn, self.workflow_id))
+        audit = json.loads(
+            read_audit_payload(
+                self.conn,
+                self.conn.execute("SELECT id FROM audit_events WHERE action='billing_workflow.deleted'").fetchone()[0],
+            )
+        )
+        self.assertEqual(audit["actorUserId"], operator["id"])
+        self.assertIn("金额核对有误", audit["message"])
+
+    def test_lock_operator_withdraws_foreign_workflow_without_bypassing_state_or_reason(self):
+        operator = {**OTHER, "billingLockAllowed": True}
+        before = self.state()
+        self.assertEqual(self.request(operator, delete=True, note=" ").status, 400)
+        self.assertEqual(self.state(), before)
+        self.advance("statement_sent")
+        self.advance("statement_archived", OWNER, registration={"signedStatementReturned": True})
+        self.assertTrue(withdrawal_capabilities(self.conn, operator, [self.workflow_id])[self.workflow_id])
+        before = self.state()
+        for delete, status, note in [
+            (True, "statement_generated", "原因"),
+            (False, "statement_generated", "原因"),
+            (False, "statement_sent", " "),
+        ]:
+            with self.subTest(delete=delete, status=status, note=note):
+                self.assertIn(self.request(operator, delete=delete, status=status, note=note).status, (400, 403))
+                self.assertEqual(self.state(), before)
+        self.assertEqual(self.request(operator, status="statement_sent").status, 200)
+        before = self.state()
+        self.assertEqual(self.request(operator, delete=True).status, 403)
+        self.assertEqual(self.request(operator, note=" ").status, 400)
+        self.assertEqual(self.state(), before)
+        response = self.request(operator)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.response["event"]["actor"]["id"], operator["id"])
+        self.assertEqual(response.response["event"]["note"], "金额核对有误")
+        self.assertEqual(get_billing_workflow(self.conn, self.workflow_id)["workflowStatus"], "statement_generated")
+        self.assertEqual(self.request(OTHER, delete=True).status, 403)
+
+    def test_lock_operator_must_unlock_foreign_workflow_before_withdrawing(self):
+        operator = {**OTHER, "billingLockAllowed": True}
+        self.advance("statement_sent")
+        self.advance("statement_locked", ADMIN)
+        self.assertFalse(withdrawal_capabilities(self.conn, operator, [self.workflow_id])[self.workflow_id])
+        before = self.state()
+        self.assertEqual(self.request(operator, delete=True).status, 403)
+        self.assertEqual(self.request(operator, status="statement_generated").status, 400)
+        self.assertEqual(self.state(), before)
+        self.assertEqual(self.request(operator, status="statement_sent").status, 200)
+        self.assertTrue(withdrawal_capabilities(self.conn, operator, [self.workflow_id])[self.workflow_id])
+        self.assertEqual(self.request(operator).status, 200)
+
+    def test_lock_operator_cannot_withdraw_legacy_terminal_states(self):
+        operator = {**OTHER, "billingLockAllowed": True}
+        for status in ("statement_signed_returned", "submitted_to_finance"):
+            self.conn.execute(
+                "UPDATE billing_workflows SET workflow_status=?, payload=json_set(payload, '$.workflowStatus', ?)",
+                (status, status),
+            )
+            self.conn.commit()
+            before = self.state()
+            self.assertFalse(withdrawal_capabilities(self.conn, operator, [self.workflow_id])[self.workflow_id])
+            self.assertEqual(self.request(operator, delete=True).status, 403)
+            self.assertEqual(self.request(operator).status, 403)
+            self.assertEqual(self.state(), before)
+
     def test_denials_leave_database_unchanged_even_with_same_display_name(self):
         for delete in (True, False):
             if not delete:

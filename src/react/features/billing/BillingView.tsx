@@ -63,7 +63,7 @@ export function BillingView({
           <SettlementCandidateList source="quantity_sheet" user={user} navigationAction={navigationAction} />
         </section>
       ) : null}
-      {mode === "monthly-summary" && user.role === "admin" ? (
+      {mode === "monthly-summary" && (user.role === "admin" || user.billingLockAllowed) ? (
         <MonthlyBillingSummary navigationAction={navigationAction} />
       ) : null}
     </div>

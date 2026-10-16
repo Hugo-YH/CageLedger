@@ -84,6 +84,12 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   await page.reload();
   await openBillingNavigation(page);
   await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  const settlementMonthFilter = page.locator(".table-filter-panel:visible");
+  const settlementMonthOption = settlementMonthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await settlementMonthOption.click();
+  await expect(settlementMonthOption).toBeChecked();
+  await settlementMonthFilter.getByRole("button", { name: "应用", exact: true }).click();
   const ownRow = page.getByRole("row").filter({ hasText: ownPi });
   const foreignRow = page.getByRole("row").filter({ hasText: foreignPi });
   await foreignRow.getByRole("checkbox").check();

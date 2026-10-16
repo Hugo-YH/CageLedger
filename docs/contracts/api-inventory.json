@@ -17,7 +17,8 @@
     "claim": "登录；报销单归属、管理员及资金状态规则按原服务校验",
     "inspection": "登录；巡检领域的角色、房间和记录归属规则按原服务校验",
     "own_feedback": "登录；上传本人原反馈或本人补充，服务端复核可见性与归属",
-    "settlement_view": "登录；技术服务候选仅在 role=admin 或 room_admin 时合并"
+    "settlement_view": "登录；技术服务候选仅在 role=admin 或 room_admin 时合并",
+    "settlement_summary_export": "系统管理员或具有 billingLockAllowed 授权的账号"
   },
   "protections": {
     "system_feature_write": {
@@ -1394,7 +1395,7 @@
           "request": "月份、设施等条件",
           "response": "XLSX下载",
           "protection": "export_audited",
-          "permission": "admin"
+          "permission": "settlement_summary_export"
         },
         {
           "method": "POST",

@@ -268,6 +268,9 @@ class TechnicalServiceTests(unittest.TestCase):
         self.assertTrue(withdrawal_capabilities(self.conn, STAFF, [identity])[identity])
         outsider = {**STAFF, "id": "outsider"}
         self.assertFalse(withdrawal_capabilities(self.conn, outsider, [identity])[identity])
+        operator = {**outsider, "billingLockAllowed": True}
+        self.assertTrue(withdrawal_capabilities(self.conn, operator, [identity])[identity])
+        require_workflow_withdrawal(self.conn, operator, result["workflow"], to_status="statement_generated")
         with self.assertRaises(PermissionError):
             require_workflow_withdrawal(self.conn, outsider, result["workflow"], to_status="statement_generated")
         with self.conn:

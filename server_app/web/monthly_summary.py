@@ -32,8 +32,8 @@ def export_monthly_billing_summary(
     user = handler.require_user()
     if not user:
         return
-    if user["role"] != "admin":
-        handler.send_json({"error": "需要管理员权限"}, HTTPStatus.FORBIDDEN)
+    if user["role"] != "admin" and not user.get("billingLockAllowed"):
+        handler.send_json({"error": "需要管理员或结算锁定授权"}, HTTPStatus.FORBIDDEN)
         return
     try:
         payload = handler.read_json_body()

@@ -16,7 +16,11 @@ async function mockPagedWorkflows(page: Page) {
   await page.route("**/api/billing-workflows?*", (route) => {
     const params = new URL(route.request().url()).searchParams;
     const filters = JSON.parse(params.get("columnFilters") || "{}") as Record<string, string[]>;
-    const filtered = workflows.filter((item) => !filters.pi?.length || filters.pi.includes(item.pi));
+    const filtered = workflows.filter(
+      (item) =>
+        (!filters.pi?.length || filters.pi.includes(item.pi)) &&
+        (!filters.month?.length || filters.month.includes(item.month)),
+    );
     if (params.get("sortKey") === "pi") {
       filtered.sort((left, right) => left.pi.localeCompare(right.pi) * (params.get("sortDir") === "desc" ? -1 : 1));
     }
@@ -30,6 +34,26 @@ async function mockPagedWorkflows(page: Page) {
     route.fulfill({ json: { items: workflows.map((item) => ({ value: item.pi, label: item.pi, count: 1 })) } }),
   );
   return workflows;
+}
+
+async function loginLockOperator(page: Page) {
+  const username = `batch-lock-${Date.now()}-${test.info().retry}`;
+  const created = await page.request.post("/api/users", {
+    data: {
+      username,
+      displayName: "锁定授权人员",
+      password: "batch-lock-e2e",
+      role: "room_admin",
+      roomIds: [],
+      billingLockAllowed: true,
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  await page.request.post("/api/auth/logout");
+  const login = await page.request.post("/api/auth/login", { data: { username, password: "batch-lock-e2e" } });
+  expect(login.ok()).toBeTruthy();
+  expect((await login.json()).user).toMatchObject({ role: "room_admin", billingLockAllowed: true });
+  await page.reload();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -162,6 +186,7 @@ test("revoke keeps the reason on failure and ignores the success callback of a c
 test("batch locking keeps selected workflows across pages, page sizes and sorting after selection is cleared", async ({
   page,
 }) => {
+  await loginLockOperator(page);
   const workflows = await mockPagedWorkflows(page);
   const writes: Array<{ workflowId: string; toStatus: string }> = [];
   let releaseFirst!: () => void;
@@ -207,6 +232,7 @@ test("batch locking keeps selected workflows across pages, page sizes and sortin
 });
 
 test("applying a workflow filter clears the selection and discards an unconfirmed batch lock", async ({ page }) => {
+  await loginLockOperator(page);
   const workflows = await mockPagedWorkflows(page);
   const writes: string[] = [];
   await page.route("**/api/billing-workflows/advance", (route) => {
@@ -275,6 +301,7 @@ test("desktop list restores paging sorting density and filters across business n
 test("partial batch lock retains only failures and deliberate retry never repeats successful writes", async ({
   page,
 }) => {
+  await loginLockOperator(page);
   const workflows = await mockPagedWorkflows(page);
   const writes: string[] = [];
   await page.route("**/api/billing-workflows/advance", (route) => {
@@ -368,4 +395,37 @@ test("shrinking data corrects an out-of-range remembered page", async ({ page })
   await panel.locator(".ant-pagination-next").click();
   await expect(panel.locator(".ant-pagination-item-active")).toHaveText("1");
   await expect(panel.locator(".ant-table-tbody > tr[data-row-key]")).toHaveCount(2);
+});
+
+test("lock operators select only eligible statuses and changing month clears selection", async ({ page }) => {
+  await loginLockOperator(page);
+  const workflows = await mockPagedWorkflows(page);
+  workflows[0].workflowStatus = "statement_generated";
+  workflows[1].workflowStatus = "statement_archived";
+  workflows[2].workflowStatus = "statement_locked";
+  workflows[3].workflowStatus = "statement_signed_returned";
+  workflows[4].workflowStatus = "submitted_to_finance";
+  await page.route("**/api/filter-options?*", (route) =>
+    route.fulfill({
+      json: { items: ["2026-08", "2026-09"].map((month) => ({ value: month, label: month, count: 12 })) },
+    }),
+  );
+  await openWorkflowCenter(page);
+  for (const number of ["01", "03", "04", "05"])
+    await expect(
+      page.getByRole("checkbox", { name: `选择 分页负责人 ${number} 2026-08 结算流程`, exact: true }),
+    ).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "选择 分页负责人 02 2026-08 结算流程", exact: true })).toBeEnabled();
+  await page.getByRole("checkbox", { name: "全选当前页可锁定的结算流程" }).check();
+  const toolbar = page.getByRole("group", { name: "结算流程批量操作", exact: true });
+  await expect(toolbar).toContainText("已选 6 项");
+  await expect(toolbar.getByRole("button", { name: "批量锁定", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  const filter = page.locator(".table-filter-panel:visible");
+  const month = filter.getByRole("checkbox", { name: /^2026-09/ });
+  await month.click();
+  await expect(month).toBeChecked();
+  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await expect(toolbar).toContainText("已选 0 项");
+  await expect(toolbar.getByRole("button", { name: "批量锁定", exact: true })).toHaveCount(0);
 });

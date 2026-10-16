@@ -34,7 +34,7 @@ export function MonthlyBillingSummary({ navigationAction }: { navigationAction?:
             <HelpPopover label="汇总导出说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
               按 IACUC 和设施汇总当月饲养费及技术服务费，供线下报销登记使用。
             </HelpPopover>
-            <Tag color="blue">管理员导出</Tag>
+            <Tag color="blue">管理员或锁定授权账号导出</Tag>
           </>
         }
         className="monthly-summary-controls"
