@@ -25,6 +25,7 @@ import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
 import { billingSidebarItems, technicalServiceSidebarItems, settlementSidebarItems } from "./workspaceNavigation";
 import { SyringeOutlined } from "../../components/ui/SyringeOutlined";
+import { useViewVisibility } from "../../state/systemFeatureVisibility";
 
 type NavIcon =
   | "tag"
@@ -83,6 +84,7 @@ export function MobileNavigation({
   onRefresh: () => void;
   onSignOut: () => void;
 }) {
+  const visible = useViewVisibility();
   const activeKey = mobileKey(activeView);
 
   useEffect(() => {
@@ -113,8 +115,16 @@ export function MobileNavigation({
             key="dashboard"
             title={mobileTabTitle("总览", activeKey === "dashboard")}
           />
-          <TabBar.Item icon={<AppstoreOutlined />} key="cages" title={mobileTabTitle("笼位", activeKey === "cages")} />
-          <TabBar.Item icon={<AuditOutlined />} key="animal" title={mobileTabTitle("动物", activeKey === "animal")} />
+          {visible("cages") ? (
+            <TabBar.Item
+              icon={<AppstoreOutlined />}
+              key="cages"
+              title={mobileTabTitle("笼位", activeKey === "cages")}
+            />
+          ) : null}
+          {visible("animal-inspection-entry") ? (
+            <TabBar.Item icon={<AuditOutlined />} key="animal" title={mobileTabTitle("动物", activeKey === "animal")} />
+          ) : null}
           <TabBar.Item icon={<AppstoreOutlined />} key="more" title={mobileTabTitle("更多", false)} />
         </TabBar>
       </div>
@@ -142,52 +152,65 @@ export function MobileNavigation({
                 主页
               </List.Item>
             </List>
-            <List header="笼卡管理">
-              <MenuItem icon={<EditOutlined />} label="预约消息识别" view="intake-entry" onNavigate={onNavigate} />
-              <MenuItem icon={<InboxOutlined />} label="待接收批次" view="intake-batches" onNavigate={onNavigate} />
-              <MenuItem icon={<QrcodeOutlined />} label="二维码扫描" view="cage-card-scanner" onNavigate={onNavigate} />
-            </List>
-            <List header="检疫管理">
-              <MenuItem icon={<BookOutlined />} label="检疫批次" view="quarantine-batches" onNavigate={onNavigate} />
-              <MenuItem
-                icon={<AuditOutlined />}
-                label="寄生虫检测"
-                view="quarantine-parasite"
-                onNavigate={onNavigate}
-              />
-              <MenuItem icon={<AuditOutlined />} label="ELISA检测" view="quarantine-elisa" onNavigate={onNavigate} />
-              <MenuItem icon={<AuditOutlined />} label="PCR检测" view="quarantine-pcr" onNavigate={onNavigate} />
-              <MenuItem icon={<AuditOutlined />} label="检疫报告" view="quarantine-reports" onNavigate={onNavigate} />
-            </List>
-            <List header="笼位管理">
-              <MenuItem icon={<AppstoreOutlined />} label="动态笼位图" view="cages" onNavigate={onNavigate} />
-            </List>
-            <List header="动物管理">
-              <MenuItem
-                icon={<AuditOutlined />}
-                label="动物巡检"
-                view="animal-inspection-entry"
-                onNavigate={onNavigate}
-              />
-              <MenuItem
-                icon={<WarningOutlined />}
-                label="异常处置"
-                view="animal-inspection-findings"
-                onNavigate={onNavigate}
-              />
-              <MenuItem
-                icon={<UnorderedListOutlined />}
-                label="巡检记录"
-                view="animal-inspection-records"
-                onNavigate={onNavigate}
-              />
-              <MenuItem
-                icon={<BookOutlined />}
-                label="巡检标准"
-                view="animal-inspection-standards"
-                onNavigate={onNavigate}
-              />
-            </List>
+            {visible("intake-entry") ? (
+              <List header="笼卡管理">
+                <MenuItem icon={<EditOutlined />} label="预约消息识别" view="intake-entry" onNavigate={onNavigate} />
+                <MenuItem icon={<InboxOutlined />} label="待接收批次" view="intake-batches" onNavigate={onNavigate} />
+                <MenuItem
+                  icon={<QrcodeOutlined />}
+                  label="二维码扫描"
+                  view="cage-card-scanner"
+                  onNavigate={onNavigate}
+                />
+              </List>
+            ) : null}
+            {visible("quarantine-batches") ? (
+              <List header="检疫管理">
+                <MenuItem icon={<BookOutlined />} label="检疫批次" view="quarantine-batches" onNavigate={onNavigate} />
+                <MenuItem
+                  icon={<AuditOutlined />}
+                  label="寄生虫检测"
+                  view="quarantine-parasite"
+                  onNavigate={onNavigate}
+                />
+                <MenuItem icon={<AuditOutlined />} label="ELISA检测" view="quarantine-elisa" onNavigate={onNavigate} />
+                <MenuItem icon={<AuditOutlined />} label="PCR检测" view="quarantine-pcr" onNavigate={onNavigate} />
+                <MenuItem icon={<AuditOutlined />} label="检疫报告" view="quarantine-reports" onNavigate={onNavigate} />
+              </List>
+            ) : null}
+            {visible("cages") ? (
+              <List header="笼位管理">
+                <MenuItem icon={<AppstoreOutlined />} label="动态笼位图" view="cages" onNavigate={onNavigate} />
+              </List>
+            ) : null}
+            {visible("animal-inspection-entry") ? (
+              <List header="动物管理">
+                <MenuItem
+                  icon={<AuditOutlined />}
+                  label="动物巡检"
+                  view="animal-inspection-entry"
+                  onNavigate={onNavigate}
+                />
+                <MenuItem
+                  icon={<WarningOutlined />}
+                  label="异常处置"
+                  view="animal-inspection-findings"
+                  onNavigate={onNavigate}
+                />
+                <MenuItem
+                  icon={<UnorderedListOutlined />}
+                  label="巡检记录"
+                  view="animal-inspection-records"
+                  onNavigate={onNavigate}
+                />
+                <MenuItem
+                  icon={<BookOutlined />}
+                  label="巡检标准"
+                  view="animal-inspection-standards"
+                  onNavigate={onNavigate}
+                />
+              </List>
+            ) : null}
             {[
               { label: "饲养费管理", icon: <TableOutlined aria-hidden />, items: billingSidebarItems() },
               { label: "技术服务费管理", icon: <SyringeOutlined />, items: technicalServiceSidebarItems() },
@@ -196,26 +219,28 @@ export function MobileNavigation({
                 icon: <CalculatorOutlined aria-hidden />,
                 items: settlementSidebarItems(user.role === "admin"),
               },
-            ].map(({ label, icon, items }) => (
-              <List
-                key={label}
-                header={
-                  <>
-                    {icon} {label}
-                  </>
-                }
-              >
-                {items.map((entry) => (
-                  <MenuItem
-                    icon={billingIcon[entry.icon || ""] || <CalculatorOutlined />}
-                    key={entry.view}
-                    label={entry.label!}
-                    onNavigate={onNavigate}
-                    view={entry.view!}
-                  />
-                ))}
-              </List>
-            ))}
+            ]
+              .filter(({ items }) => items.some((entry) => entry.view && visible(entry.view)))
+              .map(({ label, icon, items }) => (
+                <List
+                  key={label}
+                  header={
+                    <>
+                      {icon} {label}
+                    </>
+                  }
+                >
+                  {items.map((entry) => (
+                    <MenuItem
+                      icon={billingIcon[entry.icon || ""] || <CalculatorOutlined />}
+                      key={entry.view}
+                      label={entry.label!}
+                      onNavigate={onNavigate}
+                      view={entry.view!}
+                    />
+                  ))}
+                </List>
+              ))}
             <List header="帮助与反馈">
               <MenuItem icon={<InfoCircleOutlined />} label="帮助与反馈" view="feedback" onNavigate={onNavigate} />
             </List>

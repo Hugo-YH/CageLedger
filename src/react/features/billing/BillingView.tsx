@@ -6,6 +6,7 @@ import { QuantitySheetView } from "./QuantitySheetView";
 import type { SessionUser } from "../../api/contracts";
 import type { WorkspaceView } from "../../state/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
+import { useViewVisibility } from "../../state/systemFeatureVisibility";
 import { SettlementCandidateList } from "./components/SettlementCandidateList";
 import { MonthlyBillingSummary } from "./components/MonthlyBillingSummary";
 
@@ -20,10 +21,11 @@ export function BillingView({
   mode: BillingMode;
   navigate: (view: WorkspaceView) => void;
 }) {
+  const visible = useViewVisibility();
   const isMobile = useIsMobileLayout();
   const title = billingTitle(mode);
   const navigationAction =
-    isMobile && mode !== "quantity-entry" ? (
+    isMobile && mode !== "quantity-entry" && visible("billing-quantity-entry") ? (
       <Button icon={<ActionIcon name="back" />} onClick={() => navigate("billing-quantity-entry")}>
         返回数量录入
       </Button>

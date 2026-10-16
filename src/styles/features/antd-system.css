@@ -440,7 +440,11 @@
   min-height: 170px;
 }
 
-.ant-dashboard-task:hover {
+.ant-dashboard-task.is-hidden {
+  cursor: default;
+}
+
+.ant-dashboard-task:not(.is-hidden):hover {
   background: var(--app-surface-subtle);
 }
 

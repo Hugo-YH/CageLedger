@@ -44,6 +44,7 @@ from server_app.persistence.legacy_migrations import (
     ensure_occupancies_structured_columns as ensure_occupancies_structured_columns_migration,
 )
 from server_app.persistence.quantity_transfer_links import ensure_schema as ensure_quantity_transfer_links
+from server_app.persistence.system_features import ensure_schema as ensure_system_features
 from server_app.persistence.workflow_migration import (
     BillingWorkflowMigrationPorts,
 )
@@ -75,6 +76,7 @@ def initialize_schema(conn):
     registry = SchemaRegistry(
         [
             SchemaStep("legacy-schema", initialize_legacy_schema),
+            SchemaStep("system-feature-settings", ensure_system_features),
             SchemaStep("data-quality-registry", ensure_data_quality_schema),
             SchemaStep("quantity-transfer-links", initialize_quantity_transfer_links),
             SchemaStep("quarantine", ensure_quarantine_schema),

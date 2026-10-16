@@ -10,6 +10,7 @@ from server_app.web import (
     intake_summary,
     quarantine,
     settlement_candidates,
+    system_features,
     technical_services,
 )
 from server_app.web.pdf_exports import pdf_export_job_route, quantity_sheet_pdf_route
@@ -17,6 +18,7 @@ from server_app.web.route_specs import ROUTE_GROUPS
 from server_app.web.router import HANDLED
 
 DELEGATES = {
+    "system_features": system_features.handle,
     "data_quality": data_quality.handle,
     "settlement_candidates": settlement_candidates.handle,
     "technical_services": technical_services.handle,

@@ -6,6 +6,14 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 上传使用 `requestMultipart`，文件字段和业务参数保持原状，由浏览器填写multipart边界，不手工设置JSON Content-Type。上传与JSON请求共用会话、诊断脱敏和错误处理；文件下载继续保留二进制响应，不包裹为统一JSON成功格式。
 
+## 系统功能入口显示
+
+`GET /api/system/features` 供已登录账号读取全局入口显示配置，响应 `{item:{enabled,updatedAt}}`。`enabled` 包含 `intake`、`quarantine`、`cages`、`animal`、`billing`、`technical-services`、`settlement` 七项布尔值，未保存时全部为true且 `updatedAt=null`，读取不写默认记录或新增审计。
+
+`PUT /api/system/features` 仅系统管理员可调用，提交完整七项 `enabled` 及必填 `expectedUpdatedAt`，首次为null，之后精确匹配当前版本；过期返回409，非法开关返回400，房间管理员返回403。写锁内完成重读、版本比对、配置保存和审计；同内容保存不重复写入或审计。`system_features.updated` 记录账号、时间、各入口显示变化及完整前后配置，前端失效操作日志查询。
+
+配置保存在独立 `system_feature_settings` 单行表，启动幂等建表，不回填或改写原业务数据，旧全量状态写入不会清除配置，也不改变原 `/api/state` 的更新时间来源。开关只控制桌面、手机及跨页面快捷入口；原业务接口、权限、总览统计和历史单据读取不受开关限制。读取失败显示错误，不默认为全部开启。
+
 ## 共用结算调用与路由登记
 
 `src/react/api/settlements.ts` 集中结算候选查询、筛选、预览、发起和导出；请求类型在 `src/contracts/settlements.ts`。页面使用 `usePreviewSettlement`、`useInitiateSettlement`，批量发起复用 `initiateSettlement`，沿用现有查询失效范围与零自动重试。`billing.ts`、`quantitySheets.ts` 和 `technicalServices.ts` 中原有结算导出函数继续兼容。

@@ -1,4 +1,5 @@
 import type { WorkspaceView } from "../../state/ui";
+export { isWorkspaceView } from "../../state/workspaceViews";
 
 export type BillingSidebarItem = {
   section?: string;
@@ -8,41 +9,6 @@ export type BillingSidebarItem = {
   icon?: "grid" | "calculator" | "book" | "refresh";
   dataUi?: string;
 };
-
-export function isWorkspaceView(value: string): value is WorkspaceView {
-  return [
-    "dashboard",
-    "quarantine-batches",
-    "quarantine-parasite",
-    "quarantine-elisa",
-    "quarantine-pcr",
-    "quarantine-reports",
-    "cages",
-    "intake-entry",
-    "intake-batches",
-    "cage-card-scanner",
-    "animal-inspection-entry",
-    "animal-inspection-findings",
-    "animal-inspection-records",
-    "animal-inspection-standards",
-    "technical-service-entry",
-    "technical-service-saved",
-    "technical-service-settlement",
-    "billing-cage-map",
-    "billing-quantity-entry",
-    "billing-quantity-saved",
-    "billing-settlement",
-    "billing-monthly-summary",
-    "workflow-center",
-    "feedback",
-    "rooms",
-    "data",
-    "data-quality",
-    "system",
-    "users",
-    "logs",
-  ].includes(value);
-}
 
 export function billingSidebarItems(): BillingSidebarItem[] {
   return [

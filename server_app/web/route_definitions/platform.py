@@ -1,6 +1,10 @@
 """Platform API registrations, preserving existing matchers and handlers."""
 
 ROUTE_GROUPS = {
+    "system_features": [
+        {"method": "GET", "paths": ("/api/system/features",), "delegate": "system_features"},
+        {"method": "PUT", "paths": ("/api/system/features",), "delegate": "system_features"},
+    ],
     "data_quality": [
         {
             "method": "GET",

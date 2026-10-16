@@ -983,4 +983,16 @@
   .app-modal-root.data-quality-detail-modal .ant-btn {
     min-height: 44px;
   }
+
+  [data-feature="administration"].system-features-page .ant-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  [data-feature="administration"].system-features-page .system-feature-label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    cursor: pointer;
+  }
 }

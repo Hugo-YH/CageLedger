@@ -23,6 +23,7 @@ import { useDashboardOverview } from "../../api/dashboardOverview";
 import { PageState } from "../../components/WorkspaceUi";
 import { CommandBar, ListRefreshStatus } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
+import { useViewVisibility } from "../../state/systemFeatureVisibility";
 import { APP_VERSION } from "../../version";
 
 // @ant-design/plots 体积较大，拆为独立懒加载块：仅图表卡实际渲染时下载。
@@ -144,6 +145,7 @@ function DashboardContent({
   failed: boolean;
   retry: () => void;
 }) {
+  const visible = useViewVisibility();
   const { availableMonths, intake, rooms, pi } = data;
   const currentMonth = data.month === "all" ? "历史合计" : data.month;
   const tasks = [
@@ -157,14 +159,14 @@ function DashboardContent({
     {
       label: "上月饲养间",
       value: rooms.length,
-      view: "quantity-sheet-entry" as WorkspaceView,
+      view: "billing-quantity-entry" as WorkspaceView,
       icon: <ApartmentOutlined />,
       tone: "warning",
     },
     {
       label: "结算课题组",
       value: pi.length,
-      view: "billing-settlement-candidates" as WorkspaceView,
+      view: "billing-settlement" as WorkspaceView,
       icon: <ClockCircleOutlined />,
       tone: "default",
     },
@@ -214,26 +216,38 @@ function DashboardContent({
         ) : null}
         <Card className="ant-dashboard-section" size="small" title="待办任务">
           <Row gutter={[0, 12]}>
-            {tasks.map((task) => (
-              <Col key={task.label} lg={6} md={12} sm={12} xs={24}>
-                <Button
-                  aria-label={`查看${task.label}，当前 ${task.value} 项`}
-                  className={`ant-dashboard-task is-${task.tone}`}
-                  block
-                  type="text"
-                  onClick={() => navigate(task.view)}
-                >
+            {tasks.map((task) => {
+              const shown = visible(task.view);
+              const content = (
+                <>
                   <span className="ant-dashboard-task-icon" aria-hidden="true">
                     {task.icon}
                   </span>
                   <span className="ant-dashboard-task-copy">
                     <Typography.Text>{task.label}</Typography.Text>
-                    <Typography.Text className="ant-dashboard-task-action">查看详情</Typography.Text>
+                    {shown ? <Typography.Text className="ant-dashboard-task-action">查看详情</Typography.Text> : null}
                   </span>
                   <Badge className="ant-dashboard-task-count" count={task.value} overflowCount={9999} showZero />
-                </Button>
-              </Col>
-            ))}
+                </>
+              );
+              return (
+                <Col key={task.label} lg={6} md={12} sm={12} xs={24}>
+                  {shown ? (
+                    <Button
+                      aria-label={`查看${task.label}，当前 ${task.value} 项`}
+                      className={`ant-dashboard-task is-${task.tone}`}
+                      block
+                      type="text"
+                      onClick={() => navigate(task.view)}
+                    >
+                      {content}
+                    </Button>
+                  ) : (
+                    <div className={`ant-dashboard-task is-${task.tone} is-hidden`}>{content}</div>
+                  )}
+                </Col>
+              );
+            })}
           </Row>
         </Card>
 

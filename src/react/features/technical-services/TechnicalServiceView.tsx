@@ -5,6 +5,7 @@ import { Button, ConfigProvider, Space } from "antd";
 import { createTheme } from "../../../theme/visual-system.mjs";
 import type { WorkspaceView } from "../../state/ui";
 import { useUiState } from "../../state/ui";
+import { useViewVisibility } from "../../state/systemFeatureVisibility";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { CommandBar } from "../../components/ui";
 import { SavedServices } from "./SavedServices";
@@ -19,6 +20,7 @@ export function TechnicalServiceView({
   navigate: (view: WorkspaceView) => void;
   canExport: boolean;
 }) {
+  const visible = useViewVisibility();
   const touch = useMediaQuery("(max-width: 767px), (max-height: 480px) and (orientation: landscape)");
   const ui = useUiState();
   const dark = useMediaQuery("(prefers-color-scheme: dark)");
@@ -31,10 +33,12 @@ export function TechnicalServiceView({
   const title = mode === "entry" ? "录入技术服务明细" : "已保存技术服务明细";
   const actions = (
     <Space wrap>
-      <Button icon={<AuditOutlined aria-hidden />} onClick={() => navigate("workflow-center")}>
-        单据跟踪
-      </Button>
-      {canExport ? (
+      {visible("workflow-center") ? (
+        <Button icon={<AuditOutlined aria-hidden />} onClick={() => navigate("workflow-center")}>
+          单据跟踪
+        </Button>
+      ) : null}
+      {canExport && visible("billing-monthly-summary") ? (
         <Button icon={<FileExcelOutlined aria-hidden />} onClick={() => navigate("billing-monthly-summary")}>
           汇总导出
         </Button>

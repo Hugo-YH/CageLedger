@@ -1,36 +1,8 @@
 import type { WorkspaceView } from "./uiTypes";
+import { isWorkspaceView } from "./workspaceViews";
 
 const UI_STORAGE_KEY = "cageledger.ui.v2";
 const LEGACY_STORAGE_KEYS = ["cageledger.v1", "lahcas.v1"];
-const WORKSPACE_VIEWS = new Set<WorkspaceView>([
-  "dashboard",
-  "quarantine-batches",
-  "quarantine-parasite",
-  "quarantine-elisa",
-  "quarantine-pcr",
-  "quarantine-reports",
-  "cages",
-  "intake-entry",
-  "intake-batches",
-  "cage-card-scanner",
-  "animal-inspection-entry",
-  "animal-inspection-findings",
-  "animal-inspection-records",
-  "animal-inspection-standards",
-  "billing-cage-map",
-  "billing-quantity-entry",
-  "billing-quantity-saved",
-  "billing-settlement",
-  "billing-monthly-summary",
-  "workflow-center",
-  "feedback",
-  "rooms",
-  "data",
-  "data-quality",
-  "system",
-  "users",
-  "logs",
-]);
 
 export function readStoredWorkspaceView(): WorkspaceView {
   const current = readView(UI_STORAGE_KEY);
@@ -70,7 +42,7 @@ function readView(key: string): WorkspaceView | null {
     const value = readState(key).activeView;
     if (value === "intake") return "intake-entry";
     if (value === "billing") return "billing-quantity-entry";
-    return typeof value === "string" && WORKSPACE_VIEWS.has(value as WorkspaceView) ? (value as WorkspaceView) : null;
+    return typeof value === "string" && isWorkspaceView(value) ? value : null;
   } catch {
     removeStoredState(key);
     return null;

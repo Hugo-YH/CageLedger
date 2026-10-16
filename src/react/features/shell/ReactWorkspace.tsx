@@ -27,6 +27,9 @@ import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo } from "../../api/administration";
+import { useSystemFeatures } from "../../api/systemFeatures";
+import { SystemFeatureVisibilityContext, useViewVisibility } from "../../state/systemFeatureVisibility";
+import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { useLogout } from "../../api/session";
 import { clearUiStorage, persistWorkspaceView } from "../../state/uiStorage";
 import { useUiDispatch, useUiState, type WorkspaceView } from "../../state/ui";
@@ -72,6 +75,9 @@ const DataView = lazy(() => import("../settings/DataView").then((module) => ({ d
 const DataQualityView = lazy(() =>
   import("../settings/DataQualityView").then((module) => ({ default: module.DataQualityView })),
 );
+const SystemFeaturesView = lazy(() =>
+  import("../settings/SystemFeaturesView").then((module) => ({ default: module.SystemFeaturesView })),
+);
 const LogsView = lazy(() => import("../settings/LogsView").then((module) => ({ default: module.LogsView })));
 const SystemView = lazy(() => import("../settings/SystemView").then((module) => ({ default: module.SystemView })));
 const FeedbackView = lazy(() =>
@@ -112,12 +118,46 @@ function preloadDashboard() {
 export function ReactWorkspace({ user }: { user: SessionUser }) {
   return (
     <WorkspaceMemoryProvider key={user.id}>
-      <Workspace user={user} />
+      <WorkspaceFeatures user={user} />
     </WorkspaceMemoryProvider>
   );
 }
 
+function WorkspaceFeatures({ user }: { user: SessionUser }) {
+  const features = useSystemFeatures();
+  if (!features.data) {
+    return features.isError ? (
+      <PageState title="系统功能加载失败" retry={() => void features.refetch()} />
+    ) : (
+      <PageSkeleton label="系统功能" variant="form" />
+    );
+  }
+  return (
+    <SystemFeatureVisibilityContext.Provider value={features.data.enabled}>
+      <WorkspaceInitialView user={user} />
+    </SystemFeatureVisibilityContext.Provider>
+  );
+}
+
+function WorkspaceInitialView({ user }: { user: SessionUser }) {
+  const ui = useUiState();
+  const dispatch = useUiDispatch();
+  const visible = useViewVisibility();
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (ready) return;
+    if (!visible(ui.activeView)) {
+      persistWorkspaceView("dashboard");
+      dispatch({ type: "navigate", view: "dashboard" });
+    }
+    setReady(true);
+  }, [ready, visible, ui.activeView, dispatch]);
+  // Later config refreshes hide entries without unmounting an open form or losing its draft.
+  return ready ? <Workspace user={user} /> : <PageSkeleton label="工作台" variant="form" />;
+}
+
 function Workspace({ user }: { user: SessionUser }) {
+  const visible = useViewVisibility();
   const ui = useUiState();
   useEffect(() => setDiagnosticPage(ui.activeView), [ui.activeView]);
   const saveScroll = useSaveWorkspaceScroll();
@@ -136,6 +176,7 @@ function Workspace({ user }: { user: SessionUser }) {
     ["system", "关于系统", "info"],
     ...(user.role === "admin"
       ? ([
+          ["system-features", "系统功能", "grid"],
           ["data", "数据管理", "database"],
           ["data-quality", "数据核查", "clipboard"],
           ["users", "账号管理", "users"],
@@ -148,6 +189,7 @@ function Workspace({ user }: { user: SessionUser }) {
     void guardedNavigate(view);
   }
   async function guardedNavigate(view: WorkspaceView) {
+    if (!visible(view)) return;
     if (view === ui.activeView) return;
     if (navigationGuard.current && !(await navigationGuard.current())) return;
     saveScroll(ui.activeView);
@@ -243,7 +285,20 @@ function Workspace({ user }: { user: SessionUser }) {
       label: "系统设置",
       children: settingsViews.map(([view, label, icon]) => item(view, label, iconFor[icon])),
     },
-  ];
+  ].filter((entry) => {
+    if (!entry || !("key" in entry)) return true;
+    const key = String(entry.key);
+    const groups: Record<string, WorkspaceView> = {
+      intake: "intake-entry",
+      quarantine: "quarantine-batches",
+      cages: "cages",
+      animal: "animal-inspection-entry",
+      billing: "billing-quantity-entry",
+      "technical-services": "technical-service-entry",
+      settlement: "billing-settlement",
+    };
+    return !groups[key] || visible(groups[key]);
+  });
 
   return (
     <Layout className={`ant-shell ${ui.sidebarCollapsed ? "ant-shell-collapsed" : ""}`} data-ui="app-shell" hasSider>
@@ -397,6 +452,7 @@ function renderActiveView(
   if (view === "users") return <UsersView currentUser={user} />;
   if (view === "data") return <DataView user={user} />;
   if (view === "data-quality" && user.role === "admin") return <DataQualityView />;
+  if (view === "system-features" && user.role === "admin") return <SystemFeaturesView />;
   if (view === "logs") return <LogsView />;
   if (view === "system") return <SystemView user={user} navigate={navigate} />;
   return <DashboardView navigate={navigate} />;
