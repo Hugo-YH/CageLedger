@@ -1,6 +1,7 @@
 import { ServiceColumnTitle } from "./ServiceColumnTitle";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Modal, Space, Tag } from "antd";
+import { Alert, Button, Space, Tag } from "antd";
+import { Modal } from "../../components/ui/Modal";
 
 import type { TechnicalServiceSheet } from "../../../contracts/technicalServices";
 import { useServiceList, useServiceMutation } from "../../api/technicalServices";

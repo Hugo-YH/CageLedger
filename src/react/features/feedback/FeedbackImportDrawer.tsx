@@ -1,5 +1,5 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { Alert, Button, Drawer, Select, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Button, Select, Skeleton, Space, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useRef, useState } from "react";
 
@@ -7,6 +7,7 @@ import type { FeedbackImportCandidate, FeedbackImportResult } from "../../../con
 import { useFeedbackImportPreview, useImportFeedback } from "../../api/feedback";
 import { DataTable } from "../../components/ui";
 import { CommandBar } from "../../components/ui/CommandBar";
+import { Drawer } from "../../components/ui/Drawer";
 
 import { KIND_LABEL as KIND, STATUS_LABEL as STATUS } from "./feedbackPresentation";
 

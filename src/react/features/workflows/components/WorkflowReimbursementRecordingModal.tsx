@@ -1,5 +1,6 @@
 import { UploadOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Form, Modal, Space, Typography, Upload } from "antd";
+import { Alert, Button, Flex, Form, Space, Typography, Upload } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { useState } from "react";
 
 import { unverifiedFundingBookNos } from "../../../../domain/fundingBookNo";

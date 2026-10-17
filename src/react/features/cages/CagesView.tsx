@@ -8,7 +8,7 @@ import { cageCode, currentOccupancy } from "../../../domain/cages";
 import { BatchSlotEditor, PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
 import { PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { ActionButton, ListRefreshStatus } from "../../components/ui";
+import { ActionButton, ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { useReservePlacement } from "../../api/cages";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
@@ -289,50 +289,59 @@ export function CagesView() {
           </div>
         </section>
       </div>
-      {selectedSlot && selectedRack && !selectedTaskId ? (
-        <SlotEditor
-          slot={selectedSlot}
-          rack={selectedRack}
-          roomName={selectedRoom?.name || ""}
-          roomSpecies={selectedRoom?.defaultSpecies || ""}
-          occupancy={currentOccupancy(selectedSlot.id, occupancies)}
-          roomId={selectedRoomId}
-          onClose={() => setSelectedSlotId("")}
-          onNotice={setNotice}
-          beginOperation={scopeOperations.begin}
-        />
-      ) : null}
-      {batchEditorOpen && selectedRack ? (
-        <BatchSlotEditor
-          slots={slots.filter((slot) => selectedSlotIds.includes(slot.id))}
-          rack={selectedRack}
-          roomName={selectedRoom?.name || ""}
-          occupancies={occupancies}
-          roomId={selectedRoomId}
-          onClose={() => setBatchEditorOpen(false)}
-          beginOperation={scopeOperations.begin}
-          onDone={(message) => {
-            setNotice(message);
-            setBatchEditorOpen(false);
-            setSelectedSlotIds([]);
-          }}
-        />
-      ) : null}
-      {tasksOpen ? (
-        <PlacementDrawer
-          tasks={tasks}
-          selectedTaskId={selectedTaskId}
-          roomId={selectedRoomId}
-          onSelect={(task) => {
-            clearSelection();
-            setBatchMode(false);
-            setSelectedTaskId(task.id);
-            setTasksOpen(false);
-            setNotice("已选择待进驻任务，请在笼位图中选择空笼位。");
-          }}
-          onClose={() => setTasksOpen(false)}
-        />
-      ) : null}
+      <ModalPresence>
+        {selectedSlot && selectedRack && !selectedTaskId ? (
+          <SlotEditor
+            key={selectedSlot.id}
+            slot={selectedSlot}
+            rack={selectedRack}
+            roomName={selectedRoom?.name || ""}
+            roomSpecies={selectedRoom?.defaultSpecies || ""}
+            occupancy={currentOccupancy(selectedSlot.id, occupancies)}
+            roomId={selectedRoomId}
+            onClose={() => setSelectedSlotId("")}
+            onNotice={setNotice}
+            beginOperation={scopeOperations.begin}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {batchEditorOpen && selectedRack ? (
+          <BatchSlotEditor
+            key={selectedRack.id}
+            slots={slots.filter((slot) => selectedSlotIds.includes(slot.id))}
+            rack={selectedRack}
+            roomName={selectedRoom?.name || ""}
+            occupancies={occupancies}
+            roomId={selectedRoomId}
+            onClose={() => setBatchEditorOpen(false)}
+            beginOperation={scopeOperations.begin}
+            onDone={(message) => {
+              setNotice(message);
+              setBatchEditorOpen(false);
+              setSelectedSlotIds([]);
+            }}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {tasksOpen ? (
+          <PlacementDrawer
+            key={selectedRoomId}
+            tasks={tasks}
+            selectedTaskId={selectedTaskId}
+            roomId={selectedRoomId}
+            onSelect={(task) => {
+              clearSelection();
+              setBatchMode(false);
+              setSelectedTaskId(task.id);
+              setTasksOpen(false);
+              setNotice("已选择待进驻任务，请在笼位图中选择空笼位。");
+            }}
+            onClose={() => setTasksOpen(false)}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

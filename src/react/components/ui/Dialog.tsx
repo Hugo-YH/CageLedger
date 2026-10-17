@@ -1,4 +1,4 @@
-import { Modal } from "antd";
+import { Modal } from "./Modal";
 import { type ReactNode } from "react";
 
 export function Dialog({

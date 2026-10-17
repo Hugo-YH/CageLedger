@@ -15,7 +15,7 @@ import {
 } from "../../api/intake";
 import { fetchIacucSearch } from "../../api/iacuc";
 import { queryKeys } from "../../api/queryKeys";
-import { ActionButton } from "../../components/ui";
+import { ActionButton, ModalPresence } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useIntakeSelection } from "./hooks/useIntakeSelection";
 import { AsyncActionButton, ModalShell, PageSkeleton, WorkspaceToolbar } from "../../components/WorkspaceUi";
@@ -446,72 +446,84 @@ export function IntakeView({
           )}
         </section>
       </div>
-      {editingDialog ? (
-        <ModalShell ariaLabel="编辑待接收批次" className="intake-edit-modal" onClose={() => setEditingDialog(false)}>
-          <div className="modal-shell-head">
-            <div>
-              <h2>编辑待接收批次</h2>
-              <p>{draft.batchNo}</p>
+      <ModalPresence>
+        {editingDialog ? (
+          <ModalShell
+            key={draft.id}
+            ariaLabel="编辑待接收批次"
+            className="intake-edit-modal"
+            onClose={() => setEditingDialog(false)}
+          >
+            <div className="modal-shell-head">
+              <div>
+                <h2>编辑待接收批次</h2>
+                <p>{draft.batchNo}</p>
+              </div>
+              <ActionButton onClick={() => setEditingDialog(false)}>关闭</ActionButton>
             </div>
-            <ActionButton onClick={() => setEditingDialog(false)}>关闭</ActionButton>
-          </div>
-          <div className="modal-shell-body">
-            <IntakeEntryPanel
-              editing={editing}
-              draft={draft}
-              roomNames={roomNames}
-              notice={notice}
-              saving={save.isPending}
-              aiPending={aiParsing}
-              onSubmit={submit}
-              headActions={
-                <ActionButton icon={<ActionIcon name="save" />} loading={save.isPending} tone="primary" type="submit">
-                  保存待接收批次
-                </ActionButton>
-              }
-              onAiParse={aiParseMessage}
-              onParse={parseMessage}
-              onPrint={() => void printCurrentBatch()}
-              onUpdate={update}
-            />
-          </div>
-        </ModalShell>
-      ) : null}
-      {deleteTarget ? (
-        <ModalShell ariaLabel="删除待接收批次" onClose={() => setDeleteTarget(null)}>
-          <div className="modal-shell-head">
-            <div>
-              <h2 id="delete-intake-title">删除待接收批次</h2>
-              <p>{deleteTarget.batchNo}</p>
+            <div className="modal-shell-body">
+              <IntakeEntryPanel
+                editing={editing}
+                draft={draft}
+                roomNames={roomNames}
+                notice={notice}
+                saving={save.isPending}
+                aiPending={aiParsing}
+                onSubmit={submit}
+                headActions={
+                  <ActionButton icon={<ActionIcon name="save" />} loading={save.isPending} tone="primary" type="submit">
+                    保存待接收批次
+                  </ActionButton>
+                }
+                onAiParse={aiParseMessage}
+                onParse={parseMessage}
+                onPrint={() => void printCurrentBatch()}
+                onUpdate={update}
+              />
             </div>
-          </div>
-          <div className="modal-shell-body">
-            <p>删除后，该批次及关联的待进驻任务会一并移除。</p>
-          </div>
-          <div className="modal-shell-actions">
-            <ActionButton onClick={() => setDeleteTarget(null)}>取消</ActionButton>
-            <ActionButton
-              disabled={remove.isPending}
-              loading={remove.isPending}
-              tone="destructive"
-              onClick={async () => {
-                await remove.mutateAsync(deleteTarget.id);
-                selection.remove(deleteTarget.id);
-                setDeleteTarget(null);
-              }}
-            >
-              确认删除
-            </ActionButton>
-          </div>
-        </ModalShell>
-      ) : null}
-      {pendingPrint ? (
-        <IntakePrintConfirmDialog
-          job={pendingPrint}
-          onClose={() => setPendingPrint(null)}
-          onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
-        />
-      ) : null}
+          </ModalShell>
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {deleteTarget ? (
+          <ModalShell key={deleteTarget.id} ariaLabel="删除待接收批次" onClose={() => setDeleteTarget(null)}>
+            <div className="modal-shell-head">
+              <div>
+                <h2 id="delete-intake-title">删除待接收批次</h2>
+                <p>{deleteTarget.batchNo}</p>
+              </div>
+            </div>
+            <div className="modal-shell-body">
+              <p>删除后，该批次及关联的待进驻任务会一并移除。</p>
+            </div>
+            <div className="modal-shell-actions">
+              <ActionButton onClick={() => setDeleteTarget(null)}>取消</ActionButton>
+              <ActionButton
+                disabled={remove.isPending}
+                loading={remove.isPending}
+                tone="destructive"
+                onClick={async () => {
+                  await remove.mutateAsync(deleteTarget.id);
+                  selection.remove(deleteTarget.id);
+                  setDeleteTarget(null);
+                }}
+              >
+                确认删除
+              </ActionButton>
+            </div>
+          </ModalShell>
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {pendingPrint ? (
+          <IntakePrintConfirmDialog
+            key={pendingPrint.batches.map((batch) => batch.id).join(",")}
+            job={pendingPrint}
+            onClose={() => setPendingPrint(null)}
+            onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

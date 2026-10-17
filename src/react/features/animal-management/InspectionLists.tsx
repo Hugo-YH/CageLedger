@@ -1,7 +1,8 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { List as MobileList } from "antd-mobile";
-import { Alert, Button, Card, Collapse, Descriptions, Empty, Form, Modal, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Collapse, Descriptions, Empty, Form, Select, Space, Tag, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 
 import type { FindingStatus, InspectionFinding, InspectionModuleCode, SessionUser } from "../../api/contracts";
 import {
@@ -13,7 +14,7 @@ import {
 import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { MobilePage } from "../../components/ui/MobilePage";
-import { DataTable, ListRefreshStatus, RowActions } from "../../components/ui";
+import { DataTable, ListRefreshStatus, ModalPresence, RowActions } from "../../components/ui";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { FindingDialog } from "./InspectionFindingDialog";
@@ -144,7 +145,11 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
             />
           </Card>
         </MobilePage>
-        {selectedId ? <InspectionDetailDialog id={selectedId} onClose={() => setSelectedId("")} /> : null}
+        <ModalPresence>
+          {selectedId ? (
+            <InspectionDetailDialog key={selectedId} id={selectedId} onClose={() => setSelectedId("")} />
+          ) : null}
+        </ModalPresence>
       </>
     );
   }
@@ -250,7 +255,11 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
           />
         </Card>
       </MobilePage>
-      {selectedId ? <InspectionDetailDialog id={selectedId} onClose={() => setSelectedId("")} /> : null}
+      <ModalPresence>
+        {selectedId ? (
+          <InspectionDetailDialog key={selectedId} id={selectedId} onClose={() => setSelectedId("")} />
+        ) : null}
+      </ModalPresence>
     </>
   );
 }
@@ -334,7 +343,9 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
             />
           </Card>
         </MobilePage>
-        {selected ? <FindingDialog finding={selected} onClose={() => setSelected(null)} /> : null}
+        <ModalPresence>
+          {selected ? <FindingDialog key={selected.id} finding={selected} onClose={() => setSelected(null)} /> : null}
+        </ModalPresence>
       </>
     );
   }
@@ -392,7 +403,9 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
           />
         </Card>
       </MobilePage>
-      {selected ? <FindingDialog finding={selected} onClose={() => setSelected(null)} /> : null}
+      <ModalPresence>
+        {selected ? <FindingDialog key={selected.id} finding={selected} onClose={() => setSelected(null)} /> : null}
+      </ModalPresence>
     </>
   );
 }

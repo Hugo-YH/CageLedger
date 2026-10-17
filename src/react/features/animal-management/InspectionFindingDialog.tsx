@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
-import { Alert, Button, Descriptions, Form, Input, Modal, Select, Space } from "antd";
+import { Alert, Button, Descriptions, Form, Input, Select, Space } from "antd";
+import { Modal } from "../../components/ui/Modal";
 
 import type { FindingStatus, InspectionFinding } from "../../api/contracts";
 import { useResolveFinding, useUpdateFinding } from "../../api/animalManagement";

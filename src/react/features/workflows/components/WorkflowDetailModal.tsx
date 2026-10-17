@@ -1,5 +1,6 @@
 import { DownloadOutlined } from "@ant-design/icons";
-import { Button, Descriptions, Flex, Modal, Tag, Timeline, Typography } from "antd";
+import { Button, Descriptions, Flex, Tag, Timeline, Typography } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { useState } from "react";
 
 import { tagColors } from "../../../../theme/visual-system.mjs";

@@ -21,8 +21,8 @@ import { useSettlementBatch } from "../../../api/useSettlementBatch";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
-import { DataTable } from "../../../components/ui";
-import { usePdfExport } from "../hooks/usePdfExport";
+import { DataTable, ModalPresence } from "../../../components/ui";
+import { settlementExportProgress, usePdfExport } from "../hooks/usePdfExport";
 import { useSettlementSelection } from "../hooks/useSettlementSelection";
 import { BatchStartConfirmModal } from "./BatchStartConfirmModal";
 import { BatchWithdrawConfirmModal } from "./BatchWithdrawConfirmModal";
@@ -437,42 +437,41 @@ export function SettlementCandidateList({
         }}
         onConfirm={(note) => runSelectedBatch("withdraw", note)}
       />
-      {selected && result ? (
-        <SettlementPreviewModal
-          generatePending={generatePending}
-          hasWorkflow={Boolean(selected.hasWorkflow)}
-          revertPending={advanceWorkflow.isPending}
-          canWithdraw={canWithdraw(selected)}
-          workflowStatus={selected.workflowStatus}
-          notice={notice}
-          noticeKind={noticeKind}
-          pdfExporting={pdfExport.isExporting}
-          result={result}
-          selected={selected}
-          onClose={() => {
-            previewRequest.invalidate();
-            setSelected(null);
-          }}
-          onExportPdf={() => void exportCandidates([selected])}
-          onRevert={(note) => revertFor(selected, note)}
-          onStartSettlement={() => void prepareNoticeEmail(selected)}
-        />
-      ) : null}
-      {noticeEmail ? (
-        <SettlementNoticeModal
-          email={noticeEmail.email}
-          pending={generatePending}
-          onCancel={() => {
-            previewRequest.invalidate();
-            setNoticeEmail(null);
-          }}
-          onConfirm={() => void confirmNoticeEmail()}
-        />
-      ) : null}
+      <ModalPresence>
+        {noticeEmail ? (
+          <SettlementNoticeModal
+            key={`notice:${noticeEmail.candidate.id}`}
+            email={noticeEmail.email}
+            pending={generatePending}
+            onCancel={() => {
+              previewRequest.invalidate();
+              setNoticeEmail(null);
+            }}
+            onConfirm={() => void confirmNoticeEmail()}
+          />
+        ) : selected && result ? (
+          <SettlementPreviewModal
+            key={`preview:${selected.id}`}
+            generatePending={generatePending}
+            hasWorkflow={Boolean(selected.hasWorkflow)}
+            revertPending={advanceWorkflow.isPending}
+            canWithdraw={canWithdraw(selected)}
+            workflowStatus={selected.workflowStatus}
+            notice={notice}
+            noticeKind={noticeKind}
+            pdfExporting={pdfExport.isExporting}
+            result={result}
+            selected={selected}
+            onClose={() => {
+              previewRequest.invalidate();
+              setSelected(null);
+            }}
+            onExportPdf={() => void exportCandidates([selected])}
+            onRevert={(note) => revertFor(selected, note)}
+            onStartSettlement={() => void prepareNoticeEmail(selected)}
+          />
+        ) : null}
+      </ModalPresence>
     </>
   );
-}
-
-function settlementExportProgress(completed = 0, total = 0) {
-  return total > 1 ? `正在导出 ${completed}/${total}` : "PDF 正在生成，完成后自动下载。";
 }

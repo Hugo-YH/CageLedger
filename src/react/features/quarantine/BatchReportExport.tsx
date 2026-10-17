@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { Alert, Button, Form, Modal, Radio, Typography } from "antd";
+import { Alert, Button, Form, Radio, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { downloadQuarantine } from "../../api/quarantine";
 

@@ -1,4 +1,5 @@
-import { Alert, Button, Flex, Input, Modal, Typography } from "antd";
+import { Alert, Button, Flex, Input, Typography } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { useState } from "react";
 
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";

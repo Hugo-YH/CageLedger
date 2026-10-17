@@ -1,5 +1,6 @@
 import { CalendarOutlined, CheckCircleOutlined } from "@ant-design/icons";
-import { Alert, Button, Collapse, Flex, Modal, Space, Tag, Typography } from "antd";
+import { Alert, Button, Collapse, Flex, Space, Tag, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import { useRef, useState } from "react";
 
 import { useAcknowledgeReleaseAnnouncements, useReleaseAnnouncementHistory } from "../../api/administration";

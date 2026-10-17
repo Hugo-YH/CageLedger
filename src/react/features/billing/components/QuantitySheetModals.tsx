@@ -1,5 +1,6 @@
 import type { CageRoom, QuantitySheet, QuantitySheetRow } from "../../../api/contracts";
-import { Button, Modal, Space } from "antd";
+import { Button, Space } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { roomBillingProfile } from "../../../../domain/quantitySheets";
 
 export function ConfirmSave({

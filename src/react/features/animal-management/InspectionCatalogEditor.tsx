@@ -1,7 +1,8 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useMemo, useState } from "react";
 import type { Key } from "react";
-import { App, Button, Card, Form, Modal, Segmented, Select, Tag, Tree, Typography } from "antd";
+import { App, Button, Card, Form, Segmented, Select, Tag, Tree, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import { PlusOutlined, SaveOutlined, SendOutlined } from "@ant-design/icons";
 
 import { createClientId } from "../../../domain/id";
@@ -19,7 +20,7 @@ import {
 } from "../../api/animalManagement";
 import { ApiError } from "../../api/client";
 import type { InspectionCatalogDraftResponse, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
-import { CommandBar } from "../../components/ui";
+import { CommandBar, ModalPresence } from "../../components/ui";
 import { InspectionNodeForm } from "./InspectionNodeForm";
 import { InspectionPublishModal } from "./InspectionPublishModal";
 
@@ -268,16 +269,18 @@ export function InspectionCatalogEditor({
             onSelect={handleTreeSelect}
           />
         </div>
-        {formState ? (
-          <InspectionNodeForm
-            key={formState.isNew ? "new" : formState.node.code}
-            node={formState.node}
-            isNew={formState.isNew}
-            onSave={handleNodeSave}
-            onClose={closeForm}
-            onDelete={formState.isNew ? undefined : handleNodeDelete}
-          />
-        ) : null}
+        <ModalPresence>
+          {formState ? (
+            <InspectionNodeForm
+              key={`${formState.isNew ? "new" : "node"}:${formState.node.id || formState.node.code}`}
+              node={formState.node}
+              isNew={formState.isNew}
+              onSave={handleNodeSave}
+              onClose={closeForm}
+              onDelete={formState.isNew ? undefined : handleNodeDelete}
+            />
+          ) : null}
+        </ModalPresence>
         <Modal
           className="inspection-add-node-modal"
           open={addOpen}

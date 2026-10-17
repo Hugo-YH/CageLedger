@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Form, Image, Input, Modal, Select, Space, Upload } from "antd";
+import { Button, Form, Image, Input, Select, Space, Upload } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import type { UploadFile } from "antd";
 
 import type { InspectionAnswer, InspectionCatalogNode } from "../../api/contracts";

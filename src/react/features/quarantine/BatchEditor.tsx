@@ -11,12 +11,12 @@ import {
   DatePicker,
   Form,
   Input,
-  Modal,
   Space,
   Table,
   Tag,
   Typography,
 } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import dayjs from "dayjs";
 import { speciesLabel } from "../../../domain/intake";
 import type { QuarantineBatch, QuarantineSource } from "../../../contracts/quarantine";

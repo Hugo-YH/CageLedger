@@ -6,7 +6,7 @@
 - `src/react/components/ui/` 是页面使用的统一适配层。
 - 页面标题和常用操作统一通过 `CommandBar` 的 `title`、`description`、`context`、`actions` 与 `primaryAction` 呈现；`description` 统一显示为标题后的叹号说明，`WorkspaceToolbar` 完整转发这些配置。区域工具栏使用 `titleSize="section"`，不重复保留 Card 页标题。
 - 页面级工具栏放在正文卡片外，与工作区内容边界对齐；不通过嵌套 Card、局部背景或重复页面内边距改变标题位置。页面边距由工作区统一提供，移动页面不重复叠加。简短操作说明使用标题后的 `HelpPopover` 叹号提示；独立业务状态和筛选仍留在对应区域。
-- 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceToolbar`、Ant `Form`、`Table`、`Card`、`Modal`、`Drawer`、`Empty` 与 `Result`。
+- 页面组件优先组合 `ActionButton`、`CommandBar`、`WorkspaceToolbar`、Ant `Form`、`Table`、`Card`、`Empty` 与 `Result`。弹窗和抽屉使用适配层 `Modal`、`Drawer`，通过常驻 `ModalPresence` 管理条件挂载与同槽切换；底层仍为 Ant 组件，不叠加自定义入场 CSS。
 - 笼位图、数量台账网格、巡检评分、图表与打印模板可保留专用 DOM；数量台账中的输入、选择、日期与确认操作使用 Ant `Input`、`Select`、`DatePicker` 或 `Modal`，通用操作、状态与浮层使用适配层。
 
 ## 视觉与交互

@@ -1,6 +1,7 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Anchor, Button, Card, Descriptions, Form, Modal, Typography } from "antd";
+import { Alert, Anchor, Button, Card, Descriptions, Form, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import type { QuarantineBatch, QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { useQuarantineRecordSave } from "../../api/quarantine";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";

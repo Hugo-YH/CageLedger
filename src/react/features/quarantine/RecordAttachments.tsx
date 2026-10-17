@@ -1,6 +1,7 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Card, Image, Input, InputNumber, Modal, Select, Space, Typography, Upload } from "antd";
+import { Alert, Button, Card, Image, Input, InputNumber, Select, Space, Typography, Upload } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import type { QuarantineAttachment, QuarantineTest } from "../../../contracts/quarantine";
 import { downloadQuarantine, useQuarantineAttachmentWrite } from "../../api/quarantine";
 

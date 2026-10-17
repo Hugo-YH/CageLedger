@@ -1,4 +1,5 @@
-import { Modal, Typography } from "antd";
+import { Typography } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 
 export function BatchStartConfirmModal({
   count,

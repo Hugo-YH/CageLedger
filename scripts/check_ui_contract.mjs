@@ -11,6 +11,9 @@ const required = [
   "src/react/components/ui/CommandBar.tsx",
   "src/react/components/ui/DataTable.tsx",
   "src/react/components/ui/Dialog.tsx",
+  "src/react/components/ui/Modal.tsx",
+  "src/react/components/ui/ModalPresence.tsx",
+  "src/react/components/ui/Drawer.tsx",
   "src/react/components/ui/Feedback.tsx",
   "src/react/components/ui/FormField.tsx",
   "src/react/components/ui/HelpPopover.tsx",
@@ -23,6 +26,21 @@ const failures = required.filter((path) => !existsSync(join(root, path))).map((p
 const source = walk(join(root, "src"));
 for (const path of source) {
   const text = readFileSync(path, "utf8");
+  if (path.endsWith(".tsx") && !path.endsWith(".test.tsx")) {
+    const ast = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    for (const node of ast.statements) {
+      if (!ts.isImportDeclaration(node) || node.moduleSpecifier.text !== "antd") continue;
+      const bindings = node.importClause?.namedBindings;
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const item of bindings.elements) {
+          const name = (item.propertyName || item.name).text;
+          if (["Modal", "Drawer"].includes(name) && relative(path) !== `src/react/components/ui/${name}.tsx`) {
+            failures.push(`${relative(path)} 直接导入 Ant ${name}，请使用共用 ${name} 适配层保留退场内容`);
+          }
+        }
+      }
+    }
+  }
   if (
     path.endsWith(".tsx") &&
     relative(path) !== "src/react/components/ui/CommandBar.tsx" &&

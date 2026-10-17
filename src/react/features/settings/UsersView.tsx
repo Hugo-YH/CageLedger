@@ -6,7 +6,7 @@ import { useBootstrap } from "../../api/bootstrap";
 import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
 import { useDeleteUser, useSaveUser, useUsers } from "../../api/administration";
 import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { CommandBar, ListRefreshStatus } from "../../components/ui";
+import { CommandBar, ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 
 const emptyDraft = {
@@ -151,17 +151,20 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
           </Card>
         </section>
       </div>
-      {deleteTarget ? (
-        <ConfirmDialog
-          title="删除账号"
-          message={`确认删除账号“${deleteTarget.displayName}”？该账号将立即失去登录权限。`}
-          confirmLabel="确认删除"
-          danger
-          pending={remove.isPending}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => remove.mutateAsync(deleteTarget.id)}
-        />
-      ) : null}
+      <ModalPresence>
+        {deleteTarget ? (
+          <ConfirmDialog
+            key={deleteTarget.id}
+            title="删除账号"
+            message={`确认删除账号“${deleteTarget.displayName}”？该账号将立即失去登录权限。`}
+            confirmLabel="确认删除"
+            danger
+            pending={remove.isPending}
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={() => remove.mutateAsync(deleteTarget.id)}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import { UploadOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Form, Input, Modal, Space, Switch, Tag, Typography, Upload } from "antd";
+import { Alert, Button, Flex, Form, Input, Space, Switch, Tag, Typography, Upload } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
 

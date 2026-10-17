@@ -1,4 +1,5 @@
-import { App, Button, Modal, Popconfirm, Space, Tag, Typography } from "antd";
+import { App, Button, Popconfirm, Space, Tag, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import { RollbackOutlined } from "@ant-design/icons";
 
 import { PageSkeleton } from "../../components/WorkspaceUi";

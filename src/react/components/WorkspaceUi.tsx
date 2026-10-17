@@ -1,5 +1,6 @@
 import { ActionIcon } from "./ui/ActionIcon";
-import { Alert, Button, Empty, Flex, Modal, Pagination, Space, Typography } from "antd";
+import { Alert, Button, Empty, Flex, Pagination, Space, Typography } from "antd";
+import { Modal } from "./ui/Modal";
 import { CloseOutlined } from "@ant-design/icons";
 import { type ReactNode, useEffect, useRef } from "react";
 
@@ -99,19 +100,15 @@ export function ModalShell({
   children: ReactNode;
   onClose: () => void;
 }) {
-  const restoreTarget = useRef<HTMLElement | null>(null);
   const shellRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    restoreTarget.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = requestAnimationFrame(() => {
       shellRef.current?.querySelector<HTMLElement>(".modal-shell-body")?.scrollTo({ top: 0 });
       shellRef.current?.querySelector<HTMLElement>("button[aria-label='关闭']")?.focus();
     });
     return () => {
       cancelAnimationFrame(frame);
-      const target = restoreTarget.current;
-      requestAnimationFrame(() => target?.focus());
     };
   }, []);
 

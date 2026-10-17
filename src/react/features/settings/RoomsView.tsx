@@ -6,7 +6,7 @@ import { useBootstrap } from "../../api/bootstrap";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
 import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { ListRefreshStatus } from "../../components/ui";
+import { ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
 
@@ -195,36 +195,45 @@ export function RoomsView({ user }: { user: SessionUser }) {
           )}
         </Card>
       </div>
-      {roomDraft ? (
-        <RoomEditor
-          draft={roomDraft}
-          pending={save.isPending}
-          onChange={setRoomDraft}
-          onClose={() => setRoomDraft(null)}
-          onSave={persistRoom}
-        />
-      ) : null}
-      {rackDraft ? (
-        <RackEditor
-          draft={rackDraft}
-          rooms={visibleRooms}
-          pending={save.isPending}
-          onChange={setRackDraft}
-          onClose={() => setRackDraft(null)}
-          onSave={persistRack}
-        />
-      ) : null}
-      {deleteTarget ? (
-        <ConfirmDialog
-          title={`删除${deleteTarget.kind === "room" ? "饲养间" : "笼架"}`}
-          message={`确认删除“${deleteTarget.label}”？关联笼位将同步移除，占用历史继续保留。`}
-          confirmLabel="确认删除"
-          danger
-          pending={save.isPending || removeRoom.isPending}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={confirmDelete}
-        />
-      ) : null}
+      <ModalPresence>
+        {roomDraft ? (
+          <RoomEditor
+            key={roomDraft.id}
+            draft={roomDraft}
+            pending={save.isPending}
+            onChange={setRoomDraft}
+            onClose={() => setRoomDraft(null)}
+            onSave={persistRoom}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {rackDraft ? (
+          <RackEditor
+            key={rackDraft.id}
+            draft={rackDraft}
+            rooms={visibleRooms}
+            pending={save.isPending}
+            onChange={setRackDraft}
+            onClose={() => setRackDraft(null)}
+            onSave={persistRack}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {deleteTarget ? (
+          <ConfirmDialog
+            key={deleteTarget.id}
+            title={`删除${deleteTarget.kind === "room" ? "饲养间" : "笼架"}`}
+            message={`确认删除“${deleteTarget.label}”？关联笼位将同步移除，占用历史继续保留。`}
+            confirmLabel="确认删除"
+            danger
+            pending={save.isPending || removeRoom.isPending}
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={confirmDelete}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

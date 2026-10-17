@@ -1,5 +1,6 @@
 import { ActionIcon } from "../../../components/ui/ActionIcon";
-import { Alert, Button, Checkbox, Flex, Modal, Pagination, Space, Tag, Typography, type TableProps } from "antd";
+import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { useEffect, useState } from "react";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -12,7 +13,7 @@ import {
   useQuantitySheets,
 } from "../../../api/quantitySheets";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
-import { ActionButton, CommandBar, DataTable } from "../../../components/ui";
+import { ActionButton, CommandBar, DataTable, ModalPresence } from "../../../components/ui";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
@@ -271,34 +272,44 @@ export function SavedQuantitySheets({
             />
           </div>
         </Flex>
-        {viewId ? (
-          <QuantityPreviewModal sheet={detail.data?.item} loading={detail.isPending} onClose={() => setViewId("")} />
-        ) : null}
-        {deleteId ? (
-          <Modal
-            footer={
-              <Space>
-                <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
-                <ActionButton
-                  loading={remove.isPending}
-                  tone="destructive"
-                  onClick={async () => {
-                    await remove.mutateAsync(deleteId);
-                    selection.toggle(deleteId, false);
-                    setDeleteId("");
-                  }}
-                >
-                  确认删除
-                </ActionButton>
-              </Space>
-            }
-            onCancel={() => setDeleteId("")}
-            open
-            title="删除数量统计表"
-          >
-            <p>删除后，该统计表将退出结算合表范围。</p>
-          </Modal>
-        ) : null}
+        <ModalPresence>
+          {viewId ? (
+            <QuantityPreviewModal
+              key={viewId}
+              sheet={detail.data?.item}
+              loading={detail.isPending}
+              onClose={() => setViewId("")}
+            />
+          ) : null}
+        </ModalPresence>
+        <ModalPresence>
+          {deleteId ? (
+            <Modal
+              key={deleteId}
+              footer={
+                <Space>
+                  <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
+                  <ActionButton
+                    loading={remove.isPending}
+                    tone="destructive"
+                    onClick={async () => {
+                      await remove.mutateAsync(deleteId);
+                      selection.toggle(deleteId, false);
+                      setDeleteId("");
+                    }}
+                  >
+                    确认删除
+                  </ActionButton>
+                </Space>
+              }
+              onCancel={() => setDeleteId("")}
+              open
+              title="删除数量统计表"
+            >
+              <p>删除后，该统计表将退出结算合表范围。</p>
+            </Modal>
+          ) : null}
+        </ModalPresence>
       </section>
     </>
   );

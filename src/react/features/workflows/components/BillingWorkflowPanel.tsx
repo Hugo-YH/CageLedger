@@ -1,3 +1,4 @@
+import { ModalPresence } from "../../../components/ui/ModalPresence";
 import { useListPageBounds } from "../../../hooks/useListPageBounds";
 import { queryKeys } from "../../../api/queryKeys";
 import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
@@ -435,28 +436,35 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
           setRegisterTarget(null);
         }}
       />
-      <WorkflowDetailModal
-        target={detailTarget}
-        recordable={Boolean(
-          detailTarget &&
-          user.billingLockAllowed &&
-          (detailTarget.reimbursementRequired ?? Number(detailTarget.totalAmount || 0) > 0) &&
-          !detailTarget.reimbursementFormReturned,
-        )}
-        onCancel={() => setDetailTarget(null)}
-        onRecord={(workflow) => {
-          setDetailTarget(null);
-          setRecordingTarget(workflow);
-        }}
-      />
-      <WorkflowReimbursementRecordingModal
-        target={recordingTarget}
-        onCancel={() => setRecordingTarget(null)}
-        onRecorded={() => {
-          setRecordingTarget(null);
-          void query.refetch();
-        }}
-      />
+      <ModalPresence>
+        {detailTarget ? (
+          <WorkflowDetailModal
+            key={`detail:${detailTarget.id}`}
+            target={detailTarget}
+            recordable={Boolean(
+              detailTarget &&
+              user.billingLockAllowed &&
+              (detailTarget.reimbursementRequired ?? Number(detailTarget.totalAmount || 0) > 0) &&
+              !detailTarget.reimbursementFormReturned,
+            )}
+            onCancel={() => setDetailTarget(null)}
+            onRecord={(workflow) => {
+              setDetailTarget(null);
+              setRecordingTarget(workflow);
+            }}
+          />
+        ) : recordingTarget ? (
+          <WorkflowReimbursementRecordingModal
+            key={`record:${recordingTarget.id}`}
+            target={recordingTarget}
+            onCancel={() => setRecordingTarget(null)}
+            onRecorded={() => {
+              setRecordingTarget(null);
+              void query.refetch();
+            }}
+          />
+        ) : null}
+      </ModalPresence>
       <WorkflowRevokeModal target={revokeTarget} onCancel={() => setRevokeTarget(null)} />
     </section>
   );

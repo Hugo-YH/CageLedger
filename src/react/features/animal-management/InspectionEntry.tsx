@@ -14,6 +14,7 @@ import {
 import { useBootstrap } from "../../api/bootstrap";
 import { AsyncActionButton, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { HelpTooltip } from "../../components/Tooltip";
+import { ModalPresence } from "../../components/ui";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
@@ -246,25 +247,34 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   );
   const dialogs = (
     <>
-      {findingDraft ? (
-        <FindingCaptureDialog
-          node={findingDraft}
-          answer={answers[inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)]}
-          onClose={() => setFindingDraft(null)}
-          onReference={setReferencePreview}
-          onConfirm={({ answer, files }) => {
-            updateAnswer(findingDraft, { outcome: "abnormal", ...answer });
-            setPhotos((current) => ({
-              ...current,
-              [inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)]: files,
-            }));
-            setFindingDraft(null);
-          }}
-        />
-      ) : null}
-      {referencePreview ? (
-        <ReferenceImageDialog preview={referencePreview} onClose={() => setReferencePreview(null)} />
-      ) : null}
+      <ModalPresence>
+        {findingDraft ? (
+          <FindingCaptureDialog
+            key={inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)}
+            node={findingDraft}
+            answer={answers[inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)]}
+            onClose={() => setFindingDraft(null)}
+            onReference={setReferencePreview}
+            onConfirm={({ answer, files }) => {
+              updateAnswer(findingDraft, { outcome: "abnormal", ...answer });
+              setPhotos((current) => ({
+                ...current,
+                [inspectionAnswerKey(findingDraft.moduleCode, findingDraft.code)]: files,
+              }));
+              setFindingDraft(null);
+            }}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {referencePreview ? (
+          <ReferenceImageDialog
+            key={referencePreview.title}
+            preview={referencePreview}
+            onClose={() => setReferencePreview(null)}
+          />
+        ) : null}
+      </ModalPresence>
     </>
   );
   return (

@@ -1,5 +1,6 @@
 import { DownloadOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from "@ant-design/icons";
-import { Alert, Button, Modal, Tooltip, Typography } from "antd";
+import { Alert, Button, Tooltip, Typography } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 import { useState } from "react";
 
 import type { BillingStatementResponse, SettlementCandidate } from "../../../api/contracts";

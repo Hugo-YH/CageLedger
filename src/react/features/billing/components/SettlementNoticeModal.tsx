@@ -1,5 +1,6 @@
 import { CopyOutlined } from "@ant-design/icons";
-import { Button, Modal, Typography } from "antd";
+import { Button, Typography } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 
 import type { SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 import { copyTextToClipboard } from "../../../utils/clipboard";

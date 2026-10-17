@@ -1,4 +1,5 @@
-import { Alert, Descriptions, Empty, Modal, Tag, Typography } from "antd";
+import { Alert, Descriptions, Empty, Tag, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 
 import type { InspectionCatalogDiff } from "../../api/contracts";
 

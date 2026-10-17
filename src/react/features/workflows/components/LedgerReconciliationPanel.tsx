@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
-import { Alert, Button, Card, Empty, Form, Input, Modal, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Form, Input, Select, Space, Tag, Typography } from "antd";
+import { Modal } from "../../../components/ui/Modal";
 
 import {
   useConfirmReimbursementAllocation,

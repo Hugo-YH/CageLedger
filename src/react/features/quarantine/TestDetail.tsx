@@ -1,7 +1,8 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Alert, Button, Card, Collapse, Empty, Form, Modal, Select, Space, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Collapse, Empty, Form, Select, Space, Tabs, Tag, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import type { QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { downloadQuarantine, useQuarantineWrite } from "../../api/quarantine";
 import { id, methodLabels, quarantineTestStateColor } from "./shared";

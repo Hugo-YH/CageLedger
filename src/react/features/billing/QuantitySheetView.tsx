@@ -3,7 +3,7 @@ import { Switch } from "antd";
 import type { SessionUser } from "../../api/contracts";
 import { Tooltip } from "../../components/Tooltip";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { ActionButton, CommandBar } from "../../components/ui";
+import { ActionButton, CommandBar, ModalPresence } from "../../components/ui";
 import { AsyncActionButton, ModalShell, PageSkeleton } from "../../components/WorkspaceUi";
 import { ConfirmSave } from "./components/QuantitySheetModals";
 import { SavedQuantitySheets } from "./components/SavedQuantitySheets";
@@ -98,50 +98,55 @@ export function QuantitySheetView({
       ) : (
         <SavedQuantitySheets onEdit={loadForEdit} navigationAction={navigationAction} />
       )}
-      {mode === "saved" && editingDialog ? (
-        <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={closeEditor}>
-          <div className="modal-shell-head">
-            <div>
-              <h2>编辑数量统计表</h2>
-              <p>
-                {draft.month} · {draft.iacuc}
-              </p>
+      <ModalPresence>
+        {mode === "saved" && editingDialog ? (
+          <ModalShell key={draft.id} ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={closeEditor}>
+            <div className="modal-shell-head">
+              <div>
+                <h2>编辑数量统计表</h2>
+                <p>
+                  {draft.month} · {draft.iacuc}
+                </p>
+              </div>
+              <ActionButton onClick={closeEditor}>关闭</ActionButton>
             </div>
-            <ActionButton onClick={closeEditor}>关闭</ActionButton>
-          </div>
-          <div className="modal-shell-body">
-            <div className="react-quantity-layout quantity-edit-context">
-              <QuantitySheetEditorForm
-                editor={editor}
-                user={user}
-                mode={mode}
-                headActions={
-                  <Tooltip content={saveHint(editorRows, animalDetails)}>
-                    <ActionButton
-                      icon={<ActionIcon name="save" />}
-                      form="quantity-sheet-entry-form"
-                      loading={save.isPending}
-                      tone="primary"
-                      type="submit"
-                    >
-                      保存统计表
-                    </ActionButton>
-                  </Tooltip>
-                }
-              />
+            <div className="modal-shell-body">
+              <div className="react-quantity-layout quantity-edit-context">
+                <QuantitySheetEditorForm
+                  editor={editor}
+                  user={user}
+                  mode={mode}
+                  headActions={
+                    <Tooltip content={saveHint(editorRows, animalDetails)}>
+                      <ActionButton
+                        icon={<ActionIcon name="save" />}
+                        form="quantity-sheet-entry-form"
+                        loading={save.isPending}
+                        tone="primary"
+                        type="submit"
+                      >
+                        保存统计表
+                      </ActionButton>
+                    </Tooltip>
+                  }
+                />
+              </div>
             </div>
-          </div>
-        </ModalShell>
-      ) : null}
-      {confirmSave ? (
-        <ConfirmSave
-          sheet={confirmSave}
-          room={selectedRoom}
-          onCancel={() => setConfirmSave(null)}
-          onConfirm={() => void persistSheet()}
-          pending={save.isPending}
-        />
-      ) : null}
+          </ModalShell>
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {confirmSave ? (
+          <ConfirmSave
+            key={confirmSave.id}
+            sheet={confirmSave}
+            room={selectedRoom}
+            onCancel={() => setConfirmSave(null)}
+            onConfirm={() => void persistSheet()}
+            pending={save.isPending}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

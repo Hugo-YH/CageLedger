@@ -1,7 +1,8 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { useState } from "react";
-import { Alert, Button, Form, Input, Modal, Space } from "antd";
+import { Alert, Button, Form, Input, Space } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import type { QuarantineDetail } from "../../../contracts/quarantine";
 import { useQuarantineWrite } from "../../api/quarantine";
 

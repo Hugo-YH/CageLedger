@@ -1,5 +1,6 @@
-import { Drawer } from "antd";
 import { type ReactNode } from "react";
+
+import { Drawer } from "./Drawer";
 
 export function Sheet({
   children,

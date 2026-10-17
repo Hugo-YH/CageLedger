@@ -75,6 +75,10 @@ export function usePdfExport() {
   };
 }
 
+export function settlementExportProgress(completed = 0, total = 0) {
+  return total > 1 ? `正在导出 ${completed}/${total}` : "PDF 正在生成，完成后自动下载。";
+}
+
 function exportLabel(payload: PdfExportRequest) {
   if (payload.kind === "billing_statement") return "正在汇总结算单数据。";
   return payload.ids.length > 1 ? `正在生成 ${payload.ids.length} 份数量统计表。` : "正在生成数量统计表。";

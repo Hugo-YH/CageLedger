@@ -5,7 +5,7 @@ import type { DataQualityColumn, DataQualityFinding, DataQualityParams } from ".
 import { useDataQualityIssues, useDataQualityScans } from "../../api/dataQuality";
 import { FilterableColumnTitle } from "../../components/FilterableTableHeader";
 import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
-import { ActionButton, CommandBar, DataTable } from "../../components/ui";
+import { ActionButton, CommandBar, DataTable, ModalPresence } from "../../components/ui";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { DataQualityDetail } from "./components/DataQualityDetail";
@@ -211,7 +211,15 @@ export function DataQualityView() {
           </>
         )}
       </div>
-      {detail ? <DataQualityDetail selection={detail} onClose={() => setDetail(null)} /> : null}
+      <ModalPresence>
+        {detail ? (
+          <DataQualityDetail
+            key={`${detail.scanId}:${detail.issueId}`}
+            selection={detail}
+            onClose={() => setDetail(null)}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

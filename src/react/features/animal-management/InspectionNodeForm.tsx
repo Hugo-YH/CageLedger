@@ -1,5 +1,7 @@
-import { Button, Drawer, Form, Input, InputNumber, Popconfirm, Space, Tag, Typography } from "antd";
+import { Button, Form, Input, InputNumber, Popconfirm, Space, Tag, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+
+import { Drawer } from "../../components/ui/Drawer";
 
 import { formValuesToNode, nodeToFormValues } from "../../../domain/inspectionCatalog";
 import type { InspectionNodeFormValues } from "../../../domain/inspectionCatalog";

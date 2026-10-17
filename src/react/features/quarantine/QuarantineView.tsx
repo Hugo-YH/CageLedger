@@ -2,7 +2,8 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { RecordWorklist } from "./RecordWorklist";
 import { BatchOverview } from "./BatchOverview";
 import { BatchReportExport } from "./BatchReportExport";
-import { App, Alert, Button, Empty, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { App, Alert, Button, Empty, Input, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Modal } from "../../components/ui/Modal";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 
@@ -26,7 +27,7 @@ import { TestDetail } from "./TestDetail";
 import { SupplierHistoryView } from "./SupplierHistory";
 import { emptyTest, methodLabels } from "./shared";
 import { PageSkeleton } from "../../components/PageSkeleton";
-import { CommandBar, HelpPopover, ListRefreshStatus, RowActions } from "../../components/ui";
+import { CommandBar, HelpPopover, ListRefreshStatus, ModalPresence, RowActions } from "../../components/ui";
 
 export function QuarantineView({
   mode,
@@ -509,21 +510,24 @@ export function QuarantineView({
           )}
         </>
       )}
-      {batchEditor && (
-        <BatchEditor
-          initialSources={initialSources}
-          initial={batchEditor === "new" ? undefined : batchEditor}
-          onClose={() => {
-            setBatchEditor(null);
-            setPendingNewRecord(false);
-          }}
-          onSaved={(value) => {
-            setBatchEditor(null);
-            if (pendingNewRecord) startRecord(value);
-            else openBatch(value);
-          }}
-        />
-      )}
+      <ModalPresence>
+        {batchEditor ? (
+          <BatchEditor
+            key={batchEditor === "new" ? "new" : batchEditor.id}
+            initialSources={initialSources}
+            initial={batchEditor === "new" ? undefined : batchEditor}
+            onClose={() => {
+              setBatchEditor(null);
+              setPendingNewRecord(false);
+            }}
+            onSaved={(value) => {
+              setBatchEditor(null);
+              if (pendingNewRecord) startRecord(value);
+              else openBatch(value);
+            }}
+          />
+        ) : null}
+      </ModalPresence>
       <Modal
         open={batchPicker}
         title={`新建${title}记录`}

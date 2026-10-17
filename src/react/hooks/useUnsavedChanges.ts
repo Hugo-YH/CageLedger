@@ -1,13 +1,16 @@
 import { App } from "antd";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useContext, useEffect, useRef } from "react";
 import { useNavigationGuard } from "../state/ui";
+import { DialogActivityContext } from "../state/dialogActivity";
 
 /** Protect the local draft without persisting sensitive form data in browser storage. */
 export function useUnsavedChanges(dirty: boolean, busy = false) {
+  const active = useContext(DialogActivityContext);
   const { modal, message } = App.useApp();
   const guardRef = useNavigationGuard();
   const pending = useRef<Promise<boolean> | null>(null);
   const confirmLeave = useCallback(async () => {
+    if (!active) return true;
     if (busy) {
       void message.info("正在保存或上传，请完成后再离开");
       return false;
@@ -29,9 +32,9 @@ export function useUnsavedChanges(dirty: boolean, busy = false) {
         });
     }
     return pending.current;
-  }, [busy, dirty, message, modal]);
+  }, [active, busy, dirty, message, modal]);
   useEffect(() => {
-    if (!dirty && !busy) return;
+    if (!active || (!dirty && !busy)) return;
     guardRef.current = confirmLeave;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
@@ -42,6 +45,6 @@ export function useUnsavedChanges(dirty: boolean, busy = false) {
       if (guardRef.current === confirmLeave) guardRef.current = null;
       window.removeEventListener("beforeunload", beforeUnload);
     };
-  }, [busy, confirmLeave, dirty, guardRef]);
+  }, [active, busy, confirmLeave, dirty, guardRef]);
   return confirmLeave;
 }

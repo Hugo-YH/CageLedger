@@ -13,7 +13,6 @@ import {
   Card,
   Checkbox,
   Collapse,
-  Drawer,
   Form,
   Input,
   Select,
@@ -49,8 +48,9 @@ import type { FeedbackFilters, FeedbackListColumn } from "../../api/feedback";
 import { useSystemInfo } from "../../api/administration";
 import type { SessionUser } from "../../api/contracts";
 import { ApiError } from "../../api/client";
-import { DataTable, Feedback, HelpPopover, StatusTag } from "../../components/ui";
+import { DataTable, Feedback, HelpPopover, ModalPresence, StatusTag } from "../../components/ui";
 import { CommandBar } from "../../components/ui/CommandBar";
+import { Drawer } from "../../components/ui/Drawer";
 import { formatDateTime, Pager } from "../../components/WorkspaceUi";
 import { APP_VERSION } from "../../version";
 import { FeedbackImportDrawer } from "./FeedbackImportDrawer";
@@ -297,38 +297,45 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
           ) : null}
         </Card>
       </div>
-      {drawer === "create" ? (
-        <FeedbackCreateDrawer
-          key={createSession}
-          build={systemInfo.data?.build || ""}
-          open={drawer === "create"}
-          page={page}
-          onClose={() => setDrawer(null)}
-          onCreated={(id) => {
-            setSelectedId(id);
-            setDrawer("detail");
-          }}
-        />
-      ) : null}
-      {importOpen && user.role === "admin" ? (
-        <FeedbackImportDrawer
-          onClose={() => {
-            setImportOpen(false);
-            void refreshFeedback();
-          }}
-        />
-      ) : null}
-      <FeedbackDetailDrawer
-        isAdmin={user.role === "admin"}
-        open={drawer === "detail"}
-        detail={selected}
-        onRemoved={() => void refreshFeedback()}
-        onClose={() => {
-          setDrawer(null);
-          setSelectedId(null);
-          void refreshFeedback();
-        }}
-      />
+      <ModalPresence>
+        {drawer === "create" ? (
+          <FeedbackCreateDrawer
+            key={`create:${createSession}`}
+            build={systemInfo.data?.build || ""}
+            open
+            page={page}
+            onClose={() => setDrawer(null)}
+            onCreated={(id) => {
+              setSelectedId(id);
+              setDrawer("detail");
+            }}
+          />
+        ) : drawer === "detail" ? (
+          <FeedbackDetailDrawer
+            key={`detail:${selectedId || "pending"}`}
+            isAdmin={user.role === "admin"}
+            open
+            detail={selected}
+            onRemoved={() => void refreshFeedback()}
+            onClose={() => {
+              setDrawer(null);
+              setSelectedId(null);
+              void refreshFeedback();
+            }}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {importOpen && user.role === "admin" ? (
+          <FeedbackImportDrawer
+            key="feedback-import"
+            onClose={() => {
+              setImportOpen(false);
+              void refreshFeedback();
+            }}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }
