@@ -18,6 +18,7 @@ const filterLabels: Record<string, string> = {
 export function ListViewControls({
   filters,
   labels = filterLabels,
+  valueLabels,
   onFiltersChange,
   density,
   onDensity,
@@ -25,6 +26,7 @@ export function ListViewControls({
 }: {
   filters: Record<string, string[]>;
   labels?: Record<string, string>;
+  valueLabels?: Record<string, Record<string, string>>;
   onFiltersChange: (filters: Record<string, string[]>) => void;
   density: ListDensity;
   onDensity: (value: ListDensity) => void;
@@ -46,7 +48,7 @@ export function ListViewControls({
               onFiltersChange(next);
             }}
           >
-            {labels[key] || key}：{values.join("、")}
+            {labels[key] || key}：{values.map((value) => valueLabels?.[key]?.[value] ?? value).join("、")}
           </Tag>
         ))}
         {applied.length ? (

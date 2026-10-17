@@ -9,17 +9,17 @@ const currentMonth = new Date().toISOString().slice(0, 7);
 
 export function MonthlyBillingSummary({ navigationAction }: { navigationAction?: ReactNode }) {
   const [month, setMonth] = useState(currentMonth);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
 
   async function exportWorkbook() {
-    setNotice("");
+    setNotice(null);
     setExporting(true);
     try {
       const filename = await exportMonthlyBillingSummary(month);
-      setNotice(`${filename} 已开始下载。`);
+      setNotice({ type: "success", text: `${filename} 已开始下载。` });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "汇总导出失败");
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "汇总导出失败" });
     } finally {
       setExporting(false);
     }
@@ -69,7 +69,21 @@ export function MonthlyBillingSummary({ navigationAction }: { navigationAction?:
         <Typography.Paragraph className="monthly-summary-hint" type="secondary">
           伦理经费和实验日期来自 IACUC 索引；报销单经费本编号、单号、金额与备注仅使用单据跟踪已登记报销单。
         </Typography.Paragraph>
-        {notice ? <Alert role="status" showIcon title={notice} type="success" /> : null}
+        {notice ? (
+          <Alert
+            role={notice.type === "error" ? "alert" : "status"}
+            showIcon
+            title={notice.text}
+            type={notice.type}
+            action={
+              notice.type === "error" ? (
+                <Button disabled={!month} loading={exporting} onClick={() => void exportWorkbook()}>
+                  重试导出
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : null}
       </Card>
     </section>
   );

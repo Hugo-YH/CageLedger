@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactNode } from "react";
-import { Alert, Button, Form, Input, InputNumber, Select, Typography } from "antd";
+import { Alert, Button, Descriptions, Form, Input, InputNumber, Select, Typography } from "antd";
 
 import type { IacucIndexItem } from "../../../contracts/administration";
 import type { TechnicalServiceSheet } from "../../../contracts/technicalServices";
@@ -9,6 +9,7 @@ import { useServiceCatalog, useServiceMutation } from "../../api/technicalServic
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { ActionIcon, CommandBar, DataTable, DateInput } from "../../components/ui";
 import { useQuantityIacuc } from "../billing/hooks/useQuantityIacuc";
+import { ServiceTotals } from "./ServiceTotals";
 
 function newServiceSheet(): TechnicalServiceSheet {
   const month = new Date().toISOString().slice(0, 7);
@@ -91,10 +92,10 @@ export function ServiceEditor({
     setNotice(null);
     try {
       await mutation.mutateAsync({ kind: "save", sheet: draft, editing: Boolean(initial) });
-      setNotice({ error: false, text: "技术服务明细已保存" });
       setBaseline(JSON.stringify(draft));
       if (onSaved) onSaved();
       else {
+        setNotice({ error: false, text: "技术服务明细已保存" });
         iacuc.reset();
         const fresh = newServiceSheet();
         setBaseline(JSON.stringify(fresh));
@@ -145,7 +146,14 @@ export function ServiceEditor({
         }
       />
       <div className={initial ? "technical-service-form-panel" : "panel large technical-service-form-panel"}>
-        {notice ? <Alert role="status" showIcon type={notice.error ? "error" : "success"} title={notice.text} /> : null}
+        {notice ? (
+          <Alert
+            role={notice.error ? "alert" : "status"}
+            showIcon
+            type={notice.error ? "error" : "success"}
+            title={notice.text}
+          />
+        ) : null}
         {catalog.isError ? (
           <Alert
             showIcon
@@ -233,18 +241,45 @@ export function ServiceEditor({
               </Typography.Text>
             </Form.Item>
           </div>
-          <div className="technical-service-fields">
-            {[
-              ["科研项目", draft.project || "待匹配IACUC"],
-              ["项目负责人", draft.pi || "待匹配"],
-              ["项目来源", draft.funding || "—"],
-              ["收费依据", selected?.source || "—"],
-            ].map(([label, value]) => (
-              <Form.Item key={label} label={label}>
-                <Input aria-label={label} readOnly value={value} title={value} className="technical-service-readonly" />
-              </Form.Item>
-            ))}
-          </div>
+          <section className="technical-service-project-info" aria-label="IACUC项目信息">
+            <Descriptions
+              size="small"
+              column={{ xs: 1, md: 2 }}
+              items={[
+                {
+                  key: "project",
+                  label: "科研项目",
+                  span: "filled",
+                  children: (
+                    <Typography.Paragraph
+                      className="technical-service-project-text"
+                      ellipsis={{
+                        rows: 2,
+                        expandable: "collapsible",
+                        symbol: (expanded) => (expanded ? "收起" : "展开"),
+                      }}
+                      copyable={draft.project ? { text: draft.project, tooltips: ["复制项目名称", "已复制"] } : false}
+                    >
+                      {draft.project || "待匹配IACUC"}
+                    </Typography.Paragraph>
+                  ),
+                },
+                { key: "pi", label: "项目负责人", children: draft.pi || "待匹配" },
+                {
+                  key: "funding",
+                  label: "项目来源",
+                  children: (
+                    <Typography.Text
+                      copyable={draft.funding ? { text: draft.funding, tooltips: ["复制项目来源", "已复制"] } : false}
+                    >
+                      {draft.funding || "—"}
+                    </Typography.Text>
+                  ),
+                },
+                { key: "source", label: "收费依据", span: "filled", children: selected?.source || "—" },
+              ]}
+            />
+          </section>
           {iacuc.error ? <Alert showIcon type="error" title={iacuc.error} /> : null}
           {selected?.notes ? <Alert showIcon type="info" title={selected.notes} /> : null}
         </section>
@@ -269,6 +304,7 @@ export function ServiceEditor({
               </Button>
             }
           />
+          <ServiceTotals days={days} quantity={quantity} unit={selected?.unit || ""} amount={amount} />
           <DataTable
             resizeKey="technical-service-entry"
             pagination={false}
@@ -329,9 +365,6 @@ export function ServiceEditor({
               },
             ]}
           />
-          <Typography.Paragraph>
-            服务日数：{days} 累计数量：{quantity} {selected?.unit} 技术服务费：{amount.toFixed(2)} 元
-          </Typography.Paragraph>
           <Form.Item label="备注" htmlFor="service-notes">
             <Input.TextArea
               id="service-notes"

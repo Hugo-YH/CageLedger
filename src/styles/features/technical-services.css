@@ -25,11 +25,70 @@
 
 .technical-service-section-title.ant-typography {
   margin: 0 0 var(--space-4);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
+  line-height: var(--leading-section);
 }
 
-.technical-service-readonly.ant-input {
+.technical-service-project-info {
+  max-width: var(--cl-form-max-width);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
   background: var(--surface-soft);
+}
+
+.technical-service-project-info .ant-descriptions-item-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.technical-service-project-text.ant-typography {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.technical-service-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-soft);
+}
+
+.technical-service-total {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.technical-service-total + .technical-service-total {
+  border-left: 1px solid var(--line);
+}
+
+.technical-service-total-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.technical-service-total-value > .ant-typography {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.technical-service-total-value strong {
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.technical-service-total[data-total="amount"] strong {
+  color: var(--primary-text);
 }
 
 .technical-service-table-region {

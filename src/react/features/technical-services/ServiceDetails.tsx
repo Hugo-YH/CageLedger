@@ -3,6 +3,7 @@ import { Descriptions, Typography } from "antd";
 import type { TechnicalServiceSheet } from "../../../contracts/technicalServices";
 import { technicalServiceAmount } from "../../../domain/technicalServiceMoney";
 import { DataTable } from "../../components/ui";
+import { ServiceTotals } from "./ServiceTotals";
 
 export function ServiceDetails({ sheet }: { sheet: TechnicalServiceSheet }) {
   return (
@@ -40,10 +41,12 @@ export function ServiceDetails({ sheet }: { sheet: TechnicalServiceSheet }) {
           },
         ]}
       />
-      <Typography.Paragraph>
-        服务日数：{sheet.serviceDayCount} 累计数量：{sheet.totalQuantity} {sheet.unit} 技术服务费：
-        {sheet.totalAmount.toFixed(2)} 元
-      </Typography.Paragraph>
+      <ServiceTotals
+        days={sheet.serviceDayCount}
+        quantity={sheet.totalQuantity}
+        unit={sheet.unit}
+        amount={sheet.totalAmount}
+      />
       {sheet.notes ? <Typography.Paragraph>备注：{sheet.notes}</Typography.Paragraph> : null}
     </div>
   );

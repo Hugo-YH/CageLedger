@@ -57,7 +57,7 @@ test("technical service UI saves 4 days / 10 eyes / 300 yuan and shares workflow
   await page.locator("#service-month").fill("2026-10");
   await page.locator("#service-iacuc").fill("Z2099001");
   await page.locator("#service-iacuc").blur();
-  await expect(page.getByLabel("项目负责人", { exact: true })).toHaveValue("技术服务验收负责人");
+  await expect(page.getByRole("region", { name: "IACUC项目信息", exact: true })).toContainText("技术服务验收负责人");
   await page.locator("#service-item").click();
   await page.getByText("大动物滴眼", { exact: true }).click();
   for (const [index, [day, quantity]] of [
@@ -71,7 +71,10 @@ test("technical service UI saves 4 days / 10 eyes / 300 yuan and shares workflow
     await page.getByLabel(`服务日期 ${index + 1}`, { exact: true }).press("Enter");
     await page.getByLabel(`计费数量 ${index + 1}`, { exact: true }).fill(String(quantity));
   }
-  await expect(page.getByText(/服务日数：4.*累计数量：10.*300.00/)).toBeVisible();
+  const totals = page.getByRole("region", { name: "技术服务费用核对", exact: true });
+  await expect(totals).toContainText("4个服务日");
+  await expect(totals).toContainText("10眼");
+  await expect(totals).toContainText("300.00元");
   for (const [width, height] of [
     [1440, 900],
     [1180, 900],
@@ -405,6 +408,7 @@ test("saved service details edit, protect unsaved changes and delete through UI"
   await page.getByRole("button", { name: "保存技术服务明细", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "技术服务明细", exact: true })).toBeHidden();
   await expect(row).toContainText("90.00");
+  await expect(page.getByRole("status").filter({ hasText: "技术服务明细已保存" })).toBeVisible();
   await row.getByRole("button", { name: "编辑", exact: true }).click();
   await page.getByLabel("计费数量 1", { exact: true }).fill("4");
   await page.getByRole("button", { name: "取消", exact: true }).click();
@@ -510,6 +514,7 @@ test("service pages use the billing workspace style across desktop and mobile la
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await openNavigationEntry(page, "技术服务费管理", "已保存技术服务明细");
+  await filterServiceColumn(page, "月份", [sheet.month]);
   const saved = page.getByRole("row").filter({ hasText: "Z2099002" }).filter({ hasText: "珠江新城" });
   await expect(saved.getByRole("button", { name: "预览", exact: true })).toHaveCSS("width", "64px");
   await saved.getByRole("button", { name: "预览", exact: true }).click();

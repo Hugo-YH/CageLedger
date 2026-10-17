@@ -24,12 +24,15 @@ export function TechnicalServiceView({
   const touch = useMediaQuery("(max-width: 767px), (max-height: 480px) and (orientation: landscape)");
   const ui = useUiState();
   const dark = useMediaQuery("(prefers-color-scheme: dark)");
-  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const themeMode = ui.theme === "system" ? (dark ? "dark" : "light") : ui.theme;
-  const serviceTheme = useMemo(
-    () => createTheme(themeMode, { mobile: touch, motion: !reducedMotion }),
-    [themeMode, touch, reducedMotion],
-  );
+  const serviceTheme = useMemo(() => {
+    const theme = createTheme(themeMode, { mobile: touch });
+    // The outer AntdProvider owns motion and installs its provider on mount.
+    // Inherit it here so a preference change cannot insert a new wrapper and
+    // remount the live service form.
+    if (theme.token) delete theme.token.motion;
+    return theme;
+  }, [themeMode, touch]);
   const title = mode === "entry" ? "录入技术服务明细" : "已保存技术服务明细";
   const actions = (
     <Space wrap>
