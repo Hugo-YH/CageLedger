@@ -29,6 +29,7 @@ from server_app.domains.animal_management import (
 from server_app.domains.animal_management import (
     get_inspection as get_animal_inspection,
 )
+from server_app.domains.billing.candidate_calculation import CandidateCalculation
 from server_app.domains.billing.candidates import (
     list_settlement_candidates,
 )
@@ -152,7 +153,16 @@ class ReadActionsMixin:
             month = clean_text(query.get("month", [""])[0])
             if not month:
                 month = default_overview_month()
-            self.send_json(dashboard_overview_payload(conn, month))
+
+            def calculate(billing_month, pi):
+                return app_ports().generate_billing_statement_by_pi(
+                    conn, {"month": billing_month, "pi": pi, "sourceType": "quantity_sheet"}, user
+                )[0]
+
+            calculation = CandidateCalculation(conn, calculate)
+            self.send_json(
+                dashboard_overview_payload(conn, month, calculate=calculation, prepare_calculations=calculation.prepare)
+            )
         return
 
     def get_reimbursement_ledger_obligations(self, path):

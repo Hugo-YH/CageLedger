@@ -366,6 +366,38 @@
   cursor: pointer;
 }
 
+.ant-dashboard-task-content {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+}
+
+.ant-dashboard-task-content.is-amount {
+  grid-template-columns: 32px minmax(0, 1fr);
+}
+
+.ant-dashboard-task-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ant-dashboard-task-heading .ant-dashboard-task-action {
+  flex: 0 0 auto;
+}
+
+.ant-dashboard-task-amount {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
 .ant-dashboard-task-icon {
   display: inline-grid;
   width: 32px;
@@ -581,41 +613,32 @@
   margin-bottom: 8px;
 }
 
-.ant-dashboard-pi-grid {
-  margin-top: 12px;
+.ant-dashboard-pi-summary {
+  min-width: 0;
 }
 
-.ant-dashboard-pi-row {
-  padding: 12px 8px;
-  border-radius: 8px;
-  transition: background-color var(--motion-base) var(--ease-standard);
-}
-
-.ant-dashboard-pi-row:hover {
-  background: var(--app-primary-hover-bg);
-}
-
-.ant-dashboard-pi-row-head {
+.ant-dashboard-pi-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
-  align-items: baseline;
-  margin-bottom: 6px;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
-.ant-dashboard-pi-row-head .ant-typography {
-  font-size: 14px;
+.ant-dashboard-pi-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.ant-dashboard-pi-search {
+  width: 240px;
+  max-width: 100%;
 }
 
 .ant-dashboard-pi-amount {
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.ant-dashboard-pi-sub {
-  display: block;
-  font-size: 12px;
-  margin-top: 2px;
 }
 
 .app-help-button {

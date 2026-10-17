@@ -331,6 +331,7 @@ def invalidate_quantity_sheet_candidate_snapshots(conn, sheets_or_keys):
 
 def invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name):
     mark_billing_candidate_snapshots_stale_by_pi(conn, "quantity_sheet", clean_text(pi_name), now_iso())
+    invalidate_dashboard_overview_cache()
 
 
 def invalidate_all_quantity_sheet_candidate_snapshots(conn):

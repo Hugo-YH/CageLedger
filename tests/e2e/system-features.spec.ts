@@ -132,9 +132,9 @@ test.describe("global system feature visibility", () => {
     await page.getByRole("menuitem", { name: /总览$/ }).click();
     const dashboard = page.locator(".dashboard-view");
     await expect(dashboard).toBeVisible();
-    await expect(dashboard.locator(".ant-dashboard-task.is-hidden")).toHaveCount(4);
+    await expect(dashboard.locator(".ant-dashboard-task.is-hidden")).toHaveCount(3);
     await expect(dashboard.locator(".ant-dashboard-task").getByRole("button")).toHaveCount(0);
-    for (const label of ["待接收批次", "上月饲养间", "结算课题组", "上月接收批次"])
+    for (const label of ["待接收批次", "动物实验项目", "饲养费金额"])
       await expect(dashboard.getByText(label, { exact: true })).toBeVisible();
 
     for (const viewport of [

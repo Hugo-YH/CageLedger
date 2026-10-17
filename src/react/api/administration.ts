@@ -104,7 +104,11 @@ export function useSavePrincipalIdentity() {
         method: "PUT",
         body: JSON.stringify({ ...item, expectedUpdatedAt: item.updatedAt }),
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.principalIdentities }),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.principalIdentities }),
+        client.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
+      ]),
   });
 }
 export function useIacucStatus() {

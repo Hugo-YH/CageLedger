@@ -364,6 +364,7 @@ class WorkflowActionsMixin:
                 conn.commit()
             if refresh_candidate_cache:
                 invalidate_data_cache_prefixes("quantity_sheets::settlement_candidates::")
+                invalidate_data_cache_prefixes("dashboard_overview::")
             self.send_json(
                 {
                     "statement": statement,

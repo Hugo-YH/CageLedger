@@ -191,6 +191,7 @@ export async function invalidateWorkflowQueries(client: QueryClient) {
     client.invalidateQueries({ queryKey: queryKeys.workflowsRoot }),
     client.invalidateQueries({ queryKey: ["technical-services"] }),
     client.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot }),
+    client.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
   ]);
 }
 

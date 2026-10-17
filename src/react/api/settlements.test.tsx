@@ -104,7 +104,7 @@ describe("shared settlement actions", () => {
     await act(() => result.current.preview.mutateAsync(target));
     expect(invalidate).not.toHaveBeenCalled();
     await act(() => result.current.initiate.mutateAsync({ ...target, sourceVersions: { sheet: "v1" } }));
-    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledTimes(6);
     invalidate.mockClear();
     vi.mocked(requestJson).mockRejectedValueOnce(new Error("冲突"));
     await act(async () => {
@@ -152,6 +152,7 @@ describe("shared settlement actions", () => {
       { id: "workflows", queryKey: queryKeys.workflowsRoot },
       { id: "technical services", queryKey: ["technical-services"] },
       { id: "reimbursement ledger", queryKey: queryKeys.reimbursementLedgerRoot },
+      { id: "dashboard", queryKey: queryKeys.dashboardOverview("2026-09") },
     ];
     const requests: string[] = [];
     const unsubscribes = targets.map(({ id, queryKey }) => {
@@ -165,7 +166,7 @@ describe("shared settlement actions", () => {
       return observer.subscribe(() => undefined);
     });
 
-    await vi.waitFor(() => expect(requests).toHaveLength(5));
+    await vi.waitFor(() => expect(requests).toHaveLength(targets.length));
     await vi.waitFor(() =>
       targets.forEach(({ queryKey }) => expect(client.getQueryState(queryKey)?.fetchStatus).toBe("idle")),
     );

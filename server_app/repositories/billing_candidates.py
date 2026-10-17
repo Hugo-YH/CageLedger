@@ -237,6 +237,24 @@ def list_billing_candidate_snapshots_page(conn, source_type, filters):
     }
 
 
+def list_dashboard_billing_candidate_snapshots(conn, source_type, month):
+    """Return every source snapshot used by the dashboard, including closed workflows."""
+    params = [source_type]
+    where = "source_type = ?"
+    if month != "all":
+        where += " AND month = ?"
+        params.append(month)
+    return conn.execute(
+        f"""
+        SELECT month, pi, iacucs_json, total_amount, error_message, is_stale
+        FROM billing_candidate_snapshots
+        WHERE {where}
+        ORDER BY month DESC, pi COLLATE NOCASE
+        """,
+        params,
+    ).fetchall()
+
+
 def list_billing_candidate_filter_options(conn, source_type, filters):
     items = {
         "month": list_billing_candidate_scalar_filter_options(conn, source_type, filters, "month"),

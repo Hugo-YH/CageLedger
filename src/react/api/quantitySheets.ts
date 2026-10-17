@@ -97,6 +97,7 @@ export function useSaveQuantitySheet() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
       void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot });
     },
   });
 }
@@ -111,6 +112,7 @@ export function useDeleteQuantitySheet() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
       void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot });
     },
   });
 }

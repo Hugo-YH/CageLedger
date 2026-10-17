@@ -71,6 +71,7 @@ describe("workflow batch refresh", () => {
       [{ queryKey: queryKeys.workflowsRoot }],
       [{ queryKey: ["technical-services"] }],
       [{ queryKey: queryKeys.reimbursementLedgerRoot }],
+      [{ queryKey: queryKeys.dashboardOverviewRoot }],
     ]);
     expect(result.current.completed).toBe(3);
   });
@@ -86,7 +87,7 @@ describe("workflow batch refresh", () => {
       });
     });
     expect(requestJson).toHaveBeenCalledTimes(3);
-    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledTimes(6);
   });
 
   it("reconciles once even if every response fails, without retrying writes", async () => {
@@ -97,7 +98,7 @@ describe("workflow batch refresh", () => {
       expect((await result.current.run(payloads)).failures).toHaveLength(3);
     });
     expect(requestJson).toHaveBeenCalledTimes(3);
-    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledTimes(6);
   });
 
   it("retains its lock until the final refresh completes", async () => {
@@ -109,7 +110,7 @@ describe("workflow batch refresh", () => {
     act(() => {
       completion = result.current.run(payloads);
     });
-    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(6));
     expect(result.current.isPending).toBe(true);
     expect(result.current.run(payloads)).toBe(completion);
     await act(async () => {
@@ -136,7 +137,7 @@ describe("workflow batch refresh", () => {
     first.resolve({});
     await completion;
     expect(requestJson).toHaveBeenCalledTimes(3);
-    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledTimes(6);
   });
 
   it("does nothing for an empty selection", async () => {
@@ -156,7 +157,7 @@ describe("workflow batch refresh", () => {
     act(() => {
       completion = result.current.mutateAsync(payloads[0]);
     });
-    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(6));
     expect(result.current.isPending).toBe(true);
     await act(async () => {
       refresh.resolve();

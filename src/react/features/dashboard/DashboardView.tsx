@@ -1,30 +1,17 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { ApartmentOutlined, ClockCircleOutlined, ExclamationCircleOutlined, InboxOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Col,
-  Progress,
-  Row,
-  Select,
-  Skeleton,
-  Statistic,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
+import { ApartmentOutlined, ClockCircleOutlined, InboxOutlined } from "@ant-design/icons";
+import { Alert, Badge, Button, Card, Col, Row, Select, Skeleton, Statistic, Tag, Typography, theme } from "antd";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
 import { useDashboardOverview } from "../../api/dashboardOverview";
-import { PageState } from "../../components/WorkspaceUi";
+import { formatMoney, PageState } from "../../components/WorkspaceUi";
 import { CommandBar, ListRefreshStatus } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
 import { useViewVisibility } from "../../state/systemFeatureVisibility";
 import { APP_VERSION } from "../../version";
+import { PiFeeSummary } from "./PiFeeSummary";
 
 // @ant-design/plots 体积较大，拆为独立懒加载块：仅图表卡实际渲染时下载。
 const AreaChart = lazy(() => import("@ant-design/plots/es/components/area"));
@@ -85,14 +72,6 @@ const STRAIN_COLORS = ["#5B8FF9", "#5AD8A6", "#5D7092", "#F6BD16", "#E8684A", "#
 
 type RoomAreaDatum = { day: string; cages: number; roomName?: string };
 
-function formatYuan(value: number) {
-  return new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 function hexToRgba(hex: string, alpha: number) {
   const value = Number.parseInt(hex.slice(1), 16);
   const red = (value >> 16) & 255;
@@ -148,6 +127,15 @@ function DashboardContent({
   const visible = useViewVisibility();
   const { availableMonths, intake, rooms, pi } = data;
   const currentMonth = data.month === "all" ? "历史合计" : data.month;
+  const feedingFeeTotal = data.feedingFeeTotal;
+  const feedingFeeValue =
+    feedingFeeTotal?.amountState === "ready" && feedingFeeTotal.amount != null
+      ? formatMoney(feedingFeeTotal.amount)
+      : feedingFeeTotal?.amountState === "error"
+        ? "待核查"
+        : feedingFeeTotal?.amountState === "pending"
+          ? "待核算"
+          : "—";
   const tasks = [
     {
       label: "待接收批次",
@@ -157,25 +145,20 @@ function DashboardContent({
       tone: "processing",
     },
     {
-      label: "上月饲养间",
-      value: rooms.length,
-      view: "billing-quantity-entry" as WorkspaceView,
+      label: "动物实验项目",
+      value: data.quantitySheetIacucCount ?? "—",
+      view: "billing-quantity-saved" as WorkspaceView,
       icon: <ApartmentOutlined />,
       tone: "warning",
     },
     {
-      label: "结算课题组",
-      value: pi.length,
+      label: "饲养费金额",
+      value: feedingFeeValue,
+      kind: "amount",
+      ariaLabel: `查看饲养费金额，${feedingFeeValue}`,
       view: "billing-settlement" as WorkspaceView,
       icon: <ClockCircleOutlined />,
       tone: "default",
-    },
-    {
-      label: "上月接收批次",
-      value: intake.trend.reduce((sum, item) => sum + item.batches, 0),
-      view: "intake-batches" as WorkspaceView,
-      icon: <ExclamationCircleOutlined />,
-      tone: "error",
     },
   ];
 
@@ -218,24 +201,51 @@ function DashboardContent({
           <Row gutter={[0, 12]}>
             {tasks.map((task) => {
               const shown = visible(task.view);
+              const isAmount = task.kind === "amount";
+              const action = shown ? (
+                <Typography.Text className="ant-dashboard-task-action">查看详情</Typography.Text>
+              ) : null;
+              const contentClassName = `ant-dashboard-task-content${isAmount ? " is-amount" : ""}`;
               const content = (
                 <>
                   <span className="ant-dashboard-task-icon" aria-hidden="true">
                     {task.icon}
                   </span>
                   <span className="ant-dashboard-task-copy">
-                    <Typography.Text>{task.label}</Typography.Text>
-                    {shown ? <Typography.Text className="ant-dashboard-task-action">查看详情</Typography.Text> : null}
+                    {isAmount ? (
+                      <>
+                        <span className="ant-dashboard-task-heading">
+                          <Typography.Text title={task.label}>{task.label}</Typography.Text>
+                          {action}
+                        </span>
+                        <Typography.Text className="ant-dashboard-task-amount" title={String(task.value)}>
+                          {task.value}
+                        </Typography.Text>
+                      </>
+                    ) : (
+                      <>
+                        <Typography.Text title={task.label}>{task.label}</Typography.Text>
+                        {action}
+                      </>
+                    )}
                   </span>
-                  <Badge className="ant-dashboard-task-count" count={task.value} overflowCount={9999} showZero />
+                  {!isAmount ? (
+                    <Badge className="ant-dashboard-task-count" count={task.value} overflowCount={9999} showZero />
+                  ) : null}
                 </>
               );
               return (
-                <Col key={task.label} lg={6} md={12} sm={12} xs={24}>
+                <Col key={task.label} lg={8} md={12} sm={12} xs={24}>
                   {shown ? (
                     <Button
-                      aria-label={`查看${task.label}，当前 ${task.value} 项`}
+                      aria-label={
+                        task.ariaLabel ??
+                        (typeof task.value === "number"
+                          ? `查看${task.label}，当前 ${task.value} 项`
+                          : `查看${task.label}，暂无统计`)
+                      }
                       className={`ant-dashboard-task is-${task.tone}`}
+                      classNames={{ content: contentClassName }}
                       block
                       type="text"
                       onClick={() => navigate(task.view)}
@@ -243,7 +253,9 @@ function DashboardContent({
                       {content}
                     </Button>
                   ) : (
-                    <div className={`ant-dashboard-task is-${task.tone} is-hidden`}>{content}</div>
+                    <div className={`ant-dashboard-task is-${task.tone} is-hidden`}>
+                      <span className={contentClassName}>{content}</span>
+                    </div>
                   )}
                 </Col>
               );
@@ -275,47 +287,10 @@ function DashboardContent({
         <RoomOverviewCard rooms={rooms} />
 
         <Card className="ant-dashboard-section" size="small" title="饲养费统计">
-          <PiFeeChart items={pi} />
+          <PiFeeSummary key={data.month} items={pi} />
         </Card>
       </div>
     </section>
-  );
-}
-
-function PiFeeChart({ items }: { items: Array<{ pi: string; amount: number; iacucCount: number }> }) {
-  const data = items.slice(0, 10);
-  const maxAmount = Math.max(...data.map((item) => item.amount), 1);
-  const renderRow = (item: (typeof data)[number]) => (
-    <div className="ant-dashboard-pi-row" key={item.pi}>
-      <div className="ant-dashboard-pi-row-head">
-        <Typography.Text strong>
-          {data.indexOf(item) + 1}. {item.pi}
-        </Typography.Text>
-        <Typography.Text className="ant-dashboard-pi-amount">{formatYuan(item.amount)}</Typography.Text>
-      </div>
-      <Progress
-        percent={Math.max(Math.round((item.amount / maxAmount) * 100), 0)}
-        showInfo={false}
-        strokeColor={{ from: "#0958d9", to: "#68b2ff" }}
-        railColor="rgba(9, 88, 217, 0.08)"
-        size="small"
-      />
-      <Typography.Text type="secondary" className="ant-dashboard-pi-sub">
-        {item.iacucCount} 个伦理号
-      </Typography.Text>
-    </div>
-  );
-  return (
-    <div className="ant-dashboard-pi-grid">
-      <Row gutter={[24, 8]}>
-        <Col xs={24} lg={12}>
-          {data.slice(0, 5).map(renderRow)}
-        </Col>
-        <Col xs={24} lg={12}>
-          {data.slice(5, 10).map(renderRow)}
-        </Col>
-      </Row>
-    </div>
   );
 }
 
@@ -563,8 +538,8 @@ function DashboardSkeleton() {
           title={<Skeleton.Input active size="small" style={{ width: 72 }} />}
         >
           <Row gutter={[0, 12]}>
-            {Array.from({ length: 4 }, (_, index) => (
-              <Col key={index} lg={6} md={12} sm={12} xs={24}>
+            {Array.from({ length: 3 }, (_, index) => (
+              <Col key={index} lg={8} md={12} sm={12} xs={24}>
                 <div className="ant-dashboard-task dashboard-skeleton-task">
                   <Skeleton.Avatar active shape="square" size="medium" />
                   <Skeleton active paragraph={{ rows: 1, width: ["72%"] }} title={false} />

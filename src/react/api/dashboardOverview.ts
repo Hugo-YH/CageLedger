@@ -30,6 +30,8 @@ export type PiOverview = {
   pi: string;
   amount: number;
   iacucCount: number;
+  amountState?: "ready" | "pending" | "error";
+  amountError?: string;
 };
 
 export type DashboardOverviewResponse = {
@@ -38,6 +40,11 @@ export type DashboardOverviewResponse = {
   intake: IntakeOverview;
   rooms: RoomOverview[];
   pi: PiOverview[];
+  quantitySheetIacucCount?: number;
+  feedingFeeTotal?: {
+    amount: number | null;
+    amountState: "ready" | "pending" | "error";
+  };
 };
 
 export function useDashboardOverview(month?: string, enabled = true) {

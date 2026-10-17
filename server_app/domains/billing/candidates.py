@@ -7,12 +7,42 @@ from server_app.repositories.billing_candidates import (
     get_quantity_settlement_group,
     list_billing_candidate_snapshot_keys,
     list_billing_candidate_snapshots_page,
+    list_dashboard_billing_candidate_snapshots,
     mark_billing_candidate_snapshots_stale,
     sync_billing_candidate_snapshot_registry,
     upsert_billing_candidate_snapshot,
 )
 
 SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS = 15
+
+
+def dashboard_candidate_snapshots(conn, month, calculate=None, now=None, *, prepare_calculations=None):
+    """Read dashboard candidates without applying the settlement worklist exclusions.
+
+    When calculation is supplied, bring every stale or uncalculated candidate in
+    the requested period up to date before the dashboard aggregates it. A prior
+    calculation error is retained until its source changes instead of retried
+    on every dashboard read.
+    """
+    source_type = "quantity_sheet"
+    if calculate is not None and billing_candidate_snapshot_registry_needs_sync(
+        conn, source_type, QUANTITY_SETTLEMENT_CALCULATION_VERSION
+    ):
+        sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
+
+    rows = list_dashboard_billing_candidate_snapshots(conn, source_type, month)
+    if calculate is None:
+        return rows
+
+    refresh_keys = [
+        (row["month"], row["pi"])
+        for row in rows
+        if row["is_stale"] or (row["total_amount"] is None and not row["error_message"])
+    ]
+    if refresh_keys:
+        _refresh_snapshot_keys(conn, refresh_keys, calculate, source_type, now, prepare_calculations)
+        rows = list_dashboard_billing_candidate_snapshots(conn, source_type, month)
+    return rows
 
 
 def list_settlement_candidates(

@@ -18,9 +18,12 @@ from server_app.cache import (
     cache_set,
     invalidate_data_cache_prefixes,
 )
+from server_app.domains.billing.candidates import dashboard_candidate_snapshots
 from server_app.domains.billing.profiles import billing_profile_for_room
+from server_app.domains.iacuc.rules import normalize_iacuc_number
 from server_app.domains.intake.strain_standard import standardize_strain
 from server_app.shared import as_int, clean_text
+from server_app.shared.money_fields import money_sum
 
 DASHBOARD_CACHE_TTL_SECONDS = 60
 DASHBOARD_HISTORY_CACHE_TTL_SECONDS = 300
@@ -40,7 +43,7 @@ def invalidate_dashboard_overview_cache():
     invalidate_data_cache_prefixes("dashboard_overview::")
 
 
-def dashboard_overview_payload(conn, month: str, rooms=None):
+def dashboard_overview_payload(conn, month: str, rooms=None, *, calculate=None, prepare_calculations=None):
     month = clean_text(month)
     rooms = rooms if rooms is not None else _read_rooms(conn)
     room_ids = ",".join(sorted(clean_text(room.get("id", "")) for room in rooms))
@@ -54,7 +57,7 @@ def dashboard_overview_payload(conn, month: str, rooms=None):
 
     intake = _intake_overview(conn, month)
     rooms_overview = _rooms_overview(conn, month, room_by_id, room_by_name)
-    pi_overview = _pi_overview(conn, month)
+    pi_overview = _pi_overview(conn, month, calculate=calculate, prepare_calculations=prepare_calculations)
 
     payload = {
         "month": month,
@@ -62,9 +65,28 @@ def dashboard_overview_payload(conn, month: str, rooms=None):
         "intake": intake,
         "rooms": rooms_overview,
         "pi": pi_overview,
+        "feedingFeeTotal": _feeding_fee_total(pi_overview),
+        "quantitySheetIacucCount": _quantity_sheet_iacuc_count(conn, month),
     }
     ttl_seconds = DASHBOARD_HISTORY_CACHE_TTL_SECONDS if month == "all" else DASHBOARD_CACHE_TTL_SECONDS
     return cache_set(cache_key_value, payload, ttl_seconds=ttl_seconds)
+
+
+def _quantity_sheet_iacuc_count(conn, month):
+    where = "" if month == "all" else "WHERE month = ?"
+    rows = conn.execute(
+        f"SELECT DISTINCT iacuc FROM quantity_sheets {where}", () if month == "all" else (month,)
+    ).fetchall()
+    return len({iacuc for row in rows if (iacuc := normalize_iacuc_number(row["iacuc"] or ""))})
+
+
+def _feeding_fee_total(items):
+    states = [item.get("amountState", "ready") for item in items]
+    if "error" in states:
+        return {"amount": None, "amountState": "error"}
+    if "pending" in states or any(item.get("amount") is None for item in items):
+        return {"amount": None, "amountState": "pending"}
+    return {"amount": money_sum(item.get("amount", 0) for item in items), "amountState": "ready"}
 
 
 def _available_months(conn):
@@ -284,24 +306,8 @@ def _rooms_overview(conn, month, room_by_id, room_by_name):
     return result
 
 
-def _pi_overview(conn, month):
-    if month == "all":
-        rows = conn.execute(
-            """
-            SELECT pi, total_amount, iacucs_json
-            FROM billing_candidate_snapshots
-            WHERE source_type = 'quantity_sheet'
-            """
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT pi, total_amount, iacucs_json
-            FROM billing_candidate_snapshots
-            WHERE source_type = 'quantity_sheet' AND month = ?
-            """,
-            (month,),
-        ).fetchall()
+def _pi_overview(conn, month, *, calculate=None, prepare_calculations=None):
+    rows = dashboard_candidate_snapshots(conn, month, calculate=calculate, prepare_calculations=prepare_calculations)
     if not rows:
         return []
 
@@ -310,16 +316,35 @@ def _pi_overview(conn, month):
         pi = clean_text(row["pi"] or "")
         if not pi:
             continue
-        item = aggregated.setdefault(pi, {"amount": 0.0, "iacucs": set()})
-        item["amount"] = float(item["amount"]) + (as_int(row["total_amount"]) or 0)
+        item = aggregated.setdefault(pi, {"amounts": [], "iacucs": set(), "amountState": "ready", "amountError": ""})
+        if row["is_stale"] or row["total_amount"] is None or row["error_message"]:
+            if row["error_message"]:
+                item["amountState"] = "error"
+                item["amountError"] = clean_text(row["error_message"])
+            elif item["amountState"] == "ready":
+                item["amountState"] = "pending"
+        else:
+            item["amounts"].append(row["total_amount"])
         try:
             item["iacucs"].update(json.loads(row["iacucs_json"] or "[]"))
         except (TypeError, ValueError):
             pass
-    return [
-        {"pi": pi, "amount": round(float(item["amount"]), 2), "iacucCount": len(item["iacucs"])}
-        for pi, item in sorted(aggregated.items(), key=lambda pair: pair[1]["amount"], reverse=True)
-    ]
+    result = []
+    for pi, item in aggregated.items():
+        amount = money_sum(item["amounts"])
+        entry = {
+            "pi": pi,
+            "amount": amount,
+            "amountState": item["amountState"],
+            "iacucCount": len(item["iacucs"]),
+        }
+        if item["amountState"] == "error" and item["amountError"]:
+            entry["amountError"] = item["amountError"]
+        result.append(entry)
+    return sorted(
+        result,
+        key=lambda item: (item["amountState"] != "ready", -item["amount"], item["pi"]),
+    )
 
 
 def _split_month(month):
