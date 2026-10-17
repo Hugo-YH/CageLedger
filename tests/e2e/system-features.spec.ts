@@ -52,8 +52,12 @@ async function setFeature(page: Page, name: string, checked: boolean) {
 }
 
 async function saveFeatures(page: Page) {
+  const saved = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/system/features" && response.request().method() === "PUT",
+  );
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
-  await expect(page.getByText("系统功能设置已保存", { exact: true })).toBeVisible();
+  expect((await saved).ok()).toBe(true);
+  await expect(page.getByText("系统功能设置已保存", { exact: true }).last()).toBeVisible();
 }
 
 async function assertFeatureGroupsHidden(page: Page, info: TestInfo) {
