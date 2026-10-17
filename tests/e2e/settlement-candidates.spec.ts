@@ -186,6 +186,12 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByRole("menuitem", { name: /结算列表/ }).click();
   await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
   const settlementRegion = page.getByRole("region", { name: "结算管理列表" });
+  await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  const monthFilter = page.locator(".table-filter-panel:visible");
+  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await monthOption.click();
+  await expect(monthOption).toBeChecked();
+  await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
   const settlementGeometry = await settlementRegion.evaluate((element) => {
     const content = element.querySelector<HTMLElement>(".ant-table-content");
     const actionsHeader = element.querySelector<HTMLElement>("th.ant-table-cell-fix-end");
@@ -209,8 +215,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   await page.getByRole("option", { name: "5 条/页", exact: true }).click();
   await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).check();
   const bulkToolbar = page.getByRole("group", { name: "结算批量操作", exact: true });
-  await expect(bulkToolbar.getByText(/已选 \d+ 项/, { exact: true })).toHaveCount(0);
-  await expect(bulkToolbar.getByRole("button", { name: "清空选择", exact: true })).toHaveCount(0);
+  await expect(bulkToolbar.getByText(/^已选 \d+ 项：饲养费 \d+ 项、技术服务费 \d+ 项$/)).toBeVisible();
+  await expect(bulkToolbar.getByRole("button", { name: "清空选择", exact: true })).toBeEnabled();
   await expect(bulkToolbar.getByRole("button", { name: "批量导出 PDF", exact: true })).toBeEnabled();
   await page.locator(".ant-pagination-next").click();
   await expect(page.getByRole("checkbox", { name: /^选择 .+ 结算项$/ }).first()).toBeChecked();

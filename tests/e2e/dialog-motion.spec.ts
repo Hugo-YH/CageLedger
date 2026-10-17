@@ -1,6 +1,13 @@
 import type { Locator, Page } from "@playwright/test";
 import settlementFixture from "../../src/react/print/fixtures/settlement-parity.json" with { type: "json" };
-import { expect, openNavigationEntry, openSavedQuantitySheets, openWorkflowCenter, test } from "./fixtures";
+import {
+  ensureTestInfrastructure,
+  expect,
+  openNavigationEntry,
+  openSavedQuantitySheets,
+  openWorkflowCenter,
+  test,
+} from "./fixtures";
 
 type MotionEvent = {
   type: string;
@@ -11,6 +18,44 @@ type MotionEvent = {
   inert: boolean;
 };
 type AuditWindow = Window & { dialogMotion?: MotionEvent[] };
+let quantitySheetId: string | undefined;
+
+async function seedQuantitySheet(page: Page) {
+  await ensureTestInfrastructure(page);
+  quantitySheetId = `motion-quantity-${Date.now()}`;
+  const response = await page.request.post("/api/quantity-sheets", {
+    data: {
+      sheet: {
+        id: quantitySheetId,
+        month: "2026-02",
+        roomId: "room-e2e-8014",
+        roomName: "8014",
+        manager: "动效验证",
+        iacuc: quantitySheetId,
+        pi: "动效验证负责人",
+        project: "动效验证项目",
+        owner: "动效验证",
+        funding: "TEST",
+        billingUnit: "cage_day",
+        animalDetailEnabled: false,
+        initialAnimalCount: 0,
+        initialCageCount: 1,
+        pageCount: 1,
+        rows: [],
+      },
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  await auditMotion(page);
+}
+
+test.afterEach(async ({ page }) => {
+  if (quantitySheetId) {
+    const response = await page.request.delete(`/api/quantity-sheets/${quantitySheetId}`);
+    expect([200, 404]).toContain(response.status());
+    quantitySheetId = undefined;
+  }
+});
 
 async function auditMotion(page: Page) {
   await page.evaluate(() => {
@@ -71,6 +116,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("quantity preview, edit and delete retain exit content and restore keyboard focus", async ({ page }, info) => {
+  await seedQuantitySheet(page);
   await openSavedQuantitySheets(page);
   const evidence = [];
   for (const action of ["预览", "编辑", "删除"]) {
@@ -94,6 +140,7 @@ test("quantity preview, edit and delete retain exit content and restore keyboard
 });
 
 test("early Escape and a reduced-motion change during entry or exit release the modal", async ({ page }) => {
+  await seedQuantitySheet(page);
   await openSavedQuantitySheets(page);
   const trigger = page.getByRole("button", { name: "预览", exact: true }).first();
   const dialog = page.locator(".quantity-react-preview");

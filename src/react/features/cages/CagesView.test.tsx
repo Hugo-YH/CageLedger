@@ -84,6 +84,8 @@ vi.mock("antd", () => ({
   Input: { TextArea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} /> },
 }));
 vi.mock("../../components/ui", () => ({
+  // Modal/Drawer tests cover visual exit retention; this suite isolates selection scope.
+  ModalPresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ListRefreshStatus: ({ active }: { active: boolean }) => (active ? <div role="status">正在更新</div> : null),
   ActionButton: ({
     tone,

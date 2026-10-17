@@ -59,6 +59,7 @@ test("technical service UI saves 4 days / 10 eyes / 300 yuan and shares workflow
   await page.locator("#service-iacuc").blur();
   await expect(page.getByRole("region", { name: "IACUC项目信息", exact: true })).toContainText("技术服务验收负责人");
   await page.locator("#service-item").click();
+  await page.locator("#service-item").fill("大动物滴眼");
   await page.getByText("大动物滴眼", { exact: true }).click();
   for (const [index, [day, quantity]] of [
     [1, 2],

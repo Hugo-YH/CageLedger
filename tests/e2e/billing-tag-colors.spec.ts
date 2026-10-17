@@ -9,10 +9,28 @@ test("billing lists preserve established fee, lock and document colors across th
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
-  const response = await page.request.get("/api/billing-workflows?limit=10&offset=0");
-  expect(response.ok(), await response.text()).toBeTruthy();
-  const base = ((await response.json()) as { items: BillingWorkflow[] }).items[0];
-  expect(base).toBeTruthy();
+  const base: BillingWorkflow = {
+    id: "tag-base",
+    businessKey: "tag-base",
+    iacuc: "TAG-001",
+    iacucs: ["TAG-001"],
+    month: "2027-01",
+    sourceType: "quantity_sheet",
+    workflowStatus: "statement_sent",
+    pi: "配色验证负责人",
+    project: "配色验证项目",
+    owner: "配色验证",
+    funding: "测试经费",
+    manager: "测试管理员",
+    totalAmount: 100,
+    totalCageDays: 1,
+    generatedAt: "2027-01-01T10:00:00Z",
+    sentAt: "2027-01-01T10:00:00Z",
+    signedReturnedAt: "2027-01-02T10:00:00Z",
+    registeredAt: "2027-01-02T10:00:00Z",
+    archivedAt: "2027-01-02T10:00:00Z",
+    latestEventAt: "2027-01-02T10:00:00Z",
+  };
   const items = [
     {
       id: "tag-paid",

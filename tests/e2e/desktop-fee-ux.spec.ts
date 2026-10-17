@@ -4,7 +4,21 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, openNavigationEntry, test } from "./fixtures";
 
 const LIST_MONTH = "2098-08";
+const savedSheetIds: string[] = [];
 test.use({ actionTimeout: 10_000 });
+
+test.afterEach(async ({ page }) => {
+  for (const id of savedSheetIds.splice(0)) {
+    const response = await page.request.get(`/api/technical-services/sheets/${id}`);
+    if (response.status() === 404) continue;
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const { item } = (await response.json()) as { item: { updatedAt: string } };
+    const deleted = await page.request.delete(`/api/technical-services/sheets/${id}`, {
+      data: { expectedUpdatedAt: item.updatedAt },
+    });
+    expect(deleted.ok(), await deleted.text()).toBeTruthy();
+  }
+});
 
 async function login(page: Page) {
   await page.goto("/app");
@@ -32,7 +46,7 @@ async function seedSavedServiceList(page: Page) {
     return {
       iacuc: `Z2098${number}`,
       pi: `UX 列表负责人 ${number}`,
-      id: `ux-list-${number}`,
+      id: `ux-list-${number}-${Date.now()}`,
     };
   });
   const csv = [
@@ -60,6 +74,7 @@ async function seedSavedServiceList(page: Page) {
       },
     });
     expect(saved.ok(), await saved.text()).toBeTruthy();
+    savedSheetIds.push(((await saved.json()) as { item: { id: string } }).item.id);
   }
 }
 
@@ -81,7 +96,7 @@ test("monthly summary retry keeps its month and reports only the current export 
   const saved = await page.request.post("/api/technical-services/sheets", {
     data: {
       sheet: {
-        id: "ux-export-sample",
+        id: `ux-export-sample-${Date.now()}`,
         month: LIST_MONTH,
         iacuc: "Z2097555",
         facility: "bioisland",
@@ -92,6 +107,7 @@ test("monthly summary retry keeps its month and reports only the current export 
     },
   });
   expect(saved.ok(), await saved.text()).toBeTruthy();
+  savedSheetIds.push(((await saved.json()) as { item: { id: string } }).item.id);
   await openNavigationEntry(page, "结算管理", "汇总导出");
   const summary = page.getByRole("region", { name: "月度汇总导出工作区", exact: true });
   const month = page.getByRole("textbox", { name: "结算月份", exact: true });
@@ -239,6 +255,7 @@ test("service review shows expandable project information and preserves totals a
     .toBe(projectName);
   await info.getByText("收起", { exact: true }).click();
   await page.locator("#service-item").click();
+  await page.locator("#service-item").fill("大动物滴眼");
   await page.getByText("大动物滴眼", { exact: true }).click();
   for (const [index, [day, quantity]] of [
     [1, 2],
