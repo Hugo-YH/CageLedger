@@ -255,7 +255,9 @@ test("preview and notice replace each other after exit and never initiate on can
   await expect(preview.getByRole("button", { name: "已发起结算流程", exact: true })).toBeDisabled();
   expect(writes).toEqual([false, false, false, true]);
   await closeWithMotion(page, preview.locator(".ant-modal-close"));
-  await expect(page.getByRole("button", { name: "预览结算单", exact: true })).toBeFocused();
+  const restoredTrigger = page.getByRole("button", { name: /预览结算单$/ });
+  await expect(restoredTrigger).not.toHaveClass(/ant-btn-loading/);
+  await expect(restoredTrigger).toBeFocused();
   await info.attach("preview-notice-transition", { body: JSON.stringify(transition), contentType: "application/json" });
 });
 
