@@ -1,5 +1,6 @@
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useState } from "react";
+import { tagColors } from "../../../../theme/visual-system.mjs";
 import { Alert, Button, Empty, Tag } from "antd";
 import type { TableProps } from "antd";
 
@@ -79,7 +80,7 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
             迁入
           </Button>
         ) : (
-          <Tag>待核对</Tag>
+          <Tag color={tagColors.status.warning}>待核对</Tag>
         ),
     },
   ];

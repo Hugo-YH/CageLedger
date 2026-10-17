@@ -194,7 +194,7 @@ test("已登记流程可补录报销单并更新状态标签", async ({ page }) 
   await expect(row).toContainText("报销单 未交回");
 
   await row.getByRole("button", { name: "查看" }).click();
-  const detailForRecording = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  const detailForRecording = page.getByRole("dialog").filter({ hasText: "结算流程详情" }).first();
   await detailForRecording.getByRole("button", { name: "补录报销单" }).click();
   const recording = page.getByRole("dialog").filter({ hasText: "补录报销单" }).first();
   const removeReimbursementForm = recording.getByRole("button", { name: "删除第 1 行报销单" });
@@ -223,7 +223,7 @@ test("已登记流程可补录报销单并更新状态标签", async ({ page }) 
   await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
 
   await row.getByRole("button", { name: "查看" }).click();
-  const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  const detail = page.getByRole("dialog").filter({ hasText: "结算流程详情" }).first();
   await expect(detail).toContainText("报销单 已交回");
   await expect(detail).toContainText("BX-LATE-001");
   await expect(detail).toContainText("补录报销单");
@@ -305,7 +305,7 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
 
   // 主时间轴只保留生效环节，历史记录默认折叠
   await row.getByRole("button", { name: "查看" }).click();
-  const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  const detail = page.getByRole("dialog").filter({ hasText: "结算流程详情" }).first();
   await expect(detail.getByText("结算单/报销单交回")).toHaveCount(1);
   await expect(detail).toContainText("BX-RE-001");
   await expect(detail).toContainText("备注：结算单已由项目组交回");
@@ -385,7 +385,7 @@ test("结算金额为 0 的交回登记不显示报销单开关", async ({ page 
   await expect(zeroRow.getByText("报销单", { exact: false })).toHaveCount(0);
   await expect(zeroRow.getByRole("button", { name: "补录" })).toHaveCount(0);
   await zeroRow.getByRole("button", { name: "查看" }).click();
-  const zeroDetail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  const zeroDetail = page.getByRole("dialog").filter({ hasText: "结算流程详情" }).first();
   await expect(zeroDetail.getByText("报销单", { exact: false })).toHaveCount(0);
   await expect(zeroDetail.getByText("报销单号", { exact: false })).toHaveCount(0);
   await zeroDetail.locator(".ant-modal-close").click();
@@ -484,7 +484,7 @@ test("已登记流程支持锁定、批量锁定与解锁", async ({ page }) => 
   await expect(page.getByRole("row", { name: new RegExp(pis[1]) })).toContainText("已归档");
 
   await lockedRow.getByRole("button", { name: "查看" }).click();
-  const detail = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+  const detail = page.getByRole("dialog").filter({ hasText: "结算流程详情" }).first();
   const history = detail.getByText(/历史修改（2 条）/);
   await expect(history).toBeVisible();
   await history.click();

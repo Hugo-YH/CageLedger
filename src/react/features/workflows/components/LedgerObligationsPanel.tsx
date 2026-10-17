@@ -5,6 +5,8 @@ import type { TableProps } from "antd";
 import type { SettlementObligation } from "../../../api/contracts";
 import { useSettlementObligations } from "../../../api/reimbursementLedger";
 import { DataTable } from "../../../components/ui";
+import { FeeTypeTag } from "../../../components/BillingTags";
+import { tagColors } from "../../../../theme/visual-system.mjs";
 import { LedgerColumnTitle, QueryFeedback } from "./LedgerListShared";
 import { moneyColumn } from "./ledgerListModel";
 
@@ -43,7 +45,7 @@ export function ObligationsPanel() {
     {
       key: "feeType",
       title: "费用类型",
-      render: (_, row) => (row.feeType === "technical_service" ? "技术服务费" : "饲养费"),
+      render: (_, row) => <FeeTypeTag feeType={row.feeType} />,
     },
     { key: "sourcePi", title: title("sourcePi", "费用产生项目负责人"), dataIndex: "sourcePi" },
     {
@@ -72,7 +74,7 @@ export function ObligationsPanel() {
       key: "status",
       title: title("status", "状态"),
       render: (_, item) => (
-        <Tag color={item.status === "settled" ? "green" : "gold"}>
+        <Tag color={item.status === "settled" ? tagColors.status.success : tagColors.status.warning}>
           {item.status === "settled" ? "已核销" : "待核销"}
         </Tag>
       ),

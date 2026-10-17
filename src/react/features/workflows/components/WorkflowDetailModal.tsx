@@ -2,7 +2,8 @@ import { DownloadOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Flex, Modal, Tag, Timeline, Typography } from "antd";
 import { useState } from "react";
 
-import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
+import { tagColors } from "../../../../theme/visual-system.mjs";
+import { ReimbursementReturnTag } from "../../../components/BillingTags";
 import type { BillingWorkflow, BillingWorkflowEvent } from "../../../api/workflows";
 import { useWorkflowDetail } from "../../../api/workflows";
 import { formatDateTime, formatMoney, PageSkeleton } from "../../../components/WorkspaceUi";
@@ -90,7 +91,7 @@ export function WorkflowDetailModal({
       }
       rootClassName="app-modal-root workflow-detail-modal"
       open={Boolean(target)}
-      title={`流程记录 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
+      title={`结算流程详情 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
       width={840}
       onCancel={onCancel}
     >
@@ -117,7 +118,6 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
 
   const revised = Number(workflow?.currentVersionNo || 1) > 1;
   const reimbursementRequired = workflow?.reimbursementRequired ?? Number(workflow?.totalAmount || 0) > 0;
-  const reimbursementStatus = reimbursementReturnStatus(workflow || {});
   const eventMeta: Record<string, { label: string }> = {
     statement_sent: { label: "发起结算流程" },
     statement_registered_archived: { label: "结算单/报销单交回" },
@@ -205,7 +205,11 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
                 <>
                   <div className="workflow-registration-card">
                     <div className="workflow-registration-status">
-                      <Tag color={workflow?.signedStatementReturned ? "success" : "default"}>
+                      <Tag
+                        color={
+                          workflow?.signedStatementReturned ? tagColors.document.statement : tagColors.status.default
+                        }
+                      >
                         {workflow?.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
                       </Tag>
                     </div>
@@ -214,7 +218,7 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
                   {reimbursementRequired ? (
                     <div className="workflow-registration-card">
                       <div className="workflow-registration-status">
-                        <Tag color={reimbursementStatus.color}>{reimbursementStatus.label}</Tag>
+                        <ReimbursementReturnTag workflow={workflow || {}} />
                       </div>
                       {workflow?.reimbursementFormReturned ? (
                         <>
@@ -297,8 +301,9 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
   if (trailingHistory.length) items.push(...historyTimelineItems(trailingHistory));
 
   return (
-    <>
+    <div className="workflow-detail-content">
       <Descriptions
+        className="workflow-detail-overview"
         size="small"
         column={2}
         items={[
@@ -312,34 +317,36 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
           { key: "returned", label: "结算单", children: workflow.signedStatementReturned ? "已交回" : "未交回" },
         ]}
       />
-      <Typography.Title level={5}>流程记录</Typography.Title>
-      <Timeline className="workflow-timeline" items={items} mode="start" />
-      <Typography.Title level={5} style={{ marginTop: 16 }}>
-        附件
-      </Typography.Title>
-      {(workflow?.attachments || []).length ? (
-        <Flex vertical gap={8}>
-          {(workflow?.attachments || []).map((attachment) => (
-            <Button
-              key={attachment.id}
-              icon={<DownloadOutlined aria-hidden />}
-              href={`/api/billing-workflows/attachments/${attachment.id}`}
-              target="_blank"
-              rel="noreferrer"
-              type="link"
-            >
-              {attachment.kind === "settlement"
-                ? workflow?.sourceType === "pi_merged_technical_service"
-                  ? "技术服务费结算单"
-                  : "饲养费结算单"
-                : "报销单"}{" "}
-              · {attachment.originalName}
-            </Button>
-          ))}
-        </Flex>
-      ) : (
-        <Typography.Text type="secondary">无附件</Typography.Text>
-      )}
-    </>
+      <section className="workflow-detail-section" aria-label="流转记录">
+        <Typography.Title level={4}>流转记录</Typography.Title>
+        <Timeline className="workflow-timeline" items={items} mode="start" />
+      </section>
+      <section className="workflow-detail-section" aria-label="附件">
+        <Typography.Title level={4}>附件</Typography.Title>
+        {(workflow?.attachments || []).length ? (
+          <Flex vertical gap={8}>
+            {(workflow?.attachments || []).map((attachment) => (
+              <Button
+                key={attachment.id}
+                icon={<DownloadOutlined aria-hidden />}
+                href={`/api/billing-workflows/attachments/${attachment.id}`}
+                target="_blank"
+                rel="noreferrer"
+                type="link"
+              >
+                {attachment.kind === "settlement"
+                  ? workflow?.sourceType === "pi_merged_technical_service"
+                    ? "技术服务费结算单"
+                    : "饲养费结算单"
+                  : "报销单"}{" "}
+                · {attachment.originalName}
+              </Button>
+            ))}
+          </Flex>
+        ) : (
+          <Typography.Text type="secondary">无附件</Typography.Text>
+        )}
+      </section>
+    </div>
   );
 }

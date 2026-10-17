@@ -131,6 +131,9 @@ test("settlement desktop partial batch failure retains only failures for confirm
   await expect(confirm).toBeHidden();
   await expect(first).not.toBeChecked();
   await expect(second).toBeChecked();
+  await expect(page.getByRole("group", { name: "结算批量操作", exact: true })).toContainText(
+    "已选 1 项：饲养费 1 项、技术服务费 0 项",
+  );
   expect(writes).toEqual([data.items[0].pi, data.items[1].pi]);
   await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
   await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);

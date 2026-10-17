@@ -5,7 +5,8 @@ import { ExclamationCircleOutlined } from "@ant-design/icons";
 import type { QuarantineRecordRow, QuarantineWorklist } from "../../../contracts/quarantine";
 import { useQuarantineQuery } from "../../api/quarantine";
 import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
-import { methodLabels } from "./shared";
+import { methodLabels, quarantineTestStateColor } from "./shared";
+import { tagColors } from "../../../theme/visual-system.mjs";
 
 export function RecordWorklist({
   title = "检测记录",
@@ -116,8 +117,8 @@ export function RecordWorklist({
       {!reports && (
         <Space wrap>
           <Tag>当前筛选 {query.data?.summary.total ?? 0} 条</Tag>
-          <Tag color="processing">草稿 {query.data?.summary.draft ?? 0}</Tag>
-          <Tag color="success">已出具 {query.data?.summary.issued ?? 0}</Tag>
+          <Tag color={quarantineTestStateColor("draft")}>草稿 {query.data?.summary.draft ?? 0}</Tag>
+          <Tag color={tagColors.status.success}>已出具 {query.data?.summary.issued ?? 0}</Tag>
         </Space>
       )}
       {query.error && (
@@ -173,9 +174,7 @@ export function RecordWorklist({
               width: 110,
               render: (_, row) => (
                 <Space orientation="vertical" size={0}>
-                  <Tag color={row.state === "issued" ? "success" : "processing"}>
-                    {row.state === "issued" ? "已出具" : "草稿"}
-                  </Tag>
+                  <Tag color={quarantineTestStateColor(row.state)}>{row.state === "issued" ? "已出具" : "草稿"}</Tag>
                   {row.retestOf && <Tag>复检</Tag>}
                   {row.correctionOf && <Tag>更正</Tag>}
                 </Space>
@@ -197,7 +196,11 @@ export function RecordWorklist({
                     key: "result",
                     width: 110,
                     render: (_: unknown, row: QuarantineRecordRow) =>
-                      row.abnormalCount ? <Tag color="warning">{row.abnormalCount} 项阳性/可疑</Tag> : "—",
+                      row.abnormalCount ? (
+                        <Tag color={tagColors.status.warning}>{row.abnormalCount} 项阳性/可疑</Tag>
+                      ) : (
+                        "—"
+                      ),
                   },
                 ]),
             {

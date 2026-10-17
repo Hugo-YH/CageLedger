@@ -33,6 +33,7 @@ vi.mock("../../api/technicalServices", () => ({
 }));
 
 vi.mock("../../state/ui", () => ({ useNavigationGuard: () => ({ current: null }) }));
+vi.mock("../../hooks/useMediaQuery", () => ({ useMediaQuery: () => false }));
 
 vi.mock("antd", async (importOriginal) => {
   const original = await importOriginal<typeof Antd>();

@@ -350,7 +350,7 @@ test("desktop page size and scroll restore and detail cancellation keeps context
   await selectAntOptionByKeyboard(page, page.getByLabel("每页显示条数"));
   const row = panel.getByRole("row").filter({ hasText: "分页负责人 01" });
   await row.getByRole("button", { name: "查看", exact: true }).click();
-  const detail = page.getByRole("dialog", { name: /流程记录/ });
+  const detail = page.getByRole("dialog", { name: /结算流程详情/ });
   await expect(detail.getByText("负责人", { exact: true })).toBeVisible();
   await expect(detail.getByText("¥0.00", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");

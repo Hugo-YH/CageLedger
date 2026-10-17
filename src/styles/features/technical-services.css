@@ -95,6 +95,63 @@
   min-width: 0;
 }
 
+.technical-service-editor-shell {
+  min-width: 0;
+}
+
+.technical-service-row-amount {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.technical-service-row-amount > span {
+  display: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.technical-service-row-amount > strong {
+  font-weight: 400;
+}
+
+.technical-service-row-field-label {
+  display: none;
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+@keyframes technical-service-row-added {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.technical-service-date-table .technical-service-row-added > .ant-table-cell {
+  animation: technical-service-row-added var(--motion-base) var(--ease-out) both;
+}
+
+@keyframes technical-service-row-saved {
+  from {
+    background-color: var(--success-soft);
+  }
+
+  to {
+    background-color: var(--surface);
+  }
+}
+
+.technical-service-table-region .technical-service-row-saved > .ant-table-cell {
+  animation: technical-service-row-saved var(--motion-slow) var(--ease-out);
+}
+
 .technical-service-row-actions .ant-btn {
   width: 64px;
 }
@@ -114,8 +171,140 @@
   width: 100%;
 }
 
-@media (width <= 760px) {
+@media (width <= 767px) {
   .technical-service-fields {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 767px), (height <= 480px) and (orientation: landscape) {
+  .technical-service-total {
+    padding: var(--space-2);
+  }
+
+  .technical-service-total > .ant-typography {
+    font-size: var(--text-xs);
+  }
+
+  .technical-service-total-value {
+    gap: var(--space-1);
+  }
+
+  .technical-service-total-value strong {
+    font-size: var(--text-lg);
+  }
+
+  .technical-service-project-info {
+    padding: var(--space-2);
+  }
+
+  .technical-service-project-info .ant-descriptions-view table {
+    table-layout: fixed;
+  }
+
+  .technical-service-project-info .ant-descriptions-row > td {
+    padding: var(--space-1) 0;
+    border-bottom: 0;
+  }
+
+  .technical-service-date-table .ant-table-content {
+    overflow-x: visible !important;
+  }
+
+  .technical-service-date-table .ant-table-container,
+  .technical-service-date-table .ant-table-container table,
+  .technical-service-date-table .ant-table-tbody {
+    display: block;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .technical-service-date-table .ant-table-thead {
+    display: none;
+  }
+
+  .technical-service-date-table colgroup {
+    display: none;
+  }
+
+  .technical-service-date-table .ant-table-measure-row {
+    display: none;
+  }
+
+  .technical-service-date-table .app-table-flex-spacer {
+    display: none;
+  }
+
+  .technical-service-date-table .ant-table-tbody {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .technical-service-date-table .ant-table-tbody > .ant-table-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(104px, 0.7fr);
+    align-items: end;
+    gap: var(--space-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    padding: var(--space-2);
+  }
+
+  .technical-service-date-table .ant-table-tbody > .ant-table-row > .ant-table-cell:not(.app-table-flex-spacer) {
+    display: block !important;
+    border-bottom: 0 !important;
+    min-width: 0;
+    padding: 0 !important;
+  }
+
+  .technical-service-date-table .technical-service-date-cell {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .technical-service-date-table .technical-service-quantity-cell {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .technical-service-date-table .technical-service-amount-cell {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+  }
+
+  .technical-service-date-table .technical-service-date-action {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    box-shadow: none !important;
+    position: static !important;
+  }
+
+  .technical-service-date-table .technical-service-date-action::before,
+  .technical-service-date-table .technical-service-date-action::after {
+    display: none;
+  }
+
+  .technical-service-date-table .ant-picker,
+  .technical-service-date-table .ant-input-number {
+    width: 100%;
+  }
+
+  .technical-service-date-table .technical-service-row-amount {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .technical-service-row-field-label,
+  .technical-service-row-amount > span {
+    display: inline-block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .technical-service-date-table .technical-service-row-added > .ant-table-cell,
+  .technical-service-table-region .technical-service-row-saved > .ant-table-cell {
+    animation: none;
   }
 }

@@ -3,17 +3,18 @@ import { useState } from "react";
 import { Alert, Button, Modal, Select, Space, Tag } from "antd";
 import type { IntakeBatch } from "../../../contracts/intake";
 import { downloadQuarantine, useQuarantineDetail } from "../../api/quarantine";
-import { methodLabels } from "./shared";
+import { methodLabels, quarantineStatusColor } from "./shared";
 
 export function IntakeQuarantineStatus({ item }: { item: IntakeBatch }) {
   const [batchId, setBatchId] = useState("");
   const [error, setError] = useState("");
   const detail = useQuarantineDetail(batchId);
   const related = item.quarantineBatches ?? [];
+  const quarantineStatus = item.quarantineStatus || (item.status === "received" ? "待检疫" : "待接收");
   return (
     <>
       <Space orientation="vertical" size={0}>
-        <Tag>{item.quarantineStatus || (item.status === "received" ? "待检疫" : "待接收")}</Tag>
+        <Tag color={quarantineStatusColor(quarantineStatus)}>{quarantineStatus}</Tag>
         {related.length > 0 && (
           <Button icon={<ActionIcon name="info" />} size="small" type="link" onClick={() => setBatchId(related[0].id)}>
             检疫记录

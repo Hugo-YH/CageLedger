@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { tagColors } from "../../../../theme/visual-system.mjs";
 import { App, Button, Empty, Popconfirm, Space, Tag } from "antd";
 import type { TableProps } from "antd";
 
@@ -56,7 +57,9 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
     {
       key: "status",
       title: title("status", "状态", true, claimStatusLabels),
-      render: (_, item) => <Tag>{claimStatusLabels[item.status]}</Tag>,
+      render: (_, item) => (
+        <Tag color={tagColors.claim[item.status] ?? tagColors.status.default}>{claimStatusLabels[item.status]}</Tag>
+      ),
     },
     { key: "documentNumber", title: title("documentNumber", "报销单号"), dataIndex: "documentNumber" },
     { key: "fundingOwner", title: title("fundingOwner", "经费负责人"), dataIndex: "fundingOwner" },

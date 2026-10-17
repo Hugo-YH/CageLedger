@@ -5,6 +5,7 @@ import { Alert, Button, Modal, Space, Tag } from "antd";
 import type { TechnicalServiceSheet } from "../../../contracts/technicalServices";
 import { useServiceList, useServiceMutation } from "../../api/technicalServices";
 import { useListPageBounds } from "../../hooks/useListPageBounds";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { ListViewControls, type ListDensity } from "../../components/ui/ListViewControls";
 import { useWorkspaceMemory, useWorkspaceScroll } from "../../state/workspaceMemory";
 import { useNavigationGuard } from "../../state/ui";
@@ -21,6 +22,8 @@ export function SavedServices() {
   const [deleting, setDeleting] = useState<TechnicalServiceSheet | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [savedNotice, setSavedNotice] = useState("");
+  const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [filters, setFilters] = useWorkspaceMemory<Record<string, string[]>>("technical-services:saved:filters", {});
   const [sort, setSort] = useWorkspaceMemory<{ key: string; dir: "asc" | "desc" }>("technical-services:saved:sort", {
     key: "month",
@@ -45,10 +48,12 @@ export function SavedServices() {
         column={column}
         label={label}
         onFilter={(values) => {
+          setHighlightedRowId(null);
           setFilters((previous) => ({ ...previous, [column]: values }));
           setPage(1);
         }}
         onSort={() => {
+          setHighlightedRowId(null);
           setSort((previous) => ({
             key: column,
             dir: previous.key === column && previous.dir === "asc" ? "desc" : "asc",
@@ -73,6 +78,7 @@ export function SavedServices() {
   }
   function openEditor(sheet: TechnicalServiceSheet) {
     setSavedNotice("");
+    setHighlightedRowId(null);
     setEditing(sheet);
   }
   function finishEditing() {
@@ -84,9 +90,12 @@ export function SavedServices() {
     const id = completedEditId.current;
     if (!id) return;
     completedEditId.current = null;
-    (editButtonRefs.current.get(id) || listRegionRef.current)?.focus();
+    const trigger = editButtonRefs.current.get(id);
+    if (trigger && !reducedMotion && !query.isError) setHighlightedRowId(id);
+    (trigger && !trigger.matches(":disabled") ? trigger : listRegionRef.current)?.focus();
   }
   function openDelete(sheet: TechnicalServiceSheet) {
+    setHighlightedRowId(null);
     setDeleteError("");
     setDeleting(sheet);
   }
@@ -107,7 +116,8 @@ export function SavedServices() {
   }
   useEffect(() => {
     if (query.isError) setSavedNotice("");
-  }, [query.isError]);
+    if (query.isError || reducedMotion) setHighlightedRowId(null);
+  }, [query.isError, reducedMotion]);
   return (
     <section className="panel technical-service-list-panel">
       {savedNotice && !query.isError ? (
@@ -156,6 +166,7 @@ export function SavedServices() {
               status: "状态",
             }}
             onFiltersChange={(next) => {
+              setHighlightedRowId(null);
               setFilters(next);
               setPage(1);
             }}
@@ -172,6 +183,16 @@ export function SavedServices() {
             scroll={{ x: 1200 }}
             pagination={false}
             size={density}
+            onRow={(row) =>
+              row.id === highlightedRowId && !reducedMotion
+                ? {
+                    className: "technical-service-row-saved",
+                    onAnimationEnd: (event) => {
+                      if (event.animationName === "technical-service-row-saved") setHighlightedRowId(null);
+                    },
+                  }
+                : {}
+            }
             columns={[
               { title: title("month", "月份"), dataIndex: "month", width: 110 },
               { title: title("iacuc", "IACUC"), dataIndex: "iacuc", width: 150 },
@@ -201,7 +222,9 @@ export function SavedServices() {
                 title: title("status", "状态"),
                 width: 130,
                 key: "status",
-                render: (_, row) => <Tag>{row.protected ? "已发起结算" : "可编辑"}</Tag>,
+                render: (_, row) => (
+                  <Tag color={row.protected ? "processing" : "default"}>{row.protected ? "已发起结算" : "可编辑"}</Tag>
+                ),
               },
               {
                 title: "操作",
@@ -239,8 +262,12 @@ export function SavedServices() {
         pageSize={pageSize}
         pages={pages}
         total={total}
-        onPage={setPage}
+        onPage={(next) => {
+          setHighlightedRowId(null);
+          setPage(next);
+        }}
         onPageSize={(size) => {
+          setHighlightedRowId(null);
           setPageSize(size);
           setPage(1);
         }}

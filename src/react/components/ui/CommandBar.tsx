@@ -25,7 +25,7 @@ export type CommandBarProps = {
   actions?: ReactNode;
   primaryAction?: ReactNode;
   lowFrequencyActions?: LowFrequencyAction[];
-  selection?: { count: number; onClear: () => void; pending?: boolean };
+  selection?: { count: number; onClear: () => void; pending?: boolean; description?: string; pendingText?: string };
   className?: string;
   ariaLabel?: string;
   sticky?: boolean | "selection";
@@ -87,7 +87,8 @@ export function CommandBar({
           {selection ? (
             <Typography.Text aria-live="polite">
               {`已选 ${selection.count} 项`}
-              {selection.pending ? " · 正在处理…" : ""}
+              {selection.description ? `：${selection.description}` : ""}
+              {selection.pending ? ` · ${selection.pendingText || "正在处理…"}` : ""}
             </Typography.Text>
           ) : null}
         </div>

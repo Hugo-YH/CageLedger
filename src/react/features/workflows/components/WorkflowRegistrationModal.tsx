@@ -1,6 +1,7 @@
 import { UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Input, Modal, Space, Switch, Tag, Typography, Upload } from "antd";
 import { useState } from "react";
+import { tagColors } from "../../../../theme/visual-system.mjs";
 
 import { fundingBookRemark, reviewFundingBookNos, type FundingBookReference } from "../../../../domain/fundingBookNo";
 import { defaultReimbursementFormNo } from "../../../../domain/reimbursementFormNo";
@@ -46,19 +47,21 @@ function RegistrationSwitch({
   label,
   onChange,
   returnedLabel,
+  returnedColor,
   unreturnedLabel,
 }: {
   checked?: boolean;
   label: string;
   onChange?: (checked: boolean) => void;
   returnedLabel: string;
+  returnedColor: string;
   unreturnedLabel: string;
 }) {
   return (
     <Space size={8}>
       <Switch aria-label={label} checked={checked} onChange={onChange} />
       <span>{label}</span>
-      <Tag color={checked ? "success" : "default"}>{checked ? returnedLabel : unreturnedLabel}</Tag>
+      <Tag color={checked ? returnedColor : tagColors.status.default}>{checked ? returnedLabel : unreturnedLabel}</Tag>
     </Space>
   );
 }
@@ -222,7 +225,12 @@ function WorkflowRegistrationForm({
         ]}
         valuePropName="checked"
       >
-        <RegistrationSwitch label={settlementLabel} returnedLabel="已交回" unreturnedLabel="未交回" />
+        <RegistrationSwitch
+          label={settlementLabel}
+          returnedLabel="已交回"
+          unreturnedLabel="未交回"
+          returnedColor={tagColors.document.statement}
+        />
       </Form.Item>
       {signedStatementReturned ? (
         <>
@@ -237,7 +245,12 @@ function WorkflowRegistrationForm({
       {hasPayableAmount ? (
         <>
           <Form.Item name="reimbursementFormReturned" valuePropName="checked">
-            <RegistrationSwitch label="报销单" returnedLabel="已交回" unreturnedLabel="未交回" />
+            <RegistrationSwitch
+              label="报销单"
+              returnedLabel="已交回"
+              unreturnedLabel="未交回"
+              returnedColor={tagColors.document.reimbursement}
+            />
           </Form.Item>
           {reimbursementFormReturned ? (
             <>

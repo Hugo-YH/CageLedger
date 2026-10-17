@@ -1,5 +1,6 @@
 import { createClientId } from "../../../domain/id";
 import { speciesLabel } from "../../../domain/intake";
+import { tagColors } from "../../../theme/visual-system.mjs";
 import type {
   QuarantineMethod,
   QuarantineResult,
@@ -12,6 +13,21 @@ export const methodLabels: Record<QuarantineMethod, string> = {
   elisa_rat: "ELISA检测（大鼠）",
   pcr: "PCR检测",
 };
+
+export function quarantineStatusColor(status?: string) {
+  if (status === "待检疫") return tagColors.status.warning;
+  if (status === "检疫中") return tagColors.status.processing;
+  if (status === "已检疫") return tagColors.status.success;
+  return tagColors.status.default;
+}
+
+export function quarantineTestStateColor(state: QuarantineTest["state"]) {
+  return state === "issued"
+    ? tagColors.status.success
+    : state === "draft"
+      ? tagColors.status.processing
+      : tagColors.status.default;
+}
 export const resultOptions: { value: QuarantineResult; label: string }[] = [
   { value: "", label: "/" },
   { value: "negative", label: "-" },

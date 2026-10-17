@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   DownloadOutlined,
   ExclamationCircleOutlined,
@@ -9,12 +9,13 @@ import {
 import { Button, Tooltip } from "antd";
 
 import { CommandBar, HelpPopover } from "../../../components/ui";
+import type { SettlementCandidate } from "../../../api/contracts";
 
 export function SettlementBatchToolbar({
   filters,
   navigationAction,
   disabled = false,
-  selectedCount,
+  selectedCandidates,
   selectingAll,
   pdfExporting,
   xlsxExporting,
@@ -26,11 +27,12 @@ export function SettlementBatchToolbar({
   onExportXlsx,
   onWithdraw,
   onInitiate,
+  onClearSelection,
 }: {
   filters?: ReactNode;
   navigationAction?: ReactNode;
   disabled?: boolean;
-  selectedCount: number;
+  selectedCandidates: readonly SettlementCandidate[];
   selectingAll: boolean;
   pdfExporting: boolean;
   xlsxExporting: boolean;
@@ -42,7 +44,13 @@ export function SettlementBatchToolbar({
   onExportXlsx: () => void;
   onWithdraw: () => void;
   onInitiate: () => void;
+  onClearSelection: () => void;
 }) {
+  const selectedCount = selectedCandidates.length;
+  const technicalCount = useMemo(
+    () => selectedCandidates.filter((item) => item.feeType === "technical_service").length,
+    [selectedCandidates],
+  );
   const empty = disabled || !selectedCount || selectingAll;
   return (
     <CommandBar
@@ -57,6 +65,19 @@ export function SettlementBatchToolbar({
         <HelpPopover label="结算合表说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
           同一负责人、同一月份、同一费用类型下的多个伦理号自动合表。饲养费与技术服务费分别出单。
         </HelpPopover>
+      }
+      selection={
+        selectedCount || selectingAll
+          ? {
+              count: selectedCount,
+              description: selectedCount
+                ? `饲养费 ${selectedCount - technicalCount} 项、技术服务费 ${technicalCount} 项`
+                : undefined,
+              onClear: onClearSelection,
+              pending: selectingAll || batchStarting || batchWithdrawing,
+              pendingText: selectingAll ? "正在读取筛选结果…" : undefined,
+            }
+          : undefined
       }
       actions={
         <>

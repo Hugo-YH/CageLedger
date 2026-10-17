@@ -1,14 +1,16 @@
 import { Checkbox, Tag, Typography, type TableProps } from "antd";
+import { FeeTypeTag } from "../../../components/BillingTags";
+import { workflowTagColor } from "../../../components/billingTagColors";
 
 import type { SettlementCandidate, SettlementCandidateListParams } from "../../../api/contracts";
 import { SettlementCandidateActions } from "./SettlementCandidateActions";
 import { SettlementColumnTitle } from "./SettlementColumnTitle";
 
-const candidateWorkflowStatusMeta: Record<string, { label: string; color: string }> = {
-  statement_generated: { label: "已生成", color: "gold" },
-  statement_sent: { label: "已发起", color: "processing" },
-  statement_locked: { label: "已归档", color: "purple" },
-  statement_archived: { label: "未归档（已登记）", color: "green" },
+const candidateWorkflowStatusMeta: Record<string, { label: string }> = {
+  statement_generated: { label: "已生成" },
+  statement_sent: { label: "已发起" },
+  statement_locked: { label: "已归档" },
+  statement_archived: { label: "未归档（已登记）" },
 };
 
 export interface SettlementColumnsOptions {
@@ -90,7 +92,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         />
       ),
       render: (_: unknown, candidate: SettlementCandidate) => {
-        if (key === "feeType") return <Tag>{candidate.feeType === "technical_service" ? "技术服务费" : "饲养费"}</Tag>;
+        if (key === "feeType") return <FeeTypeTag feeType={candidate.feeType} />;
         if (key === "iacuc") {
           const text = candidate.iacucs.join("、") || candidate.error || "待检查";
           return (
@@ -107,7 +109,9 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         if (key === "workflow") {
           if (!candidate.hasWorkflow) return <Tag>未发起</Tag>;
           const meta = candidateWorkflowStatusMeta[candidate.workflowStatus || ""];
-          return meta ? <Tag color={meta.color}>{meta.label}</Tag> : <Tag color="processing">已发起</Tag>;
+          return (
+            <Tag color={workflowTagColor(candidate.workflowStatus || "statement_sent")}>{meta?.label || "已发起"}</Tag>
+          );
         }
         if (key === "amount") return candidate.totalAmount == null ? "-" : `¥${candidate.totalAmount.toFixed(2)}`;
         return candidate[key];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createButtonConfig, createTheme, resolveTheme } from "./visual-system.mjs";
+import { createButtonConfig, createTheme, resolveTheme, tagColors } from "./visual-system.mjs";
 
 function rgb(color: string, background = [255, 255, 255]): number[] {
   if (color.startsWith("#")) {
@@ -97,5 +97,15 @@ describe.each(["light", "dark"] as const)("%s visual system", (mode) => {
         4.5,
       );
     }
+  });
+
+  it("keeps fee and document preset labels readable in both themes", () => {
+    const token = resolveTheme(mode);
+    const tag = createTheme(mode).components!.Tag!;
+    for (const preset of ["green", "magenta", "blue", "purple", "orange"] as const) {
+      const text = tag[`${preset}7`] ?? token[`${preset}7`];
+      expect(contrast(text, token[`${preset}1`]), preset).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(tagColors.feeType.feeding).toBe("green");
   });
 });

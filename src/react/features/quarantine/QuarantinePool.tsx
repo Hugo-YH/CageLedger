@@ -10,7 +10,7 @@ import { speciesLabel } from "../../../domain/intake";
 import type { IntakeBatch } from "../../../contracts/intake";
 import type { QuarantineSource } from "../../../contracts/quarantine";
 import { useQuarantineSources } from "../../api/quarantine";
-import { id } from "./shared";
+import { id, quarantineStatusColor } from "./shared";
 
 export function QuarantinePool({
   onCreate,
@@ -150,7 +150,10 @@ export function QuarantinePool({
             { title: "种类", render: (_, s) => speciesLabel(s.species) || "—" },
             { title: "数量", dataIndex: "quantity" },
             { title: "课题组", dataIndex: "pi" },
-            { title: "检疫状态", render: (_, s) => <Tag>{s.quarantineStatus}</Tag> },
+            {
+              title: "检疫状态",
+              render: (_, s) => <Tag color={quarantineStatusColor(s.quarantineStatus)}>{s.quarantineStatus}</Tag>,
+            },
             {
               title: "关联检疫批次",
               render: (_, s) => (

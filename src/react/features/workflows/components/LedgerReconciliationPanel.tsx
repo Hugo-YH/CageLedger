@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { tagColors } from "../../../../theme/visual-system.mjs";
 import { Alert, Button, Card, Empty, Form, Input, Modal, Select, Space, Tag, Typography } from "antd";
 
 import {
@@ -212,7 +213,15 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
             key: "status",
             title: title("status", "状态", allocationOptions.status),
             render: (_, item) => (
-              <Tag color={item.status === "confirmed" ? "green" : item.status === "draft" ? "gold" : "default"}>
+              <Tag
+                color={
+                  item.status === "confirmed"
+                    ? tagColors.status.success
+                    : item.status === "draft"
+                      ? tagColors.status.warning
+                      : tagColors.status.default
+                }
+              >
                 {item.status === "draft" ? "草稿" : item.status === "confirmed" ? "已确认" : "已撤销"}
               </Tag>
             ),

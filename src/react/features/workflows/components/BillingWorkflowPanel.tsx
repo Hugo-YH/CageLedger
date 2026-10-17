@@ -13,7 +13,9 @@ import { useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows"
 import { useBatchAdvanceWorkflow } from "../../../api/useBatchAdvanceWorkflow";
 import { CommandBar, DataTable, HelpPopover } from "../../../components/ui";
 import { Pager } from "../../../components/WorkspaceUi";
-import { reimbursementReturnStatus } from "../../../../domain/workflowStatus";
+import { tagColors } from "../../../../theme/visual-system.mjs";
+import { FeeTypeTag, ReimbursementReturnTag } from "../../../components/BillingTags";
+import { workflowTagColor } from "../../../components/billingTagColors";
 import { QueryFeedback } from "./LedgerListShared";
 import { WorkflowColumnTitle } from "./WorkflowColumnTitle";
 import { WorkflowDetailModal } from "./WorkflowDetailModal";
@@ -24,13 +26,13 @@ import { WorkflowTableActions } from "./WorkflowTableActions";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 
-const workflowStatusMeta: Record<string, { label: string; color: string }> = {
-  statement_generated: { label: "已生成", color: "gold" },
-  statement_sent: { label: "已发起", color: "blue" },
-  statement_archived: { label: "未归档", color: "green" },
-  statement_locked: { label: "已归档", color: "purple" },
-  statement_signed_returned: { label: "已交回登记（历史）", color: "default" },
-  submitted_to_finance: { label: "已提交财务（历史）", color: "default" },
+const workflowStatusMeta: Record<string, { label: string }> = {
+  statement_generated: { label: "已生成" },
+  statement_sent: { label: "已发起" },
+  statement_archived: { label: "未归档" },
+  statement_locked: { label: "已归档" },
+  statement_signed_returned: { label: "已交回登记（历史）" },
+  submitted_to_finance: { label: "已提交财务（历史）" },
 };
 
 export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
@@ -217,7 +219,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       title: "费用类型",
       width: 110,
       render: (_: unknown, item: BillingWorkflow) => (
-        <Tag>{item.sourceType === "pi_merged_technical_service" ? "技术服务费" : "饲养费"}</Tag>
+        <FeeTypeTag feeType={item.sourceType === "pi_merged_technical_service" ? "technical_service" : "feeding"} />
       ),
     },
     { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 100 },
@@ -255,20 +257,24 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
         return (
           <Space size={4} orientation="vertical">
-            <Tag color={item.workflowStatus === "statement_locked" ? "purple" : "default"}>
+            <Tag
+              color={
+                item.workflowStatus === "statement_locked"
+                  ? tagColors.workflow.statement_locked
+                  : tagColors.status.default
+              }
+            >
               {item.workflowStatus === "statement_locked" ? "已归档" : "未归档"}
             </Tag>
             {showSubStatuses ? (
               <>
-                <Tag color={item.signedStatementReturned ? "success" : "default"}>
+                <Tag color={item.signedStatementReturned ? tagColors.document.statement : tagColors.status.default}>
                   {item.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
                 </Tag>
-                {reimbursementRequired ? (
-                  <Tag color={reimbursementReturnStatus(item).color}>{reimbursementReturnStatus(item).label}</Tag>
-                ) : null}
+                {reimbursementRequired ? <ReimbursementReturnTag workflow={item} /> : null}
               </>
             ) : (
-              <Tag color={workflowStatusMeta[item.workflowStatus]?.color || "default"}>
+              <Tag color={workflowTagColor(item.workflowStatus)}>
                 {workflowStatusMeta[item.workflowStatus]?.label || item.workflowStatus}
               </Tag>
             )}

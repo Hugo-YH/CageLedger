@@ -1,4 +1,5 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
+import { tagColors } from "../../../theme/visual-system.mjs";
 import { useState } from "react";
 import {
   Alert,
@@ -17,7 +18,7 @@ import {
 } from "antd";
 import type { QuarantineActivity, QuarantineDetail, QuarantinePage } from "../../../contracts/quarantine";
 import { useQuarantineQuery } from "../../api/quarantine";
-import { methodLabels } from "./shared";
+import { methodLabels, quarantineTestStateColor } from "./shared";
 import { speciesLabel } from "../../../domain/intake";
 
 const actionLabels: Record<string, string> = {
@@ -125,7 +126,11 @@ export function BatchOverview({
         {
           key: "state",
           label: "检疫状态",
-          children: <Tag color={b.completedAt ? "success" : "processing"}>{b.completedAt ? "已检疫" : "检疫中"}</Tag>,
+          children: (
+            <Tag color={b.completedAt ? tagColors.status.success : tagColors.status.processing}>
+              {b.completedAt ? "已检疫" : "检疫中"}
+            </Tag>
+          ),
         },
         { key: "sources", label: "覆盖来源", children: `${b.sources.length} 项` },
         { key: "records", label: "检测记录", children: `${detail.tests.length} 条` },
@@ -198,7 +203,7 @@ export function BatchOverview({
                   {
                     title: "状态",
                     render: (_, test) => (
-                      <Tag color={test.state === "issued" ? "success" : "processing"}>
+                      <Tag color={quarantineTestStateColor(test.state)}>
                         {test.state === "issued" ? "已出具" : "草稿"}
                       </Tag>
                     ),

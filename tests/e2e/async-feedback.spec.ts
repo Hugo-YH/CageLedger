@@ -43,7 +43,7 @@ for (const recording of [false, true]) {
     await openWorkflowCenter(page);
     const row = page.getByRole("row").filter({ hasText: "甲" });
     const trigger = row.getByRole("button", { name: recording ? "查看" : "登记", exact: true });
-    const detailDialog = page.getByRole("dialog").filter({ hasText: "流程记录" }).first();
+    const detailDialog = page.getByRole("dialog").filter({ hasText: "结算流程详情" }).first();
     const openForm = async () => {
       if (!recording) {
         await trigger.click();

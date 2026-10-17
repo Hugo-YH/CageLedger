@@ -376,8 +376,9 @@ export function SettlementCandidateList({
         batchStarting={batchStarting}
         batchWithdrawing={batchWithdrawing}
         pdfExporting={pdfExport.isExporting}
-        selectedCount={selectedCandidates.length}
+        selectedCandidates={selectedCandidates}
         selectingAll={selectingAll}
+        onClearSelection={selection.clear}
         withdrawableCount={withdrawableSelected.length}
         xlsxExporting={xlsxExporting}
         onExportPdf={() => void exportCandidates(selectedCandidates)}

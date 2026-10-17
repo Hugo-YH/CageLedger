@@ -15,6 +15,16 @@
   padding: 20px 24px 24px;
 }
 
+.workflow-detail-modal .workflow-detail-content {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.workflow-detail-modal .workflow-detail-section > .ant-typography {
+  margin: 0 0 var(--space-4);
+}
+
 [data-feature="workflow"] .workflow-row-actions {
   display: grid;
   grid-template-columns: repeat(3, 64px);

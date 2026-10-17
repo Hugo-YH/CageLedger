@@ -9,6 +9,33 @@ export const visualSystem = {
     '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"',
 };
 
+/** Ant preset categories and semantic status colors shared by every business page. */
+export const tagColors = {
+  status: {
+    default: "default",
+    processing: "processing",
+    success: "success",
+    warning: "warning",
+    error: "error",
+  },
+  feeType: { feeding: "green", technical_service: "magenta" },
+  document: { statement: "blue", reimbursement: "green" },
+  workflow: {
+    statement_generated: "gold",
+    statement_sent: "blue",
+    statement_archived: "green",
+    statement_locked: "purple",
+    statement_signed_returned: "default",
+    submitted_to_finance: "default",
+  },
+  claim: {
+    pending_submission: "warning",
+    reimbursing: "processing",
+    completed: "success",
+    void: "default",
+  },
+};
+
 /** @param {"light" | "dark"} mode @param {{ mobile?: boolean, motion?: boolean }} options
  * @returns {import("antd").ThemeConfig} */
 export function createTheme(mode, { mobile = false, motion = true } = {}) {
@@ -68,6 +95,7 @@ export function createTheme(mode, { mobile = false, motion = true } = {}) {
       },
       Menu: { darkItemSelectedBg: primaryControl, darkItemSelectedColor: palette.colorTextLightSolid },
       Tag: {
+        ...(dark ? { purple7: palette.purple8 } : {}),
         colorSuccess: palette.green8,
         colorSuccessBg: palette.colorSuccessBg,
         colorWarning: dark ? palette.gold8 : palette.gold9,

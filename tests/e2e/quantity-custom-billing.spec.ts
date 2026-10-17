@@ -1,26 +1,52 @@
-import { expect, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
+import { expect, openQuantityEntry, openSavedQuantitySheets, selectAntOptionByKeyboard, test } from "./fixtures";
+
+let generatedSheetId = "";
+test.afterEach(async ({ page }) => {
+  if (!generatedSheetId) return;
+  const response = await page.request.get(`/api/quantity-sheets/${generatedSheetId}`);
+  if (response.ok()) {
+    const { item } = await response.json();
+    const removed = await page.request.delete(`/api/quantity-sheets/${generatedSheetId}`, {
+      data: { expectedUpdatedAt: item.updatedAt },
+    });
+    expect(removed.ok(), await removed.text()).toBeTruthy();
+  }
+  generatedSheetId = "";
+});
 
 test("full-balance custom pricing saves without a fixed count and restores on edit", async ({ page }, testInfo) => {
   const login = await page.request.post("/api/auth/login", { data: { username: "admin", password: "admin123" } });
   expect(login.ok()).toBe(true);
-  const room = await page.request.post("/api/rooms", {
-    data: {
-      item: {
-        id: "room-custom-all",
-        name: "E2E 全部自定义兔房",
-        facility: "bioisland",
-        defaultSpecies: "rabbit",
-        defaultBillingItem: "rabbit",
-        defaultCustomerType: "internal",
-        roomManager: "测试管理员",
+  const existingRooms = (await (await page.request.get("/api/quantity-sheet-rooms")).json()) as {
+    items: Array<{ id: string; name: string }>;
+  };
+  const existingRoom = existingRooms.items.find((item) => item.id === "room-custom-all");
+  if (existingRoom) expect(existingRoom.name).toBe("E2E 全部自定义兔房");
+  else {
+    const room = await page.request.post("/api/rooms", {
+      data: {
+        item: {
+          id: "room-custom-all",
+          name: "E2E 全部自定义兔房",
+          facility: "bioisland",
+          defaultSpecies: "rabbit",
+          defaultBillingItem: "rabbit",
+          defaultCustomerType: "internal",
+          roomManager: "测试管理员",
+        },
       },
-    },
-  });
-  expect(room.ok()).toBe(true);
+    });
+    expect(room.ok(), await room.text()).toBe(true);
+  }
   await page.goto("/app");
   await openQuantityEntry(page);
-  await page.getByRole("combobox", { name: "房间号", exact: true }).click();
-  await page.locator(".ant-select-dropdown").getByText("E2E 全部自定义兔房", { exact: true }).click();
+  const rooms = (await (await page.request.get("/api/quantity-sheet-rooms")).json()) as {
+    items: Array<{ id: string }>;
+  };
+  const roomIndex = rooms.items.findIndex((item) => item.id === "room-custom-all");
+  expect(roomIndex).toBeGreaterThanOrEqual(0);
+  await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间号", exact: true }), roomIndex + 1);
+  await expect(page.locator(".quantity-room-select")).toContainText("E2E 全部自定义兔房");
   await page.getByRole("combobox", { name: "IACUC 编号", exact: true }).fill("E2E-ALL-CUSTOM");
   await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E 全部自定义负责人");
   await page.getByLabel("第 1 行结余总数", { exact: true }).fill("47");
@@ -49,6 +75,7 @@ test("full-balance custom pricing saves without a fixed count and restores on ed
   const response = await savedResponse;
   expect(response.status()).toBe(201);
   const { item } = await response.json();
+  generatedSheetId = item.id;
   expect(item.customBillingSegments[0]).toMatchObject({ quantityMode: "all", quantity: null, unitPrice: 3 });
   await expect(page.getByRole("status")).toContainText("统计表已保存");
   const read = await page.request.get(`/api/quantity-sheets/${item.id}`);

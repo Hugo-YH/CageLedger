@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { Alert, Button, Card, Collapse, Empty, Form, Modal, Select, Space, Tabs, Tag, Typography } from "antd";
 import type { QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { downloadQuarantine, useQuarantineWrite } from "../../api/quarantine";
-import { id, methodLabels } from "./shared";
+import { id, methodLabels, quarantineTestStateColor } from "./shared";
 import { ReportInformation, ReportProjects, ReportSamples } from "./ReportFields";
 import { ReportResults } from "./ReportResults";
 import { RecordAttachments } from "./RecordAttachments";
@@ -76,7 +76,7 @@ export function TestDetail({
       title={
         <Space wrap>
           {methodLabels[test.method]}
-          <Tag>{test.state === "issued" ? "已出具" : "草稿"}</Tag>
+          <Tag color={quarantineTestStateColor(test.state)}>{test.state === "issued" ? "已出具" : "草稿"}</Tag>
           {test.retestOf && <Tag>复检</Tag>}
           {test.correctionOf && <Tag>更正版本</Tag>}
         </Space>
