@@ -1159,3 +1159,8 @@
 .app-command-bar.app-command-bar-list {
   margin-block-end: 0;
 }
+
+.app-modal-root .ant-modal-render {
+  /* Ant adds this wrapper for modalRender; preserve bounded dialogs' height chain. */
+  height: 100%;
+}

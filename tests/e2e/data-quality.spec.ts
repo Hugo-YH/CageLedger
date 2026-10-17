@@ -74,12 +74,19 @@ async function checkLayout(page: Page, info: TestInfo, name: string, dialog?: Lo
             const select = element.querySelector<HTMLElement>(".data-quality-scan-select");
             const selectReady =
               !select || Math.abs(select.getBoundingClientRect().height - (options.touch ? 40 : 32)) < 0.1;
-            return bounds && document.documentElement.scrollWidth <= innerWidth && buttonReady && selectReady;
+            const body = element.querySelector<HTMLElement>(".modal-shell-body")?.getBoundingClientRect();
+            return {
+              bounds,
+              bodyFits: !body || (body.top >= rect.top - 1 && body.bottom <= rect.bottom + 1),
+              pageFits: document.documentElement.scrollWidth <= innerWidth,
+              buttonReady,
+              selectReady,
+            };
           },
           { modal: Boolean(dialog), touch },
         ),
       )
-      .toBe(true);
+      .toEqual({ bounds: true, bodyFits: true, pageFits: true, buttonReady: true, selectReady: true });
     const metrics = await target.evaluate((element) => {
       const body = element.querySelector<HTMLElement>(".modal-shell-body");
       const style = getComputedStyle(body || element);
