@@ -136,6 +136,8 @@ test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", a
   await firstWorkflowRow.getByRole("button", { name: "撤回", exact: true }).click();
   const revokeModal = page.getByRole("dialog").filter({ hasText: "撤回结算流程" });
   await revokeModal.getByLabel("撤回原因").fill("测试撤回已发起流程");
+  // Ant's prepare phase can look stable before the actual entry transform starts.
+  await expect(revokeModal).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
   await revokeModal.getByRole("button", { name: "确认撤回" }).click();
   // 退回已生成后该流程不再出现在单据跟踪（已生成阶段由结算管理处理）
   await expect(page.getByRole("row", { name: /E2E 台账负责人 1/ })).toHaveCount(0, { timeout: 10_000 });
