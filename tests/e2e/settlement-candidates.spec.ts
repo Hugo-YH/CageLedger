@@ -75,6 +75,76 @@ test.afterEach(async ({ page }) => {
   for (const id of sheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
 });
 
+test("selecting all settlement candidates fetches later pages concurrently without starting a settlement", async ({
+  page,
+}) => {
+  const candidates = Array.from({ length: 301 }, (_, index) => ({
+    id: `parallel-candidate-${index + 1}`,
+    month: "2026-09",
+    pi: `并行读取负责人 ${String(index + 1).padStart(3, "0")}`,
+    iacucs: [`PARALLEL-${String(index + 1).padStart(3, "0")}`],
+    manager: "合成登记员",
+    totalAmount: 100 + index,
+    hasWorkflow: false,
+    workflowStatus: "",
+  }));
+  const reads: Array<{ limit: number; offset: number }> = [];
+  const held: Array<{ offset: number; fulfill: () => Promise<void> }> = [];
+  await page.route("**/api/settlement-candidates?*", async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const limit = Number(params.get("limit") || 10);
+    const offset = Number(params.get("offset") || 0);
+    reads.push({ limit, offset });
+    const response = {
+      items: candidates.slice(offset, offset + limit),
+      page: { total: candidates.length, limit, offset },
+      filterOptions: {},
+    };
+    if (limit === 100 && [100, 200, 300].includes(offset)) {
+      held.push({ offset, fulfill: () => route.fulfill({ json: response }) });
+      return;
+    }
+    await route.fulfill({ json: response });
+  });
+
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await openBillingNavigation(page);
+  await page.getByRole("menuitem", { name: /结算列表/ }).click();
+  await expect(page.getByRole("heading", { name: "结算列表", exact: true })).toBeVisible();
+  await expect.poll(() => reads.length).toBe(1);
+  expect(reads[0]).toMatchObject({ offset: 0 });
+  expect(reads[0].limit).toBeGreaterThan(0);
+  expect(reads[0].limit).toBeLessThan(100);
+  await expect(page.getByRole("checkbox", { name: /^选择 .+ 结算项$/ })).toHaveCount(reads[0].limit);
+
+  const settlementWrites: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (
+      request.method() !== "GET" &&
+      /\/api\/(?:billing-statements|billing-workflows|technical-services\/settlements)/.test(path)
+    ) {
+      settlementWrites.push(request.url());
+    }
+  });
+  await page.getByRole("checkbox", { name: "全选当前筛选结果结算项", exact: true }).check();
+  await expect
+    .poll(() => held.map(({ offset }) => offset).sort((left, right) => left - right))
+    .toEqual([100, 200, 300]);
+
+  for (const offset of [300, 200, 100]) await held.find((request) => request.offset === offset)!.fulfill();
+
+  const toolbar = page.getByRole("group", { name: "结算批量操作", exact: true });
+  await toolbar.getByRole("button", { name: "批量发起结算", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
+  await expect(confirmation.getByRole("button", { name: "发起 301 个流程", exact: true })).toBeVisible();
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  expect(settlementWrites).toEqual([]);
+});
+
 test("settlement candidates merge a principal investigator's IACUC sheets", async ({ page }) => {
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");

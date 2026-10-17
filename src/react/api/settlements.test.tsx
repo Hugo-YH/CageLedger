@@ -1,10 +1,11 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as billingCompatibility from "./billing";
 import { requestDownload, requestJson } from "./client";
+import { queryKeys } from "./queryKeys";
 import * as quantityCompatibility from "./quantitySheets";
 import {
   exportSettlementXlsx,
@@ -15,6 +16,7 @@ import {
   useSettlementActions,
 } from "./settlements";
 import { exportServicesPdf, previewServices, useServiceMutation } from "./technicalServices";
+import { invalidateWorkflowQueries } from "./workflows";
 
 vi.mock("./client", () => ({ requestJson: vi.fn(), requestDownload: vi.fn() }));
 const target = { pi: "同一负责人", month: "2099-10", sourceType: "pi_merged_technical_service" as const };
@@ -139,6 +141,43 @@ describe("shared settlement actions", () => {
       body: JSON.stringify({ pi: target.pi, month: target.month }),
     });
     expect(invalidate).not.toHaveBeenCalled();
+    client.clear();
+  });
+
+  it("refreshes each distinct active workflow-related query once and only marks inactive data stale", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const targets: Array<{ id: string; queryKey: readonly unknown[] }> = [
+      { id: "reimbursements", queryKey: queryKeys.reimbursementRoot },
+      { id: "settlement candidates", queryKey: queryKeys.settlementCandidatesRoot },
+      { id: "workflows", queryKey: queryKeys.workflowsRoot },
+      { id: "technical services", queryKey: ["technical-services"] },
+      { id: "reimbursement ledger", queryKey: queryKeys.reimbursementLedgerRoot },
+    ];
+    const requests: string[] = [];
+    const unsubscribes = targets.map(({ id, queryKey }) => {
+      const observer = new QueryObserver(client, {
+        queryKey,
+        queryFn: () => {
+          requests.push(id);
+          return Promise.resolve({ id });
+        },
+      });
+      return observer.subscribe(() => undefined);
+    });
+
+    await vi.waitFor(() => expect(requests).toHaveLength(5));
+    await vi.waitFor(() =>
+      targets.forEach(({ queryKey }) => expect(client.getQueryState(queryKey)?.fetchStatus).toBe("idle")),
+    );
+    requests.length = 0;
+    await invalidateWorkflowQueries(client);
+    expect(requests.sort()).toEqual(targets.map(({ id }) => id).sort());
+
+    unsubscribes.forEach((unsubscribe) => unsubscribe());
+    requests.length = 0;
+    await invalidateWorkflowQueries(client);
+    expect(requests).toHaveLength(0);
+    targets.forEach(({ queryKey }) => expect(client.getQueryState(queryKey)?.isInvalidated).toBe(true));
     client.clear();
   });
 });

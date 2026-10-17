@@ -15,7 +15,9 @@ from server_app.repositories.billing_candidates import (
 SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS = 15
 
 
-def list_settlement_candidates(conn, filters, calculate, source_type="quantity_sheet", now=None):
+def list_settlement_candidates(
+    conn, filters, calculate, source_type="quantity_sheet", now=None, *, prepare_calculations=None
+):
     response_cache_key = cache_key(
         "quantity_sheets::settlement_candidates::list",
         source_type=source_type,
@@ -38,12 +40,12 @@ def list_settlement_candidates(conn, filters, calculate, source_type="quantity_s
     sort_key = filters.get("sortKey")
     column_filters = filters.get("columnFilters") or {}
     if sort_key == "amount" or bool(column_filters.get("amount")):
-        _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now)
+        _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now, prepare_calculations)
 
     payload = list_billing_candidate_snapshots_page(conn, source_type, filters)
     stale_page_keys = [(item["month"], item["pi"]) for item in payload["items"] if item.get("isStale")]
     if stale_page_keys:
-        _refresh_snapshot_keys(conn, stale_page_keys, calculate, source_type, now)
+        _refresh_snapshot_keys(conn, stale_page_keys, calculate, source_type, now, prepare_calculations)
         payload = list_billing_candidate_snapshots_page(conn, source_type, filters)
 
     managers = _quantity_sheet_managers(conn, [(item["month"], item["pi"]) for item in payload["items"]])
@@ -112,7 +114,7 @@ def update_settlement_candidate_snapshot_from_statement(
     return _public_candidate(snapshot) if snapshot else None
 
 
-def _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now):
+def _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now, prepare_calculations):
     stale_keys = [
         (item["month"], item["pi"])
         for item in list_billing_candidate_snapshot_keys(
@@ -123,11 +125,14 @@ def _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now
             exclude_amount=True,
         )
     ]
-    _refresh_snapshot_keys(conn, stale_keys, calculate, source_type, now)
+    _refresh_snapshot_keys(conn, stale_keys, calculate, source_type, now, prepare_calculations)
 
 
-def _refresh_snapshot_keys(conn, keys, calculate, source_type, now):
-    for month, pi_name in sorted({(month, pi_name) for month, pi_name in keys if month and pi_name}):
+def _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calculations):
+    keys = sorted({(month, pi_name) for month, pi_name in keys if month and pi_name})
+    if keys and prepare_calculations is not None:
+        prepare_calculations(keys)
+    for month, pi_name in keys:
         group = get_quantity_settlement_group(conn, month, pi_name)
         if not group:
             continue

@@ -9,6 +9,7 @@ from server_app.domains.billing.snapshot_codec import (
     SnapshotStorageError,
     decode_records,
     encode_records,
+    parsed_summary,
     summary_payload,
 )
 
@@ -60,6 +61,71 @@ def read_records(conn, version_id):
     if any(STORAGE_MARKER in json.loads(row[2]) for row in rows):
         raise SnapshotStorageError("账单快照压缩块缺失，不能使用实时数据替代")
     return rows
+
+
+def read_lines_many(conn, version_ids):
+    """Batch I/O, preserving complete block checks and per-version errors.
+
+    Legacy JSON is decoded once rather than once for marker inspection and
+    again for the caller. No financial values are derived from live inputs.
+    """
+    identities = list(dict.fromkeys(version_ids))
+    results = {}
+    if not identities:
+        return results
+    has_blocks = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='billing_statement_line_blocks'"
+    ).fetchone()
+    for offset in range(0, len(identities), 200):
+        batch = identities[offset : offset + 200]
+        marks = ",".join("?" for _ in batch)
+        rows_by_version = {identity: [] for identity in batch}
+        for row in conn.execute(
+            f"""SELECT version_id,id,line_date,payload FROM billing_statement_version_lines
+                WHERE version_id IN ({marks}) ORDER BY version_id,line_date,rowid""",
+            batch,
+        ):
+            rows_by_version[row[0]].append(list(row)[1:])
+        blocks = {}
+        if has_blocks:
+            for row in conn.execute(
+                f"""SELECT version_id,codec,raw_bytes,raw_sha256,line_count,payload
+                    FROM billing_statement_line_blocks WHERE version_id IN ({marks})""",
+                batch,
+            ):
+                blocks[row[0]] = dict(
+                    zip(("codec", "raw_bytes", "raw_sha256", "line_count", "payload"), list(row)[1:], strict=True)
+                )
+        for identity in batch:
+            rows = rows_by_version.pop(identity)
+            try:
+                results[identity] = _parsed_lines(identity, rows, blocks.get(identity))
+            except ValueError as exc:
+                results[identity] = exc
+    return results
+
+
+def _parsed_lines(version_id, rows, block):
+    if block:
+        records = decode_records(version_id, block)
+        if len(records) != len(rows):
+            raise SnapshotStorageError("账单快照摘要与压缩块不一致，不能使用实时数据替代")
+        lines = []
+        for record, row in zip(records, rows, strict=True):
+            if record[:2] != row[:2]:
+                raise SnapshotStorageError("账单快照摘要与压缩块不一致，不能使用实时数据替代")
+            line, summary = parsed_summary(record[2])
+            if summary != row[2]:
+                raise SnapshotStorageError("账单快照摘要与压缩块不一致，不能使用实时数据替代")
+            lines.append(line)
+        return lines
+    lines = []
+    for row in rows:
+        line = json.loads(row[2])
+        if STORAGE_MARKER in line:
+            raise SnapshotStorageError("账单快照压缩块缺失，不能使用实时数据替代")
+        lines.append(line)
+    return lines
 
 
 def insert_records(conn, version_id, records):

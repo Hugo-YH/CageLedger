@@ -3,6 +3,29 @@
 import json
 
 
+def frozen_workflow_versions(conn, keys, source_type, statuses):
+    """Select the same latest row as frozen_workflow_version for each PI scope."""
+    keys = list(dict.fromkeys(keys))
+    result = {}
+    for offset in range(0, len(keys), 200):
+        batch = keys[offset : offset + 200]
+        scopes = ",".join("(?,?)" for _ in batch)
+        marks = ",".join("?" for _ in statuses)
+        rows = conn.execute(
+            f"""WITH requested(month,pi) AS (VALUES {scopes})
+                SELECT requested.month,requested.pi,v.payload,v.version_status
+                FROM requested JOIN billing_workflows w
+                  ON w.month=requested.month AND COALESCE(json_extract(w.payload,'$.pi'),'')=requested.pi
+                LEFT JOIN billing_statement_versions v ON v.id=w.current_version_id AND v.workflow_id=w.id
+                WHERE w.source_type=? AND w.workflow_status IN ({marks})
+                ORDER BY w.latest_event_at DESC,w.id""",
+            [*[value for key in batch for value in key], source_type, *statuses],
+        )
+        for row in rows:
+            result.setdefault((row["month"], row["pi"]), row)
+    return result
+
+
 def frozen_workflow_version(conn, month, pi, source_type, statuses, *, source_id="", iacuc=""):
     placeholders = ",".join("?" for _ in statuses)
     scope = "COALESCE(json_extract(w.payload, '$.pi'), '')=?"

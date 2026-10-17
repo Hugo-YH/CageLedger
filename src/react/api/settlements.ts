@@ -123,15 +123,24 @@ export function fetchSettlementCandidates(params: SettlementCandidateListParams,
 export async function fetchAllSettlementCandidates(params: SettlementCandidateListParams, signal?: AbortSignal) {
   const limit = 100;
   const firstPage = await fetchSettlementCandidates({ ...params, limit, offset: 0 }, signal);
-  const items = [...firstPage.items];
   const total = firstPage.page.total;
+  const offsets = Array.from(
+    { length: Math.ceil(Math.max(total - limit, 0) / limit) },
+    (_, index) => (index + 1) * limit,
+  );
+  const concurrency = 3;
+  const pages = [firstPage];
 
-  for (let offset = limit; offset < total; offset += limit) {
-    const nextPage = await fetchSettlementCandidates({ ...params, limit, offset }, signal);
-    items.push(...nextPage.items);
+  for (let index = 0; index < offsets.length; index += concurrency) {
+    const nextPages = await Promise.all(
+      offsets
+        .slice(index, index + concurrency)
+        .map((offset) => fetchSettlementCandidates({ ...params, limit, offset }, signal)),
+    );
+    pages.push(...nextPages);
   }
 
-  return items;
+  return pages.flatMap((page) => page.items);
 }
 
 /** Compatibility alias used by the settlement candidate list. */

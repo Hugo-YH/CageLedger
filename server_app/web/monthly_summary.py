@@ -1,7 +1,7 @@
 from collections import defaultdict
 from http import HTTPStatus
 
-from server_app.domains.billing.frozen import frozen_statement
+from server_app.domains.billing.frozen import frozen_statements
 from server_app.domains.billing.monthly_summary import (
     EXCEL_CONTENT_TYPE,
     MONTH_PATTERN,
@@ -55,20 +55,25 @@ def export_monthly_billing_summary(
                 clean_text(item.get("pi", "")) for item in [*sheets, *service_sheets] if clean_text(item.get("pi", ""))
             }:
                 reimbursement_by_pi[pi_name] = build_pi_reimbursement_context(workflows_by_pi.get(pi_name, []))
+            snapshots = frozen_statements(
+                conn, [(month, pi) for pi in {s["pi"] for s in sheets}], "pi_merged_quantity_sheet"
+            )
+            frozen_lines = {}
+            for (_, pi), snapshot in snapshots.items():
+                if isinstance(snapshot, ValueError):
+                    raise snapshot
+                frozen_lines[pi] = snapshot[1]
+            applications = read_applications_by_iacuc(conn)
             rows = build_monthly_summary_rows(
                 month,
                 sheets,
                 read_rooms_for_quantity_sheets(conn, sheets),
-                read_applications_by_iacuc(conn),
+                applications,
                 read_principal_type_by_pi(conn),
                 reimbursement_by_pi,
-                frozen_lines_by_pi={
-                    pi: frozen[1]
-                    for pi in {s["pi"] for s in sheets}
-                    if (frozen := frozen_statement(conn, month, pi, "pi_merged_quantity_sheet"))
-                },
+                frozen_lines_by_pi=frozen_lines,
             )
-            rows = merge_service_rows(rows, service_sheets, read_applications_by_iacuc(conn), reimbursement_by_pi)
+            rows = merge_service_rows(rows, service_sheets, applications, reimbursement_by_pi)
             body = build_monthly_summary_xlsx(month, rows)
             at = now_iso()
             audit = audit_event(

@@ -28,15 +28,21 @@ class SnapshotStorageError(ValueError):
 
 
 def summary_payload(payload):
+    return parsed_summary(payload)[1]
+
+
+def parsed_summary(payload):
+    """Decode once when a caller needs both full details and their summary."""
     try:
         line = json.loads(payload)
         if not isinstance(line, dict) or STORAGE_MARKER in line:
             raise ValueError("invalid detail")
-        return json.dumps(
+        summary = json.dumps(
             {**{key: value for key, value in line.items() if key in SUMMARY_KEYS}, STORAGE_MARKER: CODEC},
             ensure_ascii=False,
             separators=(",", ":"),
         )
+        return line, summary
     except (ValueError, TypeError) as exc:
         raise SnapshotStorageError("账单快照明细格式无效，不能压缩") from exc
 

@@ -112,6 +112,17 @@ class ObligationSnapshotSyncTests(unittest.TestCase):
         self.assertEqual((result["iacuc"], result["payableAmount"], result["allocatedAmount"]), ("Z2026001", 100, 80))
         self.assertEqual(len(self.audit()), 0)
 
+    def test_equal_ids_in_another_database_do_not_reuse_the_first_databases_amount(self):
+        self.assertEqual(get_obligation(self.conn, fixture.ADMIN, self.obligation)["item"]["payableAmount"], 100)
+        with closing(sqlite3.connect(":memory:")) as other:
+            other.row_factory = sqlite3.Row
+            fixture.initialize_schema(other)
+            fixture.ReimbursementLedgerTests._insert_statement_on(
+                other, "workflow-a", "version-a", "2026-06", "张教授", "Z2026001", 37.5
+            )
+            self.assertEqual(list_obligations(other, fixture.ADMIN, {})["items"][0]["payableAmount"], 37.5)
+        self.assertEqual(get_obligation(self.conn, fixture.ADMIN, self.obligation)["item"]["payableAmount"], 100)
+
     def test_same_version_reprices_unconfirmed_only_and_audits_once(self):
         original = self.row()
         self.amount(60)

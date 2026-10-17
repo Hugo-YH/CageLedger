@@ -207,6 +207,116 @@ class MonthlyBillingSummaryTests(unittest.TestCase):
         self.assertEqual({str(item) for item in worksheet.merged_cells.ranges}, {"A1:S1"})
         self.assertEqual(worksheet.auto_filter.ref, "A2:S3")
 
+    def test_workbook_preserves_complete_cell_style_matrix(self):
+        rows = [
+            {
+                "pi": "张教授",
+                "facility": "珠江新城",
+                "iacuc": "Z2026001",
+                "funding": "伦理经费-001",
+                "species": "小鼠",
+                "amount": 100.12,
+                "supportAmount": 10.12,
+                "payableAmount": 90,
+                "statementReturned": "已交回",
+                "fundBookNo": "本号-01",
+                "reimbursementFormNo": "报销-01",
+                "reimbursementAmount": 12.34,
+                "reimbursementNotes": "报销备注",
+                "projectStartDate": "2026-01-01",
+                "projectEndDate": "2026-12-31",
+                "notes": "备注",
+                "roomNames": "8101",
+                "technicalServiceAmount": 2.5,
+            },
+            {
+                "pi": "李教授",
+                "facility": "生物岛",
+                "iacuc": "Z2026002",
+                "funding": "伦理经费-002",
+                "species": "大鼠",
+                "amount": 200.24,
+                "supportAmount": 20.24,
+                "payableAmount": 180,
+                "statementReturned": "",
+                "fundBookNo": "",
+                "reimbursementFormNo": "",
+                "reimbursementAmount": 0,
+                "reimbursementNotes": "",
+                "projectStartDate": "2026-02-01",
+                "projectEndDate": "2026-11-30",
+                "notes": "",
+                "roomNames": "B201",
+                "technicalServiceAmount": 0,
+            },
+        ]
+        workbook = openpyxl.load_workbook(io.BytesIO(build_monthly_summary_xlsx("2026-06", rows)), data_only=False)
+        worksheet = workbook.active
+        wrapped_columns = {5, 6, 14, 17, 18}
+        numeric_columns = {7, 8, 9, 13, 19}
+
+        self.assertEqual(worksheet["A1"].font.name, "Microsoft YaHei")
+        self.assertEqual(worksheet["A1"].font.sz, 14)
+        self.assertTrue(worksheet["A1"].font.bold)
+        self.assertEqual(worksheet["A1"].alignment.horizontal, "center")
+        self.assertEqual(worksheet["A1"].alignment.vertical, "center")
+        for column in range(1, 20):
+            header = worksheet.cell(2, column)
+            self.assertEqual(header.font.name, "Microsoft YaHei")
+            self.assertEqual(header.font.sz, 10)
+            self.assertTrue(header.font.bold)
+            self.assertEqual(header.fill.fill_type, "solid")
+            self.assertEqual(header.fill.fgColor.rgb, "00D9EAD3")
+            self.assertTrue(header.alignment.wrap_text)
+            self.assertEqual(header.alignment.horizontal, "center")
+            self.assertEqual(header.alignment.vertical, "center")
+            self.assertEqual(header.border.left.style, "thin")
+            self.assertEqual(header.border.right.style, "thin")
+            self.assertEqual(header.border.top.style, "thin")
+            self.assertEqual(header.border.bottom.style, "thin")
+            for row in range(3, 5):
+                cell = worksheet.cell(row, column)
+                self.assertEqual(cell.font.name, "Microsoft YaHei")
+                self.assertEqual(cell.font.sz, 10)
+                self.assertFalse(cell.font.bold)
+                self.assertEqual(cell.alignment.horizontal, "center")
+                self.assertEqual(cell.alignment.vertical, "center")
+                self.assertEqual(bool(cell.alignment.wrap_text), column in wrapped_columns)
+                self.assertEqual(cell.number_format, "0.00" if column in numeric_columns else "General")
+                self.assertEqual(cell.border.left.style, "thin")
+                self.assertEqual(cell.border.right.style, "thin")
+                self.assertEqual(cell.border.top.style, "thin")
+                self.assertEqual(cell.border.bottom.style, "thin")
+        self.assertEqual(worksheet["I3"].data_type, "f")
+        self.assertEqual(worksheet["I4"].data_type, "f")
+        self.assertEqual(worksheet["A3"].data_type, "n")
+        self.assertEqual(worksheet["A4"].data_type, "n")
+        self.assertEqual(worksheet.row_dimensions[1].height, 28)
+        self.assertEqual(worksheet.row_dimensions[2].height, 36)
+        self.assertEqual(worksheet.row_dimensions[3].height, 24)
+        self.assertEqual(worksheet.row_dimensions[4].height, 24)
+        self.assertEqual(worksheet.column_dimensions["A"].width, 9)
+        self.assertEqual(worksheet.column_dimensions["S"].width, 19)
+        self.assertEqual({str(item) for item in worksheet.merged_cells.ranges}, {"A1:S1"})
+        self.assertEqual(worksheet.freeze_panes, "A3")
+        self.assertEqual(worksheet.auto_filter.ref, "A2:S4")
+        self.assertTrue(workbook.calculation.fullCalcOnLoad)
+        self.assertTrue(workbook.calculation.forceFullCalc)
+
+    def test_empty_workbook_keeps_the_original_two_row_shape(self):
+        workbook = openpyxl.load_workbook(io.BytesIO(build_monthly_summary_xlsx("2026-06", [])), data_only=False)
+        worksheet = workbook.active
+
+        self.assertEqual(worksheet.max_row, 2)
+        self.assertEqual(worksheet.max_column, 19)
+        self.assertEqual(worksheet.calculate_dimension(), "A1:S2")
+        self.assertEqual(worksheet.auto_filter.ref, "A2:S2")
+        self.assertEqual(worksheet.row_dimensions[1].height, 28)
+        self.assertEqual(worksheet.row_dimensions[2].height, 36)
+        self.assertNotIn(3, worksheet.row_dimensions)
+        self.assertEqual({str(item) for item in worksheet.merged_cells.ranges}, {"A1:S1"})
+        self.assertEqual(worksheet.freeze_panes, "A3")
+
 
 def sheet(sheet_id, iacuc, room_id, room_name, cages):
     return {

@@ -20,7 +20,7 @@ COLUMNS = {key: key for key in ("month", "pi", "iacuc", "manager", "amount", "wo
 LABELS = {"feeding": "饲养费", "technical_service": "技术服务费"}
 
 
-def prepare(conn, filters, calculate, *, column=""):
+def prepare(conn, filters, calculate, *, column="", prepare_calculations=None):
     services_listing.columns(filters, COLUMNS)
     # Keep the existing feeding registry and amount-refresh rules. Source sheets
     # remain protected by their own domains; this list never writes statements.
@@ -34,7 +34,9 @@ def prepare(conn, filters, calculate, *, column=""):
         feeding_filters["sortKey"] = "amount"
     elif feeding_filters.get("sortKey") == "feeType":
         feeding_filters["sortKey"] = "month"
-    list_settlement_candidates(conn, feeding_filters, calculate, "quantity_sheet", now_iso())
+    list_settlement_candidates(
+        conn, feeding_filters, calculate, "quantity_sheet", now_iso(), prepare_calculations=prepare_calculations
+    )
 
 
 def base(conn, actor):
@@ -87,8 +89,8 @@ def where(filters, *, exclude=""):
     return " AND ".join(clauses) or "1", params
 
 
-def list_candidates(conn, actor, filters, calculate):
-    prepare(conn, filters, calculate)
+def list_candidates(conn, actor, filters, calculate, *, prepare_calculations=None):
+    prepare(conn, filters, calculate, prepare_calculations=prepare_calculations)
     source, source_params = base(conn, actor)
     condition, params = where(filters)
     params = [*source_params, *params]
@@ -99,6 +101,8 @@ def list_candidates(conn, actor, filters, calculate):
     total = conn.execute(f"SELECT COUNT(*) FROM ({source}) WHERE {condition}", params).fetchone()[0]
     rows = conn.execute(sql + " LIMIT ? OFFSET ?", [*params, limit, offset]).fetchall()
     stale = [row for row in rows if row["feeType"] == "feeding" and row["stale"]]
+    if stale and prepare_calculations is not None:
+        prepare_calculations([(row["month"], row["pi"]) for row in stale])
     for row in stale:
         refresh_settlement_candidate_snapshot(conn, row["month"], row["pi"], calculate, now=now_iso())
     if stale:
@@ -127,11 +131,11 @@ def list_candidates(conn, actor, filters, calculate):
     }
 
 
-def filter_options(conn, actor, filters, column, calculate):
+def filter_options(conn, actor, filters, column, calculate, *, prepare_calculations=None):
     if column not in COLUMNS:
         raise ValueError("筛选字段无效")
     scoped = {**filters, "columnFilters": {k: v for k, v in filters.get("columnFilters", {}).items() if k != column}}
-    prepare(conn, scoped, calculate, column=column)
+    prepare(conn, scoped, calculate, column=column, prepare_calculations=prepare_calculations)
     source, values = base(conn, actor)
     condition, params = where(filters, exclude=column)
     if column in ("iacuc", "manager"):

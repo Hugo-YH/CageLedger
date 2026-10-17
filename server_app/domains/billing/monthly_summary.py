@@ -5,6 +5,7 @@ from datetime import date
 
 try:
     from openpyxl import Workbook
+    from openpyxl.cell import Cell
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 except ImportError:  # pragma: no cover - deployment dependency validation
     Workbook = None
@@ -222,11 +223,13 @@ def build_monthly_summary_xlsx(month, rows):
     header_fill = PatternFill("solid", fgColor="D9EAD3")
     thin = Side(style="thin", color="000000")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_font = Font(name="Microsoft YaHei", size=10, bold=True)
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     for column, value in enumerate(headers, start=1):
         cell = worksheet.cell(2, column, value)
-        cell.font = Font(name="Microsoft YaHei", size=10, bold=True)
+        cell.font = header_font
         cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.alignment = header_alignment
         cell.border = border
     worksheet.row_dimensions[2].height = 36
 
@@ -234,6 +237,28 @@ def build_monthly_summary_xlsx(month, rows):
     for index, width in enumerate(widths, start=1):
         worksheet.column_dimensions[_excel_column(index)].width = width
 
+    body_font = Font(name="Microsoft YaHei", size=10)
+    body_alignment = Alignment(horizontal="center", vertical="center")
+    wrapped_body_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    # Cell() creates an unregistered prototype, so an empty export retains its two-row sheet shape.
+    body_style_cell = Cell(worksheet, row=3, column=1)
+    body_style_cell.font = body_font
+    body_style_cell.border = border
+    body_style_cell.alignment = body_alignment
+    body_style = body_style_cell._style
+    wrapped_body_style_cell = Cell(worksheet, row=3, column=5)
+    wrapped_body_style_cell.font = body_font
+    wrapped_body_style_cell.border = border
+    wrapped_body_style_cell.alignment = wrapped_body_alignment
+    wrapped_body_style = wrapped_body_style_cell._style
+    numeric_body_style_cell = Cell(worksheet, row=3, column=7)
+    numeric_body_style_cell.font = body_font
+    numeric_body_style_cell.border = border
+    numeric_body_style_cell.alignment = body_alignment
+    numeric_body_style_cell.number_format = "0.00"
+    numeric_body_style = numeric_body_style_cell._style
+    wrapped_columns = (5, 6, 14, 17, 18)
+    numeric_columns = (7, 8, 9, 13, 19)
     for index, row in enumerate(rows, start=1):
         excel_row = index + 2
         values = [
@@ -259,11 +284,13 @@ def build_monthly_summary_xlsx(month, rows):
         ]
         for column, value in enumerate(values, start=1):
             cell = worksheet.cell(excel_row, column, value)
-            cell.font = Font(name="Microsoft YaHei", size=10)
-            cell.border = border
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=column in (5, 6, 14, 17, 18))
-            if column in (7, 8, 9, 13, 19):
-                cell.number_format = "0.00"
+            cell._style = (
+                numeric_body_style
+                if column in numeric_columns
+                else wrapped_body_style
+                if column in wrapped_columns
+                else body_style
+            )
         worksheet.row_dimensions[excel_row].height = 24
 
     worksheet.freeze_panes = "A3"

@@ -6,7 +6,6 @@ import shutil
 
 from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
-from server_app.repositories.workflow_sources import source_fee_type
 from server_app.runtime_logging import log_operation
 from server_app.shared import clean_text, new_id, now_iso
 
@@ -82,6 +81,7 @@ from .repository import (
     upsert_obligation as _upsert_obligation,
 )
 from .snapshot_sync import sync_same_version_obligation
+from .source_fields import source_fields
 
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 MAX_ATTACHMENTS_PER_CLAIM = 10
@@ -558,16 +558,14 @@ def sync_settlement_obligations(conn, actor=None):
     if not rows:
         return
     existing_by_workflow = {}
-    for existing in conn.execute("SELECT * FROM reimbursement_settlement_obligations ORDER BY created_at").fetchall():
+    for existing in conn.execute(
+        """SELECT id,workflow_id,statement_version_id,payable_amount,iacuc
+           FROM reimbursement_settlement_obligations ORDER BY created_at"""
+    ).fetchall():
         existing_by_workflow.setdefault(existing["workflow_id"], existing)
     changed = False
     for row in rows:
-        version = json.loads(row["payload"])
-        statement = dict(version.get("statement") or {})
-        payable = _money(statement.get("totalAmount", 0))
-        source_pi = clean_text(statement.get("pi", ""))
-        statement_iacucs = [clean_text(value) for value in statement.get("iacucs", []) if clean_text(value)]
-        statement_iacuc = "、".join(dict.fromkeys(statement_iacucs)) or clean_text(statement.get("iacuc", row["iacuc"]))
+        payable, source_pi, statement_iacuc, fee_type = source_fields(row["payload"], row["iacuc"])
         if not source_pi:
             continue
         existing = existing_by_workflow.get(row["workflow_id"])
@@ -585,7 +583,7 @@ def sync_settlement_obligations(conn, actor=None):
                     "iacuc": statement_iacuc,
                     "payableAmount": payable,
                     "obligationKind": "statement",
-                    "feeType": source_fee_type(statement.get("sourceType")),
+                    "feeType": fee_type,
                     "status": "open",
                     "createdAt": now,
                     "updatedAt": now,
@@ -604,7 +602,7 @@ def sync_settlement_obligations(conn, actor=None):
             continue
         confirmed = _confirmed_amount_for_obligation(conn, existing["id"])
         if confirmed <= 0.00001:
-            payload = _obligation_payload(conn, existing)
+            payload = _obligation_payload(conn, _obligation_row(conn, existing["id"]))
             payload.update(
                 {
                     "statementVersionId": row["current_version_id"],
@@ -639,7 +637,7 @@ def sync_settlement_obligations(conn, actor=None):
                 "iacuc": statement_iacuc,
                 "payableAmount": delta,
                 "obligationKind": "adjustment",
-                "feeType": source_fee_type(statement.get("sourceType")),
+                "feeType": fee_type,
                 "status": "open",
                 "createdAt": now,
                 "updatedAt": now,

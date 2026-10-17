@@ -3,6 +3,7 @@
 from urllib.parse import parse_qs, urlparse
 
 from server_app.db import connect_db
+from server_app.domains.billing.candidate_calculation import CandidateCalculation
 from server_app.domains.billing.unified_candidates import COLUMNS, filter_options, list_candidates
 from server_app.domains.technical_services.listing import columns
 from server_app.web.ports import app_ports
@@ -27,11 +28,14 @@ def handle(handler, method, path):
                     conn, {"month": month, "pi": pi, "sourceType": "quantity_sheet"}, actor
                 )[0]
 
+            calculation = CandidateCalculation(conn, calculate)
             if path.endswith("filter-options"):
                 column = parse_qs(urlparse(handler.path).query).get("column", [""])[0]
-                result = filter_options(conn, actor, filters, column, calculate)
+                result = filter_options(
+                    conn, actor, filters, column, calculation, prepare_calculations=calculation.prepare
+                )
             else:
-                result = list_candidates(conn, actor, filters, calculate)
+                result = list_candidates(conn, actor, filters, calculation, prepare_calculations=calculation.prepare)
         handler.send_json(result)
     except (ValueError, TypeError) as exc:
         handler.send_json({"error": str(exc)}, 400)
