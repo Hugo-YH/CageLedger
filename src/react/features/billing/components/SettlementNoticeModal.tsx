@@ -4,6 +4,7 @@ import { Modal } from "../../../components/ui/Modal";
 
 import type { SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 import { copyTextToClipboard } from "../../../utils/clipboard";
+import { useLatestRequest } from "../../../hooks/useLatestRequest";
 
 export function SettlementNoticeModal({
   email,
@@ -16,9 +17,11 @@ export function SettlementNoticeModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const confirmation = useLatestRequest();
   async function copyAndConfirm() {
+    const isCurrent = confirmation.begin();
     await copyTextToClipboard(`${email.subject}\n\n${email.body}`);
-    onConfirm();
+    if (isCurrent()) onConfirm();
   }
 
   return (

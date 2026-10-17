@@ -1051,11 +1051,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Keep Ant's completion event when the preference interrupts an active modal.
+     The shared 1ms duration ends it immediately; suppress its scale transform. */
+  .ant-modal {
+    transform: none !important;
+  }
+
   .ant-btn,
   .ant-motion-collapse,
   .ant-motion-collapse-legacy,
   .ant-drawer,
-  .ant-modal,
   .react-inline-notice,
   .react-inline-notice .notice-icon {
     animation: none !important;

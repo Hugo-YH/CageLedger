@@ -93,6 +93,37 @@ test("quantity preview, edit and delete retain exit content and restore keyboard
   await info.attach("quantity-modal-motion", { body: JSON.stringify(evidence), contentType: "application/json" });
 });
 
+test("early Escape and a reduced-motion change during entry or exit release the modal", async ({ page }) => {
+  await openSavedQuantitySheets(page);
+  const trigger = page.getByRole("button", { name: "预览", exact: true }).first();
+  const dialog = page.locator(".quantity-react-preview");
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    await trigger.focus();
+    await trigger.press("Enter");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  }
+  await trigger.click();
+  await expect(dialog).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(dialog).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
+  await expect(dialog).toHaveCSS("opacity", "1");
+  await expect(dialog).toHaveCSS("transform", "none");
+  await dialog.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(dialog).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await trigger.focus();
+  await trigger.press("Enter");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(page.locator(".ant-modal-mask:visible")).toHaveCount(0);
+});
+
 test("preview and notice replace each other after exit and never initiate on cancel", async ({ page }, info) => {
   const candidate = {
     id: "motion-candidate",
@@ -130,12 +161,54 @@ test("preview and notice replace each other after exit and never initiate on can
   const enterStart = transition.find((event) => event.type === "animationstart" && event.name.endsWith("antZoomIn"))!;
   expect(enterStart.at).toBeGreaterThanOrEqual(exitEnd.at);
   await expect(page.locator(".ant-modal:visible")).toHaveCount(1);
+  await page.evaluate(() => {
+    const audit = window as Window & { noticeClipboardPending?: boolean; releaseNoticeClipboard?: () => void };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            audit.noticeClipboardPending = true;
+            audit.releaseNoticeClipboard = resolve;
+          }),
+      },
+    });
+  });
+  await notice.getByRole("button", { name: "复制并确认", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { noticeClipboardPending?: boolean }).noticeClipboardPending))
+    .toBe(true);
   await clearMotion(page);
   await notice.locator(".ant-modal-close").click();
   await expect(preview.getByRole("button", { name: "发起结算流程", exact: true })).toBeVisible();
   await finished(page, "antZoomIn");
+  const unexpectedInitiation = page
+    .waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/billing-statements/generate-by-pi") &&
+        Boolean((request.postDataJSON() as { persist?: boolean }).persist),
+      { timeout: 750 },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+  await page.evaluate(() => (window as Window & { releaseNoticeClipboard?: () => void }).releaseNoticeClipboard?.());
+  expect(await unexpectedInitiation).toBe(false);
   expect(writes).toEqual([false, false]);
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.resolve() },
+    }),
+  );
+  await preview.getByRole("button", { name: "发起结算流程", exact: true }).click();
+  await expect(notice.getByRole("button", { name: "复制并确认", exact: true })).toBeVisible();
+  await notice.getByRole("button", { name: "复制并确认", exact: true }).click();
+  await expect(preview.getByRole("button", { name: "已发起结算流程", exact: true })).toBeDisabled();
+  expect(writes).toEqual([false, false, false, true]);
   await closeWithMotion(page, preview.locator(".ant-modal-close"));
+  await expect(page.getByRole("button", { name: "预览结算单", exact: true })).toBeFocused();
   await info.attach("preview-notice-transition", { body: JSON.stringify(transition), contentType: "application/json" });
 });
 
@@ -245,6 +318,10 @@ test("unsaved batch confirmation preserves the draft on cancel and releases its 
   const confirmation = page.getByRole("dialog", { name: "离开并放弃未保存的修改？", exact: true });
   await editor.getByRole("button", { name: "取消", exact: true }).click();
   await expect(confirmation).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toHaveCount(0);
+  await expect(notes).toHaveValue("这份草稿只用于取消流程验证");
+  await editor.getByRole("button", { name: "取消", exact: true }).click();
   await confirmation.getByRole("button", { name: "继续编辑", exact: true }).click();
   await expect(confirmation).toHaveCount(0);
   await expect(notes).toHaveValue("这份草稿只用于取消流程验证");
