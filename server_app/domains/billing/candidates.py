@@ -1,4 +1,8 @@
 from server_app.cache import cache_get, cache_key, cache_set
+from server_app.repositories.billing_candidate_batches import (
+    quantity_settlement_groups_many,
+    upsert_candidate_snapshots_many,
+)
 from server_app.repositories.billing_candidates import (
     QUANTITY_SETTLEMENT_CALCULATION_VERSION,
     billing_candidate_snapshot_registry_needs_sync,
@@ -162,14 +166,26 @@ def _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calc
     keys = sorted({(month, pi_name) for month, pi_name in keys if month and pi_name})
     if keys and prepare_calculations is not None:
         prepare_calculations(keys)
-    for month, pi_name in keys:
-        group = get_quantity_settlement_group(conn, month, pi_name)
+    groups = quantity_settlement_groups_many(conn, keys)
+    snapshots = []
+    for key in keys:
+        group = groups.get(key)
         if not group:
             continue
-        _refresh_snapshot(conn, group, calculate, source_type, now)
+        snapshots.append(_snapshot_payload(group, calculate, source_type, now))
+        if len(snapshots) == 50:
+            upsert_candidate_snapshots_many(conn, snapshots)
+            snapshots.clear()
+    upsert_candidate_snapshots_many(conn, snapshots)
 
 
 def _refresh_snapshot(conn, group, calculate, source_type, now):
+    payload = _snapshot_payload(group, calculate, source_type, now)
+    upsert_billing_candidate_snapshot(conn, payload)
+    return get_billing_candidate_snapshot(conn, group["month"], group["pi"], source_type)
+
+
+def _snapshot_payload(group, calculate, source_type, now):
     month = group["month"]
     pi_name = group["pi"]
     try:
@@ -197,8 +213,7 @@ def _refresh_snapshot(conn, group, calculate, source_type, now):
             "updatedAt": now or "",
             "sourceFingerprint": group.get("sourceFingerprint", ""),
         }
-    upsert_billing_candidate_snapshot(conn, payload)
-    return get_billing_candidate_snapshot(conn, month, pi_name, source_type)
+    return payload
 
 
 def _quantity_sheet_managers(conn, keys):

@@ -24,7 +24,7 @@ def frozen_statement_headers(conn, keys, source_type):
     items = list(versions.items())
     for offset in range(0, len(items), 10):
         batch = items[offset : offset + 10]
-        details = read_lines_many(conn, [version["id"] for _, version in batch])
+        details = read_lines_many(conn, [version["id"] for _, version in batch], validate_only=True)
         for key, version in batch:
             detail = details[version["id"]]
             results[key] = detail if isinstance(detail, ValueError) else version["statement"]

@@ -388,10 +388,25 @@ def get_billing_candidate_snapshot(conn, month, pi, source_type):
     return billing_candidate_snapshot_row(row) if row else None
 
 
-def upsert_billing_candidate_snapshot(conn, snapshot):
+def candidate_snapshot_values(snapshot):
     iacucs = sorted({str(item).strip() for item in snapshot.get("iacucs", []) if str(item).strip()})
-    conn.execute(
-        """
+    return (
+        snapshot["sourceType"],
+        snapshot["month"],
+        snapshot["pi"],
+        json.dumps(iacucs, ensure_ascii=False),
+        "、".join(iacucs),
+        snapshot.get("totalAmount"),
+        snapshot.get("error", ""),
+        1 if snapshot.get("stale") else 0,
+        snapshot["updatedAt"],
+        snapshot.get("sourceFingerprint", ""),
+    ), iacucs
+
+
+def candidate_snapshot_upsert_sql(count=1):
+    values = ",".join("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" for _ in range(count))
+    return f"""
         INSERT INTO billing_candidate_snapshots (
             source_type,
             month,
@@ -404,7 +419,7 @@ def upsert_billing_candidate_snapshot(conn, snapshot):
             updated_at,
             source_fingerprint
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES {values}
         ON CONFLICT(source_type, month, pi) DO UPDATE SET
             iacucs_json = excluded.iacucs_json,
             iacucs_text = excluded.iacucs_text,
@@ -413,20 +428,12 @@ def upsert_billing_candidate_snapshot(conn, snapshot):
             is_stale = excluded.is_stale,
             updated_at = excluded.updated_at,
             source_fingerprint = excluded.source_fingerprint
-        """,
-        (
-            snapshot["sourceType"],
-            snapshot["month"],
-            snapshot["pi"],
-            json.dumps(iacucs, ensure_ascii=False),
-            "、".join(iacucs),
-            snapshot.get("totalAmount"),
-            snapshot.get("error", ""),
-            1 if snapshot.get("stale") else 0,
-            snapshot["updatedAt"],
-            snapshot.get("sourceFingerprint", ""),
-        ),
-    )
+        """
+
+
+def upsert_billing_candidate_snapshot(conn, snapshot):
+    values, iacucs = candidate_snapshot_values(snapshot)
+    conn.execute(candidate_snapshot_upsert_sql(), values)
     conn.execute(
         "DELETE FROM billing_candidate_snapshot_iacucs WHERE source_type = ? AND month = ? AND pi = ?",
         (snapshot["sourceType"], snapshot["month"], snapshot["pi"]),

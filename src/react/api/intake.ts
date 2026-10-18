@@ -65,6 +65,7 @@ export function useSaveIntakeBatch() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
   });
 }
@@ -78,6 +79,7 @@ export function useDeleteIntakeBatch() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
   });
 }
@@ -94,6 +96,7 @@ export function useConfirmIntakeBatch() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
   });
 }
@@ -110,6 +113,7 @@ export function useMarkIntakeBatchesPrinted() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
   });
 }
@@ -126,6 +130,7 @@ export function useConfirmIntakeBatchesReceipt() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
   });
 }

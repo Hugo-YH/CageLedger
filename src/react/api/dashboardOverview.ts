@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { requestJson } from "./client";
+import { requestConditionalJson, type ConditionalJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export type IntakeOverview = {
@@ -48,13 +48,21 @@ export type DashboardOverviewResponse = {
 };
 
 export function useDashboardOverview(month?: string, enabled = true) {
+  const client = useQueryClient();
+  const key = queryKeys.dashboardOverview(month);
   return useQuery({
-    queryKey: queryKeys.dashboardOverview(month),
+    queryKey: key,
     queryFn: ({ signal }) =>
-      requestJson<DashboardOverviewResponse>(
+      requestConditionalJson<DashboardOverviewResponse>(
         `/api/dashboard/overview${month ? `?month=${encodeURIComponent(month)}` : ""}`,
-        { signal },
+        client.getQueryData<ConditionalJson<DashboardOverviewResponse>>(key),
+        signal,
       ),
+    select: selectOverview,
     enabled,
   });
+}
+
+function selectOverview(response: ConditionalJson<DashboardOverviewResponse>) {
+  return response.value;
 }

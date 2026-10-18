@@ -1,13 +1,20 @@
 """Batch reads must agree with the original single-snapshot reader."""
 
 import json
+import sqlite3
 import unittest
+from contextlib import closing
+from unittest.mock import patch
 
 from server_app.composition import generate_billing_statement_by_pi
 from server_app.domains.billing.candidate_calculation import CandidateCalculation
-from server_app.domains.billing.frozen import frozen_statement, frozen_statements
+from server_app.domains.billing.frozen import frozen_statement, frozen_statement_headers, frozen_statements
 from server_app.domains.billing.snapshot_codec import SnapshotStorageError
-from server_app.repositories.billing_snapshot_storage import expand_version, read_lines_many
+from server_app.repositories.billing_snapshot_storage import (
+    clear_snapshot_validation_cache,
+    expand_version,
+    read_lines_many,
+)
 from tests import test_billing_snapshot_storage as snapshot_fixture
 from tests import test_reimbursement_ledger as ledger_fixture
 
@@ -117,6 +124,86 @@ class FrozenBatchTests(unittest.TestCase):
         with self.assertRaises(SnapshotStorageError):
             calculation(*self.key)
         self.assertEqual(calls, [("2026-09", "未知")])
+
+    def test_header_validation_reuses_only_identical_complete_source_content(self):
+        from server_app.repositories import billing_snapshot_storage as storage
+
+        clear_snapshot_validation_cache()
+        with patch.object(storage, "_parsed_lines", wraps=storage._parsed_lines) as validate:
+            for _ in range(2):
+                self.assertEqual(
+                    frozen_statement_headers(self.conn, [self.key], "quantity_sheet")[self.key]["totalAmount"], 300
+                )
+            self.assertEqual(validate.call_count, 1)
+            self.conn.execute("UPDATE billing_statement_version_lines SET payload=json_set(payload,'$.amount',99)")
+            result = frozen_statement_headers(self.conn, [self.key], "quantity_sheet")
+            self.assertIsInstance(result[self.key], SnapshotStorageError)
+            self.assertEqual(validate.call_count, 2)
+
+    def test_cached_header_validation_rechecks_block_metadata_bytes_and_missing_blocks(self):
+        for field, value in (
+            ("payload", b"broken"),
+            ("codec", "unknown"),
+            ("raw_bytes", 1),
+            ("raw_sha256", "0" * 64),
+            ("line_count", 1),
+        ):
+            clear_snapshot_validation_cache()
+            valid = frozen_statement_headers(self.conn, [self.key], "quantity_sheet")
+            self.assertNotIsInstance(valid[self.key], ValueError)
+            original = self.conn.execute(f"SELECT {field} FROM billing_statement_line_blocks").fetchone()[0]
+            self.conn.execute(f"UPDATE billing_statement_line_blocks SET {field}=?", (value,))
+            self.assertIsInstance(
+                frozen_statement_headers(self.conn, [self.key], "quantity_sheet")[self.key], SnapshotStorageError
+            )
+            self.conn.execute(f"UPDATE billing_statement_line_blocks SET {field}=?", (original,))
+        frozen_statement_headers(self.conn, [self.key], "quantity_sheet")
+        self.conn.execute("DELETE FROM billing_statement_line_blocks")
+        self.assertIsInstance(
+            frozen_statement_headers(self.conn, [self.key], "quantity_sheet")[self.key], SnapshotStorageError
+        )
+
+    def test_validation_cache_is_content_scoped_across_databases_and_does_not_cache_headers(self):
+        clear_snapshot_validation_cache()
+        frozen_statement_headers(self.conn, [self.key], "quantity_sheet")
+        self.conn.execute(
+            "UPDATE billing_statement_versions SET payload=json_set(payload,'$.statement.totalAmount',0.01)"
+        )
+        self.assertEqual(
+            frozen_statement_headers(self.conn, [self.key], "quantity_sheet")[self.key]["totalAmount"], 0.01
+        )
+        self.conn.commit()
+        with closing(sqlite3.connect(":memory:")) as other:
+            self.conn.backup(other)
+            other.row_factory = sqlite3.Row
+            other.execute("UPDATE billing_statement_line_blocks SET payload=?", (b"broken",))
+            self.assertIsInstance(
+                frozen_statement_headers(other, [self.key], "quantity_sheet")[self.key], SnapshotStorageError
+            )
+
+    def test_cached_validation_rechecks_summary_dates_order_and_removed_rows(self):
+        for mutation in (
+            "UPDATE billing_statement_version_lines SET line_date='2099-01-01' WHERE id=(SELECT id FROM billing_statement_version_lines LIMIT 1)",
+            "DELETE FROM billing_statement_version_lines WHERE id=(SELECT id FROM billing_statement_version_lines LIMIT 1)",
+        ):
+            frozen_statement_headers(self.conn, [self.key], "quantity_sheet")
+            self.conn.execute("SAVEPOINT damaged_summary")
+            try:
+                self.conn.execute(mutation)
+                self.assertIsInstance(
+                    frozen_statement_headers(self.conn, [self.key], "quantity_sheet")[self.key], SnapshotStorageError
+                )
+            finally:
+                self.conn.execute("ROLLBACK TO damaged_summary")
+                self.conn.execute("RELEASE damaged_summary")
+
+    def test_header_validation_keeps_legacy_json_blob_support(self):
+        expand_version(self.conn, self.fixture.version_id)
+        self.conn.execute("UPDATE billing_statement_version_lines SET payload=CAST(payload AS BLOB)")
+        for _ in range(2):
+            self.assertEqual(
+                frozen_statement_headers(self.conn, [self.key], "quantity_sheet")[self.key]["totalAmount"], 300
+            )
 
     def test_candidate_preserves_generator_validation_and_normalization_for_legacy_keys(self):
         for month, pi, message in (

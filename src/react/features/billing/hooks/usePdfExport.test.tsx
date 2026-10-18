@@ -100,6 +100,88 @@ describe("usePdfExport", () => {
     expect(downloadFromUrl).not.toHaveBeenCalled();
   });
 
+  it("backs off an unchanged export over one minute and still completes within two seconds", async () => {
+    const waiting = { ...ready, status: "queued" as const, completed: 0, total: 10, downloadUrl: "" };
+    vi.mocked(startPdfExport).mockResolvedValue(waiting);
+    vi.mocked(getPdfExportJob).mockResolvedValue(waiting);
+    const { result } = renderHook(usePdfExport, { wrapper });
+    let completion: Promise<PdfExportJob> | undefined;
+    await act(async () => {
+      completion = result.current.exportPdf(payload);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(31);
+
+    vi.mocked(getPdfExportJob).mockResolvedValue(ready);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+      await completion;
+    });
+    expect(downloadFromUrl).toHaveBeenCalledExactlyOnceWith(ready.downloadUrl);
+  });
+
+  it("keeps the first 500ms poll for short exports and resets after progress", async () => {
+    const waiting = { ...ready, status: "rendering" as const, completed: 0, total: 4, downloadUrl: "" };
+    const progressed = { ...waiting, completed: 1 };
+    vi.mocked(startPdfExport).mockResolvedValue(waiting);
+    vi.mocked(getPdfExportJob)
+      .mockResolvedValueOnce(waiting)
+      .mockResolvedValueOnce(waiting)
+      .mockResolvedValueOnce(progressed)
+      .mockResolvedValueOnce(ready);
+    const { result } = renderHook(usePdfExport, { wrapper });
+    let completion: Promise<PdfExportJob> | undefined;
+    await act(async () => {
+      completion = result.current.exportPdf(payload);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await completion;
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(4);
+    expect(downloadFromUrl).toHaveBeenCalledExactlyOnceWith(ready.downloadUrl);
+  });
+
+  it("resets the interval when the export leaves the queue", async () => {
+    const queued = { ...ready, status: "queued" as const, completed: 0, total: 4, downloadUrl: "" };
+    const rendering = { ...queued, status: "rendering" as const };
+    vi.mocked(startPdfExport).mockResolvedValue(queued);
+    vi.mocked(getPdfExportJob)
+      .mockResolvedValueOnce(queued)
+      .mockResolvedValueOnce(rendering)
+      .mockResolvedValueOnce(ready);
+    const { result } = renderHook(usePdfExport, { wrapper });
+    let completion: Promise<PdfExportJob> | undefined;
+    await act(async () => {
+      completion = result.current.exportPdf(payload);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await completion;
+    });
+    expect(getPdfExportJob).toHaveBeenCalledTimes(3);
+    expect(downloadFromUrl).toHaveBeenCalledExactlyOnceWith(ready.downloadUrl);
+  });
+
   it.each([
     { ...ready, status: "failed" as const, error: "生成超时" },
     { ...ready, downloadUrl: "" },

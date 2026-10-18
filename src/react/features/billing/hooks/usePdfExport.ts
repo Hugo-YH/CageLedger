@@ -9,7 +9,8 @@ import {
 } from "../../../api/client";
 import { useTaskFeedback } from "../../../components/TaskFeedbackContext";
 
-const POLL_INTERVAL_MS = 500;
+const INITIAL_POLL_INTERVAL_MS = 500;
+const MAX_POLL_INTERVAL_MS = 2000;
 
 export function usePdfExport() {
   const mounted = useRef(true);
@@ -37,11 +38,14 @@ export function usePdfExport() {
         const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload), progress: 0 });
         try {
           let current = await startPdfExport(payload);
+          let pollInterval = INITIAL_POLL_INTERVAL_MS;
           if (mounted.current) setJob(current);
           while (current.status === "queued" || current.status === "rendering") {
             tasks.update(taskId, { detail: progressLabel(current), progress: jobProgress(current) });
-            await wait(POLL_INTERVAL_MS);
-            current = await getPdfExportJob(current.id);
+            await wait(pollInterval);
+            const previous = current;
+            current = await getPdfExportJob(previous.id);
+            pollInterval = nextPollInterval(previous, current, pollInterval);
             if (mounted.current) setJob(current);
           }
           if (current.status === "failed") throw new Error(current.error || "PDF 生成失败");
@@ -73,6 +77,11 @@ export function usePdfExport() {
     job,
     isExporting,
   };
+}
+
+function nextPollInterval(previous: PdfExportJob, current: PdfExportJob, interval: number) {
+  if (previous.status !== current.status || previous.completed !== current.completed) return INITIAL_POLL_INTERVAL_MS;
+  return Math.min(interval * 2, MAX_POLL_INTERVAL_MS);
 }
 
 export function settlementExportProgress(completed = 0, total = 0) {

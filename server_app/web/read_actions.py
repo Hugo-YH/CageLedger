@@ -101,6 +101,7 @@ from server_app.repositories.payload import (
     read_payloads,
 )
 from server_app.shared import clean_text, now_iso
+from server_app.web.dashboard import send_overview
 from server_app.web.entity_contracts import ENTITY_ENDPOINTS, WRITABLE_ENTITY_ENDPOINTS
 from server_app.web.pdf_exports import (
     download_billing_statement_pdf,
@@ -160,8 +161,11 @@ class ReadActionsMixin:
                 )[0]
 
             calculation = CandidateCalculation(conn, calculate)
-            self.send_json(
-                dashboard_overview_payload(conn, month, calculate=calculation, prepare_calculations=calculation.prepare)
+            send_overview(
+                self,
+                dashboard_overview_payload(
+                    conn, month, calculate=calculation, prepare_calculations=calculation.prepare
+                ),
             )
         return
 

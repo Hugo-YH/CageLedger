@@ -1,7 +1,11 @@
 """SQL adapters for compressed bill details and their legacy JSON summaries."""
 
+import hashlib
 import json
+import pickle
+from collections import OrderedDict
 from contextlib import contextmanager
+from threading import Lock
 
 from server_app.domains.billing.snapshot_codec import (
     CODEC,
@@ -12,6 +16,32 @@ from server_app.domains.billing.snapshot_codec import (
     parsed_summary,
     summary_payload,
 )
+
+_VALIDATION_LOCK = Lock()
+_VALIDATED_LINES = OrderedDict()
+_VALIDATION_CACHE_LIMIT = 512
+
+
+def clear_snapshot_validation_cache():
+    """Reset successful content fingerprints, e.g. for a process-cold benchmark."""
+    with _VALIDATION_LOCK:
+        _VALIDATED_LINES.clear()
+
+
+def _validation_cached(key):
+    with _VALIDATION_LOCK:
+        if key not in _VALIDATED_LINES:
+            return False
+        _VALIDATED_LINES.move_to_end(key)
+        return True
+
+
+def _remember_validation(key):
+    with _VALIDATION_LOCK:
+        _VALIDATED_LINES[key] = None
+        _VALIDATED_LINES.move_to_end(key)
+        if len(_VALIDATED_LINES) > _VALIDATION_CACHE_LIMIT:
+            _VALIDATED_LINES.popitem(last=False)
 
 
 @contextmanager
@@ -63,11 +93,14 @@ def read_records(conn, version_id):
     return rows
 
 
-def read_lines_many(conn, version_ids):
+def read_lines_many(conn, version_ids, *, validate_only=False):
     """Batch I/O, preserving complete block checks and per-version errors.
 
     Legacy JSON is decoded once rather than once for marker inspection and
-    again for the caller. No financial values are derived from live inputs.
+    again for the caller. Header-only consumers retain at most 512 successful
+    full-source fingerprints; every read still fetches and hashes all source
+    bytes and ordered summaries. Full-line callers always receive parsed rows.
+    No financial values are derived from live inputs.
     """
     identities = list(dict.fromkeys(version_ids))
     results = {}
@@ -99,10 +132,27 @@ def read_lines_many(conn, version_ids):
         for identity in batch:
             rows = rows_by_version.pop(identity)
             try:
-                results[identity] = _parsed_lines(identity, rows, blocks.get(identity))
+                block = blocks.get(identity)
+                if validate_only:
+                    key = _validation_key(identity, rows, block)
+                    if not _validation_cached(key):
+                        _parsed_lines(identity, rows, block)
+                        _remember_validation(key)
+                    results[identity] = True
+                else:
+                    results[identity] = _parsed_lines(identity, rows, block)
             except ValueError as exc:
                 results[identity] = exc
     return results
+
+
+def _validation_key(version_id, rows, block):
+    # Only a digest/boolean is retained, never the bill lines or compressed data.
+    # Binary framing preserves SQLite scalar types, row order and every byte.
+    # This is serialization for hashing only; nothing is ever unpickled.
+    metadata = [block[field] for field in ("codec", "raw_bytes", "raw_sha256", "line_count")] if block else None
+    content = (version_id, rows, metadata, block["payload"] if block else None)
+    return hashlib.sha256(pickle.dumps(content, protocol=4)).hexdigest()
 
 
 def _parsed_lines(version_id, rows, block):

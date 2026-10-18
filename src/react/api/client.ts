@@ -12,7 +12,7 @@ export async function requestFetch(url: string, init: RequestInit = {}): Promise
     }
     throw error;
   }
-  if (!response.ok) {
+  if (!response.ok && response.status !== 304) {
     recordDiagnosticRequest(
       url,
       method,
@@ -115,6 +115,29 @@ export async function requestJson<T>(url: string, init: RequestInit = {}): Promi
   const payload = await responseJson(response, init, { url, startedAt });
   if (!response.ok) throw responseError(response, payload);
   return payload as T;
+}
+
+export type ConditionalJson<T> = { value: T; etag: string };
+
+/** Revalidate Query-owned data without keeping a second response cache. */
+export async function requestConditionalJson<T>(
+  url: string,
+  previous?: ConditionalJson<T>,
+  signal?: AbortSignal,
+): Promise<ConditionalJson<T>> {
+  const headers = new Headers();
+  if (previous?.etag) headers.set("If-None-Match", previous.etag);
+  const init = { headers, signal };
+  const startedAt = performance.now();
+  const response = await requestFetch(url, requestOptions(init));
+  signal?.throwIfAborted();
+  if (response.status === 304) {
+    if (previous?.etag) return previous;
+    throw new ApiError("服务器未返回可用的缓存数据，请重试", 304, {}, { code: "INVALID_NOT_MODIFIED_RESPONSE" });
+  }
+  const payload = await responseJson(response, init, { url, startedAt });
+  if (!response.ok) throw responseError(response, payload);
+  return { value: payload as T, etag: response.headers.get("ETag") || "" };
 }
 
 export function requestMultipart<T>(url: string, form: FormData, init: Omit<RequestInit, "body"> = {}): Promise<T> {
