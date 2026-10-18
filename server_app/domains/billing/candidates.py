@@ -17,6 +17,8 @@ from server_app.repositories.billing_candidates import (
     upsert_billing_candidate_snapshot,
 )
 
+from .candidate_calculation import CandidateCalculation
+
 SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS = 15
 
 
@@ -164,19 +166,34 @@ def _refresh_matching_stale_snapshots(conn, filters, calculate, source_type, now
 
 def _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calculations):
     keys = sorted({(month, pi_name) for month, pi_name in keys if month and pi_name})
-    if keys and prepare_calculations is not None:
+    if not keys:
+        return
+    # Don't lock writers during normal preparation. Fence the first publication
+    # against intervening commits, then retain the caller-owned write transaction.
+    revision = conn.execute("PRAGMA data_version").fetchone()[0] if not conn.in_transaction else None
+    if prepare_calculations is not None:
         prepare_calculations(keys)
     groups = quantity_settlement_groups_many(conn, keys)
-    snapshots = []
-    for key in keys:
-        group = groups.get(key)
-        if not group:
+    for offset in range(0, len(keys), 50):
+        snapshots = [
+            _snapshot_payload(groups[key], calculate, source_type, now)
+            for key in keys[offset : offset + 50]
+            if key in groups
+        ]
+        if not snapshots:
             continue
-        snapshots.append(_snapshot_payload(group, calculate, source_type, now))
-        if len(snapshots) == 50:
-            upsert_candidate_snapshots_many(conn, snapshots)
-            snapshots.clear()
-    upsert_candidate_snapshots_many(conn, snapshots)
+        if revision is not None:
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
+            if conn.execute("PRAGMA data_version").fetchone()[0] != revision:
+                for prepared in (calculate, getattr(prepare_calculations, "__self__", None)):
+                    if isinstance(prepared, CandidateCalculation):
+                        prepared.reset_prepared()
+                # Now holding the write lock: one fresh calculation is enough,
+                # including refreshed issued headers, before publishing any row.
+                return _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calculations)
+            revision = None
+        upsert_candidate_snapshots_many(conn, snapshots)
 
 
 def _refresh_snapshot(conn, group, calculate, source_type, now):

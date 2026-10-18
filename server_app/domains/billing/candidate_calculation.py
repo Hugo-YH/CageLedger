@@ -30,6 +30,10 @@ class CandidateCalculation:
         snapshots = frozen_statement_headers(self.conn, missing, "pi_merged_quantity_sheet")
         self.prepared.update({key: snapshots.get(key) for key in missing})
 
+    def reset_prepared(self):
+        """Discard request-local headers if a concurrent commit changed the source."""
+        self.prepared.clear()
+
     def __call__(self, month, pi):
         snapshot = self.prepared.get((month, pi))
         if isinstance(snapshot, ValueError):
