@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_NAME="$(basename "${ROOT}")"
 VERSION="$(node -p "require('${ROOT}/package.json').version")"
 OUT_DIR="${ROOT}/dist"
 PACKAGE_NAME="CageLedger-offline-${VERSION}.tar.gz"
@@ -20,7 +21,7 @@ tar \
   --exclude=".codex-run" \
   --exclude="data" \
   --exclude="dist" \
-  --exclude="docs" \
+  --exclude="${ROOT_NAME}/docs" \
   --exclude="node_modules" \
   --exclude=".vite" \
   --exclude="playwright-report" \
@@ -35,6 +36,13 @@ tar \
   --exclude="src/iacuc-data.local.json" \
   -czf "${OUT_DIR}/${PACKAGE_NAME}" \
   -C "$(dirname "${ROOT}")" \
-  "$(basename "${ROOT}")"
+  "${ROOT_NAME}"
+
+if ! tar -tzf "${OUT_DIR}/${PACKAGE_NAME}" \
+  "${ROOT_NAME}/web-dist/index.html" \
+  "${ROOT_NAME}/web-dist/docs/index.html" >/dev/null; then
+  echo "Offline package is missing its application or built documentation entry." >&2
+  exit 1
+fi
 
 echo "${OUT_DIR}/${PACKAGE_NAME}"
