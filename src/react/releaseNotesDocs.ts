@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.13.3",
+    build: "230",
+    releasedAt: "2026-10-19",
+    title: "IACUC 有效期提示",
+    items: [
+      "数量统计表录入和编辑时，在 IACUC 编号下显示有效期提示，可通过悬停、聚焦或点击查看项目起止日期",
+      "正常、90 天内到期和已到期分别使用蓝色、警示色和错误色，与已保存统计表列表保持一致",
+      "尚未生效、统计月份超出有效期、日期缺失或异常、查询失败时提醒确认；提示不阻断保存，减免仍按实际计费日期判定",
+      "切换或清空编号时及时移除旧提示，查询尚未完成时不把旧编号结果显示为当前信息；列表到期状态按本地日期判断",
+    ],
+  },
+  {
     version: "1.13.2",
     build: "229",
     releasedAt: "2026-10-18",
