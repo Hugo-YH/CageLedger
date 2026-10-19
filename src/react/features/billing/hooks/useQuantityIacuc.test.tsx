@@ -70,6 +70,28 @@ describe("quantity sheet IACUC matching", () => {
     expect(onMatch).not.toHaveBeenCalled();
   });
 
+  it("resolves unmatched codes without blocking entry and clears the result for new input", async () => {
+    const { result, rerender } = renderHook(({ code }) => useQuantityIacuc(code, onMatch), {
+      wrapper,
+      initialProps: { code: "Z1" },
+    });
+    const pending = result.current.apply("Z1");
+    expect(result.current.checked).toBe(false);
+    await act(async () => {
+      responses[0](Response.json({ items: [] }));
+      await pending;
+    });
+    expect(result.current.checked).toBe(true);
+    expect(result.current.match).toBeUndefined();
+    expect(result.current.failed).toBe(false);
+    act(() => {
+      result.current.reset();
+      rerender({ code: "Z2" });
+    });
+    expect(result.current.checked).toBe(false);
+    expect(result.current.match).toBeUndefined();
+  });
+
   it("coalesces repeated lookups, fills only once and reuses the normalized cache", async () => {
     const { result } = renderHook(() => useQuantityIacuc("", onMatch), { wrapper });
     const first = result.current.apply("z1 ");

@@ -64,6 +64,11 @@
   content: "*";
 }
 
+.react-quantity-layout .quantity-iacuc-validity .ant-tag {
+  margin-inline-end: 0;
+  white-space: normal;
+}
+
 .react-quantity-layout .quantity-field-source.ant-tag {
   margin: 0;
   padding-inline: 4px;

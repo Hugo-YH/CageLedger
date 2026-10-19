@@ -2,6 +2,7 @@ import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { Modal } from "../../../components/ui/Modal";
 import { useEffect, useState } from "react";
+import { iacucExpiryStatus } from "../../../../domain/iacucValidity";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
 import { useIacucExpiry } from "../../../api/iacuc";
@@ -416,13 +417,7 @@ function QuantityPreview({ sheet }: { sheet: QuantitySheet }) {
 }
 
 function IacucExpiryTag({ endDate }: { endDate: string }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const remainingDays = Math.ceil(
-    (new Date(`${endDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000,
-  );
-  const color = remainingDays < 0 ? "error" : remainingDays <= 90 ? "warning" : "blue";
-  const event = remainingDays < 0 ? "已到期" : remainingDays <= 90 ? "即将到期" : "到期";
-  const label = `${endDate} ${event}`;
+  const { color, label } = iacucExpiryStatus(endDate);
   return <Tag color={color}>{label}</Tag>;
 }
 

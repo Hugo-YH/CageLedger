@@ -11,6 +11,7 @@ import type { QuantitySheetEditor } from "../hooks/useQuantitySheetEditor";
 import { todayMonth, QUANTITY_ROWS_PER_PAGE } from "../quantitySheetEditorModel";
 import { QuantityBillingOptions } from "./QuantityBillingOptions";
 import { QuantityEditorPages } from "./QuantityEditorPages";
+import { QuantityIacucValidity } from "./QuantityIacucValidity";
 
 export function QuantitySheetEditorForm({
   editor,
@@ -149,6 +150,13 @@ export function QuantitySheetEditorForm({
                   </option>
                 ))}
               </datalist>
+              <QuantityIacucValidity
+                code={draft.iacuc}
+                month={draft.month}
+                match={iacucMatch}
+                checked={iacucLookup.checked}
+                failed={iacucLookup.failed}
+              />
             </label>
             <AutoFilledField label="项目名称" value={draft.project} onChange={(value) => setField("project", value)} />
             <AutoFilledField label="支撑经费" value={draft.funding} onChange={(value) => setField("funding", value)} />

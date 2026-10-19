@@ -12,14 +12,22 @@ export function useQuantityIacuc(value: string, onMatch: (item: IacucIndexItem) 
   const request = useLatestRequest();
   const lastFilled = useRef("");
   const [error, setError] = useState("");
+  const [resolvedCode, setResolvedCode] = useState("");
   const options = useMemo(() => search.data?.items || [], [search.data?.items]);
   const normalized = value.trim().toUpperCase();
-  const match = options.find((item) => item.iacuc.trim().toUpperCase() === normalized);
+  const resolvedItems =
+    resolvedCode === normalized
+      ? client.getQueryData<{ items: IacucIndexItem[] }>(queryKeys.iacucSearch(normalized, 20))?.items || []
+      : [];
+  const match =
+    options.find((item) => item.iacuc.trim().toUpperCase() === normalized) ??
+    resolvedItems.find((item) => item.iacuc.trim().toUpperCase() === normalized);
 
   const fill = useCallback(
     (item: IacucIndexItem) => {
       lastFilled.current = item.iacuc;
       setError("");
+      setResolvedCode(item.iacuc.trim().toUpperCase());
       onMatch(item);
     },
     [onMatch],
@@ -34,6 +42,7 @@ export function useQuantityIacuc(value: string, onMatch: (item: IacucIndexItem) 
     request.invalidate();
     lastFilled.current = "";
     setError("");
+    setResolvedCode("");
   }, [request]);
 
   async function apply(code: string) {
@@ -55,11 +64,15 @@ export function useQuantityIacuc(value: string, onMatch: (item: IacucIndexItem) 
       if (!isCurrent()) return;
       const exact = result.items.find((item) => item.iacuc.trim().toUpperCase() === q);
       if (exact) fill(exact);
+      else setResolvedCode(q);
     } catch (cause) {
       if (!isCurrent()) return;
       setError(cause instanceof Error ? `IACUC 信息匹配失败：${cause.message}` : "IACUC 信息匹配失败，请重试。");
     }
   }
 
-  return { options, match, error, apply, reset };
+  const searchFailed = search.isCurrentQuery && search.isError;
+  const checked =
+    Boolean(normalized) && Boolean(match || resolvedCode === normalized || search.data || searchFailed || error);
+  return { options, match, error, checked, failed: Boolean(error || searchFailed), apply, reset };
 }

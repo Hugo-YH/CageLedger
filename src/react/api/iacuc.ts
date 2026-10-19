@@ -34,5 +34,9 @@ export function useIacucSearch(query: string, limit = 20) {
     staleTime: 5 * 60_000,
   });
   // A previous code's suggestions must not remain selectable while the new search is debouncing.
-  return { ...result, data: normalized && q === normalized ? result.data : undefined };
+  return {
+    ...result,
+    isCurrentQuery: q === normalized,
+    data: normalized && q === normalized ? result.data : undefined,
+  };
 }
