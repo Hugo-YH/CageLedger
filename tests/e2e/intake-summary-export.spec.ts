@@ -96,6 +96,9 @@ test("reception notes export Word by inclusive dates without selecting or changi
     expect(content).not.toContain("接收人");
     expect(content).not.toContain("兽医电话");
     expect(content).not.toContain("饲养房间");
+    for (const removed of ["IACUC", "笼数", "动物种类", "性别", "饲养天数", "预约备注"]) {
+      expect(content).not.toContain(removed);
+    }
     expect(content).not.toContain("预约原文：");
     expect(content).not.toContain("签收：");
     await expect(modal.getByRole("status")).toContainText("已下载");

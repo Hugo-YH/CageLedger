@@ -9,21 +9,20 @@ from pathlib import Path
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
 from . import repository
-from .rules import species_label
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 STATUS_LABELS = {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}
 TEMPLATE = Path(__file__).resolve().parents[2] / "resources" / "intake" / "reception-summary.docx"
 FONT_NAME = "微软雅黑"
-# Pale tints sampled from the centre VI reference blue #222962 and orange #F16901.
-ROOM_FILL = "E9EAEF"
-BATCH_FILL = "FEF3EB"
+# Keep the VI reference hues (#222962 / #F16901), with lower saturation and higher lightness.
+ROOM_FILL = "CED1E9"
+BATCH_FILL = "F3D8C4"
 
 
 def validate_interval(start_date, end_date):
@@ -70,19 +69,6 @@ def paragraph(document, value, *, bold=False, size=12, after=0, keep_next=False)
     return p
 
 
-def detail_paragraph(document, lines):
-    p = paragraph(document, "", after=12)
-    for line_index, fields in enumerate(lines):
-        if line_index:
-            p.add_run("\n")
-        for field_index, (label, value) in enumerate(fields):
-            if field_index:
-                p.add_run("　")
-            p.add_run(label).bold = True
-            p.add_run(f"：{text(value)}").bold = False
-    return p
-
-
 def detail_table(document, batch):
     """One six-column grid yields halves on the first row and thirds on the second."""
     section = document.sections[0]
@@ -117,7 +103,7 @@ def detail_table(document, batch):
             ("数量", quantity),
         ],
     )
-    for row, fields in zip(table.rows, rows, strict=True):
+    for row_index, (row, fields) in enumerate(zip(table.rows, rows, strict=True)):
         row._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
         cells = list(row.cells)
         span = 6 // len(fields)
@@ -128,11 +114,11 @@ def detail_table(document, batch):
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
             p = cell.paragraphs[0]
             p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_after = Pt(12 if row_index == 1 else 0)
             p.paragraph_format.line_spacing = Pt(16)
             p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
             p.paragraph_format.keep_together = True
-            p.paragraph_format.keep_with_next = True
+            p.paragraph_format.keep_with_next = row_index == 0
             p.add_run(label).bold = True
             p.add_run(f"：{text(value)}").bold = False
 
@@ -150,28 +136,18 @@ def batch_block(document, batch):
     person = f"{owner}（{pi}）" if owner and pi and owner != pi else owner or pi or "负责人未填写"
     heading = paragraph(document, f"□ {person}", bold=True, keep_next=True)
     shade_paragraph(heading, BATCH_FILL)
+    section = document.sections[0]
+    heading.paragraph_format.tab_stops.add_tab_stop(
+        section.page_width - section.left_margin - section.right_margin, WD_TAB_ALIGNMENT.RIGHT
+    )
     status = text(batch.get("status"))
-    tag = heading.add_run(f"　｜{STATUS_LABELS.get(status, status or '状态未填写')}｜")
+    tag = heading.add_run(f"\t｜{STATUS_LABELS.get(status, status or '状态未填写')}｜")
     tag.bold = True
     tag.font.size = Pt(10.5)
     tag.font.color.rgb = RGBColor.from_string(
         {"printed": "0958D9", "received": "237804", "draft": "595959", "pending_print": "595959"}.get(status, "595959")
     )
     detail_table(document, batch)
-    lines = []
-    optional = [("IACUC", field(batch.get("iacuc")))]
-    if batch.get("finalCardCount") is not None:
-        optional.append(("笼数", f"{text(batch['finalCardCount'])}笼"))
-    if batch.get("species"):
-        optional.append(("动物种类", species_label(batch["species"])))
-    if batch.get("sex"):
-        optional.append(("性别", text(batch["sex"])))
-    if batch.get("husbandryDays") is not None:
-        optional.append(("饲养天数", text(batch["husbandryDays"])))
-    lines.append(optional)
-    if batch.get("notes"):
-        lines.append([("预约备注", text(batch["notes"]))])
-    detail_paragraph(document, lines)
 
 
 def generate(document_snapshot):

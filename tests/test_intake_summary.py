@@ -108,19 +108,27 @@ class IntakeSummaryTests(unittest.TestCase):
         for value in [
             "共 3 批",
             "预约人（项目负责人）",
-            "2笼",
             "C57 <原文> & ICR",
             "数量：0",
-            "饲养天数：0",
-            "雌雄各半",
             "Z2026001",
-            "请核对耳标\n保持分笼",
             "｜已接收｜",
         ]:
             self.assertIn(value, content)
         self.assertNotIn("标准化品系", content)
         self.assertIn("｜未打印｜", content)
-        for removed in ("预约原文：", "8周龄", "签收：", "实收数量：", "备注：________________"):
+        for removed in (
+            "预约原文：",
+            "8周龄",
+            "签收：",
+            "实收数量：",
+            "IACUC",
+            "笼数",
+            "动物种类",
+            "性别",
+            "饲养天数",
+            "预约备注",
+            "请核对耳标",
+        ):
             self.assertNotIn(removed, content)
         self.assertNotIn("✔", content)
         self.assertLess(content.index("PO-1"), content.index("PO-2"))
@@ -135,16 +143,15 @@ class IntakeSummaryTests(unittest.TestCase):
             if p.text.startswith("□ "):
                 self.assertTrue(p.paragraph_format.keep_with_next)
                 self.assertTrue(p.paragraph_format.keep_together)
-                self.assertEqual(p._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "FEF3EB")
+                self.assertEqual(p._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "F3D8C4")
                 self.assertFalse(p._p.xpath(".//w:rPr/w:shd"))
-            if p.text.startswith("IACUC："):
-                self.assertFalse(p.paragraph_format.keep_with_next)
-                self.assertTrue(p.paragraph_format.keep_together)
-                self.assertEqual(p.paragraph_format.space_after.pt, 12)
-                self.assertEqual(p.paragraph_format.line_spacing.pt, 16)
+                tab = p._p.pPr.find(qn("w:tabs"))[0]
+                self.assertEqual(tab.get(qn("w:val")), "right")
+                self.assertAlmostEqual(int(tab.get(qn("w:pos"))), 10205, delta=2)
+                self.assertTrue(p.runs[-1].text.startswith("\t｜"))
         self.assertEqual([p.text for p in document.paragraphs].count("8103"), 1)
         room = next(p for p in document.paragraphs if p.text == "8103")
-        self.assertEqual(room._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "E9EAEF")
+        self.assertEqual(room._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "CED1E9")
         self.assertNotIn("饲养房间", content)
 
     def test_detail_rows_use_fixed_half_and_third_widths_without_borders_or_fixed_heights(self):
@@ -172,7 +179,7 @@ class IntakeSummaryTests(unittest.TestCase):
             quantity=None,
             strainRaw="",
             strainStandard="备用品系",
-            notes="合法\x00文本\x0b\ud800",
+            supplier="合法\x00文本\x0b\ud800",
             rawMessage="",
             finalCardCount=None,
         )
@@ -188,6 +195,7 @@ class IntakeSummaryTests(unittest.TestCase):
         item = reservation(
             purchaseOrderNo="PO202610005",
             strainRaw="品系：A <B>",
+            supplier="供应商：按预约原样记录\n第二行供应商",
             project="示例项目",
             receiverName="示例接收人",
             vetPhone="020-12345678",
@@ -206,15 +214,9 @@ class IntakeSummaryTests(unittest.TestCase):
                 "供应商",
                 "品系",
                 "数量",
-                "IACUC",
-                "笼数",
-                "动物种类",
-                "性别",
-                "饲养天数",
-                "预约备注",
             },
         )
-        for value in ("：PO202610005", "：品系：A <B>", "：供应商：按预约原样记录\n第二行备注"):
+        for value in ("：PO202610005", "：品系：A <B>", "：供应商：按预约原样记录\n第二行供应商"):
             run = next(run for p in details for run in p.runs if run.text == value)
             self.assertFalse(run.bold)
         for removed in ("项目名称", "示例项目", "接收人", "示例接收人", "兽医电话", "020-12345678", "饲养房间"):
