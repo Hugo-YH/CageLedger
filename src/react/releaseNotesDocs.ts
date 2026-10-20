@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.13.4",
+    build: "231",
+    releasedAt: "2026-10-20",
+    title: "接收汇总 Word 排版",
+    items: [
+      "接收汇总按日期、房间和预约批次分组，房间与批次标题采用中心 VI 蓝色、橙色的浅色底纹，便于逐批核对",
+      "采购单号与批次号分为两栏，供应商、品系和数量分为三栏；长内容自动换行，字段名称加粗",
+      "批次状态紧随预约人显示，保留 IACUC、笼数、动物信息和预约备注；移除重复的房间信息，以及项目名称、接收人和兽医电话",
+    ],
+  },
+  {
     version: "1.13.3",
     build: "230",
     releasedAt: "2026-10-19",
