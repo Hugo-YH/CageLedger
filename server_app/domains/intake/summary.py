@@ -8,7 +8,8 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
@@ -19,6 +20,10 @@ from .rules import species_label
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 STATUS_LABELS = {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}
 TEMPLATE = Path(__file__).resolve().parents[2] / "resources" / "intake" / "reception-summary.docx"
+FONT_NAME = "微软雅黑"
+# Pale tints sampled from the centre VI reference blue #222962 and orange #F16901.
+ROOM_FILL = "E9EAEF"
+BATCH_FILL = "FEF3EB"
 
 
 def validate_interval(start_date, end_date):
@@ -55,7 +60,8 @@ def field(value):
 def paragraph(document, value, *, bold=False, size=12, after=0, keep_next=False):
     p = document.add_paragraph()
     p.paragraph_format.space_after = Pt(after)
-    p.paragraph_format.line_spacing = Pt(max(15, size * 1.25))
+    p.paragraph_format.line_spacing = Pt(max(16, size * 1.25))
+    p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
     p.paragraph_format.keep_together = True
     p.paragraph_format.keep_with_next = keep_next
     run = p.add_run(text(value))
@@ -77,38 +83,85 @@ def detail_paragraph(document, lines):
     return p
 
 
-def shade_run(run, fill):
+def detail_table(document, batch):
+    """One six-column grid yields halves on the first row and thirds on the second."""
+    section = document.sections[0]
+    width = section.page_width - section.left_margin - section.right_margin
+    table = document.add_table(rows=2, cols=6)
+    table.autofit = False
+    for column in table.columns:
+        column.width = width // 6
+    properties = table._tbl.tblPr
+    table_width = properties.find(qn("w:tblW"))
+    table_width.set(qn("w:type"), "dxa")
+    table_width.set(qn("w:w"), str(width // 635))
+    borders = OxmlElement("w:tblBorders")
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        edge = OxmlElement(f"w:{side}")
+        edge.set(qn("w:val"), "nil")
+        borders.append(edge)
+    properties.append(borders)
+    margins = OxmlElement("w:tblCellMar")
+    for side, amount in (("top", 0), ("bottom", 0), ("start", 0), ("end", 80)):
+        margin = OxmlElement(f"w:{side}")
+        margin.set(qn("w:w"), str(amount))
+        margin.set(qn("w:type"), "dxa")
+        margins.append(margin)
+    properties.append(margins)
+    quantity = f"{text(batch['quantity'])}只" if batch.get("quantity") is not None else "未填写"
+    rows = (
+        [("采购单号", field(batch.get("purchaseOrderNo"))), ("批次号", field(batch.get("batchNo")))],
+        [
+            ("供应商", field(batch.get("supplier"))),
+            ("品系", field(batch.get("strainRaw") or batch.get("strainStandard"))),
+            ("数量", quantity),
+        ],
+    )
+    for row, fields in zip(table.rows, rows, strict=True):
+        row._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
+        cells = list(row.cells)
+        span = 6 // len(fields)
+        for index, (label, value) in enumerate(fields):
+            first = index * span
+            cell = cells[first].merge(cells[first + span - 1])
+            cell.width = width // len(fields)
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+            p = cell.paragraphs[0]
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.line_spacing = Pt(16)
+            p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
+            p.paragraph_format.keep_together = True
+            p.paragraph_format.keep_with_next = True
+            p.add_run(label).bold = True
+            p.add_run(f"：{text(value)}").bold = False
+
+
+def shade_paragraph(p, fill):
     shading = OxmlElement("w:shd")
     shading.set(qn("w:val"), "clear")
     shading.set(qn("w:color"), "auto")
     shading.set(qn("w:fill"), fill)
-    run._r.get_or_add_rPr().append(shading)
+    p._p.get_or_add_pPr().append(shading)
 
 
 def batch_block(document, batch):
     owner, pi = text(batch.get("owner")), text(batch.get("pi"))
     person = f"{owner}（{pi}）" if owner and pi and owner != pi else owner or pi or "负责人未填写"
-    cage_count = batch.get("finalCardCount")
-    cages = f"　{cage_count}笼" if cage_count is not None else ""
-    heading = paragraph(document, f"□ {person}{cages}", bold=True, keep_next=True)
-    shade_run(heading.runs[0], "F8F4E3")
+    heading = paragraph(document, f"□ {person}", bold=True, keep_next=True)
+    shade_paragraph(heading, BATCH_FILL)
     status = text(batch.get("status"))
-    tag = heading.add_run(f"　【{STATUS_LABELS.get(status, status or '状态未填写')}】")
+    tag = heading.add_run(f"　｜{STATUS_LABELS.get(status, status or '状态未填写')}｜")
     tag.bold = True
     tag.font.size = Pt(10.5)
     tag.font.color.rgb = RGBColor.from_string(
         {"printed": "0958D9", "received": "237804", "draft": "595959", "pending_print": "595959"}.get(status, "595959")
     )
-    lines = [
-        [("采购单号", field(batch.get("purchaseOrderNo"))), ("批次号", field(batch.get("batchNo")))],
-        [
-            ("供应商", field(batch.get("supplier"))),
-            ("品系", field(batch.get("strainRaw") or batch.get("strainStandard"))),
-            ("数量", field(batch.get("quantity"))),
-            ("饲养房间", field(batch.get("roomName"))),
-        ],
-    ]
+    detail_table(document, batch)
+    lines = []
     optional = [("IACUC", field(batch.get("iacuc")))]
+    if batch.get("finalCardCount") is not None:
+        optional.append(("笼数", f"{text(batch['finalCardCount'])}笼"))
     if batch.get("species"):
         optional.append(("动物种类", species_label(batch["species"])))
     if batch.get("sex"):
@@ -116,15 +169,6 @@ def batch_block(document, batch):
     if batch.get("husbandryDays") is not None:
         optional.append(("饲养天数", text(batch["husbandryDays"])))
     lines.append(optional)
-    if batch.get("project"):
-        lines.append([("项目名称", text(batch["project"]))])
-    contacts = [
-        (label, text(batch[key]))
-        for key, label in (("receiverName", "接收人"), ("vetPhone", "兽医电话"))
-        if batch.get(key)
-    ]
-    if contacts:
-        lines.append(contacts)
     if batch.get("notes"):
         lines.append([("预约备注", text(batch["notes"]))])
     detail_paragraph(document, lines)
@@ -137,19 +181,27 @@ def generate(document_snapshot):
     section.top_margin = section.bottom_margin = Mm(10)
     section.left_margin, section.right_margin = Mm(10), Mm(20)
     section.header_distance = section.footer_distance = Mm(5)
+    # The old line grid rounds 16pt lines up to two grid rows in Word.
+    for grid in section._sectPr.xpath("./w:docGrid"):
+        grid.set(qn("w:type"), "default")
     if "Title" not in document.styles:
         document.styles.add_style("Title", WD_STYLE_TYPE.PARAGRAPH).base_style = document.styles["Normal"]
-    for name in ("Normal", "Title"):
+    for name in ("Normal", "Title", "Footer"):
+        if name not in document.styles:
+            continue
         style = document.styles[name]
-        style.font.name, style.font.size = "宋体", Pt(12 if name == "Normal" else 16)
+        style.font.name, style.font.size = FONT_NAME, Pt(16 if name == "Title" else 12)
         style.font.color.rgb = RGBColor(0, 0, 0)
         fonts = style.element.get_or_add_rPr().get_or_add_rFonts()
-        for key in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+        for key in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme", "csTheme"):
             fonts.attrib.pop(qn(f"w:{key}"), None)
-        fonts.set(qn("w:eastAsia"), "宋体")
+        fonts.set(qn("w:eastAsia"), FONT_NAME)
+        fonts.set(qn("w:cs"), FONT_NAME)
         style.paragraph_format.space_before = Pt(0)
         style.paragraph_format.space_after = Pt(0)
-        style.paragraph_format.line_spacing = Pt(15 if name == "Normal" else 20)
+        style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        style.paragraph_format.line_spacing = Pt(20 if name == "Title" else 16)
+        style.paragraph_format.line_spacing_rule = WD_LINE_SPACING.AT_LEAST
         for border in style.element.xpath("./w:pPr/w:pBdr"):
             border.getparent().remove(border)
     title = document.add_paragraph("实验动物接收汇总", "Title")
@@ -168,7 +220,7 @@ def generate(document_snapshot):
         paragraph(document, f"{day.year}年{day.month}月{day.day}日", bold=True, size=14, after=4, keep_next=True)
         for room, batches in sorted(rooms.items()):
             p = paragraph(document, room or "房间未填写", bold=True, after=4, keep_next=True)
-            shade_run(p.runs[0], "EAF3EA")
+            shade_paragraph(p, ROOM_FILL)
             for batch in batches:
                 batch_block(document, batch)
     footer = section.footer.paragraphs[0]

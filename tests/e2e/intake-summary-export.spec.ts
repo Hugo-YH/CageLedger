@@ -39,6 +39,8 @@ test("reception notes export Word by inclusive dates without selecting or changi
             status: "pending_print",
             rawMessage: "8周龄，20克，下午送达",
             receiverName: "系统管理员",
+            project: "不应出现在接收汇总中的项目名称",
+            vetPhone: "020-12345678",
             cards: [],
           },
         },
@@ -89,7 +91,11 @@ test("reception notes export Word by inclusive dates without selecting or changi
     expect(content).toContain("summary-e2e-start");
     expect(content).toContain("summary-e2e-end");
     expect(content).not.toContain("summary-e2e-outside");
-    expect(content).toContain("【未打印】");
+    expect(content).toContain("｜未打印｜");
+    expect(content).not.toContain("不应出现在接收汇总中的项目名称");
+    expect(content).not.toContain("接收人");
+    expect(content).not.toContain("兽医电话");
+    expect(content).not.toContain("饲养房间");
     expect(content).not.toContain("预约原文：");
     expect(content).not.toContain("签收：");
     await expect(modal.getByRole("status")).toContainText("已下载");

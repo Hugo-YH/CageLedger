@@ -7,6 +7,7 @@ from zipfile import ZipFile
 
 from docx import Document
 from docx.oxml.ns import qn
+from docx.text.paragraph import Paragraph
 
 from server_app.domains.intake import summary
 from server_app.repositories.entities import upsert_intake_batch
@@ -37,6 +38,14 @@ def reservation(index=1, **overrides):
         "rawMessage": "预约原文含8周龄，20–22克\n下午送达",
         **overrides,
     }
+
+
+def paragraphs(document):
+    return [Paragraph(element, document) for element in document.element.body.xpath(".//w:p")]
+
+
+def document_text(document):
+    return "\n".join(p.text for p in paragraphs(document))
 
 
 class IntakeSummaryTests(unittest.TestCase):
@@ -95,7 +104,7 @@ class IntakeSummaryTests(unittest.TestCase):
         document = Document(
             BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-13", "batches": entries}))
         )
-        content = "\n".join(p.text for p in document.paragraphs)
+        content = document_text(document)
         for value in [
             "共 3 批",
             "预约人（项目负责人）",
@@ -106,30 +115,55 @@ class IntakeSummaryTests(unittest.TestCase):
             "雌雄各半",
             "Z2026001",
             "请核对耳标\n保持分笼",
-            "【已接收】",
+            "｜已接收｜",
         ]:
             self.assertIn(value, content)
         self.assertNotIn("标准化品系", content)
-        self.assertIn("【未打印】", content)
+        self.assertIn("｜未打印｜", content)
         for removed in ("预约原文：", "8周龄", "签收：", "实收数量：", "备注：________________"):
             self.assertNotIn(removed, content)
         self.assertNotIn("✔", content)
         self.assertLess(content.index("PO-1"), content.index("PO-2"))
         self.assertLess(content.index("PO-2"), content.index("PO-3"))
         self.assertEqual(entries, original)
-        self.assertFalse(document.tables)
+        self.assertEqual(len(document.tables), 3)
         self.assertAlmostEqual(document.sections[0].page_width.mm, 210, places=1)
         self.assertAlmostEqual(document.sections[0].page_height.mm, 297, places=1)
-        self.assertEqual(document.styles["Normal"].element.rPr.rFonts.get(qn("w:eastAsia")), "宋体")
+        self.assertEqual(document.sections[0]._sectPr.find(qn("w:docGrid")).get(qn("w:type")), "default")
+        self.assertEqual(document.styles["Normal"].element.rPr.rFonts.get(qn("w:eastAsia")), "微软雅黑")
         for p in document.paragraphs:
             if p.text.startswith("□ "):
                 self.assertTrue(p.paragraph_format.keep_with_next)
                 self.assertTrue(p.paragraph_format.keep_together)
-            if p.text.startswith("采购单号："):
+                self.assertEqual(p._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "FEF3EB")
+                self.assertFalse(p._p.xpath(".//w:rPr/w:shd"))
+            if p.text.startswith("IACUC："):
                 self.assertFalse(p.paragraph_format.keep_with_next)
                 self.assertTrue(p.paragraph_format.keep_together)
                 self.assertEqual(p.paragraph_format.space_after.pt, 12)
-                self.assertEqual(p.paragraph_format.line_spacing.pt, 15)
+                self.assertEqual(p.paragraph_format.line_spacing.pt, 16)
+        self.assertEqual([p.text for p in document.paragraphs].count("8103"), 1)
+        room = next(p for p in document.paragraphs if p.text == "8103")
+        self.assertEqual(room._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "E9EAEF")
+        self.assertNotIn("饲养房间", content)
+
+    def test_detail_rows_use_fixed_half_and_third_widths_without_borders_or_fixed_heights(self):
+        item = reservation(supplier="很长的供应商名称" * 8, strainRaw="长品系名称" * 8)
+        document = Document(
+            BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-12", "batches": [item]}))
+        )
+        table = document.tables[0]
+        self.assertFalse(table.autofit)
+        self.assertEqual([len(row._tr.tc_lst) for row in table.rows], [2, 3])
+        for row, span in zip(table.rows, (3, 2), strict=True):
+            widths = [int(cell.tcPr.tcW.get(qn("w:w"))) for cell in row._tr.tc_lst]
+            self.assertEqual(len(set(widths)), 1)
+            self.assertAlmostEqual(sum(widths), int(table._tbl.tblPr.find(qn("w:tblW")).get(qn("w:w"))), delta=2)
+            self.assertTrue(all(cell.tcPr.gridSpan.val == span for cell in row._tr.tc_lst))
+            self.assertFalse(row._tr.xpath("./w:trPr/w:trHeight"))
+        self.assertTrue(all(edge.get(qn("w:val")) == "nil" for edge in table._tbl.tblPr.find(qn("w:tblBorders"))))
+        self.assertIn(item["supplier"], document_text(document))
+        self.assertIn(item["strainRaw"], document_text(document))
 
     def test_missing_fields_are_not_invented_and_xml_control_characters_are_removed(self):
         item = reservation(
@@ -145,7 +179,7 @@ class IntakeSummaryTests(unittest.TestCase):
         document = Document(
             BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-12", "batches": [item]}))
         )
-        content = "\n".join(p.text for p in document.paragraphs)
+        content = document_text(document)
         for value in ["负责人未填写", "数量：未填写", "备用品系", "合法文本"]:
             self.assertIn(value, content)
         self.assertNotIn("预约原文：", content)
@@ -162,8 +196,8 @@ class IntakeSummaryTests(unittest.TestCase):
         document = Document(
             BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-12", "batches": [item]}))
         )
-        details = next(p for p in document.paragraphs if p.text.startswith("采购单号："))
-        labels = {run.text for run in details.runs if run.bold}
+        details = [p for p in paragraphs(document) if any(run.bold is False for run in p.runs)]
+        labels = {run.text for p in details for run in p.runs if run.bold}
         self.assertEqual(
             labels,
             {
@@ -172,20 +206,19 @@ class IntakeSummaryTests(unittest.TestCase):
                 "供应商",
                 "品系",
                 "数量",
-                "饲养房间",
                 "IACUC",
+                "笼数",
                 "动物种类",
                 "性别",
                 "饲养天数",
-                "项目名称",
-                "接收人",
-                "兽医电话",
                 "预约备注",
             },
         )
         for value in ("：PO202610005", "：品系：A <B>", "：供应商：按预约原样记录\n第二行备注"):
-            run = next(run for run in details.runs if run.text == value)
+            run = next(run for p in details for run in p.runs if run.text == value)
             self.assertFalse(run.bold)
+        for removed in ("项目名称", "示例项目", "接收人", "示例接收人", "兽医电话", "020-12345678", "饲养房间"):
+            self.assertNotIn(removed, document_text(document))
 
     def test_template_contains_only_blank_layout_and_all_status_tags_are_exported(self):
         template = Document(summary.TEMPLATE)
@@ -199,9 +232,9 @@ class IntakeSummaryTests(unittest.TestCase):
         document = Document(
             BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-12", "batches": entries}))
         )
-        content = "\n".join(p.text for p in document.paragraphs)
+        content = document_text(document)
         for label in summary.STATUS_LABELS.values():
-            self.assertIn(f"【{label}】", content)
+            self.assertIn(f"｜{label}｜", content)
 
     def test_handler_rejects_anonymous_and_allows_list_roles_with_private_word_download(self):
         handler = Mock(path="/api/intake-batches/summary.docx?startDate=2026-10-12&endDate=2026-10-12")
