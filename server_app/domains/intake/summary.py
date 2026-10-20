@@ -72,7 +72,8 @@ def paragraph(document, value, *, bold=False, size=12, after=0, keep_next=False)
 def detail_table(document, batch):
     """One six-column grid yields halves on the first row and thirds on the second."""
     section = document.sections[0]
-    width = section.page_width - section.left_margin - section.right_margin
+    indent = Mm(5)
+    width = section.page_width - section.left_margin - section.right_margin - indent
     table = document.add_table(rows=2, cols=6)
     table.autofit = False
     for column in table.columns:
@@ -81,6 +82,10 @@ def detail_table(document, batch):
     table_width = properties.find(qn("w:tblW"))
     table_width.set(qn("w:type"), "dxa")
     table_width.set(qn("w:w"), str(width // 635))
+    table_indent = OxmlElement("w:tblInd")
+    table_indent.set(qn("w:type"), "dxa")
+    table_indent.set(qn("w:w"), str(indent.twips))
+    properties.insert_element_before(table_indent, "w:tblBorders", "w:tblLayout", "w:tblLook")
     borders = OxmlElement("w:tblBorders")
     for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
         edge = OxmlElement(f"w:{side}")

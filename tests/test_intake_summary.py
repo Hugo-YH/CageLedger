@@ -141,6 +141,7 @@ class IntakeSummaryTests(unittest.TestCase):
         self.assertEqual(document.styles["Normal"].element.rPr.rFonts.get(qn("w:eastAsia")), "微软雅黑")
         for p in document.paragraphs:
             if p.text.startswith("□ "):
+                self.assertIn(p.paragraph_format.left_indent, (None, 0))
                 self.assertTrue(p.paragraph_format.keep_with_next)
                 self.assertTrue(p.paragraph_format.keep_together)
                 self.assertEqual(p._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "F3D8C4")
@@ -151,6 +152,7 @@ class IntakeSummaryTests(unittest.TestCase):
                 self.assertTrue(p.runs[-1].text.startswith("\t｜"))
         self.assertEqual([p.text for p in document.paragraphs].count("8103"), 1)
         room = next(p for p in document.paragraphs if p.text == "8103")
+        self.assertIn(room.paragraph_format.left_indent, (None, 0))
         self.assertEqual(room._p.pPr.find(qn("w:shd")).get(qn("w:fill")), "CED1E9")
         self.assertNotIn("饲养房间", content)
 
@@ -161,6 +163,11 @@ class IntakeSummaryTests(unittest.TestCase):
         )
         table = document.tables[0]
         self.assertFalse(table.autofit)
+        indent = int(table._tbl.tblPr.find(qn("w:tblInd")).get(qn("w:w")))
+        width = int(table._tbl.tblPr.find(qn("w:tblW")).get(qn("w:w")))
+        self.assertAlmostEqual(indent, 283, delta=1)
+        self.assertAlmostEqual(width, 9921, delta=1)
+        self.assertAlmostEqual(indent + width, 10205, delta=2)
         self.assertEqual([len(row._tr.tc_lst) for row in table.rows], [2, 3])
         for row, span in zip(table.rows, (3, 2), strict=True):
             widths = [int(cell.tcPr.tcW.get(qn("w:w"))) for cell in row._tr.tc_lst]
