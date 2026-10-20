@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.13.5",
+    build: "232",
+    releasedAt: "2026-10-20",
+    title: "接收汇总 Word 精简与对齐",
+    items: [
+      "批次打印状态在标题行右对齐，调整房间与批次底纹，保留中心 VI 蓝橙配色",
+      "明细仅保留采购单号、批次号、供应商、品系和数量，移除 IACUC、笼数、动物种类、性别、饲养天数及预约备注",
+      "明细向内缩进 5 毫米，按缩进后的可用宽度均分两栏和三栏，避免右侧越界；保留长内容换行和批次间距",
+    ],
+  },
+  {
     version: "1.13.4",
     build: "231",
     releasedAt: "2026-10-20",
