@@ -31,6 +31,7 @@ from server_app.persistence import SchemaRegistry, SchemaStep, backfills
 from server_app.persistence.base_schema import initialize_base_schema
 from server_app.persistence.data_quality import ensure_schema as ensure_data_quality_schema
 from server_app.persistence.indexes import create_performance_indexes
+from server_app.persistence.intake_identifiers import ensure_intake_identifier_schema
 from server_app.persistence.legacy_migrations import (
     backfill_occupancy_structured_columns as backfill_occupancy_structured_columns_migration,
 )
@@ -105,6 +106,7 @@ def migrate_schema(conn):
     ensure_occupancies_history_schema(conn)
     ensure_occupancies_structured_columns_migration(conn, backfill_occupancy_structured_columns)
     ensure_intake_batch_structured_columns(conn)
+    ensure_intake_identifier_schema(conn)
     repair_intake_batch_species(conn)
     migrate_billing_workflow_schema(conn)
     backfill_billing_workflow_scope(conn)

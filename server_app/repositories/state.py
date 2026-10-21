@@ -2,6 +2,7 @@ import json
 
 from server_app.cache import cache_get, cache_set
 from server_app.shared import as_float, as_int
+from server_app.shared.intake_identifiers import intake_identifier_values
 
 from .payload import dump_json, read_payloads, read_setting, set_setting, table_has_rows
 
@@ -298,9 +299,10 @@ def write_normalized_state(
             """
             INSERT INTO intake_batches (
                 id, batch_no, iacuc, supplier, pi, owner, quantity, card_count,
-                room_name, intake_date, status, updated_at, payload
+                room_name, intake_date, status, updated_at, payload,
+                purchase_order_no, purchase_order_key, batch_no_key
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 batch.get("id"),
@@ -316,6 +318,7 @@ def write_normalized_state(
                 batch.get("status", "draft"),
                 batch.get("updatedAt", updated_at),
                 dump_json(batch),
+                *intake_identifier_values(batch),
             ),
         )
 

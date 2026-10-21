@@ -1,11 +1,18 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useBootstrap } from "../../api/bootstrap";
-import type { IntakeBatch, IntakeListParams, SessionUser } from "../../api/contracts";
+import type {
+  IntakeBatch,
+  IntakeDuplicateDetails,
+  IntakeListParams,
+  IntakeWriteResponse,
+  SessionUser,
+} from "../../api/contracts";
 import {
   aiParseIntakeMessage,
+  intakeDuplicateDetails,
   standardizeIntakeStrain,
   useConfirmIntakeBatchesReceipt,
   useDeleteIntakeBatch,
@@ -32,6 +39,7 @@ import {
   type IntakePrintRoom,
 } from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
+import { IntakeDuplicateConfirmDialog } from "./components/IntakeDuplicateConfirmDialog";
 import type { WorkspaceView } from "../../state/ui";
 
 interface PendingIntakePrintJob {
@@ -42,6 +50,21 @@ interface PendingIntakePrintJob {
   missing: number;
   saveCurrent: boolean;
   exists: boolean;
+  draftRevision: number;
+}
+
+interface IntakeSaveIntent {
+  item: IntakeBatch;
+  exists: boolean;
+  draftRevision: number;
+  mode: "entry" | "batches";
+  print?: { job: PendingIntakePrintJob; fillBlanks: boolean };
+}
+
+interface PendingDuplicateSave {
+  intent: IntakeSaveIntent;
+  details: IntakeDuplicateDetails;
+  error: string;
 }
 
 export function IntakeView({
@@ -52,6 +75,14 @@ export function IntakeView({
   navigate: (view: WorkspaceView) => void;
   mode: "entry" | "batches";
 }) {
+  const activeMode = useRef(mode);
+  const draftRevision = useRef(0);
+  const saveInFlight = useRef(false);
+  const duplicateConfirmationInFlight = useRef(false);
+  if (activeMode.current !== mode) {
+    activeMode.current = mode;
+    draftRevision.current += 1;
+  }
   const queryClient = useQueryClient();
   const bootstrap = useBootstrap("summary");
   const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
@@ -77,6 +108,7 @@ export function IntakeView({
   const [markingReceived, setMarkingReceived] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
   const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
+  const [pendingDuplicateSave, setPendingDuplicateSave] = useState<PendingDuplicateSave | null>(null);
   const params: IntakeListParams = {
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -108,6 +140,12 @@ export function IntakeView({
     },
     selectedItems.length > 0 || selectingAll,
   );
+  useEffect(() => {
+    setPendingDuplicateSave(null);
+    return () => {
+      draftRevision.current += 1;
+    };
+  }, [mode]);
 
   if (bootstrap.isPending || (mode === "batches" && list.isPending)) {
     return (
@@ -119,7 +157,56 @@ export function IntakeView({
   }
 
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
+    draftRevision.current += 1;
+    setPendingDuplicateSave(null);
     setDraft((current) => normalizeIntakeBatch({ ...current, [key]: value }, roomNames));
+  }
+
+  function replaceDraft(next: IntakeBatch) {
+    draftRevision.current += 1;
+    setPendingDuplicateSave(null);
+    setDraft(next);
+  }
+
+  function invalidateDraftConfirmation() {
+    draftRevision.current += 1;
+    setPendingDuplicateSave(null);
+  }
+
+  function closeEditingDialog() {
+    invalidateDraftConfirmation();
+    setEditingDialog(false);
+  }
+
+  function isCurrentSaveIntent(intent: IntakeSaveIntent) {
+    return activeMode.current === intent.mode && draftRevision.current === intent.draftRevision;
+  }
+
+  function saveIntent(item: IntakeBatch, exists: boolean, print?: IntakeSaveIntent["print"]): IntakeSaveIntent {
+    return { item, exists, draftRevision: draftRevision.current, mode, print };
+  }
+
+  function showSaveFailure(intent: IntakeSaveIntent, error: unknown, fallback: string) {
+    if (!isCurrentSaveIntent(intent)) return;
+    const details = intakeDuplicateDetails(error);
+    if (details) {
+      setPendingDuplicateSave({ intent, details, error: "" });
+      return;
+    }
+    setNotice(error instanceof Error ? error.message : fallback);
+  }
+
+  function completeSavedDraft(intent: IntakeSaveIntent, savedItem: IntakeBatch) {
+    if (!isCurrentSaveIntent(intent)) return false;
+    if (intent.exists) {
+      replaceDraft(normalizeIntakeBatch(savedItem, roomNames));
+      setNotice("待接收批次已更新。");
+      return true;
+    }
+    replaceDraft(createIntakeDraft(user.displayName, user.phone));
+    setEditing(false);
+    setNotice(`待接收批次 ${savedItem.batchNo} 已保存，可继续录入下一批。`);
+    return true;
   }
 
   async function parseMessage() {
@@ -169,7 +256,7 @@ export function IntakeView({
     }
     // Only an explicit edit from the saved-batch list retains the persisted batch ID.
     const isEditingSavedBatch = mode === "batches" && editing;
-    setDraft(
+    replaceDraft(
       normalizeIntakeBatch(
         {
           ...draft,
@@ -198,30 +285,28 @@ export function IntakeView({
       setNotice(`请填写必填项目：${missingFields.join("、")}。`);
       return;
     }
+    const isEditingSavedBatch = mode === "batches" && editing;
+    const intent = saveIntent(item, isEditingSavedBatch);
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
     try {
-      const isEditingSavedBatch = mode === "batches" && editing;
-      const response = await save.mutateAsync({ item, exists: isEditingSavedBatch });
-      if (isEditingSavedBatch) {
-        setDraft(normalizeIntakeBatch(response.item, roomNames));
-        setNotice("待接收批次已更新。");
-        return;
-      }
-      setDraft(createIntakeDraft(user.displayName, user.phone));
-      setEditing(false);
-      setNotice(`待接收批次 ${response.item.batchNo} 已保存，可继续录入下一批。`);
+      const response = await save.mutateAsync({ item, exists: isEditingSavedBatch, checkDuplicates: true });
+      completeSavedDraft(intent, response.item);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "保存失败");
+      showSaveFailure(intent, error, "保存失败");
+    } finally {
+      saveInFlight.current = false;
     }
   }
 
   function startNew() {
-    setDraft(createIntakeDraft(user.displayName, user.phone));
+    replaceDraft(createIntakeDraft(user.displayName, user.phone));
     setEditing(false);
     setNotice("");
   }
 
   function edit(item: IntakeBatch) {
-    setDraft(normalizeIntakeBatch(item, roomNames));
+    replaceDraft(normalizeIntakeBatch(item, roomNames));
     setEditing(true);
     setEditingDialog(mode === "batches");
   }
@@ -285,6 +370,7 @@ export function IntakeView({
       missing: plan.missing,
       saveCurrent,
       exists,
+      draftRevision: draftRevision.current,
     };
     if (job.missing) {
       setPendingPrint(job);
@@ -293,9 +379,20 @@ export function IntakeView({
     void executePrint(job, false);
   }
 
+  function openPrintWindow() {
+    const popup = window.open("", "_blank");
+    if (!popup) return null;
+    popup.document.write(
+      '<!doctype html><html lang="zh-CN"><head><title>正在准备笼卡</title></head><body>正在准备笼卡...</body></html>',
+    );
+    popup.document.close();
+    return popup;
+  }
+
   async function executePrint(job: PendingIntakePrintJob, fillBlanks: boolean) {
     setPendingPrint(null);
-    const popup = window.open("", "_blank");
+    if (job.saveCurrent && draftRevision.current !== job.draftRevision) return;
+    const popup = openPrintWindow();
     if (!popup) {
       const message = "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。";
       if (job.saveCurrent) setNotice(message);
@@ -305,16 +402,37 @@ export function IntakeView({
       }
       return;
     }
-    popup.document.write(
-      '<!doctype html><html lang="zh-CN"><head><title>正在准备笼卡</title></head><body>正在准备笼卡...</body></html>',
-    );
-    popup.document.close();
     let printable = job.batches;
     try {
       if (job.saveCurrent) {
-        const response = await save.mutateAsync({ item: job.batches[0], exists: job.exists });
+        const intent: IntakeSaveIntent = {
+          item: job.batches[0],
+          exists: job.exists,
+          draftRevision: job.draftRevision,
+          mode,
+          print: { job, fillBlanks },
+        };
+        if (!isCurrentSaveIntent(intent)) {
+          popup.close();
+          return;
+        }
+        if (saveInFlight.current) {
+          popup.close();
+          return;
+        }
+        saveInFlight.current = true;
+        let response: IntakeWriteResponse;
+        try {
+          response = await save.mutateAsync({ item: intent.item, exists: intent.exists, checkDuplicates: true });
+        } finally {
+          saveInFlight.current = false;
+        }
+        if (!isCurrentSaveIntent(intent)) {
+          popup.close();
+          return;
+        }
         const saved = normalizeIntakeBatch(response.item, roomNames);
-        setDraft(saved);
+        replaceDraft(saved);
         setEditing(true);
         printable = [saved];
       }
@@ -323,12 +441,90 @@ export function IntakeView({
       }
     } catch (error) {
       popup.close();
+      if (job.saveCurrent) {
+        const intent: IntakeSaveIntent = {
+          item: job.batches[0],
+          exists: job.exists,
+          draftRevision: job.draftRevision,
+          mode,
+          print: { job, fillBlanks },
+        };
+        const details = intakeDuplicateDetails(error);
+        if (details && isCurrentSaveIntent(intent)) {
+          setPendingDuplicateSave({ intent, details, error: "" });
+          return;
+        }
+        if (!isCurrentSaveIntent(intent)) return;
+      }
       const message = error instanceof Error ? error.message : "准备笼卡失败";
       if (job.saveCurrent) setNotice(message);
       else {
         setBulkNotice(message);
         setBulkNoticeKind("error");
       }
+    }
+  }
+
+  async function confirmDuplicateSave() {
+    const pending = pendingDuplicateSave;
+    if (!pending || saveInFlight.current || duplicateConfirmationInFlight.current) return;
+    if (!isCurrentSaveIntent(pending.intent)) {
+      setPendingDuplicateSave(null);
+      return;
+    }
+    duplicateConfirmationInFlight.current = true;
+    const popup = pending.intent.print ? openPrintWindow() : null;
+    if (pending.intent.print && !popup) {
+      duplicateConfirmationInFlight.current = false;
+      setPendingDuplicateSave({ ...pending, error: "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。" });
+      return;
+    }
+    try {
+      saveInFlight.current = true;
+      const response = await save.mutateAsync({
+        item: pending.intent.item,
+        exists: pending.intent.exists,
+        checkDuplicates: true,
+        duplicateConfirmation: pending.details.confirmationToken,
+      });
+      if (!isCurrentSaveIntent(pending.intent)) {
+        popup?.close();
+        return;
+      }
+      setPendingDuplicateSave(null);
+      if (!pending.intent.print) {
+        completeSavedDraft(pending.intent, response.item);
+        return;
+      }
+      const saved = normalizeIntakeBatch(response.item, roomNames);
+      replaceDraft(saved);
+      setEditing(true);
+      if (
+        openIntakeCardPrint([saved], {
+          kind: pending.intent.print.job.kind,
+          fillBlanks: pending.intent.print.fillBlanks,
+          targetWindow: popup,
+        })
+      ) {
+        await markPrinted([saved]);
+      } else {
+        popup?.close();
+      }
+    } catch (error) {
+      popup?.close();
+      if (!isCurrentSaveIntent(pending.intent)) return;
+      const details = intakeDuplicateDetails(error);
+      if (details) {
+        setPendingDuplicateSave({ intent: pending.intent, details, error: "重复记录已更新，请重新核对后确认保存。" });
+        return;
+      }
+      setPendingDuplicateSave({
+        ...pending,
+        error: error instanceof Error ? error.message : "确认保存失败，请重试。",
+      });
+    } finally {
+      saveInFlight.current = false;
+      duplicateConfirmationInFlight.current = false;
     }
   }
 
@@ -452,14 +648,14 @@ export function IntakeView({
             key={draft.id}
             ariaLabel="编辑待接收批次"
             className="intake-edit-modal"
-            onClose={() => setEditingDialog(false)}
+            onClose={closeEditingDialog}
           >
             <div className="modal-shell-head">
               <div>
                 <h2>编辑待接收批次</h2>
                 <p>{draft.batchNo}</p>
               </div>
-              <ActionButton onClick={() => setEditingDialog(false)}>关闭</ActionButton>
+              <ActionButton onClick={closeEditingDialog}>关闭</ActionButton>
             </div>
             <div className="modal-shell-body">
               <IntakeEntryPanel
@@ -521,6 +717,18 @@ export function IntakeView({
             job={pendingPrint}
             onClose={() => setPendingPrint(null)}
             onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {pendingDuplicateSave ? (
+          <IntakeDuplicateConfirmDialog
+            key={pendingDuplicateSave.details.confirmationToken}
+            details={pendingDuplicateSave.details}
+            error={pendingDuplicateSave.error}
+            pending={save.isPending}
+            onClose={invalidateDraftConfirmation}
+            onConfirm={() => void confirmDuplicateSave()}
           />
         ) : null}
       </ModalPresence>

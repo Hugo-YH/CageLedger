@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
   IntakeBatch,
+  IntakeDuplicateDetails,
   IntakeListParams,
+  IntakeSaveRequest,
   IntakeSummaryExportParams,
   IntakeWriteResponse,
   PagedResponse,
 } from "./contracts";
-import { requestDownload, requestJson } from "./client";
+import { ApiError, requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
@@ -50,22 +52,49 @@ export function useIntakeFilterOptions(params: IntakeListParams, column: string,
   return useColumnFilterOptions("intake-batches", column, params.columnFilters, enabled);
 }
 
+export function saveIntakeBatch({ item, exists, checkDuplicates, duplicateConfirmation }: IntakeSaveRequest) {
+  return requestJson<IntakeWriteResponse>(
+    exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
+    {
+      method: exists ? "PUT" : "POST",
+      body: JSON.stringify({
+        item,
+        expectedUpdatedAt: exists ? item.updatedAt : "",
+        ...(checkDuplicates ? { checkDuplicates: true } : {}),
+        ...(duplicateConfirmation ? { duplicateConfirmation } : {}),
+      }),
+    },
+  );
+}
+
+function isIntakeDuplicateDetails(value: unknown): value is IntakeDuplicateDetails {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const details = value as Record<string, unknown>;
+  return (
+    Array.isArray(details.items) &&
+    typeof details.total === "number" &&
+    typeof details.confirmationToken === "string" &&
+    Boolean(details.confirmationToken)
+  );
+}
+
+export function intakeDuplicateDetails(error: unknown): IntakeDuplicateDetails | null {
+  if (!(error instanceof ApiError) || error.status !== 409 || error.code !== "INTAKE_DUPLICATE_CONFIRMATION_REQUIRED") {
+    return null;
+  }
+  return isIntakeDuplicateDetails(error.details) ? error.details : null;
+}
+
 export function useSaveIntakeBatch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ item, exists }: { item: IntakeBatch; exists: boolean }) =>
-      requestJson<IntakeWriteResponse>(
-        exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
-        {
-          method: exists ? "PUT" : "POST",
-          body: JSON.stringify({ item, expectedUpdatedAt: exists ? item.updatedAt : "" }),
-        },
-      ),
+    mutationFn: saveIntakeBatch,
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
+        queryClient.invalidateQueries({ queryKey: ["audit-events"] }),
       ]),
   });
 }

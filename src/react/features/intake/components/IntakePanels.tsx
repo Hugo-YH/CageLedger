@@ -121,6 +121,13 @@ export function IntakeEntryPanel({
               <Field label="批次号" value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
             </Col>
             <Col lg={8} md={12} xs={24}>
+              <Field
+                label="采购单号"
+                value={draft.purchaseOrderNo}
+                onChange={(value) => onUpdate("purchaseOrderNo", value)}
+              />
+            </Col>
+            <Col lg={8} md={12} xs={24}>
               <Field label="IACUC 编号" required value={draft.iacuc} onChange={(value) => onUpdate("iacuc", value)} />
             </Col>
             <Col lg={12} md={12} xs={24}>

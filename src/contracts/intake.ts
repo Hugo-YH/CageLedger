@@ -70,6 +70,34 @@ export interface IntakeWriteResponse {
   auditLogs?: Record<string, unknown>[];
 }
 
+export type IntakeDuplicateMatchedField = "purchaseOrderNo" | "batchNo";
+
+export interface IntakeDuplicateItem {
+  id: string;
+  purchaseOrderNo: string;
+  batchNo: string;
+  intakeDate: string;
+  pi: string;
+  owner: string;
+  status: IntakeBatchStatus;
+  matchedFields: IntakeDuplicateMatchedField[];
+}
+
+export interface IntakeDuplicateDetails {
+  items: IntakeDuplicateItem[];
+  total: number;
+  confirmationToken: string;
+}
+
+export interface IntakeSaveRequest {
+  item: IntakeBatch;
+  exists: boolean;
+  /** New interactive saves always request the server-side duplicate check. */
+  checkDuplicates?: boolean;
+  /** Server token bound to this draft and the complete duplicate match set. */
+  duplicateConfirmation?: string;
+}
+
 /** Read-only public projection; never expose the complete intake batch or account data. */
 export interface CageCardDetails {
   qrId: string;

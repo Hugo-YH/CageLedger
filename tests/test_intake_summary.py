@@ -10,6 +10,7 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 
 from server_app.domains.intake import summary
+from server_app.persistence.intake_identifiers import ensure_intake_identifier_schema
 from server_app.repositories.entities import upsert_intake_batch
 from server_app.web import intake_summary
 
@@ -56,6 +57,7 @@ class IntakeSummaryTests(unittest.TestCase):
             id TEXT PRIMARY KEY, batch_no TEXT, iacuc TEXT, supplier TEXT, pi TEXT, owner TEXT,
             quantity INTEGER, card_count INTEGER, room_name TEXT, intake_date TEXT,
             status TEXT, updated_at TEXT, payload TEXT)""")
+        ensure_intake_identifier_schema(self.conn)
         self.conn.execute("CREATE INDEX idx_intake_date ON intake_batches(intake_date)")
         self.addCleanup(self.conn.close)
 

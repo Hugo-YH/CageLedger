@@ -1021,16 +1021,16 @@
           "method": "POST",
           "path": "/api/intake-batches",
           "purpose": "新建批次",
-          "request": "{item}",
-          "response": "{item,auditLogs,...}",
+          "request": "{item,checkDuplicates?,duplicateConfirmation?}",
+          "response": "{item,auditLogs,...}；可选查重未确认时409含匹配记录和确认标识",
           "protection": "entity_create"
         },
         {
           "method": "PUT",
           "path": "/api/intake-batches/{id}",
           "purpose": "编辑批次",
-          "request": "{item,expectedUpdatedAt?}",
-          "response": "{item,placementTasks?,auditLogs?}",
+          "request": "{item,expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?}",
+          "response": "{item,placementTasks?,auditLogs?}；可选查重未确认时409含匹配记录和确认标识",
           "protection": "compat_edit"
         },
         {

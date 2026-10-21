@@ -26,6 +26,7 @@ from server_app.domains.iacuc.sync import (
     invalidate_quantity_sheet_candidate_snapshots_by_pi,
     save_principal_identity,
 )
+from server_app.domains.intake.duplicates import IntakeDuplicateConfirmationRequired
 from server_app.domains.state.infrastructure_commands import (
     write_infrastructure as write_infrastructure_state,
 )
@@ -286,6 +287,11 @@ class HandlerSupportMixin:
             body = self.read_optional_json_body() if method == "DELETE" else self.read_json_body()
             payload, status = app_ports().write_entity_state(endpoint, method, item_id, body, user)
             self.send_json(payload, status)
+        except IntakeDuplicateConfirmationRequired as exc:
+            self.send_json(
+                {"error": str(exc), "code": "INTAKE_DUPLICATE_CONFIRMATION_REQUIRED", "details": exc.details},
+                HTTPStatus.CONFLICT,
+            )
         except StaleWriteError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except sqlite3.IntegrityError:

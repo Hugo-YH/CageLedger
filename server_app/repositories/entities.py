@@ -2,6 +2,7 @@ import json
 import re
 
 from server_app.cache import cache_get, cache_key, cache_set
+from server_app.shared.intake_identifiers import intake_identifier_values
 
 from .payload import cached_paginated_payloads, dump_json, paginated_payloads
 
@@ -238,9 +239,10 @@ def upsert_intake_batch(conn, batch):
         """
         INSERT INTO intake_batches (
             id, batch_no, iacuc, supplier, pi, owner, quantity, card_count,
-            room_name, intake_date, status, updated_at, payload
+            room_name, intake_date, status, updated_at, payload,
+            purchase_order_no, purchase_order_key, batch_no_key
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             batch_no = excluded.batch_no,
             iacuc = excluded.iacuc,
@@ -253,7 +255,10 @@ def upsert_intake_batch(conn, batch):
             intake_date = excluded.intake_date,
             status = excluded.status,
             updated_at = excluded.updated_at,
-            payload = excluded.payload
+            payload = excluded.payload,
+            purchase_order_no = excluded.purchase_order_no,
+            purchase_order_key = excluded.purchase_order_key,
+            batch_no_key = excluded.batch_no_key
         """,
         (
             batch.get("id"),
@@ -269,6 +274,7 @@ def upsert_intake_batch(conn, batch):
             batch.get("status", "draft"),
             batch.get("updatedAt", ""),
             dump_json(batch),
+            *intake_identifier_values(batch),
         ),
     )
 

@@ -11,6 +11,7 @@ from typing import Any
 from server_app.cache import invalidate_data_cache, invalidate_data_cache_prefixes, log_perf
 from server_app.db import connect_db
 from server_app.domains.administration import merge_audit_logs, write_audit_events
+from server_app.domains.intake.duplicates import confirm_duplicate_identifiers, duplicate_confirmation_event
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.persistence import assemble_state
@@ -63,7 +64,15 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
             raise ValueError("Unsupported entity write method")
 
         validate_state_write_permission(actor, old_state, state)
+        confirmation = None
+        if method != "DELETE" and payload.get("checkDuplicates") is True:
+            candidate = next(entry for entry in state["intakeBatches"] if entry.get("id") == item["id"])
+            confirmation = confirm_duplicate_identifiers(
+                conn, candidate, item_id if method == "PUT" else "", payload.get("duplicateConfirmation")
+            )
         events = build_audit_events(actor, old_state, state, updated_at)
+        if confirmation:
+            events.append(duplicate_confirmation_event(actor, item, confirmation, updated_at))
         if method == "DELETE":
             delete_intake_batch_repository(conn, item_id)
             conn.execute("DELETE FROM placement_tasks WHERE source_batch_id = ?", (item_id,))
