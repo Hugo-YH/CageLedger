@@ -55,6 +55,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 ## 工程与数据边界
 
+- 开发只使用默认分支 `main`、下一大版本分支 `beta` 和预发布整合分支 `rc`。当前版本修复及小功能直接在 `main` 开发、提交和推送，不另建临时开发分支。具体分工见 [分支策略](docs/contracts/branching.md)。
 - 页面通过 typed hooks 访问服务端；TanStack Query 管业务数据，UI reducer 只管显示偏好，高频表单草稿留在局部。业务写入精确失效查询键。
 - handler 管鉴权与响应，领域 service 管事务、校验、审计与缓存，repository 管 SQL 和兼容读写。新增业务进入 `server_app/domains/`，不扩大历史兼容层。
 - 不直接修改 SQLite、WAL 和运行时 JSON；不手工编辑 `data/`、`web-dist/`、`dist/`、`node_modules/`。测试使用隔离数据，不能仅凭 localhost 判断数据可丢弃。
