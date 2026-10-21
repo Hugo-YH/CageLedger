@@ -4,15 +4,14 @@ import sqlite3
 
 from server_app.domains.cages import sync_slot_statuses
 from server_app.domains.intake import collect_cage_card_qr_ids, is_cage_card_qr_id, next_cage_card_qr_id
+from server_app.domains.intake.purpose import intake_purpose, is_direct_sampling
 from server_app.domains.state.entity_rules import (
     normalize_entity_batch as normalize_entity_batch_rule,
 )
 from server_app.domains.state.entity_rules import (
     normalize_entity_payload as normalize_entity_payload_rule,
 )
-from server_app.domains.state.entity_rules import (
-    validate_entity_references,
-)
+from server_app.domains.state.entity_rules import validate_entity_payload, validate_entity_references
 from server_app.shared import as_int, clean_text, new_id, now_iso
 
 
@@ -29,6 +28,9 @@ def insert_entity(state, collection, item):
     if any(existing.get("id") == item["id"] for existing in items):
         raise sqlite3.IntegrityError(f"Duplicate id: {item['id']}")
     if collection == "intakeBatches":
+        item = normalize_direct_sampling_batch(item)
+        if is_direct_sampling(item) and item.get("status") not in ("draft", "pending_receipt"):
+            raise ValueError("直接取材批次初建只能是草稿或待接收")
         item = ensure_intake_batch_card_qr_ids(state, item)
     validate_entity_references(state, collection, item)
     items.append(item)
@@ -46,6 +48,8 @@ def intake_card_suggested_quantity(batch, index, card_count):
 
 def ensure_intake_batch_card_qr_ids(state, batch):
     next_batch = dict(batch)
+    if is_direct_sampling(next_batch):
+        return normalize_direct_sampling_batch(next_batch)
     card_count = max(as_int(next_batch.get("finalCardCount")) or as_int(next_batch.get("suggestedCardCount")) or 0, 0)
     existing_cards = next_batch.get("cards") if isinstance(next_batch.get("cards"), list) else []
     used_qr_ids = collect_cage_card_qr_ids(state, next_batch.get("id", ""))
@@ -76,8 +80,106 @@ def ensure_intake_batch_card_qr_ids(state, batch):
     return next_batch
 
 
+def normalize_direct_sampling_batch(batch):
+    next_batch = dict(batch)
+    next_batch["intakePurpose"] = intake_purpose(next_batch)
+    if not is_direct_sampling(next_batch):
+        return next_batch
+    if not clean_text(next_batch.get("status")):
+        next_batch["status"] = "pending_receipt"
+    next_batch.update(
+        {
+            "roomName": "",
+            "endDate": "",
+            "husbandryDays": None,
+            "suggestedCardCount": 0,
+            "finalCardCount": 0,
+            "confirmedCardCount": 0,
+            "remainingCardCount": 0,
+            "cards": [],
+        }
+    )
+    return next_batch
+
+
+def intake_batch_activity(state, batch_id):
+    tasks = [task for task in state.get("placementTasks", []) if task.get("sourceBatchId") == batch_id]
+    task_ids = {task.get("id") for task in tasks}
+    occupancies = [
+        occupancy
+        for occupancy in state.get("occupancies", [])
+        if occupancy.get("sourceBatchId") == batch_id or occupancy.get("placementTaskId") in task_ids
+    ]
+    return tasks, occupancies
+
+
+def validate_intake_batch_transition(old_state, old_item, next_item):
+    old_purpose = intake_purpose(old_item or {})
+    next_purpose = intake_purpose(next_item)
+    if (
+        next_purpose == "housing"
+        and clean_text(next_item.get("status")) == "pending_receipt"
+        and (not old_item or old_purpose != "housing" or clean_text(old_item.get("status")) != "pending_receipt")
+    ):
+        raise ValueError("普通饲养批次不能使用待接收状态")
+    if old_item and old_purpose != next_purpose:
+        tasks, occupancies = intake_batch_activity(old_state, old_item.get("id"))
+        if (
+            clean_text(old_item.get("status")) in ("printed", "received")
+            or old_item.get("receipts")
+            or tasks
+            or occupancies
+        ):
+            raise ValueError("已打印、已接收或已有接收/待进驻/占用记录的批次不能转换接收用途")
+    if (
+        next_purpose == "direct_sampling"
+        and clean_text(next_item.get("status")) == "received"
+        and (not old_item or clean_text(old_item.get("status")) != "received")
+    ):
+        raise ValueError("直接取材批次只能通过确认接收操作进入已接收")
+
+
+def normalize_intake_batches_for_state_write(old_state, state):
+    old_batches = {item.get("id"): item for item in old_state.get("intakeBatches", [])}
+    batches = []
+    for raw_batch in state.get("intakeBatches", []):
+        old_item = old_batches.get(raw_batch.get("id"))
+        batch = dict(raw_batch)
+        if old_item and is_direct_sampling(old_item) and "intakePurpose" not in batch:
+            batch["intakePurpose"] = intake_purpose(old_item)
+        if batch.get("intakePurpose", "housing") not in ("housing", "direct_sampling"):
+            raise ValueError("接收用途只能是 housing 或 direct_sampling")
+        if is_direct_sampling(batch):
+            batch = normalize_direct_sampling_batch(batch)
+            validate_entity_payload("intakeBatches", batch)
+        elif old_item and is_direct_sampling(old_item):
+            validate_entity_payload("intakeBatches", batch)
+        # Legacy snapshots can contain incomplete housing batches. Do not backfill
+        # or revalidate those unrelated records while protecting the new purpose.
+        validate_intake_batch_transition(old_state, old_item, batch)
+        batches.append(batch)
+    state["intakeBatches"] = batches
+    direct_ids = {batch.get("id") for batch in batches if is_direct_sampling(batch)}
+    direct_task_ids = {
+        task.get("id")
+        for task in [*old_state.get("placementTasks", []), *state.get("placementTasks", [])]
+        if task.get("sourceBatchId") in direct_ids
+    }
+    if any(task.get("sourceBatchId") in direct_ids for task in state.get("placementTasks", [])):
+        raise ValueError("直接取材批次不能创建待进驻任务")
+    if any(
+        occupancy.get("sourceBatchId") in direct_ids or occupancy.get("placementTaskId") in direct_task_ids
+        for occupancy in state.get("occupancies", [])
+    ):
+        raise ValueError("直接取材批次不能创建占用记录")
+    return state
+
+
 def reconcile_intake_batch_update(state, old_item, item):
     next_item = {**old_item, **item}
+    next_item["intakePurpose"] = intake_purpose(next_item)
+    validate_intake_batch_transition(state, old_item, next_item)
+    next_item = normalize_direct_sampling_batch(next_item)
     next_item["receipts"] = [
         dict(receipt)
         for receipt in (

@@ -1,4 +1,5 @@
-export type IntakeBatchStatus = "draft" | "pending_print" | "printed" | "received";
+export type IntakeBatchStatus = "draft" | "pending_print" | "pending_receipt" | "printed" | "received";
+export type IntakePurpose = "housing" | "direct_sampling";
 
 export interface IntakeCard {
   id: string;
@@ -16,6 +17,7 @@ export interface IntakeReceipt {
 }
 
 export interface IntakeBatch {
+  intakePurpose?: IntakePurpose;
   quarantineStatus?: "待接收" | "待检疫" | "检疫中" | "已检疫";
   quarantineBatches?: { id: string; name: string; completedAt: string }[];
   id: string;

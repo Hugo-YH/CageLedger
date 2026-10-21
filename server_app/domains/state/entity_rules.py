@@ -1,5 +1,6 @@
 """Pure state entity normalization and reference validation rules."""
 
+import re
 from collections.abc import Callable
 
 from server_app.shared import as_int
@@ -63,6 +64,14 @@ def normalize_entity_payload(collection, payload, item_id, method, id_prefix, ne
     item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
     if method == "POST":
         item["id"] = str(item.get("id") or new_id(id_prefix))
+        if collection == "intakeBatches" and item.get("intakePurpose") == "direct_sampling" and not item.get("status"):
+            item["status"] = "pending_receipt"
+        if (
+            collection == "intakeBatches"
+            and item.get("intakePurpose", "housing") == "housing"
+            and item.get("status") == "pending_receipt"
+        ):
+            raise ValueError("普通饲养批次不能使用待接收状态")
     else:
         if not item_id:
             raise ValueError("Entity id is required")
@@ -90,7 +99,6 @@ def validate_entity_payload(collection, item):
             ("iacuc", "IACUC 编号不能为空"),
             ("pi", "项目负责人不能为空"),
             ("owner", "实验负责人不能为空"),
-            ("roomName", "房间不能为空"),
             ("intakeDate", "接收日期不能为空"),
             ("status", "批次状态不能为空"),
         ),
@@ -106,9 +114,24 @@ def validate_entity_payload(collection, item):
     elif collection == "placementTasks" and item.get("status") not in ("pending", "reserved", "active", "cancelled"):
         raise ValueError("待进驻状态只能是 pending、reserved、active 或 cancelled")
     elif collection == "intakeBatches":
-        quantity = as_int(item.get("quantity"))
-        if quantity is not None and quantity <= 0:
+        quantity_value = item.get("quantity")
+        purpose = item.get("intakePurpose", "housing")
+        if purpose not in ("housing", "direct_sampling"):
+            raise ValueError("接收用途只能是 housing 或 direct_sampling")
+        direct_quantity_is_valid = not isinstance(quantity_value, bool) and bool(
+            re.fullmatch(r"[1-9]\d*", str(quantity_value).strip())
+        )
+        if purpose == "direct_sampling" and not direct_quantity_is_valid:
             raise ValueError("动物数量必须大于 0")
+        quantity = as_int(quantity_value) if direct_quantity_is_valid or purpose == "housing" else None
+        if purpose == "direct_sampling" and (quantity is None or quantity <= 0):
+            raise ValueError("动物数量必须大于 0")
+        if purpose == "housing" and quantity is not None and quantity <= 0:
+            raise ValueError("动物数量必须大于 0")
+        if purpose == "housing":
+            require_text(item, "roomName", "房间不能为空")
+        elif item.get("status") not in ("draft", "pending_receipt", "received"):
+            raise ValueError("直接取材批次状态只能是草稿、待接收或已接收")
 
 
 def require_text(item, key, message):
@@ -117,6 +140,18 @@ def require_text(item, key, message):
 
 
 def validate_entity_references(state, collection, item):
+    if collection in ("placementTasks", "occupancies"):
+        source_batch_id = item.get("sourceBatchId")
+        if collection == "occupancies" and not source_batch_id:
+            task = next(
+                (task for task in state.get("placementTasks", []) if task.get("id") == item.get("placementTaskId")), {}
+            )
+            source_batch_id = task.get("sourceBatchId")
+        if source_batch_id and any(
+            batch.get("id") == source_batch_id and batch.get("intakePurpose") == "direct_sampling"
+            for batch in state.get("intakeBatches", [])
+        ):
+            raise ValueError("直接取材批次不能创建待进驻任务或笼位占用")
     if collection == "racks" and not entity_exists(state, "rooms", item.get("roomId")):
         raise ValueError("关联的饲养间不存在")
     if collection == "slots" and not entity_exists(state, "racks", item.get("rackId")):

@@ -1,10 +1,11 @@
-import type { IntakeBatch, IntakeBatchStatus } from "../contracts/intake";
+import type { IntakeBatch, IntakeBatchStatus, IntakePurpose } from "../contracts/intake";
 import { createClientId } from "./id";
 // Single source of truth shared with the Python backend: the curated MGI
 // strain alias table lives in server_app/resources/intake and both runtimes
 // read the same file so local and AI recognition resolve identical names.
 import mgiStrainAliases from "../../server_app/resources/intake/mgi-strain-aliases.json";
-const validStatuses = new Set<IntakeBatchStatus>(["draft", "pending_print", "printed", "received"]);
+import supplierAliases from "../../server_app/resources/intake/supplier-aliases.json";
+const validStatuses = new Set<IntakeBatchStatus>(["draft", "pending_print", "pending_receipt", "printed", "received"]);
 const strainSeparatorPattern = /[\s\-_/\\.,;:·（）()【】[\]<>]+/g;
 const strainTrailingMousePattern = /(小鼠|小白鼠|mouse|mice)$/;
 const strainNoteSeparatorPattern = /[，,、；;]/;
@@ -48,28 +49,38 @@ export function standardizeStrain(raw: string): string {
   return "";
 }
 
-const supplierShortNames: Array<[string, string]> = [
-  ["江苏集萃药康", "江苏集萃"],
-  ["江苏集萃", "江苏集萃"],
-  ["广东药康", "广东药康"],
-  ["上海南方模式", "上海南模"],
-  ["上海南模", "上海南模"],
-  ["广东南模", "广东南模"],
-  ["珠海百试通", "珠海百试通"],
-  ["丹阳昌益", "丹阳昌益"],
-  ["北京维通利华", "北京维通利华"],
-  ["浙江维通利华", "浙江维通利华"],
-  ["上海斯莱克", "上海斯莱克"],
-  ["斯莱克", "上海斯莱克"],
-  ["北京华阜康", "北京华阜康"],
-  ["华阜康", "北京华阜康"],
-  ["北京百奥赛图", "北京百奥赛图"],
-  ["百奥赛图", "北京百奥赛图"],
-];
+function supplierKey(raw: string) {
+  return raw
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s()（）·\-—_]/g, "");
+}
+
+const supplierRules = supplierAliases.entries
+  .flatMap((entry) =>
+    [...new Set([...entry.companyNames, ...entry.aliases].map(supplierKey))].map((key) => ({
+      key,
+      shortName: entry.shortName,
+    })),
+  )
+  .sort((left, right) => right.key.length - left.key.length);
+const exactSupplierAliases = new Map(
+  supplierAliases.entries.flatMap((entry) =>
+    [entry.shortName, ...entry.exactAliases].map((alias) => [supplierKey(alias), entry.shortName] as const),
+  ),
+);
+const supplierBranchPattern = /分公司|分厂|分部|办事处/;
 
 export function abbreviateSupplier(raw: string) {
   const text = String(raw || "").trim();
-  return supplierShortNames.find(([marker]) => text.includes(marker))?.[1] || text;
+  const key = supplierKey(text);
+  const exact = exactSupplierAliases.get(key);
+  if (exact) return exact;
+  const rule = supplierRules.find((candidate) => key.includes(candidate.key));
+  if (!rule) return text;
+  // Only a verified branch-specific alias may shorten a branch name.
+  if (supplierBranchPattern.test(key) && !supplierBranchPattern.test(rule.key)) return text;
+  return rule.shortName;
 }
 
 function numberOrNull(value: unknown) {
@@ -144,6 +155,39 @@ export function createIntakeDraft(receiverName = "", phone = ""): IntakeBatch {
   return normalizeIntakeBatch({ id: createClientId(), receiverName, vetPhone: phone, status: "pending_print" });
 }
 
+export function isDirectSampling(batch: Pick<IntakeBatch, "intakePurpose">) {
+  return batch.intakePurpose === "direct_sampling";
+}
+
+export function intakePurposeLabel(value: string | undefined) {
+  return value === "direct_sampling" ? "直接取材" : "入驻饲养";
+}
+
+export function normalizeIntakeSex(value: unknown): "雌性" | "雄性" | "雌性/雄性" {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const female = /雌|母|♀|\bfemale\b|^f$/.test(text);
+  const male = /雄|公|♂|\bmale\b|^m$/.test(text);
+  if (female === male) return "雌性/雄性";
+  return female ? "雌性" : "雄性";
+}
+
+export function canConfirmIntakeReceipt(batch: Pick<IntakeBatch, "intakePurpose" | "status">) {
+  return isDirectSampling(batch) ? batch.status === "pending_receipt" : batch.status === "printed";
+}
+
+export function inferIntakePurpose(value: string): IntakePurpose {
+  if (
+    /(?:不(?:是|需要|要)?|非|并非|无需)\s*(?:到货(?:后)?\s*)?直接取材|(?:饲养|入驻)[^，。；\n]{0,20}(?:后|再)[^，。；\n]{0,8}取材/.test(
+      value,
+    )
+  ) {
+    return "housing";
+  }
+  return /直接取材|(?:到货|到达|接收)(?:后|当天)?(?:立即|即|就)取材|无需饲养|不(?:需要|用)饲养/.test(value)
+    ? "direct_sampling"
+    : "housing";
+}
+
 export function missingIntakeRequiredFields(item: IntakeBatch) {
   const fields: Array<[keyof IntakeBatch, string]> = [
     ["supplier", "购买单位"],
@@ -153,10 +197,17 @@ export function missingIntakeRequiredFields(item: IntakeBatch) {
     ["roomName", "房间"],
     ["intakeDate", "接收日期"],
   ];
-  return fields.filter(([key]) => !String(item[key] ?? "").trim()).map(([, label]) => label);
+  const missing = fields
+    .filter(([key]) => !(key === "roomName" && isDirectSampling(item)) && !String(item[key] ?? "").trim())
+    .map(([, label]) => label);
+  if (isDirectSampling(item) && (!Number.isInteger(item.quantity) || (item.quantity ?? 0) <= 0)) {
+    missing.push("数量（只）");
+  }
+  return missing;
 }
 
 export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: string[] = []): IntakeBatch {
+  const directSampling = isDirectSampling(item);
   const species =
     item.species || inferSpecies(`${item.strainStandard || ""} ${item.strainRaw || ""} ${item.rawMessage || ""}`);
   const quantity = numberOrNull(item.quantity);
@@ -171,10 +222,11 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
     ? (item.status as IntakeBatchStatus)
     : "pending_print";
   const roomName = String(item.roomName || "").trim();
-  const husbandryDays = numberOrNull(item.husbandryDays);
   const intakeDate = normalizedDate(String(item.intakeDate || ""));
+  const husbandryDays = numberOrNull(item.husbandryDays) ?? daysBetween(intakeDate, item.endDate || "");
   const endDate = normalizedDate(String(item.endDate || "")) || addDays(intakeDate, husbandryDays);
   return {
+    intakePurpose: directSampling ? "direct_sampling" : "housing",
     id: String(item.id || createClientId()),
     rawMessage: String(item.rawMessage || ""),
     purchaseOrderNo: String(item.purchaseOrderNo || "").trim(),
@@ -188,27 +240,35 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
     species,
     strainRaw: String(item.strainRaw || "").trim(),
     strainStandard: String(item.strainStandard || item.strainRaw || "").trim(),
-    sex: String(item.sex || "").trim(),
+    sex: normalizeIntakeSex(item.sex),
     quantity,
-    roomName,
-    roomMatched: roomNames.length ? roomNames.includes(roomName) : Boolean(item.roomMatched),
+    roomName: directSampling ? "" : roomName,
+    roomMatched: !directSampling && (roomNames.length ? roomNames.includes(roomName) : Boolean(item.roomMatched)),
     intakeDate,
-    husbandryDays,
-    endDate,
+    husbandryDays: directSampling ? null : husbandryDays,
+    endDate: directSampling ? "" : endDate,
     project: String(item.project || "").trim(),
     pi: String(item.pi || "").trim(),
     owner: String(item.owner || "").trim(),
     receiverName: String(item.receiverName || "").trim(),
     vetPhone: String(item.vetPhone || "").trim(),
     notes: String(item.notes || "").trim(),
-    status,
+    status: directSampling
+      ? status === "draft" || status === "received"
+        ? status
+        : "pending_receipt"
+      : status === "pending_receipt"
+        ? "pending_print"
+        : status,
     suggestedAnimalsPerCage: perCage,
-    suggestedCardCount,
-    finalCardCount,
-    confirmedCardCount,
-    remainingCardCount: Math.max(numberOrNull(item.remainingCardCount) ?? finalCardCount - confirmedCardCount, 0),
+    suggestedCardCount: directSampling ? 0 : suggestedCardCount,
+    finalCardCount: directSampling ? 0 : finalCardCount,
+    confirmedCardCount: directSampling ? 0 : confirmedCardCount,
+    remainingCardCount: directSampling
+      ? 0
+      : Math.max(numberOrNull(item.remainingCardCount) ?? finalCardCount - confirmedCardCount, 0),
     receipts: Array.isArray(item.receipts) ? item.receipts : [],
-    cards: Array.isArray(item.cards) ? item.cards : [],
+    cards: !directSampling && Array.isArray(item.cards) ? item.cards : [],
     updatedAt: String(item.updatedAt || ""),
   };
 }
@@ -238,6 +298,7 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
   return normalizeIntakeBatch(
     {
       rawMessage: raw,
+      intakePurpose: inferIntakePurpose(raw),
       purchaseOrderNo,
       batchNo,
       iacuc,
@@ -245,7 +306,9 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
       strainRaw,
       strainStandard: standardizeStrain(strainRaw) || strainRaw,
       species: inferSpecies(`${raw} ${strainRaw}`),
-      sex: matchField(raw, ["性别"]),
+      sex: matchField(raw, ["性别"]).split(
+        /(?:数量|供应商|购买单位|饲养房间|房间|接收日期|进驻日期|品系|批次号|项目负责人|实验负责人)\s*[:：]/,
+      )[0],
       quantity,
       roomName,
       intakeDate: normalizedDate(dateText, referenceYear),
@@ -257,13 +320,49 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
   );
 }
 
+export function updateIntakeDraft<K extends keyof IntakeBatch>(
+  current: IntakeBatch,
+  key: K,
+  value: IntakeBatch[K],
+  roomNames: string[] = [],
+): IntakeBatch {
+  const next = { ...current, [key]: value };
+  if (key === "intakePurpose" && value !== current.intakePurpose) {
+    if (current.status === "printed" || current.status === "received" || current.receipts.length) return current;
+    if (value === "housing") {
+      const count = Math.ceil(Math.max(current.quantity ?? 0, 0) / Math.max(current.suggestedAnimalsPerCage, 1));
+      next.suggestedCardCount = count;
+      next.finalCardCount = count;
+    }
+  } else if (key === "endDate") {
+    next.husbandryDays = daysBetween(next.intakeDate, next.endDate);
+  } else if (key === "husbandryDays") {
+    next.endDate = addDays(next.intakeDate, next.husbandryDays);
+  } else if (key === "intakeDate") {
+    if (next.husbandryDays !== null) next.endDate = addDays(next.intakeDate, next.husbandryDays);
+    else next.husbandryDays = daysBetween(next.intakeDate, next.endDate);
+  }
+  return normalizeIntakeBatch(next, roomNames);
+}
+
+function daysBetween(start: string, end: string): number | null {
+  const startDate = normalizedDate(start);
+  const endDate = normalizedDate(end);
+  if (!startDate || !endDate) return null;
+  const days = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000;
+  return Number.isInteger(days) && days >= 0 ? days : null;
+}
+
 function addDays(value: string, days: number | null) {
-  if (!value || !days) return "";
-  const date = new Date(`${value}T00:00:00`);
-  date.setDate(date.getDate() + days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const start = normalizedDate(value);
+  if (!start || days === null || !Number.isInteger(days) || days < 0) return "";
+  const date = new Date(`${start}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return Number.isFinite(date.getTime()) ? normalizedDate(date.toISOString().slice(0, 10)) : "";
 }
 
 export function intakeStatusLabel(status: IntakeBatchStatus) {
-  return { draft: "草稿", pending_print: "未打印", printed: "已打印", received: "已接收" }[status];
+  return { draft: "草稿", pending_print: "未打印", pending_receipt: "待接收", printed: "已打印", received: "已接收" }[
+    status
+  ];
 }

@@ -10,6 +10,7 @@ fallback so known variants always resolve to the same standard name.
 import json
 import re
 import unicodedata
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -88,30 +89,38 @@ def standardize_strain(raw: str) -> str:
     return ""
 
 
-_SUPPLIER_RULES: tuple[tuple[str, str], ...] = (
-    ("江苏集萃药康", "江苏集萃"),
-    ("江苏集萃", "江苏集萃"),
-    ("广东药康", "广东药康"),
-    ("上海南方模式", "上海南模"),
-    ("上海南模", "上海南模"),
-    ("广东南模", "广东南模"),
-    ("珠海百试通", "珠海百试通"),
-    ("丹阳昌益", "丹阳昌益"),
-    ("北京维通利华", "北京维通利华"),
-    ("浙江维通利华", "浙江维通利华"),
-    ("上海斯莱克", "上海斯莱克"),
-    ("斯莱克", "上海斯莱克"),
-    ("北京华阜康", "北京华阜康"),
-    ("华阜康", "北京华阜康"),
-    ("北京百奥赛图", "北京百奥赛图"),
-    ("百奥赛图", "北京百奥赛图"),
-)
+_SUPPLIER_ALIAS_PATH = _ALIAS_PATH.with_name("supplier-aliases.json")
+_SUPPLIER_SEPARATOR_RE = re.compile(r"[\s()（）·\-—_]")
+_SUPPLIER_BRANCH_RE = re.compile(r"分公司|分厂|分部|办事处")
+
+
+def _supplier_key(raw: str) -> str:
+    return _SUPPLIER_SEPARATOR_RE.sub("", unicodedata.normalize("NFKC", raw).lower())
+
+
+@lru_cache(maxsize=1)
+def _supplier_mappings():
+    catalog = json.loads(_SUPPLIER_ALIAS_PATH.read_text(encoding="utf-8"))
+    rules = []
+    exact = {}
+    for entry in catalog["entries"]:
+        for alias in dict.fromkeys(entry["companyNames"] + entry["aliases"]):
+            rules.append((_supplier_key(alias), entry["shortName"]))
+        for alias in [entry["shortName"], *entry["exactAliases"]]:
+            exact[_supplier_key(alias)] = entry["shortName"]
+    return sorted(rules, key=lambda rule: len(rule[0]), reverse=True), exact
 
 
 def abbreviate_supplier(raw: str) -> str:
-    """Map a supplier legal name to the facility's short display name."""
+    """Resolve verified regional names using the frontend's shared supplier catalog."""
     text = str(raw or "").strip()
-    for marker, standard in _SUPPLIER_RULES:
-        if marker in text:
+    key = _supplier_key(text)
+    rules, exact = _supplier_mappings()
+    if key in exact:
+        return exact[key]
+    for marker, standard in rules:
+        if marker in key:
+            if _SUPPLIER_BRANCH_RE.search(key) and not _SUPPLIER_BRANCH_RE.search(marker):
+                return text
             return standard
     return text

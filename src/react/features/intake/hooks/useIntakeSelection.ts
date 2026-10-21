@@ -78,5 +78,14 @@ export function useIntakeSelection() {
     [cancelPending],
   );
 
-  return { selectedItems, selectingAll, allFilteredSelected, error, clear, toggleAll, toggle, remove };
+  const update = useCallback(
+    (items: IntakeBatch[]) => {
+      if (controller.current) cancelPending();
+      const byId = new Map(items.map((item) => [item.id, item]));
+      setSelectedItems((current) => current.map((item) => byId.get(item.id) ?? item));
+    },
+    [cancelPending],
+  );
+
+  return { selectedItems, selectingAll, allFilteredSelected, error, clear, toggleAll, toggle, remove, update };
 }

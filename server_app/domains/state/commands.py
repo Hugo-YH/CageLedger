@@ -12,6 +12,7 @@ from server_app.domains.state.entity_mutations import (
     delete_entity,
     insert_entity,
     normalize_entity_payload,
+    normalize_intake_batches_for_state_write,
     replace_entity,
 )
 from server_app.domains.state.entity_rules import empty_state
@@ -25,6 +26,7 @@ def write_state(state, actor, skip_permission=False):
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or {}
+        state = normalize_intake_batches_for_state_write(old_state, copy.deepcopy(state))
         result = _persist_state(conn, old_state, state, actor, updated_at, skip_permission)
         conn.commit()
     _invalidate_state()

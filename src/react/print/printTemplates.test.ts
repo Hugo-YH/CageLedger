@@ -9,6 +9,18 @@ import { settlementStatementHtml } from "./settlement";
 import { settlementNotesMarkup } from "./settlementNotes";
 
 describe("print templates", () => {
+  it("excludes direct-sampling batches even if stale card data is supplied", () => {
+    const batch = {
+      intakePurpose: "direct_sampling",
+      finalCardCount: 1,
+      cards: [{ qrId: "ABCD", label: "1/1", index: 1, suggestedQuantity: "5" }],
+    } as IntakeBatch;
+    expect(planIntakeCardPrint([batch], []).disabledReason).toContain("直接取材");
+    expect(
+      planIntakeCardPrint([batch, { finalCardCount: 1, roomName: "8101" } as IntakeBatch], []).disabledReason,
+    ).toContain("直接取材");
+    expect(intakeCardsPrintHtml([batch], { fillBlanks: true })).toBe("");
+  });
   it("keeps the browser settlement template aligned with the server parity fixture", () => {
     const html = settlementStatementHtml(settlementParityFixture as BillingStatementResponse, false);
     [

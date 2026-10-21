@@ -2,7 +2,8 @@ import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
 
-import type { IntakeBatch, IntakeBatchStatus } from "../../../api/contracts";
+import type { IntakeBatch, IntakeBatchStatus, IntakePurpose } from "../../../api/contracts";
+import { isDirectSampling, normalizeIntakeSex } from "../../../../domain/intake";
 import { CommandBar, DateInput } from "../../../components/ui";
 
 export { IntakeBatchList } from "./IntakeBatchList";
@@ -41,11 +42,21 @@ export function IntakeEntryPanel({
   onPrint: () => void;
   onUpdate: <K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) => void;
 }) {
+  const directSampling = isDirectSampling(draft);
+  const purposeLocked =
+    editing && (draft.status === "printed" || draft.status === "received" || draft.receipts.length > 0);
+  const availableStatuses: Array<[IntakeBatchStatus, string]> = directSampling
+    ? [
+        ["pending_receipt", "待接收"],
+        ["draft", "草稿"],
+        ...(draft.status === "received" ? [["received", "已接收"] as [IntakeBatchStatus, string]] : []),
+      ]
+    : statuses;
   return (
     <form id="intake-entry-panel" className="intake-entry-form" onSubmit={onSubmit}>
       {headActions ? (
         <CommandBar
-          title={editing ? "编辑接收笼卡" : "接收笼卡"}
+          title={directSampling ? "直接取材预约" : editing ? "编辑接收笼卡" : "接收笼卡"}
           titleSize="section"
           ariaLabel="编辑笼卡操作"
           sticky
@@ -89,26 +100,64 @@ export function IntakeEntryPanel({
           </Col>
           <Col lg={6} md={8} xs={24}>
             <Card className="intake-print-card" size="small" type="inner">
-              <Typography.Text strong>{draft.finalCardCount || 0} 张笼卡</Typography.Text>
+              <Typography.Text strong>
+                {directSampling ? "直接取材" : `${draft.finalCardCount || 0} 张笼卡`}
+              </Typography.Text>
               <Typography.Text ellipsis type="secondary">
                 {draft.batchNo || "尚未识别批次"}
               </Typography.Text>
-              <Button
-                icon={<ActionIcon name="print" />}
-                block
-                disabled={!draft.finalCardCount || saving}
-                htmlType="button"
-                onClick={onPrint}
-              >
-                打印当前笼卡
-              </Button>
+              {directSampling ? (
+                <Typography.Text type="secondary">无需打印笼卡，到货后可直接确认接收。</Typography.Text>
+              ) : (
+                <Button
+                  icon={<ActionIcon name="print" />}
+                  block
+                  disabled={!draft.finalCardCount || saving}
+                  htmlType="button"
+                  onClick={onPrint}
+                >
+                  打印当前笼卡
+                </Button>
+              )}
             </Card>
           </Col>
         </Row>
         {notice ? <Alert className="intake-notice" title={notice} showIcon type="info" /> : null}
         <Divider />
         <Form component={false} layout="vertical" requiredMark>
-          <Row gutter={[16, 0]}>
+          <Row gutter={[16, 16]}>
+            <Col md={directSampling ? 24 : 12} xs={24}>
+              <Form.Item label="接收用途" required>
+                <Select<IntakePurpose>
+                  aria-label="接收用途"
+                  value={draft.intakePurpose || "housing"}
+                  disabled={purposeLocked}
+                  options={[
+                    { value: "housing", label: "入驻饲养" },
+                    { value: "direct_sampling", label: "直接取材" },
+                  ]}
+                  onChange={(value) => onUpdate("intakePurpose", value)}
+                />
+              </Form.Item>
+            </Col>
+            {!directSampling && (
+              <Col md={12} xs={24}>
+                <Form.Item label="房间" required>
+                  <Select
+                    aria-label="房间"
+                    id="intake-room"
+                    options={[
+                      { value: "", label: "请选择系统房间" },
+                      ...roomNames.map((room) => ({ value: room, label: room })),
+                    ]}
+                    value={draft.roomName}
+                    onChange={(value) => onUpdate("roomName", value)}
+                  />
+                </Form.Item>
+              </Col>
+            )}
+          </Row>
+          <Row gutter={[16, 16]}>
             <Col lg={8} md={12} xs={24}>
               <Field
                 label="购买单位"
@@ -118,9 +167,6 @@ export function IntakeEntryPanel({
               />
             </Col>
             <Col lg={8} md={12} xs={24}>
-              <Field label="批次号" value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
-            </Col>
-            <Col lg={8} md={12} xs={24}>
               <Field
                 label="采购单号"
                 value={draft.purchaseOrderNo}
@@ -128,14 +174,10 @@ export function IntakeEntryPanel({
               />
             </Col>
             <Col lg={8} md={12} xs={24}>
-              <Field label="IACUC 编号" required value={draft.iacuc} onChange={(value) => onUpdate("iacuc", value)} />
+              <Field label="批次号" value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
             </Col>
-            <Col lg={12} md={12} xs={24}>
-              <Field label="项目负责人" required value={draft.pi} onChange={(value) => onUpdate("pi", value)} />
-            </Col>
-            <Col lg={12} md={12} xs={24}>
-              <Field label="实验负责人" required value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
-            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
             <Col lg={6} md={12} xs={24}>
               <Form.Item label="物种">
                 <Select
@@ -162,28 +204,38 @@ export function IntakeEntryPanel({
               />
             </Col>
             <Col lg={6} md={12} xs={24}>
+              <Form.Item label="性别">
+                <Select
+                  aria-label="性别"
+                  options={["雌性", "雄性", "雌性/雄性"].map((value) => ({ value, label: value }))}
+                  value={normalizeIntakeSex(draft.sex)}
+                  onChange={(value) => onUpdate("sex", value)}
+                />
+              </Form.Item>
+            </Col>
+            <Col lg={6} md={12} xs={24}>
               <Field
                 label="数量（只）"
+                required={directSampling}
                 type="number"
                 value={draft.quantity ?? ""}
                 onChange={(value) => onUpdate("quantity", value ? Number(value) : null)}
               />
             </Col>
-            <Col lg={6} md={12} xs={24}>
-              <Form.Item label="房间" required>
-                <Select
-                  aria-label="房间"
-                  id="intake-room"
-                  options={[
-                    { value: "", label: "请选择系统房间" },
-                    ...roomNames.map((room) => ({ value: room, label: room })),
-                  ]}
-                  value={draft.roomName}
-                  onChange={(value) => onUpdate("roomName", value)}
-                />
-              </Form.Item>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col lg={8} md={12} xs={24}>
+              <Field label="IACUC 编号" required value={draft.iacuc} onChange={(value) => onUpdate("iacuc", value)} />
             </Col>
             <Col lg={8} md={12} xs={24}>
+              <Field label="项目负责人" required value={draft.pi} onChange={(value) => onUpdate("pi", value)} />
+            </Col>
+            <Col lg={8} md={12} xs={24}>
+              <Field label="实验负责人" required value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
+            </Col>
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col lg={directSampling ? 24 : 8} md={directSampling ? 24 : 12} xs={24}>
               <Field
                 label="接收日期"
                 required
@@ -192,49 +244,55 @@ export function IntakeEntryPanel({
                 onChange={(value) => onUpdate("intakeDate", value)}
               />
             </Col>
-            <Col lg={8} md={12} xs={24}>
-              <Field
-                label="饲养周期（天）"
-                type="number"
-                value={draft.husbandryDays ?? ""}
-                onChange={(value) => onUpdate("husbandryDays", value ? Number(value) : null)}
-              />
-            </Col>
-            <Col lg={8} md={12} xs={24}>
-              <Field
-                label="结束日期"
-                type="date"
-                value={draft.endDate}
-                onChange={(value) => onUpdate("endDate", value)}
-              />
-            </Col>
-            <Col lg={8} md={12} xs={24}>
-              <Field label="性别" value={draft.sex} onChange={(value) => onUpdate("sex", value)} />
-            </Col>
-            <Col lg={8} md={12} xs={24}>
+            {!directSampling && (
+              <>
+                <Col lg={8} md={12} xs={24}>
+                  <Field
+                    label="结束日期"
+                    type="date"
+                    value={draft.endDate}
+                    onChange={(value) => onUpdate("endDate", value)}
+                  />
+                </Col>
+                <Col lg={8} md={12} xs={24}>
+                  <Field
+                    label="饲养周期（天）"
+                    type="number"
+                    value={draft.husbandryDays ?? ""}
+                    onChange={(value) => onUpdate("husbandryDays", value ? Number(value) : null)}
+                  />
+                </Col>
+              </>
+            )}
+          </Row>
+          <Row gutter={[16, 16]}>
+            <Col lg={directSampling ? 8 : 6} md={12} xs={24}>
               <Field
                 label="接收人员"
                 value={draft.receiverName}
                 onChange={(value) => onUpdate("receiverName", value)}
               />
             </Col>
-            <Col lg={8} md={12} xs={24}>
+            <Col lg={directSampling ? 8 : 6} md={12} xs={24}>
               <Field label="联系电话" value={draft.vetPhone} onChange={(value) => onUpdate("vetPhone", value)} />
             </Col>
-            <Col lg={12} md={12} xs={24}>
-              <Field
-                label="打印张数"
-                type="number"
-                value={draft.finalCardCount}
-                onChange={(value) => onUpdate("finalCardCount", Number(value) || 0)}
-              />
-            </Col>
-            <Col lg={12} md={12} xs={24}>
+            {!directSampling && (
+              <Col lg={6} md={12} xs={24}>
+                <Field
+                  label="打印张数"
+                  type="number"
+                  value={draft.finalCardCount}
+                  onChange={(value) => onUpdate("finalCardCount", Number(value) || 0)}
+                />
+              </Col>
+            )}
+            <Col lg={directSampling ? 8 : 6} md={12} xs={24}>
               <Form.Item label="状态">
                 <Select<IntakeBatchStatus>
                   aria-label="状态"
                   value={draft.status}
-                  options={statuses.map(([value, label]) => ({ value, label }))}
+                  disabled={directSampling && draft.status === "received"}
+                  options={availableStatuses.map(([value, label]) => ({ value, label }))}
                   onChange={(value) => onUpdate("status", value)}
                 />
               </Form.Item>

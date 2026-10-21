@@ -31,6 +31,10 @@ import {
   missingIntakeRequiredFields,
   normalizeIntakeBatch,
   parseIntakeMessage,
+  updateIntakeDraft,
+  isDirectSampling,
+  canConfirmIntakeReceipt,
+  abbreviateSupplier,
 } from "../../../domain/intake";
 import {
   openIntakeCardPrint,
@@ -159,7 +163,7 @@ export function IntakeView({
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
     draftRevision.current += 1;
     setPendingDuplicateSave(null);
-    setDraft((current) => normalizeIntakeBatch({ ...current, [key]: value }, roomNames));
+    setDraft((current) => updateIntakeDraft(current, key, value, roomNames));
   }
 
   function replaceDraft(next: IntakeBatch) {
@@ -199,6 +203,7 @@ export function IntakeView({
   function completeSavedDraft(intent: IntakeSaveIntent, savedItem: IntakeBatch) {
     if (!isCurrentSaveIntent(intent)) return false;
     if (intent.exists) {
+      selection.update([savedItem]);
       replaceDraft(normalizeIntakeBatch(savedItem, roomNames));
       setNotice("待接收批次已更新。");
       return true;
@@ -241,7 +246,10 @@ export function IntakeView({
   }
 
   async function applyParsedMessage(parsed: Partial<IntakeBatch>) {
-    const normalized = normalizeIntakeBatch({ ...parsed, rawMessage: draft.rawMessage }, roomNames);
+    const normalized = normalizeIntakeBatch(
+      { ...parsed, supplier: abbreviateSupplier(parsed.supplier || ""), rawMessage: draft.rawMessage },
+      roomNames,
+    );
     const normalizedCode = String(parsed.iacuc || "")
       .trim()
       .toUpperCase();
@@ -262,6 +270,7 @@ export function IntakeView({
           ...draft,
           ...normalized,
           id: isEditingSavedBatch ? draft.id : String(normalized.id || draft.id),
+          receiverName: normalized.receiverName || (isEditingSavedBatch ? draft.receiverName : user.displayName),
           vetPhone: normalized.vetPhone || (isEditingSavedBatch ? draft.vetPhone : user.phone),
           project: match?.project || normalized.project,
           pi: match?.pi || normalized.pi,
@@ -312,7 +321,9 @@ export function IntakeView({
   }
 
   async function markPrinted(targets: IntakeBatch[]) {
-    const printable = targets.filter((item) => item.status === "pending_print" || item.status === "draft");
+    const printable = targets.filter(
+      (item) => !isDirectSampling(item) && (item.status === "pending_print" || item.status === "draft"),
+    );
     if (!printable.length) {
       setBulkNotice("选中的批次均未处于待打印状态，无需标记已打印。");
       setBulkNoticeKind("info");
@@ -322,11 +333,12 @@ export function IntakeView({
     setBulkNotice(`正在标记 ${printable.length} 个批次为已打印…`);
     setBulkNoticeKind("info");
     try {
-      await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
+      const response = await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
+      selection.update(response.items);
       const skipped = targets.length - printable.length;
       setBulkNotice(
         skipped
-          ? `已标记 ${printable.length} 个批次为已打印；${skipped} 个已打印批次跳过。`
+          ? `已标记 ${printable.length} 个批次为已打印；${skipped} 个无需打印或非待打印批次跳过。`
           : `已标记 ${printable.length} 个批次为已打印。`,
       );
       setBulkNoticeKind("success");
@@ -340,6 +352,10 @@ export function IntakeView({
 
   function printCurrentBatch() {
     const item = normalizeIntakeBatch(draft, roomNames);
+    if (isDirectSampling(item)) {
+      setNotice("直接取材批次无需打印笼卡。");
+      return;
+    }
     const missingFields = missingIntakeRequiredFields(item);
     if (missingFields.length) {
       setNotice(`打印前请填写必填项目：${missingFields.join("、")}。`);
@@ -529,9 +545,9 @@ export function IntakeView({
   }
 
   async function receive(targets: IntakeBatch[]) {
-    const printable = targets.filter((item) => item.status === "printed");
+    const printable = targets.filter(canConfirmIntakeReceipt);
     if (!printable.length) {
-      setBulkNotice("选中的批次均未处于已打印状态，无需标记已接收。");
+      setBulkNotice("请选择已打印的入驻饲养批次或待接收的直接取材批次。");
       setBulkNoticeKind("info");
       return;
     }
@@ -539,11 +555,12 @@ export function IntakeView({
     setBulkNotice(`正在标记 ${printable.length} 个批次为已接收…`);
     setBulkNoticeKind("info");
     try {
-      await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id) });
+      const response = await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id) });
+      selection.update(response.batches);
       const skipped = targets.length - printable.length;
       setBulkNotice(
         skipped
-          ? `已标记 ${printable.length} 个批次为已接收；${skipped} 个未打印批次跳过。`
+          ? `已标记 ${printable.length} 个批次为已接收；${skipped} 个不符合接收条件的批次跳过。`
           : `已标记 ${printable.length} 个批次为已接收。`,
       );
       setBulkNoticeKind("success");
@@ -567,7 +584,7 @@ export function IntakeView({
           {mode === "entry" ? (
             <WorkspaceToolbar
               ariaLabel="笼卡录入操作"
-              title={editing ? "编辑接收笼卡" : "接收笼卡"}
+              title={isDirectSampling(draft) ? "直接取材预约" : editing ? "编辑接收笼卡" : "接收笼卡"}
               sticky
               actions={
                 <ActionButton icon={<ActionIcon name="create" />} disabled={save.isPending} onClick={startNew}>

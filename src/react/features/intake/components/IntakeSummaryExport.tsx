@@ -80,7 +80,7 @@ export function IntakeSummaryExport() {
           </Form.Item>
           <Typography.Paragraph type="secondary">
             按预约接收日期导出，包含开始和结束当天的全部批次（含草稿、已接收），不受当前表格筛选或勾选影响。
-            按日期、房间分组，保留预约明细及笼卡打印、接收状态。
+            按日期分组，入驻饲养按房间排列，直接取材单独列出，保留预约明细和状态。
           </Typography.Paragraph>
           {exportSummary.isError ? (
             <Alert role="alert" showIcon type="error" title={exportSummary.error.message} />

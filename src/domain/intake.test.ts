@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import supplierAliases from "../../server_app/resources/intake/supplier-aliases.json";
 
 import {
   abbreviateSupplier,
@@ -7,9 +8,79 @@ import {
   parseIntakeMessage,
   speciesLabel,
   standardizeStrain,
+  updateIntakeDraft,
+  inferIntakePurpose,
+  canConfirmIntakeReceipt,
+  normalizeIntakeSex,
+  createIntakeDraft,
 } from "./intake";
 
 describe("intake message parser", () => {
+  it("resolves every maintained supplier name and alias from the shared catalog", () => {
+    const seen = new Map<string, string>();
+    for (const entry of supplierAliases.entries) {
+      for (const name of [entry.shortName, ...entry.companyNames, ...entry.aliases, ...entry.exactAliases]) {
+        expect(abbreviateSupplier(name), name).toBe(entry.shortName);
+        const key = name
+          .normalize("NFKC")
+          .replace(/[\s()（）·\-—_]/g, "")
+          .toLowerCase();
+        expect(seen.get(key) ?? entry.shortName, name).toBe(entry.shortName);
+        seen.set(key, entry.shortName);
+      }
+      if (entry.origin === "verified") {
+        expect(entry.companyNames.length).toBeGreaterThan(0);
+        expect(entry.sources.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it.each([
+    ["斯贝福（北京）生物技术有限公司", "北京斯贝福"],
+    [" 斯贝福 ( 北京 ) 生物技术有限公司 ", "北京斯贝福"],
+    ["北京维通利华实验动物技术有限公司湖北分公司", "湖北维通利华"],
+    ["湖南斯莱克景达实验动物有限公司", "湖南斯莱克景达"],
+    ["百奥赛图江苏基因生物技术有限公司", "江苏百奥赛图"],
+    ["百奥赛图（上海）医药科技有限公司", "上海百奥赛图"],
+    ["深圳百奥赛图生物科技有限公司", "深圳百奥赛图生物科技有限公司"],
+    ["武汉斯莱克生物科技有限公司", "武汉斯莱克生物科技有限公司"],
+    ["北京维通利华实验动物技术有限公司南京分公司", "北京维通利华实验动物技术有限公司南京分公司"],
+    ["广东明珠集团股份有限公司", "广东明珠集团股份有限公司"],
+  ])("preserves supplier region while normalizing %s", (raw, expected) => {
+    expect(abbreviateSupplier(raw)).toBe(expected);
+    expect(parseIntakeMessage(`供应商：${raw}\n品系：C57\n数量：10`).supplier).toBe(expected);
+  });
+
+  it.each([
+    ["雌性", "雌性"],
+    ["母鼠", "雌性"],
+    ["female", "雌性"],
+    ["F", "雌性"],
+    ["♀", "雌性"],
+    ["雄性", "雄性"],
+    ["公鼠", "雄性"],
+    ["male", "雄性"],
+    ["M", "雄性"],
+    ["♂", "雄性"],
+    ["雌性/雄性", "雌性/雄性"],
+    ["雌雄各半", "雌性/雄性"],
+    ["公母混合", "雌性/雄性"],
+    ["female/male", "雌性/雄性"],
+    ["", "雌性/雄性"],
+    ["未知", "雌性/雄性"],
+    [null, "雌性/雄性"],
+  ])("normalizes sex %s to the three-option field", (input, expected) => {
+    expect(normalizeIntakeSex(input)).toBe(expected);
+    expect(normalizeIntakeBatch({ sex: input ?? "" }).sex).toBe(expected);
+  });
+
+  it("defaults new and unrecognized reservations to both sexes without reading adjacent fields", () => {
+    expect(createIntakeDraft().sex).toBe("雌性/雄性");
+    expect(parseIntakeMessage("数量：10，接收日期：2026-10-22").sex).toBe("雌性/雄性");
+    expect(parseIntakeMessage("性别：雌性 供应商：某某公司 数量：10").sex).toBe("雌性");
+    expect(parseIntakeMessage("性别：公母各半 数量：10").sex).toBe("雌性/雄性");
+  });
+
   it("extracts the purchase and husbandry fields", () => {
     const result = parseIntakeMessage(
       "锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8101 进驻日期：5月13日",
@@ -75,11 +146,155 @@ describe("intake message parser", () => {
 
   it("shortens supplier names with the shared print rules", () => {
     expect(abbreviateSupplier("上海南方模式生物科技股份有限公司")).toBe("上海南模");
+    expect(abbreviateSupplier("广东维通利华实验动物技术有限公司")).toBe("广东维通利华");
+    expect(abbreviateSupplier("广东维通利华")).toBe("广东维通利华");
+    expect(abbreviateSupplier("广东维通利")).toBe("广东维通利华");
+    expect(parseIntakeMessage("供应商：广东维通利华实验动物技术有限公司 品系：C57 数量：10").supplier).toBe(
+      "广东维通利华",
+    );
     expect(abbreviateSupplier("未收录供应商")).toBe("未收录供应商");
   });
 
   it("shows stored species codes as Chinese business labels", () => {
     expect(speciesLabel("mouse")).toBe("小鼠");
     expect(speciesLabel("rat")).toBe("大鼠");
+  });
+});
+
+describe("direct-sampling intake", () => {
+  it.each(["到货直接取材", "接收后立即取材，无需饲养", "本批动物不需要饲养"])("recognizes explicit use: %s", (text) => {
+    expect(inferIntakePurpose(text)).toBe("direct_sampling");
+    expect(parseIntakeMessage(text).intakePurpose).toBe("direct_sampling");
+  });
+
+  it.each([
+    "预约进驻饲养",
+    "饲养两周后取材",
+    "饲养30天后直接取材",
+    "先饲养两周再直接取材",
+    "不是直接取材",
+    "不直接取材",
+    "不要直接取材",
+    "不是到货直接取材",
+    "尚未确定用途",
+  ])("keeps housing for %s", (text) => {
+    expect(inferIntakePurpose(text)).toBe("housing");
+  });
+
+  it("does not require a room or create printable cards for direct sampling", () => {
+    const direct = normalizeIntakeBatch({
+      intakePurpose: "direct_sampling",
+      supplier: "供应商",
+      iacuc: "Z2026001",
+      pi: "负责人",
+      owner: "实验负责人",
+      intakeDate: "2026-10-21",
+      quantity: 10,
+      roomName: "8101",
+      husbandryDays: 30,
+      finalCardCount: 2,
+      cards: [{ id: "card", index: 1, label: "1", qrId: "ABCD", suggestedQuantity: "5" }],
+    });
+    expect(direct).toMatchObject({
+      status: "pending_receipt",
+      roomName: "",
+      husbandryDays: null,
+      endDate: "",
+      finalCardCount: 0,
+      suggestedCardCount: 0,
+      cards: [],
+    });
+    expect(missingIntakeRequiredFields(direct)).toEqual([]);
+    expect(missingIntakeRequiredFields({ ...direct, quantity: 0 })).toContain("数量（只）");
+    expect(canConfirmIntakeReceipt(direct)).toBe(true);
+    expect(canConfirmIntakeReceipt({ ...direct, status: "received" })).toBe(false);
+  });
+
+  it("keeps old batches housing and allows only unprinted drafts to change purpose", () => {
+    const housing = normalizeIntakeBatch({ quantity: 10, finalCardCount: 2, roomName: "8101" });
+    expect(housing.intakePurpose).toBe("housing");
+    const direct = updateIntakeDraft(housing, "intakePurpose", "direct_sampling");
+    const restored = updateIntakeDraft(direct, "intakePurpose", "housing");
+    expect(restored).toMatchObject({ intakePurpose: "housing", status: "pending_print", finalCardCount: 2 });
+    for (const status of ["printed", "received"] as const) {
+      expect(updateIntakeDraft({ ...housing, status }, "intakePurpose", "direct_sampling").intakePurpose).toBe(
+        "housing",
+      );
+    }
+    expect(canConfirmIntakeReceipt(housing)).toBe(false);
+    expect(canConfirmIntakeReceipt({ ...housing, status: "printed" })).toBe(true);
+  });
+});
+
+describe("intake husbandry dates", () => {
+  it.each([
+    ["2026-10-21", 30, "2026-11-20"],
+    ["2026-01-31", 30, "2026-03-02"],
+    ["2026-12-31", 1, "2027-01-01"],
+    ["2028-02-28", 1, "2028-02-29"],
+    ["2026-02-28", 1, "2026-03-01"],
+    ["2026-03-07", 2, "2026-03-09"],
+    ["2026-10-21", 0, "2026-10-21"],
+  ])("calculates both directions for %s + %i days", (intakeDate, husbandryDays, endDate) => {
+    expect(normalizeIntakeBatch({ intakeDate, husbandryDays }).endDate).toBe(endDate);
+    expect(normalizeIntakeBatch({ intakeDate, endDate }).husbandryDays).toBe(husbandryDays);
+  });
+
+  it("recalculates through sequential typing and later edits", () => {
+    let draft = normalizeIntakeBatch({ intakeDate: "2026-10-21", batchNo: "KEEP-BATCH" });
+    draft = updateIntakeDraft(draft, "husbandryDays", 3);
+    expect(draft.endDate).toBe("2026-10-24");
+    draft = updateIntakeDraft(draft, "husbandryDays", 30);
+    expect(draft.endDate).toBe("2026-11-20");
+    draft = updateIntakeDraft(draft, "intakeDate", "2026-10-25");
+    expect(draft.endDate).toBe("2026-11-24");
+    draft = updateIntakeDraft(draft, "endDate", "2026-12-01");
+    expect(draft.husbandryDays).toBe(37);
+    expect(draft.batchNo).toBe("KEEP-BATCH");
+  });
+
+  it("supports entering the end date or period before the intake date", () => {
+    const endFirst = normalizeIntakeBatch({ endDate: "2026-11-20" });
+    expect(updateIntakeDraft(endFirst, "intakeDate", "2026-10-21").husbandryDays).toBe(30);
+    const daysFirst = normalizeIntakeBatch({ husbandryDays: 30 });
+    expect(updateIntakeDraft(daysFirst, "intakeDate", "2026-10-21").endDate).toBe("2026-11-20");
+  });
+
+  it("keeps cleared fields empty instead of restoring their old derived values", () => {
+    const initial = normalizeIntakeBatch({ intakeDate: "2026-10-21", husbandryDays: 30 });
+    for (const cleared of [
+      updateIntakeDraft(initial, "endDate", ""),
+      updateIntakeDraft(initial, "husbandryDays", null),
+    ]) {
+      expect(cleared.endDate).toBe("");
+      expect(cleared.husbandryDays).toBeNull();
+      expect(updateIntakeDraft(cleared, "supplier", "新供应商").endDate).toBe("");
+    }
+    const clearedStart = updateIntakeDraft(initial, "intakeDate", "");
+    expect(clearedStart.endDate).toBe("");
+    expect(clearedStart.husbandryDays).toBe(30);
+    expect(updateIntakeDraft(clearedStart, "intakeDate", "2026-12-01").endDate).toBe("2026-12-31");
+  });
+
+  it("does not invent dates for missing or invalid inputs or negative periods", () => {
+    for (const days of [null, -1, 1.5, 10_000_000, Number.MAX_VALUE]) {
+      expect(normalizeIntakeBatch({ intakeDate: "2026-10-21", husbandryDays: days }).endDate).toBe("");
+    }
+    expect(normalizeIntakeBatch({ intakeDate: "2026-02-30", husbandryDays: 30 }).endDate).toBe("");
+    expect(normalizeIntakeBatch({ endDate: "2026-11-20", husbandryDays: 30 }).intakeDate).toBe("");
+    const reversed = updateIntakeDraft(
+      normalizeIntakeBatch({ intakeDate: "2026-10-21", husbandryDays: 30 }),
+      "endDate",
+      "2026-10-20",
+    );
+    expect(reversed.endDate).toBe("2026-10-20");
+    expect(reversed.husbandryDays).toBeNull();
+  });
+
+  it("preserves existing explicit values when unrelated batch fields change", () => {
+    const stored = normalizeIntakeBatch({ intakeDate: "2026-10-21", endDate: "2026-11-20", husbandryDays: 10 });
+    const edited = updateIntakeDraft(stored, "supplier", "新供应商");
+    expect(edited.endDate).toBe(stored.endDate);
+    expect(edited.husbandryDays).toBe(stored.husbandryDays);
   });
 });

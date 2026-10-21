@@ -1,0 +1,286 @@
+{
+  "version": 1,
+  "verifiedOn": "2026-10-21",
+  "entries": [
+    {
+      "shortName": "江苏集萃",
+      "companyNames": ["江苏集萃药康生物科技股份有限公司", "江苏集萃药康生物科技股份有限公司常州分公司"],
+      "aliases": ["江苏集萃药康", "江苏集萃"],
+      "exactAliases": [],
+      "sources": [
+        "https://cn.gempharmatech.com/about/",
+        "https://static.cninfo.com.cn/finalpage/2026-04-23/1225148253.PDF"
+      ],
+      "origin": "existing"
+    },
+    {
+      "shortName": "广东药康",
+      "companyNames": ["广东药康生物科技有限公司"],
+      "aliases": ["广东药康"],
+      "exactAliases": [],
+      "sources": ["https://cn.gempharmatech.com/about/"],
+      "origin": "existing"
+    },
+    {
+      "shortName": "上海南模",
+      "companyNames": [],
+      "aliases": ["上海南方模式", "上海南模"],
+      "exactAliases": [],
+      "sources": [],
+      "origin": "existing"
+    },
+    {
+      "shortName": "广东南模",
+      "companyNames": [],
+      "aliases": ["广东南模"],
+      "exactAliases": [],
+      "sources": [],
+      "origin": "existing"
+    },
+    {
+      "shortName": "珠海百试通",
+      "companyNames": [],
+      "aliases": ["珠海百试通"],
+      "exactAliases": [],
+      "sources": [],
+      "origin": "existing"
+    },
+    {
+      "shortName": "丹阳昌益",
+      "companyNames": [],
+      "aliases": ["丹阳昌益"],
+      "exactAliases": [],
+      "sources": [],
+      "origin": "existing"
+    },
+    {
+      "shortName": "北京维通利华",
+      "companyNames": ["北京维通利华实验动物技术有限公司"],
+      "aliases": ["北京维通利华"],
+      "exactAliases": [],
+      "sources": ["https://www.vitalriver.com/capabilities.html"],
+      "origin": "existing"
+    },
+    {
+      "shortName": "浙江维通利华",
+      "companyNames": ["浙江维通利华实验动物技术有限公司", "浙江维通利华实验动物技术有限公司桐乡分公司"],
+      "aliases": ["浙江维通利华"],
+      "exactAliases": [],
+      "sources": ["https://www.vitalriver.com/capabilities.html"],
+      "origin": "existing"
+    },
+    {
+      "shortName": "广东维通利华",
+      "companyNames": ["广东维通利华实验动物技术有限公司"],
+      "aliases": ["广东维通利华", "广东维通利"],
+      "exactAliases": [],
+      "sources": ["https://www.vitalriver.com/capabilities.html"],
+      "origin": "existing"
+    },
+    {
+      "shortName": "上海斯莱克",
+      "companyNames": [],
+      "aliases": ["上海斯莱克"],
+      "exactAliases": ["斯莱克"],
+      "sources": [],
+      "origin": "existing"
+    },
+    {
+      "shortName": "北京华阜康",
+      "companyNames": [],
+      "aliases": ["北京华阜康"],
+      "exactAliases": ["华阜康"],
+      "sources": [],
+      "origin": "existing"
+    },
+    {
+      "shortName": "北京百奥赛图",
+      "companyNames": ["百奥赛图（北京）医药科技股份有限公司"],
+      "aliases": ["北京百奥赛图", "百奥赛图（北京）"],
+      "exactAliases": ["百奥赛图"],
+      "sources": ["https://biocytogen.com.cn/contact-us.html"],
+      "origin": "existing"
+    },
+    {
+      "shortName": "北京斯贝福",
+      "companyNames": ["斯贝福（北京）生物技术有限公司"],
+      "aliases": ["北京斯贝福", "斯贝福（北京）"],
+      "exactAliases": [],
+      "sources": ["https://www.spfbiotech.com/"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "四川维通利华",
+      "companyNames": ["四川维通利华实验动物技术有限公司"],
+      "aliases": ["四川维通利华"],
+      "exactAliases": [],
+      "sources": ["https://www.vitalriver.com/capabilities.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "湖北维通利华",
+      "companyNames": ["北京维通利华实验动物技术有限公司湖北分公司"],
+      "aliases": ["湖北维通利华", "北京维通利华湖北分公司"],
+      "exactAliases": [],
+      "sources": ["https://www.vitalriver.com/capabilities.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "北京药康",
+      "companyNames": ["北京药康生物科技有限公司"],
+      "aliases": ["北京药康"],
+      "exactAliases": [],
+      "sources": [
+        "https://cn.gempharmatech.com/about/",
+        "https://static.cninfo.com.cn/finalpage/2026-04-23/1225148253.PDF"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "成都药康",
+      "companyNames": ["成都药康生物科技有限公司"],
+      "aliases": ["成都药康"],
+      "exactAliases": [],
+      "sources": [
+        "https://cn.gempharmatech.com/about/",
+        "https://static.cninfo.com.cn/finalpage/2026-04-23/1225148253.PDF"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "上海药康",
+      "companyNames": ["上海药康生物科技有限公司"],
+      "aliases": ["上海药康"],
+      "exactAliases": [],
+      "sources": [
+        "https://cn.gempharmatech.com/about/",
+        "https://static.cninfo.com.cn/finalpage/2026-04-23/1225148253.PDF"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "江苏百奥赛图",
+      "companyNames": ["百奥赛图江苏基因生物技术有限公司"],
+      "aliases": ["江苏百奥赛图", "百奥赛图江苏"],
+      "exactAliases": [],
+      "sources": ["https://biocytogen.com.cn/contact-us.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "上海百奥赛图",
+      "companyNames": ["百奥赛图（上海）医药科技有限公司"],
+      "aliases": ["上海百奥赛图", "百奥赛图（上海）"],
+      "exactAliases": [],
+      "sources": ["https://biocytogen.com.cn/contact-us.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "辽宁长生",
+      "companyNames": ["辽宁长生生物技术股份有限公司"],
+      "aliases": ["辽宁长生"],
+      "exactAliases": [],
+      "sources": ["https://www.lncssw.com/"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "成都达硕",
+      "companyNames": ["成都达硕实验动物有限公司", "成都达硕生物科技有限公司"],
+      "aliases": ["成都达硕"],
+      "exactAliases": [],
+      "sources": ["https://www.cd-dossy.cn/"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "上海吉辉",
+      "companyNames": ["上海吉辉实验动物饲养有限公司"],
+      "aliases": ["上海吉辉"],
+      "exactAliases": [],
+      "sources": [
+        "https://stcsm.sh.gov.cn/cmsres/98/98ad4ab259e743c4914a91266ed55412/ac3303e4899419316871787ca04944c1.pdf"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "上海杰思捷",
+      "companyNames": ["上海杰思捷实验动物有限公司"],
+      "aliases": ["上海杰思捷"],
+      "exactAliases": [],
+      "sources": [
+        "https://stcsm.sh.gov.cn/cmsres/98/98ad4ab259e743c4914a91266ed55412/ac3303e4899419316871787ca04944c1.pdf",
+        "https://www.jsj-lab.com/"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "上海甲干",
+      "companyNames": ["上海甲干生物科技有限公司"],
+      "aliases": ["上海甲干"],
+      "exactAliases": [],
+      "sources": [
+        "https://stcsm.sh.gov.cn/cmsres/98/98ad4ab259e743c4914a91266ed55412/ac3303e4899419316871787ca04944c1.pdf"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "常州卡文斯",
+      "companyNames": ["常州卡文斯实验动物有限公司"],
+      "aliases": ["常州卡文斯"],
+      "exactAliases": [],
+      "sources": ["https://www.cavens.com.cn/about.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "杭州子源",
+      "companyNames": ["杭州子源实验动物科技有限公司"],
+      "aliases": ["杭州子源"],
+      "exactAliases": [],
+      "sources": [
+        "https://www.ccgp.gov.cn/cggg/dfgg/zbgg/202510/t20251023_25563383.htm",
+        "https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web2945/site/attach/0/48f49bdb193a49f4a3bbb82339e32f16.pdf"
+      ],
+      "origin": "verified"
+    },
+    {
+      "shortName": "湖南斯莱克景达",
+      "companyNames": ["湖南斯莱克景达实验动物有限公司"],
+      "aliases": ["湖南斯莱克景达"],
+      "exactAliases": [],
+      "sources": ["https://kjt.hunan.gov.cn/kjt/zxgz/sydw/xyxk/202609/t20260924_34071601.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "长沙天勤",
+      "companyNames": ["长沙市天勤生物技术有限公司"],
+      "aliases": ["长沙市天勤", "长沙天勤"],
+      "exactAliases": [],
+      "sources": ["https://kjt.hunan.gov.cn/kjt/zxgz/sydw/xyxk/202410/t20241030_33488856.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "广东明珠",
+      "companyNames": ["广东明珠生物技术有限公司"],
+      "aliases": ["广东明珠生物"],
+      "exactAliases": [],
+      "sources": ["https://fs-hitech.foshan.gov.cn/tzgx/mq/content/post_6916782.html"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "广东凯世",
+      "companyNames": ["广东凯世生物科技有限公司"],
+      "aliases": ["广东凯世生物"],
+      "exactAliases": [],
+      "sources": ["https://www.kaseebio.com/", "https://gdstc.gd.gov.cn/attachment/0/571/571008/4658210.pdf"],
+      "origin": "verified"
+    },
+    {
+      "shortName": "上海灵畅",
+      "companyNames": ["上海灵畅生物科技有限公司"],
+      "aliases": ["上海灵畅"],
+      "exactAliases": [],
+      "sources": [
+        "https://stcsm.sh.gov.cn/cmsres/98/98ad4ab259e743c4914a91266ed55412/ac3303e4899419316871787ca04944c1.pdf"
+      ],
+      "origin": "verified"
+    }
+  ]
+}

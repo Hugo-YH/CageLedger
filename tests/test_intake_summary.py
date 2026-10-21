@@ -50,6 +50,30 @@ def document_text(document):
 
 
 class IntakeSummaryTests(unittest.TestCase):
+    def test_direct_sampling_is_included_without_room_and_grouped_separately(self):
+        direct = reservation(
+            10, intakePurpose="direct_sampling", roomName="", status="pending_receipt", finalCardCount=0
+        )
+        received = reservation(11, intakePurpose="direct_sampling", roomName="", status="received", finalCardCount=0)
+        housing = reservation(12, roomName="8103", status="printed")
+        for item in (direct, received, housing):
+            upsert_intake_batch(self.conn, item)
+        before = self.conn.total_changes
+        snapshot = summary.snapshot(self.conn, "2026-10-12", "2026-10-12")
+        document = Document(BytesIO(summary.generate(snapshot)))
+        content = document_text(document)
+        self.assertIn("共 3 批", content)
+        for item in (direct, received, housing):
+            self.assertIn(item["batchNo"], content)
+        self.assertIn("｜直接取材·无需笼卡·待接收｜", content)
+        self.assertIn("｜直接取材·无需笼卡·已接收｜", content)
+        self.assertIn("｜已打印｜", content)
+        self.assertNotIn("房间未填写", content)
+        groups = [p.text for p in document.paragraphs if p.text in ("8103", "直接取材")]
+        self.assertEqual(groups, ["8103", "直接取材"])
+        self.assertEqual(len(document.tables), 3)
+        self.assertEqual(self.conn.total_changes, before)
+
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row

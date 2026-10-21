@@ -49,13 +49,19 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
-        item = ports.normalize_entity_payload("intakeBatches", payload, item_id, method, spec["id_prefix"])
+        existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
+        normalized_payload = payload
+        if method == "PUT" and existing and "intakePurpose" not in (payload.get("item") or payload):
+            normalized_payload = dict(payload)
+            raw_item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
+            raw_item["intakePurpose"] = existing.get("intakePurpose", "housing")
+            normalized_payload["item"] = raw_item
+        item = ports.normalize_entity_payload("intakeBatches", normalized_payload, item_id, method, spec["id_prefix"])
         item["updatedAt"] = updated_at
         if method == "POST":
             ports.insert_entity(state, "intakeBatches", item)
             status = HTTPStatus.CREATED
         elif method == "PUT":
-            existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
             require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "待接收批次")
             ports.replace_entity(state, "intakeBatches", item_id, item)
         elif method == "DELETE":
@@ -188,6 +194,7 @@ def persist_intake_batches_mark_printed(body, actor, ports):
             batches_by_id[batch_id]
             for batch_id in batch_ids
             if batches_by_id[batch_id].get("status") in ("draft", "pending_print")
+            and batches_by_id[batch_id].get("intakePurpose", "housing") != "direct_sampling"
         ]
         for batch in batches:
             batch["status"] = "printed"
@@ -228,7 +235,14 @@ def persist_intake_receipt_confirmations(body, actor, ports):
         if missing_ids:
             raise LookupError("待接收批次不存在")
         batches = [
-            batches_by_id[batch_id] for batch_id in batch_ids if batches_by_id[batch_id].get("status") == "printed"
+            batches_by_id[batch_id]
+            for batch_id in batch_ids
+            if batches_by_id[batch_id].get("status") == "printed"
+            and batches_by_id[batch_id].get("intakePurpose", "housing") != "direct_sampling"
+            or (
+                batches_by_id[batch_id].get("intakePurpose", "housing") == "direct_sampling"
+                and batches_by_id[batch_id].get("status") == "pending_receipt"
+            )
         ]
         for batch in batches:
             batch["status"] = "received"

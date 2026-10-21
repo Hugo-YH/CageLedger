@@ -8,6 +8,10 @@ from .payload import cached_paginated_payloads, dump_json, paginated_payloads
 
 INTAKE_BATCH_LIST_COLUMNS = {
     "status": {"expr": "status", "order": "status"},
+    "intakePurpose": {
+        "expr": "COALESCE(json_extract(payload, '$.intakePurpose'), 'housing')",
+        "order": "COALESCE(json_extract(payload, '$.intakePurpose'), 'housing')",
+    },
     "batchNo": {"expr": "batch_no", "order": "batch_no"},
     "supplier": {"expr": "supplier", "order": "supplier"},
     "pi": {"expr": "pi", "order": "pi"},
@@ -145,6 +149,7 @@ def intake_batch_order_by(filters, entity_order_by):
 _INTAKE_STATUS_LABELS = {
     "draft": "草稿",
     "pending_print": "未打印",
+    "pending_receipt": "待接收",
     "printed": "已打印",
     "received": "已接收",
 }

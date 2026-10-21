@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+from server_app.domains.intake.purpose import is_direct_sampling
+
 
 def next_monday_after(date_text, clean_text):
     try:
@@ -23,6 +25,30 @@ def confirm_intake_receipt(state, batch_id, payload, actor, deps):
     batch = next((item for item in state.get("intakeBatches", []) if item.get("id") == batch_id), None)
     if not batch:
         raise LookupError("待接收批次不存在")
+    if is_direct_sampling(batch):
+        if batch.get("status") == "received":
+            receipts = batch.get("receipts") or []
+            return batch, receipts[-1] if receipts else {}, []
+        if batch.get("status") != "pending_receipt":
+            raise ValueError("只有待接收的直接取材批次可以确认接收")
+        actual_date = deps["clean_text"](payload.get("actualReceiptDate"))
+        if not actual_date:
+            raise ValueError("实际接收日期不能为空")
+        try:
+            date.fromisoformat(actual_date)
+        except ValueError as exc:
+            raise ValueError("实际接收日期无效") from exc
+        now = deps["now_iso"]()
+        receipt = {
+            "id": deps["new_id"]("receipt"),
+            "actualReceiptDate": actual_date,
+            "confirmedBy": actor.get("displayName", ""),
+            "confirmedAt": now,
+        }
+        batch.setdefault("receipts", []).append(receipt)
+        batch["status"] = "received"
+        batch["updatedAt"] = now
+        return batch, receipt, []
     if batch.get("status") not in ("printed", "received"):
         raise ValueError("只有已打印批次可以确认接收")
     actual_date = deps["clean_text"](payload.get("actualReceiptDate"))

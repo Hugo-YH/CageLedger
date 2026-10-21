@@ -1,5 +1,5 @@
 import type { IntakeBatch } from "../api/contracts";
-import { abbreviateSupplier } from "../../domain/intake";
+import { abbreviateSupplier, isDirectSampling } from "../../domain/intake";
 import { qrCodeSvg } from "./qrCode";
 
 export const INTAKE_CARD_PRINT_PAGE_SIZE = 14;
@@ -37,6 +37,15 @@ const MIXED_PRINT_REASON = "普通饲养间与临时饲养间笼卡不能混合�
 const UNRESOLVED_PRINT_REASON = "无法确认 8014 饲养间的设施归属，请先检查房间配置。";
 
 export function planIntakeCardPrint(batches: IntakeBatch[], rooms: IntakePrintRoom[]): IntakeCardPrintPlan {
+  if (batches.some(isDirectSampling)) {
+    return {
+      kind: "unresolved",
+      cardCount: 0,
+      pageSize: 0,
+      missing: 0,
+      disabledReason: "直接取材批次无需打印笼卡，请仅选择入驻饲养批次。",
+    };
+  }
   const kinds = new Set<IntakeCardPrintKind>();
   let unresolved = false;
   let cardCount = 0;
@@ -95,7 +104,9 @@ function intakeCardPrintKind(batch: IntakeBatch, rooms: IntakePrintRoom[]): Inta
 }
 
 function printItems(batches: IntakeBatch[]): IntakeCardPrintItem[] {
-  return batches.flatMap((batch) => batch.cards.slice(0, batch.finalCardCount).map((card) => ({ batch, card })));
+  return batches
+    .filter((batch) => !isDirectSampling(batch))
+    .flatMap((batch) => batch.cards.slice(0, batch.finalCardCount).map((card) => ({ batch, card })));
 }
 
 function blankPrintItem(): IntakeCardPrintItem {

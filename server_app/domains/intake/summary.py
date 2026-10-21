@@ -17,7 +17,13 @@ from docx.shared import Mm, Pt, RGBColor
 from . import repository
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-STATUS_LABELS = {"draft": "草稿", "pending_print": "未打印", "printed": "已打印", "received": "已接收"}
+STATUS_LABELS = {
+    "draft": "草稿",
+    "pending_print": "未打印",
+    "pending_receipt": "待接收",
+    "printed": "已打印",
+    "received": "已接收",
+}
 TEMPLATE = Path(__file__).resolve().parents[2] / "resources" / "intake" / "reception-summary.docx"
 FONT_NAME = "微软雅黑"
 # Keep the VI reference hues (#222962 / #F16901), with lower saturation and higher lightness.
@@ -146,7 +152,10 @@ def batch_block(document, batch):
         section.page_width - section.left_margin - section.right_margin, WD_TAB_ALIGNMENT.RIGHT
     )
     status = text(batch.get("status"))
-    tag = heading.add_run(f"\t｜{STATUS_LABELS.get(status, status or '状态未填写')}｜")
+    status_label = STATUS_LABELS.get(status, status or "状态未填写")
+    if batch.get("intakePurpose") == "direct_sampling":
+        status_label = f"直接取材·无需笼卡·{status_label}"
+    tag = heading.add_run(f"\t｜{status_label}｜")
     tag.bold = True
     tag.font.size = Pt(10.5)
     tag.font.color.rgb = RGBColor.from_string(
@@ -195,12 +204,15 @@ def generate(document_snapshot):
     )
     grouped = defaultdict(lambda: defaultdict(list))
     for batch in document_snapshot["batches"]:
-        grouped[batch["intakeDate"]][text(batch.get("roomName"))].append(batch)
+        direct_sampling = batch.get("intakePurpose") == "direct_sampling"
+        group = (direct_sampling, "" if direct_sampling else text(batch.get("roomName")))
+        grouped[batch["intakeDate"]][group].append(batch)
     for intake_date, rooms in sorted(grouped.items()):
         day = date.fromisoformat(intake_date)
         paragraph(document, f"{day.year}年{day.month}月{day.day}日", bold=True, size=14, after=4, keep_next=True)
-        for room, batches in sorted(rooms.items()):
-            p = paragraph(document, room or "房间未填写", bold=True, after=4, keep_next=True)
+        for (direct_sampling, room), batches in sorted(rooms.items()):
+            group_title = "直接取材" if direct_sampling else room or "房间未填写"
+            p = paragraph(document, group_title, bold=True, after=4, keep_next=True)
             shade_paragraph(p, ROOM_FILL)
             for batch in batches:
                 batch_block(document, batch)

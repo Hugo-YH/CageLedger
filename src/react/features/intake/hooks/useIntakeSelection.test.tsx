@@ -29,6 +29,16 @@ function useScopedSelection({ filter }: { filter: string; page: number; pageSize
 }
 
 describe("intake selection", () => {
+  it("keeps selection while reflecting saved purpose and receipt status", () => {
+    const { result } = renderHook(useIntakeSelection);
+    act(() => {
+      result.current.toggle(items[0], true);
+      result.current.toggle(items[1], true);
+    });
+    const updated = { ...items[0], intakePurpose: "direct_sampling" as const, status: "received" as const };
+    act(() => result.current.update([updated, { ...items[1], id: "not-selected" }]));
+    expect(result.current.selectedItems).toEqual([updated, items[1]]);
+  });
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();

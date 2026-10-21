@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from server_app.domains.intake.ai_parse import _normalize_payload, ai_parse_intake_message
@@ -7,6 +9,57 @@ from server_app.services.ai import deepseek_chat_json
 
 
 class IntakeAiParseNormalizationTest(unittest.TestCase):
+    def test_supplier_catalog_all_names_and_aliases_resolve_consistently(self):
+        path = Path(__file__).resolve().parents[1] / "server_app/resources/intake/supplier-aliases.json"
+        catalog = json.loads(path.read_text(encoding="utf-8"))
+        for entry in catalog["entries"]:
+            for name in [entry["shortName"], *entry["companyNames"], *entry["aliases"], *entry["exactAliases"]]:
+                with self.subTest(name=name):
+                    self.assertEqual(abbreviate_supplier(name), entry["shortName"])
+                    self.assertEqual(_normalize_payload({"supplier": name})["supplier"], entry["shortName"])
+
+    def test_supplier_matching_keeps_regional_entities_and_unknown_branches(self):
+        cases = {
+            "斯贝福（北京）生物技术有限公司": "北京斯贝福",
+            " 斯贝福 ( 北京 ) 生物技术有限公司 ": "北京斯贝福",
+            "北京维通利华实验动物技术有限公司湖北分公司": "湖北维通利华",
+            "湖南斯莱克景达实验动物有限公司": "湖南斯莱克景达",
+            "百奥赛图江苏基因生物技术有限公司": "江苏百奥赛图",
+            "百奥赛图（上海）医药科技有限公司": "上海百奥赛图",
+            "深圳百奥赛图生物科技有限公司": "深圳百奥赛图生物科技有限公司",
+            "武汉斯莱克生物科技有限公司": "武汉斯莱克生物科技有限公司",
+            "北京维通利华实验动物技术有限公司南京分公司": "北京维通利华实验动物技术有限公司南京分公司",
+            "广东明珠集团股份有限公司": "广东明珠集团股份有限公司",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(abbreviate_supplier(raw), expected)
+
+    def test_sex_is_normalized_to_three_options_with_mixed_default(self):
+        cases = {
+            "雌性": "雌性",
+            "母鼠": "雌性",
+            "female": "雌性",
+            "F": "雌性",
+            "♀": "雌性",
+            "雄性": "雄性",
+            "公鼠": "雄性",
+            "male": "雄性",
+            "M": "雄性",
+            "♂": "雄性",
+            "雌性/雄性": "雌性/雄性",
+            "雌雄各半": "雌性/雄性",
+            "公母混合": "雌性/雄性",
+            "female/male": "雌性/雄性",
+            "": "雌性/雄性",
+            "未知": "雌性/雄性",
+            None: "雌性/雄性",
+        }
+        for value, expected in cases.items():
+            with self.subTest(value=value):
+                self.assertEqual(_normalize_payload({"sex": value})["sex"], expected)
+        self.assertEqual(_normalize_payload({})["sex"], "雌性/雄性")
+
     def test_normalizes_deepseek_payload(self):
         result = _normalize_payload(
             {
@@ -28,6 +81,7 @@ class IntakeAiParseNormalizationTest(unittest.TestCase):
         self.assertEqual(result["quantity"], 70)
         self.assertEqual(result["roomName"], "8101")
         self.assertEqual(result["intakeDate"], "2026-05-13")
+        self.assertEqual(result["endDate"], "2026-06-12")
         self.assertEqual(result["husbandryDays"], 30)
         self.assertEqual(result["strainStandard"], "C57BL/6J")
         self.assertEqual(result["supplier"], "广东南模")
@@ -46,6 +100,57 @@ class IntakeAiParseNormalizationTest(unittest.TestCase):
         self.assertIsNone(result["quantity"])
         self.assertEqual(result["intakeDate"], "")
         self.assertIsNone(result["husbandryDays"])
+
+    def test_derives_end_date_from_intake_date_and_days(self):
+        result = _normalize_payload({"intakeDate": "2024-02-28", "husbandryDays": "2"})
+        zero_day = _normalize_payload({"intakeDate": "2026-05-13", "husbandryDays": 0})
+        self.assertEqual(result["intakeDate"], "2024-02-28")
+        self.assertEqual(result["endDate"], "2024-03-01")
+        self.assertEqual(result["husbandryDays"], 2)
+        self.assertEqual(zero_day["endDate"], "2026-05-13")
+        self.assertEqual(zero_day["husbandryDays"], 0)
+
+    def test_derives_days_from_date_range_including_zero_and_across_year(self):
+        same_day = _normalize_payload({"intakeDate": "2026-05-13", "endDate": "2026-05-13"})
+        cross_year = _normalize_payload({"intakeDate": "2025-12-31", "endDate": "2026-01-01"})
+        self.assertEqual(same_day["husbandryDays"], 0)
+        self.assertEqual(cross_year["husbandryDays"], 1)
+
+    def test_date_range_wins_when_ai_cycle_conflicts(self):
+        result = _normalize_payload({"intakeDate": "2026-05-13", "endDate": "2026-05-20", "husbandryDays": "30"})
+        self.assertEqual(result["husbandryDays"], 7)
+
+    def test_does_not_invent_intake_date_or_negative_cycle(self):
+        no_intake = _normalize_payload({"endDate": "2026-05-20", "husbandryDays": "7"})
+        reverse_dates = _normalize_payload({"intakeDate": "2026-05-20", "endDate": "2026-05-13"})
+        self.assertEqual(no_intake["intakeDate"], "")
+        self.assertEqual(no_intake["endDate"], "2026-05-20")
+        self.assertEqual(no_intake["husbandryDays"], 7)
+        self.assertIsNone(reverse_dates["husbandryDays"])
+
+    def test_invalid_dates_and_overlarge_days_are_safe(self):
+        malformed = _normalize_payload({"intakeDate": "2026-xx-13", "endDate": "2026-02-30"})
+        overlarge = _normalize_payload({"intakeDate": "9999-12-31", "husbandryDays": "999999999999999999999"})
+        self.assertEqual(malformed["intakeDate"], "")
+        self.assertEqual(malformed["endDate"], "")
+        self.assertEqual(overlarge["endDate"], "")
+        self.assertEqual(overlarge["husbandryDays"], 999999999999999999999)
+
+    def test_direct_sampling_clears_housing_only_values(self):
+        result = _normalize_payload(
+            {"intakePurpose": "direct_sampling", "roomName": "8101", "endDate": "2026-05-20", "husbandryDays": 7}
+        )
+        self.assertEqual(result["intakePurpose"], "direct_sampling")
+        self.assertEqual(result["roomName"], "")
+        self.assertEqual(result["endDate"], "")
+        self.assertIsNone(result["husbandryDays"])
+
+    def test_invalid_or_missing_cycle_does_not_generate_end_date(self):
+        for value in (None, "", -1, "1.5", "未知", True):
+            with self.subTest(value=value):
+                result = _normalize_payload({"intakeDate": "2026-10-21", "husbandryDays": value})
+                self.assertEqual(result["endDate"], "")
+                self.assertIsNone(result["husbandryDays"])
 
     def test_deterministic_strain_wins_over_ai_value(self):
         result = _normalize_payload(
@@ -70,6 +175,7 @@ class IntakeAiParseNormalizationTest(unittest.TestCase):
         self.assertEqual(result["supplier"], "")
         self.assertIsNone(result["quantity"])
         self.assertEqual(result["intakeDate"], "")
+        self.assertEqual(result["endDate"], "")
 
 
 class DeepSeekChatJsonTest(unittest.TestCase):
@@ -108,6 +214,7 @@ class IntakeAiParseMessageTest(unittest.TestCase):
                 "quantity": "70",
                 "roomName": "8101",
                 "intakeDate": "2026-05-13",
+                "endDate": "2026-06-12",
                 "husbandryDays": "",
             },
             {"prompt_tokens": 120, "completion_tokens": 40, "total_tokens": 160},
@@ -116,6 +223,8 @@ class IntakeAiParseMessageTest(unittest.TestCase):
         self.assertEqual(result["iacuc"], "Z2025050")
         self.assertEqual(result["quantity"], 70)
         self.assertEqual(result["intakeDate"], "2026-05-13")
+        self.assertEqual(result["endDate"], "2026-06-12")
+        self.assertEqual(result["husbandryDays"], 30)
         self.assertEqual(result["strainStandard"], "C57BL/6J")
         self.assertEqual(usage["total_tokens"], 160)
 
@@ -185,12 +294,18 @@ class StrainStandardTest(unittest.TestCase):
             "广东南模生物科技股份有限公司": "广东南模",
             "上海南方模式生物科技股份有限公司": "上海南模",
             "江苏集萃药康生物科技股份有限公司": "江苏集萃",
+            "广东维通利华实验动物技术有限公司": "广东维通利华",
+            "广东维通利华": "广东维通利华",
+            "广东维通利": "广东维通利华",
             "北京百奥赛图": "北京百奥赛图",
             "未收录供应商": "未收录供应商",
         }
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
                 self.assertEqual(abbreviate_supplier(raw), expected)
+        self.assertEqual(
+            _normalize_payload({"supplier": "广东维通利华实验动物技术有限公司"})["supplier"], "广东维通利华"
+        )
 
 
 if __name__ == "__main__":

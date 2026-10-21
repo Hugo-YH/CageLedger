@@ -7,7 +7,12 @@ import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { CommandBar, DataTable } from "../../../components/ui";
 import { IntakeQuarantineStatus } from "../../quarantine/IntakeQuarantineStatus";
-import { intakeStatusLabel } from "../../../../domain/intake";
+import {
+  intakeStatusLabel,
+  intakePurposeLabel,
+  isDirectSampling,
+  canConfirmIntakeReceipt,
+} from "../../../../domain/intake";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
 
 export function IntakeBatchList({
@@ -92,6 +97,7 @@ export function IntakeBatchList({
     ...(
       [
         { key: "status", label: "状态", width: 82 },
+        { key: "intakePurpose", label: "接收用途", width: 100 },
         { key: "batchNo", label: "批次号", width: 140 },
         { key: "supplier", label: "购买单位", width: 128 },
         { key: "pi", label: "项目负责人", width: 110 },
@@ -99,7 +105,7 @@ export function IntakeBatchList({
         { key: "quantity", label: "数量", width: 64 },
         { key: "roomName", label: "房间", width: 64 },
         { key: "intakeDate", label: "接收日期", width: 108 },
-        { key: "cardCount", label: "笼卡", width: 56 },
+        { key: "cardCount", label: "笼卡", width: 94 },
       ] as const
     ).map(({ key, label, width }) => ({
       key,
@@ -118,7 +124,11 @@ export function IntakeBatchList({
       ),
       render: (_: unknown, item: IntakeBatch) => {
         if (key === "status") return <Tag color={intakeStatusColor(item.status)}>{intakeStatusLabel(item.status)}</Tag>;
-        if (key === "cardCount") return item.finalCardCount;
+        if (key === "intakePurpose")
+          return (
+            <Tag color={isDirectSampling(item) ? "blue" : undefined}>{intakePurposeLabel(item.intakePurpose)}</Tag>
+          );
+        if (key === "cardCount") return isDirectSampling(item) ? "无需笼卡" : item.finalCardCount;
         const value = item[key];
         const text = value == null || value === "" ? "-" : String(value);
         return (
@@ -171,7 +181,14 @@ export function IntakeBatchList({
               <>
                 <Button
                   icon={<ActionIcon name="print" />}
-                  disabled={loading || markingPrinted || markingReceived}
+                  disabled={
+                    loading ||
+                    markingPrinted ||
+                    markingReceived ||
+                    !selectedItems.some(
+                      (item) => !isDirectSampling(item) && (item.status === "pending_print" || item.status === "draft"),
+                    )
+                  }
                   loading={markingPrinted}
                   onClick={() => onMarkPrinted(selectedItems)}
                 >
@@ -179,7 +196,9 @@ export function IntakeBatchList({
                 </Button>
                 <Button
                   icon={<ActionIcon name="reserve" />}
-                  disabled={loading || markingPrinted || markingReceived}
+                  disabled={
+                    loading || markingPrinted || markingReceived || !selectedItems.some(canConfirmIntakeReceipt)
+                  }
                   loading={markingReceived}
                   onClick={() => onReceive(selectedItems)}
                 >
@@ -267,7 +286,12 @@ function IntakeColumnTitle({
   const options = useIntakeFilterOptions(params, column, open);
   const displayOptions = (options.data?.items || []).map((option) => ({
     ...option,
-    label: column === "status" ? (intakeStatusLabel(option.value as IntakeBatchStatus) ?? option.label) : option.label,
+    label:
+      column === "status"
+        ? (intakeStatusLabel(option.value as IntakeBatchStatus) ?? option.label)
+        : column === "intakePurpose"
+          ? intakePurposeLabel(option.value)
+          : option.label,
   }));
 
   return (
@@ -287,5 +311,6 @@ function intakeStatusColor(status: IntakeBatchStatus) {
   if (status === "received") return "green";
   if (status === "printed") return "blue";
   if (status === "pending_print") return "gold";
+  if (status === "pending_receipt") return "gold";
   return "default";
 }
