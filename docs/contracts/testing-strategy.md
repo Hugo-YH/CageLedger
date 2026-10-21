@@ -83,7 +83,7 @@ npm run check
 
 ## 完整门禁
 
-`npm run verify:full` 在基础质量检查后执行 React 应用与 VitePress 文档站的生产构建、Chromium 完整 Playwright，以及 Firefox／WebKit 桌面兼容专项。E2E 使用临时 SQLite，测试数据不会写入正式数据库。
+完整发布门禁包含基础质量检查、React 应用与 VitePress 文档站生产构建、Chromium 完整 Playwright，以及 Firefox／WebKit 桌面兼容专项。E2E 使用临时 SQLite，测试数据不会写入正式数据库。当前 `npm run verify:full` 仍按上述顺序串行执行，作为兼容和低资源回退入口；Mac mini 发布优先按下方 M4 配置编排等价的并行检查，不能把文档约定当作现有脚本已自动分片。
 
 桌面专项通过 `npm run test:e2e:compat` 单独运行；首次使用执行 `npx playwright install firefox webkit` 安装当前锁定 Playwright 配套的浏览器，不升级依赖。专项串行启动两个独立临时服务及数据库，单 worker、零重试，不允许复用开发服务。默认端口为 5193/5194/5195 与 5203/5204/5205，`CAGELEDGER_COMPAT_PORT` 可调整起始端口；`CAGELEDGER_COMPAT_OUTPUT_DIR` 指定日志报告、截图及样式证据目录，默认位于 `test-results/desktop-compat`。
 
@@ -92,6 +92,58 @@ npm run check
 Chromium 设置 `failOnFlakyTests`，重试通过仍使完整门禁失败，避免不稳定用例被报告为全绿；修复后重新取得完整成功结果。`CAGELEDGER_E2E_OUTPUT_DIR` 可将 Chromium 截图、trace、JSON 和 HTML 报告保存至独立目录，不覆盖此前失败证据。
 
 VitePress 文档使用 `wiki/` 作为唯一源目录。`npm run release:notes:sync` 从 `wiki/更新日志.md` 生成系统“关于”页使用的更新记录；发布脚本同时校验 Markdown 版本条目和生成结果。
+
+### M4 16GB 发布并行配置
+
+此配置适用于 Apple M4、10核CPU（4个性能核＋6个能效核）、16GB内存的 Mac mini。并发单位是一组浏览器测试及其 Vite、Python API、文档服务，不是操作系统线程数，也不是代理数量。
+
+默认同时运行 **3个Chromium分片＋1条Firefox→WebKit串行兼容链**，最多4组浏览器任务。每组保持 `workers=1`、`fullyParallel=false`；通过独立服务与数据库并行，不能直接在同一测试库上增加worker。4个Chromium分片再加兼容链会达到5组，不能仅根据10个逻辑核心就设为默认；提高上限前需测量资源和整个门禁耗时，并连续两次完整通过且没有不稳定用例。
+
+v1.14.0的历史报告包含266项Chromium用例：两片实测约12.0、13.8分钟；Firefox和WebKit串行合计约7.7分钟。用同一批历史时长映射到Playwright实际默认分组，3片为94／85／87项，累计测试时长约8.0／8.1／9.7分钟；4片的最长组仍约8.1分钟。它们是历史估算，未计入新并发下的启动和资源争用，不能承诺等比例加速；首次采用3片时记录实际墙钟、峰值内存压力及交换空间增量后再校准。
+
+#### 阶段与资源预算
+
+- 先在隔离发布检出中确定版本、更新记录和依赖，再执行基础检查与生产构建。同一检出中的 `npm run check`、`npm run build` 和离线打包不能相互重叠：它们会复用文档构建目录，构建还会生成更新记录及应用产物。
+- 浏览器阶段按4组上限同时启动三片Chromium和兼容链；不同时启动Docker镜像构建、另一次完整门禁或本地大模型推理。常驻服务不应被擅自停止，资源不足时降低测试并发。
+- 至少给系统和日常应用预留约4GB资源预算；这不是四组任务的内存用量保证。若系统内存压力持续进入警告／严重状态、交换空间持续增长或桌面响应明显变慢，停止启动新任务，降到2片Chromium＋兼容链，必要时串行。保留已完成结果并在报告中记录降级原因，不通过增大超时掩盖资源争用。
+- 只有全部必需检查成功，才进入发布提交、标签、镜像与Release上传；Git写入及同一标签的发布操作保持串行。
+
+#### 分片隔离与调用
+
+以下是默认端口示例；启动前检查占用，冲突时为本次任务整体分配另一组空闲端口，不结束占用端口的未知进程。
+
+| 任务                    | 页面／API／文档端口 | 证据子目录        |
+| ----------------------- | ------------------- | ----------------- |
+| Chromium 1/3            | 5613／5614／5615    | `chromium-1-of-3` |
+| Chromium 2/3            | 5623／5624／5625    | `chromium-2-of-3` |
+| Chromium 3/3            | 5633／5634／5635    | `chromium-3-of-3` |
+| Firefox                 | 5643／5644／5645    | `compat/firefox`  |
+| WebKit（Firefox结束后） | 5653／5654／5655    | `compat/webkit`   |
+
+每片必须独立设置 `CAGELEDGER_E2E_PORT`、`CAGELEDGER_E2E_API_PORT`、`CAGELEDGER_DOCS_PORT`、`CAGELEDGER_E2E_OUTPUT_DIR`，并使用 `CAGELEDGER_E2E_REUSE=0`。Playwright读取的是 `E2E_*` 端口变量，再传给开发服务；只设置 `CAGELEDGER_DEV_*` 会落回默认测试端口，造成分片冲突。启动后核对health中的数据库路径，确认各片都是不同的临时库；不得使用原始数据库、附件或普通开发实例。
+
+以下命令分别作为受管并行任务执行，不能简单顺序粘贴后声称已经并行。`release_evidence_dir` 由调用方设置为本次运行独立的绝对证据目录，不是现有发布脚本的配置开关。
+
+```bash
+# Chromium 1/3；其余两片按表替换端口、目录和 --shard。
+: "${release_evidence_dir:?请先设置本次独立证据目录}"
+CAGELEDGER_E2E_PORT=5613 CAGELEDGER_E2E_API_PORT=5614 CAGELEDGER_DOCS_PORT=5615 \
+  CAGELEDGER_E2E_REUSE=0 CAGELEDGER_E2E_OUTPUT_DIR="$release_evidence_dir/chromium-1-of-3" \
+  npx playwright test --shard=1/3 --workers=1 --retries=0
+
+# 与Chromium分片并行，脚本内部仍依次执行Firefox和WebKit。
+CAGELEDGER_COMPAT_PORT=5643 CAGELEDGER_COMPAT_OUTPUT_DIR="$release_evidence_dir/compat" \
+  npm run test:e2e:compat -- --retries=0
+```
+
+使用能等待子进程结束并收集退出码的编排器或多个前台任务。不能用未经管理的 `command &` 后退出父进程；仅看到PID、端口监听或部分日志不算检查完成。中断时只清理本次任务创建的进程组，保留失败日志、trace及报告。运行期间不修改同一检出的源文件或生成产物；需要修复时先结束受影响任务，再按影响范围复验。
+
+#### 汇总与复用
+
+- 分片前用锁定的Playwright执行 `npx playwright test --list --reporter=json` 保存完整目录。汇总时核对各片用例ID的并集等于目录、交集为空，同时保留两个兼容引擎的独立结果；不能只相加通过数量。
+- 每项任务必须有退出码和完整JSON报告，启动失败、进程被中断、报告缺失或用例未执行均不能放行。所有必需用例应完成，`unexpected`、`flaky`、`skipped` 均为0；正式门禁使用零自动重试，修复后的定向重跑不能替代缺失的完整覆盖。
+- 记录版本、构建号、来源提交及未提交发布文件指纹、依赖锁文件、分片拓扑、命令、端口、临时库路径、起止时间与资源情况。失败时保留其他有效分片结果，只复验受影响范围；改变用例集合、分片拓扑或共享配置时重新判断整组覆盖，不混用无法对应的报告。
+- 同一发布输入的完整并行证据通过后，不再额外串行运行一次 `npm run verify:full`。可在核对证据后使用 `release:local --skip-full-verify` 复用已完成的完整门禁；该选项仍会执行 `npm run check` 和离线包构建，脚本要求的检查保留。进一步消除重复检查或构建需要单独实现输入指纹校验与证据复用，不能仅凭这份约束跳过。
 
 ## 业务回归
 

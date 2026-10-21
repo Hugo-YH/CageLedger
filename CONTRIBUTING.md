@@ -84,11 +84,13 @@ Mac mini 发布前的基础质量检查：
 npm run check
 ```
 
-完整发布验证：
+完整发布验证的串行兼容入口：
 
 ```bash
 npm run verify:full
 ```
+
+Mac mini（M4 16GB）发布优先采用 [测试策略](docs/contracts/testing-strategy.md) 中的受管并行配置，保持完整检查集合、每个测试库单worker及独立报告。现有 `verify:full` 不会自动分片；并行任务的端口、资源上限、报告汇总及结果复用统一按该契约执行。
 
 `npm run dev`、`npm run check`、`npm run test:e2e` 和 Python 质量工具统一解析项目 `.venv`。`CAGELEDGER_PYTHON_BIN` 可覆盖为其他 Python 3.13 可执行文件。
 
