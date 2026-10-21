@@ -195,7 +195,7 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 发现重复且未经确认时返回 `409`、`code: INTAKE_DUPLICATE_CONFIRMATION_REQUIRED` 和 `details: {items,total,confirmationToken}`，不写业务记录或审计。`items` 最多20条，含 `id`、`purchaseOrderNo`、`batchNo`、`intakeDate`、`pi`、`owner`、`status` 及 `matchedFields`；`total` 为全部匹配条数。用户确认后以同一草稿、原 `expectedUpdatedAt` 和 `duplicateConfirmation: confirmationToken` 重试。确认标识绑定草稿ID、编号、编辑排除ID及完整匹配集合；事务内重新核对，匹配记录变化时重新提醒，过期编辑仍返回原版本冲突。成功保存时在原审计之外增加 `intake_batch.duplicate_confirmed`，记录操作者、编号和全部匹配记录ID；确认审计与业务写入一起提交或回滚。
 
-采购单号继续保留于原 `payload.purchaseOrderNo`，同时投影为 `purchase_order_no`；`purchase_order_key`、`batch_no_key` 保存规范化查询键并建立普通索引。幂等迁移从旧记录回填，只增加查询列，不修改原payload、版本或审计；局部保存和旧全量状态保存均同步投影，历史缺失编号不推断补造。
+采购单号继续保留于原 `payload.purchaseOrderNo`，同时投影为 `purchase_order_no`；`purchase_order_key`、`batch_no_key` 保存规范化查询键并建立普通索引。字段创建、回填和索引纳入同一写事务，由调用方提交，失败回滚后可重试。幂等迁移从旧记录回填，只增加查询列，不修改原payload、版本或审计；局部保存和旧全量状态保存均同步投影，历史缺失编号不推断补造。
 
 接收汇总与待接收列表沿用相同登录读取权限，按预约接收日期包含起止当天的全部批次和状态，不受分页、表头筛选或勾选限制；无预约日期的记录排除。无效日期、逆序区间或空区间返回 `400`，不生成空文档。响应为鉴权 `.docx` 附件，`Cache-Control: no-store`。汇总保留当前批次状态、原始品系和已填写的预约备注，不输出预约原文或签收等空栏；导出不写入批次、接收记录、待进驻任务或审计，不推进打印或接收状态。
 

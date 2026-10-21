@@ -43,6 +43,26 @@ def batch(identity, **fields):
 
 
 class IntakeIdentifierMigrationTests(unittest.TestCase):
+    def test_failed_backfill_rolls_back_schema_and_can_retry(self):
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("CREATE TABLE intake_batches(id TEXT, batch_no TEXT, payload TEXT)")
+            conn.execute("INSERT INTO intake_batches VALUES('broken','batch','invalid-json')")
+            conn.commit()
+            with self.assertRaises(json.JSONDecodeError), conn:
+                ensure_intake_identifier_schema(conn)
+            self.assertEqual(
+                [row[1] for row in conn.execute("PRAGMA table_info(intake_batches)")],
+                ["id", "batch_no", "payload"],
+            )
+            conn.execute("UPDATE intake_batches SET payload=?", (json.dumps(batch("broken")),))
+            conn.commit()
+            with conn:
+                ensure_intake_identifier_schema(conn)
+            self.assertEqual(
+                conn.execute("SELECT purchase_order_key FROM intake_batches").fetchone()[0], "C20261021001"
+            )
+
     def test_backfill_preserves_payload_versions_and_is_idempotent(self):
         with sqlite3.connect(":memory:") as conn:
             conn.row_factory = sqlite3.Row

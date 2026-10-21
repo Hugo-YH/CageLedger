@@ -2,10 +2,14 @@
 
 import json
 
+from server_app.shared.concurrency import begin_write
 from server_app.shared.intake_identifiers import intake_identifier_values
 
 
 def ensure_intake_identifier_schema(conn):
+    # DDL must roll back with the backfill; SQLite otherwise commits ALTER TABLE
+    # before the first UPDATE starts an implicit transaction. Caller owns commit.
+    begin_write(conn)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(intake_batches)")}
     changed = False
     for name in ("purchase_order_no", "purchase_order_key", "batch_no_key"):
