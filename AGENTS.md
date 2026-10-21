@@ -72,4 +72,4 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 MacBook 默认负责修改代码、针对性验证、提交并推送到 Gitea；推送代码不代表授权发布，不自动连接 Mac mini 执行完整检查或发布。交付时说明提交、验证结果及留待发布验证的项目。
 
-Mac mini 负责从 Gitea 同步待发布代码、发布前完整检查、版本与标签、构建打包、镜像及 Release 上传和 Wiki 同步。发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+Mac mini 负责从 Gitea 同步待发布代码、发布前完整检查、版本与标签、构建打包、镜像及 Release 上传和 Wiki 同步。完整门禁优先按 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置受管并行执行，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
