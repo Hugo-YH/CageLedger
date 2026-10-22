@@ -314,6 +314,13 @@
   -webkit-line-clamp: 2;
 }
 
+[data-feature="intake"] .intake-project-people-copy {
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  text-align: left;
+}
+
 .intake-batch-table .ghost {
   margin-right: 4px;
   padding-inline: 8px;
