@@ -577,6 +577,10 @@ test("ELISA report form links sources, symbols and multi-project image metadata"
   await page.getByRole("button", { name: "保存检测草稿" }).click();
   await page.getByRole("button", { name: "返回批次" }).click();
   await page.getByRole("button", { name: "出具报告", exact: true }).click();
+  const issuing = page.waitForResponse(
+    (response) => response.url().endsWith("/issue") && response.request().method() === "POST",
+  );
   await page.getByRole("dialog").getByRole("button", { name: "确认出具" }).click();
+  expect((await issuing).ok()).toBe(true);
   await expect(page.getByRole("button", { name: "创建更正草稿" })).toBeVisible();
 });

@@ -112,6 +112,7 @@ test("direct sampling is recognized, saved without cards, confirmed and included
     await page.getByRole("button", { name: "导出汇总", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "接收汇总", exact: true });
     for (const label of ["开始日期", "结束日期"]) {
+      await dialog.getByLabel(label, { exact: true }).click();
       await dialog.getByLabel(label, { exact: true }).fill("2026-10-22");
       await page.locator(".ant-picker-dropdown:visible").getByTitle("2026-10-22", { exact: true }).click();
       await expect(page.locator(".ant-picker-dropdown:visible")).toHaveCount(0);

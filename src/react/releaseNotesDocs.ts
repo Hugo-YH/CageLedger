@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.16.0",
+    build: "235",
+    releasedAt: "2026-10-22",
+    title: "按项目汇总表复制负责人",
+    items: [
+      "在待接收批次列表中点击实验负责人，可按当前 IACUC 查询项目汇总表，复制“项目负责人组实验负责人”格式的文本",
+      "每次复制读取项目汇总表的最新信息；缺少伦理号、负责人信息不完整、匹配不唯一或查询失败时给出提示，不使用批次中的旧姓名代替",
+      "增加复制中的状态反馈和重复点击保护，离开列表后不处理迟到的查询结果；复制失败时提示重试",
+    ],
+  },
+  {
     version: "1.15.0",
     build: "234",
     releasedAt: "2026-10-21",
