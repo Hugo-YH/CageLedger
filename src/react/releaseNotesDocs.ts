@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.17.1",
+    build: "237",
+    releasedAt: "2026-10-23",
+    title: "检疫与巡检录入性能优化",
+    items: [
+      "检疫检测记录按项目更新判定、板孔号和对照结果，减少连续输入时无关结果表的重绘",
+      "巡检单项确认只更新对应条目，分区“全部正常”合并为一次批量更新，保留原有定位、备注等异常登记信息",
+      "保留样本编号变更后的结果关联、未保存提示、附件、版本校验与原有保存格式",
+    ],
+  },
+  {
     version: "1.17.0",
     build: "236",
     releasedAt: "2026-10-23",
