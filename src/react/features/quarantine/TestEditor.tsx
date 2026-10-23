@@ -2,7 +2,12 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Anchor, Button, Card, Descriptions, Form, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
-import type { QuarantineBatch, QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
+import type {
+  QuarantineBatch,
+  QuarantineDetail,
+  QuarantineProject,
+  QuarantineTest,
+} from "../../../contracts/quarantine";
 import { useQuarantineRecordSave } from "../../api/quarantine";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { CommandBar } from "../../components/ui";
@@ -68,7 +73,8 @@ export function TestEditor({
   const markAttachmentDirty = useCallback((id: string, changed: boolean) => {
     setAttachmentChanges((current) => (current[id] === changed ? current : { ...current, [id]: changed }));
   }, []);
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [baseline, draft]);
+  const serializedBaseline = useMemo(() => JSON.stringify(baseline), [baseline]);
+  const dirty = useMemo(() => JSON.stringify(draft) !== serializedBaseline, [draft, serializedBaseline]);
   const confirmLeave = useUnsavedChanges(dirty || attachmentDirty, save.isPending || fileBusy);
   const resultTotal = draft.projects.reduce(
     (count, project) => count + project.sampleIds.length + (draft.method === "parasite" ? 0 : 2),
@@ -89,10 +95,21 @@ export function TestEditor({
     { key: "attachments", href: `#quarantine-part-${sections.pictures}`, title: "原始资料" },
   ];
 
-  function changeDraft(test: QuarantineTest) {
+  const changeDraft = useCallback((test: QuarantineTest) => {
     setDraft(test);
     setSaved(false);
-  }
+  }, []);
+
+  const changeResultProject = useCallback(
+    (projectId: string, update: (current: QuarantineProject) => QuarantineProject) => {
+      setDraft((current) => ({
+        ...current,
+        projects: current.projects.map((project) => (project.id === projectId ? update(project) : project)),
+      }));
+      setSaved(false);
+    },
+    [],
+  );
 
   function received(test: QuarantineTest) {
     version.current = test.updatedAt;
@@ -293,7 +310,12 @@ export function TestEditor({
             </section>
             <section className="quarantine-record-section" aria-label="检测结果">
               <Card title="检测结果" size="small">
-                <ReportResults test={draft} onChange={changeDraft} sectionNumber={sections.results} hideTitle />
+                <ReportResults
+                  test={draft}
+                  onProjectChange={changeResultProject}
+                  sectionNumber={sections.results}
+                  hideTitle
+                />
               </Card>
             </section>
             <section

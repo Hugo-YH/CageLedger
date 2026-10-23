@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Button, Card, Collapse, Space, Tag } from "antd";
 
 import type { InspectionAnswer, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
@@ -22,6 +23,7 @@ export function InspectionModuleForm({
   nodes,
   answerMap,
   onAnswer,
+  onMarkNormal,
   onFinding,
   onReference,
 }: {
@@ -29,9 +31,18 @@ export function InspectionModuleForm({
   nodes: InspectionCatalogNode[];
   answerMap: Record<string, InspectionAnswer>;
   onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onMarkNormal: (nodes: InspectionCatalogNode[]) => void;
   onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
+  const regions = useMemo(
+    () => (moduleCode === "abnormalAnimalAssessment" ? abnormalAnimalBodyRegions(nodes) : []),
+    [moduleCode, nodes],
+  );
+  const sections = useMemo(
+    () => (moduleCode === "abnormalAnimalAssessment" ? [] : groupedItems(nodes, moduleCode)),
+    [moduleCode, nodes],
+  );
   return (
     <Card
       className="animal-ant-card inspection-module-card"
@@ -54,18 +65,19 @@ export function InspectionModuleForm({
       }
     >
       {moduleCode === "abnormalAnimalAssessment"
-        ? abnormalAnimalBodyRegions(nodes).map((region) => (
+        ? regions.map((region) => (
             <InspectionRegionSection
               answerMap={answerMap}
               key={region.key}
               moduleCode={moduleCode}
               onAnswer={onAnswer}
+              onMarkNormal={onMarkNormal}
               onFinding={onFinding}
               onReference={onReference}
               region={region}
             />
           ))
-        : groupedItems(nodes, moduleCode).map(([category, items]) => (
+        : sections.map(([category, items]) => (
             <InspectionSection
               answerMap={answerMap}
               category={category}
@@ -73,6 +85,7 @@ export function InspectionModuleForm({
               key={category}
               moduleCode={moduleCode}
               onAnswer={onAnswer}
+              onMarkNormal={onMarkNormal}
               onFinding={onFinding}
               onReference={onReference}
             />
@@ -86,6 +99,7 @@ function InspectionRegionSection({
   moduleCode,
   answerMap,
   onAnswer,
+  onMarkNormal,
   onFinding,
   onReference,
 }: {
@@ -93,6 +107,7 @@ function InspectionRegionSection({
   moduleCode: InspectionModuleCode;
   answerMap: Record<string, InspectionAnswer>;
   onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onMarkNormal: (nodes: InspectionCatalogNode[]) => void;
   onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
@@ -122,12 +137,7 @@ function InspectionRegionSection({
                   {stateLabel}
                 </Tag>
                 <span className="inspection-section-count">{region.itemCount} 项</span>
-                <Button
-                  className="inspection-all-normal"
-                  size="small"
-                  type="link"
-                  onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
-                >
+                <Button className="inspection-all-normal" size="small" type="link" onClick={() => onMarkNormal(items)}>
                   全部正常
                 </Button>
               </span>
@@ -140,6 +150,7 @@ function InspectionRegionSection({
                 moduleCode={moduleCode}
                 name={group.name}
                 onAnswer={onAnswer}
+                onMarkNormal={onMarkNormal}
                 onFinding={onFinding}
                 onReference={onReference}
               />
@@ -157,6 +168,7 @@ function InspectionSection({
   moduleCode,
   answerMap,
   onAnswer,
+  onMarkNormal,
   onFinding,
   onReference,
 }: {
@@ -165,6 +177,7 @@ function InspectionSection({
   moduleCode: InspectionModuleCode;
   answerMap: Record<string, InspectionAnswer>;
   onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onMarkNormal: (nodes: InspectionCatalogNode[]) => void;
   onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
@@ -187,12 +200,7 @@ function InspectionSection({
                   {stateLabel}
                 </Tag>
                 <span className="inspection-section-count">{items.length} 项</span>
-                <Button
-                  className="inspection-all-normal"
-                  size="small"
-                  type="link"
-                  onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
-                >
+                <Button className="inspection-all-normal" size="small" type="link" onClick={() => onMarkNormal(items)}>
                   全部正常
                 </Button>
               </span>
@@ -220,6 +228,7 @@ function InspectionSubsection({
   moduleCode,
   answerMap,
   onAnswer,
+  onMarkNormal,
   onFinding,
   onReference,
 }: {
@@ -228,6 +237,7 @@ function InspectionSubsection({
   moduleCode: InspectionModuleCode;
   answerMap: Record<string, InspectionAnswer>;
   onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onMarkNormal: (nodes: InspectionCatalogNode[]) => void;
   onFinding: (node: InspectionCatalogNode) => void;
   onReference: (preview: ReferencePreview) => void;
 }) {
@@ -248,12 +258,7 @@ function InspectionSubsection({
                 <Tag className="inspection-subsection-state" color={stateTone}>
                   {stateLabel}
                 </Tag>
-                <Button
-                  className="inspection-all-normal"
-                  size="small"
-                  type="link"
-                  onClick={() => items.forEach((node) => onAnswer(node, { outcome: "normal" }))}
-                >
+                <Button className="inspection-all-normal" size="small" type="link" onClick={() => onMarkNormal(items)}>
                   全部正常
                 </Button>
               </span>
@@ -295,62 +300,85 @@ function InspectionItems({
       {items.map((node) => {
         const key = inspectionAnswerKey(moduleCode, node.code);
         const answer = answerMap[key];
-        // A missing answer remains visibly pending until the inspector confirms it.
-        const outcome = answer ? inspectionOutcome(answer) : undefined;
-        const images = node.config?.referenceImages || [];
         return (
-          <article className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`} key={node.code}>
-            <div className="inspection-node-main">
-              <div className="inspection-node-title">
-                <strong>{node.name}</strong>
-                {images.length ? (
-                  <Button
-                    className="inspection-reference-trigger"
-                    size="small"
-                    type="link"
-                    onClick={() => onReference({ images, initialIndex: 0, title: node.name })}
-                  >
-                    图例 {images.length}
-                  </Button>
-                ) : null}
-              </div>
-              <Space.Compact className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
-                <Button
-                  aria-pressed={outcome === "normal"}
-                  className="normal"
-                  size="small"
-                  type={outcome === "normal" ? "primary" : "default"}
-                  onClick={() => onAnswer(node, { outcome: "normal" })}
-                >
-                  正常
-                </Button>
-                <Button
-                  aria-pressed={outcome === "abnormal"}
-                  className="abnormal"
-                  danger
-                  size="small"
-                  type={outcome === "abnormal" ? "primary" : "default"}
-                  onClick={() => onFinding(node)}
-                >
-                  异常
-                </Button>
-              </Space.Compact>
-              {node.description ? <p>{node.description}</p> : null}
-            </div>
-            {outcome === "abnormal" ? (
-              <div className="inspection-finding-summary">
-                <strong>已登记异常</strong>
-                <span>
-                  {answer?.locationHint || answer?.animalIdentifier || answer?.note || "已登记，可点击异常修改。"}
-                </span>
-              </div>
-            ) : null}
-          </article>
+          <InspectionItem
+            answer={answer}
+            key={node.code}
+            node={node}
+            onAnswer={onAnswer}
+            onFinding={onFinding}
+            onReference={onReference}
+          />
         );
       })}
     </div>
   );
 }
+
+const InspectionItem = memo(function InspectionItem({
+  node,
+  answer,
+  onAnswer,
+  onFinding,
+  onReference,
+}: {
+  node: InspectionCatalogNode;
+  answer?: InspectionAnswer;
+  onAnswer: (node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => void;
+  onFinding: (node: InspectionCatalogNode) => void;
+  onReference: (preview: ReferencePreview) => void;
+}) {
+  // A missing answer remains pending until the inspector confirms this item.
+  const outcome = answer ? inspectionOutcome(answer) : undefined;
+  const images = node.config?.referenceImages || [];
+  return (
+    <article className={`inspection-node ${outcome === "abnormal" ? "has-finding" : ""}`}>
+      <div className="inspection-node-main">
+        <div className="inspection-node-title">
+          <strong>{node.name}</strong>
+          {images.length ? (
+            <Button
+              className="inspection-reference-trigger"
+              size="small"
+              type="link"
+              onClick={() => onReference({ images, initialIndex: 0, title: node.name })}
+            >
+              图例 {images.length}
+            </Button>
+          ) : null}
+        </div>
+        <Space.Compact className="inspection-outcome-options" role="group" aria-label={`${node.name}巡检结论`}>
+          <Button
+            aria-pressed={outcome === "normal"}
+            className="normal"
+            size="small"
+            type={outcome === "normal" ? "primary" : "default"}
+            onClick={() => onAnswer(node, { outcome: "normal" })}
+          >
+            正常
+          </Button>
+          <Button
+            aria-pressed={outcome === "abnormal"}
+            className="abnormal"
+            danger
+            size="small"
+            type={outcome === "abnormal" ? "primary" : "default"}
+            onClick={() => onFinding(node)}
+          >
+            异常
+          </Button>
+        </Space.Compact>
+        {node.description ? <p>{node.description}</p> : null}
+      </div>
+      {outcome === "abnormal" ? (
+        <div className="inspection-finding-summary">
+          <strong>已登记异常</strong>
+          <span>{answer?.locationHint || answer?.animalIdentifier || answer?.note || "已登记，可点击异常修改。"}</span>
+        </div>
+      ) : null}
+    </article>
+  );
+});
 
 function sectionState(
   items: InspectionCatalogNode[],

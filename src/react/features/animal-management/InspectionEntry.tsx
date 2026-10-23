@@ -1,5 +1,5 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Selector as MobileSelector } from "antd-mobile";
 import { Alert, Card, Checkbox, Form, Select, Space, Tag, Typography } from "antd";
 
@@ -20,6 +20,7 @@ import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { FindingCaptureDialog, ReferenceImageDialog, type ReferencePreview } from "./InspectionDialogs";
 import { InspectionModuleForm } from "./InspectionModuleForms";
+import { applyInspectionAnswerPatch, applyInspectionOutcomeToNodes } from "./inspectionAnswerUpdates";
 import {
   inspectionAnswerKey,
   inspectionFacilityLabel,
@@ -98,11 +99,13 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
     });
   }
 
-  function updateAnswer(node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) {
-    const key = inspectionAnswerKey(node.moduleCode, node.code);
-    const current = answers[key] || { nodeCode: node.code, moduleCode: node.moduleCode, outcome: "normal" };
-    setAnswers((items) => ({ ...items, [key]: { ...current, ...patch } }));
-  }
+  const updateAnswer = useCallback((node: InspectionCatalogNode, patch: Partial<InspectionAnswer>) => {
+    setAnswers((items) => applyInspectionAnswerPatch(items, node, patch));
+  }, []);
+
+  const markNodesNormal = useCallback((nodes: InspectionCatalogNode[]) => {
+    setAnswers((items) => applyInspectionOutcomeToNodes(items, nodes, "normal"));
+  }, []);
 
   async function saveDraft() {
     setNotice("");
@@ -232,6 +235,7 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
           moduleCode={moduleCode}
           nodes={catalogNodes}
           onAnswer={updateAnswer}
+          onMarkNormal={markNodesNormal}
           onFinding={setFindingDraft}
           onReference={setReferencePreview}
         />

@@ -393,7 +393,7 @@ test("supplier history retains populated results while filtering and can retry a
 test("quarantine large record input and four viewport evidence", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await login(page);
-  const { batchName } = await seed(page, "elisa_mouse", 24, 8);
+  const { batchId, batchName, record } = await seed(page, "elisa_mouse", 24, 8);
   await openRecord(page, batchName, "elisa_mouse");
   await page.getByRole("button", { name: "编辑检测", exact: true }).click();
   const material = page.getByRole("textbox", { name: "样品名称", exact: true });
@@ -454,6 +454,24 @@ test("quarantine large record input and four viewport evidence", async ({ page }
   await expect(material).toBeFocused();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(material).toHaveValue("血清ABCDE");
+
+  await page.getByRole("textbox", { name: "项目1 1 板孔号", exact: true }).fill("A01");
+  await page.getByRole("textbox", { name: "项目1 2 板孔号", exact: true }).fill("A02");
+  await page.getByRole("textbox", { name: "项目2 1 板孔号", exact: true }).fill("B01");
+  await page.getByRole("textbox", { name: "样本编号 1", exact: true }).fill("重新编号1");
+  await expect(page.getByRole("textbox", { name: "项目1 重新编号1 板孔号", exact: true })).toHaveValue("A01");
+  await expect(page.getByRole("textbox", { name: "项目2 重新编号1 板孔号", exact: true })).toHaveValue("B01");
+  await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
+  await expect(page.getByText("当前内容已保存", { exact: true })).toBeVisible();
+  const detail = await (await page.request.get(`/api/quarantine/batches/${batchId}`)).json();
+  const saved: QuarantineTest = detail.tests.find((item: QuarantineTest) => item.id === record.id);
+  expect(saved.samples).toHaveLength(24);
+  expect(saved.projects).toHaveLength(8);
+  expect(saved.samples[0].number).toBe("重新编号1");
+  expect(saved.projects[0].wells).toEqual({ "sample-0": "A01", "sample-1": "A02" });
+  expect(saved.projects[1].wells).toEqual({ "sample-0": "B01" });
+  expect(saved.projects.slice(2)).toEqual(record.projects.slice(2));
+  expect(saved.projects[0].results).toEqual(record.projects[0].results);
 });
 
 test("method lists reveal matching drafts and compact summary across four viewports", async ({ page }, testInfo) => {
