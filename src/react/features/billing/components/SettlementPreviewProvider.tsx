@@ -40,6 +40,8 @@ export function SettlementPreviewProvider({
   const request = useLatestRequest();
   const generating = useRef(false);
   const mounted = useRef(true);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const restoreFocusAfterClose = useRef(false);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -154,6 +156,7 @@ export function SettlementPreviewProvider({
   }
 
   function close() {
+    restoreFocusAfterClose.current = true;
     request.invalidate();
     setSelected(null);
     setResult(null);
@@ -161,11 +164,22 @@ export function SettlementPreviewProvider({
     setPreviewError("");
   }
 
+  function restoreFocus() {
+    if (!restoreFocusAfterClose.current) return;
+    restoreFocusAfterClose.current = false;
+    const trigger = returnFocus.current;
+    returnFocus.current = null;
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+  }
+
   const controller = useMemo(
     () => ({
       pending: isPending,
       previewingId: isPending ? activeId : "",
-      open: (candidate: SettlementCandidate) => void generateFor(candidate, false),
+      open: (candidate: SettlementCandidate, trigger?: HTMLElement) => {
+        if (trigger?.isConnected) returnFocus.current = trigger;
+        void generateFor(candidate, false);
+      },
     }),
     [activeId, generateFor, isPending],
   );
@@ -205,6 +219,7 @@ export function SettlementPreviewProvider({
             result={result}
             selected={selected}
             onClose={close}
+            afterClose={restoreFocus}
             onExportPdf={() => void exportSelected(selected)}
             onRevert={(note) => revertFor(selected, note)}
             onStartSettlement={() => void prepareNoticeEmail(selected)}

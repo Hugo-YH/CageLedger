@@ -18,7 +18,7 @@ export function SettlementCandidateActions({
       <Button
         loading={controller.previewingId === candidate.id}
         disabled={disabled || controller.pending || candidate.totalAmount == null}
-        onClick={() => controller.open(candidate)}
+        onClick={(event) => controller.open(candidate, event.currentTarget)}
       >
         预览结算单
       </Button>

@@ -24,6 +24,7 @@ export function SettlementPreviewModal({
   revertPending,
   canWithdraw,
   onClose,
+  afterClose,
   onExportPdf,
   onRevert,
   onStartSettlement,
@@ -42,6 +43,7 @@ export function SettlementPreviewModal({
   revertPending: boolean;
   canWithdraw: boolean;
   onClose: () => void;
+  afterClose?: () => void;
   onExportPdf: () => void;
   onRevert: (note: string) => Promise<void>;
   onStartSettlement: () => void;
@@ -69,6 +71,7 @@ export function SettlementPreviewModal({
       width={1200}
       footer={null}
       onCancel={onClose}
+      afterClose={afterClose}
     >
       <CommandBar
         className="settlement-preview-toolbar"

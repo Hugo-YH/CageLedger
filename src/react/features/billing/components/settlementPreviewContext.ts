@@ -4,7 +4,7 @@ import type { SettlementCandidate, SessionUser } from "../../../api/contracts";
 export const SettlementPreviewContext = createContext<{
   pending: boolean;
   previewingId: string;
-  open: (candidate: SettlementCandidate) => void;
+  open: (candidate: SettlementCandidate, trigger?: HTMLElement) => void;
 } | null>(null);
 
 export function canWithdrawCandidate(candidate: SettlementCandidate, user: SessionUser) {

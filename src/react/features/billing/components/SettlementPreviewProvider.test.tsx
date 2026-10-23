@@ -46,6 +46,7 @@ vi.mock("./SettlementPreviewModal", () => ({
     loading,
     error,
     onClose,
+    afterClose,
     onRetry,
     onStartSettlement,
   }: {
@@ -54,13 +55,20 @@ vi.mock("./SettlementPreviewModal", () => ({
     loading: boolean;
     error: string;
     onClose: () => void;
+    afterClose?: () => void;
     onRetry: () => void;
     onStartSettlement: () => void;
   }) => (
     <section aria-label={`预览 ${selected.id}`}>
       <p>{loading ? "正在加载结算预览" : `审阅版本 ${result?.sourceVersions?.["service-1"] || "feeding"}`}</p>
       {error ? <p role="alert">{error}</p> : null}
-      <button type="button" onClick={onClose}>
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          afterClose?.();
+        }}
+      >
         关闭预览
       </button>
       <button type="button" onClick={onRetry}>
@@ -174,6 +182,7 @@ describe("SettlementPreviewProvider", () => {
       </>,
     );
     const [first, second] = screen.getAllByRole("button", { name: "预览结算单" });
+    first.focus();
     fireEvent.click(first);
 
     expect(screen.getByLabelText("预览 one")).toHaveTextContent("正在加载结算预览");
@@ -184,6 +193,7 @@ describe("SettlementPreviewProvider", () => {
     expect(requestJson).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+    expect(first).toHaveFocus();
     await act(async () => {
       pending.resolve(statement());
       await pending.promise;
