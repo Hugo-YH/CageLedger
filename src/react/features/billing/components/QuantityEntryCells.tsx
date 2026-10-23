@@ -67,7 +67,14 @@ export const QuantityEntryCells = memo(
       const next = quantityTabTarget(scope, current, event.shiftKey);
       if (!next) return;
       event.preventDefault();
-      (next.querySelector<HTMLElement>("input, button") ?? next).focus();
+      (next.querySelector<HTMLElement>("input, button") ?? next).focus({ preventScroll: true });
+      // Native focus can reveal only the caret in a horizontally clipped input.
+      // Reveal the whole control, including Select's visible shell.
+      (next.closest<HTMLElement>(".ant-select") ?? next).scrollIntoView({
+        behavior: "instant",
+        block: "nearest",
+        inline: "nearest",
+      });
     };
     return (
       <>

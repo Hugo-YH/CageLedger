@@ -15,6 +15,8 @@ test("quantity keyboard navigation preserves row order without measuring every f
   const measurements = [];
   for (const details of [false, true]) {
     await page.getByRole("switch", { name: "动物数量", exact: true }).setChecked(details);
+    // Keep the keyboard microbenchmark independent of hover-tooltip alignment.
+    await page.mouse.move(0, 0);
     const result = await page.evaluate(() => {
       const first = document.querySelector<HTMLInputElement>('[data-quantity-row="0"][data-quantity-field="date"]')!;
       // eslint-disable-next-line @typescript-eslint/unbound-method -- Bound with .call(this) and restored in finally below.
@@ -57,4 +59,53 @@ test("quantity keyboard navigation preserves row order without measuring every f
   await page.keyboard.press("Tab");
   await expect(firstDate).not.toBeFocused();
   await writeFile(testInfo.outputPath("quantity-navigation.json"), JSON.stringify(measurements, null, 2));
+});
+
+test("quantity keyboard focus fully reveals controls in a short viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+  await ensureTestInfrastructure(page);
+  await openQuantityEntry(page);
+  for (const details of [false, true]) {
+    await page.getByRole("switch", { name: "动物数量", exact: true }).setChecked(details);
+    await page.mouse.move(0, 0);
+    await page.getByLabel("第 16 行日期", { exact: true }).focus();
+    for (let index = 0; index < (details ? 6 : 1); index += 1) await page.keyboard.press("Tab");
+    const right = page.getByLabel("第 16 行结余笼数", { exact: true });
+    await expect(right).toBeFocused();
+    await right.fill("1234");
+    for (const target of [right, page.getByLabel("第 15 行结余笼数", { exact: true })]) {
+      if (target !== right) {
+        for (let index = 0; index < (details ? 7 : 2); index += 1) await page.keyboard.press("Shift+Tab");
+      }
+      await expect(target).toBeFocused();
+      const visibility = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        let left = Math.max(0, rect.left);
+        let right = Math.min(innerWidth, rect.right);
+        let top = Math.max(0, rect.top);
+        let bottom = Math.min(innerHeight, rect.bottom);
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          const style = getComputedStyle(parent);
+          const clip = parent.getBoundingClientRect();
+          if (/auto|scroll|hidden|clip/.test(style.overflowX)) {
+            left = Math.max(left, clip.left + parent.clientLeft);
+            right = Math.min(right, clip.left + parent.clientLeft + parent.clientWidth);
+          }
+          if (/auto|scroll|hidden|clip/.test(style.overflowY)) {
+            top = Math.max(top, clip.top + parent.clientTop);
+            bottom = Math.min(bottom, clip.top + parent.clientTop + parent.clientHeight);
+          }
+        }
+        return { width: rect.width, height: rect.height, visibleWidth: right - left, visibleHeight: bottom - top };
+      });
+      expect(visibility.visibleWidth).toBeGreaterThanOrEqual(visibility.width - 1);
+      expect(visibility.visibleHeight).toBeGreaterThanOrEqual(visibility.height - 1);
+    }
+    await expect(right).toHaveValue("1234");
+  }
 });
