@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -44,7 +45,7 @@ def batch(identity, **fields):
 
 class IntakeIdentifierMigrationTests(unittest.TestCase):
     def test_failed_backfill_rolls_back_schema_and_can_retry(self):
-        with sqlite3.connect(":memory:") as conn:
+        with closing(sqlite3.connect(":memory:")) as conn, conn:
             conn.row_factory = sqlite3.Row
             conn.execute("CREATE TABLE intake_batches(id TEXT, batch_no TEXT, payload TEXT)")
             conn.execute("INSERT INTO intake_batches VALUES('broken','batch','invalid-json')")
@@ -64,7 +65,7 @@ class IntakeIdentifierMigrationTests(unittest.TestCase):
             )
 
     def test_backfill_preserves_payload_versions_and_is_idempotent(self):
-        with sqlite3.connect(":memory:") as conn:
+        with closing(sqlite3.connect(":memory:")) as conn, conn:
             conn.row_factory = sqlite3.Row
             conn.execute("CREATE TABLE intake_batches(id TEXT, batch_no TEXT, updated_at TEXT, payload TEXT)")
             for index, purchase in enumerate((" c20261021001 ", "", None)):

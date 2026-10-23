@@ -511,7 +511,7 @@ class FeedbackTests(unittest.TestCase):
         file_backup = self.root / "backup-files"
         file_backup.mkdir()
         shutil.copy2(self.root / stored, file_backup / stored)
-        with self.connect() as conn, sqlite3.connect(backup) as target:
+        with self.connect() as conn, sqlite3.connect(backup, factory=ClosingConnection) as target:
             conn.backup(target)
         (self.root / stored).unlink()
         shutil.copy2(backup, self.db)
