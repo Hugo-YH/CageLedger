@@ -5,31 +5,22 @@ import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
 import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
 import { ListViewControls, type ListDensity } from "../../../components/ui/ListViewControls";
 import { Alert, Button, Empty, Space, Typography } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { settlementCandidateScope } from "../../../../domain/settlementCandidateScope";
-import { buildSettlementNoticeEmail, type SettlementNoticeEmail } from "../../../../domain/settlementNotice";
-import type {
-  BillingStatementResponse,
-  SessionUser,
-  SettlementCandidate,
-  SettlementCandidateListParams,
-} from "../../../api/contracts";
-import { exportSettlementXlsx, useSettlementCandidates, useSettlementActions } from "../../../api/settlements";
-import { useAdvanceWorkflow } from "../../../api/workflows";
+import type { SessionUser, SettlementCandidate, SettlementCandidateListParams } from "../../../api/contracts";
+import { exportSettlementXlsx, useSettlementCandidates } from "../../../api/settlements";
 import { useSettlementBatch } from "../../../api/useSettlementBatch";
-import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
-import { DataTable, ModalPresence } from "../../../components/ui";
 import { settlementExportProgress, usePdfExport } from "../hooks/usePdfExport";
 import { useSettlementSelection } from "../hooks/useSettlementSelection";
 import { BatchStartConfirmModal } from "./BatchStartConfirmModal";
 import { BatchWithdrawConfirmModal } from "./BatchWithdrawConfirmModal";
 import { SettlementBatchToolbar } from "./SettlementBatchToolbar";
-import { SettlementNoticeModal } from "./SettlementNoticeModal";
-import { SettlementPreviewModal } from "./SettlementPreviewModal";
-import { buildSettlementColumns } from "./settlementCandidateColumns";
+import { SettlementCandidateTable } from "./SettlementCandidateTable";
+import { SettlementPreviewProvider } from "./SettlementPreviewProvider";
+import { canWithdrawCandidate } from "./settlementPreviewContext";
 
 export function SettlementCandidateList({
   source,
@@ -54,12 +45,6 @@ export function SettlementCandidateList({
   }, [filters]);
   const selection = useSettlementSelection();
   const { selectedCandidates, allFilteredSelected, selectingAll } = selection;
-  const [selected, setSelected] = useState<SettlementCandidate | null>(null);
-  const [result, setResult] = useState<BillingStatementResponse | null>(null);
-  const [noticeEmail, setNoticeEmail] = useState<{
-    candidate: SettlementCandidate;
-    email: SettlementNoticeEmail;
-  } | null>(null);
   const [batchFailures, setBatchFailures] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
@@ -72,8 +57,6 @@ export function SettlementCandidateList({
   const batchWithdrawing = batchAction === "withdraw";
   const [xlsxExporting, setXlsxExporting] = useState(false);
   const pdfExport = usePdfExport();
-  const previewRequest = useLatestRequest();
-  const generating = useRef(false);
   const exportingXlsx = useRef(false);
 
   useSelectionScope(
@@ -94,16 +77,17 @@ export function SettlementCandidateList({
     setNoticeKind(kind);
   }
 
-  const params: SettlementCandidateListParams = {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    sortKey: sort.key,
-    sortDir: sort.dir,
-    columnFilters: filters,
-  };
+  const params = useMemo<SettlementCandidateListParams>(
+    () => ({
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      sortKey: sort.key,
+      sortDir: sort.dir,
+      columnFilters: filters,
+    }),
+    [pageSize, page, sort, filters],
+  );
   const list = useSettlementCandidates(params, source === "quantity_sheet");
-  const { preview, initiate, isPending: generatePending } = useSettlementActions();
-  const advanceWorkflow = useAdvanceWorkflow();
   useWorkspaceScroll("billing-settlement", !list.isPending && !list.isError);
   const items = list.data?.items || [];
   const total = list.data?.page.total || 0;
@@ -117,116 +101,23 @@ export function SettlementCandidateList({
     queryKeys.settlementCandidatesRoot,
   );
 
-  const columns = buildSettlementColumns({
-    allFilteredSelected,
-    filters,
-    params,
-    previewing: generatePending,
-    selectedCandidates,
-    selectingAll,
-    disabled: list.isPlaceholderData || batch.isPending,
-    total,
-    onFilter: (column, values) => {
+  const onFilter = useCallback(
+    (column: string, values: string[]) => {
       setFilters((current) => ({ ...current, [column]: values }));
       setPage(1);
     },
-    onPreview: (candidate) => void generateFor(candidate, false),
-    onSort: (column) => {
-      setSort((current) => ({
-        key: column,
-        dir: current.key === column && current.dir === "asc" ? "desc" : "asc",
-      }));
+    [setFilters, setPage],
+  );
+  const onSort = useCallback(
+    (column: NonNullable<SettlementCandidateListParams["sortKey"]>) => {
+      setSort((current) => ({ key: column, dir: current.key === column && current.dir === "asc" ? "desc" : "asc" }));
       setPage(1);
     },
-    onToggle: selection.toggle,
-    onToggleAll: () => void selection.toggleAll(params),
-  });
-
-  function canWithdraw(candidate: SettlementCandidate) {
-    return Boolean(
-      candidate.hasWorkflow &&
-      (candidate.workflowStatus === "statement_generated" || candidate.workflowStatus === "statement_sent") &&
-      (candidate.canWithdraw ?? user.role === "admin"),
-    );
-  }
-
-  async function revertFor(candidate: SettlementCandidate, note: string) {
-    if (!candidate.workflowId) return;
-    await advanceWorkflow.mutateAsync({
-      workflowId: candidate.workflowId,
-      toStatus: "statement_generated",
-      note,
-    });
-    setSelected(null);
-    setResult(null);
-    showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，退回已生成状态。`, "success");
-  }
-
-  async function generateFor(candidate: SettlementCandidate, persist: boolean): Promise<boolean> {
-    if (generating.current) return false;
-    generating.current = true;
-    const isCurrent = previewRequest.begin();
-    try {
-      const target = settlementCandidateScope(candidate, source);
-      const response = persist
-        ? await initiate.mutateAsync({
-            ...target,
-            sourceVersions: selected?.id === candidate.id ? result?.sourceVersions : undefined,
-          })
-        : await preview.mutateAsync(target);
-      if (!isCurrent()) return false;
-      setSelected(candidate);
-      setResult(response);
-      showNotice(persist ? "结算流程已发起，可到单据跟踪继续处理。" : "结算预览已生成。", "success");
-      return true;
-    } catch (error) {
-      if (isCurrent()) showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
-      return false;
-    } finally {
-      generating.current = false;
-    }
-  }
-
-  async function prepareNoticeEmail(candidate: SettlementCandidate) {
-    if (generating.current) return;
-    generating.current = true;
-    const isCurrent = previewRequest.begin();
-    try {
-      const response = await preview.mutateAsync(settlementCandidateScope(candidate, source));
-      if (!isCurrent()) return;
-      setSelected(candidate);
-      setResult(response);
-      if (!response.statement) return;
-      setNoticeEmail({
-        candidate,
-        email: buildSettlementNoticeEmail({
-          feeType: candidate.feeType,
-          pi: response.statement.pi,
-          month: response.statement.month,
-          totalAmount: response.statement.totalAmount,
-          staffName: user.displayName,
-          staffPhone: user.phone,
-        }),
-      });
-      showNotice("请复制通知邮件并确认发起结算流程。", "info");
-    } catch (error) {
-      if (isCurrent()) showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
-    } finally {
-      generating.current = false;
-    }
-  }
-
-  async function confirmNoticeEmail() {
-    if (!noticeEmail) return;
-    const ok = await generateFor(noticeEmail.candidate, true);
-    if (ok) {
-      setNoticeEmail(null);
-      // 预览弹窗立即反映已发起状态，无需退出重新进入。
-      setSelected((current) =>
-        current ? { ...current, hasWorkflow: true, workflowStatus: "statement_sent" } : current,
-      );
-    }
-  }
+    [setSort, setPage],
+  );
+  const { toggleAll } = selection;
+  const onToggleAll = useCallback(() => void toggleAll(params), [toggleAll, params]);
+  const canWithdraw = (candidate: SettlementCandidate) => canWithdrawCandidate(candidate, user);
 
   async function exportCandidates(candidates: SettlementCandidate[]) {
     setNotice("");
@@ -335,7 +226,12 @@ export function SettlementCandidateList({
     selectedCandidates.every((item) => item.hasWorkflow && item.workflowStatus !== "statement_generated");
   const withdrawableSelected = selectedCandidates.filter(canWithdraw);
   return (
-    <>
+    <SettlementPreviewProvider
+      source={source}
+      user={user}
+      exportPdf={pdfExport.exportPdf}
+      pdfExporting={pdfExport.isExporting}
+    >
       {selection.error ? <Alert role="alert" type="error" showIcon title={selection.error} /> : null}
       {notice || pdfExport.isExporting || xlsxExporting || batchStarting || batchWithdrawing ? (
         <Alert
@@ -386,23 +282,22 @@ export function SettlementCandidateList({
         onInitiate={() => setBatchConfirmOpen(true)}
         onWithdraw={() => setBatchWithdrawOpen(true)}
       />
-      <div
-        className="ant-table-region settlement-candidate-list"
-        role="region"
-        tabIndex={0}
-        aria-busy={list.isFetching}
-        aria-label="结算管理列表"
-      >
-        <DataTable
-          refreshing={list.isFetching}
-          size={density}
-          columns={columns}
-          dataSource={items}
-          pagination={false}
-          resizeKey="settlement-candidates"
-          rowKey="id"
-        />
-      </div>
+      <SettlementCandidateTable
+        items={items}
+        refreshing={list.isFetching}
+        density={density}
+        allFilteredSelected={allFilteredSelected}
+        filters={filters}
+        params={params}
+        selectedCandidates={selectedCandidates}
+        selectingAll={selectingAll}
+        disabled={list.isPlaceholderData || batch.isPending}
+        total={total}
+        onFilter={onFilter}
+        onSort={onSort}
+        onToggle={selection.toggle}
+        onToggleAll={onToggleAll}
+      />
       <Pager
         itemLabel="项"
         page={page}
@@ -437,41 +332,6 @@ export function SettlementCandidateList({
         }}
         onConfirm={(note) => runSelectedBatch("withdraw", note)}
       />
-      <ModalPresence>
-        {noticeEmail ? (
-          <SettlementNoticeModal
-            key={`notice:${noticeEmail.candidate.id}`}
-            email={noticeEmail.email}
-            pending={generatePending}
-            onCancel={() => {
-              previewRequest.invalidate();
-              setNoticeEmail(null);
-            }}
-            onConfirm={() => void confirmNoticeEmail()}
-          />
-        ) : selected && result ? (
-          <SettlementPreviewModal
-            key={`preview:${selected.id}`}
-            generatePending={generatePending}
-            hasWorkflow={Boolean(selected.hasWorkflow)}
-            revertPending={advanceWorkflow.isPending}
-            canWithdraw={canWithdraw(selected)}
-            workflowStatus={selected.workflowStatus}
-            notice={notice}
-            noticeKind={noticeKind}
-            pdfExporting={pdfExport.isExporting}
-            result={result}
-            selected={selected}
-            onClose={() => {
-              previewRequest.invalidate();
-              setSelected(null);
-            }}
-            onExportPdf={() => void exportCandidates([selected])}
-            onRevert={(note) => revertFor(selected, note)}
-            onStartSettlement={() => void prepareNoticeEmail(selected)}
-          />
-        ) : null}
-      </ModalPresence>
-    </>
+    </SettlementPreviewProvider>
   );
 }

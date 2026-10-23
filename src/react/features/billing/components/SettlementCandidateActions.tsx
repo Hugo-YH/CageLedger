@@ -1,21 +1,25 @@
 import { Button, Space, Tooltip } from "antd";
+import { useContext } from "react";
+import { SettlementPreviewContext } from "./settlementPreviewContext";
 
 import type { SettlementCandidate } from "../../../api/contracts";
 
 export function SettlementCandidateActions({
   candidate,
-  previewing,
   disabled = false,
-  onPreview,
 }: {
   candidate: SettlementCandidate;
-  previewing: boolean;
   disabled?: boolean;
-  onPreview: () => void;
 }) {
+  const controller = useContext(SettlementPreviewContext);
+  if (!controller) throw new Error("SettlementCandidateActions requires SettlementPreviewProvider");
   const action = (
     <Space size={4} wrap>
-      <Button loading={previewing} disabled={disabled || candidate.totalAmount == null} onClick={onPreview}>
+      <Button
+        loading={controller.previewingId === candidate.id}
+        disabled={disabled || controller.pending || candidate.totalAmount == null}
+        onClick={() => controller.open(candidate)}
+      >
         预览结算单
       </Button>
     </Space>

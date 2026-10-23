@@ -1,33 +1,20 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useEffect, useId, useState } from "react";
-import { Alert, Button, Card, Checkbox, Collapse, Form, Input, Select, Space, Tag, Typography } from "antd";
+import { useCallback, useState } from "react";
+import { Alert, Button } from "antd";
 
 import { useBootstrap } from "../../api/bootstrap";
-import type { CageRoom, ManagedUser, SessionUser, UserRole } from "../../api/contracts";
-import { useDeleteUser, useSaveUser, useUsers } from "../../api/administration";
+import type { CageRoom, ManagedUser, SessionUser } from "../../api/contracts";
+import { useDeleteUser, useUsers } from "../../api/administration";
 import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { CommandBar, ListRefreshStatus, ModalPresence } from "../../components/ui";
-import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
-
-const emptyDraft = {
-  username: "",
-  displayName: "",
-  phone: "",
-  password: "",
-  role: "room_admin" as UserRole,
-  roomIds: [] as string[],
-  billingLockAllowed: false,
-};
-type UserDraft = typeof emptyDraft;
+import { ListRefreshStatus, ModalPresence } from "../../components/ui";
+import { UserCreateForm, UserList, UserSaveProvider } from "./components/UserManagementPanels";
 
 export function UsersView({ currentUser }: { currentUser: SessionUser }) {
   const users = useUsers(currentUser.role === "admin");
   const bootstrap = useBootstrap("summary");
-  const save = useSaveUser();
   const remove = useDeleteUser();
-  const create = useAsyncFormAction("创建账号失败，请重试");
-  const [createDraft, setCreateDraft] = useState(emptyDraft);
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
+  const selectDeleteTarget = useCallback((user: ManagedUser) => setDeleteTarget(user), []);
   if (currentUser.role !== "admin")
     return (
       <section className="workspace-view">
@@ -58,12 +45,6 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
     );
   const items = users.data?.users || [];
   const rooms = (bootstrap.data?.rooms || []) as unknown as CageRoom[];
-  async function createUser() {
-    await create.run(
-      () => save.mutateAsync({ user: createDraft }),
-      () => setCreateDraft(emptyDraft),
-    );
-  }
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceToolbar ariaLabel="账号管理" title="账号管理" />
@@ -89,67 +70,12 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
             }
           />
         ) : null}
-        <section className="settings-split-layout">
-          <Card className="settings-user-list-card">
-            <CommandBar
-              ariaLabel="账号列表"
-              title="账号列表"
-              titleSize="section"
-              context={
-                <Tag>
-                  管理员 {items.filter((item) => item.role === "admin").length} · 房间管理员{" "}
-                  {items.filter((item) => item.role === "room_admin").length}
-                </Tag>
-              }
-            />
-            <Collapse
-              className="settings-user-collapse"
-              items={items.map((item) => ({
-                key: item.id,
-                label: (
-                  <Space size={8} wrap>
-                    <Typography.Text strong>{item.displayName}</Typography.Text>
-                    <Typography.Text type="secondary">{item.username}</Typography.Text>
-                    <Tag color={item.role === "admin" ? "blue" : "default"}>
-                      {item.role === "admin" ? "系统管理员" : `${item.roomIds.length} 个授权饲养间`}
-                    </Tag>
-                    {item.id === currentUser.id ? <Tag color="processing">当前账号</Tag> : null}
-                  </Space>
-                ),
-                children: (
-                  <UserEditor
-                    current={item.id === currentUser.id}
-                    onDelete={() => setDeleteTarget(item)}
-                    onSave={(next) => save.mutateAsync({ id: item.id, user: next, expectedUpdatedAt: item.updatedAt })}
-                    pending={save.isPending}
-                    rooms={rooms}
-                    user={item}
-                  />
-                ),
-              }))}
-            />
-          </Card>
-          <Card className="settings-side-panel" size="small" title="创建账号">
-            {create.error ? <Alert role="alert" showIcon title={create.error} type="error" /> : null}
-            <UserFields
-              creating
-              disabled={create.pending}
-              draft={createDraft}
-              rooms={rooms}
-              onChange={setCreateDraft}
-            />
-            <Button
-              icon={<ActionIcon name="create" />}
-              block
-              type="primary"
-              loading={create.pending}
-              disabled={!createDraft.username || !createDraft.password}
-              onClick={() => void createUser()}
-            >
-              创建账号
-            </Button>
-          </Card>
-        </section>
+        <UserSaveProvider>
+          <section className="settings-split-layout">
+            <UserList currentUserId={currentUser.id} items={items} rooms={rooms} onDelete={selectDeleteTarget} />
+            <UserCreateForm rooms={rooms} />
+          </section>
+        </UserSaveProvider>
       </div>
       <ModalPresence>
         {deleteTarget ? (
@@ -166,169 +92,5 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
         ) : null}
       </ModalPresence>
     </section>
-  );
-}
-
-function UserEditor({
-  user,
-  current,
-  rooms,
-  pending,
-  onSave,
-  onDelete,
-}: {
-  user: ManagedUser;
-  current: boolean;
-  rooms: CageRoom[];
-  pending: boolean;
-  onSave: (user: Partial<ManagedUser> & { password?: string }) => Promise<unknown>;
-  onDelete: () => void;
-}) {
-  const [draft, setDraft] = useState<UserDraft>(() => userDraft(user));
-  const action = useAsyncFormAction("账号保存失败，请重试");
-  const phoneId = useId();
-  useEffect(() => setDraft(userDraft(user)), [user]);
-  if (current)
-    return (
-      <div className="settings-user-editor">
-        {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
-        <Typography.Text type="secondary">
-          当前登录账号仅可维护联系电话，登录名、显示姓名与角色由其他管理员账号管理。
-        </Typography.Text>
-        <Form className="user-fields-react" layout="vertical" requiredMark={false}>
-          <Form.Item htmlFor={phoneId} label="联系电话">
-            <Input
-              id={phoneId}
-              disabled={action.pending}
-              value={draft.phone}
-              placeholder="用于预约消息识别的联系电话"
-              onChange={(event) => setDraft({ ...draft, phone: event.target.value })}
-            />
-          </Form.Item>
-        </Form>
-        <Space className="form-actions">
-          <Button
-            type="primary"
-            disabled={pending}
-            loading={action.pending}
-            onClick={() => void action.run(() => onSave({ phone: draft.phone }))}
-          >
-            保存联系电话
-          </Button>
-        </Space>
-      </div>
-    );
-  return (
-    <div className="settings-user-editor">
-      {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
-      <UserFields disabled={action.pending} draft={draft} rooms={rooms} onChange={setDraft} />
-      <Space className="form-actions">
-        <Button danger onClick={onDelete}>
-          删除账号
-        </Button>
-        <Button
-          type="primary"
-          disabled={pending}
-          loading={action.pending}
-          onClick={() => void action.run(() => onSave(draft))}
-        >
-          保存账号
-        </Button>
-      </Space>
-    </div>
-  );
-}
-
-function userDraft(user: ManagedUser): UserDraft {
-  return {
-    username: user.username,
-    displayName: user.displayName,
-    phone: user.phone || "",
-    password: "",
-    role: user.role,
-    roomIds: [...user.roomIds],
-    billingLockAllowed: Boolean(user.billingLockAllowed),
-  };
-}
-
-function UserFields({
-  draft,
-  rooms,
-  onChange,
-  creating = false,
-  disabled = false,
-}: {
-  draft: UserDraft;
-  rooms: CageRoom[];
-  onChange: (draft: UserDraft) => void;
-  creating?: boolean;
-  disabled?: boolean;
-}) {
-  const id = useId();
-  const update = <K extends keyof UserDraft>(key: K, value: UserDraft[K]) => onChange({ ...draft, [key]: value });
-  return (
-    <Form disabled={disabled} className="user-fields-react" layout="vertical" requiredMark={false}>
-      <Form.Item htmlFor={`${id}-username`} label="登录名" required={creating}>
-        <Input
-          id={`${id}-username`}
-          value={draft.username}
-          onChange={(event) => update("username", event.target.value)}
-        />
-      </Form.Item>
-      <Form.Item htmlFor={`${id}-display-name`} label="显示姓名" required={creating}>
-        <Input
-          id={`${id}-display-name`}
-          value={draft.displayName}
-          onChange={(event) => update("displayName", event.target.value)}
-        />
-      </Form.Item>
-      <Form.Item htmlFor={`${id}-phone`} label="联系电话">
-        <Input
-          id={`${id}-phone`}
-          value={draft.phone}
-          placeholder="用于预约消息识别的联系电话"
-          onChange={(event) => update("phone", event.target.value)}
-        />
-      </Form.Item>
-      <Form.Item htmlFor={`${id}-password`} label={creating ? "初始密码" : "新密码（留空保持）"} required={creating}>
-        <Input.Password
-          id={`${id}-password`}
-          value={draft.password}
-          onChange={(event) => update("password", event.target.value)}
-        />
-      </Form.Item>
-      <Form.Item htmlFor={`${id}-role`} label="角色">
-        <Select
-          id={`${id}-role`}
-          value={draft.role}
-          options={[
-            { value: "room_admin", label: "房间管理员" },
-            { value: "admin", label: "系统管理员" },
-          ]}
-          onChange={(value) => update("role", value)}
-        />
-      </Form.Item>
-      {draft.role === "room_admin" ? (
-        <Form.Item className="room-access-fieldset" label="饲养间授权">
-          <Checkbox.Group
-            aria-label="饲养间授权"
-            className="settings-room-access-group"
-            options={rooms.map((room) => ({ label: room.name, value: room.id }))}
-            value={draft.roomIds}
-            onChange={(values) => update("roomIds", values.map(String))}
-          />
-        </Form.Item>
-      ) : (
-        <p className="muted">系统管理员默认访问全部饲养间。</p>
-      )}
-      <Form.Item label="结算流程锁定权限">
-        <Checkbox
-          checked={draft.billingLockAllowed}
-          onChange={(event) => update("billingLockAllowed", event.target.checked)}
-        >
-          允许锁定、解锁结算流程，撤回本人或他人经手的未归档单据、导出月度汇总，并可为已归档流程补录报销单
-        </Checkbox>
-      </Form.Item>
-    </Form>
   );
 }

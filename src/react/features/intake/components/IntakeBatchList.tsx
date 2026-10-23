@@ -1,17 +1,5 @@
 import { ActionIcon } from "../../../components/ui/ActionIcon";
-import {
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  Flex,
-  Pagination,
-  Space,
-  Tag,
-  Tooltip,
-  Typography,
-  type TableProps,
-} from "antd";
+import { Alert, Button, Card, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useState } from "react";
 
 import type { IntakeBatch, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
@@ -26,7 +14,7 @@ import {
   canConfirmIntakeReceipt,
 } from "../../../../domain/intake";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
-import { useCopyProjectPeople } from "../hooks/useCopyProjectPeople";
+import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
 
 export function IntakeBatchList({
   total,
@@ -85,7 +73,6 @@ export function IntakeBatchList({
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
 }) {
-  const { copy, copyingId } = useCopyProjectPeople();
   const columns: TableProps<IntakeBatch>["columns"] = [
     {
       key: "selection",
@@ -146,20 +133,7 @@ export function IntakeBatchList({
         const value = item[key];
         const text = value == null || value === "" ? "-" : String(value);
         if (key === "owner") {
-          return (
-            <Tooltip title="按项目汇总表复制：项目负责人组实验负责人">
-              <Button
-                type="link"
-                className="intake-project-people-copy"
-                aria-label={`复制项目负责人和实验负责人：${text}`}
-                loading={copyingId === item.id}
-                disabled={loading || Boolean(copyingId)}
-                onClick={() => void copy(item)}
-              >
-                <span className="table-cell-text">{text}</span>
-              </Button>
-            </Tooltip>
-          );
+          return <ProjectPeopleCopyButton item={item} disabled={loading} />;
         }
         return (
           <span className="table-cell-text" title={text}>
@@ -189,7 +163,7 @@ export function IntakeBatchList({
   ];
 
   return (
-    <>
+    <ProjectPeopleCopyProvider>
       <CommandBar
         ariaLabel="待接收批次批量操作"
         title="待接收批次列表"
@@ -293,7 +267,7 @@ export function IntakeBatchList({
           </div>
         </Flex>
       </Card>
-    </>
+    </ProjectPeopleCopyProvider>
   );
 }
 

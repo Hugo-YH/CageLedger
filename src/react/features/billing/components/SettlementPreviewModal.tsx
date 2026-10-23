@@ -1,16 +1,20 @@
 import { DownloadOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from "@ant-design/icons";
 import { Alert, Button, Tooltip, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { BillingStatementResponse, SettlementCandidate } from "../../../api/contracts";
 import { CommandBar } from "../../../components/ui";
+import { PageSkeleton } from "../../../components/WorkspaceUi";
 import { openSettlementPrint, settlementStatementHtml } from "../../../print/settlement";
 import { BatchWithdrawConfirmModal } from "./BatchWithdrawConfirmModal";
 
 export function SettlementPreviewModal({
   selected,
   result,
+  loading = false,
+  error = "",
+  onRetry,
   notice,
   noticeKind,
   generatePending,
@@ -25,7 +29,10 @@ export function SettlementPreviewModal({
   onStartSettlement,
 }: {
   selected: SettlementCandidate;
-  result: BillingStatementResponse;
+  result: BillingStatementResponse | null;
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
   notice: string;
   noticeKind: "success" | "error" | "info";
   generatePending: boolean;
@@ -39,6 +46,7 @@ export function SettlementPreviewModal({
   onRevert: (note: string) => Promise<void>;
   onStartSettlement: () => void;
 }) {
+  const previewMarkup = useMemo(() => (result ? settlementStatementHtml(result, false) : ""), [result]);
   const canInitiate = !hasWorkflow || workflowStatus === "statement_generated";
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const workflowActionLabel = canInitiate
@@ -77,10 +85,19 @@ export function SettlementPreviewModal({
         }
         actions={
           <>
-            <Button icon={<PrinterOutlined aria-hidden />} onClick={() => openSettlementPrint(result)}>
+            <Button
+              icon={<PrinterOutlined aria-hidden />}
+              disabled={!result}
+              onClick={() => result && openSettlementPrint(result)}
+            >
               打印结算单
             </Button>
-            <Button icon={<DownloadOutlined aria-hidden />} loading={pdfExporting} onClick={onExportPdf}>
+            <Button
+              icon={<DownloadOutlined aria-hidden />}
+              disabled={!result}
+              loading={pdfExporting}
+              onClick={onExportPdf}
+            >
               导出 PDF
             </Button>
             {canWithdraw && hasWorkflow && workflowStatus === "statement_sent" ? (
@@ -88,6 +105,7 @@ export function SettlementPreviewModal({
                 danger
                 icon={<UndoOutlined aria-hidden />}
                 loading={revertPending}
+                disabled={!result}
                 onClick={() => setWithdrawOpen(true)}
               >
                 撤回
@@ -102,7 +120,7 @@ export function SettlementPreviewModal({
                 icon={<PlayCircleOutlined aria-hidden />}
                 loading={generatePending}
                 type="primary"
-                disabled={!canInitiate}
+                disabled={!result || !canInitiate}
                 onClick={onStartSettlement}
               >
                 {workflowActionLabel}
@@ -111,7 +129,9 @@ export function SettlementPreviewModal({
           </Tooltip>
         }
       />
-      {notice ? (
+      {error ? (
+        <Alert role="alert" showIcon type="error" title={error} action={<Button onClick={onRetry}>重试</Button>} />
+      ) : notice ? (
         <Alert
           title={notice}
           role="status"
@@ -119,9 +139,13 @@ export function SettlementPreviewModal({
           type={noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info"}
         />
       ) : null}
-      <div className="settlement-preview settlement-document-preview">
-        <iframe title="结算单预览" srcDoc={settlementStatementHtml(result, false)} />
-      </div>
+      {loading ? (
+        <PageSkeleton embedded label="结算预览" variant="detail" rows={4} />
+      ) : result ? (
+        <div className="settlement-preview settlement-document-preview">
+          <iframe title="结算单预览" srcDoc={previewMarkup} />
+        </div>
+      ) : null}
       <BatchWithdrawConfirmModal
         count={1}
         open={withdrawOpen}

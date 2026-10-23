@@ -244,6 +244,27 @@
       "transaction": "原服务端解析与输入限制；不保存接收批次",
       "audit": "原诊断及使用信息规则",
       "effects": "remote_read"
+    },
+    "user_create": {
+      "version": "创建不要求编辑版本",
+      "idempotency": "用户名唯一；重复返回409，不新增成功审计",
+      "transaction": "账号写入、原会话清理及审计同一事务；失败一起回滚",
+      "audit": "user.created记录操作者和新账号公开字段；不记录密码或哈希",
+      "effects": "business_write"
+    },
+    "user_edit": {
+      "version": "可选 expectedUpdatedAt；缺省兼容，提供后拒绝过期",
+      "idempotency": "成功保存各记录一次；不是requestId幂等协议",
+      "transaction": "账号写入、原会话清理及审计同一事务；失败一起回滚",
+      "audit": "user.updated记录实际前后公开字段、密码重置标记；自改仅联系电话",
+      "effects": "business_write"
+    },
+    "user_delete": {
+      "version": "原删除入口不要求 expectedUpdatedAt",
+      "idempotency": "不存在返回404；禁止删除当前账号",
+      "transaction": "账号写入、原会话清理及审计同一事务；失败一起回滚",
+      "audit": "user.deleted记录操作者和删除前公开字段；历史审计保留",
+      "effects": "business_write"
     }
   },
   "routingSurface": {
@@ -432,7 +453,7 @@
           "purpose": "创建账号",
           "request": "账号字段",
           "response": "{user}",
-          "protection": "entity_create"
+          "protection": "user_create"
         },
         {
           "method": "PUT",
@@ -440,7 +461,7 @@
           "purpose": "编辑账号",
           "request": "账号字段、可选 expectedUpdatedAt",
           "response": "{user}",
-          "protection": "compat_edit"
+          "protection": "user_edit"
         },
         {
           "method": "DELETE",
@@ -448,7 +469,7 @@
           "purpose": "删除账号",
           "request": "id",
           "response": "{ok}",
-          "protection": "entity_delete"
+          "protection": "user_delete"
         }
       ]
     },

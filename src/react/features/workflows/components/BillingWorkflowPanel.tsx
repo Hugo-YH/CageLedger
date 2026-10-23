@@ -4,37 +4,27 @@ import { queryKeys } from "../../../api/queryKeys";
 import { BatchFailureDetails } from "../../../components/BatchFailureDetails";
 import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
 import { ListViewControls, type ListDensity } from "../../../components/ui/ListViewControls";
-import { Alert, Button, Checkbox, Empty, Popconfirm, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, Popconfirm, Select, Tag } from "antd";
 import { ExclamationCircleOutlined, LockOutlined } from "@ant-design/icons";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { SessionUser } from "../../../api/contracts";
 import type { BillingWorkflow } from "../../../api/workflows";
-import { useAdvanceWorkflow, useBillingWorkflows } from "../../../api/workflows";
+import { useAdvanceWorkflow, useBillingWorkflows, type WorkflowAdvancePayload } from "../../../api/workflows";
 import { useBatchAdvanceWorkflow } from "../../../api/useBatchAdvanceWorkflow";
-import { CommandBar, DataTable, HelpPopover } from "../../../components/ui";
+import { CommandBar, HelpPopover } from "../../../components/ui";
 import { Pager } from "../../../components/WorkspaceUi";
-import { tagColors } from "../../../../theme/visual-system.mjs";
-import { FeeTypeTag, ReimbursementReturnTag } from "../../../components/BillingTags";
-import { workflowTagColor } from "../../../components/billingTagColors";
 import { QueryFeedback } from "./LedgerListShared";
-import { WorkflowColumnTitle } from "./WorkflowColumnTitle";
 import { WorkflowDetailModal } from "./WorkflowDetailModal";
 import { WorkflowReimbursementRecordingModal } from "./WorkflowReimbursementRecordingModal";
 import { WorkflowRegistrationModal } from "./WorkflowRegistrationModal";
 import { WorkflowRevokeModal, type WorkflowRevokeTarget } from "./WorkflowRevokeModal";
-import { WorkflowTableActions } from "./WorkflowTableActions";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
+import { BillingWorkflowTable } from "./BillingWorkflowTable";
+import { WorkflowLockContext } from "./workflowLockContext";
 
-const workflowStatusMeta: Record<string, { label: string }> = {
-  statement_generated: { label: "已生成" },
-  statement_sent: { label: "已发起" },
-  statement_archived: { label: "未归档" },
-  statement_locked: { label: "已归档" },
-  statement_signed_returned: { label: "已交回登记（历史）" },
-  submitted_to_finance: { label: "已提交财务（历史）" },
-};
+const EMPTY_WORKFLOWS: BillingWorkflow[] = [];
 
 export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   const [page, setPage] = useWorkspaceMemory("workflow:page", 1);
@@ -67,10 +57,10 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   const [revokeTarget, setRevokeTarget] = useState<WorkflowRevokeTarget | null>(null);
   const [selectedLockable, setSelectedLockable] = useState<string[]>([]);
   const selectedRows = useRef(new Map<string, BillingWorkflow>());
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedLockable([]);
     selectedRows.current.clear();
-  };
+  }, []);
   useSelectionScope(JSON.stringify([user.id, filters]), clearSelection, selectedLockable.length > 0);
   const [batchFailures, setBatchFailures] = useState<string[]>([]);
   const [batchLocking, setBatchLocking] = useState(false);
@@ -78,24 +68,26 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     null,
   );
   useWorkspaceScroll("workflow-center", !query.isPending && !query.isError);
-  const items = query.data?.items || [];
+  const items = query.data?.items || EMPTY_WORKFLOWS;
   const total = query.data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
-  const lockableItems = items.filter(
-    (item) => item.workflowStatus === "statement_sent" || item.workflowStatus === "statement_archived",
+  const lockableItems = useMemo(
+    () =>
+      items.filter((item) => item.workflowStatus === "statement_sent" || item.workflowStatus === "statement_archived"),
+    [items],
   );
   const allLockableSelected =
     lockableItems.length > 0 && lockableItems.every((item) => selectedLockable.includes(item.id));
 
-  function toggleLockable(item: BillingWorkflow, checked: boolean) {
+  const toggleLockable = useCallback((item: BillingWorkflow, checked: boolean) => {
     if (checked) selectedRows.current.set(item.id, item);
     else selectedRows.current.delete(item.id);
     setSelectedLockable((current) =>
       checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id),
     );
-  }
+  }, []);
 
-  function toggleAllLockable() {
+  const toggleAllLockable = useCallback(() => {
     for (const item of lockableItems) {
       if (allLockableSelected) selectedRows.current.delete(item.id);
       else selectedRows.current.set(item.id, item);
@@ -107,7 +99,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       }
       return [...new Set([...current, ...lockableItems.map((item) => item.id)])];
     });
-  }
+  }, [allLockableSelected, lockableItems]);
 
   async function lockSelected() {
     if (lockAction.pending || batchLocking) return;
@@ -163,148 +155,36 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     queryKeys.workflowsRoot,
   );
 
-  function toggleSort(key: string) {
-    setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
-    setPage(1);
-  }
+  const toggleSort = useCallback(
+    (key: string) => {
+      setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
+      setPage(1);
+    },
+    [setSort, setPage],
+  );
 
-  function applyFilter(key: string, values: string[]) {
-    setFilters((current) => ({ ...current, [key]: values }));
-    setPage(1);
-  }
+  const applyFilter = useCallback(
+    (key: string, values: string[]) => {
+      setFilters((current) => ({ ...current, [key]: values }));
+      setPage(1);
+    },
+    [setFilters, setPage],
+  );
 
-  function columnTitle(column: string, label: string, filterColumn = column) {
-    return (
-      <WorkflowColumnTitle
-        column={filterColumn}
-        columnFilters={filters}
-        label={label}
-        values={filters[filterColumn] || []}
-        onFilter={(values) => applyFilter(filterColumn, values)}
-        onSort={() => toggleSort(column)}
-      />
-    );
-  }
-
-  const columns = [
-    ...(user.billingLockAllowed
-      ? [
-          {
-            key: "selection",
-            title: (
-              <Checkbox
-                aria-label="全选当前页可锁定的结算流程"
-                checked={allLockableSelected}
-                disabled={!lockableItems.length || batchLocking || lockAction.pending}
-                onChange={toggleAllLockable}
-              />
-            ),
-            width: 44,
-            render: (_: unknown, item: BillingWorkflow) => (
-              <Checkbox
-                aria-label={`选择 ${item.pi} ${item.month} 结算流程`}
-                checked={selectedLockable.includes(item.id)}
-                disabled={
-                  (item.workflowStatus !== "statement_sent" && item.workflowStatus !== "statement_archived") ||
-                  batchLocking ||
-                  lockAction.pending
-                }
-                onChange={(event) => toggleLockable(item, event.target.checked)}
-              />
-            ),
-          },
-        ]
-      : []),
-    {
-      key: "feeType",
-      title: "费用类型",
-      width: 110,
-      render: (_: unknown, item: BillingWorkflow) => (
-        <FeeTypeTag feeType={item.sourceType === "pi_merged_technical_service" ? "technical_service" : "feeding"} />
-      ),
-    },
-    { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 100 },
-    { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 140 },
-    {
-      key: "iacuc",
-      title: columnTitle("iacuc", "IACUC"),
-      width: 160,
-      render: (_: unknown, item: BillingWorkflow) => (
-        <Typography.Paragraph style={{ margin: 0 }} ellipsis={{ rows: 2, expandable: true, symbol: "展开" }}>
-          {item.iacucs.join("、") || "-"}
-        </Typography.Paragraph>
-      ),
-    },
-    {
-      key: "manager",
-      title: columnTitle("manager", "登记人员"),
-      width: 110,
-      render: (_: unknown, item: BillingWorkflow) => item.manager || "-",
-    },
-    {
-      key: "totalAmount",
-      title: columnTitle("totalAmount", "结算金额"),
-      align: "right" as const,
-      width: 110,
-      render: (_: unknown, item: BillingWorkflow) => `¥${Number(item.totalAmount || 0).toFixed(2)}`,
-    },
-    {
-      key: "workflowStatus",
-      title: columnTitle("workflowStatus", "状态", "status"),
-      width: 160,
-      render: (_: unknown, item: BillingWorkflow) => {
-        const showSubStatuses =
-          item.workflowStatus === "statement_archived" || item.workflowStatus === "statement_locked";
-        const reimbursementRequired = item.reimbursementRequired ?? Number(item.totalAmount || 0) > 0;
-        return (
-          <Space size={4} orientation="vertical">
-            <Tag
-              color={
-                item.workflowStatus === "statement_locked"
-                  ? tagColors.workflow.statement_locked
-                  : tagColors.status.default
-              }
-            >
-              {item.workflowStatus === "statement_locked" ? "已归档" : "未归档"}
-            </Tag>
-            {showSubStatuses ? (
-              <>
-                <Tag color={item.signedStatementReturned ? tagColors.document.statement : tagColors.status.default}>
-                  {item.signedStatementReturned ? "结算单 已交回" : "结算单 未交回"}
-                </Tag>
-                {reimbursementRequired ? <ReimbursementReturnTag workflow={item} /> : null}
-              </>
-            ) : (
-              <Tag color={workflowTagColor(item.workflowStatus)}>
-                {workflowStatusMeta[item.workflowStatus]?.label || item.workflowStatus}
-              </Tag>
-            )}
-          </Space>
-        );
-      },
-    },
-    {
-      key: "actions",
-      title: "操作",
-      fixed: "right" as const,
-      width: 240,
-      render: (_: unknown, item: BillingWorkflow) => (
-        <WorkflowTableActions
-          item={item}
-          canLock={Boolean(user.billingLockAllowed)}
-          canWithdraw={item.canWithdraw ?? user.role === "admin"}
-          disabled={batchLocking || lockAction.pending}
-          loading={lockAction.pending && advance.variables?.workflowId === item.id}
-          onRegister={setRegisterTarget}
-          onDetail={setDetailTarget}
-          onRevoke={setRevokeTarget}
-          onAdvance={(toStatus, note) =>
-            lockAction.run(() => advance.mutateAsync({ workflowId: item.id, toStatus, note }))
-          }
-        />
-      ),
-    },
-  ];
+  const runLockAction = lockAction.run;
+  const advanceWorkflow = advance.mutateAsync;
+  const onAdvance = useCallback(
+    (payload: WorkflowAdvancePayload) => runLockAction(() => advanceWorkflow(payload)),
+    [runLockAction, advanceWorkflow],
+  );
+  const lockState = useMemo(
+    () => ({
+      pending: batchLocking || lockAction.pending,
+      activeId: lockAction.pending ? advance.variables?.workflowId || "" : "",
+      onAdvance,
+    }),
+    [batchLocking, lockAction.pending, advance.variables?.workflowId, onAdvance],
+  );
 
   return (
     <section className="ledger-section" aria-label="结算流程列表">
@@ -392,30 +272,25 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         retry={() => void query.refetch()}
       />
       {!query.isPending && !query.isError ? (
-        <div className="ant-table-region" role="region" aria-label="结算流程表格" tabIndex={0}>
-          <DataTable
+        <WorkflowLockContext.Provider value={lockState}>
+          <BillingWorkflowTable
+            user={user}
+            items={items}
             refreshing={query.isFetching}
-            className="antd-data-table reimbursement-table"
-            size={density}
-            columns={columns}
-            dataSource={items}
-            locale={{
-              emptyText: (
-                <Empty
-                  description={
-                    Object.values(filters).some((values) => values.length)
-                      ? "没有符合当前筛选的结算流程"
-                      : "当前没有结算流程"
-                  }
-                />
-              ),
-            }}
-            pagination={false}
-            resizeKey="billing-workflows"
-            rowKey="id"
-            scroll={{ x: 1064 }}
+            density={density}
+            filters={filters}
+            selectedLockable={selectedLockable}
+            allLockableSelected={allLockableSelected}
+            hasLockableItems={Boolean(lockableItems.length)}
+            onToggleLockable={toggleLockable}
+            onToggleAllLockable={toggleAllLockable}
+            onSort={toggleSort}
+            onFilter={applyFilter}
+            onRegister={setRegisterTarget}
+            onDetail={setDetailTarget}
+            onRevoke={setRevokeTarget}
           />
-        </div>
+        </WorkflowLockContext.Provider>
       ) : null}
       <Pager
         itemLabel="条"

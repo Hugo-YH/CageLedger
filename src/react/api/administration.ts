@@ -43,7 +43,11 @@ export function useSaveUser() {
         method: id ? "PUT" : "POST",
         body: JSON.stringify({ ...user, expectedUpdatedAt: id ? expectedUpdatedAt : "" }),
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.users }),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.users }),
+        client.invalidateQueries({ queryKey: queryKeys.auditEventsRoot }),
+      ]),
   });
 }
 
@@ -51,7 +55,11 @@ export function useDeleteUser() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => requestJson<{ ok: true }>(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.users }),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.users }),
+        client.invalidateQueries({ queryKey: queryKeys.auditEventsRoot }),
+      ]),
   });
 }
 

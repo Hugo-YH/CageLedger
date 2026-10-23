@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Switch } from "antd";
 import type { SessionUser } from "../../api/contracts";
+import { useQuantitySheetDetail } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { ActionButton, CommandBar, ModalPresence } from "../../components/ui";
-import { AsyncActionButton, ModalShell, PageSkeleton } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { ConfirmSave } from "./components/QuantitySheetModals";
 import { SavedQuantitySheets } from "./components/SavedQuantitySheets";
 import { QuantitySheetEditorForm } from "./components/QuantitySheetEditorForm";
@@ -21,6 +22,8 @@ export function QuantitySheetView({
   navigationAction?: ReactNode;
 }) {
   const editor = useQuantitySheetEditor(user, mode);
+  const [editingId, setEditingId] = useState("");
+  const editingDetail = useQuantitySheetDetail(editingId);
   const {
     draft,
     editorRows,
@@ -38,6 +41,17 @@ export function QuantitySheetView({
     selectedRoom,
     persistSheet,
   } = editor;
+  const openEditor = useCallback((id: string) => setEditingId(id), []);
+  const dismissEditor = useCallback(() => {
+    setEditingId("");
+    closeEditor();
+  }, [closeEditor]);
+
+  useEffect(() => {
+    if (!editingId || !editingDetail.data?.item) return;
+    loadForEdit(editingDetail.data.item);
+    setEditingId("");
+  }, [editingDetail.data, editingId, loadForEdit]);
 
   const entryToolbar =
     mode === "entry" ? (
@@ -96,41 +110,57 @@ export function QuantitySheetView({
       {mode === "entry" ? (
         <QuantitySheetEditorForm editor={editor} user={user} mode={mode} />
       ) : (
-        <SavedQuantitySheets onEdit={loadForEdit} navigationAction={navigationAction} />
+        <SavedQuantitySheets onEdit={openEditor} navigationAction={navigationAction} />
       )}
       <ModalPresence>
-        {mode === "saved" && editingDialog ? (
-          <ModalShell key={draft.id} ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={closeEditor}>
+        {mode === "saved" && (editingId || editingDialog) ? (
+          <ModalShell ariaLabel="编辑数量统计表" className="quantity-edit-modal" onClose={dismissEditor}>
             <div className="modal-shell-head">
               <div>
                 <h2>编辑数量统计表</h2>
                 <p>
-                  {draft.month} · {draft.iacuc}
+                  {editingId
+                    ? editingDetail.isError
+                      ? "读取失败，可重试或关闭。"
+                      : "正在读取统计表…"
+                    : `${draft.month} · ${draft.iacuc}`}
                 </p>
               </div>
-              <ActionButton onClick={closeEditor}>关闭</ActionButton>
+              <ActionButton onClick={dismissEditor}>关闭</ActionButton>
             </div>
             <div className="modal-shell-body">
-              <div className="react-quantity-layout quantity-edit-context">
-                <QuantitySheetEditorForm
-                  editor={editor}
-                  user={user}
-                  mode={mode}
-                  headActions={
-                    <Tooltip content={saveHint(editorRows, animalDetails)}>
-                      <ActionButton
-                        icon={<ActionIcon name="save" />}
-                        form="quantity-sheet-entry-form"
-                        loading={save.isPending}
-                        tone="primary"
-                        type="submit"
-                      >
-                        保存统计表
-                      </ActionButton>
-                    </Tooltip>
-                  }
-                />
-              </div>
+              {editingId ? (
+                editingDetail.isError ? (
+                  <PageState
+                    title="数量统计表加载失败"
+                    detail={editingDetail.error?.message}
+                    retry={() => void editingDetail.refetch()}
+                  />
+                ) : (
+                  <PageSkeleton compact label="编辑数量统计表" rows={4} variant="form" />
+                )
+              ) : (
+                <div className="react-quantity-layout quantity-edit-context">
+                  <QuantitySheetEditorForm
+                    editor={editor}
+                    user={user}
+                    mode={mode}
+                    headActions={
+                      <Tooltip content={saveHint(editorRows, animalDetails)}>
+                        <ActionButton
+                          icon={<ActionIcon name="save" />}
+                          form="quantity-sheet-entry-form"
+                          loading={save.isPending}
+                          tone="primary"
+                          type="submit"
+                        >
+                          保存统计表
+                        </ActionButton>
+                      </Tooltip>
+                    }
+                  />
+                </div>
+              )}
             </div>
           </ModalShell>
         ) : null}

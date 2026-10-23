@@ -253,7 +253,7 @@ class WriteActionsMixin:
         try:
             body = self.read_json_body()
             with connect_db() as conn:
-                created = create_user(conn, body)
+                created = create_user(conn, body, actor=user)
             self.send_json({"user": created}, HTTPStatus.CREATED)
         except sqlite3.IntegrityError:
             self.send_json({"error": "用户名已存在"}, HTTPStatus.CONFLICT)

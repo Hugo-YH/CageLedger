@@ -15,6 +15,7 @@ const MAX_POLL_INTERVAL_MS = 2000;
 export function usePdfExport() {
   const mounted = useRef(true);
   const inFlight = useRef<Promise<PdfExportJob> | null>(null);
+  const currentJob = useRef<PdfExportJob | null>(null);
   const [job, setJob] = useState<PdfExportJob | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const tasks = useTaskFeedback();
@@ -32,21 +33,34 @@ export function usePdfExport() {
       if (inFlight.current) return inFlight.current;
       if (mounted.current) {
         setIsExporting(true);
+        currentJob.current = null;
         setJob(null);
       }
       const run = async () => {
         const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload), progress: 0 });
+        let previousTaskUpdate: { detail: string; progress: number | undefined } | null = null;
+        const updateTaskProgress = (next: PdfExportJob) => {
+          const update = { detail: progressLabel(next), progress: jobProgress(next) };
+          if (sameTaskProgress(previousTaskUpdate, update)) return;
+          previousTaskUpdate = update;
+          tasks.update(taskId, update);
+        };
+        const updateJob = (next: PdfExportJob) => {
+          if (!mounted.current || samePdfExportJob(currentJob.current, next)) return;
+          currentJob.current = next;
+          setJob(next);
+        };
         try {
           let current = await startPdfExport(payload);
           let pollInterval = INITIAL_POLL_INTERVAL_MS;
-          if (mounted.current) setJob(current);
+          updateJob(current);
           while (current.status === "queued" || current.status === "rendering") {
-            tasks.update(taskId, { detail: progressLabel(current), progress: jobProgress(current) });
+            updateTaskProgress(current);
             await wait(pollInterval);
             const previous = current;
             current = await getPdfExportJob(previous.id);
             pollInterval = nextPollInterval(previous, current, pollInterval);
-            if (mounted.current) setJob(current);
+            updateJob(current);
           }
           if (current.status === "failed") throw new Error(current.error || "PDF 生成失败");
           if (!current.downloadUrl) throw new Error("PDF 已生成，但下载链接不可用");
@@ -55,7 +69,13 @@ export function usePdfExport() {
           return current;
         } catch (error) {
           const message = error instanceof Error ? error.message : "PDF 生成失败";
-          if (mounted.current) setJob((previous) => previous && { ...previous, status: "failed", error: message });
+          if (mounted.current && currentJob.current) {
+            const failed = { ...currentJob.current, status: "failed" as const, error: message };
+            if (!samePdfExportJob(currentJob.current, failed)) {
+              currentJob.current = failed;
+              setJob(failed);
+            }
+          }
           tasks.fail(taskId, message);
           throw error;
         }
@@ -77,6 +97,26 @@ export function usePdfExport() {
     job,
     isExporting,
   };
+}
+
+function samePdfExportJob(previous: PdfExportJob | null, next: PdfExportJob) {
+  return Boolean(
+    previous &&
+    previous.id === next.id &&
+    previous.status === next.status &&
+    previous.completed === next.completed &&
+    previous.total === next.total &&
+    previous.filename === next.filename &&
+    previous.error === next.error &&
+    previous.downloadUrl === next.downloadUrl,
+  );
+}
+
+function sameTaskProgress(
+  previous: { detail: string; progress: number | undefined } | null,
+  next: { detail: string; progress: number | undefined },
+) {
+  return previous?.detail === next.detail && previous.progress === next.progress;
 }
 
 function nextPollInterval(previous: PdfExportJob, current: PdfExportJob, interval: number) {

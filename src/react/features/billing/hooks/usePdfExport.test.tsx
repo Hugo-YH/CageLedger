@@ -1,4 +1,4 @@
-import { StrictMode, type ReactNode } from "react";
+import { Profiler, StrictMode, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,6 +36,18 @@ function wrapper({ children }: { children: ReactNode }) {
       <TaskFeedbackContext.Provider value={feedback}>{children}</TaskFeedbackContext.Provider>
     </StrictMode>
   );
+}
+
+function profiledWrapper(onRender: () => void) {
+  return function ProfiledWrapper({ children }: { children: ReactNode }) {
+    return (
+      <StrictMode>
+        <Profiler id="pdf-export" onRender={onRender}>
+          <TaskFeedbackContext.Provider value={feedback}>{children}</TaskFeedbackContext.Provider>
+        </Profiler>
+      </StrictMode>
+    );
+  };
 }
 
 describe("usePdfExport", () => {
@@ -151,6 +163,46 @@ describe("usePdfExport", () => {
       await completion;
     });
     expect(getPdfExportJob).toHaveBeenCalledTimes(4);
+    expect(downloadFromUrl).toHaveBeenCalledExactlyOnceWith(ready.downloadUrl);
+  });
+
+  it("keeps identical poll results and task feedback stable, then publishes real progress", async () => {
+    const waiting = { ...ready, status: "queued" as const, completed: 0, total: 4, downloadUrl: "" };
+    const progressed = { ...waiting, completed: 1 };
+    const onRender = vi.fn();
+    vi.mocked(startPdfExport).mockResolvedValue(waiting);
+    vi.mocked(getPdfExportJob)
+      .mockResolvedValueOnce({ ...waiting })
+      .mockResolvedValueOnce(progressed)
+      .mockResolvedValueOnce(ready);
+    const { result } = renderHook(usePdfExport, { wrapper: profiledWrapper(onRender) });
+    let completion: Promise<PdfExportJob> | undefined;
+    await act(async () => {
+      completion = result.current.exportPdf(payload);
+      await Promise.resolve();
+    });
+    const initialJob = result.current.job;
+    const rendersBeforeDuplicate = onRender.mock.calls.length;
+    expect(feedback.update).toHaveBeenCalledExactlyOnceWith("task-1", { detail: "已完成 0/4 份。", progress: 0 });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(result.current.job).toBe(initialJob);
+    expect(onRender).toHaveBeenCalledTimes(rendersBeforeDuplicate);
+    expect(feedback.update).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(result.current.job).toMatchObject({ completed: 1, total: 4 });
+    expect(result.current.job).not.toBe(initialJob);
+    expect(feedback.update).toHaveBeenLastCalledWith("task-1", { detail: "已完成 1/4 份。", progress: 25 });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await completion;
+    });
     expect(downloadFromUrl).toHaveBeenCalledExactlyOnceWith(ready.downloadUrl);
   });
 

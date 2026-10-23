@@ -1,7 +1,7 @@
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { useEffect, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { iacucExpiryStatus } from "../../../../domain/iacucValidity";
 
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
@@ -21,11 +21,13 @@ import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../prin
 import { usePdfExport } from "../hooks/usePdfExport";
 import { useQuantitySheetSelection } from "../hooks/useQuantitySheetSelection";
 
-export function SavedQuantitySheets({
+const EMPTY_SHEETS: QuantitySheet[] = [];
+
+export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   onEdit,
   navigationAction,
 }: {
-  onEdit: (sheet: QuantitySheet) => void;
+  onEdit: (id: string) => void;
   navigationAction?: React.ReactNode;
 }) {
   const [page, setPage] = useState(1);
@@ -33,124 +35,136 @@ export function SavedQuantitySheets({
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const selection = useQuantitySheetSelection();
-  const { selected, selectingAll, allFilteredSelected } = selection;
-  useSelectionScope(JSON.stringify(filters), selection.clear, selected.length > 0 || selectingAll);
+  const { selected, selectingAll, allFilteredSelected, clear, toggle, toggleAll } = selection;
+  useSelectionScope(JSON.stringify(filters), clear, selected.length > 0 || selectingAll);
   const [viewId, setViewId] = useState("");
-  const [editId, setEditId] = useState("");
   const [deleteId, setDeleteId] = useState("");
   const [exportError, setExportError] = useState("");
   const [printPending, setPrintPending] = useState(false);
   const pdfExport = usePdfExport();
-  const params: QuantitySheetListParams = {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    sortKey: sort.key,
-    sortDir: sort.dir,
-    columnFilters: filters,
-  };
+  const params = useMemo<QuantitySheetListParams>(
+    () => ({
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      sortKey: sort.key,
+      sortDir: sort.dir,
+      columnFilters: filters,
+    }),
+    [filters, page, pageSize, sort],
+  );
   const list = useQuantitySheets(params);
   const iacucExpiry = useIacucExpiry();
-  const detail = useQuantitySheetDetail(viewId || editId);
+  const detail = useQuantitySheetDetail(viewId);
   const remove = useDeleteQuantitySheet();
-  const items = list.data?.items || [];
+  const items = list.data?.items || EMPTY_SHEETS;
   const total = list.data?.page.total || 0;
-  const iacucExpiryByCode = new Map(
-    (iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate]),
+  const iacucExpiryByCode = useMemo(
+    () =>
+      new Map((iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate])),
+    [iacucExpiry.data?.items],
   );
   const initialLoading = list.isPending;
-  const columns: TableProps<QuantitySheet>["columns"] = [
-    {
-      key: "selection",
-      width: 40,
-      title: (
-        <Checkbox
-          aria-label="全选当前筛选结果统计表"
-          disabled={list.isFetching || selectingAll || !total}
-          checked={total > 0 && allFilteredSelected}
-          onChange={() => void selection.toggleAll(params)}
-        />
-      ),
-      render: (_, item) => (
-        <Checkbox
-          aria-label={`选择 ${item.iacuc}`}
-          checked={selected.includes(item.id)}
-          disabled={list.isFetching}
-          onChange={(event) => selection.toggle(item.id, event.target.checked)}
-        />
-      ),
-    },
-    ...(
-      [
-        { key: "month", label: "月份", width: 110 },
-        { key: "iacuc", label: "IACUC", width: 250 },
-        { key: "roomName", label: "房间", width: 140 },
-        { key: "manager", label: "登记人员", width: 130 },
-        { key: "pi", label: "负责人", width: 140 },
-        { key: "updatedAt", label: "更新时间", width: 190 },
-      ] as const
-    ).map(({ key, label, width }) => ({
-      key,
-      dataIndex: key,
-      width,
-      title: (
-        <QuantityColumnTitle
-          column={key}
-          label={label}
-          params={params}
-          values={filters[key] || []}
-          onSort={() => {
-            setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
-            setPage(1);
-          }}
-          onFilter={(values) => {
-            setFilters((current) => ({ ...current, [key]: values }));
-            setPage(1);
-          }}
-        />
-      ),
-      render: (value: string, item: QuantitySheet) => {
-        if (key === "updatedAt") return formatTime(item.updatedAt);
-        const text = value || "-";
-        if (key === "iacuc") {
-          const projectEndDate = iacucExpiryByCode.get(item.iacuc.trim().toUpperCase());
-          return (
-            <Space size={4} wrap className="quantity-iacuc-cell">
-              <span title={text}>{text}</span>
-              {projectEndDate ? <IacucExpiryTag endDate={projectEndDate} /> : null}
-            </Space>
-          );
-        }
-        return <span title={text}>{text}</span>;
+  const columns = useMemo<TableProps<QuantitySheet>["columns"]>(
+    () => [
+      {
+        key: "selection",
+        width: 40,
+        title: (
+          <Checkbox
+            aria-label="全选当前筛选结果统计表"
+            disabled={list.isFetching || selectingAll || !total}
+            checked={total > 0 && allFilteredSelected}
+            onChange={() => void toggleAll(params)}
+          />
+        ),
+        render: (_, item) => (
+          <Checkbox
+            aria-label={`选择 ${item.iacuc}`}
+            checked={selected.includes(item.id)}
+            disabled={list.isFetching}
+            onChange={(event) => toggle(item.id, event.target.checked)}
+          />
+        ),
       },
-    })),
-    {
-      key: "actions",
-      title: "操作",
-      fixed: "right" as const,
-      width: 240,
-      align: "right",
-      render: (_, item) => (
-        <Space aria-label={`${item.iacuc}操作`} className="quantity-saved-row-actions" size={8}>
-          <Button color="blue" variant="filled" disabled={list.isFetching} onClick={() => setViewId(item.id)}>
-            预览
-          </Button>
-          <Button type="primary" disabled={list.isFetching} onClick={() => setEditId(item.id)}>
-            编辑
-          </Button>
-          <Button danger disabled={list.isFetching} onClick={() => setDeleteId(item.id)}>
-            删除
-          </Button>
-        </Space>
-      ),
-    },
-  ];
-
-  useEffect(() => {
-    if (editId && detail.data?.item) {
-      onEdit(detail.data.item);
-      setEditId("");
-    }
-  }, [detail.data, editId, onEdit]);
+      ...(
+        [
+          { key: "month", label: "月份", width: 110 },
+          { key: "iacuc", label: "IACUC", width: 250 },
+          { key: "roomName", label: "房间", width: 140 },
+          { key: "manager", label: "登记人员", width: 130 },
+          { key: "pi", label: "负责人", width: 140 },
+          { key: "updatedAt", label: "更新时间", width: 190 },
+        ] as const
+      ).map(({ key, label, width }) => ({
+        key,
+        dataIndex: key,
+        width,
+        title: (
+          <QuantityColumnTitle
+            column={key}
+            label={label}
+            params={params}
+            values={filters[key] || []}
+            onSort={() => {
+              setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
+              setPage(1);
+            }}
+            onFilter={(values) => {
+              setFilters((current) => ({ ...current, [key]: values }));
+              setPage(1);
+            }}
+          />
+        ),
+        render: (value: string, item: QuantitySheet) => {
+          if (key === "updatedAt") return formatTime(item.updatedAt);
+          const text = value || "-";
+          if (key === "iacuc") {
+            const projectEndDate = iacucExpiryByCode.get(item.iacuc.trim().toUpperCase());
+            return (
+              <Space size={4} wrap className="quantity-iacuc-cell">
+                <span title={text}>{text}</span>
+                {projectEndDate ? <IacucExpiryTag endDate={projectEndDate} /> : null}
+              </Space>
+            );
+          }
+          return <span title={text}>{text}</span>;
+        },
+      })),
+      {
+        key: "actions",
+        title: "操作",
+        fixed: "right" as const,
+        width: 240,
+        align: "right",
+        render: (_, item) => (
+          <Space aria-label={`${item.iacuc}操作`} className="quantity-saved-row-actions" size={8}>
+            <Button color="blue" variant="filled" disabled={list.isFetching} onClick={() => setViewId(item.id)}>
+              预览
+            </Button>
+            <Button type="primary" disabled={list.isFetching} onClick={() => onEdit(item.id)}>
+              编辑
+            </Button>
+            <Button danger disabled={list.isFetching} onClick={() => setDeleteId(item.id)}>
+              删除
+            </Button>
+          </Space>
+        ),
+      },
+    ],
+    [
+      allFilteredSelected,
+      filters,
+      iacucExpiryByCode,
+      list.isFetching,
+      onEdit,
+      params,
+      selected,
+      selectingAll,
+      toggle,
+      toggleAll,
+      total,
+    ],
+  );
 
   async function printSelected() {
     setExportError("");
@@ -185,7 +199,7 @@ export function SavedQuantitySheets({
         sticky="selection"
         selection={{
           count: selected.length,
-          onClear: selection.clear,
+          onClear: clear,
           pending: selectingAll || printPending || pdfExport.isExporting,
         }}
         context={<Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `共 ${total} 条`}</Tag>}
@@ -243,15 +257,7 @@ export function SavedQuantitySheets({
           aria-busy={list.isFetching}
           aria-label="已保存数量统计表"
         >
-          <DataTable
-            refreshing={list.isFetching}
-            className="quantity-saved-table"
-            columns={columns}
-            dataSource={items}
-            pagination={false}
-            resizeKey="quantity-saved"
-            rowKey="id"
-          />
+          <SavedQuantitySheetTable columns={columns} items={items} refreshing={list.isFetching} />
         </div>
         <Flex align="center" className="quantity-saved-pagination" justify="space-between" wrap>
           <Typography.Text type="secondary">共 {total} 条</Typography.Text>
@@ -295,7 +301,7 @@ export function SavedQuantitySheets({
                     tone="destructive"
                     onClick={async () => {
                       await remove.mutateAsync(deleteId);
-                      selection.toggle(deleteId, false);
+                      toggle(deleteId, false);
                       setDeleteId("");
                     }}
                   >
@@ -314,7 +320,29 @@ export function SavedQuantitySheets({
       </section>
     </>
   );
-}
+});
+
+const SavedQuantitySheetTable = memo(function SavedQuantitySheetTable({
+  columns,
+  items,
+  refreshing,
+}: {
+  columns: TableProps<QuantitySheet>["columns"];
+  items: QuantitySheet[];
+  refreshing: boolean;
+}) {
+  return (
+    <DataTable
+      refreshing={refreshing}
+      className="quantity-saved-table"
+      columns={columns}
+      dataSource={items}
+      pagination={false}
+      resizeKey="quantity-saved"
+      rowKey="id"
+    />
+  );
+});
 
 function QuantityColumnTitle({
   column,
@@ -411,9 +439,8 @@ function QuantityPreviewModal({
 }
 
 function QuantityPreview({ sheet }: { sheet: QuantitySheet }) {
-  return (
-    <div className="quantity-stat-preview" dangerouslySetInnerHTML={{ __html: quantitySheetPagesMarkup([sheet]) }} />
-  );
+  const markup = useMemo(() => quantitySheetPagesMarkup([sheet]), [sheet]);
+  return <div className="quantity-stat-preview" dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
 function IacucExpiryTag({ endDate }: { endDate: string }) {

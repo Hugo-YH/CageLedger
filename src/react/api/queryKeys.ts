@@ -46,6 +46,7 @@ export const queryKeys = {
   iacucStatus: ["iacuc-index", "status"] as const,
   iacucExpiry: ["iacuc-index", "expiry"] as const,
   iacucSearch: (q: string, limit: number) => ["iacuc-index", "search", q, limit] as const,
+  auditEventsRoot: ["audit-events"] as const,
   auditEvents: (filters: Record<string, unknown>) => ["audit-events", filters] as const,
   systemInfo: ["system", "info"] as const,
   systemEnvironment: ["system", "environment"] as const,

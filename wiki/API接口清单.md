@@ -62,12 +62,12 @@
 
 调用模块线索：`src/react/api/administration.ts`。
 
-| 方法   | 路径              | 用途／生命周期       | 鉴权    | 请求 → 响应                               | 保护／读写属性                                     | HTTP入口                                      |
-| ------ | ----------------- | -------------------- | ------- | ----------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
-| GET    | `/api/users`      | 账号列表 / supported | `admin` | 无 → {users}                              | [read](#read) / `read`                             | `server_app/web/read_actions.py:get_users`    |
-| POST   | `/api/users`      | 创建账号 / supported | `admin` | 账号字段 → {user}                         | [entity_create](#entity-create) / `business_write` | `server_app/web/write_actions.py:post_users`  |
-| PUT    | `/api/users/{id}` | 编辑账号 / supported | `admin` | 账号字段、可选 expectedUpdatedAt → {user} | [compat_edit](#compat-edit) / `business_write`     | `server_app/web/write_actions.py:put_user`    |
-| DELETE | `/api/users/{id}` | 删除账号 / supported | `admin` | id → {ok}                                 | [entity_delete](#entity-delete) / `business_write` | `server_app/web/write_actions.py:delete_user` |
+| 方法   | 路径              | 用途／生命周期       | 鉴权    | 请求 → 响应                               | 保护／读写属性                                 | HTTP入口                                      |
+| ------ | ----------------- | -------------------- | ------- | ----------------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| GET    | `/api/users`      | 账号列表 / supported | `admin` | 无 → {users}                              | [read](#read) / `read`                         | `server_app/web/read_actions.py:get_users`    |
+| POST   | `/api/users`      | 创建账号 / supported | `admin` | 账号字段 → {user}                         | [user_create](#user-create) / `business_write` | `server_app/web/write_actions.py:post_users`  |
+| PUT    | `/api/users/{id}` | 编辑账号 / supported | `admin` | 账号字段、可选 expectedUpdatedAt → {user} | [user_edit](#user-edit) / `business_write`     | `server_app/web/write_actions.py:put_user`    |
+| DELETE | `/api/users/{id}` | 删除账号 / supported | `admin` | id → {ok}                                 | [user_delete](#user-delete) / `business_write` | `server_app/web/write_actions.py:delete_user` |
 
 ### IACUC与负责人
 
@@ -714,3 +714,27 @@
 - 事务：原服务端解析与输入限制；不保存接收批次。
 - 审计：原诊断及使用信息规则。
 - 读写属性：remote_read。
+
+### user-create
+
+- 版本：创建不要求编辑版本。
+- 重放：用户名唯一；重复返回409，不新增成功审计。
+- 事务：账号写入、原会话清理及审计同一事务；失败一起回滚。
+- 审计：user.created记录操作者和新账号公开字段；不记录密码或哈希。
+- 读写属性：business_write。
+
+### user-edit
+
+- 版本：可选 expectedUpdatedAt；缺省兼容，提供后拒绝过期。
+- 重放：成功保存各记录一次；不是requestId幂等协议。
+- 事务：账号写入、原会话清理及审计同一事务；失败一起回滚。
+- 审计：user.updated记录实际前后公开字段、密码重置标记；自改仅联系电话。
+- 读写属性：business_write。
+
+### user-delete
+
+- 版本：原删除入口不要求 expectedUpdatedAt。
+- 重放：不存在返回404；禁止删除当前账号。
+- 事务：账号写入、原会话清理及审计同一事务；失败一起回滚。
+- 审计：user.deleted记录操作者和删除前公开字段；历史审计保留。
+- 读写属性：business_write。

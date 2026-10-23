@@ -21,10 +21,8 @@ export interface SettlementColumnsOptions {
   total: number;
   params: SettlementCandidateListParams;
   filters: Record<string, string[]>;
-  previewing: boolean;
   onToggleAll: () => void;
   onToggle: (candidate: SettlementCandidate, checked: boolean) => void;
-  onPreview: (candidate: SettlementCandidate) => void;
   onSort: (column: NonNullable<SettlementCandidateListParams["sortKey"]>) => void;
   onFilter: (column: string, values: string[]) => void;
 }
@@ -38,10 +36,8 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
     total,
     params,
     filters,
-    previewing,
     onToggleAll,
     onToggle,
-    onPreview,
     onSort,
     onFilter,
   } = options;
@@ -122,14 +118,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
       title: "操作",
       fixed: "right" as const,
       width: 144,
-      render: (_, candidate) => (
-        <SettlementCandidateActions
-          candidate={candidate}
-          previewing={previewing}
-          disabled={disabled}
-          onPreview={() => onPreview(candidate)}
-        />
-      ),
+      render: (_, candidate) => <SettlementCandidateActions candidate={candidate} disabled={disabled} />,
     },
   ];
 }

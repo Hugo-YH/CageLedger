@@ -13,7 +13,7 @@ export function useCopyProjectPeople() {
   const { message } = App.useApp();
   const latest = useLatestRequest();
   const busy = useRef(false);
-  const [copyingId, setCopyingId] = useState("");
+  const [progress, setProgress] = useState<{ id: string; phase: "querying" | "copying" } | null>(null);
 
   async function copy(item: Pick<IntakeBatch, "id" | "iacuc">) {
     if (busy.current) return;
@@ -23,7 +23,7 @@ export function useCopyProjectPeople() {
       return;
     }
     busy.current = true;
-    setCopyingId(item.id);
+    setProgress({ id: item.id, phase: "querying" });
     const isCurrent = latest.begin();
     try {
       const result = await client.fetchQuery({
@@ -46,6 +46,7 @@ export function useCopyProjectPeople() {
         throw new Error("项目汇总表中有多条匹配记录，请核对负责人信息后再复制。");
       }
       const text = [...texts][0];
+      setProgress({ id: item.id, phase: "copying" });
       const copied = await copyTextToClipboard(text);
       if (!isCurrent()) return;
       if (copied) void message.success(`已复制：${text}`);
@@ -56,9 +57,9 @@ export function useCopyProjectPeople() {
       }
     } finally {
       busy.current = false;
-      if (isCurrent()) setCopyingId("");
+      if (isCurrent()) setProgress(null);
     }
   }
 
-  return { copy, copyingId };
+  return { copy, copyingId: progress?.id ?? "", phase: progress?.phase ?? null };
 }
