@@ -101,6 +101,19 @@ graph TD
 - 结算Excel保留 `server_app/domains/billing/settlement_xlsx.py` 的工作簿入口及原辅助函数兼容导出；列身份、逐日投影和公式位于 `settlement_xlsx_model.py`，单表与自定义附表版式位于 `settlement_xlsx_layout.py`。两类费用的共用导出仍由 `settlement_export.py` 分流，渲染层不读取数据库、不重新计费。
 - HTTP路由由 `server_app/web/router_registry.py` 装配，领域声明位于 `route_definitions/`；原HTTP动作与纯路径匹配器分别保留。路由登记不承担领域权限、金额计算、事务和审计。
 
+## 热点拆分后的职责落点
+
+- 巡检service保留用例编排，`inspection_repository.py`负责行读写与投影，`inspection_rules.py`负责可见性、权限和校验；原service函数入口保持。
+- 报销台账的核销命令、附件和共用校验分别位于`allocation_commands.py`、`claim_attachments.py`、`claim_rules.py`；service继续持有单据、应收与历史迁移编排。
+- 候选快照按groups/model/queries/storage划分，流程repository按queries/projections/writes划分；原`billing_candidates.py`和`billing_workflows.py`保留兼容导出。
+- GET适配按领域进入`read_*_actions.py`，`ReadActionsMixin`显式组合原动作接口。API清单静态解析其唯一实际owner，仍拒绝缺失或重复动作。
+- `base_schema.py`按原顺序调用五个领域DDL helper，迁移后处理、提交和默认管理员初始化仍由外层编排，不在helper内增加事务边界。
+- 服务端PDF入口`documents.py`保留兼容导出，数量表、结算模型/版式和基础文档格式各自独立；浏览器结算入口`settlement.ts`依赖`settlementModel.ts`、`settlementPagination.ts`和`settlementGroupCells.ts`，两端核算和输出契约保持。
+- 巡检列表按记录、异常、详情拆分；已存数量表保持原memo和状态所有权，表格/列标题/预览独立；笼位四个职责组件使用同一共享日期值，原命名入口保持。
+- 巡检样式按录入证据、记录详情、桌面组件、移动组件及目录编辑顺序展开，在style-ownership登记；反馈测试共用非TestCase夹具，客户端与HTTP测试各自发现，保留旧共享fake导出。
+
+完整逐项对照及验证边界见[本轮验收记录](../archives/hotspot-decomposition-2026-10-24/acceptance.md)。
+
 ## 验收标准
 
 - 页面组件通过 typed API hooks 获取服务端数据。

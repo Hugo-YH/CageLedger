@@ -2,13 +2,14 @@
 
 本目录保存已完成迁移和规范化项目的过程资料。当前开发依据是仓库代码、根目录 `AGENTS.md`、`docs/contracts/` 和 `wiki/`；归档内容用于追溯历史决策和验收证据。
 
-| 任务 | 时间 | 说明 | 进度记录 |
-|:-----|:-----|:-----|:---------|
-| CageLedger Standardization | 2026-05-20 至 2026-05-21 | 完成前后端边界、契约、验证和发布流程规范化 | [MASTER](./cageledger-standardization-2026/progress/MASTER.md) |
-| CageLedger React Performance | 2026-06-27 至 2026-06-28 | 完成 React 19、Vite 8、TypeScript、数据查询和发布链性能升级 | [MASTER](./cageledger-react-performance/progress/MASTER.md) |
-| CageLedger Project Modularization | 2026-06-30 至 2026-07-01 | 完成后端领域、React 页面、CSS、脚本、测试和架构门禁拆分 | [MASTER](./project-modularization/progress/MASTER.md) |
-| legacy.py 尺寸治理 | 2026-08-09 | 提取 multipart 解析工具，恢复兼容入口尺寸门禁 | [MASTER](./legacy-size-governance/progress/MASTER.md) |
-| Ant Design UI 审计与整改 | 2026-08-14 至 2026-08-16 | 阶段 1 已完成，持续收敛项转入日常 UI 迭代 | [MASTER](./ant-design-ui-audit/progress/MASTER.md) |
-| legacy.py 持续拆分 | 2026-08-16 | 完成 persistence、state、业务事务、HTTP composition 与兼容入口拆分，legacy 收敛为 101 行 | [MASTER](./legacy-decomposition/progress/MASTER.md) |
-| 系统状态页重建 | 2026-08-23 | 将“关于系统”重建为管理员运行状态页，补齐性能指标、权限、响应式和无障碍回归 | [MASTER](./system-status-page-rebuild/progress/MASTER.md) |
-| 前端性能、Ant Design 与交互升级 | 2026-08-31 至 2026-09-04 | 完成查询、表格、主题、响应式、异步反馈、动效、可访问性与生产启动验收 | [MASTER](./frontend-performance-ui/progress/MASTER.md) |
+| 任务                              | 时间                     | 说明                                                                                     | 进度记录                                                        |
+| :-------------------------------- | :----------------------- | :--------------------------------------------------------------------------------------- | :-------------------------------------------------------------- |
+| CageLedger Standardization        | 2026-05-20 至 2026-05-21 | 完成前后端边界、契约、验证和发布流程规范化                                               | [MASTER](./cageledger-standardization-2026/progress/MASTER.md)  |
+| CageLedger React Performance      | 2026-06-27 至 2026-06-28 | 完成 React 19、Vite 8、TypeScript、数据查询和发布链性能升级                              | [MASTER](./cageledger-react-performance/progress/MASTER.md)     |
+| CageLedger Project Modularization | 2026-06-30 至 2026-07-01 | 完成后端领域、React 页面、CSS、脚本、测试和架构门禁拆分                                  | [MASTER](./project-modularization/progress/MASTER.md)           |
+| legacy.py 尺寸治理                | 2026-08-09               | 提取 multipart 解析工具，恢复兼容入口尺寸门禁                                            | [MASTER](./legacy-size-governance/progress/MASTER.md)           |
+| Ant Design UI 审计与整改          | 2026-08-14 至 2026-08-16 | 阶段 1 已完成，持续收敛项转入日常 UI 迭代                                                | [MASTER](./ant-design-ui-audit/progress/MASTER.md)              |
+| legacy.py 持续拆分                | 2026-08-16               | 完成 persistence、state、业务事务、HTTP composition 与兼容入口拆分，legacy 收敛为 101 行 | [MASTER](./legacy-decomposition/progress/MASTER.md)             |
+| 系统状态页重建                    | 2026-08-23               | 将“关于系统”重建为管理员运行状态页，补齐性能指标、权限、响应式和无障碍回归               | [MASTER](./system-status-page-rebuild/progress/MASTER.md)       |
+| 前端性能、Ant Design 与交互升级   | 2026-08-31 至 2026-09-04 | 完成查询、表格、主题、响应式、异步反馈、动效、可访问性与生产启动验收                     | [MASTER](./frontend-performance-ui/progress/MASTER.md)          |
+| 剩余14处大模块拆分                | 2026-10-23 至 2026-10-24 | 14项职责拆分、完整回归与性能/SQLite复验；保留PDF退出风险                                 | [MASTER](./hotspot-decomposition-2026-10-24/progress/MASTER.md) |
