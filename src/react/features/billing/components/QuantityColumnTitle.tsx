@@ -26,6 +26,8 @@ export function QuantityColumnTitle({
       values={values}
       options={options.data?.items || []}
       loading={options.isFetching}
+      error={options.isError ? "无法读取筛选选项，请重试" : undefined}
+      onRetry={() => void options.refetch()}
       onOpenChange={setOpen}
       onSort={onSort}
       onFilter={onFilter}

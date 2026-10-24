@@ -1,7 +1,7 @@
 import { ActionIcon } from "./ui/ActionIcon";
 import { Alert, Button, Checkbox, Input, Popover, Skeleton, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ComponentRef } from "react";
 
 export interface TableFilterOption {
   value: string;
@@ -38,7 +38,29 @@ export function FilterableColumnTitle({
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState(values);
   const rootRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<ComponentRef<typeof Button>>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(false);
+  const panelId = useId();
   const [inMeasureRow, setInMeasureRow] = useState(false);
+  const closeAndRestoreFocus = useCallback(() => {
+    openRef.current = false;
+    setOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || !(event.target instanceof Node) || !panelRef.current?.contains(event.target))
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeAndRestoreFocus();
+    };
+    document.addEventListener("keydown", onEscape, true);
+    return () => document.removeEventListener("keydown", onEscape, true);
+  }, [open, closeAndRestoreFocus]);
 
   useLayoutEffect(() => {
     const nextInMeasureRow = Boolean(rootRef.current?.closest(".ant-table-measure-row"));
@@ -67,12 +89,22 @@ export function FilterableColumnTitle({
       setPending(values);
       setSearch("");
     }
+    openRef.current = next;
     setOpen(next);
   }
 
   const content = (
-    <div className="table-filter-panel" data-ui="data-table-filter" role="group" aria-label={`筛选${label}选项`}>
+    <div
+      ref={panelRef}
+      id={panelId}
+      className="table-filter-panel"
+      data-ui="data-table-filter"
+      role="group"
+      aria-label={`筛选${label}选项`}
+      aria-busy={loading}
+    >
       <Input.Search
+        aria-label={`搜索${label}筛选选项`}
         allowClear
         placeholder="搜索当前列"
         value={search}
@@ -84,7 +116,10 @@ export function FilterableColumnTitle({
         onChange={(nextValues) => setPending(nextValues.map(String))}
       >
         {loading ? (
-          <Skeleton active paragraph={{ rows: 3 }} title={false} />
+          <div role="status" aria-label={`${label}筛选选项正在加载`}>
+            <span className="app-visually-hidden">{label}筛选选项正在加载</span>
+            <Skeleton active paragraph={{ rows: 3 }} title={false} />
+          </div>
         ) : error ? (
           <Alert
             type="error"
@@ -107,7 +142,9 @@ export function FilterableColumnTitle({
             </Checkbox>
           ))
         ) : (
-          <p className="muted">当前列没有可选项。</p>
+          <p className="muted" role="status">
+            {search.trim() ? "没有匹配的筛选项，请调整搜索内容。" : "当前列没有可选项。"}
+          </p>
         )}
       </Checkbox.Group>
       <Space className="table-filter-actions">
@@ -118,8 +155,9 @@ export function FilterableColumnTitle({
           size="small"
           type="primary"
           onClick={() => {
+            if (!openRef.current) return;
+            closeAndRestoreFocus();
             onFilter(pending);
-            setOpen(false);
           }}
         >
           应用
@@ -152,12 +190,15 @@ export function FilterableColumnTitle({
           onOpenChange={setPopoverOpen}
         >
           <Button
+            ref={triggerRef}
             className="table-filter-button"
             icon={<FilterOutlined />}
             size="small"
             type="text"
             aria-label={`筛选${label}`}
             aria-pressed={values.length > 0}
+            aria-expanded={open}
+            aria-controls={open ? panelId : undefined}
             onClick={(event) => event.stopPropagation()}
           />
         </Popover>

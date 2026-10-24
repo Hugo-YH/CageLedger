@@ -80,7 +80,9 @@ export function LedgerColumnTitle({
     <FilterableColumnTitle
       filterable={filterable}
       label={label}
-      loading={optionsQuery.isFetching}
+      loading={!localOptions && optionsQuery.isFetching}
+      error={!localOptions && optionsQuery.isError ? "无法读取筛选选项，请重试" : undefined}
+      onRetry={() => void optionsQuery.refetch()}
       options={options}
       values={values}
       onFilter={onFilter}

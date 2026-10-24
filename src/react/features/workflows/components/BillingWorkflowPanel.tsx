@@ -49,6 +49,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     columnFilters: filters,
   });
   const advance = useAdvanceWorkflow();
+  const rowInteractionBlocked = query.isPlaceholderData || query.isError;
   const lockAction = useAsyncFormAction("结算流程操作失败，请重试");
   const batchAdvance = useBatchAdvanceWorkflow();
   const [registerTarget, setRegisterTarget] = useState<BillingWorkflow | null>(null);
@@ -102,7 +103,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   }, [allLockableSelected, lockableItems]);
 
   async function lockSelected() {
-    if (lockAction.pending || batchLocking) return;
+    if (lockAction.pending || batchLocking || rowInteractionBlocked) return;
     const targets = selectedLockable
       .map((id) => selectedRows.current.get(id))
       .filter((item): item is BillingWorkflow => Boolean(item));
@@ -174,16 +175,19 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   const runLockAction = lockAction.run;
   const advanceWorkflow = advance.mutateAsync;
   const onAdvance = useCallback(
-    (payload: WorkflowAdvancePayload) => runLockAction(() => advanceWorkflow(payload)),
-    [runLockAction, advanceWorkflow],
+    async (payload: WorkflowAdvancePayload) => {
+      if (rowInteractionBlocked) return;
+      await runLockAction(() => advanceWorkflow(payload));
+    },
+    [runLockAction, advanceWorkflow, rowInteractionBlocked],
   );
   const lockState = useMemo(
     () => ({
-      pending: batchLocking || lockAction.pending,
+      pending: batchLocking || lockAction.pending || rowInteractionBlocked,
       activeId: lockAction.pending ? advance.variables?.workflowId || "" : "",
       onAdvance,
     }),
-    [batchLocking, lockAction.pending, advance.variables?.workflowId, onAdvance],
+    [batchLocking, lockAction.pending, advance.variables?.workflowId, onAdvance, rowInteractionBlocked],
   );
 
   return (
@@ -244,7 +248,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
               <Button
                 icon={<LockOutlined aria-hidden />}
                 loading={batchLocking}
-                disabled={lockAction.pending || query.isPlaceholderData}
+                disabled={lockAction.pending || rowInteractionBlocked}
                 type="primary"
               >
                 批量锁定
@@ -277,6 +281,7 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
             user={user}
             items={items}
             refreshing={query.isFetching}
+            readOnly={rowInteractionBlocked}
             density={density}
             filters={filters}
             selectedLockable={selectedLockable}

@@ -7,6 +7,7 @@ import { WorkflowLockButton } from "./WorkflowLockControls";
 /** Stable three-slot presentation; state transitions still belong to the parent service hook. */
 export function WorkflowTableActions({
   item,
+  disabled = false,
   canLock,
   canWithdraw,
   onRegister,
@@ -14,6 +15,7 @@ export function WorkflowTableActions({
   onRevoke,
 }: {
   item: BillingWorkflow;
+  disabled?: boolean;
   canLock: boolean;
   canWithdraw: boolean;
   onRegister: (item: BillingWorkflow) => void;
@@ -28,7 +30,7 @@ export function WorkflowTableActions({
     <WorkflowRowActions
       primary={
         sent ? (
-          <Button type="primary" onClick={() => onRegister(item)}>
+          <Button type="primary" disabled={disabled} onClick={() => onRegister(item)}>
             登记
           </Button>
         ) : (
@@ -39,6 +41,7 @@ export function WorkflowTableActions({
         !locked && canWithdraw ? (
           <Button
             danger
+            disabled={disabled}
             onClick={() => onRevoke({ workflow: item, toStatus: sent ? "statement_generated" : "statement_sent" })}
           >
             撤回

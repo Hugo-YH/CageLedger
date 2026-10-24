@@ -204,8 +204,9 @@ export function useAdvanceWorkflow() {
 }
 
 export function useBillingWorkflows(params: WorkflowListParams) {
-  return useQuery({
+  return useQuery<PagedResponse<BillingWorkflow>>({
     queryKey: queryKeys.workflows({ ...params }),
+    placeholderData: (previous) => previous,
     queryFn: ({ signal }) =>
       requestJson<PagedResponse<BillingWorkflow>>(
         `/api/billing-workflows?${billingWorkflowSearch(params).toString()}`,

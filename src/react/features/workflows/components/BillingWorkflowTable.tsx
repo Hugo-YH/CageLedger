@@ -25,6 +25,7 @@ export const BillingWorkflowTable = memo(function BillingWorkflowTable({
   user,
   items,
   refreshing,
+  readOnly = false,
   density,
   filters,
   selectedLockable,
@@ -41,6 +42,7 @@ export const BillingWorkflowTable = memo(function BillingWorkflowTable({
   user: SessionUser;
   items: BillingWorkflow[];
   refreshing: boolean;
+  readOnly?: boolean;
   density: ListDensity;
   filters: Record<string, string[]>;
   selectedLockable: string[];
@@ -168,6 +170,7 @@ export const BillingWorkflowTable = memo(function BillingWorkflowTable({
       render: (_: unknown, item: BillingWorkflow) => (
         <WorkflowTableActions
           item={item}
+          disabled={readOnly}
           canLock={Boolean(user.billingLockAllowed)}
           canWithdraw={item.canWithdraw ?? user.role === "admin"}
           onRegister={onRegister}
@@ -179,7 +182,7 @@ export const BillingWorkflowTable = memo(function BillingWorkflowTable({
   ];
 
   return (
-    <div className="ant-table-region" role="region" aria-label="结算流程表格" tabIndex={0}>
+    <div className="ant-table-region" role="region" aria-label="结算流程表格" aria-busy={refreshing} tabIndex={0}>
       <DataTable
         refreshing={refreshing}
         className="antd-data-table reimbursement-table"

@@ -302,6 +302,8 @@ function IntakeColumnTitle({
     <FilterableColumnTitle
       label={label}
       loading={options.isFetching}
+      error={options.isError ? "无法读取筛选选项，请重试" : undefined}
+      onRetry={() => void options.refetch()}
       options={displayOptions}
       values={values}
       onFilter={onFilter}
