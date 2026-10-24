@@ -12,7 +12,7 @@
 
 - [x] H01 `server_app/domains/animal_management/service.py`：目标验证记录见下方批次，最终完整验收待执行。
 - [x] H02 `server_app/domains/reimbursement_ledger/service.py`：目标验证记录见下方批次，最终完整验收待执行。
-- [ ] H03 `server_app/pdf/documents.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H03 `server_app/pdf/documents.py`：目标验证记录见下方批次，最终完整验收待执行。
 - [x] H04 `server_app/persistence/base_schema.py`：目标验证记录见下方批次，最终完整验收待执行。
 - [x] H05 `server_app/repositories/billing_candidates.py`：目标验证记录见下方批次，最终完整验收待执行。
 - [x] H06 `server_app/repositories/billing_workflows.py`：目标验证记录见下方批次，最终完整验收待执行。
@@ -20,8 +20,8 @@
 - [ ] H08 `src/react/features/animal-management/InspectionLists.tsx`：目标验证记录见下方批次，最终完整验收待执行。
 - [ ] H09 `src/react/features/billing/components/SavedQuantitySheets.tsx`：目标验证记录见下方批次，最终完整验收待执行。
 - [ ] H10 `src/react/features/cages/components/CageWorkspaceComponents.tsx`：目标验证记录见下方批次，最终完整验收待执行。
-- [ ] H11 `src/react/print/printTemplates.test.ts`：目标验证记录见下方批次，最终完整验收待执行。
-- [ ] H12 `src/react/print/settlement.ts`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H11 `src/react/print/printTemplates.test.ts`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H12 `src/react/print/settlement.ts`：目标验证记录见下方批次，最终完整验收待执行。
 - [ ] H13 `src/styles/features/animal-management.css`：目标验证记录见下方批次，最终完整验收待执行。
 - [ ] H14 `tests/test_feedback.py`：目标验证记录见下方批次，最终完整验收待执行。
 
@@ -38,3 +38,5 @@
 - 实现期装饰器、缩进、CSS边界、格式检查和回环端口sandbox失败均保留于外部hotspot-evidence；无断言/阈值放宽。
 
 B1：6项生产后端拆分及静态API owner适配已完成目标业务154项、API清单10项与架构检查；独立review未见生产阻断。迁移和事务语义按原体保留。
+
+B2：3项前后端打印职责/测试拆分完成；47项后端与原27项前端打印测试通过，原27项测试名/正文、24个TS声明及全部Python函数保持等价。
