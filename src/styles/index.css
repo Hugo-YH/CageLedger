@@ -16,6 +16,10 @@
 @import url("./features/billing.css");
 @import url("./features/quantity-entry-form.css");
 @import url("./features/animal-management.css");
+@import url("./features/animal-inspection-records.css");
+@import url("./features/animal-inspection-antd.css");
+@import url("./features/animal-inspection-mobile.css");
+@import url("./features/animal-inspection-catalog.css");
 @import url("./features/cages.css");
 @import url("./features/workflow.css");
 @import url("./features/administration.css");

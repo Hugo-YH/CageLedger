@@ -3,23 +3,23 @@ import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type
 import { Modal } from "../../../components/ui/Modal";
 import { memo, useMemo, useState } from "react";
 import { iacucExpiryStatus } from "../../../../domain/iacucValidity";
-
 import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
 import { useIacucExpiry } from "../../../api/iacuc";
 import {
   fetchQuantitySheetsForPrint,
   useDeleteQuantitySheet,
-  useQuantityFilterOptions,
   useQuantitySheetDetail,
   useQuantitySheets,
 } from "../../../api/quantitySheets";
-import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
-import { ActionButton, CommandBar, DataTable, ModalPresence } from "../../../components/ui";
+import { ActionButton, CommandBar, ModalPresence } from "../../../components/ui";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton } from "../../../components/WorkspaceUi";
-import { openQuantitySheetsPrint, quantitySheetPagesMarkup } from "../../../print/quantitySheets";
+import { openQuantitySheetsPrint } from "../../../print/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
 import { useQuantitySheetSelection } from "../hooks/useQuantitySheetSelection";
+import { SavedQuantitySheetTable } from "./SavedQuantitySheetTable";
+import { QuantityColumnTitle } from "./QuantityColumnTitle";
+import { QuantityPreviewModal } from "./QuantityPreviewModal";
 
 const EMPTY_SHEETS: QuantitySheet[] = [];
 
@@ -321,127 +321,6 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
     </>
   );
 });
-
-const SavedQuantitySheetTable = memo(function SavedQuantitySheetTable({
-  columns,
-  items,
-  refreshing,
-}: {
-  columns: TableProps<QuantitySheet>["columns"];
-  items: QuantitySheet[];
-  refreshing: boolean;
-}) {
-  return (
-    <DataTable
-      refreshing={refreshing}
-      className="quantity-saved-table"
-      columns={columns}
-      dataSource={items}
-      pagination={false}
-      resizeKey="quantity-saved"
-      rowKey="id"
-    />
-  );
-});
-
-function QuantityColumnTitle({
-  column,
-  label,
-  params,
-  values,
-  onSort,
-  onFilter,
-}: {
-  column: string;
-  label: string;
-  params: QuantitySheetListParams;
-  values: string[];
-  onSort: () => void;
-  onFilter: (values: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const options = useQuantityFilterOptions(params, column, open);
-  return (
-    <FilterableColumnTitle
-      label={label}
-      values={values}
-      options={options.data?.items || []}
-      loading={options.isFetching}
-      onOpenChange={setOpen}
-      onSort={onSort}
-      onFilter={onFilter}
-    />
-  );
-}
-
-function QuantityPreviewModal({
-  sheet,
-  loading,
-  onClose,
-}: {
-  sheet?: QuantitySheet;
-  loading: boolean;
-  onClose: () => void;
-}) {
-  const [exportError, setExportError] = useState("");
-  const pdfExport = usePdfExport();
-
-  async function exportSheet() {
-    if (!sheet) return;
-    setExportError("");
-    try {
-      await pdfExport.exportPdf({ kind: "quantity_sheet", ids: [sheet.id] });
-    } catch (error) {
-      setExportError(error instanceof Error ? error.message : "PDF 导出失败");
-    }
-  }
-
-  return (
-    <Modal
-      className="quantity-react-preview"
-      footer={
-        <Space wrap>
-          <ActionButton
-            className="info-button"
-            disabled={!sheet}
-            onClick={() => sheet && openQuantitySheetsPrint([sheet])}
-          >
-            打印
-          </ActionButton>
-          <ActionButton
-            className="info-button"
-            disabled={!sheet || pdfExport.isExporting}
-            loading={pdfExport.isExporting}
-            onClick={() => void exportSheet()}
-          >
-            {pdfExport.isExporting ? "正在生成…" : "导出 PDF"}
-          </ActionButton>
-          <ActionButton onClick={onClose}>关闭</ActionButton>
-        </Space>
-      }
-      onCancel={onClose}
-      open
-      title={sheet ? `${sheet.month} · ${sheet.iacuc}` : "预览数量统计表"}
-      width="min(1120px, calc(100vw - 32px))"
-    >
-      {pdfExport.isExporting || exportError ? (
-        <div className="react-inline-notice" role="status" aria-live="polite">
-          {exportError || "PDF 正在后台生成，完成后会自动下载。"}
-        </div>
-      ) : null}
-      {loading || !sheet ? (
-        <PageSkeleton compact label="数量统计表预览" rows={4} variant="detail" />
-      ) : (
-        <QuantityPreview sheet={sheet} />
-      )}
-    </Modal>
-  );
-}
-
-function QuantityPreview({ sheet }: { sheet: QuantitySheet }) {
-  const markup = useMemo(() => quantitySheetPagesMarkup([sheet]), [sheet]);
-  return <div className="quantity-stat-preview" dangerouslySetInnerHTML={{ __html: markup }} />;
-}
 
 function IacucExpiryTag({ endDate }: { endDate: string }) {
   const { color, label } = iacucExpiryStatus(endDate);

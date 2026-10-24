@@ -14,6 +14,10 @@
     "src/styles/features/billing.css",
     "src/styles/features/quantity-entry-form.css",
     "src/styles/features/animal-management.css",
+    "src/styles/features/animal-inspection-records.css",
+    "src/styles/features/animal-inspection-antd.css",
+    "src/styles/features/animal-inspection-mobile.css",
+    "src/styles/features/animal-inspection-catalog.css",
     "src/styles/features/cages.css",
     "src/styles/features/workflow.css",
     "src/styles/features/administration.css",
@@ -76,7 +80,7 @@
       "selectorPrefixes": [".react-quantity-layout"]
     },
     "src/styles/features/animal-management.css": {
-      "owner": "animal-management",
+      "owner": "inspection-entry-and-evidence",
       "status": "complete",
       "selectorPrefixes": [".inspection-"],
       "scopeRoots": [
@@ -123,6 +127,54 @@
       "owner": "technical-services",
       "status": "complete",
       "selectorPrefixes": [".technical-service-"]
+    },
+    "src/styles/features/animal-inspection-records.css": {
+      "owner": "inspection-records-and-details",
+      "status": "complete",
+      "selectorPrefixes": [".inspection-"],
+      "scopeRoots": [
+        "[data-feature=\"animal-management\"]",
+        ".animal-management-workspace",
+        ".inspection-finding-modal",
+        ".inspection-detail-modal",
+        ".inspection-image-dialog"
+      ]
+    },
+    "src/styles/features/animal-inspection-antd.css": {
+      "owner": "inspection-desktop-components",
+      "status": "complete",
+      "selectorPrefixes": [".inspection-"],
+      "scopeRoots": [
+        "[data-feature=\"animal-management\"]",
+        ".animal-management-workspace",
+        ".inspection-finding-modal",
+        ".inspection-detail-modal",
+        ".inspection-image-dialog"
+      ]
+    },
+    "src/styles/features/animal-inspection-mobile.css": {
+      "owner": "inspection-mobile-components",
+      "status": "complete",
+      "selectorPrefixes": [".inspection-"],
+      "scopeRoots": [
+        "[data-feature=\"animal-management\"]",
+        ".animal-management-workspace",
+        ".inspection-finding-modal",
+        ".inspection-detail-modal",
+        ".inspection-image-dialog"
+      ]
+    },
+    "src/styles/features/animal-inspection-catalog.css": {
+      "owner": "inspection-catalog-editor",
+      "status": "complete",
+      "selectorPrefixes": [".inspection-"],
+      "scopeRoots": [
+        "[data-feature=\"animal-management\"]",
+        ".animal-management-workspace",
+        ".inspection-finding-modal",
+        ".inspection-detail-modal",
+        ".inspection-image-dialog"
+      ]
     }
   },
   "componentFamilies": {

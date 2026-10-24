@@ -1,0 +1,497 @@
+.animal-management-workspace .workspace-body {
+  gap: 16px;
+}
+
+.animal-management-workspace .animal-ant-card.ant-card,
+.animal-management-workspace .inspection-list-panel.ant-card,
+.animal-management-workspace .inspection-standards-panel.ant-card {
+  border: 1px solid var(--surface-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.animal-management-workspace .animal-ant-card > .ant-card-head,
+.animal-management-workspace .inspection-list-panel > .ant-card-head,
+.animal-management-workspace .inspection-standards-panel > .ant-card-head {
+  min-height: 52px;
+  padding: 0 24px;
+  border-bottom-color: var(--surface-strong);
+  background: var(--surface);
+}
+
+.animal-management-workspace .animal-ant-card > .ant-card-head .ant-card-head-title,
+.animal-management-workspace .inspection-list-panel > .ant-card-head .ant-card-head-title,
+.animal-management-workspace .inspection-standards-panel > .ant-card-head .ant-card-head-title {
+  padding: 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.animal-management-workspace .inspection-context-panel > .ant-card-body,
+.animal-management-workspace .inspection-list-panel > .ant-card-body,
+.animal-management-workspace .inspection-standards-panel > .ant-card-body {
+  padding: 20px 24px;
+}
+
+.animal-management-workspace .inspection-context-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.animal-management-workspace .inspection-room-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.animal-management-workspace .inspection-room-picker .ant-form-item {
+  margin-bottom: 0;
+}
+
+.animal-management-workspace .inspection-room-select {
+  width: 100%;
+}
+
+.animal-management-workspace .inspection-module-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 12px;
+}
+
+.animal-management-workspace .inspection-module-choice.ant-card {
+  display: block;
+  min-height: 48px;
+  padding: 0;
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.animal-management-workspace .inspection-module-choice.ant-card.is-selected {
+  border-color: var(--app-primary);
+  background: var(--primary-soft);
+}
+
+.animal-management-workspace .inspection-module-choice .ant-card-body {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.animal-management-workspace .inspection-module-choice-content {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+.animal-management-workspace .inspection-module-choice .ant-checkbox-wrapper {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.animal-management-workspace .inspection-module-choice .ant-checkbox + span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animal-management-workspace .inspection-module-choice .help-tooltip-anchor {
+  flex: none;
+  margin-left: auto;
+}
+
+.animal-management-workspace .inspection-module-card > .ant-card-head {
+  min-height: 48px;
+  border-left: 0;
+  background: var(--surface);
+}
+
+.animal-management-workspace .inspection-module-card[data-module] {
+  border-color: var(--surface-strong);
+  background: var(--surface);
+}
+
+.animal-management-workspace .inspection-module-card[data-module="basicAssessment"] {
+  --inspection-module-accent: var(--primary);
+  --inspection-module-border: var(--primary-soft);
+  --inspection-module-surface: var(--primary-soft);
+}
+
+.animal-management-workspace .inspection-module-card[data-module="advancedAssessment"] {
+  --inspection-module-accent: var(--amber);
+  --inspection-module-border: var(--warning-line);
+  --inspection-module-surface: var(--warning-soft);
+}
+
+.animal-management-workspace .inspection-module-card[data-module="abnormalAnimalAssessment"] {
+  --inspection-module-accent: var(--danger);
+  --inspection-module-border: var(--danger-line);
+  --inspection-module-surface: var(--danger-soft);
+}
+
+.animal-management-workspace .inspection-module-card[data-module] > .ant-card-head {
+  background: var(--surface);
+}
+
+.animal-management-workspace .inspection-module-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animal-management-workspace .inspection-module-card-title > span {
+  font-weight: 600;
+}
+
+.animal-management-workspace .inspection-module-choice .ant-tag,
+.animal-management-workspace .inspection-module-card-title .ant-tag {
+  flex: none;
+  margin-inline-end: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.animal-management-workspace .inspection-section {
+  padding: 0;
+  border-top: 1px solid var(--surface-strong);
+  background: var(--surface);
+}
+
+.animal-management-workspace .inspection-section:first-child {
+  border-top: 0;
+}
+
+.animal-management-workspace .inspection-section + .inspection-section {
+  border-top: 1px solid var(--surface-strong);
+}
+
+.animal-management-workspace .inspection-section.has-findings {
+  background: transparent;
+}
+
+.animal-management-workspace .inspection-section-collapse.ant-collapse {
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.animal-management-workspace .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+  padding: 8px 16px 8px 32px;
+}
+
+.animal-management-workspace
+  .inspection-section-collapse
+  > .ant-collapse-item
+  > .ant-collapse-content
+  > .ant-collapse-content-box {
+  padding: 0;
+}
+
+.animal-management-workspace .inspection-section-label-main {
+  align-items: center;
+  gap: 8px;
+}
+
+.animal-management-workspace .inspection-section-label-main .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.animal-management-workspace .inspection-section-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.animal-management-workspace .inspection-section-label > .inspection-all-normal {
+  margin-left: auto;
+  padding-inline: 4px;
+}
+
+.animal-management-workspace .inspection-subsection {
+  padding: 8px 20px 4px 24px;
+}
+
+.animal-management-workspace .inspection-subsection-collapse.ant-collapse {
+  border: 0;
+  background: transparent;
+}
+
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-item {
+  border-bottom: 0;
+}
+
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-header {
+  min-height: 32px;
+  padding: 8px 0;
+  color: var(--muted);
+}
+
+.animal-management-workspace .inspection-subsection-label {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.animal-management-workspace .inspection-subsection-label h4 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-content {
+  border-top: 0;
+  background: transparent;
+}
+
+.animal-management-workspace .inspection-subsection-collapse .ant-collapse-content-box {
+  padding: 4px 0 0;
+}
+
+.animal-management-workspace
+  .inspection-subsection-collapse
+  > .ant-collapse-item
+  > .ant-collapse-panel
+  > .ant-collapse-body {
+  padding: 4px 0 0 !important;
+}
+
+.animal-management-workspace
+  .inspection-section-collapse
+  > .ant-collapse-item
+  > .ant-collapse-panel
+  > .ant-collapse-body
+  > .inspection-category-items {
+  padding-left: 24px;
+}
+
+.animal-management-workspace .inspection-subsection-state.ant-tag {
+  margin-inline-end: 0;
+}
+
+.animal-management-workspace .inspection-subsection-label .inspection-all-normal {
+  margin-left: auto;
+  padding-inline: 4px;
+}
+
+.animal-management-workspace .inspection-subsection + .inspection-subsection {
+  border-top: 1px dashed var(--surface-strong);
+}
+
+.animal-management-workspace .inspection-subsection .inspection-category-items {
+  padding-left: 8px;
+  border-left: 1px solid var(--surface-strong);
+}
+
+.animal-management-workspace .inspection-subsection .inspection-node {
+  padding-inline: 12px;
+}
+
+.animal-management-workspace .inspection-node {
+  padding: 12px 0;
+  border-top: 1px solid var(--surface-strong);
+}
+
+.animal-management-workspace .inspection-node:first-child {
+  border-top: 0;
+}
+
+.animal-management-workspace .inspection-node.has-finding {
+  padding-inline: 12px;
+  border-radius: 6px;
+  background: var(--danger-soft);
+}
+
+.animal-management-workspace .inspection-node-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.animal-management-workspace .inspection-node-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.animal-management-workspace .inspection-node-title > strong {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.animal-management-workspace .inspection-node-main p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.animal-management-workspace .inspection-outcome-options {
+  display: inline-flex;
+}
+
+.animal-management-workspace .inspection-outcome-options .ant-btn {
+  min-width: 72px;
+}
+
+.animal-management-workspace .inspection-finding-summary {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
+.animal-management-workspace .inspection-review-notice {
+  margin: 0;
+  border-radius: 6px;
+}
+
+.animal-management-workspace .inspection-list-filters {
+  margin-bottom: 16px;
+}
+
+/* CommandBar already separates its filter and action regions. Its shared outer
+ * margins compounded with this workspace's grid gap, leaving empty bands
+ * before list cards on both desktop and mobile inspection lists. */
+[data-feature="animal-management"] .inspection-list-filters,
+[data-feature="animal-management"] [data-ui="workspace-toolbar"] {
+  margin-block-end: 0;
+}
+
+.animal-management-workspace .inspection-list-filters .ant-form-item {
+  margin-bottom: 0;
+}
+
+.animal-management-workspace .inspection-table .ant-table {
+  border-radius: 6px;
+}
+
+.animal-management-workspace .inspection-table .ant-table-cell {
+  white-space: nowrap;
+}
+
+.inspection-finding-modal .ant-modal-content,
+.inspection-detail-modal .ant-modal-content,
+.inspection-image-dialog .ant-modal-content {
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
+}
+
+.inspection-finding-modal .ant-modal-header,
+.inspection-detail-modal .ant-modal-header,
+.inspection-image-dialog .ant-modal-header {
+  margin-bottom: 16px;
+}
+
+.inspection-finding-modal .ant-modal-footer,
+.inspection-detail-modal .ant-modal-footer {
+  margin-top: 20px;
+}
+
+.inspection-location-grid,
+.inspection-action-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.inspection-action-modal .ant-modal-container {
+  display: flex;
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
+}
+
+.inspection-action-modal .ant-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.inspection-action-modal .inspection-action-summary {
+  margin-bottom: 16px;
+}
+
+.inspection-action-modal .inspection-action-note {
+  margin-top: 12px;
+}
+
+.inspection-reference-strip {
+  margin-bottom: 16px;
+}
+
+.inspection-reference-images,
+.inspection-image-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.inspection-reference-button {
+  width: 100%;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.inspection-reference-button img,
+.inspection-image-gallery .ant-image,
+.inspection-image-gallery .ant-image-img {
+  width: 100%;
+}
+
+.inspection-reference-button img {
+  display: block;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.inspection-image-gallery figure {
+  margin: 0;
+}
+
+.inspection-image-gallery figcaption {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.animal-management-workspace .inspection-catalog-summary {
+  margin-bottom: 16px;
+}
+
+.animal-management-workspace .inspection-standard-list .ant-card {
+  height: 100%;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.animal-management-workspace .inspection-standard-list .ant-card-body {
+  padding: 16px;
+}

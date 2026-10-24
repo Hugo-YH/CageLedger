@@ -1,0 +1,520 @@
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.list-toolbar select {
+  min-width: 160px;
+}
+
+.list-meta {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.inspection-table .row-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.inspection-table .secondary {
+  min-height: 32px;
+  padding: 4px 8px;
+}
+
+.table-sort-button {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.table-sort-button.active::after {
+  content: " · 排序";
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.status-pill,
+.severity-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill.draft {
+  color: var(--warning-text);
+  background: var(--warning-soft);
+}
+
+.status-pill.submitted,
+.status-pill.resolved {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+
+.status-pill.pending,
+.severity-chip.severity-1 {
+  color: var(--danger-text);
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+}
+
+.status-pill.in_progress,
+.status-pill.pending_recheck,
+.severity-chip.severity-2 {
+  color: var(--warning-text);
+  background: var(--warning-soft);
+  border-color: var(--warning-line);
+}
+
+.inspection-finding-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(780px, calc(100dvh - 32px));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 0;
+}
+
+.inspection-finding-dialog .modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspection-finding-dialog .modal-head h2 {
+  margin: 4px 0;
+  font-size: 20px;
+}
+
+.inspection-finding-dialog .modal-head p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.inspection-finding-dialog .modal-body {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.inspection-location-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inspection-finding-dialog textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.inspection-finding-dialog small {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.inspection-finding-dialog .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.inspection-detail-dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.inspection-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.inspection-detail-summary strong {
+  grid-column: 1 / -1;
+  color: var(--accent-deep);
+}
+
+.inspection-detail-scores {
+  display: grid;
+  gap: 8px;
+}
+
+.inspection-detail-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.inspection-detail-section-head h3 {
+  margin: 0;
+}
+
+.inspection-detail-section-head span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.inspection-detail-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.inspection-detail-score-grid article {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.inspection-detail-score-grid article > strong {
+  color: var(--ink-strong);
+}
+
+.inspection-detail-score-grid article > span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.inspection-detail-score-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.inspection-detail-score-counts span,
+.inspection-detail-exception-scores em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.inspection-detail-score-counts .score-3 {
+  border-color: var(--success-line);
+  color: var(--success-text);
+  background: var(--success-soft);
+}
+
+.inspection-detail-score-counts .outcome-normal,
+.inspection-detail-exception-scores .outcome-normal {
+  border-color: var(--success-line);
+  color: var(--success-text);
+  background: var(--success-soft);
+}
+
+.inspection-detail-score-counts .outcome-abnormal,
+.inspection-detail-exception-scores .outcome-abnormal {
+  border-color: var(--danger-line);
+  color: var(--danger-text);
+  background: var(--danger-soft);
+}
+
+.inspection-detail-score-counts .score-2,
+.inspection-detail-exception-scores .score-2 {
+  border-color: var(--warning-line);
+  color: var(--warning-text);
+  background: var(--warning-soft);
+}
+
+.inspection-detail-score-counts .score-1,
+.inspection-detail-exception-scores .score-1 {
+  border-color: var(--danger-line);
+  color: var(--danger-text);
+  background: var(--danger-soft);
+}
+
+.inspection-detail-exception-scores {
+  border: 1px solid var(--warning-line);
+  border-radius: 8px;
+  background: var(--warning-soft);
+}
+
+.inspection-detail-exception-scores summary {
+  padding: 8px;
+  color: var(--warning-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inspection-detail-exception-scores ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
+}
+
+.inspection-detail-exception-scores li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.inspection-detail-exception-scores li span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.inspection-detail-exception-scores li strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspection-detail-exception-scores li em {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+.inspection-detail-all-normal {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--success-line);
+  border-radius: 8px;
+  color: var(--success-text);
+  background: var(--success-soft);
+  font-size: 14px;
+}
+
+.inspection-detail-findings {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspection-detail-findings li {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-left: 3px solid var(--warning);
+  background: var(--warning-soft);
+}
+
+.inspection-catalog-banner {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.inspection-catalog-banner > div {
+  display: grid;
+  gap: 4px;
+  padding: 20px;
+}
+
+.inspection-catalog-banner > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.inspection-catalog-banner span,
+.inspection-catalog-banner small {
+  color: var(--ink-muted);
+}
+
+.inspection-catalog-banner strong {
+  font-size: 16px;
+}
+
+.inspection-standard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.inspection-standard-grid article {
+  display: grid;
+  gap: 8px;
+  min-height: 170px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.inspection-standard-grid span,
+.inspection-standard-grid p {
+  color: var(--ink-muted);
+}
+
+.inspection-standard-grid h2,
+.inspection-standard-grid p {
+  margin: 0;
+}
+
+.inspection-standard-grid strong {
+  color: var(--accent-deep);
+}
+
+@media (width <= 1000px) {
+  .inspection-context-grid,
+  .inspection-node {
+    grid-template-columns: 1fr;
+  }
+
+  .inspection-module-picker {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width < 768px) {
+  .animal-management-workspace > .workspace-toolbar {
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+
+  .animal-management-workspace > .workspace-toolbar .workspace-toolbar-actions,
+  .animal-management-workspace > .workspace-toolbar .workspace-toolbar-action-group {
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .animal-management-workspace > .workspace-toolbar .inspection-save-draft,
+  .animal-management-workspace > .workspace-toolbar .inspection-submit {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .inspection-module-picker {
+    display: grid;
+    grid-template-columns: minmax(0, 280px);
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .inspection-module-picker > div {
+    position: relative;
+    min-height: 40px;
+    padding: 8px;
+  }
+
+  [data-feature="animal-management"] .inspection-module-picker .ant-checkbox-wrapper {
+    justify-content: flex-start;
+  }
+
+  .inspection-module-picker strong {
+    font-size: 14px;
+    text-align: left;
+  }
+
+  .inspection-module-picker .help-tooltip-anchor {
+    margin-left: auto;
+  }
+
+  .inspection-module-picker .inspection-help-trigger.ant-btn {
+    font-size: 12px;
+  }
+
+  .inspection-section {
+    padding: 16px 12px;
+  }
+
+  .inspection-node-main {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .inspection-node-title > strong {
+    font-size: 14px;
+  }
+
+  .inspection-score-options,
+  .inspection-node-main p {
+    grid-column: 1;
+  }
+
+  .inspection-score-options,
+  .inspection-outcome-options {
+    width: min(100%, 360px);
+  }
+
+  .inspection-finding-fields,
+  .inspection-standard-grid,
+  .inspection-catalog-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .inspection-catalog-banner > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .inspection-finding-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: 16px 16px 0 0;
+  }
+
+  .inspection-finding-dialog .modal-head,
+  .inspection-finding-dialog .modal-body,
+  .inspection-finding-dialog .modal-actions {
+    padding-inline: 16px;
+  }
+
+  .inspection-finding-dialog .modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inspection-finding-dialog .modal-actions button {
+    width: 100%;
+  }
+
+  .list-meta {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .inspection-detail-summary {
+    grid-template-columns: 1fr;
+  }
+}

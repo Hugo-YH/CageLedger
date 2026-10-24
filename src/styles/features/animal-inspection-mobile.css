@@ -1,0 +1,192 @@
+@media (width < 768px) {
+  .ant-workspace
+    .inspection-module-card
+    .inspection-section-collapse
+    > .ant-collapse-item
+    > .ant-collapse-panel
+    > .ant-collapse-body {
+    padding: 0 0 0 24px !important;
+  }
+
+  .animal-management-workspace .inspection-context-panel > .ant-card-body,
+  .animal-management-workspace .inspection-list-panel > .ant-card-body,
+  .animal-management-workspace .inspection-standards-panel > .ant-card-body,
+  .animal-management-workspace .inspection-section {
+    padding: 16px;
+  }
+
+  .animal-management-workspace .inspection-context-grid,
+  .animal-management-workspace .inspection-room-picker,
+  .animal-management-workspace .inspection-module-picker,
+  .inspection-location-grid,
+  .inspection-action-fields,
+  .inspection-reference-images,
+  .inspection-image-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .animal-management-workspace .inspection-module-choice.ant-card {
+    min-height: 48px;
+  }
+
+  .animal-management-workspace .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+    padding: 8px 12px;
+  }
+
+  .animal-management-workspace .inspection-section-label-main {
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .animal-management-workspace .inspection-section-label-main .ant-tag {
+    max-width: 100%;
+  }
+
+  .animal-management-workspace .inspection-subsection {
+    padding: 8px 12px 4px 16px;
+  }
+
+  .ant-workspace .inspection-module-card .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+    padding: 8px 12px 8px 32px;
+  }
+
+  .animal-management-workspace .inspection-subsection .inspection-category-items {
+    padding-left: 8px;
+  }
+
+  .animal-management-workspace .inspection-subsection .inspection-node {
+    padding-inline: 8px;
+  }
+
+  .animal-management-workspace .inspection-node-main {
+    grid-template-columns: 1fr;
+  }
+
+  .animal-management-workspace .inspection-outcome-options {
+    width: 100%;
+  }
+
+  .animal-management-workspace .inspection-outcome-options .ant-btn {
+    flex: 1;
+  }
+
+  .animal-management-workspace .inspection-list-filters,
+  .animal-management-workspace .inspection-list-filters .ant-space {
+    width: 100%;
+  }
+
+  .animal-management-workspace .inspection-list-filters .ant-form-item,
+  .animal-management-workspace .inspection-list-filters .ant-select {
+    width: 100%;
+    margin-inline-end: 0;
+  }
+
+  .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header {
+    padding: 8px 12px;
+  }
+
+  .inspection-section-label {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .inspection-section-label-main {
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .inspection-section-label-main span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inspection-section-count {
+    display: none;
+  }
+}
+
+[data-ui="mobile-page"] .inspection-context-grid {
+  grid-template-columns: 1fr;
+}
+
+[data-ui="mobile-page"] .inspection-module-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The mobile Selector reserves its lower-right checkmark area so long module
+ * names can wrap inside the option instead of being clipped or overlapping it. */
+[data-ui="mobile-page"] .inspection-module-selector {
+  width: 100%;
+
+  --padding: 8px 28px 8px 12px;
+}
+
+[data-ui="mobile-page"] .inspection-module-selector .adm-selector-item {
+  box-sizing: border-box;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Collapse headers are nested flex items. Every level must opt into shrinking
+ * on mobile so the end-aligned disclosure icon remains inside its card. */
+[data-ui="mobile-page"] .inspection-module-card,
+[data-ui="mobile-page"] .inspection-section-collapse,
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-header,
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-title,
+[data-ui="mobile-page"] .inspection-section-label,
+[data-ui="mobile-page"] .inspection-section-label-main,
+[data-ui="mobile-page"] .inspection-subsection-collapse,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-header,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-title,
+[data-ui="mobile-page"] .inspection-subsection-label,
+[data-ui="mobile-page"] .inspection-subsection-label h4 {
+  min-width: 0;
+}
+
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-header,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-header {
+  padding: 8px 12px;
+}
+
+[data-ui="mobile-page"] .inspection-section-collapse > .ant-collapse-item > .ant-collapse-header > .ant-collapse-title,
+[data-ui="mobile-page"]
+  .inspection-subsection-collapse
+  > .ant-collapse-item
+  > .ant-collapse-header
+  > .ant-collapse-title {
+  flex: 1 1 0;
+  width: 0;
+}
+
+[data-ui="mobile-page"] .inspection-section-collapse .ant-collapse-expand-icon,
+[data-ui="mobile-page"] .inspection-subsection-collapse .ant-collapse-expand-icon {
+  flex: none;
+}
+
+[data-ui="mobile-page"] .inspection-subsection-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+[data-ui="mobile-page"] .inspection-subsection-label h4 {
+  flex: 1;
+}
+
+[data-ui="mobile-page"] .inspection-subsection-label .inspection-subsection-state,
+[data-ui="mobile-page"] .inspection-subsection-label .inspection-all-normal {
+  flex: none;
+}
+
+.inspection-draft-banner {
+  margin-bottom: 16px;
+}
