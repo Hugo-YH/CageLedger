@@ -1,8 +1,8 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "1.17.1",
-  "build": 237,
+  "version": "1.17.2",
+  "build": 238,
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
