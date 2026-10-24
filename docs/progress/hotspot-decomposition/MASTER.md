@@ -1,0 +1,38 @@
+# 14处热点拆分进度
+
+模式LOCAL_ONLY。治理AGENTS.md及docs/contracts；记忆沿用现有原生上下文，不改记忆或旧MASTER。
+
+准备已完成：范围和约束沿用用户明确授权；基线d4b18cc；14项精确清单见../../analysis/hotspot-decomposition/module-inventory.md，计划见../../plan/hotspot-decomposition/task-breakdown.md。
+
+## 当前状态
+
+14/14已实现职责拆分；分批验证通过，最终完整验收未运行。原架构目标不变，当前0阻断、0提醒、0热点。
+
+## 逐项进度
+
+- [ ] H01 `server_app/domains/animal_management/service.py`：待实现/验证。
+- [ ] H02 `server_app/domains/reimbursement_ledger/service.py`：待实现/验证。
+- [ ] H03 `server_app/pdf/documents.py`：待实现/验证。
+- [ ] H04 `server_app/persistence/base_schema.py`：待实现/验证。
+- [ ] H05 `server_app/repositories/billing_candidates.py`：待实现/验证。
+- [ ] H06 `server_app/repositories/billing_workflows.py`：待实现/验证。
+- [ ] H07 `server_app/web/read_actions.py`：待实现/验证。
+- [ ] H08 `src/react/features/animal-management/InspectionLists.tsx`：待实现/验证。
+- [ ] H09 `src/react/features/billing/components/SavedQuantitySheets.tsx`：待实现/验证。
+- [ ] H10 `src/react/features/cages/components/CageWorkspaceComponents.tsx`：待实现/验证。
+- [ ] H11 `src/react/print/printTemplates.test.ts`：待实现/验证。
+- [ ] H12 `src/react/print/settlement.ts`：待实现/验证。
+- [ ] H13 `src/styles/features/animal-management.css`：待实现/验证。
+- [ ] H14 `tests/test_feedback.py`：待实现/验证。
+
+## 遥测与偏差
+
+初始drift_score=0；新增非计划依赖逐项登记，20%注解、40%重排、60%重定范围。当前无范围扩大。每批在此记录实际成果和证据；不编造耗时/评分。
+
+## 分批实现与审查结果
+
+- B1目标154项通过；B2后端47项、前端打印27项通过；B3目标23项通过；B4修正重复发现后50项通过。所有目标运行均零自动重试。
+- 38条提取记录逐函数/类/方法体AST等价；基础schema展开50条语句及hook/commit顺序完全一致；266条CSS顶层节点展开后完全同序。
+- 独立只读审查未见剩余生产阻断；发现HTTP测试重复38项，已将生命周期抽为不继承TestCase的共享fixture，原50个测试体与3个生命周期体保持一致。首次88项记录保留，不作为目录通过依据。
+- 一个新增依赖：API清单静态检查原只识别read_actions本文件方法，已改为解析显式Mixin唯一owner，保留全部路由/权限校验和不存在/重复入口拒绝；新增2项保护测试，10项API清单测试通过。API路径/协议未改，仅生成文档中的实际代码入口更新。drift_score=1/14（7.1%），无需扩大范围。
+- 实现期装饰器、缩进、CSS边界、格式检查和回环端口sandbox失败均保留于外部hotspot-evidence；无断言/阈值放宽。
