@@ -16,6 +16,7 @@ from server_app.domains.feedback import repository as repo
 from server_app.domains.feedback.gitea import RemoteError
 from server_app.shared.sqlite import ClosingConnection
 from tests.feedback_fixtures import ACTOR, ADMIN, REPOSITORY, FeedbackFixture, screenshot, submission
+from tests.feedback_fixtures import FakeGitea as FakeGitea
 
 
 class FeedbackTests(FeedbackFixture, unittest.TestCase):
