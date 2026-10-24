@@ -124,6 +124,7 @@ function DashboardContent({
   failed: boolean;
   retry: () => void;
 }) {
+  const { token } = theme.useToken();
   const visible = useViewVisibility();
   const { availableMonths, intake, rooms, pi } = data;
   const currentMonth = data.month === "all" ? "历史合计" : data.month;
@@ -230,7 +231,17 @@ function DashboardContent({
                     )}
                   </span>
                   {!isAmount ? (
-                    <Badge className="ant-dashboard-task-count" count={task.value} overflowCount={9999} showZero />
+                    <Badge
+                      className="ant-dashboard-task-count"
+                      count={task.value}
+                      overflowCount={9999}
+                      showZero
+                      styles={
+                        task.value === 0
+                          ? { indicator: { background: token.colorFillSecondary, color: token.colorTextSecondary } }
+                          : undefined
+                      }
+                    />
                   ) : null}
                 </>
               );

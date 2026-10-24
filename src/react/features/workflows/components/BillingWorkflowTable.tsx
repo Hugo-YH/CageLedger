@@ -182,9 +182,10 @@ export const BillingWorkflowTable = memo(function BillingWorkflowTable({
   ];
 
   return (
-    <div className="ant-table-region" role="region" aria-label="结算流程表格" aria-busy={refreshing} tabIndex={0}>
+    <div className="ant-table-region" role="region" aria-label="结算流程表格" tabIndex={0}>
       <DataTable
         refreshing={refreshing}
+        aria-busy={refreshing}
         className="antd-data-table reimbursement-table"
         size={density}
         columns={columns}

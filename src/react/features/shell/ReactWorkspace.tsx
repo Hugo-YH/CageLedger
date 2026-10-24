@@ -22,7 +22,7 @@ import {
   TagsOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Space, Tooltip, Typography, type MenuProps } from "antd";
+import { Button, Layout, Menu, Tooltip, Typography, type MenuProps } from "antd";
 import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
@@ -350,7 +350,7 @@ function Workspace({ user }: { user: SessionUser }) {
           <Typography.Text type="secondary">
             {user.role === "admin" ? "管理员 · 全部饲养间" : `房间管理员 · ${user.roomIds.length} 个饲养间`}
           </Typography.Text>
-          <Space orientation="vertical" size={8}>
+          <div className="ant-sidebar-account-actions">
             <Button aria-label="刷新页面" block icon={<ReloadOutlined aria-hidden="true" />} onClick={clearLocalCache}>
               刷新
             </Button>
@@ -364,7 +364,7 @@ function Workspace({ user }: { user: SessionUser }) {
             >
               退出
             </Button>
-          </Space>
+          </div>
         </div>
       </Layout.Sider>
       <Layout className="ant-workspace-layout">

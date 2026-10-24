@@ -1333,6 +1333,23 @@ h3 {
   color: rgb(255 255 255 / 65%);
 }
 
+.ant-sidebar-account-actions {
+  display: grid;
+  gap: 8px;
+}
+
+@media (width >= 768px) and (height <= 500px) {
+  .ant-sidebar-account {
+    gap: 4px;
+    margin-bottom: 8px;
+    padding-top: 8px;
+  }
+
+  .ant-sidebar-account-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .ant-workspace-layout,
 .ant-workspace {
   min-width: 0;

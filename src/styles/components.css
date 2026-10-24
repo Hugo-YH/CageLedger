@@ -996,7 +996,7 @@
 
 [data-ui="list-refresh"][data-active="true"] {
   opacity: 1;
-  transition: opacity var(--motion-fast) var(--ease-standard) var(--motion-base);
+  transition: opacity var(--motion-fast) var(--ease-standard);
 }
 
 [data-ui="page-skeleton"].page-skeleton-page,

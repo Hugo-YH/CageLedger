@@ -13,12 +13,14 @@ export function QueryFeedback({
   loadingText,
   errorText,
   retry,
+  retrying = false,
 }: {
   loading: boolean;
   error: boolean;
   loadingText: string;
   errorText: string;
   retry: () => void;
+  retrying?: boolean;
 }) {
   if (loading) {
     return <PageSkeleton label={loadingText.replace("正在", "").replace("...", "")} rows={5} variant="table" />;
@@ -27,7 +29,13 @@ export function QueryFeedback({
     return (
       <Alert
         action={
-          <Button icon={<ReloadOutlined aria-hidden />} onClick={retry}>
+          <Button
+            icon={<ReloadOutlined aria-hidden />}
+            onClick={retry}
+            loading={retrying}
+            disabled={retrying}
+            aria-busy={retrying}
+          >
             重试
           </Button>
         }

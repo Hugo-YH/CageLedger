@@ -1,6 +1,6 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { ExclamationCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Space, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 
@@ -17,7 +17,7 @@ import { useSystemInfo } from "../../api/administration";
 import type { SessionUser } from "../../api/contracts";
 import { DataTable, Feedback, HelpPopover, ModalPresence, StatusTag } from "../../components/ui";
 import { CommandBar } from "../../components/ui/CommandBar";
-import { formatDateTime, Pager } from "../../components/WorkspaceUi";
+import { formatDateTime, PageSkeleton, Pager } from "../../components/WorkspaceUi";
 import { FeedbackImportDrawer } from "./FeedbackImportDrawer";
 import { FeedbackColumnTitle } from "./FeedbackColumnTitle";
 import { FeedbackCreateDrawer } from "./FeedbackCreateDrawer";
@@ -219,7 +219,7 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
           {user.role === "admin" && integration.isError ? (
             <Alert showIcon type="warning" title="同步集成状态暂时不可用" description={integration.error.message} />
           ) : null}
-          {list.isPending ? <Skeleton active paragraph={{ rows: 8 }} /> : null}
+          {list.isPending ? <PageSkeleton embedded label="反馈列表" variant="table" rows={5} /> : null}
           {list.isError ? (
             <Feedback
               kind="error"

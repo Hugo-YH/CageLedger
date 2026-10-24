@@ -10,7 +10,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { SessionUser } from "../../../api/contracts";
 import type { BillingWorkflow } from "../../../api/workflows";
-import { useAdvanceWorkflow, useBillingWorkflows, type WorkflowAdvancePayload } from "../../../api/workflows";
+import {
+  useAdvanceWorkflow,
+  useBillingWorkflows,
+  type WorkflowAdvancePayload,
+  type WorkflowListParams,
+} from "../../../api/workflows";
 import { useBatchAdvanceWorkflow } from "../../../api/useBatchAdvanceWorkflow";
 import { CommandBar, HelpPopover } from "../../../components/ui";
 import { Pager } from "../../../components/WorkspaceUi";
@@ -40,16 +45,28 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     scopeRef.current = JSON.stringify(filters);
   }, [filters]);
   const [sourceType, setSourceType] = useWorkspaceMemory("workflow:feeType", "");
-  const query = useBillingWorkflows({
-    sourceType,
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    sortKey: sort.key,
-    sortDir: sort.dir,
-    columnFilters: filters,
-  });
+  const params = useMemo<WorkflowListParams>(
+    () => ({
+      sourceType,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      sortKey: sort.key,
+      sortDir: sort.dir,
+      columnFilters: filters,
+    }),
+    [sourceType, pageSize, page, sort.key, sort.dir, filters],
+  );
+  const [displayedParams, setDisplayedParams] = useState(params);
+  const query = useBillingWorkflows(params);
+  // Keep a disabled observer of the last successful cache entry, not a second
+  // business-data copy. Failed updates must not remove the table or selection.
+  const displayed = useBillingWorkflows(displayedParams, false);
+  useEffect(() => {
+    if (query.isSuccess && !query.isPlaceholderData) setDisplayedParams(params);
+  }, [query.isSuccess, query.isPlaceholderData, params]);
+  const data = query.data ?? displayed.data;
   const advance = useAdvanceWorkflow();
-  const rowInteractionBlocked = query.isPlaceholderData || query.isError;
+  const rowInteractionBlocked = query.isPlaceholderData || query.isError || !query.data;
   const lockAction = useAsyncFormAction("结算流程操作失败，请重试");
   const batchAdvance = useBatchAdvanceWorkflow();
   const [registerTarget, setRegisterTarget] = useState<BillingWorkflow | null>(null);
@@ -69,8 +86,8 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
     null,
   );
   useWorkspaceScroll("workflow-center", !query.isPending && !query.isError);
-  const items = query.data?.items || EMPTY_WORKFLOWS;
-  const total = query.data?.page.total || 0;
+  const items = data?.items || EMPTY_WORKFLOWS;
+  const total = data?.page.total || 0;
   const pages = Math.max(Math.ceil(total / pageSize), 1);
   const lockableItems = useMemo(
     () =>
@@ -270,12 +287,13 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
       ) : null}
       <QueryFeedback
         error={query.isError}
-        errorText="结算流程加载失败"
-        loading={query.isPending}
+        errorText={data ? "结算流程加载失败，暂显示上次结果" : "结算流程加载失败"}
+        loading={!data && query.isPending}
         loadingText="正在同步结算流程..."
         retry={() => void query.refetch()}
+        retrying={query.isFetching}
       />
-      {!query.isPending && !query.isError ? (
+      {data ? (
         <WorkflowLockContext.Provider value={lockState}>
           <BillingWorkflowTable
             user={user}
