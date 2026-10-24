@@ -1,5 +1,6 @@
 """Chromium-backed PDF rendering for printable server documents."""
 
+import atexit
 import logging
 import os
 import shutil
@@ -9,8 +10,8 @@ import time
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
-from queue import PriorityQueue
-from threading import Event, Lock, Thread
+from queue import Empty, PriorityQueue
+from threading import Event, Lock, Thread, current_thread
 
 from server_app.runtime_logging import capture_log_context, emit_event, log_context, log_operation
 
@@ -38,7 +39,7 @@ class RenderJob:
 class _QueuedRender:
     priority: int
     sequence: int
-    job: RenderJob = field(compare=False)
+    job: RenderJob | None = field(compare=False)
 
 
 class PersistentChromiumRenderer:
@@ -54,11 +55,11 @@ class PersistentChromiumRenderer:
         self._failures = 0
         self._timeouts = 0
         self._latency_samples: list[float] = []
+        self._stopping = Event()
 
     def render(self, markup, *, priority=PDF_RENDER_PRIORITY_USER):
         job = RenderJob(markup=markup, completed=Event())
-        self._start()
-        self._jobs.put(_QueuedRender(priority, next(self._sequence), job))
+        self._enqueue(job, priority)
         if not job.completed.wait(RENDER_TIMEOUT_SECONDS):
             job.cancelled = True
             with self._lock:
@@ -71,8 +72,23 @@ class PersistentChromiumRenderer:
         return job.result
 
     def prewarm(self):
-        self._start()
-        self._jobs.put(_QueuedRender(-1, next(self._sequence), RenderJob(markup=None, completed=Event())))
+        self._enqueue(RenderJob(markup=None, completed=Event()), -1)
+
+    def shutdown(self, timeout=None):
+        """Close admission, wake the owner thread, and wait for its Playwright cleanup."""
+        with self._lock:
+            if not self._stopping.is_set():
+                self._stopping.set()
+                if self._thread and self._thread.is_alive():
+                    self._jobs.put(_QueuedRender(-2, next(self._sequence), None))
+            thread = self._thread
+            if thread is None:
+                self._fail_pending(RuntimeError("PDF 渲染器正在停止"))
+        if thread is current_thread():
+            return False
+        if thread:
+            thread.join(timeout)
+        return thread is None or not thread.is_alive()
 
     def snapshot(self):
         with self._lock:
@@ -90,65 +106,112 @@ class PersistentChromiumRenderer:
             **_latency_summary(samples),
         }
 
-    def _start(self):
+    def _enqueue(self, job, priority):
         with self._lock:
+            if self._stopping.is_set():
+                raise RuntimeError("PDF 渲染器正在停止")
+            # Admission and startup share a lock: initialization failure must not
+            # drain the queue before a concurrently accepted job is inserted.
+            self._jobs.put(_QueuedRender(priority, next(self._sequence), job))
             if self._thread and self._thread.is_alive():
                 return
-            self._thread = Thread(target=self._run, name="cageledger-pdf", daemon=True)
-            self._thread.start()
+            thread = Thread(target=self._run, name="cageledger-pdf", daemon=True)
+            try:
+                self._thread = thread
+                thread.start()
+            except BaseException as exc:
+                # An interrupt may arrive before start or while its bootstrap is
+                # pending. A late owner sees stopping before opening Playwright.
+                if not isinstance(exc, Exception):
+                    self._stopping.set()
+                self._fail_pending(exc)
+                if thread.is_alive():
+                    self._stopping.set()
+                    self._jobs.put(_QueuedRender(-2, next(self._sequence), None))
+                else:
+                    self._thread = None
+                raise
 
     def _run(self):
         browser = None
         page = None
+        error = RuntimeError("PDF 渲染器正在停止")
         try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            self._fail_pending(PlaywrightUnavailable("缺少 Playwright PDF 渲染组件"))
-            return
-
-        with sync_playwright() as playwright:
-            while True:
-                queued = self._jobs.get()
-                job = queued.job
-                started_at = time.perf_counter()
+            if self._stopping.is_set():
+                return
+            try:
+                from playwright.sync_api import sync_playwright
+            except ImportError as exc:
+                raise PlaywrightUnavailable("缺少 Playwright PDF 渲染组件") from exc
+            with sync_playwright() as playwright:
                 try:
-                    if job.cancelled:
-                        continue
-                    with self._lock:
-                        self._active = True
-                    if browser is None:
-                        browser = playwright.chromium.launch(
-                            executable_path=required_chromium_binary(),
-                            headless=True,
-                            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
-                        )
-                        page = browser.new_page()
-                        page.emulate_media(media="print")
-                    if job.markup is not None:
-                        page.set_content(job.markup, wait_until="load")
-                        page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
-                        job.result = page.pdf(print_background=True, prefer_css_page_size=True)
-                        self._record_render(time.perf_counter() - started_at)
-                except Exception as exc:  # Browser process recovery belongs to the next queued job.
-                    with log_context(**job.log_fields):
-                        emit_event("pdf_browser_failed", level=logging.WARNING, error=exc, rate_limit=True)
-                    job.error = RuntimeError(f"PDF 渲染失败：{str(exc).splitlines()[0]}")
-                    self._record_render(time.perf_counter() - started_at, failed=True)
+                    while True:
+                        job = self._jobs.get().job
+                        if job is None:
+                            self._jobs.task_done()
+                            break
+                        started_at = time.perf_counter()
+                        try:
+                            if self._stopping.is_set():
+                                job.error = error
+                                continue
+                            if job.cancelled:
+                                continue
+                            with self._lock:
+                                self._active = True
+                            if browser is None:
+                                browser = playwright.chromium.launch(
+                                    executable_path=required_chromium_binary(),
+                                    headless=True,
+                                    args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
+                                )
+                                page = browser.new_page()
+                                page.emulate_media(media="print")
+                            if job.markup is not None:
+                                page.set_content(job.markup, wait_until="load")
+                                page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
+                                job.result = page.pdf(print_background=True, prefer_css_page_size=True)
+                                self._record_render(time.perf_counter() - started_at)
+                        except Exception as exc:  # Browser recovery belongs to the next queued job.
+                            with log_context(**job.log_fields):
+                                emit_event("pdf_browser_failed", level=logging.WARNING, error=exc, rate_limit=True)
+                            job.error = RuntimeError(f"PDF 渲染失败：{str(exc).splitlines()[0]}")
+                            self._record_render(time.perf_counter() - started_at, failed=True)
+                            try:
+                                if browser:
+                                    browser.close()
+                            finally:
+                                browser = None
+                                page = None
+                        finally:
+                            with self._lock:
+                                self._active = False
+                            job.completed.set()
+                            self._jobs.task_done()
+                finally:
                     if browser:
                         browser.close()
-                    browser = None
-                    page = None
-                finally:
-                    with self._lock:
-                        self._active = False
-                    job.completed.set()
-                    self._jobs.task_done()
+        except Exception as exc:
+            error = (
+                exc
+                if isinstance(exc, PlaywrightUnavailable)
+                else RuntimeError(f"PDF 渲染失败：{str(exc).splitlines()[0]}")
+            )
+            emit_event("pdf_worker_stopped", level=logging.WARNING, error=exc, rate_limit=True)
+        finally:
+            with self._lock:
+                self._thread = None
+                self._fail_pending(error)
 
     def _fail_pending(self, error):
-        while not self._jobs.empty():
-            job = self._jobs.get().job
-            job.error = error
-            job.completed.set()
+        while True:
+            try:
+                job = self._jobs.get_nowait().job
+            except Empty:
+                break
+            if job is not None:
+                job.error = error
+                job.completed.set()
             self._jobs.task_done()
 
     def _record_render(self, elapsed_seconds, *, failed=False):
@@ -177,6 +240,14 @@ def html_to_pdf(markup, *, priority=PDF_RENDER_PRIORITY_USER):
 def prewarm_pdf_renderer():
     """Start Chromium during service boot so the first export avoids cold start."""
     _PERSISTENT_RENDERER.prewarm()
+
+
+def shutdown_pdf_renderer():
+    """Finish active rendering and close the owned browser before the process exits."""
+    return _PERSISTENT_RENDERER.shutdown()
+
+
+atexit.register(shutdown_pdf_renderer)
 
 
 def pdf_renderer_snapshot():

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { resolveProjectPython } from "./python_runtime.mjs";
+import { createDevShutdown } from "./dev_shutdown.mjs";
 
 const processes = new Set();
 const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
@@ -52,10 +53,19 @@ function launch(command, args, env = {}) {
   return child;
 }
 
+const stopChildren = createDevShutdown(
+  processes,
+  () => {
+    if (ephemeralDir) rmSync(ephemeralDir, { recursive: true, force: true });
+  },
+  (code) => process.exit(code),
+);
+
 function shutdown(code = 0) {
-  for (const child of processes) child.kill("SIGTERM");
-  if (ephemeralDir) rmSync(ephemeralDir, { recursive: true, force: true });
-  setTimeout(() => process.exit(code), 50);
+  void stopChildren(code).catch((error) => {
+    console.error("Development shutdown failed:", error);
+    process.exitCode = 1;
+  });
 }
 
 process.on("SIGINT", () => shutdown(0));

@@ -39,5 +39,8 @@ export default defineConfig({
     url: `${e2eBaseUrl}/api/health`,
     reuseExistingServer: process.env.CAGELEDGER_E2E_REUSE === "1",
     timeout: 120_000,
+    // Teardown is separate from test/assertion budgets. Let the owned launcher
+    // close its PDF renderer before Playwright's bounded force-stop fallback.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 150_000 },
   },
 });
