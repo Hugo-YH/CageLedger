@@ -22,6 +22,7 @@ export default defineConfig({
       command: `${apiEnvironment} npm exec -- vite build --outDir ${output} && ${apiEnvironment} npm exec -- vite preview --host 127.0.0.1 --port ${previewPort} --outDir ${output}`,
       url: `${previewUrl}/app`,
       timeout: 120_000,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 150_000 },
     },
   ],
 });
