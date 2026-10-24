@@ -1,14 +1,35 @@
-import hashlib
+"""Claims, obligations and legacy migration use-case orchestration."""
+
 import json
-import math
-import mimetypes
 import shutil
 
 from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
-from server_app.runtime_logging import log_operation
 from server_app.shared import clean_text, new_id, now_iso
 
+from .allocation_commands import ALLOCATION_STATUSES as ALLOCATION_STATUSES
+from .allocation_commands import confirm_allocation as confirm_allocation
+from .allocation_commands import create_allocation as create_allocation
+from .allocation_commands import reverse_allocation as reverse_allocation
+from .claim_attachments import ALLOWED_ATTACHMENT_TYPES as ALLOWED_ATTACHMENT_TYPES
+from .claim_attachments import MAX_ATTACHMENT_BYTES as MAX_ATTACHMENT_BYTES
+from .claim_attachments import MAX_ATTACHMENTS_PER_CLAIM as MAX_ATTACHMENTS_PER_CLAIM
+from .claim_attachments import add_attachment as add_attachment
+from .claim_attachments import get_attachment as get_attachment
+from .claim_rules import _detect_attachment_type as _detect_attachment_type
+from .claim_rules import _dump as _dump
+from .claim_rules import _input_money as _input_money
+from .claim_rules import _limit as _limit
+from .claim_rules import _load as _load
+from .claim_rules import _money as _money
+from .claim_rules import _normalize_funding_line as _normalize_funding_line
+from .claim_rules import _obligation_filters as _obligation_filters
+from .claim_rules import _offset as _offset
+from .claim_rules import _page as _page
+from .claim_rules import _require_admin as _require_admin
+from .claim_rules import _require_authenticated as _require_authenticated
+from .claim_rules import _require_claim_edit as _require_claim_edit
+from .claim_rules import _require_claim_view as _require_claim_view
 from .listing import (
     CLAIM_LIST_COLUMNS,
     LEGACY_LIST_COLUMNS,
@@ -16,78 +37,22 @@ from .listing import (
     list_column_where,
     list_sort_order,
 )
-from .repository import (
-    EFFECTIVE_OBLIGATION_WHERE,
-    confirm_allocation_if_effective,
-    effective_obligation_row,
-    require_effective_obligation,
-    validate_funding_line_ownership,
-)
-from .repository import (
-    allocation_payload as _allocation_payload,
-)
-from .repository import (
-    allocation_row as _allocation_row,
-)
-from .repository import (
-    attachment_payload as _attachment_payload,
-)
-from .repository import (
-    claim_has_confirmed_allocations as _claim_has_confirmed_allocations,
-)
-from .repository import (
-    claim_payload as _claim_payload,
-)
-from .repository import (
-    claim_row as _claim_row,
-)
-from .repository import (
-    confirmed_amount_for_line as _confirmed_amount_for_line,
-)
-from .repository import (
-    confirmed_amount_for_obligation as _confirmed_amount_for_obligation,
-)
-from .repository import (
-    delete_claim as _delete_claim,
-)
-from .repository import (
-    funding_line_row as _funding_line_row,
-)
-from .repository import (
-    obligation_payload as _obligation_payload,
-)
-from .repository import (
-    obligation_row as _obligation_row,
-)
-from .repository import (
-    refresh_claim_balances as _refresh_claim_balances,
-)
-from .repository import (
-    refresh_line_balance as _refresh_line_balance,
-)
-from .repository import (
-    refresh_obligation_balance as _refresh_obligation_balance,
-)
-from .repository import (
-    upsert_allocation as _upsert_allocation,
-)
-from .repository import (
-    upsert_claim as _upsert_claim,
-)
-from .repository import (
-    upsert_funding_line as _upsert_funding_line,
-)
-from .repository import (
-    upsert_obligation as _upsert_obligation,
-)
+from .repository import EFFECTIVE_OBLIGATION_WHERE, effective_obligation_row, validate_funding_line_ownership
+from .repository import claim_has_confirmed_allocations as _claim_has_confirmed_allocations
+from .repository import claim_payload as _claim_payload
+from .repository import claim_row as _claim_row
+from .repository import confirmed_amount_for_line as _confirmed_amount_for_line
+from .repository import confirmed_amount_for_obligation as _confirmed_amount_for_obligation
+from .repository import delete_claim as _delete_claim
+from .repository import obligation_payload as _obligation_payload
+from .repository import obligation_row as _obligation_row
+from .repository import refresh_claim_balances as _refresh_claim_balances
+from .repository import refresh_obligation_balance as _refresh_obligation_balance
+from .repository import upsert_claim as _upsert_claim
+from .repository import upsert_funding_line as _upsert_funding_line
+from .repository import upsert_obligation as _upsert_obligation
 from .snapshot_sync import sync_same_version_obligation
 from .source_fields import source_fields
-
-MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
-MAX_ATTACHMENTS_PER_CLAIM = 10
-ALLOWED_ATTACHMENT_TYPES = {"application/pdf", "image/jpeg", "image/png"}
-CLAIM_STATUSES = {"pending_submission", "reimbursing", "completed", "void"}
-ALLOCATION_STATUSES = {"draft", "confirmed", "reversed"}
 
 
 def list_obligations(conn, actor, filters):
@@ -263,226 +228,6 @@ def delete_claim(conn, actor, claim_id):
     return {"ok": True, "auditLogs": merge_audit_logs([], [event])}
 
 
-def create_allocation(conn, actor, payload):
-    _require_authenticated(actor)
-    line = _funding_line_row(conn, clean_text(payload.get("fundingLineId", "")))
-    claim = _claim_row(conn, line["claim_id"])
-    if clean_text(payload.get("claimId", "")) != claim["id"]:
-        raise ValueError("核销经费明细与报销单不匹配")
-    _require_claim_edit(actor, claim)
-    obligation = _obligation_row(conn, clean_text(payload.get("obligationId", "")))
-    require_effective_obligation(conn, obligation["id"])
-    amount = _input_money(payload.get("amount"), "核销金额")
-    if amount <= 0:
-        raise ValueError("核销金额应大于 0")
-    record = {
-        "id": new_id("reimbursement-allocation"),
-        "fundingLineId": line["id"],
-        "obligationId": obligation["id"],
-        "amount": amount,
-        "status": "draft",
-        "createdBy": actor["id"],
-        "createdByName": actor["displayName"],
-        "createdAt": now_iso(),
-        "updatedAt": now_iso(),
-    }
-    _upsert_allocation(conn, record)
-    event = audit_event(
-        actor,
-        "reimbursement_ledger.allocation_drafted",
-        "reimbursement_allocation",
-        record["id"],
-        f"{actor['displayName']} 创建核销草稿",
-        [],
-        record["createdAt"],
-        None,
-        record,
-    )
-    write_audit_events(conn, [event])
-    conn.commit()
-    return {
-        "item": _allocation_payload(conn, _allocation_row(conn, record["id"])),
-        "auditLogs": merge_audit_logs([], [event]),
-    }
-
-
-def confirm_allocation(conn, actor, allocation_id):
-    _require_admin(actor)
-    allocation = _allocation_row(conn, allocation_id)
-    before = _allocation_payload(conn, allocation)
-    if allocation["status"] != "draft":
-        raise ValueError("只有核销草稿可以确认")
-    line = _funding_line_row(conn, allocation["funding_line_id"])
-    obligation = _obligation_row(conn, allocation["obligation_id"])
-    require_effective_obligation(conn, obligation["id"])
-    now = now_iso()
-    if not confirm_allocation_if_effective(conn, allocation_id, actor["id"], now):
-        require_effective_obligation(conn, obligation["id"])
-        current = _allocation_row(conn, allocation_id)
-        if current["status"] != "draft":
-            raise ValueError("只有核销草稿可以确认")
-        if _confirmed_amount_for_line(conn, line["id"]) + allocation["amount"] > line["reimbursement_amount"] + 0.00001:
-            raise ValueError("本次核销超过经费明细可分摊余额")
-        raise ValueError("本次核销超过结算应收待核销金额")
-    _refresh_line_balance(conn, line["id"])
-    _refresh_obligation_balance(conn, obligation["id"])
-    _refresh_claim_balances(conn, line["claim_id"])
-    event = audit_event(
-        actor,
-        "reimbursement_ledger.allocation_confirmed",
-        "reimbursement_allocation",
-        allocation_id,
-        f"{actor['displayName']} 确认核销 {allocation['amount']:.2f} 元",
-        [],
-        now,
-        before,
-        _allocation_payload(conn, _allocation_row(conn, allocation_id)),
-    )
-    write_audit_events(conn, [event])
-    conn.commit()
-    return {
-        "item": _allocation_payload(conn, _allocation_row(conn, allocation_id)),
-        "auditLogs": merge_audit_logs([], [event]),
-    }
-
-
-def reverse_allocation(conn, actor, allocation_id, reason):
-    _require_admin(actor)
-    allocation = _allocation_row(conn, allocation_id)
-    before = _allocation_payload(conn, allocation)
-    if allocation["status"] != "confirmed":
-        raise ValueError("只有已确认核销可以撤销")
-    note = clean_text(reason)
-    if not note:
-        raise ValueError("请填写撤销原因")
-    now = now_iso()
-    conn.execute(
-        """UPDATE reimbursement_allocations
-           SET status = 'reversed', reversed_by = ?, reversed_at = ?, reversal_reason = ?, updated_at = ? WHERE id = ?""",
-        (actor["id"], now, note, now, allocation_id),
-    )
-    line = _funding_line_row(conn, allocation["funding_line_id"])
-    _refresh_line_balance(conn, line["id"])
-    _refresh_obligation_balance(conn, allocation["obligation_id"])
-    _refresh_claim_balances(conn, line["claim_id"])
-    event = audit_event(
-        actor,
-        "reimbursement_ledger.allocation_reversed",
-        "reimbursement_allocation",
-        allocation_id,
-        f"{actor['displayName']} 撤销核销：{note}",
-        [],
-        now,
-        before,
-        _allocation_payload(conn, _allocation_row(conn, allocation_id)),
-    )
-    write_audit_events(conn, [event])
-    conn.commit()
-    return {
-        "item": _allocation_payload(conn, _allocation_row(conn, allocation_id)),
-        "auditLogs": merge_audit_logs([], [event]),
-    }
-
-
-@log_operation("reimbursement_upload", component="files")
-def add_attachment(conn, actor, claim_id, filename, body, content_type):
-    claim = _claim_row(conn, claim_id)
-    _require_claim_edit(actor, claim)
-    if len(body) > MAX_ATTACHMENT_BYTES:
-        raise ValueError("单个报销单附件不能超过 30 MiB")
-    count = conn.execute(
-        "SELECT COUNT(*) FROM reimbursement_claim_attachments WHERE claim_id = ?", (claim_id,)
-    ).fetchone()[0]
-    if count >= MAX_ATTACHMENTS_PER_CLAIM:
-        raise ValueError("每张报销单最多上传 10 个附件")
-    mime_type = _detect_attachment_type(body, content_type, filename)
-    if mime_type not in ALLOWED_ATTACHMENT_TYPES:
-        raise ValueError("仅支持 PDF、JPEG 或 PNG 附件")
-    digest = hashlib.sha256(body).hexdigest()
-    duplicate = conn.execute(
-        "SELECT id FROM reimbursement_claim_attachments WHERE claim_id = ? AND sha256 = ?", (claim_id, digest)
-    ).fetchone()
-    if duplicate:
-        raise ValueError("该报销单已上传相同附件")
-    attachment_id = new_id("reimbursement-attachment")
-    suffix = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}[mime_type]
-    stored_name = f"{attachment_id}{suffix}"
-    target = REIMBURSEMENT_ATTACHMENTS_PATH / claim_id / stored_name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(body)
-    now = now_iso()
-    item = {
-        "id": attachment_id,
-        "claimId": claim_id,
-        "originalName": clean_text(filename) or stored_name,
-        "storedName": stored_name,
-        "mimeType": mime_type,
-        "sizeBytes": len(body),
-        "sha256": digest,
-        "ocrStatus": "disabled",
-        "ocrResult": "",
-        "ocrProvider": "",
-        "ocrModelVersion": "",
-        "ocrRequestedAt": "",
-        "ocrCompletedAt": "",
-        "ocrError": "",
-        "createdBy": actor["id"],
-        "createdAt": now,
-    }
-    conn.execute(
-        """INSERT INTO reimbursement_claim_attachments
-           (id, claim_id, original_name, stored_name, mime_type, size_bytes, sha256, ocr_status, ocr_result, ocr_provider,
-            ocr_model_version, ocr_requested_at, ocr_completed_at, ocr_error, created_by, created_at, payload)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            item["id"],
-            item["claimId"],
-            item["originalName"],
-            item["storedName"],
-            item["mimeType"],
-            item["sizeBytes"],
-            item["sha256"],
-            item["ocrStatus"],
-            item["ocrResult"],
-            item["ocrProvider"],
-            item["ocrModelVersion"],
-            None,
-            None,
-            item["ocrError"],
-            item["createdBy"],
-            item["createdAt"],
-            _dump(item),
-        ),
-    )
-    _refresh_claim_balances(conn, claim_id)
-    event = audit_event(
-        actor,
-        "reimbursement_ledger.attachment_added",
-        "reimbursement_claim_attachment",
-        attachment_id,
-        f"{actor['displayName']} 上传报销单附件 {item['originalName']}",
-        [],
-        now,
-        None,
-        item,
-    )
-    write_audit_events(conn, [event])
-    conn.commit()
-    return {"item": item, "auditLogs": merge_audit_logs([], [event])}
-
-
-def get_attachment(conn, actor, attachment_id):
-    row = conn.execute("SELECT * FROM reimbursement_claim_attachments WHERE id = ?", (attachment_id,)).fetchone()
-    if not row:
-        raise LookupError("报销单附件不存在")
-    item = _attachment_payload(row)
-    _require_claim_view(actor, _claim_row(conn, item["claimId"]))
-    target = REIMBURSEMENT_ATTACHMENTS_PATH / item["claimId"] / item["storedName"]
-    if not target.is_file():
-        raise LookupError("报销单附件文件不存在")
-    return item, target.read_bytes()
-
-
 def list_legacy_records(conn, actor, filters):
     _require_authenticated(actor)
     limit, offset = _limit(filters), _offset(filters)
@@ -648,123 +393,4 @@ def sync_settlement_obligations(conn, actor=None):
         conn.commit()
 
 
-def _obligation_filters(filters):
-    clauses, params = [], []
-    for field, column in (("month", "month"), ("iacuc", "iacuc")):
-        value = clean_text(filters.get(field, ""))
-        if value:
-            clauses.append(f"{column} = ?")
-            params.append(value)
-    pi = clean_text(filters.get("sourcePi", ""))
-    if pi:
-        clauses.append("source_pi LIKE ?")
-        params.append(f"%{pi}%")
-    status = clean_text(filters.get("status", ""))
-    if status and status != "all":
-        clauses.append("status = ?")
-        params.append(status)
-    return clauses, params
-
-
-def _normalize_funding_line(value, index):
-    if not isinstance(value, dict):
-        raise ValueError("经费明细格式无效")
-    fund_book = clean_text(value.get("fundBookNo", ""))
-    owner = clean_text(value.get("fundingOwner", ""))
-    amount = _input_money(value.get("reimbursementAmount", 0), "报销金额")
-    if not fund_book or not owner:
-        raise ValueError("经费明细需填写经费本号和经费负责人")
-    if amount < 0:
-        raise ValueError("报销金额不能小于 0")
-    return {
-        "id": clean_text(value.get("id", "")),
-        "fundBookNo": fund_book,
-        "fundingOwner": owner,
-        "reimbursementAmount": amount,
-        "sortOrder": index,
-    }
-
-
-def _detect_attachment_type(body, supplied_type, filename):
-    if body.startswith(b"%PDF-"):
-        return "application/pdf"
-    if body.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if body.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    guessed = mimetypes.guess_type(filename or "")[0] or clean_text(supplied_type).split(";", 1)[0]
-    return guessed.lower()
-
-
-def _require_authenticated(actor):
-    if not actor:
-        raise PermissionError("请先登录")
-
-
-def _require_admin(actor):
-    _require_authenticated(actor)
-    if actor.get("role") != "admin":
-        raise PermissionError("需要管理员权限")
-
-
-def _require_claim_view(actor, claim):
-    _require_authenticated(actor)
-    if actor.get("role") == "admin" or claim["created_by"] == actor.get("id"):
-        return
-    raise PermissionError("没有权限查看该报销单")
-
-
-def _require_claim_edit(actor, claim):
-    _require_claim_view(actor, claim)
-    if claim["status"] == "void":
-        raise ValueError("已作废报销单不能编辑")
-
-
-def _limit(filters):
-    try:
-        return max(1, min(int(filters.get("limit", 20)), 100))
-    except (TypeError, ValueError):
-        return 20
-
-
-def _offset(filters):
-    try:
-        return max(0, int(filters.get("offset", 0)))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _page(filters, total):
-    limit, offset = _limit(filters), _offset(filters)
-    return {"limit": limit, "offset": offset, "total": total, "hasMore": offset + limit < total}
-
-
-def _money(value):
-    try:
-        number = float(value or 0)
-        return round(number, 2) if math.isfinite(number) else 0.0
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _input_money(value, field):
-    if isinstance(value, bool):
-        raise ValueError(f"{field}格式无效")
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{field}格式无效") from exc
-    if not math.isfinite(number):
-        raise ValueError(f"{field}格式无效")
-    return round(number, 2)
-
-
-def _load(value):
-    try:
-        return json.loads(value or "{}")
-    except json.JSONDecodeError:
-        return {}
-
-
-def _dump(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+CLAIM_STATUSES = {"pending_submission", "reimbursing", "completed", "void"}

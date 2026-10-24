@@ -10,20 +10,20 @@
 
 ## 逐项进度
 
-- [ ] H01 `server_app/domains/animal_management/service.py`：待实现/验证。
-- [ ] H02 `server_app/domains/reimbursement_ledger/service.py`：待实现/验证。
-- [ ] H03 `server_app/pdf/documents.py`：待实现/验证。
-- [ ] H04 `server_app/persistence/base_schema.py`：待实现/验证。
-- [ ] H05 `server_app/repositories/billing_candidates.py`：待实现/验证。
-- [ ] H06 `server_app/repositories/billing_workflows.py`：待实现/验证。
-- [ ] H07 `server_app/web/read_actions.py`：待实现/验证。
-- [ ] H08 `src/react/features/animal-management/InspectionLists.tsx`：待实现/验证。
-- [ ] H09 `src/react/features/billing/components/SavedQuantitySheets.tsx`：待实现/验证。
-- [ ] H10 `src/react/features/cages/components/CageWorkspaceComponents.tsx`：待实现/验证。
-- [ ] H11 `src/react/print/printTemplates.test.ts`：待实现/验证。
-- [ ] H12 `src/react/print/settlement.ts`：待实现/验证。
-- [ ] H13 `src/styles/features/animal-management.css`：待实现/验证。
-- [ ] H14 `tests/test_feedback.py`：待实现/验证。
+- [x] H01 `server_app/domains/animal_management/service.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H02 `server_app/domains/reimbursement_ledger/service.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H03 `server_app/pdf/documents.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H04 `server_app/persistence/base_schema.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H05 `server_app/repositories/billing_candidates.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H06 `server_app/repositories/billing_workflows.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [x] H07 `server_app/web/read_actions.py`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H08 `src/react/features/animal-management/InspectionLists.tsx`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H09 `src/react/features/billing/components/SavedQuantitySheets.tsx`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H10 `src/react/features/cages/components/CageWorkspaceComponents.tsx`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H11 `src/react/print/printTemplates.test.ts`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H12 `src/react/print/settlement.ts`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H13 `src/styles/features/animal-management.css`：目标验证记录见下方批次，最终完整验收待执行。
+- [ ] H14 `tests/test_feedback.py`：目标验证记录见下方批次，最终完整验收待执行。
 
 ## 遥测与偏差
 
@@ -36,3 +36,5 @@
 - 独立只读审查未见剩余生产阻断；发现HTTP测试重复38项，已将生命周期抽为不继承TestCase的共享fixture，原50个测试体与3个生命周期体保持一致。首次88项记录保留，不作为目录通过依据。
 - 一个新增依赖：API清单静态检查原只识别read_actions本文件方法，已改为解析显式Mixin唯一owner，保留全部路由/权限校验和不存在/重复入口拒绝；新增2项保护测试，10项API清单测试通过。API路径/协议未改，仅生成文档中的实际代码入口更新。drift_score=1/14（7.1%），无需扩大范围。
 - 实现期装饰器、缩进、CSS边界、格式检查和回环端口sandbox失败均保留于外部hotspot-evidence；无断言/阈值放宽。
+
+B1：6项生产后端拆分及静态API owner适配已完成目标业务154项、API清单10项与架构检查；独立review未见生产阻断。迁移和事务语义按原体保留。

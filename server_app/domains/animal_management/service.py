@@ -1,4 +1,4 @@
-"""Room-scoped animal inspection records, evidence, and corrective-action workflow."""
+"""Inspection use-case orchestration; persistence and permission rules are explicit dependencies."""
 
 import json
 from collections import Counter
@@ -11,11 +11,29 @@ from server_app.shared import clean_text, new_id, now_iso
 from .catalog import CATALOG_VERSION, ensure_catalog_rows
 from .catalog import catalog_payload as read_catalog_payload
 from .catalog_payload import prepare_catalog_payload
+from .inspection_repository import _attachment_payload as _attachment_payload
+from .inspection_repository import _attachment_values as _attachment_values
+from .inspection_repository import _distinct as _distinct
+from .inspection_repository import _finding_payload as _finding_payload
+from .inspection_repository import _finding_row as _finding_row
+from .inspection_repository import _insert_answers as _insert_answers
+from .inspection_repository import _insert_finding_event as _insert_finding_event
+from .inspection_repository import _inspection_list_item as _inspection_list_item
+from .inspection_repository import _inspection_payload as _inspection_payload
+from .inspection_repository import _inspection_row as _inspection_row
+from .inspection_repository import _inspection_values as _inspection_values
+from .inspection_repository import _room_snapshot as _room_snapshot
+from .inspection_repository import _upsert_finding as _upsert_finding
+from .inspection_rules import _answer_outcome as _answer_outcome
+from .inspection_rules import _detect_image_type as _detect_image_type
+from .inspection_rules import _finding_visibility_clause as _finding_visibility_clause
+from .inspection_rules import _inspection_visibility_clause as _inspection_visibility_clause
+from .inspection_rules import _require_actor as _require_actor
+from .inspection_rules import _require_draft_write as _require_draft_write
+from .inspection_rules import _require_room_manager as _require_room_manager
+from .inspection_rules import _require_view as _require_view
+from .inspection_rules import _validate_submission as _validate_submission
 from .normalization import clean_answers, clean_modules
-
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-FINDING_STATUSES = {"pending", "in_progress", "pending_recheck", "resolved"}
 
 
 def ensure_catalog(conn):
@@ -420,335 +438,10 @@ def export_inspection_pdf(conn, actor, inspection_id):
     ), f"实验动物巡检报告 {detail['item']['roomName']} {detail['item']['createdAt'][:10]}.pdf"
 
 
-def _inspection_row(conn, inspection_id):
-    row = conn.execute("SELECT * FROM animal_inspections WHERE id = ?", (inspection_id,)).fetchone()
-    if not row:
-        raise LookupError("巡检记录不存在")
-    return _inspection_payload(row)
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
-def _inspection_payload(row):
-    payload = json.loads(row["payload"])
-    payload.update(
-        {
-            "id": row["id"],
-            "roomId": row["room_id"],
-            "roomName": row["room_name"],
-            "facility": row["facility"] or "",
-            "moduleCodes": json.loads(row["module_codes"]),
-            "status": row["status"],
-            "catalogVersion": row["catalog_version"],
-            "createdBy": row["created_by"],
-            "createdByName": row["created_by_name"],
-            "submittedAt": row["submitted_at"] or "",
-            "updatedAt": row["updated_at"],
-            "snapshot": json.loads(row["snapshot_json"]),
-        }
-    )
-    return payload
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 
-def _inspection_values(item):
-    return (
-        item["id"],
-        item["roomId"],
-        item["roomName"],
-        item["facility"],
-        json.dumps(item["moduleCodes"], ensure_ascii=False),
-        item["status"],
-        item["catalogVersion"],
-        item["createdBy"],
-        item["createdByName"],
-        item["submittedAt"] or None,
-        item["updatedAt"],
-        json.dumps(item["snapshot"], ensure_ascii=False),
-        json.dumps(item, ensure_ascii=False),
-    )
-
-
-def _inspection_list_item(conn, row, finding_counts=None):
-    item = _inspection_payload(row)
-    counts = finding_counts
-    if counts is None:
-        counts = Counter(
-            finding["status"]
-            for finding in conn.execute(
-                "SELECT status FROM animal_inspection_findings WHERE inspection_id = ?", (item["id"],)
-            )
-        )
-    item["findingSummary"] = {
-        "total": sum(counts.values()),
-        "pending": counts["pending"] + counts["in_progress"] + counts["pending_recheck"],
-        "resolved": counts["resolved"],
-    }
-    return item
-
-
-def _room_snapshot(conn, room_id):
-    row = conn.execute("SELECT payload FROM rooms WHERE id = ?", (room_id,)).fetchone()
-    if not row:
-        raise LookupError("饲养间不存在")
-    room = json.loads(row["payload"])
-    occupancy_rows = conn.execute(
-        "SELECT iacuc, pi, species, animal_count, cage_code FROM occupancies WHERE room_id = ? AND status IN ('active', 'reserved')",
-        (room_id,),
-    ).fetchall()
-    iacucs = sorted({clean_text(item["iacuc"]) for item in occupancy_rows if clean_text(item["iacuc"])})
-    pis = sorted({clean_text(item["pi"]) for item in occupancy_rows if clean_text(item["pi"])})
-    species = sorted({clean_text(item["species"]) for item in occupancy_rows if clean_text(item["species"])})
-    cages = sorted({clean_text(item["cage_code"]) for item in occupancy_rows if clean_text(item["cage_code"])})
-    snapshot = {
-        "iacucs": iacucs,
-        "pis": pis,
-        "species": species,
-        "animalCount": sum(int(item["animal_count"] or 0) for item in occupancy_rows),
-        "cageCodes": cages,
-    }
-    return room, snapshot
-
-
-def _insert_answers(conn, inspection_id, answers):
-    for answer in answers:
-        payload = dict(answer)
-        conn.execute(
-            """INSERT INTO animal_inspection_answers (id, inspection_id, module_code, node_code, score, sub_option, note, payload)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                new_id("inspection-answer"),
-                inspection_id,
-                answer["moduleCode"],
-                answer["nodeCode"],
-                answer["score"],
-                answer["subOption"] or None,
-                answer["note"] or None,
-                json.dumps(payload, ensure_ascii=False),
-            ),
-        )
-
-
-def _validate_submission(conn, inspection, answers):
-    selected = set(inspection["moduleCodes"])
-    answered = {(item["module_code"], item["node_code"]) for item in answers}
-    rows = conn.execute(
-        "SELECT module_code, code, input_type FROM inspection_catalog_nodes WHERE version = ? AND node_type = 'ITEM'",
-        (inspection["catalogVersion"],),
-    ).fetchall()
-    missing = [
-        row["code"]
-        for row in rows
-        if row["module_code"] in selected
-        and row["module_code"] != "abnormalAnimalAssessment"
-        and (row["module_code"], row["code"]) not in answered
-    ]
-    if missing:
-        raise ValueError(f"仍有 {len(missing)} 项巡检结论未确认")
-
-
-def _answer_outcome(payload, legacy_score):
-    outcome = clean_text(payload.get("outcome"))
-    if outcome in {"normal", "abnormal"}:
-        return outcome
-    return "abnormal" if int(legacy_score or 3) < 3 else "normal"
-
-
-def _finding_row(conn, finding_id):
-    row = conn.execute("SELECT * FROM animal_inspection_findings WHERE id = ?", (finding_id,)).fetchone()
-    if not row:
-        raise LookupError("异常处置项不存在")
-    return _finding_payload(conn, row)
-
-
-def _finding_payload(conn, row):
-    payload = json.loads(row["payload"])
-    payload.update(
-        {
-            "id": row["id"],
-            "inspectionId": row["inspection_id"],
-            "roomId": row["room_id"],
-            "moduleCode": row["module_code"],
-            "nodeCode": row["node_code"],
-            "severity": row["severity"],
-            "status": row["status"],
-            "locationHint": row["location_hint"] or "",
-            "rackHint": row["rack_hint"] or "",
-            "cageNumber": row["cage_number"] or "",
-            "animalIdentifier": row["animal_identifier"] or "",
-            "actionNote": row["action_note"] or "",
-            "responsibleName": row["responsible_name"] or "",
-            "recheckDueAt": row["recheck_due_at"] or "",
-            "resolvedAt": row["resolved_at"] or "",
-            "updatedAt": row["updated_at"],
-        }
-    )
-    inspection = conn.execute(
-        "SELECT room_name, created_by_name FROM animal_inspections WHERE id = ?", (row["inspection_id"],)
-    ).fetchone()
-    payload["roomName"] = inspection["room_name"] if inspection else ""
-    payload["createdByName"] = inspection["created_by_name"] if inspection else ""
-    payload["attachments"] = [
-        _attachment_payload(item)
-        for item in conn.execute(
-            "SELECT * FROM animal_inspection_attachments WHERE finding_id = ? ORDER BY created_at", (row["id"],)
-        )
-    ]
-    payload["events"] = [
-        dict(item) | {"payload": json.loads(item["payload"])}
-        for item in conn.execute(
-            "SELECT * FROM animal_inspection_finding_events WHERE finding_id = ? ORDER BY at", (row["id"],)
-        )
-    ]
-    return payload
-
-
-def _upsert_finding(conn, item):
-    conn.execute(
-        """INSERT INTO animal_inspection_findings
-           (id, inspection_id, room_id, module_code, node_code, severity, status, location_hint, rack_hint, cage_number,
-            animal_identifier, action_note, responsible_name, recheck_due_at, resolved_at, updated_at, payload)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET status=excluded.status, location_hint=excluded.location_hint,
-             rack_hint=excluded.rack_hint, cage_number=excluded.cage_number, animal_identifier=excluded.animal_identifier,
-             action_note=excluded.action_note, responsible_name=excluded.responsible_name,
-             recheck_due_at=excluded.recheck_due_at, resolved_at=excluded.resolved_at, updated_at=excluded.updated_at, payload=excluded.payload""",
-        (
-            item["id"],
-            item["inspectionId"],
-            item["roomId"],
-            item["moduleCode"],
-            item["nodeCode"],
-            item["severity"],
-            item["status"],
-            item["locationHint"] or None,
-            item["rackHint"] or None,
-            item["cageNumber"] or None,
-            item["animalIdentifier"] or None,
-            item["actionNote"] or None,
-            item["responsibleName"] or None,
-            item["recheckDueAt"] or None,
-            item["resolvedAt"] or None,
-            item["updatedAt"],
-            json.dumps(item, ensure_ascii=False),
-        ),
-    )
-
-
-def _insert_finding_event(conn, finding_id, event_type, note, actor, at):
-    payload = {
-        "findingId": finding_id,
-        "eventType": event_type,
-        "note": note,
-        "actorId": actor["id"],
-        "actorName": actor["displayName"],
-        "at": at,
-    }
-    conn.execute(
-        """INSERT INTO animal_inspection_finding_events (id, finding_id, event_type, note, actor_id, actor_name, at, payload)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            new_id("finding-event"),
-            finding_id,
-            event_type,
-            note or None,
-            actor["id"],
-            actor["displayName"],
-            at,
-            json.dumps(payload, ensure_ascii=False),
-        ),
-    )
-
-
-def _attachment_values(item):
-    return (
-        item["id"],
-        item["inspectionId"],
-        item["findingId"],
-        item["originalName"],
-        item["storedName"],
-        item["mimeType"],
-        item["sizeBytes"],
-        item["createdBy"],
-        item["createdAt"],
-        json.dumps(item, ensure_ascii=False),
-    )
-
-
-def _attachment_payload(row):
-    payload = json.loads(row["payload"])
-    payload.update(
-        {
-            "id": row["id"],
-            "inspectionId": row["inspection_id"],
-            "findingId": row["finding_id"],
-            "originalName": row["original_name"],
-            "mimeType": row["mime_type"],
-            "sizeBytes": row["size_bytes"],
-            "createdAt": row["created_at"],
-            "downloadUrl": f"/api/animal-inspection-attachments/{row['id']}",
-        }
-    )
-    return payload
-
-
-def _inspection_visibility_clause(actor):
-    if actor.get("role") == "admin":
-        return ["1 = 1"], []
-    allowed = [clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)]
-    placeholders = ", ".join("?" for _ in allowed)
-    if allowed:
-        return [f"(created_by = ? OR room_id IN ({placeholders}))"], [actor["id"], *allowed]
-    return ["created_by = ?"], [actor["id"]]
-
-
-def _finding_visibility_clause(actor):
-    if actor.get("role") == "admin":
-        return ["1 = 1"], []
-    allowed = [clean_text(item) for item in actor.get("roomIds", []) if clean_text(item)]
-    placeholders = ", ".join("?" for _ in allowed)
-    if allowed:
-        return [f"(i.created_by = ? OR i.room_id IN ({placeholders}))"], [actor["id"], *allowed]
-    return ["i.created_by = ?"], [actor["id"]]
-
-
-def _require_actor(actor):
-    if not actor:
-        raise PermissionError("请先登录")
-
-
-def _require_view(actor, item):
-    _require_actor(actor)
-    if (
-        actor.get("role") == "admin"
-        or item["createdBy"] == actor.get("id")
-        or item["roomId"] in set(actor.get("roomIds", []))
-    ):
-        return
-    raise PermissionError("无权查看该饲养间巡检记录")
-
-
-def _require_draft_write(actor, item):
-    _require_view(actor, item)
-    if item["status"] != "draft":
-        raise ValueError("已提交巡检记录保持锁定，请通过复查记录补充处理结果")
-    if actor.get("role") != "admin" and item["createdBy"] != actor.get("id"):
-        raise PermissionError("仅创建者可编辑巡检草稿")
-
-
-def _require_room_manager(actor, item):
-    _require_view(actor, item)
-    if actor.get("role") == "admin" or item["roomId"] in set(actor.get("roomIds", [])):
-        return
-    raise PermissionError("需要该饲养间的处置权限")
-
-
-def _distinct(conn, sql, params):
-    return [row[0] for row in conn.execute(sql, tuple(params)).fetchall() if clean_text(row[0])]
-
-
-def _detect_image_type(body, declared):
-    if body.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if body.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if body.startswith(b"RIFF") and body[8:12] == b"WEBP":
-        return "image/webp"
-    return clean_text(declared).split(";", 1)[0].lower()
+FINDING_STATUSES = {"pending", "in_progress", "pending_recheck", "resolved"}

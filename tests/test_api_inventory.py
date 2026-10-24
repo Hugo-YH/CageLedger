@@ -6,12 +6,43 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.api_inventory import CATALOG, ROOT, ROUTING_SOURCES, expanded, render, routing_surface, validate
+from scripts.api_inventory import (
+    CATALOG,
+    ROOT,
+    ROUTING_SOURCES,
+    expanded,
+    read_action_boundary,
+    render,
+    routing_surface,
+    validate,
+)
 
 
 class ApiInventoryTests(unittest.TestCase):
     def setUp(self):
         self.catalog = json.loads(CATALOG.read_text())
+
+    def test_read_action_owner_is_static_and_points_to_the_real_domain_adapter(self):
+        with patch.object(sqlite3, "connect", side_effect=AssertionError("inventory must be static")):
+            self.assertEqual(
+                read_action_boundary("get_animal_inspection"),
+                "server_app/web/read_inspection_actions.py:get_animal_inspection",
+            )
+        with self.assertRaisesRegex(ValueError, "唯一实现"):
+            read_action_boundary("get_nonexistent_action")
+
+    def test_ambiguous_read_action_owners_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            web = root / "server_app/web"
+            web.mkdir(parents=True)
+            (web / "read_actions.py").write_text(
+                "from .one import One\nfrom .two import Two\nclass ReadActionsMixin(One, Two):\n    pass\n"
+            )
+            for module, name in (("one", "One"), ("two", "Two")):
+                (web / f"{module}.py").write_text(f"class {name}:\n    def get_shared(self):\n        pass\n")
+            with self.assertRaisesRegex(ValueError, "唯一实现"):
+                read_action_boundary("get_shared", root)
 
     def test_current_catalog_is_complete_for_reviewed_routes_without_loading_a_database(self):
         with patch.object(sqlite3, "connect", side_effect=AssertionError("inventory must be static")):

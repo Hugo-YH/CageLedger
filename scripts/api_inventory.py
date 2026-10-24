@@ -95,6 +95,35 @@ def primary_boundary(method, path, registered):
     return registered.get((method, path), "server_app/web/router_registry.py")
 
 
+def read_action_boundary(action, root=ROOT):
+    """Resolve the explicit read-action mixin statically, without importing the application."""
+    filename = "server_app/web/read_actions.py"
+    syntax = tree(root, filename)
+    composition = next(
+        node for node in syntax.body if isinstance(node, ast.ClassDef) and node.name == "ReadActionsMixin"
+    )
+    if any(isinstance(node, ast.FunctionDef) and node.name == action for node in composition.body):
+        return f"{filename}:{action}"
+    imports = {
+        alias.asname or alias.name: (node.module, alias.name)
+        for node in syntax.body
+        if isinstance(node, ast.ImportFrom) and node.level == 1
+        for alias in node.names
+    }
+    owners = []
+    for base in composition.bases:
+        if not isinstance(base, ast.Name) or base.id not in imports:
+            raise ValueError(f"未支持的GET组合入口: {ast.unparse(base)}")
+        module, name = imports[base.id]
+        target = f"server_app/web/{module}.py"
+        owner = next(node for node in tree(root, target).body if isinstance(node, ast.ClassDef) and node.name == name)
+        if any(isinstance(node, ast.FunctionDef) and node.name == action for node in owner.body):
+            owners.append(f"{target}:{action}")
+    if len(owners) != 1:
+        raise ValueError(f"GET动作必须有唯一实现: {action} ({len(owners)})")
+    return owners[0]
+
+
 def registered_routes(root=ROOT):
     registered = {
         (node.args[0].value, normalized_path(node.args[1].value)): "server_app/web/router_registry.py"
@@ -120,7 +149,11 @@ def registered_routes(root=ROOT):
                             else f"server_app/web/{name}.py:{'handle_get' if name == 'animal_inspection' else 'handle'}"
                         )
                     else:
-                        boundary = f"server_app/web/{'read' if spec['method'] == 'GET' else 'write'}_actions.py:{spec['action']}"
+                        boundary = (
+                            read_action_boundary(spec["action"], root)
+                            if spec["method"] == "GET"
+                            else f"server_app/web/write_actions.py:{spec['action']}"
+                        )
                     for path in spec["paths"]:
                         identity = spec["method"], path
                         if identity in registered:
