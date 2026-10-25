@@ -11,6 +11,7 @@ import { CommandBar, ListRefreshStatus } from "../../components/ui";
 import type { WorkspaceView } from "../../state/ui";
 import { useViewVisibility } from "../../state/systemFeatureVisibility";
 import { APP_VERSION } from "../../version";
+import { DashboardChartState } from "./DashboardChartState";
 import { PiFeeSummary } from "./PiFeeSummary";
 
 // @ant-design/plots 体积较大，拆为独立懒加载块：仅图表卡实际渲染时下载。
@@ -285,7 +286,12 @@ function DashboardContent({
                   <Statistic title="接收只数" value={intake.animals} />
                 </Col>
               </Row>
-              <IntakeTrend items={intake.trend} unit={intake.trendUnit} />
+              <IntakeTrend
+                items={intake.trend}
+                unit={intake.trendUnit}
+                batches={intake.batches}
+                animals={intake.animals}
+              />
             </Card>
           </Col>
           <Col lg={10} xs={24}>
@@ -308,7 +314,11 @@ function DashboardContent({
 function IntakeTrend({
   items,
   unit,
+  batches,
+  animals,
 }: {
+  batches: number;
+  animals: number;
   items: Array<{ month?: string; day?: number; batches: number; animals: number }>;
   unit: "day" | "month";
 }) {
@@ -320,34 +330,45 @@ function IntakeTrend({
   return (
     <div className="ant-dashboard-trend">
       <DeferredChart height={180}>
-        <AreaChart
-          data={data}
-          xField="label"
-          yField="animals"
-          height={180}
-          axis={{
-            x: { title: false, labelAutoRotate: false, labelFormatter: (v: string) => v.replace("日", "") },
-            y: { title: false },
-          }}
-          style={{
-            shape: "smooth",
-            fill: () =>
-              `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
-          }}
-          tooltip={{
-            title: "label",
-            items: [
-              (datum: { animals: number }) => ({
-                name: "接收只数",
-                value: datum.animals,
-              }),
-            ],
-          }}
-          scale={{ y: { nice: true } }}
-          legend={false}
-        />
+        <DashboardChartState
+          message={
+            !batches && !animals
+              ? "当前统计范围暂无接收记录"
+              : !data.length
+                ? "当前统计范围暂无接收趋势记录"
+                : undefined
+          }
+        >
+          <AreaChart
+            data={data}
+            xField="label"
+            yField="animals"
+            height={180}
+            axis={{
+              x: { title: false, labelAutoRotate: false, labelFormatter: (v: string) => v.replace("日", "") },
+              y: { title: false },
+            }}
+            style={{
+              shape: "smooth",
+              fill: () =>
+                `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
+            }}
+            tooltip={{
+              title: "label",
+              items: [
+                (datum: { animals: number }) => ({
+                  name: "接收只数",
+                  value: datum.animals,
+                }),
+              ],
+            }}
+            scale={{ y: { nice: true } }}
+            legend={false}
+          />
+        </DashboardChartState>
       </DeferredChart>
       <Typography.Text type="secondary" className="ant-dashboard-trend-caption">
+        {batches > 0 && animals === 0 ? `已记录 ${batches} 批接收，接收只数为 0。` : ""}
         {unit === "month" ? "近 6 个月接收只数变化" : "当月每日接收只数变化"}
       </Typography.Text>
     </div>
@@ -385,49 +406,53 @@ function StrainDistribution({ items }: { items: Array<{ strain: string; animals:
   return (
     <div className="ant-dashboard-pie">
       <DeferredChart height={280}>
-        <RoseChart
-          data={data}
-          xField="type"
-          yField="value"
-          colorField="type"
-          radius={0.9}
-          style={{
-            inset: 2,
-            radius: 8,
-            fill: (datum: { type: string }) => {
-              const color = colorOf(datum.type);
-              return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
-            },
-          }}
-          axis={false}
-          height={280}
-          scale={{
-            color: {
-              range: data.map((item) => colorOf(item.type)),
-            },
-          }}
-          label={{
-            text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
-            position: "outside",
-            fontSize: token.fontSizeSM,
-          }}
-          legend={{
-            color: {
-              position: "bottom",
-              layout: { justifyContent: "center" },
-              labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
-            },
-          }}
-          tooltip={{
-            title: "type",
-            items: [
-              (datum: { animals: number; percent: number }) => ({
-                name: "接收只数",
-                value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
-              }),
-            ],
-          }}
-        />
+        <DashboardChartState
+          message={!items.length ? "当前统计范围暂无品系统计" : total === 0 ? "已记录品系，接收只数均为 0" : undefined}
+        >
+          <RoseChart
+            data={data}
+            xField="type"
+            yField="value"
+            colorField="type"
+            radius={0.9}
+            style={{
+              inset: 2,
+              radius: 8,
+              fill: (datum: { type: string }) => {
+                const color = colorOf(datum.type);
+                return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
+              },
+            }}
+            axis={false}
+            height={280}
+            scale={{
+              color: {
+                range: data.map((item) => colorOf(item.type)),
+              },
+            }}
+            label={{
+              text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
+              position: "outside",
+              fontSize: token.fontSizeSM,
+            }}
+            legend={{
+              color: {
+                position: "bottom",
+                layout: { justifyContent: "center" },
+                labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
+              },
+            }}
+            tooltip={{
+              title: "type",
+              items: [
+                (datum: { animals: number; percent: number }) => ({
+                  name: "接收只数",
+                  value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
+                }),
+              ],
+            }}
+          />
+        </DashboardChartState>
       </DeferredChart>
     </div>
   );
@@ -477,45 +502,51 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
       </div>
       <div className="ant-dashboard-room-area">
         <DeferredChart height={220}>
-          <AreaChart
-            data={chartData}
-            xField="day"
-            yField="cages"
-            colorField={selected === "__all__" ? "roomName" : undefined}
-            stack={selected === "__all__"}
-            scale={selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } }}
-            height={220}
-            axis={{
-              x: {
-                title: false,
-                labelAutoRotate: false,
-                labelFormatter: (v: string) => v.replace("日", ""),
-              },
-              y: { title: false },
-            }}
-            style={{
-              shape: "smooth",
-              fill: (seriesData: RoomAreaDatum[]) => {
-                const roomName = seriesData[0]?.roomName;
-                const color = selected === "__all__" ? colorOf(roomName) : selectedColor;
-                return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
-              },
-            }}
-            line={selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } }}
-            tooltip={{
-              title: "day",
-              items:
-                selected === "__all__"
-                  ? [{ field: "cages", name: "笼位" }]
-                  : [
-                      (datum: RoomAreaDatum) => ({
-                        name: selected,
-                        value: datum.cages,
-                      }),
-                    ],
-            }}
-            legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
-          />
+          <DashboardChartState
+            message={
+              !rooms.length ? "当前统计范围暂无笼位统计" : !chartData.length ? "当前筛选下暂无笼位趋势记录" : undefined
+            }
+          >
+            <AreaChart
+              data={chartData}
+              xField="day"
+              yField="cages"
+              colorField={selected === "__all__" ? "roomName" : undefined}
+              stack={selected === "__all__"}
+              scale={selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } }}
+              height={220}
+              axis={{
+                x: {
+                  title: false,
+                  labelAutoRotate: false,
+                  labelFormatter: (v: string) => v.replace("日", ""),
+                },
+                y: { title: false },
+              }}
+              style={{
+                shape: "smooth",
+                fill: (seriesData: RoomAreaDatum[]) => {
+                  const roomName = seriesData[0]?.roomName;
+                  const color = selected === "__all__" ? colorOf(roomName) : selectedColor;
+                  return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
+                },
+              }}
+              line={selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } }}
+              tooltip={{
+                title: "day",
+                items:
+                  selected === "__all__"
+                    ? [{ field: "cages", name: "笼位" }]
+                    : [
+                        (datum: RoomAreaDatum) => ({
+                          name: selected,
+                          value: datum.cages,
+                        }),
+                      ],
+              }}
+              legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
+            />
+          </DashboardChartState>
         </DeferredChart>
       </div>
     </Card>
