@@ -171,6 +171,10 @@ test("workspace return restores applied preferences and scroll without bulk sele
   await expect(page.getByRole("checkbox", { name: "选择 LIST-021", exact: true })).not.toBeChecked();
   await expect(page.locator(".quantity-saved-pagination .ant-pagination-item-active")).toHaveText("2");
   await expect.poll(() => scrollPosition(page)).toBe(before);
+  await page.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
+  expect(await scrollPosition(page)).toBe(before);
   expect(requests.at(-1)!.search).toBe(params);
   await screenshot(page, info, "after-workspace-return");
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
@@ -219,4 +223,57 @@ test("a fresh smaller result corrects the page, while cancelled late results can
   await openSavedQuantitySheets(page);
   await expect(page.locator(".quantity-saved-list tbody tr[data-row-key]")).toHaveCount(3);
   await expect(page.getByText("共 3 条", { exact: true }).first()).toBeVisible();
+});
+
+test("the five page sizes support mouse, keyboard and cancellation without losing the list", async ({ page }) => {
+  const requests: URL[] = [];
+  await page.route("**/api/quantity-sheets?*", async (route) => {
+    requests.push(new URL(route.request().url()));
+    await respond(route);
+  });
+  await openSavedQuantitySheets(page);
+  await expect(page.getByRole("checkbox", { name: "选择 LIST-001", exact: true })).toBeEnabled();
+  const size = page.getByLabel("每页显示条数");
+  await size.click();
+  await page.getByRole("option", { name: "20 条/页", exact: true }).click();
+  await expect(page.locator(".quantity-saved-list tbody tr[data-row-key]")).toHaveCount(20);
+  await size.click();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".quantity-saved-list tbody tr[data-row-key]")).toHaveCount(10);
+  await expect(size).toBeFocused();
+  const before = requests.length;
+  await size.click();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("option", { name: "20 条/页", exact: true })).toBeHidden();
+  await expect(size).toBeFocused();
+  await expect(page.locator(".quantity-saved-list tbody tr[data-row-key]")).toHaveCount(10);
+  expect(requests).toHaveLength(before);
+  // Returning to 10 uses the still-fresh Query cache; the last HTTP request
+  // can legitimately remain the earlier request for 20.
+  await expect(page.locator(".quantity-saved-pagination .ant-select-content")).toHaveAttribute("title", "10 条/页");
+  await expect(page.locator(".quantity-saved-pagination .ant-pagination-item-active")).toHaveText("1");
+  for (const count of [5, 50, 100]) {
+    await size.click();
+    let activeLabel = "";
+    for (let step = 0; step < 6; step++) {
+      activeLabel = await size.evaluate((input) => {
+        const id = input.getAttribute("aria-activedescendant");
+        return id ? document.getElementById(id)?.getAttribute("title") || "" : "";
+      });
+      if (activeLabel === `${count} 条/页`) break;
+      await page.keyboard.press(Number.parseInt(activeLabel, 10) > count ? "ArrowUp" : "ArrowDown");
+    }
+    expect(activeLabel).toBe(`${count} 条/页`);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".quantity-saved-list tbody tr[data-row-key]")).toHaveCount(
+      Math.min(count, sheets.length),
+    );
+    await expect(page.locator(".quantity-saved-pagination .ant-select-content")).toHaveAttribute(
+      "title",
+      `${count} 条/页`,
+    );
+    expect(requests.at(-1)?.searchParams.get("limit")).toBe(String(count));
+  }
 });

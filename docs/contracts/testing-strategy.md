@@ -51,6 +51,12 @@ Playwright 默认启动隔离服务；`CAGELEDGER_E2E_REUSE=1` 会复用已有�
 
 涉及字段、计费结果、汇总、分页、列宽、说明或页脚的修改，需要同时更新两端实现，并分别在 `src/react/print/printTemplates.test.ts` 和 `tests/test_pdf_exports.py` 添加等价断言。多页结算单至少覆盖：第一页汇总包含后续页同品种伦理，逐日笼数、减免、梯度、缴纳金额和单项合计一致，预览与导出 PDF 的物理页数及页码一致。只验证其中一个出口不得作为完成依据。
 
+### 浏览器诊断与运行异常
+
+共用 `tests/e2e/fixtures.ts` 继续将未预期的应用 `console.warn`、`console.error` 和未捕获页面异常作为失败。Firefox 原生的 scroll-linked-effects 提示只有同时匹配 Firefox 引擎、完整原生包装文本、当前应用文档 URL、零行号和原生列号时，才单独记录为 `native-browser-performance-diagnostics` 报告附件；其他内容或来源仍失败。分类器有反例单测，并以真实页面日志验证：应用代码即使输出同样文字，也不能被重新分类。
+
+该诊断说明浏览器检测到可能影响异步滚动的效果，并不等于已测得卡顿或运行异常；保留附件供性能分析，不能宣称提示已消失或性能问题已修复。相关页面仍需验证实际滚轮、工具栏与焦点稳定，以及返回后的位置恢复。Mozilla 的语义见 [Scroll-linked effects](https://firefox-source-docs.mozilla.org/performance/scroll-linked_effects.html)。仅用于验证诊断分类器的反例用例可以使用原始 Playwright 捕获故意产生的警告/异常；业务流程仍使用共用 fixture。
+
 ## 完整基础检查
 
 `npm run check` 执行格式检查、全部 lint、TypeScript 类型检查、Vitest、Python unittest、项目契约检查与文档构建，是 Mac mini 发布前的基础检查，不是日常提交和推送的必需命令。简单修改只执行上方矩阵中的相关检查。开发依赖需要提前安装：

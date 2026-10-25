@@ -46,11 +46,19 @@ export function useWorkspaceScroll(key: string, ready: boolean) {
   useEffect(() => {
     if (!memory || !ready || restored.current) return;
     const saved = memory.get(`${key}:scroll`) as number | undefined;
-    const frame = requestAnimationFrame(() => {
-      const target = workspaceScrollTarget();
-      if (target && saved !== undefined) target.scrollTop = saved;
-      restored.current = true;
+    let restoreFrame = 0;
+    // Ant Table measures its header after mounting. Restore after that frame,
+    // rather than letting the browser's following layout displace the position.
+    const measureFrame = requestAnimationFrame(() => {
+      restoreFrame = requestAnimationFrame(() => {
+        const target = workspaceScrollTarget();
+        if (target && saved !== undefined) target.scrollTop = saved;
+        restored.current = true;
+      });
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(measureFrame);
+      cancelAnimationFrame(restoreFrame);
+    };
   }, [memory, key, ready]);
 }

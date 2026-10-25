@@ -1,12 +1,16 @@
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 
 import { APP_VERSION } from "../../src/react/version";
+import { isFirefoxScrollAdvisory, type BrowserConsoleRecord } from "../../src/test/browserConsoleDiagnostic";
 
 export { expect };
 
 export const test = base.extend({
-  page: async ({ page }, runPage) => {
+  page: async ({ page, browserName }, runPage, testInfo) => {
     const runtimeErrors: string[] = [];
+    const browserDiagnostics: BrowserConsoleRecord[] = [];
+    const baseUrl = testInfo.project.use.baseURL;
+    const appUrl = baseUrl ? new URL("/app", baseUrl).href : "";
     await page.route("**/api/release-announcements**", async (route) => {
       if (route.request().method() === "GET") {
         const version = route.request().url().split("/").at(-1) || "";
@@ -19,12 +23,23 @@ export const test = base.extend({
       if (message.type() !== "error" && message.type() !== "warning") return;
       const text = message.text();
       if (text.startsWith("Failed to load resource: the server responded with a status of")) return;
+      const record = { type: message.type(), text, location: message.location() };
+      if (isFirefoxScrollAdvisory(record, browserName, appUrl)) {
+        browserDiagnostics.push(record);
+        return;
+      }
       runtimeErrors.push(`console ${message.type()}: ${text}`);
     });
     page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
 
     await runPage(page);
 
+    if (browserDiagnostics.length) {
+      await testInfo.attach("native-browser-performance-diagnostics", {
+        body: JSON.stringify(browserDiagnostics, null, 2),
+        contentType: "application/json",
+      });
+    }
     expect(runtimeErrors, runtimeErrors.join("\n")).toEqual([]);
   },
 });
