@@ -33,6 +33,7 @@ test("native saved-list scrolling keeps the sticky toolbar and keyboard focus st
   const list = page
     .getByRole("region", { name: "已保存数量统计表", exact: true })
     .and(page.locator('[data-ui="data-table"]'));
+  const listHeight = await list.evaluate((element) => element.getBoundingClientRect().height);
   await list.focus();
   await page.keyboard.press("End");
   await expect
@@ -59,15 +60,17 @@ test("native saved-list scrolling keeps the sticky toolbar and keyboard focus st
         at: performance.now(),
         scrollTop: owner.scrollTop,
         toolbarTop: toolbar.getBoundingClientRect().top,
+        listHeight: document.querySelector(".quantity-saved-list")!.getBoundingClientRect().height,
       });
     }
     return result;
   });
   expect(new Set(samples.map((sample) => sample.toolbarTop)).size).toBe(1);
+  expect(samples.every((sample) => sample.listHeight === listHeight)).toBe(true);
   expect(samples.every((sample) => sample.scrollTop > 100)).toBe(true);
   await expect(list).toBeFocused();
   await info.attach("native-scroll-samples", {
-    body: JSON.stringify({ before, samples }, null, 2),
+    body: JSON.stringify({ before, listHeight, samples }, null, 2),
     contentType: "application/json",
   });
 });

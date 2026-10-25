@@ -111,7 +111,9 @@
   box-shadow: var(--focus-ring);
 }
 
-.table-wrap::after {
+/* The saved list delegates horizontal scrolling to Ant Table. Sticky floats on
+ * its overflow-visible outer frame enlarge Firefox's scroll range while moving. */
+.table-wrap:not(.quantity-saved-list)::after {
   content: "";
   position: sticky;
   right: 0;
@@ -123,7 +125,7 @@
   box-shadow: var(--shadow-fade-right);
 }
 
-.table-wrap::before {
+.table-wrap:not(.quantity-saved-list)::before {
   content: "";
   position: sticky;
   left: 0;
