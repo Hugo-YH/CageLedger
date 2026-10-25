@@ -3,19 +3,19 @@ import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type
 import { Modal } from "../../../components/ui/Modal";
 import { memo, useMemo, useState } from "react";
 import { iacucExpiryStatus } from "../../../../domain/iacucValidity";
-import type { QuantitySheet, QuantitySheetListParams } from "../../../api/contracts";
+import type { QuantitySheet } from "../../../api/contracts";
 import { useIacucExpiry } from "../../../api/iacuc";
 import {
   fetchQuantitySheetsForPrint,
   useDeleteQuantitySheet,
   useQuantitySheetDetail,
-  useQuantitySheets,
 } from "../../../api/quantitySheets";
 import { ActionButton, CommandBar, ModalPresence } from "../../../components/ui";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { PageSkeleton } from "../../../components/WorkspaceUi";
 import { openQuantitySheetsPrint } from "../../../print/quantitySheets";
 import { usePdfExport } from "../hooks/usePdfExport";
+import { useSavedQuantityList } from "../hooks/useSavedQuantityList";
 import { useQuantitySheetSelection } from "../hooks/useQuantitySheetSelection";
 import { SavedQuantitySheetTable } from "./SavedQuantitySheetTable";
 import { QuantityColumnTitle } from "./QuantityColumnTitle";
@@ -30,10 +30,8 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   onEdit: (id: string) => void;
   navigationAction?: React.ReactNode;
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "month", dir: "desc" });
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const { page, setPage, pageSize, setPageSize, setSort, filters, setFilters, params, list, data, blocked } =
+    useSavedQuantityList();
   const selection = useQuantitySheetSelection();
   const { selected, selectingAll, allFilteredSelected, clear, toggle, toggleAll } = selection;
   useSelectionScope(JSON.stringify(filters), clear, selected.length > 0 || selectingAll);
@@ -42,28 +40,17 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   const [exportError, setExportError] = useState("");
   const [printPending, setPrintPending] = useState(false);
   const pdfExport = usePdfExport();
-  const params = useMemo<QuantitySheetListParams>(
-    () => ({
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
-      sortKey: sort.key,
-      sortDir: sort.dir,
-      columnFilters: filters,
-    }),
-    [filters, page, pageSize, sort],
-  );
-  const list = useQuantitySheets(params);
   const iacucExpiry = useIacucExpiry();
   const detail = useQuantitySheetDetail(viewId);
   const remove = useDeleteQuantitySheet();
-  const items = list.data?.items || EMPTY_SHEETS;
-  const total = list.data?.page.total || 0;
+  const items = data?.items || EMPTY_SHEETS;
+  const total = data?.page.total || 0;
   const iacucExpiryByCode = useMemo(
     () =>
       new Map((iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate])),
     [iacucExpiry.data?.items],
   );
-  const initialLoading = list.isPending;
+  const initialLoading = list.isPending && !data;
   const columns = useMemo<TableProps<QuantitySheet>["columns"]>(
     () => [
       {
@@ -72,7 +59,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         title: (
           <Checkbox
             aria-label="全选当前筛选结果统计表"
-            disabled={list.isFetching || selectingAll || !total}
+            disabled={blocked || selectingAll || !total}
             checked={total > 0 && allFilteredSelected}
             onChange={() => void toggleAll(params)}
           />
@@ -81,7 +68,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
           <Checkbox
             aria-label={`选择 ${item.iacuc}`}
             checked={selected.includes(item.id)}
-            disabled={list.isFetching}
+            disabled={blocked}
             onChange={(event) => toggle(item.id, event.target.checked)}
           />
         ),
@@ -138,13 +125,13 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         align: "right",
         render: (_, item) => (
           <Space aria-label={`${item.iacuc}操作`} className="quantity-saved-row-actions" size={8}>
-            <Button color="blue" variant="filled" disabled={list.isFetching} onClick={() => setViewId(item.id)}>
+            <Button color="blue" variant="filled" disabled={blocked} onClick={() => setViewId(item.id)}>
               预览
             </Button>
-            <Button type="primary" disabled={list.isFetching} onClick={() => onEdit(item.id)}>
+            <Button type="primary" disabled={blocked} onClick={() => onEdit(item.id)}>
               编辑
             </Button>
-            <Button danger disabled={list.isFetching} onClick={() => setDeleteId(item.id)}>
+            <Button danger disabled={blocked} onClick={() => setDeleteId(item.id)}>
               删除
             </Button>
           </Space>
@@ -155,11 +142,14 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
       allFilteredSelected,
       filters,
       iacucExpiryByCode,
-      list.isFetching,
+      blocked,
       onEdit,
       params,
       selected,
       selectingAll,
+      setFilters,
+      setPage,
+      setSort,
       toggle,
       toggleAll,
       total,
@@ -202,13 +192,23 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
           onClear: clear,
           pending: selectingAll || printPending || pdfExport.isExporting,
         }}
-        context={<Tag color="blue">{selectingAll ? `正在选择全部 ${total} 条` : `共 ${total} 条`}</Tag>}
+        context={
+          <Tag color="blue">
+            {!data
+              ? "列表未加载"
+              : selectingAll
+                ? `正在选择全部 ${total} 条`
+                : list.isError || list.isPlaceholderData
+                  ? `上次结果共 ${total} 条`
+                  : `共 ${total} 条`}
+          </Tag>
+        }
         actions={
           <>
             {navigationAction}
             <ActionButton
               icon={<ActionIcon name="print" />}
-              disabled={!selected.length || list.isFetching || selectingAll || printPending}
+              disabled={!selected.length || blocked || selectingAll || printPending}
               loading={printPending}
               onClick={() => void printSelected()}
             >
@@ -219,7 +219,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         primaryAction={
           <ActionButton
             icon={<ActionIcon name="download" />}
-            disabled={!selected.length || list.isFetching || pdfExport.isExporting || selectingAll}
+            disabled={!selected.length || blocked || pdfExport.isExporting || selectingAll}
             loading={pdfExport.isExporting}
             tone="primary"
             onClick={() => void exportSelected()}
@@ -233,6 +233,24 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         }
       />
       <section className="panel quantity-saved-panel">
+        {list.isError ? (
+          <Alert
+            role="alert"
+            showIcon
+            type="error"
+            title={data ? "列表更新失败，当前显示上次成功结果，操作已暂停" : "无法加载数量统计表列表"}
+            description={list.error instanceof Error ? list.error.message : "请重试读取列表"}
+            action={
+              <Button
+                disabled={list.isFetching}
+                loading={list.isFetching}
+                onClick={() => void list.refetch({ cancelRefetch: false })}
+              >
+                重试
+              </Button>
+            }
+          />
+        ) : null}
         {selection.error ? <Alert role="alert" showIcon title={selection.error} type="error" /> : null}
         {pdfExport.isExporting || exportError ? (
           <Alert
@@ -249,36 +267,40 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
             type={exportError ? "error" : "info"}
           />
         ) : null}
-        <div
-          className="table-wrap quantity-saved-list"
-          data-ui="data-table"
-          role="region"
-          tabIndex={0}
-          aria-busy={list.isFetching}
-          aria-label="已保存数量统计表"
-        >
-          <SavedQuantitySheetTable columns={columns} items={items} refreshing={list.isFetching} />
-        </div>
-        <Flex align="center" className="quantity-saved-pagination" justify="space-between" wrap>
-          <Typography.Text type="secondary">共 {total} 条</Typography.Text>
-          <div className="quantity-saved-pagination-scroll">
-            <Pagination
-              current={page}
-              onChange={(nextPage, nextPageSize) => {
-                if (nextPageSize !== pageSize) {
-                  setPageSize(nextPageSize);
-                  setPage(1);
-                  return;
-                }
-                setPage(nextPage);
-              }}
-              pageSize={pageSize}
-              pageSizeOptions={[5, 10, 20, 50, 100]}
-              showSizeChanger={{ "aria-label": "每页显示条数" }}
-              total={total}
-            />
-          </div>
-        </Flex>
+        {data ? (
+          <>
+            <div
+              className="table-wrap quantity-saved-list"
+              data-ui="data-table"
+              role="region"
+              tabIndex={0}
+              aria-busy={list.isFetching}
+              aria-label="已保存数量统计表"
+            >
+              <SavedQuantitySheetTable columns={columns} items={items} refreshing={list.isFetching} />
+            </div>
+            <Flex align="center" className="quantity-saved-pagination" justify="space-between" wrap>
+              <Typography.Text type="secondary">共 {total} 条</Typography.Text>
+              <div className="quantity-saved-pagination-scroll">
+                <Pagination
+                  current={page}
+                  onChange={(nextPage, nextPageSize) => {
+                    if (nextPageSize !== pageSize) {
+                      setPageSize(nextPageSize);
+                      setPage(1);
+                      return;
+                    }
+                    setPage(nextPage);
+                  }}
+                  pageSize={pageSize}
+                  pageSizeOptions={[5, 10, 20, 50, 100]}
+                  showSizeChanger={{ "aria-label": "每页显示条数" }}
+                  total={total}
+                />
+              </div>
+            </Flex>
+          </>
+        ) : null}
         <ModalPresence>
           {viewId ? (
             <QuantityPreviewModal
@@ -297,9 +319,11 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
                 <Space>
                   <ActionButton onClick={() => setDeleteId("")}>取消</ActionButton>
                   <ActionButton
+                    disabled={blocked || remove.isPending}
                     loading={remove.isPending}
                     tone="destructive"
                     onClick={async () => {
+                      if (blocked || remove.isPending) return;
                       await remove.mutateAsync(deleteId);
                       toggle(deleteId, false);
                       setDeleteId("");

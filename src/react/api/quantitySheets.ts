@@ -31,11 +31,12 @@ export function listQuantitySheets(params: QuantitySheetListParams, signal?: Abo
   return requestJson<PagedResponse<QuantitySheet>>(listUrl(params), { signal });
 }
 
-export function useQuantitySheets(params: QuantitySheetListParams) {
+export function useQuantitySheets(params: QuantitySheetListParams, enabled = true) {
   return useQuery({
     queryKey: queryKeys.quantitySheets({ ...params }),
     queryFn: ({ signal }) => listQuantitySheets(params, signal),
     placeholderData: (previous) => previous,
+    enabled,
   });
 }
 

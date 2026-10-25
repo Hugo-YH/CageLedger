@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,7 +93,11 @@ describe("SavedQuantitySheets PDF progress", () => {
   afterEach(cleanup);
 
   it("updates the export feedback without rerendering the saved DataTable", () => {
-    render(<SavedQuantitySheets onEdit={vi.fn()} />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SavedQuantitySheets onEdit={vi.fn()} />
+      </QueryClientProvider>,
+    );
     expect(state.tableRender).toHaveBeenCalledOnce();
 
     act(() => state.setPdf({ exportPdf: vi.fn(), isExporting: true, job: { completed: 1, total: 2 } }));
@@ -111,7 +116,11 @@ describe("SavedQuantitySheets PDF progress", () => {
         </>
       );
     }
-    render(<DraftHarness />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <DraftHarness />
+      </QueryClientProvider>,
+    );
     expect(state.tableRender).toHaveBeenCalledOnce();
     fireEvent.change(screen.getByRole("textbox", { name: "编辑字段" }), { target: { value: "新值" } });
     expect(state.tableRender).toHaveBeenCalledOnce();
