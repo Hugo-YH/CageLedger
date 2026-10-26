@@ -14,6 +14,7 @@ import {
   canConfirmIntakeReceipt,
 } from "../../../../domain/intake";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
+import { IntakeStatistics } from "./IntakeStatistics";
 import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
 
 export function IntakeBatchList({
@@ -181,6 +182,10 @@ export function IntakeBatchList({
         actions={
           <>
             <IntakeSummaryExport />
+            <IntakeStatistics
+              selectedItems={selectedItems}
+              disabled={loading || selectingAll || markingPrinted || markingReceived}
+            />
             {selectedItems.length ? (
               <>
                 <Button

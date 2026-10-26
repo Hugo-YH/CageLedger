@@ -19,6 +19,8 @@
 
 历史兼容文件（`core.css`、`legacy-responsive.css`、`react.css`、`responsive.css`、`apple-ux.css`、`mobile.css`、`ux-foundation.css`）已完成迁移并从导入中删除，不允许重新引入。
 
+滚动条尺寸和滑块裁剪统一由 `tokens.css` 管理：WebKit 滚动条拖动区域为 10px，两侧各留 2px 透明边距，灰色滑块实际为 6px；hover 仅改变颜色，不增加粗细。`components.css` 统一管理 Ant 表格（含弹窗）、数量录入网格和笼位预览的 WebKit 常显滚动行为，页面不再单独覆盖尺寸或常显规则。工作区纵向滚动继续沿用原生细滚动条；不支持 WebKit 滚动条的浏览器保留标准 `thin` 回退。
+
 ## 组件边界
 
 | 组件族   | 根标识                        | 唯一所有者       | 允许范围                 |

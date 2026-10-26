@@ -1,5 +1,5 @@
 *::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--primary) 48%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 48%, transparent);
 }
 
 .intake-receipt-panel,

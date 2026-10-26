@@ -321,6 +321,112 @@
   text-align: left;
 }
 
+[data-feature="intake"].intake-statistics {
+  display: grid;
+  gap: 16px;
+  max-height: min(64dvh, 680px);
+  overflow-y: auto;
+  padding-inline-end: 4px;
+  overscroll-behavior: contain;
+}
+
+[data-feature="intake"] .intake-statistics-description {
+  margin: 0;
+}
+
+[data-feature="intake"] .intake-statistics-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+[data-feature="intake"] .intake-statistics-metric {
+  background: var(--surface-soft);
+}
+
+[data-feature="intake"] .intake-statistics-metric-primary {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+[data-feature="intake"] .intake-statistics-metric .ant-statistic-content {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+
+[data-feature="intake"] .intake-statistics-metric .ant-typography,
+[data-feature="intake"] .intake-statistics-note {
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+[data-feature="intake"] .intake-statistics-day .ant-card-head {
+  background: var(--surface-soft);
+}
+
+[data-feature="intake"] .intake-statistics-room + .intake-statistics-room {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+[data-feature="intake"] .intake-statistics-room-heading {
+  margin-bottom: 8px;
+}
+
+[data-feature="intake"] .intake-statistics-people,
+[data-feature="intake"] .intake-statistics-issues {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-feature="intake"] .intake-statistics-people li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0 6px 24px;
+}
+
+[data-feature="intake"] .intake-statistics-person-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-feature="intake"] .intake-statistics-person-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  max-width: 60%;
+  text-align: right;
+}
+
+[data-feature="intake"] .intake-statistics-count {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-feature="intake"] .intake-statistics-issues li + li {
+  margin-top: 12px;
+}
+
+@media (width < 768px) {
+  [data-feature="intake"] .intake-statistics-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  [data-feature="intake"] .intake-statistics-metric-primary {
+    grid-column: 1 / -1;
+  }
+
+  [data-feature="intake"] .intake-statistics-people li {
+    padding-inline-start: 8px;
+    gap: 8px;
+  }
+}
+
 .intake-batch-table .ghost {
   margin-right: 4px;
   padding-inline: 8px;

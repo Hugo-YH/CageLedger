@@ -40,7 +40,6 @@
   border-radius: 8px;
   background: var(--surface);
   padding: 0 0 8px;
-  scrollbar-gutter: stable;
   scroll-padding-top: 56px;
 }
 
@@ -539,7 +538,7 @@
 [data-ui="workspace-toolbar"][data-sticky="true"] {
   position: sticky;
   top: var(--cl-command-bar-sticky-inset, var(--cl-space-2));
-  z-index: var(--cl-z-sticky);
+  z-index: var(--z-sticky);
 }
 
 [data-ui="workspace-toolbar"] .app-command-bar-context,
@@ -864,6 +863,17 @@
 
 /* Panel headers, table surfaces and form notices (migrated from
  * ux-foundation.css). */
+
+/* Use the shared 10px hit area and inset 6px thumb for horizontal work areas.
+ * Explicit WebKit sizing stays visible; page-level vertical scrolling keeps
+ * its existing native thin-scrollbar behavior. */
+@supports selector(::-webkit-scrollbar) {
+  :is([data-ui="data-table"], [data-ui="app-shell"], [role="dialog"]) :is(.ant-table-content, .ant-table-body),
+  :is([data-ui="app-shell"], [role="dialog"]) :is(.quantity-entry-wrap, .table-wrap, .cage-preview) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
 
 .table-wrap {
   border-radius: 8px;

@@ -143,6 +143,8 @@
   --focus-ring-info: 0 0 0 2px var(--info-line);
   --scrollbar-thumb: color-mix(in srgb, var(--muted) 40%, transparent);
   --scrollbar-track: transparent;
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 2px;
   --card-border: var(--cl-color-border-secondary);
   --surface-elevated: var(--cl-color-elevated);
   --motion-fast: var(--cl-motion-fast);
@@ -173,8 +175,8 @@
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 
 *::-webkit-scrollbar-track {
@@ -183,9 +185,10 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid var(--scrollbar-track);
+  border: var(--scrollbar-thumb-inset) solid var(--scrollbar-track);
   border-radius: 9999px;
-  background: var(--scrollbar-thumb);
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
 }
 
 :root[data-theme="dark"] * {
@@ -198,7 +201,7 @@
 
 :root[data-theme="dark"] *::-webkit-scrollbar-thumb {
   border-color: var(--scrollbar-track);
-  background: var(--scrollbar-thumb);
+  background-color: var(--scrollbar-thumb);
 }
 
 @media (width < 768px) {

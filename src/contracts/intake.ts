@@ -66,6 +66,11 @@ export interface IntakeSummaryExportParams {
   endDate: string;
 }
 
+export interface IntakeStatisticsPrincipal {
+  pi: string;
+  issue?: string;
+}
+
 export interface IntakeWriteResponse {
   item: IntakeBatch;
   placementTasks?: Record<string, unknown>[];
