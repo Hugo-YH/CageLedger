@@ -7,6 +7,8 @@ import type {
   QuarantineMethod,
   QuarantinePage,
   SupplierHistory,
+  SupplierHistorySummary,
+  SupplierHistoryDetail,
 } from "../../contracts/quarantine";
 import type { IntakeBatch } from "../../contracts/intake";
 import { requestDownload, requestJson } from "./client";
@@ -44,12 +46,11 @@ export function useQuarantineBatches(
 export function useQuarantineDetail(id: string) {
   return useQuarantineQuery<QuarantineDetail>(`batches/${id}`, Boolean(id));
 }
+export function quarantineSourcesPath(from: string, to: string, page: number, state = "pending") {
+  return `sources?dateFrom=${from}&dateTo=${to}&offset=${(page - 1) * 30}&state=${state}`;
+}
 export function useQuarantineSources(from: string, to: string, page: number, enabled: boolean, state = "pending") {
-  return useQuarantineQuery<QuarantinePage<IntakeBatch>>(
-    `sources?dateFrom=${from}&dateTo=${to}&offset=${(page - 1) * 30}&state=${state}`,
-    enabled,
-    true,
-  );
+  return useQuarantineQuery<QuarantinePage<IntakeBatch>>(quarantineSourcesPath(from, to, page, state), enabled, true);
 }
 export function useQuarantineCatalog(enabled = true) {
   return useQuarantineQuery<{ projects: Record<QuarantineMethod, string[]>; templateVersion: string }>(
@@ -59,6 +60,35 @@ export function useQuarantineCatalog(enabled = true) {
 }
 export function useSupplierHistory(filters: Record<string, string>, enabled: boolean) {
   return useQuarantineQuery<{ items: SupplierHistory[] }>(`suppliers?${new URLSearchParams(filters)}`, enabled, true);
+}
+export function supplierSummaryPath(filters: Record<string, string>, page: number) {
+  const params = new URLSearchParams({ ...filters, limit: "10", offset: String((page - 1) * 10) });
+  return `suppliers/summary?${params}`;
+}
+export function useSupplierHistorySummary(filters: Record<string, string>, page: number) {
+  return useQuarantineQuery<QuarantinePage<SupplierHistorySummary>>(supplierSummaryPath(filters, page), true, true);
+}
+export function supplierDetailsPath(filters: Record<string, string>, group: SupplierHistorySummary, page: number) {
+  const params = new URLSearchParams({
+    ...filters,
+    groupSupplier: group.supplier,
+    groupMethod: group.method,
+    groupRetest: String(group.retest),
+    limit: "10",
+    offset: String((page - 1) * 10),
+  });
+  return `suppliers/details?${params}`;
+}
+export function useSupplierHistoryDetails(
+  filters: Record<string, string>,
+  group: SupplierHistorySummary,
+  page: number,
+) {
+  return useQuarantineQuery<QuarantinePage<SupplierHistoryDetail>>(
+    supplierDetailsPath(filters, group, page),
+    true,
+    true,
+  );
 }
 export function useQuarantineWrite() {
   const client = useQueryClient();

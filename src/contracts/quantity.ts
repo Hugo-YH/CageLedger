@@ -63,6 +63,30 @@ export interface QuantitySheet {
   updatedAt: string;
 }
 
+/** Fields projected by the paginated list; full rows are fetched only for editing and printing. */
+export type QuantitySheetListItem = Omit<
+  Pick<
+    QuantitySheet,
+    | "id"
+    | "month"
+    | "iacuc"
+    | "roomId"
+    | "roomName"
+    | "manager"
+    | "roomManager"
+    | "project"
+    | "pi"
+    | "owner"
+    | "contact"
+    | "funding"
+    | "initialCageCount"
+    | "initialAnimalCount"
+    | "billingUnit"
+    | "updatedAt"
+  >,
+  "billingUnit"
+> & { billingUnit: BillingUnit | "" };
+
 export interface QuantitySheetListParams {
   limit: number;
   offset: number;

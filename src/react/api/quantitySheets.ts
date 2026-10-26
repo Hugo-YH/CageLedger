@@ -4,6 +4,7 @@ import type {
   CageRoom,
   PagedResponse,
   QuantitySheet,
+  QuantitySheetListItem,
   QuantitySheetListParams,
   QuantitySheetWriteResponse,
 } from "./contracts";
@@ -18,23 +19,28 @@ export {
   type GenerateBillingStatementPayload,
 } from "./settlements";
 
-function listUrl(params: QuantitySheetListParams) {
+function listUrl(params: QuantitySheetListParams, view?: "summary") {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.sortKey) search.set("sortKey", params.sortKey);
   if (params.sortDir) search.set("sortDir", params.sortDir);
   if (params.columnFilters && Object.keys(params.columnFilters).length)
     search.set("columnFilters", JSON.stringify(params.columnFilters));
+  if (view) search.set("view", view);
   return `/api/quantity-sheets?${search.toString()}`;
 }
 
 export function listQuantitySheets(params: QuantitySheetListParams, signal?: AbortSignal) {
-  return requestJson<PagedResponse<QuantitySheet>>(listUrl(params), { signal });
+  return requestJson<PagedResponse<QuantitySheetListItem>>(listUrl(params), { signal });
+}
+
+export function listQuantitySheetSummaries(params: QuantitySheetListParams, signal?: AbortSignal) {
+  return requestJson<PagedResponse<QuantitySheetListItem>>(listUrl(params, "summary"), { signal });
 }
 
 export function useQuantitySheets(params: QuantitySheetListParams, enabled = true) {
   return useQuery({
     queryKey: queryKeys.quantitySheets({ ...params }),
-    queryFn: ({ signal }) => listQuantitySheets(params, signal),
+    queryFn: ({ signal }) => listQuantitySheetSummaries(params, signal),
     placeholderData: (previous) => previous,
     enabled,
   });
@@ -54,13 +60,14 @@ export function useQuantitySheetPiHistory(iacuc: string, beforeMonth: string, en
 }
 
 export function listAllQuantitySheets(params: QuantitySheetListParams, signal?: AbortSignal) {
-  return loadAllPages((offset, limit) => listQuantitySheets({ ...params, offset, limit }, signal));
+  return loadAllPages((offset, limit) => listQuantitySheetSummaries({ ...params, offset, limit }, signal));
 }
 
-export function useQuantitySheetRooms() {
+export function useQuantitySheetRooms(enabled = true) {
   return useQuery({
     queryKey: queryKeys.quantitySheetRooms,
     queryFn: ({ signal }) => requestJson<{ items: CageRoom[] }>("/api/quantity-sheet-rooms", { signal }),
+    enabled,
   });
 }
 

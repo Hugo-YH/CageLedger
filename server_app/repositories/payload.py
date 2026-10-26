@@ -1,6 +1,7 @@
 import json
+import time
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import cache_get, cache_key, cache_set, log_perf
 
 from .audit_storage import payloads_for_rows
 
@@ -17,11 +18,17 @@ def read_payloads(conn, table, order_by):
     if table == "audit_events":
         rows = conn.execute(f"SELECT id,payload FROM {table} ORDER BY {order_by}").fetchall()
         return [json.loads(payload) for payload in payloads_for_rows(conn, rows)]
+    started = time.perf_counter()
     rows = conn.execute(f"SELECT payload FROM {table} ORDER BY {order_by}").fetchall()
-    return [json.loads(row["payload"]) for row in rows]
+    log_perf("state.read.query", started, component=table, rows=len(rows))
+    started = time.perf_counter()
+    result = [json.loads(row["payload"]) for row in rows]
+    log_perf("state.read.decode", started, component=table, rows=len(rows))
+    return result
 
 
 def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200, offset=0):
+    started = time.perf_counter()
     where_clause = f" WHERE {where_sql}" if where_sql else ""
     total = conn.execute(f"SELECT COUNT(*) AS total FROM {table}{where_clause}", params).fetchone()["total"]
     columns = "id,payload" if table == "audit_events" else "payload"
@@ -29,12 +36,16 @@ def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200
         f"SELECT {columns} FROM {table}{where_clause} ORDER BY {order_by} LIMIT ? OFFSET ?",
         (*params, limit, offset),
     ).fetchall()
+    log_perf("list.read.query", started, component=table, rows=len(rows))
+    started = time.perf_counter()
     if table == "audit_events":
         payloads = payloads_for_rows(conn, rows)
     else:
         payloads = [row["payload"] for row in rows]
+    items = [json.loads(payload) for payload in payloads]
+    log_perf("list.read.decode", started, component=table, rows=len(items))
     return {
-        "items": [json.loads(payload) for payload in payloads],
+        "items": items,
         "page": {
             "limit": limit,
             "offset": offset,

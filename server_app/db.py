@@ -68,6 +68,7 @@ def configure_database(schema_initializer):
 
 def connect_db():
     ensure_database_ready()
+    started = time.perf_counter()
     conn = sqlite3.connect(DB_PATH, factory=ObservedConnection)
     try:
         conn.row_factory = sqlite3.Row
@@ -80,6 +81,9 @@ def connect_db():
     except BaseException:
         conn.close()
         raise
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    if elapsed_ms >= SLOW_DATABASE_THRESHOLD_MS:
+        emit_event("performance_operation", operation="database.connect", durationMs=round(elapsed_ms, 1))
     return conn
 
 

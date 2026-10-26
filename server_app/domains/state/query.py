@@ -29,7 +29,6 @@ def actor_cache_scope(actor):
 
 def read_bootstrap_state(conn, actor, read_cached_state, scope="summary", room_id=""):
     started_at = time.perf_counter()
-    state = filter_state_for_actor(read_cached_state(conn), actor)
     actor_scope = actor_cache_scope(actor)
     key = cache_key("bootstrap_summary", actor=actor_scope)
     if scope == "summary":
@@ -37,7 +36,15 @@ def read_bootstrap_state(conn, actor, read_cached_state, scope="summary", room_i
         if cached is not None:
             log_perf("bootstrap", started_at, scope=scope, cached=1, rooms=len(cached.get("rooms", [])))
             return cached
+    stage = time.perf_counter()
+    state = read_cached_state(conn)
+    log_perf("bootstrap.read_state", stage)
+    stage = time.perf_counter()
+    state = filter_state_for_actor(state, actor)
+    log_perf("bootstrap.permissions", stage)
+    stage = time.perf_counter()
     payload = {"rooms": state.get("rooms", []), "racks": state.get("racks", []), **summarize_infrastructure(state)}
+    log_perf("bootstrap.summarize", stage)
     if scope == "full":
         payload["slots"] = state.get("slots", [])
         log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]), slots=len(payload["slots"]))

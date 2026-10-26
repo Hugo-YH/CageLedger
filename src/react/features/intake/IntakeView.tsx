@@ -1,8 +1,9 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button } from "antd";
 
-import { useBootstrap } from "../../api/bootstrap";
+import { useRooms } from "../../api/infrastructure";
 import type {
   IntakeBatch,
   IntakeDuplicateDetails,
@@ -25,7 +26,7 @@ import { queryKeys } from "../../api/queryKeys";
 import { ActionButton, ModalPresence } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useIntakeSelection } from "./hooks/useIntakeSelection";
-import { AsyncActionButton, ModalShell, PageSkeleton, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { AsyncActionButton, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {
   createIntakeDraft,
   missingIntakeRequiredFields,
@@ -88,13 +89,6 @@ export function IntakeView({
     draftRevision.current += 1;
   }
   const queryClient = useQueryClient();
-  const bootstrap = useBootstrap("summary");
-  const roomNames = bootstrap.data?.rooms.map((room) => String(room.name || "")).filter(Boolean) || [];
-  const printRooms: IntakePrintRoom[] =
-    bootstrap.data?.rooms.map((room) => ({
-      name: String(room.name || ""),
-      facility: String(room.facility || ""),
-    })) || [];
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [aiParsing, setAiParsing] = useState(false);
@@ -105,6 +99,7 @@ export function IntakeView({
   const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName, user.phone));
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState<IntakeBatch | null>(null);
   const [notice, setNotice] = useState("");
   const [bulkNotice, setBulkNotice] = useState("");
   const [bulkNoticeKind, setBulkNoticeKind] = useState<"success" | "error" | "info">("info");
@@ -113,20 +108,48 @@ export function IntakeView({
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
   const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
   const [pendingDuplicateSave, setPendingDuplicateSave] = useState<PendingDuplicateSave | null>(null);
-  const params: IntakeListParams = {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    sortKey: sort.key,
-    sortDir: sort.dir,
-    columnFilters: filters,
-  };
+  const params = useMemo<IntakeListParams>(
+    () => ({
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      sortKey: sort.key,
+      sortDir: sort.dir,
+      columnFilters: filters,
+    }),
+    [pageSize, page, sort.key, sort.dir, filters],
+  );
   const list = useIntakeBatches(params, mode === "batches");
+  const [displayedParams, setDisplayedParams] = useState(params);
+  const displayed = useIntakeBatches(displayedParams, false);
+  useEffect(() => {
+    if (list.isSuccess && !list.isPlaceholderData) setDisplayedParams(params);
+  }, [list.isSuccess, list.isPlaceholderData, params]);
+  const listData = list.data ?? displayed.data;
+  const listBlocked = list.isFetching || list.isError || list.isPlaceholderData;
+  const roomQuery = useRooms(mode === "entry" || Boolean(listData));
+  const roomNames = useMemo(
+    () => roomQuery.data?.items.map((room) => room.name).filter(Boolean) || [],
+    [roomQuery.data],
+  );
+  const printRooms: IntakePrintRoom[] = useMemo(
+    () => roomQuery.data?.items.map((room) => ({ name: room.name, facility: room.facility || "" })) || [],
+    [roomQuery.data],
+  );
+  const roomsAvailable = Boolean(roomQuery.data);
+  const roomsReady = roomsAvailable && !roomQuery.isError;
+  useEffect(() => {
+    if (!pendingEdit || !roomsReady || !editingDialog) return;
+    draftRevision.current += 1;
+    setPendingDuplicateSave(null);
+    setDraft(normalizeIntakeBatch(pendingEdit, roomNames));
+    setPendingEdit(null);
+  }, [pendingEdit, roomsReady, editingDialog, roomNames]);
   const save = useSaveIntakeBatch();
   const remove = useDeleteIntakeBatch();
   const markBatchesPrinted = useMarkIntakeBatchesPrinted();
   const confirmBatchesReceipt = useConfirmIntakeBatchesReceipt();
-  const items = list.data?.items || [];
-  const total = list.data?.page.total || 0;
+  const items = listData?.items || [];
+  const total = listData?.page.total || 0;
   const selectedPrintPlan = planIntakeCardPrint(selectedItems, printRooms);
   const selectionScope = JSON.stringify([
     mode,
@@ -151,13 +174,30 @@ export function IntakeView({
     };
   }, [mode]);
 
-  if (bootstrap.isPending || (mode === "batches" && list.isPending)) {
-    return (
-      <PageSkeleton
-        label={mode === "entry" ? "笼卡接收" : "待接收批次"}
-        variant={mode === "entry" ? "form" : "table"}
-      />
-    );
+  const roomFeedback = !roomsReady ? (
+    <Alert
+      role={roomQuery.isError ? "alert" : "status"}
+      showIcon
+      type={roomQuery.isError ? "error" : "info"}
+      title={
+        roomQuery.isError
+          ? "房间信息加载失败；列表仍可浏览，请重试后编辑、识别或打印。"
+          : "正在加载房间信息；列表可先浏览。"
+      }
+      action={
+        roomQuery.isError ? (
+          <Button loading={roomQuery.isFetching} onClick={() => void roomQuery.refetch()}>
+            重试房间信息
+          </Button>
+        ) : undefined
+      }
+    />
+  ) : null;
+
+  function requireRooms() {
+    if (roomsReady) return true;
+    setNotice("房间信息尚未就绪，请先重试加载。");
+    return false;
   }
 
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
@@ -180,6 +220,7 @@ export function IntakeView({
   function closeEditingDialog() {
     invalidateDraftConfirmation();
     setEditingDialog(false);
+    setPendingEdit(null);
   }
 
   function isCurrentSaveIntent(intent: IntakeSaveIntent) {
@@ -215,6 +256,7 @@ export function IntakeView({
   }
 
   async function parseMessage() {
+    if (!requireRooms()) return;
     let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
     if (parsed.strainRaw && parsed.strainStandard === parsed.strainRaw) {
       const result = await standardizeIntakeStrain(parsed.strainRaw);
@@ -225,6 +267,7 @@ export function IntakeView({
   }
 
   async function aiParseMessage() {
+    if (!requireRooms()) return;
     setAiParsing(true);
     try {
       const response = await aiParseIntakeMessage(draft.rawMessage, roomNames);
@@ -288,6 +331,7 @@ export function IntakeView({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!requireRooms()) return;
     const item = normalizeIntakeBatch(draft, roomNames);
     const missingFields = missingIntakeRequiredFields(item);
     if (missingFields.length) {
@@ -315,7 +359,9 @@ export function IntakeView({
   }
 
   function edit(item: IntakeBatch) {
-    replaceDraft(normalizeIntakeBatch(item, roomNames));
+    setNotice("");
+    if (roomsReady) replaceDraft(normalizeIntakeBatch(item, roomNames));
+    else setPendingEdit(item);
     setEditing(true);
     setEditingDialog(mode === "batches");
   }
@@ -351,6 +397,7 @@ export function IntakeView({
   }
 
   function printCurrentBatch() {
+    if (!requireRooms()) return;
     const item = normalizeIntakeBatch(draft, roomNames);
     if (isDirectSampling(item)) {
       setNotice("直接取材批次无需打印笼卡。");
@@ -369,6 +416,7 @@ export function IntakeView({
   }
 
   function requestPrint(targets: IntakeBatch[], saveCurrent = false, exists = false) {
+    if (!requireRooms()) return;
     const plan = planIntakeCardPrint(targets, printRooms);
     if (plan.disabledReason) {
       if (saveCurrent) setNotice(plan.disabledReason);
@@ -581,6 +629,14 @@ export function IntakeView({
     <section className="workspace-view intake-workspace react-intake-view" data-feature="intake">
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">
+          {roomFeedback}
+          {mode === "batches" && list.isError ? (
+            <PageState
+              title="待接收批次更新失败"
+              detail="已加载内容和选择已保留，请重试后继续操作。"
+              retry={() => void list.refetch()}
+            />
+          ) : null}
           {mode === "entry" ? (
             <WorkspaceToolbar
               ariaLabel="笼卡录入操作"
@@ -597,6 +653,7 @@ export function IntakeView({
                   className="primary"
                   type="submit"
                   form="intake-entry-panel"
+                  disabled={!roomsReady}
                   pending={save.isPending}
                   pendingLabel="保存中..."
                 >
@@ -606,33 +663,43 @@ export function IntakeView({
             />
           ) : null}
           {mode === "entry" ? (
-            <IntakeEntryPanel
-              editing={editing}
-              draft={draft}
-              roomNames={roomNames}
-              notice={notice}
-              saving={save.isPending}
-              aiPending={aiParsing}
-              onSubmit={submit}
-              headActions={null}
-              onAiParse={aiParseMessage}
-              onParse={parseMessage}
-              onPrint={() => void printCurrentBatch()}
-              onUpdate={update}
-            />
+            roomsAvailable ? (
+              <IntakeEntryPanel
+                editing={editing}
+                draft={draft}
+                roomNames={roomNames}
+                notice={notice}
+                saving={save.isPending}
+                aiPending={aiParsing}
+                onSubmit={submit}
+                headActions={null}
+                onAiParse={aiParseMessage}
+                onParse={parseMessage}
+                onPrint={() => void printCurrentBatch()}
+                onUpdate={update}
+                roomsReady={roomsReady}
+              />
+            ) : (
+              <PageSkeleton compact label="房间信息" variant="form" />
+            )
+          ) : !listData ? (
+            <>
+              <WorkspaceToolbar title="待接收批次列表" ariaLabel="待接收批次列表" />
+              {list.isPending ? <PageSkeleton label="待接收批次" variant="table" /> : null}
+            </>
           ) : (
             <IntakeBatchList
               total={total}
               selectedItems={selectedItems}
               items={items}
-              loading={list.isFetching}
+              loading={listBlocked}
               selectingAll={selectingAll}
               allFilteredSelected={allFilteredSelected}
               bulkNotice={selection.error || bulkNotice}
               bulkNoticeKind={selection.error ? "error" : bulkNoticeKind}
               markingPrinted={markingPrinted}
               markingReceived={markingReceived}
-              printDisabledReason={selectedPrintPlan.disabledReason}
+              printDisabledReason={roomsReady ? selectedPrintPlan.disabledReason : "房间信息尚未就绪，请等待或重试。"}
               page={page}
               pageSize={pageSize}
               params={params}
@@ -662,7 +729,7 @@ export function IntakeView({
       <ModalPresence>
         {editingDialog ? (
           <ModalShell
-            key={draft.id}
+            key="intake-editor"
             ariaLabel="编辑待接收批次"
             className="intake-edit-modal"
             onClose={closeEditingDialog}
@@ -670,29 +737,41 @@ export function IntakeView({
             <div className="modal-shell-head">
               <div>
                 <h2>编辑待接收批次</h2>
-                <p>{draft.batchNo}</p>
+                <p>{pendingEdit?.batchNo || draft.batchNo}</p>
               </div>
               <ActionButton onClick={closeEditingDialog}>关闭</ActionButton>
             </div>
             <div className="modal-shell-body">
-              <IntakeEntryPanel
-                editing={editing}
-                draft={draft}
-                roomNames={roomNames}
-                notice={notice}
-                saving={save.isPending}
-                aiPending={aiParsing}
-                onSubmit={submit}
-                headActions={
-                  <ActionButton icon={<ActionIcon name="save" />} loading={save.isPending} tone="primary" type="submit">
-                    保存待接收批次
-                  </ActionButton>
-                }
-                onAiParse={aiParseMessage}
-                onParse={parseMessage}
-                onPrint={() => void printCurrentBatch()}
-                onUpdate={update}
-              />
+              {roomFeedback}
+              {pendingEdit ? (
+                <PageSkeleton compact label="编辑所需房间信息" variant="form" />
+              ) : (
+                <IntakeEntryPanel
+                  editing={editing}
+                  draft={draft}
+                  roomNames={roomNames}
+                  notice={notice}
+                  saving={save.isPending}
+                  aiPending={aiParsing}
+                  onSubmit={submit}
+                  headActions={
+                    <ActionButton
+                      icon={<ActionIcon name="save" />}
+                      disabled={!roomsReady}
+                      loading={save.isPending}
+                      tone="primary"
+                      type="submit"
+                    >
+                      保存待接收批次
+                    </ActionButton>
+                  }
+                  onAiParse={aiParseMessage}
+                  onParse={parseMessage}
+                  onPrint={() => void printCurrentBatch()}
+                  onUpdate={update}
+                  roomsReady={roomsReady}
+                />
+              )}
             </div>
           </ModalShell>
         ) : null}

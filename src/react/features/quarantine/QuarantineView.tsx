@@ -50,6 +50,7 @@ export function QuarantineView({
   const [tab, setTab] = useState(isBatchManagement ? "pool" : isReports ? "reports" : "batches");
   const [batchPicker, setBatchPicker] = useState(false);
   const [pendingNewRecord, setPendingNewRecord] = useState(false);
+  const [pendingMethod, setPendingMethod] = useState<QuarantineMethod | null>(null);
   const [method, setMethod] = useState<QuarantineMethod>(
     mode === "quarantine-parasite" ? "parasite" : mode === "quarantine-pcr" ? "pcr" : "elisa_mouse",
   );
@@ -62,9 +63,7 @@ export function QuarantineView({
     batchPicker ? "" : batchState,
   );
   const detail = useQuarantineDetail(batchId);
-  const catalog = useQuarantineCatalog(
-    batchPicker || pendingNewRecord || (Boolean(batchId) && !isReports && (!isBatchManagement || Boolean(testId))),
-  );
+  const catalog = useQuarantineCatalog(pendingNewRecord);
   const tests =
     detail.data?.tests.filter(
       (t) =>
@@ -75,7 +74,8 @@ export function QuarantineView({
   const selected = tests.find((t) => t.id === testId) ?? tests[0];
   function beginTest() {
     const nextMethod = isBatchManagement && selected ? selected.method : method;
-    setEditor(emptyTest(batchId, nextMethod, catalog.data?.projects[nextMethod] ?? []));
+    setPendingMethod(nextMethod);
+    setPendingNewRecord(true);
   }
   const availableMethods = [...new Set(detail.data?.tests.map((test) => test.method) ?? [])];
   function openBatch(value: string, recordId = "") {
@@ -83,12 +83,14 @@ export function QuarantineView({
     setTestId(recordId);
     setEditor(null);
     setPendingNewRecord(false);
+    setPendingMethod(null);
     if (isBatchManagement) setTab("batches");
     if (isReports) setTab("reports");
   }
   function startRecord(value: string) {
     openBatch(value);
     setBatchPicker(false);
+    setPendingMethod(method);
     setPendingNewRecord(true);
   }
   function newBatch() {
@@ -96,10 +98,22 @@ export function QuarantineView({
     setBatchEditor("new");
   }
   useEffect(() => {
-    if (!pendingNewRecord || !catalog.data || detail.data?.item.id !== batchId) return;
-    setEditor(emptyTest(batchId, method, catalog.data.projects[method] ?? []));
+    if (!pendingNewRecord || catalog.isFetching || catalog.isError || !catalog.data || detail.data?.item.id !== batchId)
+      return;
+    const nextMethod = pendingMethod ?? method;
+    setEditor(emptyTest(batchId, nextMethod, catalog.data.projects[nextMethod] ?? []));
     setPendingNewRecord(false);
-  }, [batchId, catalog.data, detail.data, method, pendingNewRecord]);
+    setPendingMethod(null);
+  }, [
+    batchId,
+    catalog.data,
+    catalog.isFetching,
+    catalog.isError,
+    detail.data,
+    method,
+    pendingMethod,
+    pendingNewRecord,
+  ]);
   useEffect(() => {
     if (detail.error) setPendingNewRecord(false);
   }, [detail.error]);
@@ -376,7 +390,8 @@ export function QuarantineView({
                             {!isReports && !detail.data.item.completedAt && (
                               <Button
                                 icon={<ActionIcon name="create" />}
-                                disabled={!catalog.data}
+                                loading={pendingNewRecord && !catalog.isError}
+                                disabled={pendingNewRecord}
                                 onClick={() => beginTest()}
                               >
                                 新建检测记录
@@ -403,7 +418,8 @@ export function QuarantineView({
                         <Button
                           icon={<ActionIcon name="create" />}
                           type="primary"
-                          disabled={!catalog.data}
+                          loading={pendingNewRecord && !catalog.isError}
+                          disabled={pendingNewRecord}
                           onClick={() => beginTest()}
                         >
                           新建检测记录
@@ -423,14 +439,24 @@ export function QuarantineView({
               )}
               {(!isBatchManagement || Boolean(testId)) && (
                 <>
-                  {!isReports && catalog.error && (
+                  {pendingNewRecord && catalog.error && (
                     <Alert
                       type="error"
                       title={catalog.error.message}
                       action={
-                        <Button icon={<ActionIcon name="refresh" />} onClick={() => void catalog.refetch()}>
-                          重试
-                        </Button>
+                        <Space>
+                          <Button icon={<ActionIcon name="refresh" />} onClick={() => void catalog.refetch()}>
+                            重试
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setPendingNewRecord(false);
+                              setPendingMethod(null);
+                            }}
+                          >
+                            取消
+                          </Button>
+                        </Space>
                       }
                     />
                   )}
@@ -496,7 +522,8 @@ export function QuarantineView({
                         <Button
                           icon={<ActionIcon name="create" />}
                           type="primary"
-                          disabled={!catalog.data}
+                          loading={pendingNewRecord && !catalog.isError}
+                          disabled={pendingNewRecord}
                           onClick={() => beginTest()}
                         >
                           新建{methodLabels[method]}记录

@@ -110,7 +110,7 @@ export interface QuarantinePage<T> {
   items: T[];
   page: { total: number; offset: number; limit: number; hasMore: boolean };
 }
-export interface SupplierHistory {
+export interface SupplierHistorySummary {
   supplier: string;
   method: QuarantineMethod;
   retest: boolean;
@@ -123,14 +123,17 @@ export interface SupplierHistory {
   resolved: number;
   normal: number;
   incomplete: number;
-  details: {
-    batchId: string;
-    batchName: string;
-    testId: string;
-    testDate: string;
-    status: string;
-    sharedPools: boolean;
-  }[];
+}
+export interface SupplierHistoryDetail {
+  batchId: string;
+  batchName: string;
+  testId: string;
+  testDate: string;
+  status: string;
+  sharedPools: boolean;
+}
+export interface SupplierHistory extends SupplierHistorySummary {
+  details: SupplierHistoryDetail[];
 }
 
 export interface QuarantineRecordRow {

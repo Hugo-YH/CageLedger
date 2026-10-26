@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { QuantitySheetListParams } from "../../../api/contracts";
 import { useQuantitySheets } from "../../../api/quantitySheets";
 import { queryKeys } from "../../../api/queryKeys";
+import { useRetainedListData } from "../../../hooks/useRetainedListData";
 import { useListPageBounds } from "../../../hooks/useListPageBounds";
 import { useWorkspaceMemory, useWorkspaceScroll } from "../../../state/workspaceMemory";
 
@@ -24,15 +25,9 @@ export function useSavedQuantityList() {
     }),
     [pageSize, page, sort.key, sort.dir, filters],
   );
-  const [displayedParams, setDisplayedParams] = useState(params);
   const list = useQuantitySheets(params);
-  // A failed page/filter request discards placeholderData. Keep the last successful
-  // cache entry observed without requesting it or copying its business objects.
-  const displayed = useQuantitySheets(displayedParams, false);
-  useEffect(() => {
-    if (list.isSuccess && !list.isPlaceholderData) setDisplayedParams(params);
-  }, [list.isSuccess, list.isPlaceholderData, params]);
-  const data = list.data ?? displayed.data;
+  const retained = useRetainedListData(list, queryKeys.quantitySheets({ ...params }), "quantity-sheets");
+  const data = retained.data;
   const pages = Math.max(1, Math.ceil((list.data?.page.total ?? 0) / pageSize));
   const ready = list.isSuccess && !list.isPlaceholderData && !list.isFetching;
   useListPageBounds(page, pages, ready, setPage, queryKeys.quantitySheetsRoot);
@@ -49,6 +44,7 @@ export function useSavedQuantityList() {
     params,
     list,
     data,
-    blocked: list.isFetching || list.isError || list.isPlaceholderData || !list.data,
+    loading: retained.loading,
+    blocked: list.isFetching || retained.blocked,
   };
 }

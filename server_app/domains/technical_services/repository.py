@@ -77,12 +77,36 @@ def list_sheets(conn, filters, *, all_rows=False):
     limit, offset = listing.pagination(filters)
     sort = listing.order(filters, listing.SHEET_COLUMNS, "month DESC, iacuc")
     suffix = "" if all_rows else " LIMIT ? OFFSET ?"
+    summary = filters.get("view") == "summary"
     rows = conn.execute(
-        f"SELECT payload FROM ({base}) WHERE {where} ORDER BY {sort}, id{suffix}",
+        f"SELECT {listing.SHEET_SUMMARY_COLUMNS if summary else 'payload'} FROM ({base}) WHERE {where} ORDER BY {sort}, id{suffix}",
         params if all_rows else [*params, limit, offset],
     ).fetchall()
+    if summary:
+        items = [
+            {
+                "id": row["id"],
+                "month": row["month"],
+                "iacuc": row["iacuc"],
+                "pi": row["pi"],
+                "facility": row["facility"],
+                "serviceId": row["service_id"],
+                "serviceName": row["service_name"],
+                "customerType": row["customer_type"],
+                "unit": row["unit"],
+                "unitPrice": row["unit_price"],
+                "totalAmount": row["total_amount"],
+                "totalQuantity": row["total_quantity"],
+                "serviceDayCount": row["service_day_count"],
+                "protected": row["protected"] == "protected",
+                "updatedAt": row["updated_at"],
+            }
+            for row in rows
+        ]
+    else:
+        items = [{**json.loads(row[0]), "protected": json.loads(row[0])["id"] in protected} for row in rows]
     return {
-        "items": [{**json.loads(r[0]), "protected": json.loads(r[0])["id"] in protected} for r in rows],
+        "items": items,
         "page": listing.page(total, limit, offset),
     }
 

@@ -12,7 +12,7 @@ from server_app.domains.animal_management import (
     submit_inspection,
     update_finding,
 )
-from server_app.domains.animal_management.catalog_draft import get_draft, list_catalog_versions
+from server_app.domains.animal_management.catalog_draft import draft_status, get_draft, list_catalog_versions
 from server_app.shared import clean_text
 
 
@@ -24,7 +24,11 @@ def handle_get(handler, path):
         with connect_db() as conn:
             handler.send_json(catalog_payload(conn, user))
         return True
-    if path in {"/api/animal-inspection-catalog/draft", "/api/animal-inspection-catalog/versions"}:
+    if path in {
+        "/api/animal-inspection-catalog/draft",
+        "/api/animal-inspection-catalog/draft/status",
+        "/api/animal-inspection-catalog/versions",
+    }:
         user = handler.require_user()
         if not user:
             return True
@@ -33,7 +37,9 @@ def handle_get(handler, path):
             return True
         with connect_db() as conn:
             payload = (
-                get_draft(conn, image_root=ANIMAL_INSPECTION_IMAGES_PATH)
+                draft_status(conn)
+                if path.endswith("/draft/status")
+                else get_draft(conn, image_root=ANIMAL_INSPECTION_IMAGES_PATH)
                 if path.endswith("/draft")
                 else list_catalog_versions(conn)
             )

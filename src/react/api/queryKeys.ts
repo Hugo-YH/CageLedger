@@ -21,6 +21,7 @@ export const queryKeys = {
   intake: (filters: Record<string, unknown>) => ["intake", "list", filters] as const,
   quantitySheets: (filters: Record<string, unknown>) => ["quantity-sheets", filters] as const,
   quantitySheetsRoot: ["quantity-sheets"] as const,
+  technicalServiceSheets: (params: object) => ["technical-services", "sheets", "summary", params] as const,
   quantitySheetPiHistory: (iacuc: string, beforeMonth: string) =>
     ["quantity-sheets", "pi-history", iacuc, beforeMonth] as const,
   quantitySheetRooms: ["quantity-sheet-rooms"] as const,
@@ -42,6 +43,12 @@ export const queryKeys = {
   reimbursementLegacy: (filters: Record<string, unknown>) => ["reimbursement-ledger", "legacy", filters] as const,
   users: ["users"] as const,
   infrastructure: ["infrastructure"] as const,
+  roomDirectoryRoot: ["room-directory"] as const,
+  roomDirectory: (actorScope: object) => ["room-directory", actorScope] as const,
+  infrastructureStructure: (actorScope: object) => ["infrastructure", "structure", actorScope] as const,
+  infrastructureRoom: (actorScope: object, roomId: string) => ["infrastructure", "room", actorScope, roomId] as const,
+  infrastructureRackSlots: (actorScope: object, rackId: string) =>
+    ["infrastructure", "rack-slots", actorScope, rackId] as const,
   principalIdentities: ["principal-identities"] as const,
   iacucStatus: ["iacuc-index", "status"] as const,
   iacucExpiry: ["iacuc-index", "expiry"] as const,
@@ -57,6 +64,7 @@ export const queryKeys = {
   releaseAnnouncementHistory: ["release-announcements"] as const,
   animalInspectionCatalog: ["animal-inspection-catalog"] as const,
   animalInspectionCatalogDraft: ["animal-inspection-catalog", "draft"] as const,
+  animalInspectionCatalogDraftStatus: ["animal-inspection-catalog", "draft-status"] as const,
   animalInspectionCatalogVersions: ["animal-inspection-catalog", "versions"] as const,
   animalInspectionsRoot: ["animal-inspections"] as const,
   animalInspections: (filters: Record<string, unknown>) => ["animal-inspections", filters] as const,

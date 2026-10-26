@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import sqlite3
+import time
 from http import HTTPStatus
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -13,6 +14,7 @@ except ImportError:
 from server_app.cache import (
     invalidate_data_cache,
     invalidate_data_cache_prefixes,
+    log_perf,
 )
 from server_app.config import (
     SESSION_COOKIE,
@@ -128,7 +130,9 @@ class HandlerSupportMixin:
                 payload = list_intake_batches_page(conn, filters, filtered_where, ENTITY_ORDER_BY)
                 from server_app.domains.quarantine.workflow import decorate_intakes
 
+                started = time.perf_counter()
                 decorate_intakes(conn, payload["items"])
+                log_perf("intake.quarantine_links", started, rows=len(payload["items"]))
                 items = payload["items"]
                 page = payload["page"]
             elif table == "placement_tasks":

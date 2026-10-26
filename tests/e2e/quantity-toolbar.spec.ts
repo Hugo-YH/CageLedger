@@ -16,6 +16,9 @@ for (const viewport of [
     await openQuantityEntry(page);
     const toolbar = page.locator(".quantity-entry-toolbar");
     await expect(toolbar).toBeVisible();
+    // The toolbar now appears before its independently loaded form metadata.
+    await expect(page.locator("#quantity-sheet-entry-form")).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "保存统计表", exact: true })).toBeEnabled();
     const scroll = async (top: number) =>
       toolbar.evaluate((element, offset) => {
         let owner = element.parentElement;

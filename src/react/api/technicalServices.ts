@@ -5,9 +5,11 @@ import type {
   TechnicalServiceCandidate,
   TechnicalServiceCatalogItem,
   TechnicalServiceListParams,
+  TechnicalServiceListItem,
   TechnicalServiceSheet,
 } from "../../contracts/technicalServices";
 import { requestJson } from "./client";
+import { queryKeys } from "./queryKeys";
 import { initiateReviewedServiceSettlement, previewSettlement } from "./settlements";
 
 export { exportTechnicalServicePdf as exportServicesPdf } from "./settlements";
@@ -16,7 +18,7 @@ const root = ["technical-services"] as const;
 const base = "/api/technical-services";
 export type ServiceListParams = TechnicalServiceListParams;
 
-function listSearch(params: Partial<ServiceListParams>) {
+function listSearch(params: Partial<ServiceListParams> & { view?: "summary" }) {
   return new URLSearchParams(
     Object.entries(params)
       .filter(([, value]) => value !== undefined)
@@ -33,11 +35,25 @@ export function useServiceCatalog() {
 
 export function useServiceList(params: ServiceListParams) {
   const resource = "sheets";
-  return useQuery<PagedResponse<TechnicalServiceSheet>>({
+  return useQuery<PagedResponse<TechnicalServiceListItem>>({
     placeholderData: (previous) => previous,
-    queryKey: [...root, resource, params],
+    queryKey: queryKeys.technicalServiceSheets(params),
     queryFn: ({ signal }) =>
-      requestJson<PagedResponse<TechnicalServiceSheet>>(`${base}/${resource}?${listSearch(params)}`, { signal }),
+      requestJson<PagedResponse<TechnicalServiceListItem>>(
+        `${base}/${resource}?${listSearch({ ...params, view: "summary" })}`,
+        { signal },
+      ),
+  });
+}
+
+export function useServiceDetail(id: string) {
+  return useQuery({
+    queryKey: [...root, "sheet-detail", id],
+    queryFn: ({ signal }) =>
+      requestJson<{ item: TechnicalServiceSheet }>(`${base}/sheets/${encodeURIComponent(id)}`, { signal }),
+    enabled: Boolean(id),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -76,7 +92,7 @@ export function useServiceMutation() {
     mutationFn: async (
       action:
         | { kind: "save"; sheet: TechnicalServiceSheet; editing: boolean }
-        | { kind: "delete"; sheet: TechnicalServiceSheet }
+        | { kind: "delete"; sheet: TechnicalServiceListItem }
         | { kind: "initiate"; month: string; pi: string; sourceVersions: Record<string, string> },
     ) => {
       if (action.kind === "initiate") return initiateReviewedServiceSettlement(action);

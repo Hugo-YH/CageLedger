@@ -11,6 +11,8 @@ import type {
   FeedbackStatus,
   FeedbackSyncStatus,
 } from "../../../contracts/feedback";
+import { queryKeys } from "../../api/queryKeys";
+import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useFeedbackIntegration, useFeedbackList } from "../../api/feedback";
 import type { FeedbackFilters, FeedbackListColumn } from "../../api/feedback";
 import { useSystemInfo } from "../../api/administration";
@@ -28,12 +30,12 @@ export { FeedbackCreateDrawer } from "./FeedbackCreateDrawer";
 export { FeedbackDetailDrawer } from "./FeedbackDetailDrawer";
 
 export function FeedbackView({ user, page }: { user: SessionUser; page: string }) {
-  const systemInfo = useSystemInfo();
   const [columnFilters, setColumnFilters] = useState<FeedbackFilters["columnFilters"]>({});
   const [sort, setSort] = useState<{ key: FeedbackListColumn; dir: "asc" | "desc" }>({ key: "number", dir: "desc" });
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [drawer, setDrawer] = useState<"create" | "detail" | null>(null);
+  const systemInfo = useSystemInfo(drawer === "create");
   const [importOpen, setImportOpen] = useState(false);
   const [createSession, setCreateSession] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -49,14 +51,18 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
   );
   const activeFilters = Object.values(columnFilters).filter((values) => values?.length).length;
   const list = useFeedbackList(filters);
+  const retained = useRetainedListData(list, queryKeys.feedback(filters), "feedback");
   const integration = useFeedbackIntegration(user.role === "admin");
-  const total = list.data?.total || 0;
+  const total = retained.data?.total || 0;
+  const shownSize = retained.data?.limit || pageSize;
+  const shownPage = retained.data ? Math.floor(retained.data.offset / shownSize) + 1 : pageNumber;
 
   async function refreshFeedback() {
     await Promise.allSettled([list.refetch(), ...(user.role === "admin" ? [integration.refetch()] : [])]);
   }
 
   function openDetail(id: string) {
+    if (retained.blocked) return;
     setSelectedId(id);
     setDrawer("detail");
   }
@@ -98,6 +104,7 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
           <Button
             aria-label={`查看反馈 #${item.number}：${item.title}`}
             type="link"
+            disabled={retained.blocked}
             onClick={() => openDetail(item.id)}
           >
             {item.title}
@@ -219,11 +226,11 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
           {user.role === "admin" && integration.isError ? (
             <Alert showIcon type="warning" title="同步集成状态暂时不可用" description={integration.error.message} />
           ) : null}
-          {list.isPending ? <PageSkeleton embedded label="反馈列表" variant="table" rows={5} /> : null}
+          {retained.loading ? <PageSkeleton embedded label="反馈列表" variant="table" rows={5} /> : null}
           {list.isError ? (
             <Feedback
               kind="error"
-              title="反馈列表加载失败"
+              title={retained.data ? "反馈列表更新失败，暂显示上次结果" : "反馈列表加载失败"}
               detail={list.error.message}
               action={
                 <Button icon={<ActionIcon name="refresh" />} onClick={() => void refreshFeedback()}>
@@ -232,12 +239,12 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
               }
             />
           ) : null}
-          {list.data ? (
+          {retained.data ? (
             <>
               <DataTable
                 className="feedback-table"
                 columns={columns}
-                dataSource={list.data.items}
+                dataSource={retained.data.items}
                 locale={{ emptyText: "暂无反馈记录" }}
                 pagination={false}
                 refreshing={list.isFetching}
@@ -246,9 +253,9 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
                 onRow={(item) => ({ onDoubleClick: () => openDetail(item.id) })}
               />
               <Pager
-                page={pageNumber}
-                pageSize={pageSize}
-                pages={Math.max(1, Math.ceil(total / pageSize))}
+                page={shownPage}
+                pageSize={shownSize}
+                pages={Math.max(1, Math.ceil(total / shownSize))}
                 total={total}
                 onPage={setPageNumber}
                 onPageSize={(size) => {

@@ -1,39 +1,56 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Card, Empty, Space, Tag, Typography } from "antd";
 
-import { useBootstrap } from "../../api/bootstrap";
+import { useInfrastructureStructure, useRackSlots } from "../../api/infrastructure";
 import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
-import { ConfirmDialog, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
+import { ConfirmDialog, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
 
 export function RoomsView({ user }: { user: SessionUser }) {
-  const query = useBootstrap("full");
+  const query = useInfrastructureStructure();
   const save = useSaveInfrastructure();
   const removeRoom = useDeleteRoom();
   const [roomDraft, setRoomDraft] = useState<RoomDraft | null>(null);
   const [rackDraft, setRackDraft] = useState<CageRack | null>(null);
+  const [rackExisting, setRackExisting] = useState(false);
+  const [slotSnapshot, setSlotSnapshot] = useState<{ rackId: string; items: CageSlot[] } | null>(null);
+  const rackSlots = useRackSlots(rackExisting ? rackDraft?.id || "" : "");
   const [deleteTarget, setDeleteTarget] = useState<{ kind: "room" | "rack"; id: string; label: string } | null>(null);
   const canManageRooms = user.role === "admin";
+  useEffect(() => {
+    if (rackExisting && rackDraft && !slotSnapshot && !rackSlots.isFetching && !rackSlots.isError && rackSlots.data) {
+      setSlotSnapshot({ rackId: rackDraft.id, items: rackSlots.data.items });
+    }
+  }, [rackDraft, rackExisting, rackSlots.data, rackSlots.isError, rackSlots.isFetching, slotSnapshot]);
+  function openRack(rack: CageRack, existing: boolean) {
+    setSlotSnapshot(null);
+    setRackExisting(existing);
+    setRackDraft(rack);
+  }
+  function closeRack() {
+    setRackDraft(null);
+    setSlotSnapshot(null);
+    setRackExisting(false);
+  }
   if (query.isPending)
     return (
       <section className="workspace-view">
+        <WorkspaceToolbar ariaLabel="饲养间与笼架操作" title="饲养间与笼架" />
         <PageSkeleton label="基础设施" variant="detail" />
       </section>
     );
   if (!query.data)
     return (
       <section className="workspace-view">
+        <WorkspaceToolbar ariaLabel="饲养间与笼架操作" title="饲养间与笼架" />
         <PageState title="基础设施加载失败" retry={() => query.refetch()} />
       </section>
     );
-  const { rooms, racks, slots } = query.data;
-  const visibleRooms = rooms as unknown as CageRoom[];
-  const cageRacks = racks as unknown as CageRack[];
-  const cageSlots = slots as unknown as CageSlot[];
+  const { rooms: visibleRooms, racks: cageRacks, roomSummaries, rackSummaries } = query.data;
   async function persistRoom() {
     if (!roomDraft?.name.trim()) return;
     const exists = visibleRooms.some((room) => room.id === roomDraft.id);
@@ -41,11 +58,12 @@ export function RoomsView({ user }: { user: SessionUser }) {
   }
   async function persistRack() {
     if (!rackDraft?.roomId || rackDraft.rows < 1 || rackDraft.cols < 1) return;
-    const existing = cageRacks.find((rack) => rack.id === rackDraft.id);
+    const existing = rackExisting;
     const room = visibleRooms.find((item) => item.id === rackDraft.roomId);
     if (!room) return;
     const nextSlots = generateSlots(rackDraft);
-    const existingSlots = cageSlots.filter((slot) => slot.rackId === rackDraft.id);
+    if (existing && slotSnapshot?.rackId !== rackDraft.id) throw new Error("笼位尚未加载，请重试后保存");
+    const existingSlots = existing ? slotSnapshot!.items : [];
     const positions = new Set(nextSlots.map(slotKey));
     const oldPositions = new Set(existingSlots.map(slotKey));
     const slotCreates = nextSlots.filter((slot) => !oldPositions.has(slotKey(slot)));
@@ -83,7 +101,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
           <Button
             icon={<ActionIcon name="create" />}
             disabled={!visibleRooms.length}
-            onClick={() => setRackDraft(newRackDraft(visibleRooms[0], cageRacks))}
+            onClick={() => openRack(newRackDraft(visibleRooms[0], cageRacks), false)}
           >
             新增笼架
           </Button>
@@ -119,7 +137,8 @@ export function RoomsView({ user }: { user: SessionUser }) {
           className="settings-rooms-card"
           extra={
             <Tag color="processing">
-              {visibleRooms.length} 间 · {cageRacks.length} 架 · {cageSlots.length} 笼位
+              {visibleRooms.length} 间 · {cageRacks.length} 架 ·{" "}
+              {roomSummaries.reduce((total, room) => total + room.slotCount, 0)} 笼位
             </Tag>
           }
         >
@@ -158,11 +177,11 @@ export function RoomsView({ user }: { user: SessionUser }) {
                               <Typography.Text strong>笼架 {rack.index}</Typography.Text>
                               <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                                 {rack.rows} 行 × {rack.cols} 列 ·{" "}
-                                {cageSlots.filter((slot) => slot.rackId === rack.id).length} 笼位
+                                {rackSummaries.find((summary) => summary.rackId === rack.id)?.slotCount ?? 0} 笼位
                               </Typography.Paragraph>
                             </div>
                             <Space>
-                              <Button onClick={() => setRackDraft({ ...rack })}>编辑</Button>
+                              <Button onClick={() => openRack({ ...rack }, true)}>编辑</Button>
                               <Button
                                 danger
                                 type="link"
@@ -183,7 +202,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
                         <Typography.Text type="secondary">当前房间尚未创建笼架。</Typography.Text>
                       )}
                     </div>
-                    <Button block onClick={() => setRackDraft(newRackDraft(room, cageRacks))}>
+                    <Button block onClick={() => openRack(newRackDraft(room, cageRacks), false)}>
                       在此房间新增笼架
                     </Button>
                   </div>
@@ -208,14 +227,28 @@ export function RoomsView({ user }: { user: SessionUser }) {
         ) : null}
       </ModalPresence>
       <ModalPresence>
-        {rackDraft ? (
+        {rackDraft && rackExisting && !slotSnapshot ? (
+          <ModalShell ariaLabel="编辑笼架" className="settings-editor-modal" onClose={closeRack}>
+            <div className="modal-shell-head">
+              <h2>编辑笼架</h2>
+              <Button onClick={closeRack}>关闭</Button>
+            </div>
+            <div className="modal-shell-body">
+              {rackSlots.isError ? (
+                <PageState title="笼位读取失败" retry={() => void rackSlots.refetch()} />
+              ) : (
+                <PageSkeleton compact label="笼位" variant="detail" />
+              )}
+            </div>
+          </ModalShell>
+        ) : rackDraft ? (
           <RackEditor
             key={rackDraft.id}
             draft={rackDraft}
             rooms={visibleRooms}
             pending={save.isPending}
             onChange={setRackDraft}
-            onClose={() => setRackDraft(null)}
+            onClose={closeRack}
             onSave={persistRack}
           />
         ) : null}

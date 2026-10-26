@@ -1,8 +1,11 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
+import { PageSkeleton } from "../../components/PageSkeleton";
 import { useState } from "react";
 import { Alert, Button, Card, DatePicker, Empty, Input, Select, Space, Table, Tag, Typography } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import type { QuarantineRecordRow, QuarantineWorklist } from "../../../contracts/quarantine";
+import { queryKeys } from "../../api/queryKeys";
+import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useQuarantineQuery } from "../../api/quarantine";
 import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
 import { methodLabels, quarantineTestStateColor } from "./shared";
@@ -26,7 +29,13 @@ export function RecordWorklist({
   const [filters, setFilters] = useState({ search: "", state: "", method: method ?? "", dateFrom: "", dateTo: "" });
   const [page, setPage] = useState(1);
   const params = new URLSearchParams({ ...filters, offset: String((page - 1) * 30) });
-  const query = useQuarantineQuery<QuarantineWorklist>(`${reports ? "reports" : "records"}?${params}`, true);
+  const path = `${reports ? "reports" : "records"}?${params}`;
+  const query = useQuarantineQuery<QuarantineWorklist>(path, true, true);
+  const retained = useRetainedListData(
+    query,
+    [...queryKeys.quarantine, path],
+    `quarantine-worklist:${reports}:${filters.method}`,
+  );
   const set = (key: keyof typeof filters, value: string) => {
     setFilters((current) => ({ ...current, [key]: value }));
     setPage(1);
@@ -45,7 +54,7 @@ export function RecordWorklist({
             ) : null}
             <Space wrap>
               <Typography.Text strong>
-                <Typography.Text type="secondary">{query.data?.page.total ?? 0} 条</Typography.Text>
+                <Typography.Text type="secondary">{retained.data?.page.total ?? "—"} 条</Typography.Text>
               </Typography.Text>
               <ListRefreshStatus active={query.isFetching && !query.isPending} />
             </Space>
@@ -116,15 +125,15 @@ export function RecordWorklist({
       />
       {!reports && (
         <Space wrap>
-          <Tag>当前筛选 {query.data?.summary.total ?? 0} 条</Tag>
-          <Tag color={quarantineTestStateColor("draft")}>草稿 {query.data?.summary.draft ?? 0}</Tag>
-          <Tag color={tagColors.status.success}>已出具 {query.data?.summary.issued ?? 0}</Tag>
+          <Tag>当前筛选 {retained.data?.summary.total ?? "—"} 条</Tag>
+          <Tag color={quarantineTestStateColor("draft")}>草稿 {retained.data?.summary.draft ?? "—"}</Tag>
+          <Tag color={tagColors.status.success}>已出具 {retained.data?.summary.issued ?? "—"}</Tag>
         </Space>
       )}
       {query.error && (
         <Alert
           type="error"
-          title={query.error.message}
+          title={retained.data ? `${query.error.message}，暂显示上次结果` : query.error.message}
           action={
             <Button icon={<ActionIcon name="refresh" />} onClick={() => void query.refetch()}>
               重试
@@ -132,100 +141,105 @@ export function RecordWorklist({
           }
         />
       )}
-      <Card size="small">
-        <Table<QuarantineRecordRow>
-          rowKey="id"
-          size="small"
-          loading={query.isPending}
-          dataSource={query.data?.items ?? []}
-          scroll={{ x: 1080 }}
-          locale={{
-            emptyText: <Empty description={reports ? "暂无符合条件的已出具报告" : "暂无符合条件的检测记录"} />,
-          }}
-          pagination={{
-            current: page,
-            pageSize: 30,
-            total: query.data?.page.total,
-            showSizeChanger: false,
-            onChange: setPage,
-            showTotal: (total) => `共 ${total} 条`,
-          }}
-          columns={[
-            ...(reports
-              ? [
-                  {
-                    title: "报告编号 / 版本",
-                    key: "report",
-                    width: 240,
-                    render: (_: unknown, row: QuarantineRecordRow) => (
-                      <Space orientation="vertical" size={0}>
-                        <Typography.Text strong>{row.number}</Typography.Text>
-                        <Typography.Text type="secondary">第 {row.version} 版</Typography.Text>
-                      </Space>
-                    ),
-                  },
-                ]
-              : []),
-            { title: "检疫批次", dataIndex: "batchName", width: 180 },
-            { title: "检测方法", render: (_, row) => methodLabels[row.method], width: 150 },
-            { title: "检测日期", dataIndex: "testDate", width: 120, render: (value: string) => value || "待填写" },
-            {
-              title: "状态",
-              width: 110,
-              render: (_, row) => (
-                <Space orientation="vertical" size={0}>
-                  <Tag color={quarantineTestStateColor(row.state)}>{row.state === "issued" ? "已出具" : "草稿"}</Tag>
-                  {row.retestOf && <Tag>复检</Tag>}
-                  {row.correctionOf && <Tag>更正</Tag>}
-                </Space>
-              ),
-            },
-            { title: "样本 / 项目", width: 110, render: (_, row) => `${row.sampleCount} / ${row.projectCount}` },
-            ...(reports
-              ? [
-                  {
-                    title: "出具人",
-                    key: "issuer",
-                    width: 100,
-                    render: (_: unknown, row: QuarantineRecordRow) => row.issuedBy?.name || "—",
-                  },
-                ]
-              : [
-                  {
-                    title: "结果提示",
-                    key: "result",
-                    width: 110,
-                    render: (_: unknown, row: QuarantineRecordRow) =>
-                      row.abnormalCount ? (
-                        <Tag color={tagColors.status.warning}>{row.abnormalCount} 项阳性/可疑</Tag>
-                      ) : (
-                        "—"
+      {retained.loading ? (
+        <PageSkeleton embedded label="检测记录" variant="table" />
+      ) : retained.data ? (
+        <Card size="small">
+          <Table<QuarantineRecordRow>
+            rowKey="id"
+            size="small"
+            dataSource={retained.data?.items ?? []}
+            scroll={{ x: 1080 }}
+            locale={{
+              emptyText: <Empty description={reports ? "暂无符合条件的已出具报告" : "暂无符合条件的检测记录"} />,
+            }}
+            pagination={{
+              current: retained.data ? Math.floor(retained.data.page.offset / retained.data.page.limit) + 1 : page,
+              pageSize: retained.data?.page.limit || 30,
+              total: retained.data?.page.total,
+              showSizeChanger: false,
+              onChange: setPage,
+              showTotal: (total) => `共 ${total} 条`,
+            }}
+            columns={[
+              ...(reports
+                ? [
+                    {
+                      title: "报告编号 / 版本",
+                      key: "report",
+                      width: 240,
+                      render: (_: unknown, row: QuarantineRecordRow) => (
+                        <Space orientation="vertical" size={0}>
+                          <Typography.Text strong>{row.number}</Typography.Text>
+                          <Typography.Text type="secondary">第 {row.version} 版</Typography.Text>
+                        </Space>
                       ),
-                  },
-                ]),
-            {
-              title: "供应商",
-              width: 200,
-              render: (_, row) => <Typography.Text>{row.suppliers.join("、") || "—"}</Typography.Text>,
-            },
-            {
-              title: reports ? "出具时间" : "最近更新",
-              dataIndex: "updatedAt",
-              width: 170,
-              render: (value: string) => value?.replace("T", " ").slice(0, 19),
-            },
-            {
-              title: "操作",
-              key: "action",
-              fixed: "right",
-              width: 120,
-              render: (_, row) => (
-                <Button onClick={() => onOpen(row.batchId, row.testId)}>{reports ? "查看报告" : "查看检测记录"}</Button>
-              ),
-            },
-          ]}
-        />
-      </Card>
+                    },
+                  ]
+                : []),
+              { title: "检疫批次", dataIndex: "batchName", width: 180 },
+              { title: "检测方法", render: (_, row) => methodLabels[row.method], width: 150 },
+              { title: "检测日期", dataIndex: "testDate", width: 120, render: (value: string) => value || "待填写" },
+              {
+                title: "状态",
+                width: 110,
+                render: (_, row) => (
+                  <Space orientation="vertical" size={0}>
+                    <Tag color={quarantineTestStateColor(row.state)}>{row.state === "issued" ? "已出具" : "草稿"}</Tag>
+                    {row.retestOf && <Tag>复检</Tag>}
+                    {row.correctionOf && <Tag>更正</Tag>}
+                  </Space>
+                ),
+              },
+              { title: "样本 / 项目", width: 110, render: (_, row) => `${row.sampleCount} / ${row.projectCount}` },
+              ...(reports
+                ? [
+                    {
+                      title: "出具人",
+                      key: "issuer",
+                      width: 100,
+                      render: (_: unknown, row: QuarantineRecordRow) => row.issuedBy?.name || "—",
+                    },
+                  ]
+                : [
+                    {
+                      title: "结果提示",
+                      key: "result",
+                      width: 110,
+                      render: (_: unknown, row: QuarantineRecordRow) =>
+                        row.abnormalCount ? (
+                          <Tag color={tagColors.status.warning}>{row.abnormalCount} 项阳性/可疑</Tag>
+                        ) : (
+                          "—"
+                        ),
+                    },
+                  ]),
+              {
+                title: "供应商",
+                width: 200,
+                render: (_, row) => <Typography.Text>{row.suppliers.join("、") || "—"}</Typography.Text>,
+              },
+              {
+                title: reports ? "出具时间" : "最近更新",
+                dataIndex: "updatedAt",
+                width: 170,
+                render: (value: string) => value?.replace("T", " ").slice(0, 19),
+              },
+              {
+                title: "操作",
+                key: "action",
+                fixed: "right",
+                width: 120,
+                render: (_, row) => (
+                  <Button disabled={retained.blocked} onClick={() => onOpen(row.batchId, row.testId)}>
+                    {reports ? "查看报告" : "查看检测记录"}
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      ) : null}
     </>
   );
 }

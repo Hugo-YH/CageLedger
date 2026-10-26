@@ -108,7 +108,7 @@ test("cage request failures provide retry and retain an open editor during backg
   let fail = true;
   let gate: Promise<void> = Promise.resolve();
   let release!: () => void;
-  await page.route("**/api/bootstrap?scope=room&*", async (route) => {
+  await page.route("**/api/infrastructure/rooms/*", async (route) => {
     await gate;
     if (fail) await route.fulfill({ status: 503, json: { error: "暂时不可用" } });
     else await route.fallback();

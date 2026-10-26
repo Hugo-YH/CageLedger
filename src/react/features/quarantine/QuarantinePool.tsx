@@ -9,7 +9,9 @@ import dayjs from "dayjs";
 import { speciesLabel } from "../../../domain/intake";
 import type { IntakeBatch } from "../../../contracts/intake";
 import type { QuarantineSource } from "../../../contracts/quarantine";
-import { useQuarantineSources } from "../../api/quarantine";
+import { queryKeys } from "../../api/queryKeys";
+import { useRetainedListData } from "../../hooks/useRetainedListData";
+import { quarantineSourcesPath, useQuarantineSources } from "../../api/quarantine";
 import { id, quarantineStatusColor } from "./shared";
 
 export function QuarantinePool({
@@ -27,6 +29,11 @@ export function QuarantinePool({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<IntakeBatch[]>([]);
   const query = useQuarantineSources(from, to, page, true, state);
+  const retained = useRetainedListData(
+    query,
+    [...queryKeys.quarantine, quarantineSourcesPath(from, to, page, state)],
+    "quarantine-sources",
+  );
   useSelectionScope(JSON.stringify([from, to, state]), () => setSelected([]), selected.length > 0);
   return (
     <>
@@ -97,6 +104,7 @@ export function QuarantinePool({
             <Button
               icon={<ActionIcon name="create" />}
               type="primary"
+              disabled={retained.blocked}
               onClick={() => onCreate(selected.map((s) => ({ ...s, id: id(), intakeId: s.id })))}
             >
               用所选动物新建检疫批次（{selected.length}）
@@ -111,7 +119,7 @@ export function QuarantinePool({
       {query.error && (
         <Alert
           type="error"
-          title={query.error.message}
+          title={retained.data ? `${query.error.message}，暂显示上次结果` : query.error.message}
           action={
             <Button icon={<ActionIcon name="refresh" />} onClick={() => void query.refetch()}>
               重试
@@ -120,25 +128,25 @@ export function QuarantinePool({
         />
       )}
       <ListRefreshStatus active={query.isFetching && !query.isPending} />
-      {query.isPending ? (
+      {retained.loading ? (
         <PageSkeleton embedded label="待检疫列表" variant="table" />
-      ) : (
+      ) : retained.data ? (
         <Table<IntakeBatch>
           rowKey="id"
           size="small"
           aria-busy={query.isFetching}
-          dataSource={query.data?.items ?? []}
+          dataSource={retained.data?.items ?? []}
           scroll={{ x: 900 }}
           rowSelection={{
             selectedRowKeys: selected.map((s) => s.id),
             preserveSelectedRowKeys: true,
             onChange: (_, rows) => setSelected(rows),
-            getCheckboxProps: (s) => ({ disabled: s.quarantineStatus !== "待检疫" }),
+            getCheckboxProps: (s) => ({ disabled: retained.blocked || s.quarantineStatus !== "待检疫" }),
           }}
           pagination={{
-            current: page,
-            pageSize: 30,
-            total: query.data?.page.total,
+            current: retained.data ? Math.floor(retained.data.page.offset / retained.data.page.limit) + 1 : page,
+            pageSize: retained.data?.page.limit || 30,
+            total: retained.data?.page.total,
             showSizeChanger: false,
             onChange: setPage,
           }}
@@ -159,7 +167,7 @@ export function QuarantinePool({
               render: (_, s) => (
                 <Space wrap>
                   {s.quarantineBatches?.map((b) => (
-                    <Button key={b.id} onClick={() => onOpen(b.id)}>
+                    <Button key={b.id} disabled={retained.blocked} onClick={() => onOpen(b.id)}>
                       {b.name}
                     </Button>
                   ))}
@@ -168,7 +176,7 @@ export function QuarantinePool({
             },
           ]}
         />
-      )}
+      ) : null}
     </>
   );
 }

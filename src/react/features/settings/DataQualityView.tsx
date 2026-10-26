@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Card, Col, Empty, Flex, Row, Select, Statistic, Tag, Typography } from "antd";
+import { Alert, Button, Card, Col, Empty, Flex, Row, Select, Statistic, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { DataQualityColumn, DataQualityFinding, DataQualityParams } from "../../../contracts/dataQuality";
+import { queryKeys } from "../../api/queryKeys";
+import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useDataQualityIssues, useDataQualityScans } from "../../api/dataQuality";
 import { FilterableColumnTitle } from "../../components/FilterableTableHeader";
 import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
@@ -21,20 +23,22 @@ export function DataQualityView() {
   const [filters, setFilters] = useState<DataQualityParams["columnFilters"]>({});
   const [sort, setSort] = useState<Pick<DataQualityParams, "sortKey" | "sortDir">>({});
   const [detail, setDetail] = useState<{ scanId: string; issueId: string } | null>(null);
-  const list = useDataQualityIssues(scanId, {
+  const params = {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     columnFilters: filters,
     ...sort,
-  });
-  const scan = list.data?.scan || archives.find((item) => item.id === scanId);
-  const total = list.data?.page.total || 0;
+  };
+  const list = useDataQualityIssues(scanId, params);
+  const retained = useRetainedListData(list, queryKeys.dataQualityIssues(scanId, params), `data-quality:${scanId}`);
+  const scan = retained.data?.scan || archives.find((item) => item.id === scanId);
+  const total = retained.data?.page.total || 0;
   function title(column: DataQualityColumn, label: string) {
     return (
       <FilterableColumnTitle
         label={label}
         values={filters[column] || []}
-        options={list.data?.filterOptions[column] || []}
+        options={retained.data?.filterOptions[column] || []}
         onFilter={(values) => {
           setFilters((current) => ({ ...current, [column]: values }));
           setPage(1);
@@ -83,7 +87,7 @@ export function DataQualityView() {
       width: 88,
       fixed: "right",
       render: (_, item) => (
-        <ActionButton size="small" onClick={() => setDetail({ scanId, issueId: item.id })}>
+        <ActionButton size="small" disabled={retained.blocked} onClick={() => setDetail({ scanId, issueId: item.id })}>
           查看
         </ActionButton>
       ),
@@ -111,7 +115,7 @@ export function DataQualityView() {
         />
         {scans.isPending ? (
           <PageSkeleton label="核查留档" variant="table" />
-        ) : scans.isError ? (
+        ) : scans.isError && !archives.length ? (
           <PageState title="核查留档加载失败" detail={scans.error.message} retry={() => scans.refetch()} />
         ) : !archives.length ? (
           <Card>
@@ -119,6 +123,13 @@ export function DataQualityView() {
           </Card>
         ) : (
           <>
+            {scans.isError && (
+              <Alert
+                type="error"
+                title="核查留档更新失败，暂显示上次结果"
+                action={<Button onClick={() => void scans.refetch()}>重试</Button>}
+              />
+            )}
             <Card>
               <Flex wrap gap="middle" align="center">
                 <label htmlFor="data-quality-scan">核查留档</label>
@@ -172,19 +183,26 @@ export function DataQualityView() {
               ))}
             </Row>
             <Card>
-              {list.isPending ? (
+              {retained.loading ? (
                 <PageSkeleton label="核查问题" variant="table" />
-              ) : list.isError ? (
+              ) : !retained.data && list.isError ? (
                 <PageState title="核查问题加载失败" detail={list.error.message} retry={() => list.refetch()} />
               ) : (
                 <>
+                  {list.isError && (
+                    <Alert
+                      type="error"
+                      title="核查问题更新失败，暂显示上次结果"
+                      action={<Button onClick={() => void list.refetch()}>重试</Button>}
+                    />
+                  )}
                   <DataTable
                     aria-label="数据核查问题"
                     className="app-data-table"
                     refreshing={list.isFetching}
                     rowKey="id"
                     columns={columns}
-                    dataSource={list.data?.items || []}
+                    dataSource={retained.data?.items || []}
                     pagination={false}
                     scroll={{ x: 844 }}
                     resizeKey="data-quality"
@@ -195,9 +213,9 @@ export function DataQualityView() {
                     }}
                   />
                   <Pager
-                    page={page}
-                    pageSize={pageSize}
-                    pages={Math.max(Math.ceil(total / pageSize), 1)}
+                    page={retained.data ? Math.floor(retained.data.page.offset / retained.data.page.limit) + 1 : page}
+                    pageSize={retained.data?.page.limit || pageSize}
+                    pages={Math.max(Math.ceil(total / (retained.data?.page.limit || pageSize)), 1)}
                     total={total}
                     onPage={setPage}
                     onPageSize={(value) => {

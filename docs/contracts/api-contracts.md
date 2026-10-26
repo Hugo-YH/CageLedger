@@ -6,6 +6,28 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 上传使用 `requestMultipart`，文件字段和业务参数保持原状，由浏览器填写multipart边界，不手工设置JSON Content-Type。上传与JSON请求共用会话、诊断脱敏和错误处理；文件下载继续保留二进制响应，不包裹为统一JSON成功格式。
 
+## 列表、目录与按需详情
+
+`GET /api/rooms` 返回 `{items}`，直接读取房间目录并按当前账号过滤。它不包含笼位、占用或全系统汇总；`/api/quantity-sheet-rooms` 继续提供数量统计表跨房间业务所需目录，不能替换为授权房间范围。
+
+新增三个只读接口，均先校验当前账号范围，不组装全量 state、不新增审计或修改业务记录：
+
+| 路径                                   | 响应与用途                                                                                     |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/api/infrastructure/structure`        | `{rooms,racks,roomSummaries,rackSummaries}`；房间、笼架和真实笼位数量，不返回完整笼位或占用    |
+| `/api/infrastructure/rooms/{id}`       | `{rooms,racks,slots,occupancies,placementTasks}`；仅指定房间的工作数据，包括该房间原有占用历史 |
+| `/api/infrastructure/racks/{id}/slots` | `{items}`；指定笼架编辑所需的真实笼位                                                          |
+
+无权限返回403，不存在返回404。原 `/api/bootstrap` 的参数和响应继续兼容；summary 缓存检查在读取共享 state 之前执行。
+
+数量表和技术服务列表支持 `view=summary`。数量表原默认列表本来就采用 SQL 投影，显式 summary 与该投影一致；技术服务 summary 保留月份、伦理号、服务项目、服务日数、数量、金额、保护状态和 `updatedAt`，省略 `rows`、价格快照等详情。不传 view 的原列表响应保持原状。预览和编辑通过原单条详情接口读取完整数据；技术服务普通编辑仍使用原价格快照，删除继续提交列表所见版本，不能通过读详情静默替换该版本。
+
+`GET /api/quarantine/suppliers/summary` 接受原历史筛选以及 `limit/offset`，返回 `{items,page}`，按原统计口径聚合后分页，不包含明细和来源ID集合。`GET /api/quarantine/suppliers/details` 另需 `groupSupplier/groupMethod/groupRetest`（true或false），返回该精确分组的分页明细。两者默认10条、最大100条；旧 `/suppliers` 保留原完整结构、顺序和统计口径。关联检测批量读取，分组详情提前过滤，但纠正、复检计算仍保留匹配批次的完整检测上下文。
+
+管理员 `GET /api/animal-inspection-catalog/draft/status` 返回 `{hasDraft,updatedAt}`，未有草稿时为 false和空字符串，读取不创建草稿。完整草稿仍在进入编辑时读取，原克隆、保存、发布与恢复规则不变。状态保留原精确差异比较，响应轻量不等于常数时间查询。
+
+IACUC 状态在数据库有索引记录时只查询数量和最近导入时间，不读取应用 payload；文件方式的旧安装保留原回退与缓存。运行日志通过固定阶段标签关联连接、查询、解码、权限过滤、设施汇总和检疫关联耗时，不记录SQL、筛选值或业务内容。
+
 ## 运营总览金额
 
 总览GET在原有鉴权后附加弱ETag。携带匹配的`If-None-Match`时返回304及ETag，无JSON响应体；无条件请求和内容变化仍返回原200 JSON结构，旧客户端无需改动。条件读取不延长原缓存时间，客户端继续每15秒过期并按需重新验证。验证标识只与Query中的该统计范围响应一起保存，错误和取消不能降级成旧数据成功。

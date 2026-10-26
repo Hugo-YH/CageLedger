@@ -77,6 +77,15 @@ def sheet_base(protected):
     )
 
 
+SHEET_SUMMARY_COLUMNS = """id, month, iacuc, pi, facility, service_id, customer_type, updated_at, protected,
+    json_extract(payload, '$.serviceName') AS service_name,
+    json_extract(payload, '$.unit') AS unit,
+    json_extract(payload, '$.unitPrice') AS unit_price,
+    json_extract(payload, '$.totalAmount') AS total_amount,
+    json_extract(payload, '$.totalQuantity') AS total_quantity,
+    json_extract(payload, '$.serviceDayCount') AS service_day_count"""
+
+
 def sheet_where(params, *, exclude=""):
     clauses, values = conditions(params, SHEET_COLUMNS, exclude=exclude)
     for key, column in (("month", "month"), ("pi", "pi"), ("facility", "facility"), ("serviceId", "service_id")):

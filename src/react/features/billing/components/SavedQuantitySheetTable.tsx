@@ -1,6 +1,6 @@
 import { type TableProps } from "antd";
 import { memo } from "react";
-import type { QuantitySheet } from "../../../api/contracts";
+import type { QuantitySheetListItem } from "../../../api/contracts";
 import { DataTable } from "../../../components/ui";
 
 export const SavedQuantitySheetTable = memo(function SavedQuantitySheetTable({
@@ -8,8 +8,8 @@ export const SavedQuantitySheetTable = memo(function SavedQuantitySheetTable({
   items,
   refreshing,
 }: {
-  columns: TableProps<QuantitySheet>["columns"];
-  items: QuantitySheet[];
+  columns: TableProps<QuantitySheetListItem>["columns"];
+  items: QuantitySheetListItem[];
   refreshing: boolean;
 }) {
   return (

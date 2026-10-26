@@ -8,12 +8,14 @@ def _date_matches(item, field, filters):
     )
 
 
-def supplier_history(conn, filters):
-    rows = {}
+def supplier_history(conn, filters, *, group=None, include_details=True):
+    matching_batches = []
     for batch in repo.all_items(conn, "batches"):
         sources = {s["id"]: s for s in batch["sources"]}
         matching_by_supplier = {}
         for supplier in {s["supplier"] for s in sources.values()}:
+            if group is not None and supplier != group[0]:
+                continue
             if filters.get("supplier") and filters["supplier"].casefold() not in supplier.casefold():
                 continue
             matching = [
@@ -27,11 +29,18 @@ def supplier_history(conn, filters):
                 matching_by_supplier[supplier] = matching
         if not matching_by_supplier:
             continue
+        matching_batches.append((batch, sources, matching_by_supplier))
+
+    tests_by_batch = repo.tests_by_batch_ids(conn, [batch["id"] for batch, _, _ in matching_batches])
+    rows = {}
+    for batch, sources, matching_by_supplier in matching_batches:
         # Keep every test in a matching batch so corrections and split retests retain their context.
-        tests = repo.all_items(conn, "tests", batch["id"])
+        tests = tests_by_batch.get(batch["id"], [])
         # A correction supersedes its prior version for counts, not for history retention.
         superseded = {t["correctionOf"] for t in tests if t.get("correctionOf") and t["state"] == "issued"}
         for test in tests:
+            if group is not None and (test["method"] != group[1] or bool(test.get("retestOf")) != group[2]):
+                continue
             if test["id"] in superseded or (test.get("correctionOf") and test["state"] == "draft"):
                 continue
             if filters.get("method") and test["method"] != filters["method"]:
@@ -70,6 +79,8 @@ def supplier_history(conn, filters):
                 if filters.get("result") and filters["result"] != status:
                     continue
                 key = (supplier, test["method"], bool(test.get("retestOf")))
+                if group is not None and key != group:
+                    continue
                 row = rows.setdefault(
                     key,
                     {
@@ -93,18 +104,19 @@ def supplier_history(conn, filters):
                 row["poolCount"] += sum(s["poolCount"] for s in samples)
                 row["portionCount"] += sum(s["portionCount"] for s in samples)
                 row[status] += 1
-                row["details"].append(
-                    {
-                        "batchId": batch["id"],
-                        "batchName": batch["name"],
-                        "testId": test["id"],
-                        "testDate": test["testDate"],
-                        "status": status,
-                        "sharedPools": any(
-                            len({sources[sid]["supplier"] for sid in s["sourceIds"]}) > 1 for s in samples
-                        ),
-                    }
-                )
+                if include_details:
+                    row["details"].append(
+                        {
+                            "batchId": batch["id"],
+                            "batchName": batch["name"],
+                            "testId": test["id"],
+                            "testDate": test["testDate"],
+                            "status": status,
+                            "sharedPools": any(
+                                len({sources[sid]["supplier"] for sid in s["sourceIds"]}) > 1 for s in samples
+                            ),
+                        }
+                    )
     return [
         {
             **row,
@@ -115,3 +127,29 @@ def supplier_history(conn, filters):
         }
         for row in rows.values()
     ]
+
+
+def _page(params, total):
+    limit = min(100, max(1, int(params.get("limit", 10))))
+    offset = max(0, int(params.get("offset", 0)))
+    return {"limit": limit, "offset": offset, "total": total, "hasMore": offset + limit < total}
+
+
+def supplier_summary(conn, filters):
+    rows = supplier_history(conn, filters, include_details=False)
+    page = _page(filters, len(rows))
+    items = [
+        {key: value for key, value in row.items() if key not in {"details", "intakeIds", "batchIds"}}
+        for row in rows[page["offset"] : page["offset"] + page["limit"]]
+    ]
+    return {"items": items, "page": page}
+
+
+def supplier_details(conn, filters):
+    supplier, method, retest = (filters.get(key, "") for key in ("groupSupplier", "groupMethod", "groupRetest"))
+    if not supplier or not method or retest not in {"true", "false"}:
+        raise ValueError("供应商、检测方法和复检分组不能为空")
+    rows = supplier_history(conn, filters, group=(supplier, method, retest == "true"))
+    details = rows[0]["details"] if rows else []
+    page = _page(filters, len(details))
+    return {"items": details[page["offset"] : page["offset"] + page["limit"]], "page": page}

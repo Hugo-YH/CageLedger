@@ -8,6 +8,7 @@ export function BatchWithdrawConfirmModal({
   count,
   open,
   pending,
+  disabled = false,
   onConfirm,
   onCancel,
   title = "批量撤回结算流程",
@@ -15,13 +16,16 @@ export function BatchWithdrawConfirmModal({
   count: number;
   open: boolean;
   pending: boolean;
+  disabled?: boolean;
   onConfirm: (note: string) => Promise<void>;
   onCancel: () => void;
   title?: string;
 }) {
   return (
     <Modal open={open} title={title} footer={null} destroyOnHidden onCancel={pending ? undefined : onCancel}>
-      {open ? <WithdrawForm count={count} pending={pending} onConfirm={onConfirm} onCancel={onCancel} /> : null}
+      {open ? (
+        <WithdrawForm count={count} pending={pending} disabled={disabled} onConfirm={onConfirm} onCancel={onCancel} />
+      ) : null}
     </Modal>
   );
 }
@@ -29,11 +33,13 @@ export function BatchWithdrawConfirmModal({
 function WithdrawForm({
   count,
   pending,
+  disabled,
   onConfirm,
   onCancel,
 }: {
   count: number;
   pending: boolean;
+  disabled: boolean;
   onConfirm: (note: string) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -65,8 +71,10 @@ function WithdrawForm({
           danger
           type="primary"
           loading={busy}
-          disabled={!note.trim() || !count}
-          onClick={() => void action.run(() => onConfirm(note.trim()))}
+          disabled={disabled || !note.trim() || !count}
+          onClick={() => {
+            if (!disabled) void action.run(() => onConfirm(note.trim()));
+          }}
         >
           撤回 {count} 个流程
         </Button>

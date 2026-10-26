@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Switch } from "antd";
+import { Alert, Button, Switch } from "antd";
 import type { SessionUser } from "../../api/contracts";
 import { useQuantitySheetDetail } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
@@ -21,13 +21,18 @@ export function QuantitySheetView({
   mode: "entry" | "saved";
   navigationAction?: ReactNode;
 }) {
-  const editor = useQuantitySheetEditor(user, mode);
   const [editingId, setEditingId] = useState("");
+  const editor = useQuantitySheetEditor(user, mode, Boolean(editingId));
   const editingDetail = useQuantitySheetDetail(editingId);
   const {
     draft,
     editorRows,
     initialLoading,
+    metadataLoading,
+    metadataError,
+    metadataHasData,
+    metadataReady,
+    retryMetadata,
     unit,
     animalDetails,
     setField,
@@ -94,6 +99,7 @@ export function QuantitySheetView({
               form="quantity-sheet-entry-form"
               pending={save.isPending}
               pendingLabel="保存中..."
+              disabled={!metadataReady}
             >
               保存统计表
             </AsyncActionButton>
@@ -102,11 +108,34 @@ export function QuantitySheetView({
       />
     ) : null;
 
-  if (initialLoading) return <PageSkeleton label="数量统计表" variant="form" />;
+  if (initialLoading)
+    return (
+      <section className="billing-layout quantity-billing-layout react-quantity-layout">
+        {entryToolbar}
+        <PageSkeleton embedded label="数量统计表" variant="form" />
+      </section>
+    );
+  if (mode === "entry" && metadataError && !metadataHasData) {
+    return (
+      <section className="billing-layout quantity-billing-layout react-quantity-layout">
+        {entryToolbar}
+        <PageState title="房间或负责人配置加载失败" retry={retryMetadata} />
+      </section>
+    );
+  }
 
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">
       {entryToolbar}
+      {mode === "entry" && metadataError && metadataHasData ? (
+        <Alert
+          role="alert"
+          type="error"
+          showIcon
+          title="房间或负责人配置更新失败，草稿已保留"
+          action={<Button onClick={retryMetadata}>重试</Button>}
+        />
+      ) : null}
       {mode === "entry" ? (
         <QuantitySheetEditorForm editor={editor} user={user} mode={mode} />
       ) : (
@@ -139,8 +168,21 @@ export function QuantitySheetView({
                 ) : (
                   <PageSkeleton compact label="编辑数量统计表" rows={4} variant="form" />
                 )
+              ) : metadataError && !metadataHasData ? (
+                <PageState title="房间或负责人配置加载失败" retry={retryMetadata} />
+              ) : metadataLoading && !metadataHasData ? (
+                <PageSkeleton compact label="房间与负责人配置" rows={4} variant="form" />
               ) : (
                 <div className="react-quantity-layout quantity-edit-context">
+                  {metadataError ? (
+                    <Alert
+                      role="alert"
+                      type="error"
+                      showIcon
+                      title="房间或负责人配置更新失败，草稿已保留"
+                      action={<Button onClick={retryMetadata}>重试</Button>}
+                    />
+                  ) : null}
                   <QuantitySheetEditorForm
                     editor={editor}
                     user={user}
@@ -151,6 +193,7 @@ export function QuantitySheetView({
                           icon={<ActionIcon name="save" />}
                           form="quantity-sheet-entry-form"
                           loading={save.isPending}
+                          disabled={!metadataReady}
                           tone="primary"
                           type="submit"
                         >

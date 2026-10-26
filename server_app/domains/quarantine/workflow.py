@@ -6,11 +6,13 @@ from . import repository as repo
 from . import service
 
 
-def intake_links(conn):
+def intake_links(conn, intake_ids=None):
     links = {}
-    for batch in repo.all_items(conn, "batches"):
+    wanted = set(intake_ids) if intake_ids is not None else None
+    batches = repo.all_items(conn, "batches") if wanted is None else repo.batches_for_intake_ids(conn, wanted)
+    for batch in batches:
         for source in batch["sources"]:
-            if source.get("intakeId"):
+            if source.get("intakeId") and (wanted is None or source["intakeId"] in wanted):
                 links.setdefault(source["intakeId"], []).append(
                     {"id": batch["id"], "name": batch["name"], "completedAt": batch.get("completedAt", "")}
                 )
@@ -18,7 +20,7 @@ def intake_links(conn):
 
 
 def decorate_intakes(conn, items):
-    links = intake_links(conn)
+    links = intake_links(conn, [item["id"] for item in items])
     for item in items:
         related = links.get(item["id"], [])
         item["quarantineBatches"] = related

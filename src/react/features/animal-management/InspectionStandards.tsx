@@ -3,7 +3,11 @@ import { useState } from "react";
 import { Alert, Button, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
 
 import type { SessionUser } from "../../api/contracts";
-import { useAnimalInspectionCatalog, useAnimalInspectionCatalogDraft } from "../../api/animalManagement";
+import {
+  useAnimalInspectionCatalog,
+  useAnimalInspectionCatalogDraft,
+  useAnimalInspectionCatalogDraftStatus,
+} from "../../api/animalManagement";
 import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { CommandBar } from "../../components/ui";
 import { MobilePage } from "../../components/ui/MobilePage";
@@ -32,21 +36,41 @@ export function InspectionStandards({
   const [editing, setEditing] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const catalog = useAnimalInspectionCatalog();
-  const draft = useAnimalInspectionCatalogDraft(isAdmin);
+  const draftStatus = useAnimalInspectionCatalogDraftStatus(isAdmin);
+  const draft = useAnimalInspectionCatalogDraft(isAdmin && editing);
   if (catalog.isLoading) return <PageSkeleton label="巡检标准" variant="detail" />;
   if (catalog.isError || !catalog.data)
     return <PageState title="巡检标准加载失败" retry={() => void catalog.refetch()} />;
   if (editing) {
-    if (draft.isLoading || !draft.data) return <PageSkeleton label="巡检编辑草稿" variant="form" />;
     return (
       <MobilePage titleInToolbar desktop={desktop} onBack={() => navigate("animal-inspection-entry")} title="巡检标准">
-        <InspectionCatalogEditor draft={draft.data} onExit={() => setEditing(false)} />
+        {draft.isError ? (
+          <>
+            <Button onClick={() => setEditing(false)}>返回标准目录</Button>
+            <PageState title="巡检编辑草稿加载失败" retry={() => void draft.refetch()} />
+          </>
+        ) : draft.data ? (
+          <InspectionCatalogEditor draft={draft.data} onExit={() => setEditing(false)} />
+        ) : (
+          <>
+            <Button onClick={() => setEditing(false)}>返回标准目录</Button>
+            <PageSkeleton label="巡检编辑草稿" variant="form" />
+          </>
+        )}
       </MobilePage>
     );
   }
   const content = (
     <>
-      {draft.data?.hasDraft ? (
+      {draftStatus.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="草稿状态读取失败"
+          action={<Button onClick={() => void draftStatus.refetch()}>重试</Button>}
+        />
+      ) : null}
+      {draftStatus.data?.hasDraft ? (
         <Alert
           className="inspection-draft-banner"
           type="info"

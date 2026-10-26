@@ -81,6 +81,7 @@ export function useSaveInfrastructure() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["bootstrap"] });
       void client.invalidateQueries({ queryKey: queryKeys.infrastructure });
+      void client.invalidateQueries({ queryKey: queryKeys.roomDirectoryRoot });
       void client.invalidateQueries({ queryKey: queryKeys.quantitySheetRooms });
     },
   });
@@ -92,6 +93,8 @@ export function useDeleteRoom() {
     mutationFn: (id: string) => requestJson<{ ok: true }>(`/api/rooms/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["bootstrap"] });
+      void client.invalidateQueries({ queryKey: queryKeys.infrastructure });
+      void client.invalidateQueries({ queryKey: queryKeys.roomDirectoryRoot });
       void client.invalidateQueries({ queryKey: queryKeys.quantitySheetRooms });
     },
   });
@@ -135,9 +138,10 @@ export function useAuditEvents(limit: number, offset: number) {
       requestJson<PagedResponse<AuditEvent>>(`/api/audit-events?limit=${limit}&offset=${offset}`, { signal }),
   });
 }
-export function useSystemInfo() {
+export function useSystemInfo(enabled = true) {
   return useQuery({
     queryKey: queryKeys.systemInfo,
+    enabled,
     queryFn: ({ signal }) => requestJson<SystemInfo>("/api/system/info", { signal }),
   });
 }

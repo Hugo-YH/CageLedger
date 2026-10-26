@@ -11,7 +11,7 @@ export interface TechnicalServiceCatalogItem {
   notes: string;
 }
 
-export interface TechnicalServiceSheet {
+export interface TechnicalServiceListItem {
   id: string;
   month: string;
   iacuc: string;
@@ -21,19 +21,22 @@ export interface TechnicalServiceSheet {
   serviceName: string;
   unit: string;
   unitPrice: number;
-  priceSnapshot?: TechnicalServiceCatalogItem;
-  project: string;
   pi: string;
-  owner: string;
-  funding: string;
-  manager: string;
-  notes: string;
   updatedAt: string;
-  rows: Array<{ id?: string; date: string; quantity: number; amount?: number }>;
   totalAmount: number;
   totalQuantity: number;
   serviceDayCount: number;
   protected?: boolean;
+}
+
+export interface TechnicalServiceSheet extends TechnicalServiceListItem {
+  priceSnapshot?: TechnicalServiceCatalogItem;
+  project: string;
+  owner: string;
+  funding: string;
+  manager: string;
+  notes: string;
+  rows: Array<{ id?: string; date: string; quantity: number; amount?: number }>;
 }
 
 export interface TechnicalServicePreview extends BillingStatementResponse {

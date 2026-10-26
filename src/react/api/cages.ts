@@ -15,7 +15,11 @@ export function useSaveOccupancy(roomId: string) {
           body: JSON.stringify({ item, expectedUpdatedAt: exists ? item.updatedAt : "" }),
         },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.infrastructure }),
+      ]),
   });
 }
 
@@ -27,7 +31,11 @@ export function useReservePlacement(roomId: string) {
         method: "POST",
         body: JSON.stringify({ slotId }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.infrastructure }),
+      ]),
   });
 }
 
@@ -39,6 +47,10 @@ export function useMoveInPlacement(roomId: string) {
         method: "POST",
         body: JSON.stringify({ actualMoveInDate }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.infrastructure }),
+      ]),
   });
 }

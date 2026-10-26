@@ -11,7 +11,7 @@ import {
   useSaveAnimalInspection,
   useSubmitAnimalInspection,
 } from "../../api/animalManagement";
-import { useBootstrap } from "../../api/bootstrap";
+import { useRooms } from "../../api/infrastructure";
 import { AsyncActionButton, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { HelpTooltip } from "../../components/Tooltip";
 import { ModalPresence } from "../../components/ui";
@@ -49,13 +49,13 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   const [findingDraft, setFindingDraft] = useState<InspectionCatalogNode | null>(null);
   const [referencePreview, setReferencePreview] = useState<ReferencePreview | null>(null);
   const catalog = useAnimalInspectionCatalog();
-  const bootstrap = useBootstrap("summary");
+  const bootstrap = useRooms();
   const detail = useAnimalInspection(draftId);
   const save = useSaveAnimalInspection();
   const submit = useSubmitAnimalInspection();
   const rooms = useMemo(
-    () => (bootstrap.data?.rooms || []) as Array<{ id: string; name: string; facility?: string }>,
-    [bootstrap.data?.rooms],
+    () => (bootstrap.data?.items || []) as Array<{ id: string; name: string; facility?: string }>,
+    [bootstrap.data?.items],
   );
   const facilities = [...new Set(rooms.map((room) => String(room.facility || "").trim()).filter(Boolean))].sort();
   const facilityRooms = rooms.filter((room) => room.facility === facility);
@@ -158,7 +158,14 @@ export function InspectionEntry({ navigate }: { navigate: (view: WorkspaceView) 
   if (catalog.isLoading || bootstrap.isLoading || (draftId && detail.isLoading))
     return <PageSkeleton label="巡检工作区" variant="form" />;
   if (catalog.isError || bootstrap.isError || detail.isError)
-    return <PageState title="巡检工作区加载失败" retry={() => void catalog.refetch()} />;
+    return (
+      <PageState
+        title="巡检工作区加载失败"
+        retry={() => {
+          void Promise.allSettled([catalog.refetch(), bootstrap.refetch(), ...(draftId ? [detail.refetch()] : [])]);
+        }}
+      />
+    );
 
   const content = (
     <>

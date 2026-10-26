@@ -3,7 +3,7 @@ import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type
 import { Modal } from "../../../components/ui/Modal";
 import { memo, useMemo, useState } from "react";
 import { iacucExpiryStatus } from "../../../../domain/iacucValidity";
-import type { QuantitySheet } from "../../../api/contracts";
+import type { QuantitySheetListItem } from "../../../api/contracts";
 import { useIacucExpiry } from "../../../api/iacuc";
 import {
   fetchQuantitySheetsForPrint,
@@ -21,7 +21,7 @@ import { SavedQuantitySheetTable } from "./SavedQuantitySheetTable";
 import { QuantityColumnTitle } from "./QuantityColumnTitle";
 import { QuantityPreviewModal } from "./QuantityPreviewModal";
 
-const EMPTY_SHEETS: QuantitySheet[] = [];
+const EMPTY_SHEETS: QuantitySheetListItem[] = [];
 
 export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   onEdit,
@@ -30,7 +30,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   onEdit: (id: string) => void;
   navigationAction?: React.ReactNode;
 }) {
-  const { page, setPage, pageSize, setPageSize, setSort, filters, setFilters, params, list, data, blocked } =
+  const { setPage, setPageSize, setSort, filters, setFilters, params, list, data, blocked, loading } =
     useSavedQuantityList();
   const selection = useQuantitySheetSelection();
   const { selected, selectingAll, allFilteredSelected, clear, toggle, toggleAll } = selection;
@@ -50,8 +50,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
       new Map((iacucExpiry.data?.items || []).map((item) => [item.iacuc.trim().toUpperCase(), item.projectEndDate])),
     [iacucExpiry.data?.items],
   );
-  const initialLoading = list.isPending && !data;
-  const columns = useMemo<TableProps<QuantitySheet>["columns"]>(
+  const columns = useMemo<TableProps<QuantitySheetListItem>["columns"]>(
     () => [
       {
         key: "selection",
@@ -102,7 +101,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
             }}
           />
         ),
-        render: (value: string, item: QuantitySheet) => {
+        render: (value: string, item: QuantitySheetListItem) => {
           if (key === "updatedAt") return formatTime(item.updatedAt);
           const text = value || "-";
           if (key === "iacuc") {
@@ -178,8 +177,6 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
     }
   }
 
-  if (initialLoading) return <PageSkeleton label="已保存数量统计表" variant="table" />;
-
   return (
     <>
       <CommandBar
@@ -233,6 +230,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         }
       />
       <section className="panel quantity-saved-panel">
+        {loading ? <PageSkeleton embedded label="已保存数量统计表" variant="table" /> : null}
         {list.isError ? (
           <Alert
             role="alert"
@@ -283,16 +281,16 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
               <Typography.Text type="secondary">共 {total} 条</Typography.Text>
               <div className="quantity-saved-pagination-scroll">
                 <Pagination
-                  current={page}
+                  current={Math.floor(data.page.offset / data.page.limit) + 1}
                   onChange={(nextPage, nextPageSize) => {
-                    if (nextPageSize !== pageSize) {
+                    if (nextPageSize !== data.page.limit) {
                       setPageSize(nextPageSize);
                       setPage(1);
                       return;
                     }
                     setPage(nextPage);
                   }}
-                  pageSize={pageSize}
+                  pageSize={data.page.limit}
                   pageSizeOptions={[5, 10, 20, 50, 100]}
                   showSizeChanger={{ "aria-label": "每页显示条数" }}
                   total={total}

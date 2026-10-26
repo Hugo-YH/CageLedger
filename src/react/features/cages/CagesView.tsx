@@ -2,8 +2,7 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useState } from "react";
 import { Alert, Button, Select } from "antd";
 
-import { useBootstrap } from "../../api/bootstrap";
-import type { CageRoom, RoomBootstrapResponse } from "../../api/contracts";
+import { useRooms, useRoomWorkspace } from "../../api/infrastructure";
 import { cageCode, currentOccupancy } from "../../../domain/cages";
 import { BatchSlotEditor, PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
@@ -14,12 +13,12 @@ import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 
 export function CagesView() {
-  const summary = useBootstrap("summary");
-  const rooms = (summary.data?.rooms || []) as unknown as CageRoom[];
+  const summary = useRooms();
+  const rooms = summary.data?.items || [];
   const [roomId, setRoomId] = useState("");
   const selectedRoomId = roomId || rooms[0]?.id || "";
-  const roomQuery = useBootstrap("room", selectedRoomId, Boolean(selectedRoomId));
-  const data = roomQuery.data as RoomBootstrapResponse | undefined;
+  const roomQuery = useRoomWorkspace(selectedRoomId);
+  const data = roomQuery.data;
   const racks = (data?.racks || []).filter((rack) => rack.roomId === selectedRoomId);
   const [rackId, setRackId] = useState("");
   const selectedRack = racks.find((rack) => rack.id === rackId) || racks[0];

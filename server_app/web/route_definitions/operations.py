@@ -16,6 +16,7 @@ ROUTE_GROUPS = {
             "paths": (
                 "/api/animal-inspection-catalog",
                 "/api/animal-inspection-catalog/draft",
+                "/api/animal-inspection-catalog/draft/status",
                 "/api/animal-inspection-catalog/versions",
                 "/api/animal-inspections",
                 "/api/animal-inspection-findings",
@@ -123,6 +124,17 @@ ROUTE_GROUPS = {
     ],
     "intake_and_placement": [
         {"method": "GET", "paths": ("/api/infrastructure/occupancies",), "action": "get_infrastructure_occupancies"},
+        {
+            "method": "GET",
+            "paths": (
+                "/api/infrastructure/structure",
+                "/api/infrastructure/rooms/{id}",
+                "/api/infrastructure/racks/{id}/slots",
+            ),
+            "prefix": "/api/infrastructure/",
+            "delegate": "infrastructure",
+            "two_args": True,
+        },
         {
             "method": "GET",
             "paths": ("/api/intake-batches/filter-options",),

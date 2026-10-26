@@ -109,6 +109,41 @@ def all_items(conn, table, parent=None):
     ]
 
 
+def tests_by_batch_ids(conn, batch_ids):
+    grouped = {}
+    ids = list(dict.fromkeys(batch_ids))
+    for offset in range(0, len(ids), 500):
+        chunk = ids[offset : offset + 500]
+        placeholders = ",".join("?" for _ in chunk)
+        for row in conn.execute(
+            f"SELECT batch_id,payload FROM quarantine_tests WHERE batch_id IN ({placeholders}) ORDER BY updated_at DESC,id",
+            chunk,
+        ):
+            grouped.setdefault(row[0], []).append(json.loads(row[1]))
+    return grouped
+
+
+def batches_for_intake_ids(conn, intake_ids):
+    ids = list(dict.fromkeys(value for value in intake_ids if value))
+    if not ids:
+        return []
+    # A page is bounded; chunking also keeps compatibility with SQLite variable limits.
+    found = {}
+    for offset in range(0, len(ids), 500):
+        chunk = ids[offset : offset + 500]
+        placeholders = ",".join("?" for _ in chunk)
+        for row in conn.execute(
+            f"""SELECT id,payload,updated_at FROM quarantine_batches b
+                WHERE EXISTS (SELECT 1 FROM json_each(b.payload, '$.sources') s
+                              WHERE json_extract(s.value, '$.intakeId') IN ({placeholders}))""",
+            chunk,
+        ):
+            found[row[0]] = (row[2], json.loads(row[1]))
+    rows = sorted(found.values(), key=lambda pair: pair[1]["id"])
+    rows.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in rows]
+
+
 def save(conn, table, item, *, create=False):
     payload = json.dumps(item, ensure_ascii=False)
     if not create:

@@ -14,6 +14,17 @@ DRAFT_VERSION = "draft"
 DRAFT_SOURCE = "CageLedger 巡检标准草稿"
 
 
+def draft_status(conn):
+    row = _draft_row(conn)
+    if not row:
+        return {"hasDraft": False, "updatedAt": ""}
+    payload = conn.execute(
+        "SELECT payload FROM inspection_catalog_versions WHERE version = ?", (DRAFT_VERSION,)
+    ).fetchone()
+    modules = json.loads(payload["payload"]).get("modules", [])
+    return {"hasDraft": _has_draft_changes(conn, modules, DRAFT_VERSION), "updatedAt": row["imported_at"]}
+
+
 def get_draft(conn, image_root=None):
     """Return the editable draft, cloning the active catalog when none exists."""
     row = _draft_row(conn)

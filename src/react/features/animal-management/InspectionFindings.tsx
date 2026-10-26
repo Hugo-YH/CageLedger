@@ -7,6 +7,8 @@ import { useAnimalFindings } from "../../api/animalManagement";
 import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
 import { DataTable, ListRefreshStatus, ModalPresence } from "../../components/ui";
+import { queryKeys } from "../../api/queryKeys";
+import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { FindingDialog } from "./InspectionFindingDialog";
@@ -19,15 +21,16 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<InspectionFinding | null>(null);
-  const query = useAnimalFindings({ limit: pageSize, offset, status });
-  const page = query.data?.page || { offset: 0, limit: pageSize, total: 0 };
+  const params = { limit: pageSize, offset, status };
+  const query = useAnimalFindings(params);
+  const retained = useRetainedListData(query, queryKeys.animalFindings(params), "inspection-findings");
+  const page = retained.data?.page || { offset: 0, limit: pageSize, total: 0 };
   const current = Math.floor(page.offset / page.limit) + 1;
-  if (query.isPending) return <PageSkeleton label="异常处置项" variant="table" />;
-  if (query.isError && !query.data) return <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />;
   const refreshStatus = <ListRefreshStatus active={query.isFetching} />;
-  const feedback = query.isError ? (
-    <InspectionListError refreshing={query.isFetching} retry={() => void query.refetch()} />
-  ) : null;
+  const feedback =
+    query.isError && retained.data ? (
+      <InspectionListError refreshing={query.isFetching} retry={() => void query.refetch()} />
+    ) : null;
   const filters = (
     <Form className="inspection-list-filters" component="div" layout={isMobile ? "vertical" : "inline"}>
       <Form.Item label="处置状态">
@@ -48,7 +51,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
     </Form>
   );
   if (isMobile) {
-    const findings = query.data?.items || [];
+    const findings = retained.data?.items || [];
     return (
       <>
         <MobilePage
@@ -69,28 +72,41 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
           />
           {feedback}
           <Card className="animal-ant-card inspection-list-panel">
-            {findings.length ? (
-              <MobileList>
-                {findings.map((item) => (
-                  <MobileList.Item
-                    description={`${findingLocation(item)} · ${FINDING_STATUS_LABELS[item.status]}`}
-                    key={item.id}
-                    onClick={() => setSelected(item)}
-                  >
-                    {item.roomName} · {item.nodeCode}
-                  </MobileList.Item>
-                ))}
-              </MobileList>
+            {!retained.data ? (
+              retained.loading ? (
+                <PageSkeleton label="异常处置项" variant="table" />
+              ) : (
+                <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />
+              )
             ) : (
-              <Empty description="当前没有异常处置项" />
+              <>
+                {findings.length ? (
+                  <MobileList>
+                    {findings.map((item) => (
+                      <MobileList.Item
+                        description={`${findingLocation(item)} · ${FINDING_STATUS_LABELS[item.status]}`}
+                        key={item.id}
+                        disabled={retained.blocked}
+                        onClick={() => {
+                          if (!retained.blocked) setSelected(item);
+                        }}
+                      >
+                        {item.roomName} · {item.nodeCode}
+                      </MobileList.Item>
+                    ))}
+                  </MobileList>
+                ) : (
+                  <Empty description="当前没有异常处置项" />
+                )}
+                <Pager
+                  onPage={(next) => setOffset((next - 1) * page.limit)}
+                  page={current}
+                  pageSize={page.limit}
+                  pages={Math.max(Math.ceil(page.total / page.limit), 1)}
+                  total={page.total}
+                />
+              </>
             )}
-            <Pager
-              onPage={(next) => setOffset((next - 1) * page.limit)}
-              page={current}
-              pageSize={page.limit}
-              pages={Math.max(Math.ceil(page.total / page.limit), 1)}
-              total={page.total}
-            />
           </Card>
         </MobilePage>
         <ModalPresence>
@@ -113,44 +129,60 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
         <WorkspaceToolbar title="异常处置" ariaLabel="异常处置" filters={filters} />
         {feedback}
         <Card className="animal-ant-card inspection-list-panel">
-          <DataTable
-            className="inspection-table"
-            resizeKey="inspection-findings"
-            columns={[
-              { title: "饲养间", dataIndex: "roomName" },
-              { title: "异常项目", dataIndex: "nodeCode" },
-              { title: "位置/动物", render: (_, item) => findingLocation(item) },
-              {
-                title: "状态",
-                render: (_, item) => (
-                  <Tag color={findingStatusColor(item.status)}>{FINDING_STATUS_LABELS[item.status]}</Tag>
-                ),
-              },
-              { title: "复查日期", dataIndex: "recheckDueAt", render: (value: string | undefined) => value || "-" },
-              {
-                title: "操作",
-                fixed: "right",
-                width: 96,
-                render: (_, item) => (
-                  <Button type="primary" onClick={() => setSelected(item)}>
-                    处置
-                  </Button>
-                ),
-              },
-            ]}
-            dataSource={query.data?.items || []}
-            locale={{ emptyText: <Empty description="当前没有异常处置项" /> }}
-            pagination={false}
-            rowKey="id"
-            scroll={{ x: 760 }}
-          />
-          <Pager
-            onPage={(next) => setOffset((next - 1) * page.limit)}
-            page={current}
-            pageSize={page.limit}
-            pages={Math.max(Math.ceil(page.total / page.limit), 1)}
-            total={page.total}
-          />
+          {!retained.data ? (
+            retained.loading ? (
+              <PageSkeleton label="异常处置项" variant="table" />
+            ) : (
+              <PageState title="异常处置项加载失败" retry={() => void query.refetch()} />
+            )
+          ) : (
+            <>
+              <DataTable
+                className="inspection-table"
+                resizeKey="inspection-findings"
+                columns={[
+                  { title: "饲养间", dataIndex: "roomName" },
+                  { title: "异常项目", dataIndex: "nodeCode" },
+                  { title: "位置/动物", render: (_, item) => findingLocation(item) },
+                  {
+                    title: "状态",
+                    render: (_, item) => (
+                      <Tag color={findingStatusColor(item.status)}>{FINDING_STATUS_LABELS[item.status]}</Tag>
+                    ),
+                  },
+                  { title: "复查日期", dataIndex: "recheckDueAt", render: (value: string | undefined) => value || "-" },
+                  {
+                    title: "操作",
+                    fixed: "right",
+                    width: 96,
+                    render: (_, item) => (
+                      <Button
+                        type="primary"
+                        disabled={retained.blocked}
+                        onClick={() => {
+                          if (!retained.blocked) setSelected(item);
+                        }}
+                      >
+                        处置
+                      </Button>
+                    ),
+                  },
+                ]}
+                dataSource={retained.data?.items || []}
+                locale={{ emptyText: <Empty description="当前没有异常处置项" /> }}
+                pagination={false}
+                rowKey="id"
+                scroll={{ x: 760 }}
+              />
+              <Pager
+                onPage={(next) => setOffset((next - 1) * page.limit)}
+                page={current}
+                pageSize={page.limit}
+                pages={Math.max(Math.ceil(page.total / page.limit), 1)}
+                total={page.total}
+              />
+            </>
+          )}
         </Card>
       </MobilePage>
       <ModalPresence>

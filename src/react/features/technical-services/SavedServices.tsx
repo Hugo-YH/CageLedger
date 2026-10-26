@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Space, Tag } from "antd";
 import { Modal } from "../../components/ui/Modal";
 
-import type { TechnicalServiceSheet } from "../../../contracts/technicalServices";
-import { useServiceList, useServiceMutation } from "../../api/technicalServices";
+import type { TechnicalServiceListItem, TechnicalServiceSheet } from "../../../contracts/technicalServices";
+import { useServiceDetail, useServiceList, useServiceMutation } from "../../api/technicalServices";
+import { queryKeys } from "../../api/queryKeys";
+import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useListPageBounds } from "../../hooks/useListPageBounds";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { ListViewControls, type ListDensity } from "../../components/ui/ListViewControls";
@@ -13,14 +15,17 @@ import { useNavigationGuard } from "../../state/ui";
 import { ServiceEditor } from "./ServiceEditor";
 import { ServiceDetails } from "./ServiceDetails";
 import { DataTable } from "../../components/ui";
-import { PageSkeleton, Pager } from "../../components/WorkspaceUi";
+import { PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 
 export function SavedServices() {
   const [page, setPage] = useWorkspaceMemory("technical-services:saved:page", 1);
   const [pageSize, setPageSize] = useWorkspaceMemory("technical-services:saved:pageSize", 10);
-  const [viewing, setViewing] = useState<TechnicalServiceSheet | null>(null);
-  const [editing, setEditing] = useState<TechnicalServiceSheet | null>(null);
-  const [deleting, setDeleting] = useState<TechnicalServiceSheet | null>(null);
+  const [viewing, setViewing] = useState<TechnicalServiceListItem | null>(null);
+  const [editing, setEditing] = useState<TechnicalServiceListItem | null>(null);
+  const [editingSheet, setEditingSheet] = useState<TechnicalServiceSheet | null>(null);
+  const [deleting, setDeleting] = useState<TechnicalServiceListItem | null>(null);
+  const viewingDetail = useServiceDetail(viewing?.id || "");
+  const editingDetail = useServiceDetail(editing?.id || "");
   const [deleteError, setDeleteError] = useState("");
   const [savedNotice, setSavedNotice] = useState("");
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
@@ -65,26 +70,39 @@ export function SavedServices() {
     );
   }
   const query = useServiceList(params);
+  const { data, blocked, loading } = useRetainedListData(
+    query,
+    queryKeys.technicalServiceSheets(params),
+    "technical-service-saved",
+  );
   const mutation = useServiceMutation();
   const guard = useNavigationGuard();
-  const total = query.data?.page.total || 0;
-  const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const total = data?.page.total || 0;
+  const pages = Math.max(Math.ceil(total / (data?.page.limit || pageSize)), 1);
   useWorkspaceScroll("technical-service-saved", !query.isPending && !query.isError);
-  useListPageBounds(page, pages, !query.isPending && !query.isError && !query.isPlaceholderData, setPage, [
-    "technical-services",
-    "sheets",
-  ]);
+  useListPageBounds(
+    page,
+    pages,
+    !query.isPending && !query.isError && !query.isPlaceholderData && !query.isFetching,
+    setPage,
+    ["technical-services", "sheets"],
+  );
   async function closeEditor() {
-    if (await (guard.current?.() ?? Promise.resolve(true))) setEditing(null);
+    if (await (guard.current?.() ?? Promise.resolve(true))) {
+      setEditing(null);
+      setEditingSheet(null);
+    }
   }
-  function openEditor(sheet: TechnicalServiceSheet) {
+  function openEditor(sheet: TechnicalServiceListItem) {
     setSavedNotice("");
     setHighlightedRowId(null);
+    setEditingSheet(null);
     setEditing(sheet);
   }
   function finishEditing() {
     completedEditId.current = editing?.id || null;
     setEditing(null);
+    setEditingSheet(null);
     setSavedNotice("技术服务明细已保存。");
   }
   function restoreCompletedEditFocus() {
@@ -95,7 +113,7 @@ export function SavedServices() {
     if (trigger && !reducedMotion && !query.isError) setHighlightedRowId(id);
     (trigger && !trigger.matches(":disabled") ? trigger : listRegionRef.current)?.focus();
   }
-  function openDelete(sheet: TechnicalServiceSheet) {
+  function openDelete(sheet: TechnicalServiceListItem) {
     setHighlightedRowId(null);
     setDeleteError("");
     setDeleting(sheet);
@@ -105,7 +123,7 @@ export function SavedServices() {
     setDeleting(null);
   }
   async function remove() {
-    if (!deleting) return;
+    if (blocked || !deleting) return;
     setSavedNotice("");
     try {
       await mutation.mutateAsync({ kind: "delete", sheet: deleting });
@@ -119,6 +137,12 @@ export function SavedServices() {
     if (query.isError) setSavedNotice("");
     if (query.isError || reducedMotion) setHighlightedRowId(null);
   }, [query.isError, reducedMotion]);
+  useEffect(() => {
+    const item = editingDetail.data?.item;
+    if (editing && !editingSheet && !editingDetail.isFetching && !editingDetail.isError && item?.id === editing.id) {
+      setEditingSheet(item);
+    }
+  }, [editing, editingSheet, editingDetail.data, editingDetail.isFetching, editingDetail.isError]);
   return (
     <section className="panel technical-service-list-panel">
       {savedNotice && !query.isError ? (
@@ -134,53 +158,55 @@ export function SavedServices() {
         <Alert
           showIcon
           type="error"
+          role="alert"
           title="明细列表读取失败"
+          description={data ? "暂显示上次成功结果，重试成功后继续操作。" : undefined}
           action={<Button onClick={() => void query.refetch()}>重试</Button>}
         />
       ) : null}
-      {query.isPending ? (
-        <PageSkeleton label="技术服务明细" variant="table" embedded />
-      ) : (
-        <div
-          ref={listRegionRef}
-          className="technical-service-table-region"
-          role="region"
-          tabIndex={0}
-          aria-label="已保存技术服务明细列表"
-          aria-busy={query.isFetching}
-        >
-          <ListViewControls
-            filters={filters}
-            valueLabels={{
-              facility: { zhujiang: "珠江新城", bioisland: "生物岛" },
-              status: { protected: "已发起结算", editable: "可编辑" },
-            }}
-            labels={{
-              month: "月份",
-              iacuc: "IACUC",
-              pi: "项目负责人",
-              facility: "服务设施",
-              serviceName: "服务项目",
-              serviceDayCount: "服务日数",
-              quantity: "计费数量",
-              amount: "金额",
-              status: "状态",
-            }}
-            onFiltersChange={(next) => {
-              setHighlightedRowId(null);
-              setFilters(next);
-              setPage(1);
-            }}
-            density={density}
-            onDensity={setDensity}
-            disabled={query.isFetching || mutation.isPending}
-          />
-          <DataTable<TechnicalServiceSheet>
+      <div
+        ref={listRegionRef}
+        className="technical-service-table-region"
+        role="region"
+        tabIndex={0}
+        aria-label="已保存技术服务明细列表"
+        aria-busy={query.isFetching}
+      >
+        <ListViewControls
+          filters={filters}
+          valueLabels={{
+            facility: { zhujiang: "珠江新城", bioisland: "生物岛" },
+            status: { protected: "已发起结算", editable: "可编辑" },
+          }}
+          labels={{
+            month: "月份",
+            iacuc: "IACUC",
+            pi: "项目负责人",
+            facility: "服务设施",
+            serviceName: "服务项目",
+            serviceDayCount: "服务日数",
+            quantity: "计费数量",
+            amount: "金额",
+            status: "状态",
+          }}
+          onFiltersChange={(next) => {
+            setHighlightedRowId(null);
+            setFilters(next);
+            setPage(1);
+          }}
+          density={density}
+          onDensity={setDensity}
+          disabled={query.isFetching || mutation.isPending}
+        />
+        {loading ? (
+          <PageSkeleton label="技术服务明细" variant="table" embedded />
+        ) : data ? (
+          <DataTable<TechnicalServiceListItem>
             resizeKey="technical-service-saved"
             refreshing={query.isFetching}
             rowKey="id"
             loading={query.isPending || mutation.isPending}
-            dataSource={query.data?.items}
+            dataSource={data.items}
             scroll={{ x: 1200 }}
             pagination={false}
             size={density}
@@ -234,7 +260,12 @@ export function SavedServices() {
                 fixed: "right",
                 render: (_, row) => (
                   <Space size={8} className="technical-service-row-actions" aria-label={`${row.iacuc}操作`}>
-                    <Button color="blue" variant="filled" disabled={query.isFetching} onClick={() => setViewing(row)}>
+                    <Button
+                      color="blue"
+                      variant="filled"
+                      disabled={blocked || query.isFetching}
+                      onClick={() => setViewing(row)}
+                    >
                       预览
                     </Button>
                     <Button
@@ -243,12 +274,16 @@ export function SavedServices() {
                         else editButtonRefs.current.delete(row.id);
                       }}
                       type="primary"
-                      disabled={query.isFetching}
+                      disabled={blocked || query.isFetching}
                       onClick={() => openEditor(row)}
                     >
                       编辑
                     </Button>
-                    <Button danger disabled={row.protected || query.isFetching} onClick={() => openDelete(row)}>
+                    <Button
+                      danger
+                      disabled={row.protected || blocked || query.isFetching}
+                      onClick={() => openDelete(row)}
+                    >
                       删除
                     </Button>
                   </Space>
@@ -256,23 +291,25 @@ export function SavedServices() {
               },
             ]}
           />
-        </div>
-      )}
-      <Pager
-        page={page}
-        pageSize={pageSize}
-        pages={pages}
-        total={total}
-        onPage={(next) => {
-          setHighlightedRowId(null);
-          setPage(next);
-        }}
-        onPageSize={(size) => {
-          setHighlightedRowId(null);
-          setPageSize(size);
-          setPage(1);
-        }}
-      />
+        ) : null}
+      </div>
+      {data ? (
+        <Pager
+          page={Math.floor((data?.page.offset ?? 0) / (data?.page.limit || pageSize)) + 1}
+          pageSize={data?.page.limit || pageSize}
+          pages={pages}
+          total={total}
+          onPage={(next) => {
+            setHighlightedRowId(null);
+            setPage(next);
+          }}
+          onPageSize={(size) => {
+            setHighlightedRowId(null);
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      ) : null}
       <Modal
         open={Boolean(viewing)}
         title="技术服务明细预览"
@@ -281,7 +318,19 @@ export function SavedServices() {
         onCancel={() => setViewing(null)}
         footer={<Button onClick={() => setViewing(null)}>关闭</Button>}
       >
-        {viewing ? <ServiceDetails sheet={viewing} /> : null}
+        {viewing ? (
+          viewingDetail.isFetching ? (
+            <PageSkeleton label="技术服务明细预览" variant="detail" />
+          ) : viewingDetail.isError ? (
+            <PageState
+              title="技术服务明细读取失败"
+              detail={viewingDetail.error.message}
+              retry={() => void viewingDetail.refetch()}
+            />
+          ) : viewingDetail.data ? (
+            <ServiceDetails sheet={viewingDetail.data.item} />
+          ) : null
+        ) : null}
       </Modal>
       <Modal
         open={Boolean(editing)}
@@ -293,13 +342,23 @@ export function SavedServices() {
         onCancel={() => void closeEditor()}
         afterClose={restoreCompletedEditFocus}
       >
-        {editing ? (
+        {editing && editingSheet ? (
           <ServiceEditor
             key={editing.id}
-            initial={editing}
+            initial={editingSheet}
             onSaved={finishEditing}
             onCancel={() => void closeEditor()}
           />
+        ) : editing && editingDetail.isFetching ? (
+          <PageSkeleton label="技术服务明细编辑" variant="form" />
+        ) : editing && editingDetail.isError ? (
+          <PageState
+            title="技术服务明细读取失败"
+            detail={editingDetail.error.message}
+            retry={() => void editingDetail.refetch()}
+          />
+        ) : editing ? (
+          <PageSkeleton label="技术服务明细编辑" variant="form" />
         ) : null}
       </Modal>
       <Modal
@@ -308,7 +367,7 @@ export function SavedServices() {
         rootClassName="app-modal-root technical-service-modal"
         okText="删除"
         cancelText="取消"
-        okButtonProps={{ danger: true, loading: mutation.isPending }}
+        okButtonProps={{ danger: true, loading: mutation.isPending, disabled: blocked }}
         onOk={() => void remove()}
         onCancel={closeDelete}
       >

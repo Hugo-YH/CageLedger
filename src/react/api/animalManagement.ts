@@ -41,6 +41,16 @@ export function useAnimalInspectionCatalogDraft(enabled: boolean) {
   });
 }
 
+export function useAnimalInspectionCatalogDraftStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.animalInspectionCatalogDraftStatus,
+    queryFn: ({ signal }) =>
+      requestJson<{ hasDraft: boolean; updatedAt: string }>("/api/animal-inspection-catalog/draft/status", { signal }),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useSaveInspectionCatalogDraft() {
   const client = useQueryClient();
   return useMutation({
@@ -55,6 +65,7 @@ export function useSaveInspectionCatalogDraft() {
       }),
     onSuccess: (payload) => {
       client.setQueryData(queryKeys.animalInspectionCatalogDraft, payload);
+      void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraftStatus });
     },
   });
 }
@@ -67,6 +78,7 @@ export function usePublishInspectionCatalogDraft() {
     onSuccess: (payload) => {
       client.setQueryData(queryKeys.animalInspectionCatalog, payload);
       void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraft });
+      void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraftStatus });
     },
   });
 }
@@ -94,6 +106,7 @@ export function useRestoreInspectionCatalogVersion() {
     onSuccess: (payload) => {
       client.setQueryData(queryKeys.animalInspectionCatalog, payload);
       void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraft });
+      void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogDraftStatus });
       void client.invalidateQueries({ queryKey: queryKeys.animalInspectionCatalogVersions });
     },
   });

@@ -14,6 +14,11 @@ const api = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   editingDialog: false,
+  metadataError: false,
+  metadataHasData: true,
+  metadataReady: true,
+  retryMetadata: vi.fn(),
+  editorRequested: vi.fn(),
   loadForEdit: vi.fn(),
   closeEditor: vi.fn(),
 }));
@@ -23,23 +28,31 @@ vi.mock("../../api/quantitySheets", () => ({
 }));
 
 vi.mock("./hooks/useQuantitySheetEditor", () => ({
-  useQuantitySheetEditor: () => ({
-    animalDetails: false,
-    confirmSave: null,
-    draft: { id: "draft", iacuc: "", month: "2026-10" },
-    editingDialog: api.editingDialog,
-    editorRows: [],
-    initialLoading: false,
-    loadForEdit: api.loadForEdit,
-    closeEditor: api.closeEditor,
-    persistSheet: vi.fn(),
-    save: { isPending: false },
-    selectedRoom: undefined,
-    setConfirmSave: vi.fn(),
-    setField: vi.fn(),
-    startNew: vi.fn(),
-    unit: "cage_day",
-  }),
+  useQuantitySheetEditor: (_user: unknown, _mode: unknown, requested: boolean) => {
+    api.editorRequested(requested);
+    return {
+      animalDetails: false,
+      confirmSave: null,
+      draft: { id: "draft", iacuc: "", month: "2026-10" },
+      editingDialog: api.editingDialog,
+      editorRows: [],
+      initialLoading: false,
+      metadataLoading: false,
+      metadataError: api.metadataError,
+      metadataHasData: api.metadataHasData,
+      metadataReady: api.metadataReady,
+      retryMetadata: api.retryMetadata,
+      loadForEdit: api.loadForEdit,
+      closeEditor: api.closeEditor,
+      persistSheet: vi.fn(),
+      save: { isPending: false },
+      selectedRoom: undefined,
+      setConfirmSave: vi.fn(),
+      setField: vi.fn(),
+      startNew: vi.fn(),
+      unit: "cage_day",
+    };
+  },
 }));
 
 vi.mock("./components/SavedQuantitySheets", () => ({
@@ -96,6 +109,11 @@ describe("QuantitySheetView saved editor", () => {
   beforeEach(() => {
     api.detail = { data: undefined, error: null, isError: false, isPending: true, refetch: vi.fn() };
     api.editingDialog = false;
+    api.metadataError = false;
+    api.metadataHasData = true;
+    api.metadataReady = true;
+    api.retryMetadata.mockReset();
+    api.editorRequested.mockReset();
     api.loadForEdit.mockReset().mockImplementation(() => {
       api.editingDialog = true;
     });
@@ -132,5 +150,21 @@ describe("QuantitySheetView saved editor", () => {
     act(() => view.rerender(<QuantitySheetView user={user} mode="saved" />));
     expect(api.loadForEdit).toHaveBeenCalledWith(sheet);
     expect(screen.getByText("数量编辑器")).toBeInTheDocument();
+  });
+
+  it("starts metadata with edit and keeps its failure inside the dialog for retry", () => {
+    api.metadataError = true;
+    api.metadataHasData = false;
+    api.metadataReady = false;
+    const view = render(<QuantitySheetView user={user} mode="saved" />);
+    expect(api.editorRequested).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "编辑第一条" }));
+    expect(api.editorRequested).toHaveBeenLastCalledWith(true);
+    api.detail = { ...api.detail, data: { item: sheet }, isPending: false };
+    act(() => view.rerender(<QuantitySheetView user={user} mode="saved" />));
+    expect(screen.getByRole("dialog")).toHaveTextContent("房间或负责人配置加载失败");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(api.retryMetadata).toHaveBeenCalledOnce();
+    expect(screen.queryByText("数量编辑器")).not.toBeInTheDocument();
   });
 });

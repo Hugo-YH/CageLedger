@@ -10,8 +10,8 @@ from server_app.domains.administration import (
     system_environment,
     system_update_status,
 )
+from server_app.domains.iacuc.metadata import read_index_status
 from server_app.web.pdf_exports import download_pdf_export_job, read_pdf_export_job
-from server_app.web.ports import app_ports
 
 
 class ReadSystemActionsMixin:
@@ -22,8 +22,8 @@ class ReadSystemActionsMixin:
     def get_iacuc_index_status(self, path):
         if not self.require_user():
             return
-        payload = app_ports().read_iacuc_index()
-        self.send_json({key: payload[key] for key in ("count", "updatedAt", "source")})
+        with connect_db() as conn:
+            self.send_json(read_index_status(conn))
         return
 
     def get_system_update_check(self, path):

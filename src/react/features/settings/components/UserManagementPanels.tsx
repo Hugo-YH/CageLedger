@@ -90,11 +90,17 @@ export const UserList = memo(function UserList({
   currentUserId,
   items,
   rooms,
+  roomsReady = true,
+  roomsError = false,
+  onRetryRooms,
   onDelete,
 }: {
   currentUserId: string;
   items: ManagedUser[];
   rooms: CageRoom[];
+  roomsReady?: boolean;
+  roomsError?: boolean;
+  onRetryRooms?: () => void;
   onDelete: (user: ManagedUser) => void;
 }) {
   return (
@@ -115,7 +121,17 @@ export const UserList = memo(function UserList({
         items={items.map((item) => ({
           key: item.id,
           label: <UserListLabel current={item.id === currentUserId} user={item} />,
-          children: <UserEditor current={item.id === currentUserId} onDelete={onDelete} rooms={rooms} user={item} />,
+          children: (
+            <UserEditor
+              current={item.id === currentUserId}
+              onDelete={onDelete}
+              rooms={rooms}
+              roomsReady={roomsReady}
+              roomsError={roomsError}
+              onRetryRooms={onRetryRooms}
+              user={item}
+            />
+          ),
         }))}
       />
     </Card>
@@ -139,11 +155,17 @@ function UserEditor({
   user,
   current,
   rooms,
+  roomsReady,
+  roomsError,
+  onRetryRooms,
   onDelete,
 }: {
   user: ManagedUser;
   current: boolean;
   rooms: CageRoom[];
+  roomsReady: boolean;
+  roomsError: boolean;
+  onRetryRooms?: () => void;
   onDelete: (user: ManagedUser) => void;
 }) {
   const [draft, setDraft] = useState<UserDraft>(() => userDraft(user));
@@ -187,12 +209,24 @@ function UserEditor({
   return (
     <div className="settings-user-editor">
       {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
-      <UserFields disabled={action.pending} draft={draft} rooms={rooms} onChange={setDraft} />
+      <UserFields
+        disabled={action.pending}
+        draft={draft}
+        rooms={rooms}
+        roomsReady={roomsReady}
+        roomsError={roomsError}
+        onRetryRooms={onRetryRooms}
+        onChange={setDraft}
+      />
       <Space className="form-actions">
         <Button danger onClick={() => onDelete(user)}>
           删除账号
         </Button>
-        <UserSaveButton pendingId={user.id} disabled={action.pending} onClick={() => void save()}>
+        <UserSaveButton
+          pendingId={user.id}
+          disabled={action.pending || (draft.role === "room_admin" && !roomsReady)}
+          onClick={() => void save()}
+        >
           保存账号
         </UserSaveButton>
       </Space>
@@ -200,19 +234,38 @@ function UserEditor({
   );
 }
 
-export function UserCreateForm({ rooms }: { rooms: CageRoom[] }) {
+export function UserCreateForm({
+  rooms,
+  roomsReady = true,
+  roomsError = false,
+  onRetryRooms,
+}: {
+  rooms: CageRoom[];
+  roomsReady?: boolean;
+  roomsError?: boolean;
+  onRetryRooms?: () => void;
+}) {
   const [draft, setDraft] = useState<UserDraft>(emptyDraft);
   const action = useAsyncFormAction("创建账号失败，请重试");
   const saveUser = useUserSaveAction();
   return (
     <Card className="settings-side-panel" size="small" title="创建账号">
       {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
-      <UserFields creating disabled={action.pending} draft={draft} rooms={rooms} onChange={setDraft} />
+      <UserFields
+        creating
+        disabled={action.pending}
+        draft={draft}
+        rooms={rooms}
+        roomsReady={roomsReady}
+        roomsError={roomsError}
+        onRetryRooms={onRetryRooms}
+        onChange={setDraft}
+      />
       <UserSaveButton
         pendingId={CREATE_SAVE_ID}
         block
         icon={<ActionIcon name="create" />}
-        disabled={!draft.username || !draft.password || action.pending}
+        disabled={!draft.username || !draft.password || action.pending || (draft.role === "room_admin" && !roomsReady)}
         onClick={() =>
           void action.run(
             () => saveUser(CREATE_SAVE_ID, { user: draft }),
@@ -241,12 +294,18 @@ function userDraft(user: ManagedUser): UserDraft {
 function UserFields({
   draft,
   rooms,
+  roomsReady,
+  roomsError,
+  onRetryRooms,
   onChange,
   creating = false,
   disabled = false,
 }: {
   draft: UserDraft;
   rooms: CageRoom[];
+  roomsReady: boolean;
+  roomsError: boolean;
+  onRetryRooms?: () => void;
   onChange: (draft: UserDraft) => void;
   creating?: boolean;
   disabled?: boolean;
@@ -297,11 +356,24 @@ function UserFields({
       </Form.Item>
       {draft.role === "room_admin" ? (
         <Form.Item className="room-access-fieldset" label="饲养间授权">
+          {!roomsReady ? (
+            roomsError ? (
+              <Alert
+                type="error"
+                showIcon
+                title="饲养间读取失败，当前授权已保留"
+                action={<Button onClick={onRetryRooms}>重试</Button>}
+              />
+            ) : (
+              <Typography.Text role="status">正在读取饲养间…</Typography.Text>
+            )
+          ) : null}
           <Checkbox.Group
             aria-label="饲养间授权"
             className="settings-room-access-group"
             options={rooms.map((room) => ({ label: room.name, value: room.id }))}
             value={draft.roomIds}
+            disabled={!roomsReady || disabled}
             onChange={(values) => update("roomIds", values.map(String))}
           />
         </Form.Item>

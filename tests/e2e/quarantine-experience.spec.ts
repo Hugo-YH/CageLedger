@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { expect, openNavigationEntry, test } from "./fixtures";
 import type { QuarantineMethod, QuarantineTest } from "../../src/contracts/quarantine";
 
@@ -213,10 +213,12 @@ test("quarantine detail and catalog failures retain navigation and retry", async
   failDetail = false;
   await page.getByRole("alert").filter({ hasText: "批次详情暂时不可用" }).getByRole("button", { name: "重试" }).click();
   await expect(page.getByRole("group", { name: "检疫批次详情操作", exact: true })).toContainText(batchName);
+  await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "检测目录暂时不可用" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建检测记录", exact: true })).toBeDisabled();
   failCatalog = false;
   await page.getByRole("alert").filter({ hasText: "检测目录暂时不可用" }).getByRole("button", { name: "重试" }).click();
-  await expect(page.getByRole("button", { name: "新建检测记录", exact: true })).toBeEnabled();
+  await expect(page.getByRole("textbox", { name: "样品名称", exact: true })).toBeVisible();
 });
 
 for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
@@ -323,11 +325,15 @@ test("supplier history retains populated results while filtering and can retry a
     page.getByRole("row").filter({ hasText: batchName }).first().getByRole("button", { name: "查看报告", exact: true }),
   ).toBeVisible();
   let failHistory = false;
+  let detailRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/quarantine/suppliers/details") detailRequests += 1;
+  });
   let releaseHistory!: () => void;
   const historyGate = new Promise<void>((resolve) => {
     releaseHistory = resolve;
   });
-  await page.route("**/api/quarantine/suppliers?**", async (route) => {
+  await page.route("**/api/quarantine/suppliers/summary?**", async (route) => {
     if (!failHistory) return route.fallback();
     await historyGate;
     return route.fulfill({ status: 500, json: { error: "供应商历史暂时不可用" } });
@@ -383,6 +389,17 @@ test("supplier history retains populated results while filtering and can retry a
     await page.screenshot({ path: testInfo.outputPath(`supplier-history-${width}.png`) });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+  expect(detailRequests).toBe(0);
+  await supplier.first().locator("..").getByRole("button", { name: "展开行" }).click();
+  await expect.poll(() => detailRequests).toBe(1);
+  await expect(page.getByRole("button", { name: `${batchName} · 2026-09-12`, exact: true })).toBeVisible();
+  await supplier.first().locator("..").getByRole("button", { name: "关闭行" }).click();
+  const refreshed = page.waitForResponse((response) => response.url().includes("/api/quarantine/suppliers/summary?"));
+  await search.fill("体验测试供应");
+  await search.press("Enter");
+  await refreshed;
+  await page.waitForLoadState("networkidle");
+  expect(detailRequests).toBe(1);
   await supplier.first().locator("..").getByRole("button", { name: "展开行" }).click();
   await page.getByRole("button", { name: `${batchName} · 2026-09-12`, exact: true }).click();
   await expect(page.getByRole("group", { name: "检疫批次详情操作", exact: true })).toContainText(batchName);
@@ -606,4 +623,47 @@ test("top report actions follow selected record and retain issue confirmation", 
   await confirmation.getByRole("button", { name: "取消", exact: true }).click();
   await toolbar.getByRole("button", { name: "编辑检测", exact: true }).click();
   await expect(page.getByRole("button", { name: "保存检测草稿", exact: true })).toBeVisible();
+});
+
+test("new detection waits for refreshed stale catalog and can cancel a failed refresh", async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = Date.now.bind(Date);
+    let offset = 0;
+    Date.now = () => now() + offset;
+    Object.defineProperty(window, "advanceCatalogClock", {
+      value: () => {
+        offset += 16_000;
+      },
+    });
+  });
+  await login(page);
+  const { batchName } = await seed(page);
+  let calls = 0;
+  let pending: Route | undefined;
+  await page.route("**/api/quarantine/catalog", async (route) => {
+    calls += 1;
+    if (calls === 1) await route.fallback();
+    else pending = route;
+  });
+  await openNavigationEntry(page, "检疫管理", "ELISA检测");
+  await page
+    .getByRole("row")
+    .filter({ hasText: batchName })
+    .first()
+    .getByRole("button", { name: "查看检测记录" })
+    .click();
+  expect(calls).toBe(0);
+  await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "样品名称", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "返回批次", exact: true }).click();
+  await page.evaluate(() => (window as unknown as { advanceCatalogClock: () => void }).advanceCatalogClock());
+  await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
+  await expect.poll(() => calls).toBe(2);
+  await expect(page.getByRole("textbox", { name: "样品名称", exact: true })).toHaveCount(0);
+  await pending!.fulfill({ status: 403, json: { error: "检测目录刷新失败" } });
+  const error = page.getByRole("alert").filter({ hasText: "检测目录刷新失败" });
+  await expect(error).toBeVisible();
+  await error.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(error).toBeHidden();
+  await expect(page.getByRole("textbox", { name: "样品名称", exact: true })).toHaveCount(0);
 });

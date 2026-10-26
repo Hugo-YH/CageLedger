@@ -140,7 +140,7 @@ test("account background refresh failure preserves an expanded editor and retrie
   await expect(page.getByRole("status").filter({ hasText: "正在更新" })).toBeVisible();
   await expect(editor.getByLabel("显示姓名", { exact: true })).toBeEnabled();
   await pending?.fulfill({ status: 409, json: { error: "账号更新暂不可用" } });
-  const error = page.getByRole("alert").filter({ hasText: "账号与房间信息更新失败" });
+  const error = page.getByRole("alert").filter({ hasText: "账号信息更新失败" });
   await expect(error).toBeVisible();
   await expect(editor.getByLabel("显示姓名", { exact: true })).toHaveValue("跨刷新保留的输入");
   await captureFormEvidence(page, testInfo, "account-refresh-error", page.locator(".settings-workspace"));
@@ -157,7 +157,7 @@ test("room background refresh failure keeps the open dialog and typed values", a
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("饲养间名称", { exact: true }).fill("网络恢复期间保留的房间名称");
   let failed = true;
-  await page.route("**/api/bootstrap?scope=full", (route) =>
+  await page.route("**/api/infrastructure/structure", (route) =>
     failed ? route.fulfill({ status: 409, json: { error: "设施更新暂不可用" } }) : route.continue(),
   );
   await reconnectWithStaleData(page);

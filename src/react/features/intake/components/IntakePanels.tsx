@@ -21,6 +21,7 @@ export function IntakeEntryPanel({
   roomNames,
   notice,
   saving,
+  roomsReady = true,
   onSubmit,
   headActions,
   onParse,
@@ -34,6 +35,7 @@ export function IntakeEntryPanel({
   roomNames: string[];
   notice: string;
   saving: boolean;
+  roomsReady?: boolean;
   onSubmit: React.FormEventHandler<HTMLFormElement>;
   headActions?: React.ReactNode;
   onParse: () => void;
@@ -70,12 +72,19 @@ export function IntakeEntryPanel({
               className="intake-recognition-card"
               extra={
                 <Space wrap>
-                  <Button icon={<ActionIcon name="scan" />} htmlType="button" onClick={onParse} size="small">
+                  <Button
+                    icon={<ActionIcon name="scan" />}
+                    htmlType="button"
+                    disabled={!roomsReady}
+                    onClick={onParse}
+                    size="small"
+                  >
                     本地识别
                   </Button>
                   <Button
                     htmlType="button"
                     icon={<RobotOutlined aria-hidden />}
+                    disabled={!roomsReady}
                     loading={aiPending}
                     onClick={onAiParse}
                     size="small"
@@ -112,7 +121,7 @@ export function IntakeEntryPanel({
                 <Button
                   icon={<ActionIcon name="print" />}
                   block
-                  disabled={!draft.finalCardCount || saving}
+                  disabled={!draft.finalCardCount || saving || !roomsReady}
                   htmlType="button"
                   onClick={onPrint}
                 >
@@ -146,6 +155,7 @@ export function IntakeEntryPanel({
                   <Select
                     aria-label="房间"
                     id="intake-room"
+                    disabled={!roomsReady}
                     options={[
                       { value: "", label: "请选择系统房间" },
                       ...roomNames.map((room) => ({ value: room, label: room })),

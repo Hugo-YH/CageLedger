@@ -102,3 +102,17 @@ export interface PlacementWriteResponse {
   occupancy?: Occupancy;
   affectedSlots?: CageSlot[];
 }
+
+export interface InfrastructureStructure {
+  rooms: CageRoom[];
+  racks: CageRack[];
+  roomSummaries: Array<{ roomId: string; slotCount: number }>;
+  rackSummaries: Array<{ rackId: string; slotCount: number }>;
+}
+export interface RoomWorkspace {
+  rooms: CageRoom[];
+  racks: CageRack[];
+  slots: CageSlot[];
+  occupancies: Occupancy[];
+  placementTasks: PlacementTask[];
+}

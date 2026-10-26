@@ -29,6 +29,7 @@ ROUTING_SOURCES = (
     "server_app/web/animal_inspection.py",
     "server_app/web/settlement_candidates.py",
     "server_app/web/intake_summary.py",
+    "server_app/web/infrastructure.py",
     "server_app/web/pdf_exports.py",
     "server_app/repositories/filter_options.py",
     *tuple(str(path.relative_to(ROOT)) for path in sorted((ROOT / "server_app/web/route_definitions").glob("*.py"))),

@@ -20,9 +20,11 @@ import {
 } from "../quantitySheetEditorModel";
 import { useQuantityIacuc } from "./useQuantityIacuc";
 
-export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved") {
-  const roomsQuery = useQuantitySheetRooms();
-  const identitiesQuery = usePrincipalIdentities();
+export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved", editRequested = false) {
+  const [editingDialog, setEditingDialog] = useState(false);
+  const metadataEnabled = mode === "entry" || editRequested || editingDialog;
+  const roomsQuery = useQuantitySheetRooms(metadataEnabled);
+  const identitiesQuery = usePrincipalIdentities(metadataEnabled);
   const rooms = roomsQuery.data?.items || [];
   const [draft, setDraft] = useState(() => createQuantitySheet(todayMonth, user.displayName));
   const fillFromIacuc = useCallback(
@@ -44,7 +46,6 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [confirmSave, setConfirmSave] = useState<QuantitySheet | null>(null);
-  const [editingDialog, setEditingDialog] = useState(false);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
   const selectedRoom = rooms.find((room) => room.id === draft.roomId);
@@ -64,7 +65,18 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
     draft.month,
     mode === "entry" && Boolean(iacucMatch),
   );
-  const initialLoading = mode === "entry" && (roomsQuery.isPending || identitiesQuery.isPending);
+  const metadataError = metadataEnabled && (roomsQuery.isError || identitiesQuery.isError);
+  const metadataLoading =
+    metadataEnabled &&
+    !metadataError &&
+    (!roomsQuery.data || !identitiesQuery.data) &&
+    (roomsQuery.isPending || identitiesQuery.isPending);
+  const metadataReady = metadataEnabled && Boolean(roomsQuery.data && identitiesQuery.data) && !metadataError;
+  const initialLoading = mode === "entry" && metadataLoading;
+  function retryMetadata() {
+    if (roomsQuery.isError) void roomsQuery.refetch();
+    if (identitiesQuery.isError) void identitiesQuery.refetch();
+  }
   const previousPi = piHistory.data?.item?.pi || "";
   const piHint =
     mode === "entry" &&
@@ -200,6 +212,11 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
 
   function requestSave(event: React.FormEvent) {
     event.preventDefault();
+    if (!metadataReady) {
+      setNotice("房间或负责人配置尚未就绪，请重试后保存。");
+      setNoticeKind("error");
+      return;
+    }
     const sheet = collectSheet();
     const issues = validateQuantitySheet(sheet);
     if (issues.length) {
@@ -212,6 +229,12 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
 
   async function persistSheet() {
     if (!confirmSave) return;
+    if (!metadataReady) {
+      setConfirmSave(null);
+      setNotice("房间或负责人配置尚未就绪，请重试后保存。");
+      setNoticeKind("error");
+      return;
+    }
     try {
       const response = await save.mutateAsync({ sheet: confirmSave, exists });
       const normalized = normalizeQuantitySheet(response.item);
@@ -288,6 +311,11 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
     iacucMatch,
     piHistory,
     initialLoading,
+    metadataLoading,
+    metadataError,
+    metadataHasData: Boolean(roomsQuery.data && identitiesQuery.data),
+    metadataReady,
+    retryMetadata,
     previousPi,
     piHint,
     save,

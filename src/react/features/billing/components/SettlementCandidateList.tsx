@@ -12,6 +12,7 @@ import type { SessionUser, SettlementCandidate, SettlementCandidateListParams } 
 import { exportSettlementXlsx, useSettlementCandidates } from "../../../api/settlements";
 import { useSettlementBatch } from "../../../api/useSettlementBatch";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
+import { useRetainedListData } from "../../../hooks/useRetainedListData";
 import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
 import { settlementExportProgress, usePdfExport } from "../hooks/usePdfExport";
 import { useSettlementSelection } from "../hooks/useSettlementSelection";
@@ -88,15 +89,20 @@ export function SettlementCandidateList({
     [pageSize, page, sort, filters],
   );
   const list = useSettlementCandidates(params, source === "quantity_sheet");
+  const { data, blocked, loading } = useRetainedListData(
+    list,
+    queryKeys.settlementCandidates({ ...params }),
+    `settlement:${source}`,
+  );
   useWorkspaceScroll("billing-settlement", !list.isPending && !list.isError);
-  const items = list.data?.items || [];
-  const total = list.data?.page.total || 0;
-  const pages = Math.max(Math.ceil(total / pageSize), 1);
+  const items = data?.items || [];
+  const total = data?.page.total || 0;
+  const pages = Math.max(Math.ceil(total / (data?.page.limit || pageSize)), 1);
 
   useListPageBounds(
     page,
     pages,
-    !list.isPending && !list.isError && !list.isPlaceholderData,
+    !list.isPending && !list.isError && !list.isPlaceholderData && !list.isFetching,
     setPage,
     queryKeys.settlementCandidatesRoot,
   );
@@ -116,10 +122,13 @@ export function SettlementCandidateList({
     [setSort, setPage],
   );
   const { toggleAll } = selection;
-  const onToggleAll = useCallback(() => void toggleAll(params), [toggleAll, params]);
+  const onToggleAll = useCallback(() => {
+    if (!blocked) void toggleAll(params);
+  }, [blocked, toggleAll, params]);
   const canWithdraw = (candidate: SettlementCandidate) => canWithdrawCandidate(candidate, user);
 
   async function exportCandidates(candidates: SettlementCandidate[]) {
+    if (blocked) return;
     setNotice("");
     try {
       await pdfExport.exportPdf({
@@ -132,7 +141,7 @@ export function SettlementCandidateList({
   }
 
   async function exportCandidatesXlsx(candidates: SettlementCandidate[]) {
-    if (exportingXlsx.current) return;
+    if (blocked || exportingXlsx.current) return;
     exportingXlsx.current = true;
     setXlsxExporting(true);
     setNotice("");
@@ -151,7 +160,7 @@ export function SettlementCandidateList({
   }
 
   async function runSelectedBatch(action: "start" | "withdraw", note?: string) {
-    if (batchActionRef.current) return;
+    if (blocked || batchActionRef.current) return;
     const candidates = selectedCandidates.filter((candidate) =>
       action === "start"
         ? candidate.totalAmount != null &&
@@ -205,22 +214,6 @@ export function SettlementCandidateList({
     );
   }
 
-  if (list.isPending) return <PageSkeleton embedded label="结算管理" variant="table" />;
-  if (list.isError)
-    return (
-      <Alert
-        role="alert"
-        type="error"
-        showIcon
-        title={`结算列表加载失败：${list.error.message}`}
-        action={
-          <Button icon={<ActionIcon name="refresh" />} onClick={() => void list.refetch()}>
-            重试
-          </Button>
-        }
-      />
-    );
-
   const allSelectedNonInitiative =
     selectedCandidates.length > 0 &&
     selectedCandidates.every((item) => item.hasWorkflow && item.workflowStatus !== "statement_generated");
@@ -232,6 +225,20 @@ export function SettlementCandidateList({
       exportPdf={pdfExport.exportPdf}
       pdfExporting={pdfExport.isExporting}
     >
+      {list.isError ? (
+        <Alert
+          role="alert"
+          type="error"
+          showIcon
+          title={`结算列表加载失败：${list.error.message}`}
+          description={data ? "暂显示上次成功结果，重试成功后继续操作。" : undefined}
+          action={
+            <Button icon={<ActionIcon name="refresh" />} loading={list.isFetching} onClick={() => void list.refetch()}>
+              重试
+            </Button>
+          }
+        />
+      ) : null}
       {selection.error ? <Alert role="alert" type="error" showIcon title={selection.error} /> : null}
       {notice || pdfExport.isExporting || xlsxExporting || batchStarting || batchWithdrawing ? (
         <Alert
@@ -268,7 +275,7 @@ export function SettlementCandidateList({
           />
         }
         allSelectedNonInitiative={allSelectedNonInitiative}
-        disabled={list.isPlaceholderData || batch.isPending}
+        disabled={blocked || batch.isPending}
         batchStarting={batchStarting}
         batchWithdrawing={batchWithdrawing}
         pdfExporting={pdfExport.isExporting}
@@ -282,42 +289,49 @@ export function SettlementCandidateList({
         onInitiate={() => setBatchConfirmOpen(true)}
         onWithdraw={() => setBatchWithdrawOpen(true)}
       />
-      <SettlementCandidateTable
-        items={items}
-        refreshing={list.isFetching}
-        density={density}
-        allFilteredSelected={allFilteredSelected}
-        filters={filters}
-        params={params}
-        selectedCandidates={selectedCandidates}
-        selectingAll={selectingAll}
-        disabled={list.isPlaceholderData || batch.isPending}
-        total={total}
-        onFilter={onFilter}
-        onSort={onSort}
-        onToggle={selection.toggle}
-        onToggleAll={onToggleAll}
-      />
-      <Pager
-        itemLabel="项"
-        page={page}
-        pageSize={pageSize}
-        pages={pages}
-        total={total}
-        onPage={(nextPage) => {
-          setPage(nextPage);
-        }}
-        onPageSize={(nextSize) => {
-          setPageSize(nextSize);
-          setPage(1);
-        }}
-      />
+      {data ? (
+        <SettlementCandidateTable
+          items={items}
+          refreshing={list.isFetching}
+          density={density}
+          allFilteredSelected={allFilteredSelected}
+          filters={filters}
+          params={params}
+          selectedCandidates={selectedCandidates}
+          selectingAll={selectingAll}
+          disabled={blocked || batch.isPending}
+          total={total}
+          onFilter={onFilter}
+          onSort={onSort}
+          onToggle={selection.toggle}
+          onToggleAll={onToggleAll}
+        />
+      ) : loading ? (
+        <PageSkeleton embedded label="结算管理" variant="table" />
+      ) : null}
+      {data ? (
+        <Pager
+          itemLabel="项"
+          page={Math.floor((data?.page.offset ?? 0) / (data?.page.limit || pageSize)) + 1}
+          pageSize={data?.page.limit || pageSize}
+          pages={pages}
+          total={total}
+          onPage={(nextPage) => {
+            setPage(nextPage);
+          }}
+          onPageSize={(nextSize) => {
+            setPageSize(nextSize);
+            setPage(1);
+          }}
+        />
+      ) : null}
       <BatchStartConfirmModal
         count={
           selectedCandidates.filter((item) => !item.hasWorkflow || item.workflowStatus === "statement_generated").length
         }
         open={batchConfirmOpen}
         pending={batchStarting}
+        disabled={blocked}
         onCancel={() => {
           if (!batchStarting) setBatchConfirmOpen(false);
         }}
@@ -327,6 +341,7 @@ export function SettlementCandidateList({
         count={withdrawableSelected.length}
         open={batchWithdrawOpen}
         pending={batchWithdrawing}
+        disabled={blocked}
         onCancel={() => {
           if (!batchWithdrawing) setBatchWithdrawOpen(false);
         }}

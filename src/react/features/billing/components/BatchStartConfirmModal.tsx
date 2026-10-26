@@ -5,12 +5,14 @@ export function BatchStartConfirmModal({
   count,
   open,
   pending,
+  disabled = false,
   onConfirm,
   onCancel,
 }: {
   count: number;
   open: boolean;
   pending: boolean;
+  disabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -19,6 +21,7 @@ export function BatchStartConfirmModal({
       cancelButtonProps={{ disabled: pending }}
       cancelText="取消"
       confirmLoading={pending}
+      okButtonProps={{ disabled }}
       okText={`发起 ${count} 个流程`}
       open={open}
       title="批量发起结算流程"

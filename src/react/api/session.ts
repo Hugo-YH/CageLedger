@@ -5,11 +5,12 @@ import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 import { clearDiagnostics } from "../diagnostics/collector";
 
-export function useSession() {
+export function useSession(enabled = true) {
   return useQuery({
     queryKey: queryKeys.session,
     queryFn: ({ signal }) => requestJson<SessionResponse>("/api/auth/me", { signal }),
     retry: false,
+    enabled,
   });
 }
 

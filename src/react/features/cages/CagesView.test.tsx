@@ -40,8 +40,9 @@ const tasks: PlacementTask[] = [
   },
 ];
 
-vi.mock("../../api/bootstrap", () => ({
-  useBootstrap: () => ({
+vi.mock("../../api/infrastructure", () => ({
+  useRooms: () => ({ data: { items: rooms }, isPending: false, isFetching: false }),
+  useRoomWorkspace: () => ({
     data: { rooms, racks, slots, occupancies: [], placementTasks: tasks },
     isPending: false,
     isFetching: false,

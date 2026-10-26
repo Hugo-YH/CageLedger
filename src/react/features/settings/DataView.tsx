@@ -76,7 +76,11 @@ export function DataView({ user }: { user: SessionUser }) {
         key: "principalType",
         width: 220,
         render: (_value, item) => (
-          <PrincipalTypeSelect key={`${item.pi}:${item.updatedAt}`} item={item} disabled={user.role !== "admin"} />
+          <PrincipalTypeSelect
+            key={`${item.pi}:${item.updatedAt}`}
+            item={item}
+            disabled={user.role !== "admin" || identities.isError}
+          />
         ),
       },
       { title: "免费笼数/天", dataIndex: "freeCageAllowance", key: "freeCageAllowance", width: 140, align: "right" },
@@ -88,7 +92,7 @@ export function DataView({ user }: { user: SessionUser }) {
         render: (value: string) => <Typography.Text type="secondary">{formatDateTime(value)}</Typography.Text>,
       },
     ],
-    [user.role],
+    [user.role, identities.isError],
   );
 
   return (
@@ -121,12 +125,19 @@ export function DataView({ user }: { user: SessionUser }) {
                 />
               }
             />
-            {identities.isPending ? (
+            {identities.isPending && !identities.data ? (
               <PageSkeleton compact label="负责人身份" rows={4} variant="table" />
-            ) : identities.isError ? (
+            ) : identities.isError && !identities.data ? (
               <PageState title="负责人身份加载失败" retry={() => identities.refetch()} />
             ) : (
               <Fragment>
+                {identities.isError ? (
+                  <Alert
+                    type="error"
+                    title="负责人身份更新失败，暂显示上次结果"
+                    action={<Button onClick={() => void identities.refetch()}>重试</Button>}
+                  />
+                ) : null}
                 <DataTable
                   className="app-data-table"
                   columns={columns}

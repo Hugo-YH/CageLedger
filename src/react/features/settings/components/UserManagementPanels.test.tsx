@@ -23,7 +23,12 @@ vi.mock("antd", () => {
   }) => <input {...props} value={value} onChange={onChange} />;
   Input.Password = Input;
   return {
-    Alert: ({ title }: { title: ReactNode }) => <div role="alert">{title}</div>,
+    Alert: ({ title, action }: { title: ReactNode; action?: ReactNode }) => (
+      <div role="alert">
+        {title}
+        {action}
+      </div>
+    ),
     Button: ({
       children,
       disabled,
@@ -159,6 +164,61 @@ describe("user management save boundaries", () => {
     expect(api.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ id: "alpha", expectedUpdatedAt: "version-alpha" }),
     );
+  });
+
+  it("keeps account drafts and current-user actions available while room authorization is unavailable", async () => {
+    const retry = vi.fn();
+    const onDelete = vi.fn();
+    const renderView = (ready: boolean) => (
+      <UserSaveProvider>
+        <UserList
+          currentUserId="alpha"
+          items={users}
+          rooms={ready ? rooms : []}
+          roomsReady={ready}
+          roomsError={!ready}
+          onRetryRooms={retry}
+          onDelete={onDelete}
+        />
+      </UserSaveProvider>
+    );
+    const rendered = render(renderView(false));
+    const alpha = screen.getByLabelText("账号 alpha");
+    const beta = screen.getByLabelText("账号 beta");
+    expect(within(alpha).getByRole("button", { name: "保存联系电话" })).toBeEnabled();
+    expect(within(beta).getByRole("button", { name: "保存账号" })).toBeDisabled();
+    expect(within(beta).getByRole("button", { name: "删除账号" })).toBeEnabled();
+    fireEvent.change(within(beta).getByDisplayValue("200"), { target: { value: "保留电话" } });
+    fireEvent.click(within(beta).getByRole("button", { name: "重试" }));
+    expect(retry).toHaveBeenCalledOnce();
+    rendered.rerender(renderView(true));
+    expect(within(beta).getByDisplayValue("保留电话")).toBeInTheDocument();
+    api.mutateAsync.mockResolvedValueOnce({ user: users[1] });
+    fireEvent.click(within(beta).getByRole("button", { name: "保存账号" }));
+    await waitFor(() =>
+      expect(api.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ user: expect.objectContaining({ phone: "保留电话", roomIds: ["room-1"] }) }),
+      ),
+    );
+  });
+
+  it("does not block editing an administrator account or deleting when rooms are unavailable", () => {
+    const adminAccount = { ...users[1], role: "admin" as const };
+    render(
+      <UserSaveProvider>
+        <UserList
+          currentUserId="none"
+          items={[adminAccount]}
+          rooms={[]}
+          roomsReady={false}
+          roomsError
+          onRetryRooms={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </UserSaveProvider>,
+    );
+    expect(screen.getByRole("button", { name: "保存账号" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "删除账号" })).toBeEnabled();
   });
 
   it("keeps the account list out of a create-draft update", () => {

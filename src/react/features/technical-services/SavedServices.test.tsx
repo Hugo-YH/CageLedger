@@ -15,6 +15,9 @@ const api = vi.hoisted(() => ({
   lastParams: {},
   mutation: vi.fn<() => Promise<unknown>>(),
   total: 0,
+  detailLoading: false,
+  detailError: false,
+  detailRefetch: vi.fn(),
 }));
 
 vi.mock("../../api/technicalServices", () => ({
@@ -30,6 +33,13 @@ vi.mock("../../api/technicalServices", () => ({
     };
   },
   useServiceMutation: () => ({ isPending: false, mutateAsync: api.mutation }),
+  useServiceDetail: (id: string) => ({
+    data: id && !api.detailLoading && !api.detailError ? { item: api.items.find((item) => item.id === id) } : undefined,
+    isFetching: Boolean(id) && api.detailLoading,
+    isError: Boolean(id) && api.detailError,
+    error: new Error("详情不可用"),
+    refetch: api.detailRefetch,
+  }),
 }));
 
 vi.mock("../../state/ui", () => ({ useNavigationGuard: () => ({ current: null }) }));
@@ -67,6 +77,7 @@ vi.mock("antd", async (importOriginal) => {
     return (
       <div className="ant-modal">
         <div>{title}</div>
+        <button aria-label="关闭弹窗" onClick={onCancel} />
         {children}
         {footer === null
           ? null
@@ -91,7 +102,12 @@ vi.mock("./ServiceColumnTitle", () => ({
 }));
 
 vi.mock("./ServiceEditor", () => ({
-  ServiceEditor: ({ onSaved }: { onSaved: () => void }) => <button onClick={onSaved}>完成保存</button>,
+  ServiceEditor: ({ initial, onSaved }: { initial: TechnicalServiceSheet; onSaved: () => void }) => (
+    <>
+      <span data-testid="snapshot-version">{initial.priceSnapshot?.version}</span>
+      <button onClick={onSaved}>完成保存</button>
+    </>
+  ),
 }));
 
 vi.mock("./ServiceDetails", () => ({ ServiceDetails: () => null }));
@@ -130,7 +146,13 @@ vi.mock("../../components/ui", async (importOriginal) => {
 });
 
 vi.mock("../../components/WorkspaceUi", () => ({
-  PageSkeleton: () => null,
+  PageSkeleton: ({ label }: { label: string }) => <div>{label}加载中</div>,
+  PageState: ({ title, retry }: { title: string; retry: () => void }) => (
+    <div>
+      {title}
+      <button onClick={retry}>重新加载</button>
+    </div>
+  ),
   Pager: ({ page, onPage }: { page: number; onPage: (next: number) => void }) => (
     <button type="button" onClick={() => onPage(page + 1)}>
       第 {page} 页
@@ -186,6 +208,9 @@ beforeEach(() => {
   api.lastParams = {};
   api.mutation.mockReset();
   api.mutation.mockResolvedValue({});
+  api.detailLoading = false;
+  api.detailError = false;
+  api.detailRefetch.mockReset();
 });
 
 afterEach(() => {
@@ -194,6 +219,51 @@ afterEach(() => {
 });
 
 describe("SavedServices", () => {
+  it("opens edit immediately, retries detail failure, and ignores late data after close", async () => {
+    api.items[0].priceSnapshot = {
+      id: "service-1",
+      name: "原价格",
+      unit: "次",
+      internalPrice: 10,
+      externalPrice: 20,
+      version: "old-price",
+      source: "test",
+      notes: "",
+    };
+    api.detailLoading = true;
+    const rendered = view();
+    fireEvent.click(screen.getAllByRole("button", { name: /编\s*辑/ })[0]);
+    expect(screen.getByText("技术服务明细编辑加载中")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByText("技术服务明细").closest(".ant-modal")!).getByLabelText("关闭弹窗"));
+    await waitFor(() => expect(screen.queryByText("技术服务明细编辑加载中")).not.toBeInTheDocument());
+    api.detailLoading = false;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(screen.queryByTestId("snapshot-version")).not.toBeInTheDocument();
+
+    api.detailError = true;
+    fireEvent.click(screen.getAllByRole("button", { name: /编\s*辑/ })[0]);
+    expect(screen.getByText("技术服务明细读取失败")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(api.detailRefetch).toHaveBeenCalledOnce();
+    api.detailError = false;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(screen.getByTestId("snapshot-version")).toHaveTextContent("old-price");
+    api.detailLoading = true;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(screen.getByTestId("snapshot-version")).toHaveTextContent("old-price");
+  });
+
+  it("opens preview with loading and does not reopen it when the detail arrives after close", () => {
+    api.detailLoading = true;
+    const rendered = view();
+    fireEvent.click(screen.getAllByRole("button", { name: /预\s*览/ })[0]);
+    expect(screen.getByText("技术服务明细预览加载中")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByText("技术服务明细预览").closest(".ant-modal")!).getByLabelText("关闭弹窗"));
+    api.detailLoading = false;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(screen.queryByText("技术服务明细预览加载中")).not.toBeInTheDocument();
+    expect(screen.queryByText("技术服务明细预览")).not.toBeInTheDocument();
+  });
   it("remembers paging, filters and density, and lets users remove or clear applied filters", async () => {
     const rendered = view();
     fireEvent.click(screen.getByRole("button", { name: "月份筛选" }));
@@ -249,6 +319,10 @@ describe("SavedServices", () => {
       within(screen.getByText("删除技术服务明细").closest(".ant-modal")!).getByRole("button", { name: /删\s*除/ }),
     );
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("删除失败"));
+    expect(api.mutation).toHaveBeenLastCalledWith({
+      kind: "delete",
+      sheet: expect.objectContaining({ id: "open", updatedAt: "2026-10-17T00:00:00Z" }),
+    });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /删\s*除/ })[1]).toBeDisabled();
     fireEvent.click(

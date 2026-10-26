@@ -9,7 +9,7 @@ from server_app.db import connect_db
 from server_app.domains.quarantine import attachment_metadata, files, pdf, service, summary, workflow, worklist
 from server_app.domains.quarantine import repository as repo
 from server_app.domains.quarantine.catalog import PROJECTS, TEMPLATE_VERSION
-from server_app.domains.quarantine.history import supplier_history
+from server_app.domains.quarantine.history import supplier_details, supplier_history, supplier_summary
 from server_app.runtime_logging import emit_event
 from server_app.shared.concurrency import StaleWriteError
 from server_app.web.multipart import parse_multipart_upload
@@ -75,6 +75,10 @@ def get(handler, conn, parts, params):
         return repo.list_page(conn, parts[0], params)
     if len(parts) == 2 and parts[0] == "batches":
         return service.batch_detail(conn, parts[1])
+    if parts == ["suppliers", "summary"]:
+        return supplier_summary(conn, params)
+    if parts == ["suppliers", "details"]:
+        return supplier_details(conn, params)
     if parts == ["suppliers"]:
         return {"items": supplier_history(conn, params)}
     if len(parts) == 2 and parts[0] in {"attachments", "reports"}:

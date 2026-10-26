@@ -7,6 +7,7 @@ from server_app.web import (
     animal_inspection,
     data_quality,
     feedback,
+    infrastructure,
     intake_summary,
     quarantine,
     settlement_candidates,
@@ -18,6 +19,7 @@ from server_app.web.route_specs import ROUTE_GROUPS
 from server_app.web.router import HANDLED
 
 DELEGATES = {
+    "infrastructure": infrastructure.handle,
     "system_features": system_features.handle,
     "data_quality": data_quality.handle,
     "settlement_candidates": settlement_candidates.handle,

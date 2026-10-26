@@ -70,8 +70,54 @@ describe("quantity editor draft lifecycle", () => {
     vi.restoreAllMocks();
   });
 
+  it("does not request editor metadata on the saved list until an edit starts", async () => {
+    const { result, rerender } = renderHook(({ editing }) => useQuantitySheetEditor(user, "saved", editing), {
+      wrapper,
+      initialProps: { editing: false },
+    });
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url) === "/api/quantity-sheet-rooms")).toBe(
+      false,
+    );
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url) === "/api/principal-identities")).toBe(
+      false,
+    );
+    rerender({ editing: true });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url) === "/api/quantity-sheet-rooms")).toBe(
+      true,
+    );
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url) === "/api/principal-identities")).toBe(
+      true,
+    );
+  });
+
+  it("blocks saving after metadata failure and keeps the draft through retry", async () => {
+    let failing = true;
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = String(input);
+      if (url === "/api/quantity-sheet-rooms") return Promise.resolve(Response.json({ items: rooms }));
+      if (url === "/api/principal-identities")
+        return Promise.resolve(
+          failing ? Response.json({ error: "配置不可用" }, { status: 503 }) : Response.json({ items: [] }),
+        );
+      if (url.includes("/iacuc-index?")) return Promise.resolve(Response.json({ items: [] }));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(result.current.metadataError).toBe(true));
+    act(() => result.current.setField("funding", "未保存草稿"));
+    act(() => result.current.requestSave(submitEvent()));
+    expect(result.current.confirmSave).toBeNull();
+    expect(result.current.notice).toContain("尚未就绪");
+    expect(writes).toHaveLength(0);
+    failing = false;
+    act(() => result.current.retryMetadata());
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    expect(result.current.draft.funding).toBe("未保存草稿");
+  });
+
   it("saves live editor rows with the original version and opens a fresh draft only after success", async () => {
-    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved"), { wrapper });
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved", true), { wrapper });
     await waitFor(() => expect(result.current.rooms).toHaveLength(2));
     act(() => result.current.loadForEdit(savedSheet()));
     const liveRow = { ...result.current.draft.rows[0], cageCount: 8 };
@@ -98,7 +144,7 @@ describe("quantity editor draft lifecycle", () => {
   });
 
   it("retains the draft and row edits on a conflict without retrying the write", async () => {
-    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved"), { wrapper });
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved", true), { wrapper });
     await waitFor(() => expect(result.current.rooms).toHaveLength(2));
     act(() => result.current.loadForEdit(savedSheet()));
     act(() => result.current.setField("funding", "刚修改的支撑经费"));

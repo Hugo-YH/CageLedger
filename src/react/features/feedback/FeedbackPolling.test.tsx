@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useSyncExternalStore } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as UiComponents from "../../components/ui";
 
 import { FeedbackView } from "./FeedbackView";
@@ -89,7 +90,12 @@ it("detail polling updates its drawer without rendering the feedback list again"
     active: true,
     updatedAt: "2026-10-23T00:00:00Z",
   };
-  render(<FeedbackView user={user} page="feedback" />);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <FeedbackView user={user} page="feedback" />
+    </QueryClientProvider>,
+  );
   fireEvent.click(screen.getByRole("button", { name: "查看反馈 #1：轮询测试" }));
   const before = polling.tableRenders;
   act(() => {
