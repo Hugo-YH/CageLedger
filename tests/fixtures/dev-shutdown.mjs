@@ -77,6 +77,7 @@ assert.deepEqual(empty, ["cleanup", "exit"]);
 console.log(
   JSON.stringify({
     passed: 5,
-    scope: "Owned child handles, delayed acknowledgements, forced timeout, duplicate shutdown, child exit codes, already exited and empty launch",
+    scope:
+      "Owned child handles, delayed acknowledgements, forced timeout, duplicate shutdown, child exit codes, already exited and empty launch",
   }),
 );
