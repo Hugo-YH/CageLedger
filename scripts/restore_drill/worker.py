@@ -42,6 +42,7 @@ def main():
                 ANIMAL_INSPECTION_ATTACHMENTS_PATH,
                 ANIMAL_INSPECTION_IMAGES_PATH,
                 FEEDBACK_FILES_PATH,
+                INTAKE_RECOGNITION_IMAGES_PATH,
                 QUARANTINE_FILES_PATH,
                 REIMBURSEMENT_ATTACHMENTS_PATH,
             )
@@ -49,6 +50,7 @@ def main():
             expected_paths = {
                 QUARANTINE_FILES_PATH: root / "quarantine",
                 FEEDBACK_FILES_PATH: root / "feedback",
+                INTAKE_RECOGNITION_IMAGES_PATH: root / "intake/recognition",
                 ANIMAL_INSPECTION_ATTACHMENTS_PATH: root / "animal-inspections/attachments",
                 ANIMAL_INSPECTION_IMAGES_PATH: root / "animal-inspections/reference-images",
                 REIMBURSEMENT_ATTACHMENTS_PATH: root / "reimbursements/attachments",

@@ -41,7 +41,7 @@ test("direct sampling is recognized, saved without cards, confirmed and included
   const suffix = Date.now();
   const batchNo = `（Z2026001）20261022${suffix}`;
   const raw = `饲养需求批次号：${batchNo}\n锐竞采购单号：C20261022${suffix}\n供应商：广东南模\n品系：C57BL/6J\n数量：10\n接收日期：2026-10-22\n到货直接取材，无需饲养。`;
-  await page.getByLabel("预约消息").fill(raw);
+  await page.getByLabel("预约消息", { exact: true }).fill(raw);
   await page.getByRole("button", { name: "本地识别", exact: true }).click();
   await expectDirectFields(page);
   await expect(page.getByLabel("IACUC 编号", { exact: true })).toHaveValue("Z2026001");
@@ -152,7 +152,7 @@ test("AI direct-sampling recognition and manual purpose correction work across v
       },
     }),
   );
-  await page.getByLabel("预约消息").fill("预约10只小鼠，到货直接取材，无需饲养。");
+  await page.getByLabel("预约消息", { exact: true }).fill("预约10只小鼠，到货直接取材，无需饲养。");
   await page.getByRole("button", { name: "AI识别", exact: true }).click();
   await expectDirectFields(page);
   await expect(page.getByLabel("接收人员", { exact: true })).toHaveValue("系统管理员");

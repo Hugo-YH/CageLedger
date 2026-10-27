@@ -1,6 +1,7 @@
 """Read persisted attachment references without importing or mutating the app."""
 
 import json
+import re
 from urllib.parse import quote, unquote, urlsplit
 
 from scripts.database_review.storage import quote as sql_quote
@@ -106,6 +107,21 @@ def references(conn):
                 )
 
     seen_images = set()
+
+    for row in rows("intake_batches"):
+        batch = json.loads(row["payload"])
+        for item in (batch.get("recognition") or {}).get("images", []):
+            suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}.get(item.get("mime"))
+            if not suffix or not re.fullmatch(r"[a-f0-9]{32}", str(item.get("id") or "")):
+                raise ValueError("预约来源图片的留档标识无效")
+            add(
+                "intake-recognition",
+                item["id"],
+                ["intake", "recognition", item["id"] + suffix],
+                "/api/intake-batches/" + quote(batch["id"], safe="") + "/recognition-images/" + item["id"],
+                size=item.get("size"),
+                sha=item.get("sha256"),
+            )
 
     def images(config):
         for item in config.get("referenceImages", []):

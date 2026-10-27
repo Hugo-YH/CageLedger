@@ -109,6 +109,12 @@ function matchField(text: string, labels: string[]) {
 
 function normalizedDate(value: string, fallbackYear = new Date().getFullYear()) {
   const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T00:00:00Z`);
+    return Number(raw.slice(0, 4)) > 0 && Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw
+      ? raw
+      : "";
+  }
   const full = raw.match(/(20\d{2})[-/.年]\s*(\d{1,2})[-/.月]\s*(\d{1,2})/);
   const short = raw.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
   const parts = full
@@ -223,12 +229,19 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
     : "pending_print";
   const roomName = String(item.roomName || "").trim();
   const intakeDate = normalizedDate(String(item.intakeDate || ""));
-  const husbandryDays = numberOrNull(item.husbandryDays) ?? daysBetween(intakeDate, item.endDate || "");
-  const endDate = normalizedDate(String(item.endDate || "")) || addDays(intakeDate, husbandryDays);
+  const months = numberOrNull(item.husbandryMonths);
+  const husbandryMonths = months !== null && Number.isInteger(months) && months > 0 && months <= 1200 ? months : null;
+  let husbandryDays = numberOrNull(item.husbandryDays) ?? daysBetween(intakeDate, item.endDate || "");
+  let endDate = normalizedDate(String(item.endDate || "")) || addDays(intakeDate, husbandryDays);
+  if (husbandryMonths !== null) {
+    endDate = calendarMonthEnd(intakeDate, husbandryMonths);
+    husbandryDays = daysBetween(intakeDate, endDate);
+  }
   return {
     intakePurpose: directSampling ? "direct_sampling" : "housing",
     id: String(item.id || createClientId()),
     rawMessage: String(item.rawMessage || ""),
+    ...(item.recognition ? { recognition: item.recognition } : {}),
     purchaseOrderNo: String(item.purchaseOrderNo || "").trim(),
     batchNo: String(item.batchNo || "")
       .trim()
@@ -240,12 +253,14 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
     species,
     strainRaw: String(item.strainRaw || "").trim(),
     strainStandard: String(item.strainStandard || item.strainRaw || "").trim(),
+    ...(item.specification !== undefined ? { specification: String(item.specification).trim() } : {}),
     sex: normalizeIntakeSex(item.sex),
     quantity,
     roomName: directSampling ? "" : roomName,
     roomMatched: !directSampling && (roomNames.length ? roomNames.includes(roomName) : Boolean(item.roomMatched)),
     intakeDate,
     husbandryDays: directSampling ? null : husbandryDays,
+    ...("husbandryMonths" in item ? { husbandryMonths: directSampling ? null : husbandryMonths } : {}),
     endDate: directSampling ? "" : endDate,
     project: String(item.project || "").trim(),
     pi: String(item.pi || "").trim(),
@@ -294,7 +309,23 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
   const quantity = numberOrNull(source.match(/数量\s*:?\s*(\d+)/)?.[1]);
   const roomName = matchField(raw, ["饲养房间", "房间"]).match(/\d{3,4}/)?.[0] || "";
   const dateText = matchField(raw, ["进驻日期", "拟进驻日期", "预计进驻日期", "接收日期", "到货日期"]);
-  const husbandryDays = numberOrNull(matchField(raw, ["饲养周期（天）", "饲养周期(天)", "饲养周期", "周期"]));
+  const periodText = matchField(raw, ["饲养周期（天）", "饲养周期(天)", "饲养周期", "周期"]);
+  const monthMatch = periodText.match(/^(\d+|一|两|二|三|四|五|六|七|八|九|十)\s*个?\s*(?:自然月|月)(?!龄)/);
+  const numerals: Record<string, number> = {
+    一: 1,
+    两: 2,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  const husbandryMonths = monthMatch ? numerals[monthMatch[1]] || Number(monthMatch[1]) : null;
+  const husbandryDays = husbandryMonths ? null : numberOrNull(periodText);
   return normalizeIntakeBatch(
     {
       rawMessage: raw,
@@ -313,6 +344,7 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
       roomName,
       intakeDate: normalizedDate(dateText, referenceYear),
       husbandryDays,
+      ...(husbandryMonths ? { husbandryMonths } : {}),
       receiverName,
       status: "pending_print",
     },
@@ -335,14 +367,29 @@ export function updateIntakeDraft<K extends keyof IntakeBatch>(
       next.finalCardCount = count;
     }
   } else if (key === "endDate") {
+    if ("husbandryMonths" in current) next.husbandryMonths = null;
     next.husbandryDays = daysBetween(next.intakeDate, next.endDate);
   } else if (key === "husbandryDays") {
+    if ("husbandryMonths" in current) next.husbandryMonths = null;
     next.endDate = addDays(next.intakeDate, next.husbandryDays);
   } else if (key === "intakeDate") {
     if (next.husbandryDays !== null) next.endDate = addDays(next.intakeDate, next.husbandryDays);
     else next.husbandryDays = daysBetween(next.intakeDate, next.endDate);
   }
   return normalizeIntakeBatch(next, roomNames);
+}
+
+/** Calendar addition clamps the target day at month end rather than rolling into another month. */
+function calendarMonthEnd(value: string, months: number) {
+  const start = normalizedDate(value);
+  if (!start) return "";
+  const day = Number(start.slice(-2));
+  const end = new Date(`${start}T00:00:00Z`);
+  end.setUTCDate(1);
+  end.setUTCMonth(end.getUTCMonth() + months + 1);
+  end.setUTCDate(0);
+  end.setUTCDate(Math.min(day, end.getUTCDate()));
+  return Number.isFinite(end.getTime()) ? normalizedDate(end.toISOString().slice(0, 10)) : "";
 }
 
 function daysBetween(start: string, end: string): number | null {

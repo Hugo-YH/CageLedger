@@ -12,7 +12,7 @@ from server_app.domains.administration import (
     system_info,
 )
 from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
-from server_app.web.intake_ai import intake_ai_parse_handler
+from server_app.web.intake_ai import intake_ai_parse_handler, intake_recognition_image_handler
 from server_app.web.intake_strain import intake_strain_standardize_handler
 from server_app.web.response import JsonResponse
 from server_app.web.route_registration import register_domain_routes
@@ -76,6 +76,11 @@ API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
+API_ROUTER.add(
+    "GET",
+    r"/api/intake-batches/(?P<batchId>[^/]+)/recognition-images/(?P<imageId>[a-f0-9]{32})",
+    intake_recognition_image_handler,
+)
 API_ROUTER.add("POST", r"/api/intake/standardize-strain", intake_strain_standardize_handler)
 API_ROUTER.add("GET", r"/api/auth/me", current_session_response)
 API_ROUTER.add("GET", r"/api/release-announcements", get_release_announcement_acknowledgements)

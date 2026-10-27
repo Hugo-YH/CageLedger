@@ -192,6 +192,18 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 
 ## 笼卡与待进驻
 
+`POST /api/intake/ai-parse` 保留原 `{rawMessage,roomNames}` 及 `{item,usage}` 响应。可选 `images:[{name,dataUrl}]` 支持同一预约的文字加图片或纯图片；最多4张 PNG/JPEG/WebP，单张5 MiB、合计15 MiB，校验真实格式、完整性、尺寸与静态图片后才请求 AI。图片使用独立 `DEEPSEEK_VISION_MODEL`（默认 `deepseek-flash`），共用原key与地址；原文字模型、响应和本地识别保持兼容。
+
+图片响应另含 `recognition:{extractedText,warnings,fieldSources,sources,model}`。`sources` 按1起点 `imageIndex` 标识截图，`kind` 为 `husbandry`（饲养需求）、`purchase`（采购信息）或 `unknown`。饲养需求分离许可总量/剩余量、本批数量/雌雄及审核备注字段；采购信息单列单号、批次、商品、规格、数量及供应商。服务端先核对编号，再按来源合并，许可数量永不映射到本批数量；品系（对应商品名称）、体重/日龄（对应规格）、本批数量有差异时采用采购信息的非空值，保留双方原值并提示；采购内部多图矛盾仍需人工核对，编号冲突拒绝合并。明确笼数保留；缺少明确接收日期依据时留空，不用采购申请日期代替；项目和负责人仍由现有 IACUC 匹配回填。
+
+图片 AI 只提取原始事实。采购来源可选 `quantityFacts:{lineQuantity,lineQuantityEvidence,giftQuantity,giftEvidence,giftInclusion,giftScope,currentDeliveryQuantity,currentDeliveryEvidence,deferredQuantity,deferredEvidence,purchaseNotes}`；缺失数字为null。`lineQuantity` 取商品行供应商、单价后的数量列，原 `source.quantity` 继续保存该列原数。`giftInclusion=extra|included|unknown|none` 分别表示额外、已含、不确定、无赠送，`giftScope=current_item|other|unknown` 标识本次商品归属。服务端仅在原文与事实支持明确额外赠送时做加法；已含或后续赠送不重复计入。本次备注合计只交叉校验，后续数量不进入本次；相同采购图片重复出现不累加。包含关系、数量或范围矛盾时主数量留空并提示核对，不能退回申请额度或AI猜测合计。已有无quantityFacts的识别记录保持原采购数量兼容。
+
+识别依据另含可选 `quantityCalculation:{baseQuantity,giftQuantity,addedGiftQuantity,actualQuantity,formula,status,reason}`，`status=calculated|review_required`。例如27只加额外赠送3只得到30只，备注本次30只不重复加、后续47只不计入。保存时作为识别依据留档，不覆盖用户核对后编辑的主数量。动物规格由服务端本地提取年龄/体重并规范为 `6-8w`、`1-2m`、`1-2y`、`18-22g` 等；等级、赠送及饲养周期排除，来源规格原文仍保留。缺失标记“-”不参与差异比较。原文字识别响应和旧保存请求不变，不增加数据库迁移。
+
+自然月饲养周期使用可选 `item.husbandryMonths`（1至1200的整数），来源同时保留 `husbandryMonths` 与 `husbandryPeriodRaw`；月数必须有明确饲养/周期原文，不能来自动物月龄。AI只提取事实，本地将接收日期加月数（目标日不存在时取目标月末）并计算 `endDate` 与 `husbandryDays`；缺接收日期时保留月数，其余两项留空。明确的两日期不符合该自然月结果时，保留原日期差且清除月数意图。保存接口同样计算可选月数并在原事务中审计，`husbandryMonths:null` 表示手动覆盖或清除联动；旧记录无该字段时不回填，旧客户端省略字段且日期天数未改时保留已存月数，显式改变日期/天数时尊重其输入。直接取材不使用自然月周期，无数据库迁移。
+
+批次 POST/PUT 可选携带 `recognitionImages:[{name,dataUrl}]`，提取依据在 `item.recognition`。图片字节不进入业务 payload 或审计，只在权限、版本、重复确认均通过后写入新文件，并随批次与来源图片审计一起提交元数据；失败清理本次新文件，不覆盖旧文件。省略识别依据的旧编辑请求保留原留档，客户端不能指定或替换存储路径，已有图片不会因普通编辑删除。相同内容和名称不重复留档。 `recognition.imageIds` 按本次图片输入顺序绑定原图 ID，`images` 同时保留历史原图；多次编辑后仍能核对每个来源的对应图片。图片识别返回 `inputImages`（名称与SHA-256）；保存按该签名绑定原图，变更后的图片不能冒充旧识别来源，缺少对应原图时明确提示。`GET /api/intake-batches/{batchId}/recognition-images/{imageId}` 要求登录、确认图片归属于该批次后返回原图，沿用批次可见范围，响应 `no-store`；批次不存在、图片不属于批次或文件暂缺返回404。新功能不增加数据库结构迁移。
+
 | 方法     | 路径                                       | 请求或参数                                               | 响应                                    |
 | -------- | ------------------------------------------ | -------------------------------------------------------- | --------------------------------------- |
 | `GET`    | `/api/intake-batches`                      | `limit`、`offset`、`sortKey`、`sortDir`、`columnFilters` | 分页批次                                |

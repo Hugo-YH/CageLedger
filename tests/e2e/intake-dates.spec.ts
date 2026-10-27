@@ -92,7 +92,7 @@ test("AI recognized date ranges populate the cycle and remain editable", async (
       },
     }),
   );
-  await page.getByLabel("预约消息").fill("2028年2月28日接收，3月1日结束饲养。");
+  await page.getByLabel("预约消息", { exact: true }).fill("2028年2月28日接收，3月1日结束饲养。");
   await page.getByRole("button", { name: "AI识别", exact: true }).click();
   await expect(page.getByLabel("接收日期", { exact: true })).toHaveValue("2028-02-28");
   await expect(page.getByLabel("结束日期", { exact: true })).toHaveValue("2028-03-01");

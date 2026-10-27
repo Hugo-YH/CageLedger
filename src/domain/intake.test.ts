@@ -99,6 +99,12 @@ describe("intake message parser", () => {
     expect(result.strainRaw).toBe("c57");
   });
 
+  it("preserves an optional specification without adding it to legacy drafts", () => {
+    expect(normalizeIntakeBatch({})).not.toHaveProperty("specification");
+    expect(normalizeIntakeBatch({ specification: " 6–8个月 " }).specification).toBe("6–8个月");
+    expect(updateIntakeDraft(normalizeIntakeBatch({}), "specification", "2–6月").specification).toBe("2–6月");
+  });
+
   it("preserves server cards and receipt counts", () => {
     const result = normalizeIntakeBatch({
       finalCardCount: 4,
@@ -296,5 +302,45 @@ describe("intake husbandry dates", () => {
     const edited = updateIntakeDraft(stored, "supplier", "新供应商");
     expect(edited.endDate).toBe(stored.endDate);
     expect(edited.husbandryDays).toBe(stored.husbandryDays);
+  });
+
+  it.each([
+    ["2026-10-26", "2026-11-26", 31],
+    ["2026-01-31", "2026-02-28", 28],
+    ["2024-01-31", "2024-02-29", 29],
+    ["2026-04-15", "2026-05-15", 30],
+    ["2026-12-31", "2027-01-31", 31],
+    ["2099-12-31", "2100-01-31", 31],
+  ])("uses an actual calendar month from %s", (intakeDate, endDate, husbandryDays) => {
+    const batch = normalizeIntakeBatch({ intakeDate, husbandryMonths: 1 });
+    expect(batch.endDate).toBe(endDate);
+    expect(batch.husbandryDays).toBe(husbandryDays);
+    expect(batch.husbandryMonths).toBe(1);
+  });
+
+  it("retains a recognized month until the intake date is filled, and recalculates date edits", () => {
+    const parsed = parseIntakeMessage("饲养周期:1个月");
+    expect(parsed.husbandryMonths).toBe(1);
+    expect(parsed.endDate).toBe("");
+    expect(parsed.husbandryDays).toBeNull();
+    const october = updateIntakeDraft(parsed, "intakeDate", "2026-10-26");
+    expect([october.endDate, october.husbandryDays]).toEqual(["2026-11-26", 31]);
+    const january = updateIntakeDraft(october, "intakeDate", "2026-01-31");
+    expect([january.endDate, january.husbandryDays]).toEqual(["2026-02-28", 28]);
+    const cleared = updateIntakeDraft(january, "intakeDate", "");
+    expect([cleared.husbandryMonths, cleared.endDate, cleared.husbandryDays]).toEqual([1, "", null]);
+    expect(parseIntakeMessage("体重/日龄:1个月").husbandryMonths).toBeUndefined();
+  });
+
+  it("manual days or end date replaces calendar-month intent", () => {
+    const original = normalizeIntakeBatch({ intakeDate: "2026-10-26", husbandryMonths: 1 });
+    const days = updateIntakeDraft(original, "husbandryDays", 20);
+    expect([days.husbandryMonths, days.endDate]).toEqual([null, "2026-11-15"]);
+    expect(updateIntakeDraft(days, "intakeDate", "2026-01-31").endDate).toBe("2026-02-20");
+    const end = updateIntakeDraft(original, "endDate", "2026-11-20");
+    expect([end.husbandryMonths, end.husbandryDays]).toEqual([null, 25]);
+    const clear = updateIntakeDraft(original, "husbandryDays", null);
+    expect([clear.husbandryMonths, clear.husbandryDays, clear.endDate]).toEqual([null, null, ""]);
+    expect(normalizeIntakeBatch({ intakePurpose: "direct_sampling", husbandryMonths: 1 }).husbandryMonths).toBeNull();
   });
 });

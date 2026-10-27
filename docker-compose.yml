@@ -18,6 +18,7 @@ services:
       - CAGELEDGER_LOG_MAX_BYTES=${CAGELEDGER_LOG_MAX_BYTES:-10485760}
       - CAGELEDGER_LOG_FILE_COUNT=${CAGELEDGER_LOG_FILE_COUNT:-5}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_VISION_MODEL=${DEEPSEEK_VISION_MODEL:-deepseek-flash}
     volumes:
       - ./data:/app/data
     logging:

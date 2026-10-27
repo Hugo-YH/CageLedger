@@ -269,7 +269,7 @@
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "86b807f71a686dd132ed04b15b679eebed7b94ac24181edb9120d79f0c7404c1",
+    "server_app/web/router_registry.py": "5116e6f85c0f251f4a0d0b348d1523aa855f45c33889d80aee7ee2bed05f7c82",
     "server_app/web/route_registration.py": "d05acfff6e18583855cdcdc896f44a8963b0653aac470bc8312806c3fee72009",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "d635092b9c9db6395b0e2f22407d9511fb18cf3b01d741cc2335e3ebe7a2b106",
@@ -1151,9 +1151,9 @@
         {
           "method": "POST",
           "path": "/api/intake/ai-parse",
-          "purpose": "解析接收消息",
-          "request": "{rawMessage,roomNames}",
-          "response": "{item,usage}",
+          "purpose": "解析文字及多图预约信息，按饲养需求和采购信息分别提取后核对合并",
+          "request": "{rawMessage,roomNames,images?:[{name,dataUrl}]}；图片≤4张、单张≤5MiB、合计≤15MiB",
+          "response": "{item,usage,recognition?}；图片返回分类来源、提取文本、字段依据与核对提示",
           "protection": "ai"
         },
         {
@@ -1163,6 +1163,14 @@
           "request": "{strain}",
           "response": "{item}",
           "protection": "remote_read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/intake-batches/{batchId}/recognition-images/{imageId}",
+          "purpose": "登录后读取该批次关联的预约来源原图，不修改业务或审计",
+          "request": "批次ID与留档图片ID",
+          "response": "PNG/JPEG/WebP二进制，private no-store",
+          "protection": "download"
         }
       ]
     },

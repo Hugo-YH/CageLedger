@@ -21,7 +21,7 @@ test("local and AI supplier recognition share regional aliases without collapsin
   ];
   for (const [raw, shortName] of cases) {
     supplier = raw;
-    await page.getByLabel("预约消息").fill(`供应商：${raw}\n数量：10\n到货直接取材`);
+    await page.getByLabel("预约消息", { exact: true }).fill(`供应商：${raw}\n数量：10\n到货直接取材`);
     await page.getByRole("button", { name: "本地识别", exact: true }).click();
     await expect(page.getByLabel("购买单位", { exact: true })).toHaveValue(shortName);
     await page.getByLabel("购买单位", { exact: true }).fill("待核对");

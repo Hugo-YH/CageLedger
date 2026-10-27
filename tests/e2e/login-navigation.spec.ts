@@ -23,7 +23,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openIntakeEntry(page);
   await expect(page.getByRole("heading", { name: "接收笼卡", exact: true, level: 2 })).toBeVisible();
   await page
-    .getByLabel("预约消息")
+    .getByLabel("预约消息", { exact: true })
     .fill(
       "锐竞采购单号：C2026043035083 饲养需求批次号：（Z2025050）2026042903 供应商：广东南模生物科技有限公司 品系：c57 数量：70 饲养房间：8014 进驻日期：5月13日",
     );

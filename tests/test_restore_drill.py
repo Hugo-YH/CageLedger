@@ -16,6 +16,23 @@ from scripts.restore_drill.worker import block_external_network
 
 
 class RestoreDrillTests(unittest.TestCase):
+    def test_intake_recognition_originals_are_in_the_restore_reference_manifest(self):
+        with closing(sqlite3.connect(":memory:")) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("CREATE TABLE intake_batches(id TEXT, payload TEXT)")
+            image = {"id": "a" * 32, "mime": "image/png", "size": 4, "sha256": "expected-sha"}
+            conn.execute(
+                "INSERT INTO intake_batches VALUES(?,?)",
+                ("batch-one", json.dumps({"id": "batch-one", "recognition": {"images": [image]}})),
+            )
+            refs = references(conn)
+            self.assertEqual(refs["local"][0]["path"], "intake/recognition/" + "a" * 32 + ".png")
+            self.assertEqual(
+                refs["local"][0]["endpoint"], "/api/intake-batches/batch-one/recognition-images/" + "a" * 32
+            )
+            issues = validate_references(refs, {"files": {}})
+            self.assertEqual(issues[0]["reason"], "missing_file")
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

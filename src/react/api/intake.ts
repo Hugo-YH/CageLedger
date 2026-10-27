@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
   IntakeBatch,
+  IntakeAiParseResponse,
+  IntakeRecognitionImageInput,
   IntakeDuplicateDetails,
   IntakeListParams,
   IntakeSaveRequest,
@@ -52,13 +54,20 @@ export function useIntakeFilterOptions(params: IntakeListParams, column: string,
   return useColumnFilterOptions("intake-batches", column, params.columnFilters, enabled);
 }
 
-export function saveIntakeBatch({ item, exists, checkDuplicates, duplicateConfirmation }: IntakeSaveRequest) {
+export function saveIntakeBatch({
+  item,
+  exists,
+  checkDuplicates,
+  duplicateConfirmation,
+  recognitionImages,
+}: IntakeSaveRequest) {
   return requestJson<IntakeWriteResponse>(
     exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
     {
       method: exists ? "PUT" : "POST",
       body: JSON.stringify({
         item,
+        ...(recognitionImages?.length ? { recognitionImages } : {}),
         expectedUpdatedAt: exists ? item.updatedAt : "",
         ...(checkDuplicates ? { checkDuplicates: true } : {}),
         ...(duplicateConfirmation ? { duplicateConfirmation } : {}),
@@ -164,13 +173,16 @@ export function useConfirmIntakeBatchesReceipt() {
   });
 }
 
-export async function aiParseIntakeMessage(rawMessage: string, roomNames: string[]) {
-  return requestJson<{
-    item: Partial<IntakeBatch>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-  }>("/api/intake/ai-parse", {
+export async function aiParseIntakeMessage(
+  rawMessage: string,
+  roomNames: string[],
+  images?: IntakeRecognitionImageInput[],
+  signal?: AbortSignal,
+) {
+  return requestJson<IntakeAiParseResponse>("/api/intake/ai-parse", {
     method: "POST",
-    body: JSON.stringify({ rawMessage, roomNames }),
+    signal,
+    body: JSON.stringify({ rawMessage, roomNames, ...(images?.length ? { images } : {}) }),
   });
 }
 

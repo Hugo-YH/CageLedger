@@ -1,6 +1,91 @@
 export type IntakeBatchStatus = "draft" | "pending_print" | "pending_receipt" | "printed" | "received";
 export type IntakePurpose = "housing" | "direct_sampling";
 
+/** Temporary request bytes; never stored in a batch payload or audit record. */
+export interface IntakeRecognitionImageInput {
+  name: string;
+  dataUrl: string;
+}
+
+export interface IntakeRecognitionImage {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  url: string;
+  createdAt: string;
+}
+
+export interface IntakeRecognitionSource {
+  /** One-based position in the submitted image list. */
+  imageIndex: number;
+  kind: "husbandry" | "purchase" | "unknown";
+  iacuc?: string;
+  batchNo?: string;
+  project?: string;
+  approvedQuantity?: number | null;
+  remainingQuantity?: number | null;
+  quantity?: number | null;
+  quantityFacts?: {
+    lineQuantity?: number | null;
+    lineQuantityEvidence?: string;
+    giftQuantity?: number | null;
+    giftEvidence?: string;
+    giftInclusion?: "extra" | "included" | "unknown" | "none";
+    giftScope?: "current_item" | "other" | "unknown";
+    currentDeliveryQuantity?: number | null;
+    currentDeliveryEvidence?: string;
+    deferredQuantity?: number | null;
+    deferredEvidence?: string;
+    purchaseNotes?: string;
+  };
+  maleQuantity?: number | null;
+  femaleQuantity?: number | null;
+  reviewNotes?: string;
+  husbandryDays?: number | null;
+  husbandryMonths?: number | null;
+  husbandryPeriodRaw?: string;
+  roomName?: string;
+  intakePurpose?: IntakePurpose | "";
+  finalCardCount?: number | null;
+  purchaseOrderNo?: string;
+  productName?: string;
+  specification?: string;
+  supplier?: string;
+  strainRaw?: string;
+  sex?: string;
+  intakeDate?: string;
+  endDate?: string;
+}
+
+export interface IntakeRecognitionEvidence {
+  extractedText: string;
+  warnings: string[];
+  fieldSources: Record<string, string>;
+  sources?: IntakeRecognitionSource[];
+  quantityCalculation?: {
+    baseQuantity: number | null;
+    giftQuantity: number | null;
+    addedGiftQuantity: number;
+    actualQuantity: number | null;
+    formula: string;
+    status: "calculated" | "review_required";
+    reason: string;
+  };
+  model?: string;
+  images?: IntakeRecognitionImage[];
+  /** IDs in this recognition's input order; images also contains older originals. */
+  imageIds?: string[];
+  inputImages?: Array<{ name: string; sha256: string }>;
+}
+
+export interface IntakeAiParseResponse {
+  item: Partial<IntakeBatch>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  recognition?: IntakeRecognitionEvidence;
+}
+
 export interface IntakeCard {
   id: string;
   index: number;
@@ -22,6 +107,7 @@ export interface IntakeBatch {
   quarantineBatches?: { id: string; name: string; completedAt: string }[];
   id: string;
   rawMessage: string;
+  recognition?: IntakeRecognitionEvidence;
   purchaseOrderNo: string;
   batchNo: string;
   iacuc: string;
@@ -29,12 +115,15 @@ export interface IntakeBatch {
   species: string;
   strainRaw: string;
   strainStandard: string;
+  specification?: string;
   sex: string;
   quantity: number | null;
   roomName: string;
   roomMatched: boolean;
   intakeDate: string;
   husbandryDays: number | null;
+  /** Calendar-month intent; null means the user has manually selected days/end date. */
+  husbandryMonths?: number | null;
   endDate: string;
   project: string;
   pi: string;
@@ -103,6 +192,8 @@ export interface IntakeSaveRequest {
   checkDuplicates?: boolean;
   /** Server token bound to this draft and the complete duplicate match set. */
   duplicateConfirmation?: string;
+  /** New local images, persisted alongside the successful batch transaction only. */
+  recognitionImages?: IntakeRecognitionImageInput[];
 }
 
 /** Read-only public projection; never expose the complete intake batch or account data. */

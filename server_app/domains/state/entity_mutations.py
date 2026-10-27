@@ -4,6 +4,7 @@ import sqlite3
 
 from server_app.domains.cages import sync_slot_statuses
 from server_app.domains.intake import collect_cage_card_qr_ids, is_cage_card_qr_id, next_cage_card_qr_id
+from server_app.domains.intake.calendar_batch import normalize_calendar_batch
 from server_app.domains.intake.purpose import intake_purpose, is_direct_sampling
 from server_app.domains.state.entity_rules import (
     normalize_entity_batch as normalize_entity_batch_rule,
@@ -81,7 +82,7 @@ def ensure_intake_batch_card_qr_ids(state, batch):
 
 
 def normalize_direct_sampling_batch(batch):
-    next_batch = dict(batch)
+    next_batch = normalize_calendar_batch(batch)
     next_batch["intakePurpose"] = intake_purpose(next_batch)
     if not is_direct_sampling(next_batch):
         return next_batch
@@ -154,6 +155,7 @@ def normalize_intake_batches_for_state_write(old_state, state):
             validate_entity_payload("intakeBatches", batch)
         elif old_item and is_direct_sampling(old_item):
             validate_entity_payload("intakeBatches", batch)
+        batch = normalize_calendar_batch(batch, old_item)
         # Legacy snapshots can contain incomplete housing batches. Do not backfill
         # or revalidate those unrelated records while protecting the new purpose.
         validate_intake_batch_transition(old_state, old_item, batch)
@@ -176,6 +178,7 @@ def normalize_intake_batches_for_state_write(old_state, state):
 
 
 def reconcile_intake_batch_update(state, old_item, item):
+    item = normalize_calendar_batch(item, old_item)
     next_item = {**old_item, **item}
     next_item["intakePurpose"] = intake_purpose(next_item)
     validate_intake_batch_transition(state, old_item, next_item)

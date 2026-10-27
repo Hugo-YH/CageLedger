@@ -19,6 +19,7 @@ tar \
   --exclude=".github" \
   --exclude=".codex" \
   --exclude=".codex-run" \
+  --exclude=".env" \
   --exclude="data" \
   --exclude="dist" \
   --exclude="${ROOT_NAME}/docs" \

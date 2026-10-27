@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
-import { intakeDuplicateDetails, saveIntakeBatch } from "./intake";
+import { aiParseIntakeMessage, intakeDuplicateDetails, saveIntakeBatch } from "./intake";
 import { createIntakeDraft } from "../../domain/intake";
 
 describe("intake save API", () => {
@@ -25,6 +25,30 @@ describe("intake save API", () => {
           checkDuplicates: true,
           duplicateConfirmation: "token-1",
         }),
+      }),
+    );
+  });
+
+  it("sends image bytes only in the recognition and save request envelopes", async () => {
+    const image = { name: "预约.png", dataUrl: "data:image/png;base64,aGVsbG8=" };
+    const item = createIntakeDraft("测试");
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ item }))));
+    const controller = new AbortController();
+    await aiParseIntakeMessage("", ["8101"], [image], controller.signal);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "/api/intake/ai-parse",
+      expect.objectContaining({
+        signal: controller.signal,
+        body: JSON.stringify({ rawMessage: "", roomNames: ["8101"], images: [image] }),
+      }),
+    );
+    await saveIntakeBatch({ item, exists: false, recognitionImages: [image] });
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "/api/intake-batches",
+      expect.objectContaining({
+        body: JSON.stringify({ item, recognitionImages: [image], expectedUpdatedAt: "" }),
       }),
     );
   });

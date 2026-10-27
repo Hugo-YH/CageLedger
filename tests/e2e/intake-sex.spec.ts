@@ -21,11 +21,11 @@ test("intake sex defaults, recognition and manual choices persist across both pu
   await page.keyboard.press("Enter");
   await expect(selection).toHaveText("雄性");
 
-  await page.getByLabel("预约消息").fill("性别：female\n数量：10\n到货直接取材");
+  await page.getByLabel("预约消息", { exact: true }).fill("性别：female\n数量：10\n到货直接取材");
   await page.getByRole("button", { name: "本地识别", exact: true }).click();
   await expect(selection).toHaveText("雌性");
   await expect(page.getByRole("heading", { name: "直接取材预约", exact: true })).toBeVisible();
-  await page.getByLabel("预约消息").fill("数量：10\n到货直接取材，性别未注明");
+  await page.getByLabel("预约消息", { exact: true }).fill("数量：10\n到货直接取材，性别未注明");
   await page.getByRole("button", { name: "本地识别", exact: true }).click();
   await expect(selection).toHaveText("雌性/雄性");
 

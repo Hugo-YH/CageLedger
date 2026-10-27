@@ -1,15 +1,25 @@
-import { Button, Popover } from "antd";
+import { Button, Popover, type PopoverProps } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { useState, type ReactNode } from "react";
 
-export function HelpPopover({ label, children, icon }: { label: string; children: ReactNode; icon?: ReactNode }) {
+export function HelpPopover({
+  label,
+  children,
+  icon,
+  placement = "bottom",
+}: {
+  label: string;
+  children: ReactNode;
+  icon?: ReactNode;
+  placement?: PopoverProps["placement"];
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Popover
       content={children}
       title={label}
       trigger={["hover", "click"]}
-      placement="bottom"
+      placement={placement}
       open={open}
       onOpenChange={setOpen}
       styles={{ root: { maxWidth: "min(384px, 100vw)" }, container: { marginInline: 12 } }}

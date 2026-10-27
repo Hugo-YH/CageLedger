@@ -30,6 +30,28 @@
   height: 100%;
 }
 
+[data-feature="intake"] .intake-recognition-card > .ant-card-head {
+  padding-block: 8px;
+}
+
+[data-feature="intake"] .intake-recognition-card .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+[data-feature="intake"] .intake-recognition-card .ant-card-head-title {
+  flex: 1 0 auto;
+}
+
+[data-feature="intake"] .intake-recognition-card > .ant-card-head .ant-card-extra {
+  max-width: 100%;
+  margin-inline-start: 0;
+}
+
+[data-feature="intake"] .intake-recognition-actions {
+  max-width: 100%;
+}
+
 [data-feature="intake"] .intake-recognition-card .ant-card-body,
 [data-feature="intake"] .intake-print-card .ant-card-body {
   display: grid;
@@ -435,4 +457,69 @@
 [data-feature="intake"] .intake-entry-form {
   max-width: var(--cl-form-max-width);
   margin-inline: auto;
+}
+
+[data-feature="intake"] .intake-recognition-images {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-feature="intake"] .intake-image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-feature="intake"] .intake-image-item {
+  display: grid;
+  gap: 4px;
+  width: 100px;
+}
+
+[data-feature="intake"] .intake-recognition-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[data-feature="intake"] .intake-recognition-review {
+  border-color: var(--warning-line);
+  background: var(--warning-soft);
+}
+
+[data-feature="intake"] .intake-recognition-review > .ant-collapse-item > .ant-collapse-panel {
+  border-color: var(--warning-line);
+  background: var(--warning-soft);
+}
+
+[data-feature="intake"] .intake-recognition-review-icon {
+  color: var(--warning-text);
+}
+
+[data-feature="intake"] .intake-recognition-review-content,
+[data-feature="intake"] .intake-recognition-review-content > .ant-space-item {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-feature="intake"] .intake-recognition-comparison :is(th, td) {
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-feature="intake"] .intake-recognition-comparison table {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-feature="intake"] .intake-recognition-reminders {
+  margin-block: 4px 0;
+  padding-inline-start: 20px;
+}
+
+[data-feature="intake"] .intake-recognition-reminders li + li {
+  margin-top: 8px;
 }

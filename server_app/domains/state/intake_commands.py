@@ -1,5 +1,6 @@
 """Intake batch application transactions."""
 
+import hashlib
 import json
 import time
 from collections.abc import Callable
@@ -10,8 +11,10 @@ from typing import Any
 
 from server_app.cache import invalidate_data_cache, invalidate_data_cache_prefixes, log_perf
 from server_app.db import connect_db
-from server_app.domains.administration import merge_audit_logs, write_audit_events
+from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
 from server_app.domains.intake.duplicates import confirm_duplicate_identifiers, duplicate_confirmation_event
+from server_app.domains.intake.recognition_evidence import sanitize_evidence
+from server_app.domains.intake.recognition_images import ImageWriteSession, decode_images
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.persistence import assemble_state
@@ -44,18 +47,30 @@ class IntakeCommandPorts:
 def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports):
     started_at = time.perf_counter()
     status = HTTPStatus.OK
-    with connect_db() as conn:
+    images = decode_images(payload.get("recognitionImages", [])) if method != "DELETE" else []
+    with ImageWriteSession() as image_writer, connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
         old_state = assemble_state(conn) or empty_state()
         state = json.loads(json.dumps(old_state))
         existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
-        normalized_payload = payload
-        if method == "PUT" and existing and "intakePurpose" not in (payload.get("item") or payload):
-            normalized_payload = dict(payload)
-            raw_item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
+        normalized_payload = dict(payload)
+        raw_item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
+        raw_item.pop("recognitionImages", None)
+        # Only server-owned metadata may reference persisted images. Old clients
+        # omitting provenance retain the existing record instead of removing it.
+        old_recognition = (existing or {}).get("recognition") or {}
+        old_images = old_recognition.get("images", []) if isinstance(old_recognition, dict) else []
+        evidence = sanitize_evidence(raw_item.get("recognition") or old_recognition or None)
+        raw_item.pop("recognition", None)
+        if evidence is not None:
+            evidence["images"] = old_images
+            if isinstance(old_recognition, dict) and old_recognition.get("imageIds"):
+                evidence["imageIds"] = old_recognition["imageIds"]
+            raw_item["recognition"] = evidence
+        if method == "PUT" and existing and "intakePurpose" not in raw_item:
             raw_item["intakePurpose"] = existing.get("intakePurpose", "housing")
-            normalized_payload["item"] = raw_item
+        normalized_payload["item"] = raw_item
         item = ports.normalize_entity_payload("intakeBatches", normalized_payload, item_id, method, spec["id_prefix"])
         item["updatedAt"] = updated_at
         if method == "POST":
@@ -76,9 +91,51 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
             confirmation = confirm_duplicate_identifiers(
                 conn, candidate, item_id if method == "PUT" else "", payload.get("duplicateConfirmation")
             )
+        added_images = []
+        if images:
+            candidate = next(entry for entry in state["intakeBatches"] if entry.get("id") == item["id"])
+            metadata, added_images = image_writer.save(candidate["id"], images, old_images, updated_at)
+            inputs = (evidence or {}).get("inputImages") or [
+                {"name": image.name, "sha256": hashlib.sha256(image.body).hexdigest()} for image in images
+            ]
+            ordered_ids = [
+                next(
+                    (
+                        meta["id"]
+                        for meta in metadata
+                        if meta["name"] == image["name"] and meta["sha256"] == image["sha256"]
+                    ),
+                    "",
+                )
+                for image in inputs
+            ]
+            candidate["recognition"] = {
+                **(evidence or sanitize_evidence({})),
+                "images": metadata,
+                "imageIds": ordered_ids,
+            }
+            if "" in ordered_ids:
+                candidate["recognition"]["warnings"] = [
+                    *(evidence or {}).get("warnings", []),
+                    "部分识别所用原图未留档，请重新添加识别时的图片或重新识别；新添加图片不会替代旧识别依据。",
+                ]
         events = build_audit_events(actor, old_state, state, updated_at)
         if confirmation:
             events.append(duplicate_confirmation_event(actor, item, confirmation, updated_at))
+        if added_images:
+            events.append(
+                audit_event(
+                    actor,
+                    "intake_batch.recognition_images_added",
+                    "intake_batch",
+                    item["id"],
+                    f"{actor['displayName']} 为待接收批次 {item.get('batchNo', '')} 留档 {len(added_images)} 张预约来源图片",
+                    [],
+                    updated_at,
+                    None,
+                    {"images": added_images},
+                )
+            )
         if method == "DELETE":
             delete_intake_batch_repository(conn, item_id)
             conn.execute("DELETE FROM placement_tasks WHERE source_batch_id = ?", (item_id,))
@@ -105,6 +162,7 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
                     upsert_placement_task_repository(conn, task)
         write_audit_events(conn, events)
         conn.commit()
+        image_writer.committed = True
 
     invalidate_data_cache("assembled_state")
     invalidate_data_cache_prefixes(

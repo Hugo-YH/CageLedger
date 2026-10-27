@@ -6,6 +6,11 @@ from server_app.repositories.entities import list_intake_batches_page
 __all__ = ["intake_batch_filter_options", "list_intake_batches_page", "list_summary_batches"]
 
 
+def get_batch_payload(conn, batch_id):
+    row = conn.execute("SELECT payload FROM intake_batches WHERE id=?", (batch_id,)).fetchone()
+    return json.loads(row["payload"]) if row else None
+
+
 def find_duplicate_identifiers(conn, purchase_order_key, batch_no_key, exclude_id=""):
     """Return all matching identities so confirmation also covers off-page matches."""
     clauses, params = [], []

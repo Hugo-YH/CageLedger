@@ -1,11 +1,12 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button } from "antd";
 
 import { useRooms } from "../../api/infrastructure";
 import type {
   IntakeBatch,
+  IntakeRecognitionImageInput,
   IntakeDuplicateDetails,
   IntakeListParams,
   IntakeWriteResponse,
@@ -25,6 +26,7 @@ import { fetchIacucSearch } from "../../api/iacuc";
 import { queryKeys } from "../../api/queryKeys";
 import { ActionButton, ModalPresence } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
+import { useIntakeRecognition } from "./hooks/useIntakeRecognition";
 import { useIntakeSelection } from "./hooks/useIntakeSelection";
 import { AsyncActionButton, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {
@@ -62,6 +64,7 @@ interface IntakeSaveIntent {
   item: IntakeBatch;
   exists: boolean;
   draftRevision: number;
+  recognitionImages: IntakeRecognitionImageInput[];
   mode: "entry" | "batches";
   print?: { job: PendingIntakePrintJob; fillBlanks: boolean };
 }
@@ -91,7 +94,6 @@ export function IntakeView({
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [aiParsing, setAiParsing] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "intakeDate", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const selection = useIntakeSelection();
@@ -108,6 +110,12 @@ export function IntakeView({
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
   const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
   const [pendingDuplicateSave, setPendingDuplicateSave] = useState<PendingDuplicateSave | null>(null);
+  const onRecognitionChange = useCallback(() => {
+    draftRevision.current += 1;
+    setPendingDuplicateSave(null);
+  }, []);
+  const recognition = useIntakeRecognition(onRecognitionChange);
+  const { reset: resetRecognition, invalidate: invalidateRecognition } = recognition;
   const params = useMemo<IntakeListParams>(
     () => ({
       limit: pageSize,
@@ -168,11 +176,13 @@ export function IntakeView({
     selectedItems.length > 0 || selectingAll,
   );
   useEffect(() => {
+    resetRecognition();
     setPendingDuplicateSave(null);
     return () => {
       draftRevision.current += 1;
+      invalidateRecognition();
     };
-  }, [mode]);
+  }, [mode, resetRecognition, invalidateRecognition]);
 
   const roomFeedback = !roomsReady ? (
     <Alert
@@ -201,12 +211,14 @@ export function IntakeView({
   }
 
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
+    recognition.invalidate();
     draftRevision.current += 1;
     setPendingDuplicateSave(null);
     setDraft((current) => updateIntakeDraft(current, key, value, roomNames));
   }
 
   function replaceDraft(next: IntakeBatch) {
+    recognition.invalidate();
     draftRevision.current += 1;
     setPendingDuplicateSave(null);
     setDraft(next);
@@ -218,6 +230,7 @@ export function IntakeView({
   }
 
   function closeEditingDialog() {
+    recognition.reset();
     invalidateDraftConfirmation();
     setEditingDialog(false);
     setPendingEdit(null);
@@ -228,7 +241,14 @@ export function IntakeView({
   }
 
   function saveIntent(item: IntakeBatch, exists: boolean, print?: IntakeSaveIntent["print"]): IntakeSaveIntent {
-    return { item, exists, draftRevision: draftRevision.current, mode, print };
+    return {
+      item,
+      exists,
+      draftRevision: draftRevision.current,
+      recognitionImages: recognition.snapshot(),
+      mode,
+      print,
+    };
   }
 
   function showSaveFailure(intent: IntakeSaveIntent, error: unknown, fallback: string) {
@@ -243,6 +263,7 @@ export function IntakeView({
 
   function completeSavedDraft(intent: IntakeSaveIntent, savedItem: IntakeBatch) {
     if (!isCurrentSaveIntent(intent)) return false;
+    recognition.reset();
     if (intent.exists) {
       selection.update([savedItem]);
       replaceDraft(normalizeIntakeBatch(savedItem, roomNames));
@@ -257,28 +278,46 @@ export function IntakeView({
 
   async function parseMessage() {
     if (!requireRooms()) return;
-    let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
-    if (parsed.strainRaw && parsed.strainStandard === parsed.strainRaw) {
-      const result = await standardizeIntakeStrain(parsed.strainRaw);
-      parsed = { ...parsed, strainStandard: result.item || parsed.strainStandard };
+    const revision = draftRevision.current;
+    const valid = () => revision === draftRevision.current && activeMode.current === mode;
+    try {
+      let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
+      if (parsed.strainRaw && parsed.strainStandard === parsed.strainRaw) {
+        const result = await standardizeIntakeStrain(parsed.strainRaw);
+        if (!valid()) return;
+        parsed = { ...parsed, strainStandard: result.item || parsed.strainStandard };
+      }
+      const info = await applyParsedMessage(parsed, valid);
+      if (info) setNotice(recognitionNotice(info));
+    } catch (error) {
+      if (valid()) setNotice(error instanceof Error ? error.message : "本地识别失败，请重试。");
     }
-    const info = await applyParsedMessage(parsed);
-    setNotice(recognitionNotice(info));
   }
 
   async function aiParseMessage() {
-    if (!requireRooms()) return;
-    setAiParsing(true);
+    if (!requireRooms() || recognition.reading) return;
+    const request = recognition.begin();
+    if (!request) return;
+    const revision = draftRevision.current;
+    const valid = () => request.isCurrent() && revision === draftRevision.current;
     try {
-      const response = await aiParseIntakeMessage(draft.rawMessage, roomNames);
-      const info = await applyParsedMessage(response.item);
+      const response = await aiParseIntakeMessage(draft.rawMessage, roomNames, recognition.snapshot(), request.signal);
+      if (!valid()) return;
+      const evidence = response.recognition
+        ? { ...response.recognition, images: draft.recognition?.images }
+        : undefined;
+      const info = await applyParsedMessage(
+        { ...response.item, ...(evidence ? { recognition: evidence } : {}) },
+        valid,
+      );
+      if (!info) return;
       const tokens = response.usage?.total_tokens;
       const usageText = typeof tokens === "number" && tokens > 0 ? `，本次 AI 识别消耗 ${tokens} tokens` : "";
       setNotice(`预约消息已识别（AI）${usageText}${info.strainNote}，请核对批次信息。`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
+      if (valid()) setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
     } finally {
-      setAiParsing(false);
+      request.finish();
     }
   }
 
@@ -288,7 +327,7 @@ export function IntakeView({
       : `未识别到完整批次号，请手动补充${info.strainNote}。`;
   }
 
-  async function applyParsedMessage(parsed: Partial<IntakeBatch>) {
+  async function applyParsedMessage(parsed: Partial<IntakeBatch>, valid: () => boolean) {
     const normalized = normalizeIntakeBatch(
       { ...parsed, supplier: abbreviateSupplier(parsed.supplier || ""), rawMessage: draft.rawMessage },
       roomNames,
@@ -303,8 +342,14 @@ export function IntakeView({
         queryFn: ({ signal }) => fetchIacucSearch(normalizedCode, 1, signal),
         staleTime: 5 * 60_000,
       });
-      match = result.items[0];
+      match = result.items.find(
+        (candidate) =>
+          String(candidate.iacuc || "")
+            .trim()
+            .toUpperCase() === normalizedCode,
+      );
     }
+    if (!valid()) return null;
     // Only an explicit edit from the saved-batch list retains the persisted batch ID.
     const isEditingSavedBatch = mode === "batches" && editing;
     replaceDraft(
@@ -312,6 +357,7 @@ export function IntakeView({
         {
           ...draft,
           ...normalized,
+          husbandryMonths: normalized.husbandryMonths ?? null,
           id: isEditingSavedBatch ? draft.id : String(normalized.id || draft.id),
           receiverName: normalized.receiverName || (isEditingSavedBatch ? draft.receiverName : user.displayName),
           vetPhone: normalized.vetPhone || (isEditingSavedBatch ? draft.vetPhone : user.phone),
@@ -331,7 +377,7 @@ export function IntakeView({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!requireRooms()) return;
+    if (!requireRooms() || recognition.reading) return;
     const item = normalizeIntakeBatch(draft, roomNames);
     const missingFields = missingIntakeRequiredFields(item);
     if (missingFields.length) {
@@ -343,7 +389,12 @@ export function IntakeView({
     if (saveInFlight.current) return;
     saveInFlight.current = true;
     try {
-      const response = await save.mutateAsync({ item, exists: isEditingSavedBatch, checkDuplicates: true });
+      const response = await save.mutateAsync({
+        item,
+        exists: isEditingSavedBatch,
+        checkDuplicates: true,
+        recognitionImages: intent.recognitionImages,
+      });
       completeSavedDraft(intent, response.item);
     } catch (error) {
       showSaveFailure(intent, error, "保存失败");
@@ -353,12 +404,14 @@ export function IntakeView({
   }
 
   function startNew() {
+    recognition.reset();
     replaceDraft(createIntakeDraft(user.displayName, user.phone));
     setEditing(false);
     setNotice("");
   }
 
   function edit(item: IntakeBatch) {
+    recognition.reset();
     setNotice("");
     if (roomsReady) replaceDraft(normalizeIntakeBatch(item, roomNames));
     else setPendingEdit(item);
@@ -397,7 +450,7 @@ export function IntakeView({
   }
 
   function printCurrentBatch() {
-    if (!requireRooms()) return;
+    if (!requireRooms() || recognition.reading) return;
     const item = normalizeIntakeBatch(draft, roomNames);
     if (isDirectSampling(item)) {
       setNotice("直接取材批次无需打印笼卡。");
@@ -473,6 +526,7 @@ export function IntakeView({
           item: job.batches[0],
           exists: job.exists,
           draftRevision: job.draftRevision,
+          recognitionImages: recognition.snapshot(),
           mode,
           print: { job, fillBlanks },
         };
@@ -487,7 +541,12 @@ export function IntakeView({
         saveInFlight.current = true;
         let response: IntakeWriteResponse;
         try {
-          response = await save.mutateAsync({ item: intent.item, exists: intent.exists, checkDuplicates: true });
+          response = await save.mutateAsync({
+            item: intent.item,
+            exists: intent.exists,
+            checkDuplicates: true,
+            recognitionImages: intent.recognitionImages,
+          });
         } finally {
           saveInFlight.current = false;
         }
@@ -496,6 +555,7 @@ export function IntakeView({
           return;
         }
         const saved = normalizeIntakeBatch(response.item, roomNames);
+        recognition.reset();
         replaceDraft(saved);
         setEditing(true);
         printable = [saved];
@@ -510,6 +570,7 @@ export function IntakeView({
           item: job.batches[0],
           exists: job.exists,
           draftRevision: job.draftRevision,
+          recognitionImages: recognition.snapshot(),
           mode,
           print: { job, fillBlanks },
         };
@@ -550,6 +611,7 @@ export function IntakeView({
         exists: pending.intent.exists,
         checkDuplicates: true,
         duplicateConfirmation: pending.details.confirmationToken,
+        recognitionImages: pending.intent.recognitionImages,
       });
       if (!isCurrentSaveIntent(pending.intent)) {
         popup?.close();
@@ -561,6 +623,7 @@ export function IntakeView({
         return;
       }
       const saved = normalizeIntakeBatch(response.item, roomNames);
+      recognition.reset();
       replaceDraft(saved);
       setEditing(true);
       if (
@@ -653,7 +716,7 @@ export function IntakeView({
                   className="primary"
                   type="submit"
                   form="intake-entry-panel"
-                  disabled={!roomsReady}
+                  disabled={!roomsReady || recognition.reading}
                   pending={save.isPending}
                   pendingLabel="保存中..."
                 >
@@ -669,8 +732,12 @@ export function IntakeView({
                 draft={draft}
                 roomNames={roomNames}
                 notice={notice}
-                saving={save.isPending}
-                aiPending={aiParsing}
+                saving={save.isPending || recognition.reading}
+                aiPending={recognition.pending || recognition.reading}
+                recognitionImages={recognition.images}
+                recognitionError={recognition.error}
+                onAddImages={(files) => void recognition.addFiles(files)}
+                onRemoveImage={recognition.remove}
                 onSubmit={submit}
                 headActions={null}
                 onAiParse={aiParseMessage}
@@ -751,13 +818,17 @@ export function IntakeView({
                   draft={draft}
                   roomNames={roomNames}
                   notice={notice}
-                  saving={save.isPending}
-                  aiPending={aiParsing}
+                  saving={save.isPending || recognition.reading}
+                  aiPending={recognition.pending || recognition.reading}
+                  recognitionImages={recognition.images}
+                  recognitionError={recognition.error}
+                  onAddImages={(files) => void recognition.addFiles(files)}
+                  onRemoveImage={recognition.remove}
                   onSubmit={submit}
                   headActions={
                     <ActionButton
                       icon={<ActionIcon name="save" />}
-                      disabled={!roomsReady}
+                      disabled={!roomsReady || recognition.reading}
                       loading={save.isPending}
                       tone="primary"
                       type="submit"

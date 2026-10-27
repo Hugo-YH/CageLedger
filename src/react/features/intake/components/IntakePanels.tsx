@@ -1,9 +1,12 @@
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
+import { useRef } from "react";
 
 import type { IntakeBatch, IntakeBatchStatus, IntakePurpose } from "../../../api/contracts";
 import { isDirectSampling, normalizeIntakeSex } from "../../../../domain/intake";
+import { IntakeRecognitionHelp, IntakeRecognitionImages } from "./IntakeRecognitionImages";
+import type { IntakeRecognitionImageInput } from "../../../api/contracts";
 import { CommandBar, DateInput } from "../../../components/ui";
 
 export { IntakeBatchList } from "./IntakeBatchList";
@@ -29,7 +32,15 @@ export function IntakeEntryPanel({
   aiPending,
   onPrint,
   onUpdate,
+  recognitionImages,
+  recognitionError,
+  onAddImages,
+  onRemoveImage,
 }: {
+  recognitionImages: Array<IntakeRecognitionImageInput & { key: string }>;
+  recognitionError: string;
+  onAddImages: (files: File[]) => void;
+  onRemoveImage: (key: string) => void;
   editing: boolean;
   draft: IntakeBatch;
   roomNames: string[];
@@ -44,6 +55,7 @@ export function IntakeEntryPanel({
   onPrint: () => void;
   onUpdate: <K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) => void;
 }) {
+  const imagePickerRef = useRef<HTMLInputElement>(null);
   const directSampling = isDirectSampling(draft);
   const purposeLocked =
     editing && (draft.status === "printed" || draft.status === "received" || draft.receipts.length > 0);
@@ -70,12 +82,37 @@ export function IntakeEntryPanel({
           <Col lg={18} md={16} xs={24}>
             <Card
               className="intake-recognition-card"
+              onDragOver={(event) => {
+                if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+              }}
+              onDrop={(event) => {
+                const files = Array.from(event.dataTransfer.files);
+                if (files.length) {
+                  event.preventDefault();
+                  onAddImages(files);
+                }
+              }}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData.files);
+                if (files.length) {
+                  event.preventDefault();
+                  onAddImages(files);
+                }
+              }}
               extra={
-                <Space wrap>
+                <Space wrap className="intake-recognition-actions" role="group" aria-label="预约识别操作">
+                  <Button
+                    htmlType="button"
+                    icon={<ActionIcon name="upload" />}
+                    onClick={() => imagePickerRef.current?.click()}
+                    size="small"
+                  >
+                    选择预约图片
+                  </Button>
                   <Button
                     icon={<ActionIcon name="scan" />}
                     htmlType="button"
-                    disabled={!roomsReady}
+                    disabled={!roomsReady || !draft.rawMessage.trim()}
                     onClick={onParse}
                     size="small"
                   >
@@ -84,7 +121,7 @@ export function IntakeEntryPanel({
                   <Button
                     htmlType="button"
                     icon={<RobotOutlined aria-hidden />}
-                    disabled={!roomsReady}
+                    disabled={!roomsReady || (!draft.rawMessage.trim() && !recognitionImages.length)}
                     loading={aiPending}
                     onClick={onAiParse}
                     size="small"
@@ -95,16 +132,31 @@ export function IntakeEntryPanel({
                 </Space>
               }
               size="small"
-              title="预约消息识别"
+              title={
+                <Space size={8}>
+                  <span>预约消息识别</span>
+                  <IntakeRecognitionHelp />
+                </Space>
+              }
               type="inner"
             >
-              <Input.TextArea
-                aria-label="预约消息"
-                autoSize={{ minRows: 5, maxRows: 8 }}
-                value={draft.rawMessage}
-                onChange={(event) => onUpdate("rawMessage", event.target.value)}
-                placeholder="粘贴预约接收文本，自动提取批次号、供应商、品系、数量、房间和接收日期。"
-              />
+              <div>
+                <Input.TextArea
+                  aria-label="预约消息"
+                  autoSize={{ minRows: 5, maxRows: 8 }}
+                  value={draft.rawMessage}
+                  onChange={(event) => onUpdate("rawMessage", event.target.value)}
+                  placeholder="粘贴预约接收文本，自动提取批次号、供应商、品系、数量、房间和接收日期。"
+                />
+                <IntakeRecognitionImages
+                  images={recognitionImages}
+                  error={recognitionError}
+                  evidence={draft.recognition}
+                  onAdd={onAddImages}
+                  onRemove={onRemoveImage}
+                  pickerRef={imagePickerRef}
+                />
+              </div>
             </Card>
           </Col>
           <Col lg={6} md={8} xs={24}>
@@ -188,7 +240,7 @@ export function IntakeEntryPanel({
             </Col>
           </Row>
           <Row gutter={[16, 16]}>
-            <Col lg={6} md={12} xs={24}>
+            <Col lg={4} md={12} xs={24}>
               <Form.Item label="物种">
                 <Select
                   aria-label="物种"
@@ -206,14 +258,21 @@ export function IntakeEntryPanel({
                 />
               </Form.Item>
             </Col>
-            <Col lg={6} md={12} xs={24}>
+            <Col lg={5} md={12} xs={24}>
               <Field
                 label="品系"
                 value={draft.strainStandard}
                 onChange={(value) => onUpdate("strainStandard", value)}
               />
             </Col>
-            <Col lg={6} md={12} xs={24}>
+            <Col lg={5} md={12} xs={24}>
+              <Field
+                label="体重/日龄（规格）"
+                value={draft.specification ?? ""}
+                onChange={(value) => onUpdate("specification", value)}
+              />
+            </Col>
+            <Col lg={5} md={12} xs={24}>
               <Form.Item label="性别">
                 <Select
                   aria-label="性别"
@@ -223,7 +282,7 @@ export function IntakeEntryPanel({
                 />
               </Form.Item>
             </Col>
-            <Col lg={6} md={12} xs={24}>
+            <Col lg={5} md={12} xs={24}>
               <Field
                 label="数量（只）"
                 required={directSampling}
@@ -269,6 +328,11 @@ export function IntakeEntryPanel({
                     label="饲养周期（天）"
                     type="number"
                     value={draft.husbandryDays ?? ""}
+                    extra={
+                      draft.husbandryMonths
+                        ? `按 ${draft.husbandryMonths} 个自然月计算${draft.intakeDate ? "" : "，请先填写接收日期"}`
+                        : undefined
+                    }
                     onChange={(value) => onUpdate("husbandryDays", value ? Number(value) : null)}
                   />
                 </Col>
@@ -320,15 +384,17 @@ function Field({
   onChange,
   type = "text",
   required = false,
+  extra,
 }: {
   label: string;
   value: string | number;
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  extra?: string;
 }) {
   return (
-    <Form.Item label={label} required={required}>
+    <Form.Item label={label} required={required} extra={extra}>
       {type === "date" ? (
         <DateInput label={label} value={String(value)} onChange={onChange} required={required} />
       ) : (

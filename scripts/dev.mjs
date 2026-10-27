@@ -84,6 +84,8 @@ launch(resolveProjectPython(), ["server.py"], {
         CAGELEDGER_DATA_ROOT: ephemeralDir,
         // Isolated runs must not inherit real Gitea credentials from .env.
         CAGELEDGER_GITEA_TOKEN: process.env.CAGELEDGER_E2E_GITEA_TOKEN || "",
+        // Automated tests use mocked AI and must not inherit a paid local key.
+        DEEPSEEK_API_KEY: process.env.CAGELEDGER_E2E_DEEPSEEK_API_KEY || "",
         CAGELEDGER_REPOSITORY_URL: process.env.CAGELEDGER_E2E_REPOSITORY_URL || "http://127.0.0.1:1/test/feedback",
         CAGELEDGER_UPDATE_CHECK_ENABLED: "false",
         CAGELEDGER_ADMIN_USERNAME: "admin",
