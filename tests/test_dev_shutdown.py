@@ -16,4 +16,4 @@ class DevShutdownTests(unittest.TestCase):
             text=True,
             timeout=10,
         )
-        self.assertEqual(json.loads(result.stdout)["passed"], 3)
+        self.assertEqual(json.loads(result.stdout)["passed"], 5)

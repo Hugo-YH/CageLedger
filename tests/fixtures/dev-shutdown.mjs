@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { createDevShutdown } from "../../scripts/dev_shutdown.mjs";
+import { childExitCode, createDevShutdown } from "../../scripts/dev_shutdown.mjs";
 
 const events = [];
 function child(name) {
@@ -8,9 +8,9 @@ function child(name) {
   value.exitCode = null;
   value.signalCode = null;
   value.kill = (signal) => events.push(`${name}:${signal}`);
-  value.finish = () => {
-    value.signalCode = "SIGTERM";
-    value.emit("exit", null, "SIGTERM");
+  value.finish = (signal = "SIGTERM") => {
+    value.signalCode = signal;
+    value.emit("exit", null, signal);
   };
   return value;
 }
@@ -44,6 +44,29 @@ await createDevShutdown(
 assert.deepEqual(immediate, ["cleanup", 3]);
 assert.ok(!events.includes("done:SIGTERM"));
 
+const forced = child("forced");
+const forcedStop = createDevShutdown(
+  new Set([forced]),
+  () => events.push("forced-cleanup"),
+  (code) => events.push(`forced-exit:${code}`),
+  { forceAfterMs: 1 },
+);
+const forcedShutdown = forcedStop(0);
+forced.kill = (signal) => {
+  events.push(`forced:${signal}`);
+  if (signal === "SIGKILL") forced.finish("SIGKILL");
+};
+await forcedShutdown;
+assert.ok(events.includes("forced:SIGTERM"));
+assert.ok(events.includes("forced:SIGKILL"));
+assert.ok(events.includes("forced-cleanup"));
+assert.ok(events.includes("forced-exit:0"));
+
+assert.equal(childExitCode(null, "SIGTERM"), 0);
+assert.equal(childExitCode(null, "SIGKILL"), 1);
+assert.equal(childExitCode(3, null), 3);
+assert.equal(childExitCode(0, null), 0);
+
 const empty = [];
 await createDevShutdown(
   new Set(),
@@ -53,7 +76,7 @@ await createDevShutdown(
 assert.deepEqual(empty, ["cleanup", "exit"]);
 console.log(
   JSON.stringify({
-    passed: 3,
-    scope: "Owned child handles, delayed acknowledgements, duplicate shutdown, already exited and empty launch",
+    passed: 5,
+    scope: "Owned child handles, delayed acknowledgements, forced timeout, duplicate shutdown, child exit codes, already exited and empty launch",
   }),
 );

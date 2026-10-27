@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { resolveProjectPython } from "./python_runtime.mjs";
-import { createDevShutdown } from "./dev_shutdown.mjs";
+import { childExitCode, createDevShutdown } from "./dev_shutdown.mjs";
 
 const processes = new Set();
 const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
@@ -48,7 +48,7 @@ function launch(command, args, env = {}) {
   processes.add(child);
   child.on("exit", (code, signal) => {
     processes.delete(child);
-    if (!signal && code) shutdown(code);
+    shutdown(childExitCode(code, signal));
   });
   return child;
 }
