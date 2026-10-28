@@ -6,6 +6,7 @@ from unittest import mock
 from server_app.domains.intake.ai_parse import _normalize_payload, ai_parse_intake_message
 from server_app.domains.intake.strain_standard import abbreviate_supplier, standardize_strain
 from server_app.services.ai import deepseek_chat_json
+from server_app.web.intake_ai import intake_ai_parse_handler
 
 
 class IntakeAiParseNormalizationTest(unittest.TestCase):
@@ -200,6 +201,136 @@ class DeepSeekChatJsonTest(unittest.TestCase):
 
 class IntakeAiParseMessageTest(unittest.TestCase):
     @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_only_endpoint_returns_the_locally_computed_month(self, chat_mock):
+        chat_mock.return_value = (
+            {"intakeDate": "2026-10-28", "endDate": "2026-11-27", "husbandryDays": 30},
+            {"total_tokens": 12},
+        )
+        handler = mock.Mock()
+        handler.current_user.return_value = {"id": "test-admin"}
+        handler.read_json_body.return_value = {
+            "rawMessage": "接收日期2026-10-28，饲养周期1月",
+            "roomNames": [],
+            "images": [],
+        }
+        response = intake_ai_parse_handler(handler, {})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            {key: response.payload["item"][key] for key in ("husbandryMonths", "husbandryDays", "endDate")},
+            {"husbandryMonths": 1, "husbandryDays": 31, "endDate": "2026-11-28"},
+        )
+        self.assertEqual(response.payload["usage"], {"total_tokens": 12})
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_calendar_month_uses_original_text_instead_of_model_echo_or_day_conversion(self, chat_mock):
+        cases = [
+            {"husbandryMonths": 1, "husbandryPeriodRaw": "1月"},
+            {"husbandryDays": 30, "endDate": "2026-11-27"},
+            {"husbandryMonths": 1, "husbandryPeriodRaw": "饲养周期1月", "endDate": "2026-11-27"},
+            {"husbandryMonths": 2, "husbandryPeriodRaw": "饲养周期2月", "husbandryDays": 60},
+        ]
+        for fields in cases:
+            with self.subTest(fields=fields):
+                chat_mock.return_value = ({"intakeDate": "2026-10-28", **fields}, {"total_tokens": 12})
+                result, usage = ai_parse_intake_message("接收日期：2026-10-28\n饲养周期1月")
+                self.assertEqual(
+                    (result["husbandryMonths"], result["endDate"], result["husbandryDays"]), (1, "2026-11-28", 31)
+                )
+                self.assertEqual(usage, {"total_tokens": 12})
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_month_clamps_month_end_and_handles_leap_year_and_year_boundary(self, chat_mock):
+        for start, end, days in [
+            ("2026-01-31", "2026-02-28", 28),
+            ("2024-01-31", "2024-02-29", 29),
+            ("2026-12-31", "2027-01-31", 31),
+        ]:
+            with self.subTest(start=start):
+                chat_mock.return_value = ({"intakeDate": start, "husbandryDays": 30}, {})
+                result, _ = ai_parse_intake_message(f"接收日期：{start}，饲养周期一个月")
+                self.assertEqual(
+                    (result["husbandryMonths"], result["endDate"], result["husbandryDays"]), (1, end, days)
+                )
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_month_preserves_stated_end_date_including_short_dates(self, chat_mock):
+        for raw_end in ["2026-11-27", "2026年11月27日", "2026/11/27", "2026.11.27", "11月27日", "11/27"]:
+            with self.subTest(raw_end=raw_end):
+                chat_mock.return_value = ({"intakeDate": "2026-10-28", "endDate": "2026-11-27"}, {})
+                result, _ = ai_parse_intake_message(f"接收日期：2026-10-28；饲养周期1月；结束日期：{raw_end}")
+                self.assertIsNone(result["husbandryMonths"])
+                self.assertEqual((result["endDate"], result["husbandryDays"]), ("2026-11-27", 30))
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_month_without_receipt_date_keeps_intent_without_invented_dates(self, chat_mock):
+        chat_mock.return_value = ({"intakeDate": "2026-10-28", "endDate": "2026-11-27", "husbandryDays": 30}, {})
+        result, _ = ai_parse_intake_message("饲养周期1月，批次号2026102801")
+        self.assertEqual(
+            (result["husbandryMonths"], result["intakeDate"], result["endDate"], result["husbandryDays"]),
+            (1, "", "", None),
+        )
+        result, _ = ai_parse_intake_message("接收日期：2025年10月28日；饲养周期1月")
+        self.assertEqual(result["intakeDate"], "")
+        result, _ = ai_parse_intake_message("饲养周期1月；结束日期：2026-11-27")
+        self.assertEqual(
+            (result["husbandryMonths"], result["intakeDate"], result["endDate"], result["husbandryDays"]),
+            (1, "", "", None),
+        )
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_month_does_not_treat_procurement_date_as_receipt_or_end_date(self, chat_mock):
+        for text in [
+            "采购申请日期：2026-10-28；饲养周期1月",
+            "采购申请日期：2026-10-28 接收日期：2026-11-01；饲养周期1月",
+        ]:
+            with self.subTest(text=text):
+                chat_mock.return_value = ({"intakeDate": "2026-10-28", "endDate": "2026-11-27"}, {})
+                result, _ = ai_parse_intake_message(text)
+                self.assertEqual((result["husbandryMonths"], result["intakeDate"], result["endDate"]), (1, "", ""))
+        chat_mock.return_value = ({"intakeDate": "2026-10-28", "endDate": "2026-11-27"}, {})
+        result, _ = ai_parse_intake_message("接收日期：2026-10-28；饲养周期1月；采购交付期限：2026-11-27")
+        self.assertEqual((result["endDate"], result["husbandryDays"]), ("2026-11-28", 31))
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_month_accepts_dates_before_actions_and_explicit_husbandry_ranges(self, chat_mock):
+        for text in [
+            "2026年10月28日接收，11月27日结束饲养；饲养周期1月",
+            "饲养时间：2026-10-28至2026-11-27；饲养周期1月",
+        ]:
+            with self.subTest(text=text):
+                chat_mock.return_value = ({"intakeDate": "2026-10-28", "endDate": "2026-11-27"}, {})
+                result, _ = ai_parse_intake_message(text)
+                self.assertIsNone(result["husbandryMonths"])
+                self.assertEqual(
+                    (result["intakeDate"], result["endDate"], result["husbandryDays"]), ("2026-10-28", "2026-11-27", 30)
+                )
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_month_does_not_use_age_negated_period_or_conflicting_month_counts(self, chat_mock):
+        for raw in ["动物月龄1月", "不是饲养周期1月", "饲养周期1月；饲养周期2月"]:
+            with self.subTest(raw=raw):
+                chat_mock.return_value = ({"husbandryMonths": 1, "husbandryPeriodRaw": "饲养周期1月"}, {})
+                result, _ = ai_parse_intake_message(raw)
+                self.assertNotIn("husbandryMonths", result)
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
+    def test_text_without_a_stated_receipt_date_does_not_use_model_guesses(self, chat_mock):
+        chat_mock.return_value = (
+            {"intakeDate": "2026-10-28", "endDate": "2026-11-04", "husbandryDays": 7},
+            {},
+        )
+        for text in (
+            "采购完成，接收日期待定，饲养周期7天",
+            "采购申请日期2026-10-28；接收时间另行通知；饲养周期7天",
+            "批次号2026102801，饲养周期7天",
+        ):
+            with self.subTest(text=text):
+                result, _ = ai_parse_intake_message(text)
+                self.assertEqual((result["intakeDate"], result["endDate"], result["husbandryDays"]), ("", "", 7))
+        result, _ = ai_parse_intake_message("接收日期待定，结束日期2026-11-04，饲养周期7天")
+        self.assertEqual((result["intakeDate"], result["endDate"]), ("", "2026-11-04"))
+
+    @mock.patch("server_app.domains.intake.ai_parse.deepseek_chat_json")
     def test_ai_parse_message(self, chat_mock):
         chat_mock.return_value = (
             {
@@ -219,7 +350,7 @@ class IntakeAiParseMessageTest(unittest.TestCase):
             },
             {"prompt_tokens": 120, "completion_tokens": 40, "total_tokens": 160},
         )
-        result, usage = ai_parse_intake_message("sample", ["8101"])
+        result, usage = ai_parse_intake_message("接收日期2026-05-13，结束日期2026-06-12", ["8101"])
         self.assertEqual(result["iacuc"], "Z2025050")
         self.assertEqual(result["quantity"], 70)
         self.assertEqual(result["intakeDate"], "2026-05-13")

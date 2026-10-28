@@ -23,6 +23,7 @@ export function ServiceColumnTitle({
   return (
     <FilterableColumnTitle
       label={label}
+      dateHierarchy={column === "month" ? "month" : undefined}
       values={params.columnFilters?.[column] || []}
       options={options.data?.items || []}
       loading={options.isFetching}

@@ -72,7 +72,7 @@ def list_column_where(filters, columns, exclude_column=""):
         if key == exclude_column:
             continue
         spec = columns.get(key)
-        cleaned = [clean_text(value) for value in values if clean_text(value)]
+        cleaned = [clean_text(value) for value in values if clean_text(value) or (key == "month" and value == "")]
         if not spec or not cleaned:
             continue
         placeholders = ", ".join("?" for _ in cleaned)
@@ -89,13 +89,14 @@ def list_column_options(conn, table, columns, filters, column):
     if table == "reimbursement_settlement_obligations":
         clauses.append(EFFECTIVE_OBLIGATION_WHERE)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    limit = "" if column == "month" else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
         FROM {table}{where}
         GROUP BY value
         ORDER BY value COLLATE NOCASE
-        LIMIT 500
+        {limit}
         """,
         params,
     ).fetchall()
@@ -103,6 +104,6 @@ def list_column_options(conn, table, columns, filters, column):
         "items": [
             {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]}
             for row in rows
-            if row["value"]
+            if row["value"] or column == "month"
         ]
     }

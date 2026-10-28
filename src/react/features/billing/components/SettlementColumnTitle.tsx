@@ -24,6 +24,7 @@ export function SettlementColumnTitle({
   return (
     <FilterableColumnTitle
       label={label}
+      dateHierarchy={column === "month" ? "month" : undefined}
       loading={options.isFetching}
       error={options.isError ? "无法读取筛选选项" : undefined}
       onRetry={() => void options.refetch()}

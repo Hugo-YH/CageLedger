@@ -427,7 +427,8 @@ test("lock operators select only eligible statuses and changing month clears sel
   await expect(toolbar.getByRole("button", { name: "批量锁定", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const filter = page.locator(".table-filter-panel:visible");
-  const month = filter.getByRole("checkbox", { name: /^2026-09/ });
+  await filter.getByRole("searchbox").fill("2026-09");
+  const month = filter.getByRole("checkbox", { name: /^9月/ });
   await month.click();
   await expect(month).toBeChecked();
   await filter.getByRole("button", { name: "应用", exact: true }).click();

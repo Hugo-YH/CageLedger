@@ -315,6 +315,7 @@ def list_billing_workflow_filter_options(conn, filters, column):
         expression = expressions.get(column)
         if not expression:
             return []
+        limit = "" if column == "month" else "LIMIT 500"
         rows = conn.execute(
             f"""
             SELECT {expression} AS value, {expression} AS label, COUNT(*) AS count
@@ -322,7 +323,7 @@ def list_billing_workflow_filter_options(conn, filters, column):
             {where_clause + " AND " if where_clause else "WHERE "}{expression} IS NOT NULL AND {expression} != ''
             GROUP BY value, label
             ORDER BY value COLLATE NOCASE
-            LIMIT 500
+            {limit}
             """,
             tuple(params),
         ).fetchall()

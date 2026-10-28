@@ -215,6 +215,8 @@ class DirectSamplingIntakePersistenceTests(unittest.TestCase):
         created, _ = composition.write_intake_batch_entity_state(
             "POST", None, {"item": direct_batch()}, self.actor, {"id_prefix": "batch"}
         )
+        with self.assertRaisesRegex(ValueError, "实际接收日期不能为空"):
+            composition.persist_intake_receipt_confirmation(created["item"]["id"], {}, self.actor)
         with self.assertRaisesRegex(ValueError, "实际接收日期无效"):
             composition.persist_intake_receipt_confirmation(
                 created["item"]["id"], {"actualReceiptDate": "2026-02-30"}, self.actor

@@ -11,7 +11,8 @@ async function openWorkflowMonth(page: Page, month: string) {
   await openWorkflowCenter(page);
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const filter = page.locator(".table-filter-panel:visible");
-  const option = filter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await filter.getByRole("searchbox").fill(month);
+  const option = filter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   if (!(await option.isChecked())) await option.click();
   await expect(option).toBeChecked();
   await filter.getByRole("button", { name: "应用", exact: true }).click();
@@ -86,7 +87,10 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   await page.getByRole("menuitem", { name: /结算列表/ }).click();
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const settlementMonthFilter = page.locator(".table-filter-panel:visible");
-  const settlementMonthOption = settlementMonthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await settlementMonthFilter.getByRole("searchbox").fill(month);
+  const settlementMonthOption = settlementMonthFilter.getByRole("checkbox", {
+    name: new RegExp(`^${Number(month.slice(5))}月`),
+  });
   await settlementMonthOption.click();
   await expect(settlementMonthOption).toBeChecked();
   await settlementMonthFilter.getByRole("button", { name: "应用", exact: true }).click();
@@ -119,7 +123,8 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   await openWorkflowCenter(page);
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const monthFilter = page.locator(".table-filter-panel:visible");
-  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await monthFilter.getByRole("searchbox").fill(month);
+  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await monthOption.click();
   await expect(monthOption).toBeChecked();
   await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
@@ -350,7 +355,8 @@ test("房间管理员可登记他人发起的结算流程，登记信息和台�
   await openWorkflowCenter(page);
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const monthFilter = page.locator(".table-filter-panel:visible");
-  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await monthFilter.getByRole("searchbox").fill(month);
+  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await monthOption.click();
   await expect(monthOption).toBeChecked();
   await monthFilter.getByRole("button", { name: "应用", exact: true }).click();

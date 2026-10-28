@@ -91,12 +91,17 @@ class HandlerSupportMixin:
                 parsed = {}
             if isinstance(parsed, dict):
                 for key, values in parsed.items():
+                    column = clean_text(key)
                     if isinstance(values, list):
-                        cleaned = [clean_text(item) for item in values if clean_text(item)]
+                        cleaned = [
+                            clean_text(item)
+                            for item in values
+                            if clean_text(item) or (column in {"intakeDate", "month", "updatedAt"} and item == "")
+                        ]
                     else:
                         cleaned = [clean_text(values)] if clean_text(values) else []
                     if cleaned:
-                        column_filters[clean_text(key)] = cleaned
+                        column_filters[column] = cleaned
         return {
             "limit": app_ports().bounded_int(value("limit"), default_limit, 1, max_limit),
             "offset": app_ports().bounded_int(value("offset"), 0, 0, 1_000_000),

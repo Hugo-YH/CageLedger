@@ -307,9 +307,9 @@ export function IntakeEntryPanel({
             <Col lg={directSampling ? 24 : 8} md={directSampling ? 24 : 12} xs={24}>
               <Field
                 label="接收日期"
-                required
                 type="date"
                 value={draft.intakeDate}
+                extra="日期未定可留空保存，确定后在待接收批次中编辑补填。"
                 onChange={(value) => onUpdate("intakeDate", value)}
               />
             </Col>

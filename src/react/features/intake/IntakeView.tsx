@@ -456,7 +456,7 @@ export function IntakeView({
       setNotice("直接取材批次无需打印笼卡。");
       return;
     }
-    const missingFields = missingIntakeRequiredFields(item);
+    const missingFields = missingIntakeRequiredFields(item, { forPrint: true });
     if (missingFields.length) {
       setNotice(`打印前请填写必填项目：${missingFields.join("、")}。`);
       return;

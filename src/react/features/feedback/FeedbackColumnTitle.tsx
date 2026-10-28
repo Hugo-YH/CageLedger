@@ -40,6 +40,7 @@ export function FeedbackColumnTitle({
   return (
     <FilterableColumnTitle
       label={label}
+      dateHierarchy={column === "createdAt" ? "datetime" : undefined}
       values={filters[column] || []}
       options={items}
       loading={options.isFetching}

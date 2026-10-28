@@ -23,6 +23,7 @@ export function QuantityColumnTitle({
   return (
     <FilterableColumnTitle
       label={label}
+      dateHierarchy={column === "month" ? "month" : column === "updatedAt" ? "datetime" : undefined}
       values={values}
       options={options.data?.items || []}
       loading={options.isFetching}

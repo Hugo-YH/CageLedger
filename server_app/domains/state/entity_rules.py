@@ -99,7 +99,6 @@ def validate_entity_payload(collection, item):
             ("iacuc", "IACUC 编号不能为空"),
             ("pi", "项目负责人不能为空"),
             ("owner", "实验负责人不能为空"),
-            ("intakeDate", "接收日期不能为空"),
             ("status", "批次状态不能为空"),
         ),
     }

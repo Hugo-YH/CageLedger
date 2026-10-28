@@ -194,15 +194,15 @@ export function inferIntakePurpose(value: string): IntakePurpose {
     : "housing";
 }
 
-export function missingIntakeRequiredFields(item: IntakeBatch) {
+export function missingIntakeRequiredFields(item: IntakeBatch, { forPrint = false } = {}) {
   const fields: Array<[keyof IntakeBatch, string]> = [
     ["supplier", "购买单位"],
     ["iacuc", "IACUC 编号"],
     ["pi", "项目负责人"],
     ["owner", "实验负责人"],
     ["roomName", "房间"],
-    ["intakeDate", "接收日期"],
   ];
+  if (forPrint) fields.push(["intakeDate", "接收日期"]);
   const missing = fields
     .filter(([key]) => !(key === "roomName" && isDirectSampling(item)) && !String(item[key] ?? "").trim())
     .map(([, label]) => label);

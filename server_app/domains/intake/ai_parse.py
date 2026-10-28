@@ -58,7 +58,7 @@ SYSTEM_RULES = """你是实验动物接收预约消息解析器。请从用户�
 - 明确写出周数时可按每周 7 天换算；不要把动物周龄当作饲养周期
 - 自然月仅提取月数及周期原文，不计算结束日期或天数，也不要转换为固定30天
 - 两个日期都明确时，以日期差校验饲养周期；缺少日期或周期依据时不要编造
-- 未提供接收日期时保持空值，不根据结束日期和周期反推接收日期
+- 未提供明确接收日期或写明待定时保持空值，不使用采购申请日期、当天日期，也不根据结束日期和周期反推接收日期
 - 批次号括号内首字母序列加数字视为 IACUC（如 （Z2025050）2026042903 -> Z2025050）
 - species 从品系和文本关键词推断：猴->monkey、兔->rabbit、猪->pig、犬/狗->dog、豚鼠->guinea_pig、大鼠/rat/sprague/wistar/lewis/sd->rat，默认 mouse
 - 房间只保留 3-4 位数字
@@ -103,6 +103,42 @@ def _parse_date(value: Any) -> str:
         except (ValueError, OverflowError):
             return ""
     return ""
+
+
+def _date_is_mentioned(value: Any, text: str) -> bool:
+    """Distinguish a stated date from a model-calculated calendar-month date."""
+    normalized = _parse_date(value)
+    if not normalized:
+        return False
+    target = date.fromisoformat(normalized)
+    full_dates = re.compile(r"(?<!\d)(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})(?:\s*[日号])?(?!\d)")
+    for match in full_dates.finditer(text):
+        if tuple(map(int, match.groups())) == (target.year, target.month, target.day):
+            return True
+    # Remove full dates first: a date with a different year is not evidence for this date.
+    remaining = full_dates.sub("", text)
+    short_dates = re.finditer(r"(?<![\d/])(\d{1,2})\s*(?:月\s*(\d{1,2})\s*[日号]|/\s*(\d{1,2}))(?![\d/])", remaining)
+    return any((int(match[1]), int(match[2] or match[3])) == (target.month, target.day) for match in short_dates)
+
+
+def _stated_husbandry_date(value: Any, text: str, *, end=False) -> bool:
+    full = r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}(?:\s*[日号])?"
+    short = r"\d{1,2}\s*(?:月\s*\d{1,2}\s*[日号]|/\s*\d{1,2})"
+    date_text = rf"(?:{full}|{short})(?!\d)"
+    action = r"(?:结束|截止|到期|终止)(?:饲养)?" if end else r"接收|到货|进驻|入驻|入住"
+    prefix = rf"(?:{action}|饲养至|饲养到)" if end else rf"(?:{action})"
+    fields = re.finditer(
+        rf"{prefix}\s*(?:日期|时间)?\s*(?:为|是|在|于)?\s*[:：]?\s*({date_text})|"
+        rf"({date_text})\s*(?:{action})(?!\s*(?:饲养)?(?:日期|时间|[:：]))",
+        text,
+    )
+    if any(_date_is_mentioned(value, match[1] or match[2]) for match in fields):
+        return True
+    ranges = re.finditer(
+        rf"饲养(?:周期|期间|时间|期限|期)?\s*[:：]?\s*({date_text})\s*(?:至|到|—|~|～)\s*({date_text})",
+        text,
+    )
+    return any(_date_is_mentioned(value, match[2 if end else 1]) for match in ranges)
 
 
 def _normalize_payload(payload: dict[str, Any], *, month_evidence: str = "") -> dict[str, Any]:
@@ -172,8 +208,20 @@ def ai_parse_intake_message(raw_message: str, room_names: list[str] | None = Non
     if room_names:
         user_prompt += f"\n\n可选饲养房间号：{', '.join(sorted(room_names))}"
     payload, usage = deepseek_chat_json(SYSTEM_RULES, user_prompt)
-    period_raw = str(payload.get("husbandryPeriodRaw") or "")
-    return _normalize_payload(payload, month_evidence=period_raw if period_raw and period_raw in text else ""), usage
+    payload = dict(payload)
+    if not _stated_husbandry_date(payload.get("intakeDate"), text):
+        payload["intakeDate"] = ""
+        if not _stated_husbandry_date(payload.get("endDate"), text, end=True):
+            payload["endDate"] = ""
+    # The original text is available here, so the month intent need not depend on
+    # the model echoing its label or correctly converting the period to days.
+    months = parse_husbandry_months(text)
+    if months is not None:
+        payload = {**payload, "husbandryMonths": months}
+        if not _stated_husbandry_date(payload.get("endDate"), text, end=True):
+            payload["endDate"] = ""
+            payload["husbandryDays"] = None
+    return _normalize_payload(payload, month_evidence=text), usage
 
 
 IMAGE_RULES = """

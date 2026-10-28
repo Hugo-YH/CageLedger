@@ -132,7 +132,7 @@ export function IntakeBatchList({
           );
         if (key === "cardCount") return isDirectSampling(item) ? "无需笼卡" : item.finalCardCount;
         const value = item[key];
-        const text = value == null || value === "" ? "-" : String(value);
+        const text = value == null || value === "" ? (key === "intakeDate" ? "待定" : "-") : String(value);
         if (key === "owner") {
           return <ProjectPeopleCopyButton item={item} disabled={loading} />;
         }
@@ -300,12 +300,15 @@ function IntakeColumnTitle({
         ? (intakeStatusLabel(option.value as IntakeBatchStatus) ?? option.label)
         : column === "intakePurpose"
           ? intakePurposeLabel(option.value)
-          : option.label,
+          : column === "intakeDate" && !option.value
+            ? "待定"
+            : option.label,
   }));
 
   return (
     <FilterableColumnTitle
       label={label}
+      dateHierarchy={column === "intakeDate" ? "day" : undefined}
       loading={options.isFetching}
       error={options.isError ? "无法读取筛选选项，请重试" : undefined}
       onRetry={() => void options.refetch()}

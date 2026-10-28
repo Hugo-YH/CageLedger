@@ -206,6 +206,18 @@
       "breakpoints": ["desktop", "1180px", "760px"],
       "status": "complete"
     },
+    "data-table-filter": {
+      "root": "[data-ui='data-table-filter']",
+      "owner": "src/styles/components.css",
+      "allowedPrefixes": [
+        "[data-ui='data-table-filter']",
+        ".filterable-th",
+        ".table-sort-button",
+        ".table-filter-button"
+      ],
+      "breakpoints": ["desktop", "1180px", "760px", "landscape"],
+      "status": "complete"
+    },
     "modal": {
       "root": "[data-ui='modal']",
       "owner": "src/styles/components.css",

@@ -87,6 +87,7 @@ export function LedgerColumnTitle({
   return (
     <FilterableColumnTitle
       filterable={filterable}
+      dateHierarchy={column === "month" ? "month" : undefined}
       label={label}
       loading={!localOptions && optionsQuery.isFetching}
       error={!localOptions && optionsQuery.isError ? "无法读取筛选选项，请重试" : undefined}

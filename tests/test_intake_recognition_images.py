@@ -308,6 +308,58 @@ class ImageRecognitionTests(unittest.TestCase):
 
 
 class ImagePersistenceTests(unittest.TestCase):
+    def test_recognition_batch_can_defer_intake_date_then_calculates_calendar_month_on_full_edit(self):
+        saved = self.save(
+            {
+                **batch("calendar-deferred-date"),
+                "intakeDate": "",
+                "husbandryMonths": 1,
+                "husbandryDays": 99,
+                "endDate": "2026-05-01",
+                "recognition": {"fieldSources": {"husbandryMonths": "图2 饲养周期：1月"}},
+            }
+        )
+        self.assertEqual(
+            (saved["intakeDate"], saved["endDate"], saved["husbandryDays"], saved["husbandryMonths"]), ("", "", None, 1)
+        )
+        card_qr_ids = [(card["id"], card["qrId"]) for card in saved["cards"]]
+        with self.connect() as conn:
+            created_event = conn.execute(
+                "SELECT id,action FROM audit_events WHERE entity_id=?", (saved["id"],)
+            ).fetchone()
+            self.assertEqual(created_event["action"], "intake_batch.created")
+            self.assertEqual(json.loads(read_payload(conn, created_event["id"]))["after"]["intakeDate"], "")
+
+        edited = self.save(
+            {**saved, "intakeDate": "2026-01-31"},
+            editing=True,
+            expectedUpdatedAt=saved["updatedAt"],
+        )
+        self.assertEqual(
+            (edited["intakeDate"], edited["endDate"], edited["husbandryDays"], edited["husbandryMonths"]),
+            ("2026-01-31", "2026-02-28", 28, 1),
+        )
+        self.assertEqual([(card["id"], card["qrId"]) for card in edited["cards"]], card_qr_ids)
+        self.assertEqual((edited["batchNo"], edited["purchaseOrderNo"]), (saved["batchNo"], saved["purchaseOrderNo"]))
+
+        with self.connect() as conn:
+            stored = json.loads(
+                conn.execute("SELECT payload FROM intake_batches WHERE id=?", (saved["id"],)).fetchone()[0]
+            )
+            self.assertEqual(
+                (stored["intakeDate"], stored["endDate"], stored["husbandryDays"], stored["husbandryMonths"]),
+                ("2026-01-31", "2026-02-28", 28, 1),
+            )
+            event = conn.execute(
+                "SELECT id,action FROM audit_events WHERE entity_id=? ORDER BY rowid DESC LIMIT 1", (saved["id"],)
+            ).fetchone()
+            self.assertEqual(event["action"], "intake_batch.updated")
+            audited = json.loads(read_payload(conn, event["id"]))
+            self.assertEqual(
+                (audited["after"]["intakeDate"], audited["after"]["endDate"], audited["after"]["husbandryDays"]),
+                ("2026-01-31", "2026-02-28", 28),
+            )
+
     def test_calendar_month_save_and_date_edits_preserve_values_in_sqlite_and_audit(self):
         item = {
             **batch("calendar"),

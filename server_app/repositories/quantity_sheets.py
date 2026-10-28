@@ -121,7 +121,11 @@ def quantity_sheet_where(filters, filtered_where, exclude_column=""):
         if key == exclude_column:
             continue
         spec = QUANTITY_SHEET_LIST_COLUMNS.get(key)
-        cleaned = [str(value).strip() for value in values if str(value).strip()]
+        cleaned = [
+            str(value).strip()
+            for value in values
+            if str(value).strip() or (key in {"month", "updatedAt"} and value == "")
+        ]
         if not spec or not cleaned:
             continue
         placeholders = ", ".join("?" for _ in cleaned)
@@ -145,13 +149,14 @@ def list_quantity_sheet_filter_options(conn, filters, filtered_where, column):
         return {"items": []}
     where, params = quantity_sheet_where(filters, filtered_where, exclude_column=column)
     where_clause = f" WHERE {where}" if where else ""
+    limit = "" if column in {"month", "updatedAt"} else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
         FROM quantity_sheets{where_clause}
         GROUP BY value
         ORDER BY value COLLATE NOCASE
-        LIMIT 500
+        {limit}
         """,
         params,
     ).fetchall()

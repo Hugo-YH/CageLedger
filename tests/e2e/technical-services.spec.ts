@@ -41,7 +41,12 @@ async function filterServiceColumn(page: Page, label: string, values: string[]) 
   const panel = page.getByRole("group", { name: `筛选${label}选项`, exact: true });
   await panel.getByRole("button", { name: "清空", exact: true }).click();
   for (const value of values) {
-    const checkbox = panel.getByRole("checkbox", { name: value, exact: false });
+    const isMonth = /^\d{4}-\d{2}$/.test(value) && label.includes("月份");
+    if (isMonth) await panel.getByRole("searchbox").fill(value);
+    const checkbox = panel.getByRole("checkbox", {
+      name: isMonth ? new RegExp(`^${Number(value.slice(5))}月`) : value,
+      exact: false,
+    });
     await checkbox.click();
     await expect(checkbox).toBeChecked();
   }
@@ -559,8 +564,9 @@ test("service column funnels filter all pages, combine selections, clear and res
   await expect(page.getByRole("button", { name: "筛选月份", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByLabel("列表总数")).not.toHaveText("共 1 条");
   await page.getByRole("button", { name: "筛选月份", exact: true }).click();
+  await page.getByRole("group", { name: "筛选月份选项", exact: true }).getByRole("searchbox").fill("2025-01");
   await expect(
-    page.getByRole("group", { name: "筛选月份选项", exact: true }).getByRole("checkbox", { name: /2025-01/ }),
+    page.getByRole("group", { name: "筛选月份选项", exact: true }).getByRole("checkbox", { name: /^1月/ }),
   ).toBeVisible();
   await expect(
     page.locator(".ant-popover").filter({ has: page.getByRole("group", { name: "筛选月份选项", exact: true }) }),
@@ -581,8 +587,9 @@ test("service column funnels filter all pages, combine selections, clear and res
   await page.getByRole("button", { name: "结算月份，点击切换排序", exact: true }).click();
   await expect(page.locator("tbody .ant-table-row").first()).toContainText("2025-01");
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
+  await page.getByRole("group", { name: "筛选结算月份选项", exact: true }).getByRole("searchbox").fill("2025-01");
   await expect(
-    page.getByRole("group", { name: "筛选结算月份选项", exact: true }).getByRole("checkbox", { name: /2025-01/ }),
+    page.getByRole("group", { name: "筛选结算月份选项", exact: true }).getByRole("checkbox", { name: /^1月/ }),
   ).toBeVisible();
   await expect(
     page.locator(".ant-popover").filter({ has: page.getByRole("group", { name: "筛选结算月份选项", exact: true }) }),

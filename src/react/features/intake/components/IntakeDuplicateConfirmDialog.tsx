@@ -28,7 +28,7 @@ export function IntakeDuplicateConfirmDialog({
     },
     { title: "采购单号", dataIndex: "purchaseOrderNo", width: 140, render: (value: string) => value || "-" },
     { title: "批次号", dataIndex: "batchNo", width: 150, render: (value: string) => value || "-" },
-    { title: "接收日期", dataIndex: "intakeDate", width: 108, render: (value: string) => value || "-" },
+    { title: "接收日期", dataIndex: "intakeDate", width: 108, render: (value: string) => value || "待定" },
     { title: "项目负责人", dataIndex: "pi", width: 108, render: (value: string) => value || "-" },
     { title: "实验负责人", dataIndex: "owner", width: 108, render: (value: string) => value || "-" },
     {

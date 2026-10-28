@@ -715,6 +715,63 @@
   font-weight: 600;
 }
 
+[data-ui="data-table-filter"] .table-filter-checkboxes {
+  display: grid;
+  gap: var(--cl-space-1);
+}
+
+[data-ui="data-table-filter"] .table-date-filter-options {
+  min-width: 0;
+  margin: var(--cl-space-2) 0;
+}
+
+[data-ui="data-table-filter"] .table-date-filter-title {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-space-2);
+  min-width: 0;
+  min-height: 32px;
+}
+
+[data-ui="data-table-filter"] .table-date-filter-switcher {
+  min-width: 32px;
+  min-height: 32px;
+  line-height: 32px;
+}
+
+[data-ui="data-table-filter"] .table-date-filter-item {
+  align-items: center;
+}
+
+[data-ui="data-table-filter"] .table-date-filter-item .ant-tree-checkbox {
+  align-self: center;
+  margin-block-start: 0;
+}
+
+@media (width < 768px), (height <= 500px) {
+  [data-ui="data-table-filter"] .table-date-filter-title,
+  [data-ui="data-table-filter"] .table-date-filter-switcher {
+    min-height: 44px;
+    line-height: 44px;
+  }
+
+  [data-ui="data-table-filter"] .table-date-filter-switcher {
+    min-width: 44px;
+  }
+}
+
+[data-ui="data-table-filter"] .table-date-filter-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-ui="data-table-filter"] .table-date-filter-title small {
+  color: var(--cl-color-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 [data-ui="data-table-filter"] .table-filter-options .ant-checkbox-wrapper:hover {
   background: var(--cl-color-fill-secondary);
 }

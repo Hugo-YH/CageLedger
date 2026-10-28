@@ -128,7 +128,9 @@ def intake_batch_where(filters, filtered_where, exclude_column=""):
         if key == exclude_column:
             continue
         spec = INTAKE_BATCH_LIST_COLUMNS.get(key)
-        cleaned = [str(value).strip() for value in values if str(value).strip()]
+        cleaned = [
+            str(value).strip() for value in values if str(value).strip() or (key == "intakeDate" and value == "")
+        ]
         if not spec or not cleaned:
             continue
         placeholders = ", ".join("?" for _ in cleaned)
@@ -168,13 +170,14 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
         return {"items": []}
     where, params = intake_batch_where(filters, filtered_where, exclude_column=column)
     where_clause = f" WHERE {where}" if where else ""
+    limit = "" if column == "intakeDate" else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
         FROM intake_batches{where_clause}
         GROUP BY value
         ORDER BY value COLLATE NOCASE
-        LIMIT 500
+        {limit}
         """,
         params,
     ).fetchall()

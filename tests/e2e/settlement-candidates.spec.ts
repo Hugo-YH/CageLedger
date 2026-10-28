@@ -188,7 +188,8 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   const settlementRegion = page.getByRole("region", { name: "结算管理列表" });
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const monthFilter = page.locator(".table-filter-panel:visible");
-  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await monthFilter.getByRole("searchbox").fill(month);
+  const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await monthOption.click();
   await expect(monthOption).toBeChecked();
   await monthFilter.getByRole("button", { name: "应用", exact: true }).click();

@@ -115,9 +115,13 @@ describe("intake message parser", () => {
     expect(result.remainingCardCount).toBe(3);
   });
 
-  it("reports the six required intake fields", () => {
+  it("allows saving a pending date while retaining the current form print requirements", () => {
     const result = normalizeIntakeBatch({ supplier: "购买单位", iacuc: "Z2026001", pi: "负责人" });
-    expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人", "房间", "接收日期"]);
+    expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人", "房间"]);
+    const ready = { ...result, owner: "实验负责人", roomName: "8101" };
+    expect(missingIntakeRequiredFields(ready)).toEqual([]);
+    expect(missingIntakeRequiredFields(ready, { forPrint: true })).toEqual(["接收日期"]);
+    expect(missingIntakeRequiredFields({ ...ready, intakeDate: "2026-10-28" }, { forPrint: true })).toEqual([]);
   });
 
   it("standardizes common facility aliases without loading the full MGI index", () => {
@@ -330,6 +334,32 @@ describe("intake husbandry dates", () => {
     const cleared = updateIntakeDraft(january, "intakeDate", "");
     expect([cleared.husbandryMonths, cleared.endDate, cleared.husbandryDays]).toEqual([1, "", null]);
     expect(parseIntakeMessage("体重/日龄:1个月").husbandryMonths).toBeUndefined();
+  });
+
+  it("parses text-only calendar-month periods with optional punctuation", () => {
+    const dated = parseIntakeMessage("接收日期：2026-10-26\n饲养周期1月");
+    expect([dated.intakeDate, dated.husbandryMonths, dated.husbandryDays, dated.endDate]).toEqual([
+      "2026-10-26",
+      1,
+      31,
+      "2026-11-26",
+    ]);
+
+    const chineseMonth = parseIntakeMessage("接收日期：2026-10-26\n饲养周期一个月");
+    expect([chineseMonth.husbandryMonths, chineseMonth.husbandryDays, chineseMonth.endDate]).toEqual([
+      1,
+      31,
+      "2026-11-26",
+    ]);
+
+    const missingDate = parseIntakeMessage("饲养周期1月");
+    expect([missingDate.husbandryMonths, missingDate.husbandryDays, missingDate.endDate]).toEqual([1, null, ""]);
+    const october = updateIntakeDraft(missingDate, "intakeDate", "2026-10-26");
+    expect([october.husbandryDays, october.endDate]).toEqual([31, "2026-11-26"]);
+    const january = updateIntakeDraft(october, "intakeDate", "2026-01-31");
+    expect([january.husbandryDays, january.endDate]).toEqual([28, "2026-02-28"]);
+
+    expect(parseIntakeMessage("动物月龄：1月").husbandryMonths).toBeUndefined();
   });
 
   it("manual days or end date replaces calendar-month intent", () => {

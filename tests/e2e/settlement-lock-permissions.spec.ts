@@ -143,7 +143,8 @@ test("lock operator withdraws a foreign workflow from the list with a required r
   await openWorkflowCenter(page);
   await page.getByRole("button", { name: "筛选结算月份", exact: true }).click();
   const filter = page.locator(".table-filter-panel:visible");
-  const option = filter.getByRole("checkbox", { name: new RegExp(`^${month}`) });
+  await filter.getByRole("searchbox").fill(month);
+  const option = filter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await option.click();
   await expect(option).toBeChecked();
   await filter.getByRole("button", { name: "应用", exact: true }).click();

@@ -33,7 +33,12 @@ async function applyServiceFilter(page: Page, column: string, value: string) {
   const options = page.getByRole("group", { name: `筛选${column}选项`, exact: true });
   await expect(options).toBeVisible();
   await options.getByRole("button", { name: "清空", exact: true }).click();
-  const choice = options.getByRole("checkbox", { name: value, exact: false });
+  const isMonth = column.includes("月份") && /^\d{4}-\d{2}$/.test(value);
+  if (isMonth) await options.getByRole("searchbox").fill(value);
+  const choice = options.getByRole("checkbox", {
+    name: isMonth ? new RegExp(`^${Number(value.slice(5))}月`) : value,
+    exact: false,
+  });
   await choice.click();
   await expect(choice).toBeChecked();
   await options.getByRole("button", { name: "应用", exact: true }).click();

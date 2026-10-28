@@ -89,4 +89,53 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).not.toBeChecked();
     expect(search).toHaveValue("");
   });
+
+  it("checks a whole year, preserves pending dates and only applies on confirmation", async () => {
+    const onFilter = vi.fn();
+    renderFilter(
+      <FilterableColumnTitle
+        label="接收日期"
+        dateHierarchy="day"
+        values={[""]}
+        options={["2026-10-28", "2026-10-29", "2025-12-31", ""].map((value) => ({
+          value,
+          label: value || "待定",
+          count: 1,
+        }))}
+        onSort={vi.fn()}
+        onFilter={onFilter}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "筛选接收日期" });
+    fireEvent.click(trigger);
+    const panel = await screen.findByRole("group", { name: "筛选接收日期选项" });
+    expect(within(panel).queryByText("10月")).not.toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /2026年/ }));
+    await waitFor(() => expect(within(panel).getByRole("checkbox", { name: /2026年/ })).toBeChecked());
+    expect(onFilter).not.toHaveBeenCalled();
+    fireEvent.click(within(panel).getByRole("button", { name: "应用" }));
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["", "2026-10-28", "2026-10-29"]);
+    expect(trigger).toHaveFocus();
+  });
+
+  it("searches and selects a month with half-selection feedback, without losing a hidden year", async () => {
+    const onFilter = vi.fn();
+    renderFilter(
+      <FilterableColumnTitle
+        label="结算月份"
+        dateHierarchy="month"
+        values={["2025-12", "2026-10"]}
+        options={["2026-10", "2026-11", "2025-12"].map((value) => ({ value, label: value, count: 2 }))}
+        onSort={vi.fn()}
+        onFilter={onFilter}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "筛选结算月份" }));
+    const panel = await screen.findByRole("group", { name: "筛选结算月份选项" });
+    expect(within(panel).getByRole("checkbox", { name: /2026年/ })).toHaveAttribute("aria-checked", "mixed");
+    fireEvent.change(within(panel).getByRole("searchbox"), { target: { value: "2026年11月" } });
+    fireEvent.click(await within(panel).findByRole("checkbox", { name: /11月/ }));
+    fireEvent.click(within(panel).getByRole("button", { name: "应用" }));
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["2025-12", "2026-10", "2026-11"]);
+  });
 });

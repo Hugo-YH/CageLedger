@@ -2,17 +2,16 @@ import { ActionIcon } from "./ui/ActionIcon";
 import { Alert, Button, Checkbox, Input, Popover, Skeleton, Space } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ComponentRef } from "react";
+import { DateFilterTree } from "./DateFilterTree";
+import type { DateFilterHierarchy, TableFilterOption } from "./dateFilterModel";
 
-export interface TableFilterOption {
-  value: string;
-  label: string;
-  count: number;
-}
+export type { TableFilterOption } from "./dateFilterModel";
 
 export interface FilterableColumnTitleProps {
   label: string;
   values: string[];
   options: TableFilterOption[];
+  dateHierarchy?: DateFilterHierarchy;
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
@@ -26,6 +25,7 @@ export function FilterableColumnTitle({
   label,
   values,
   options,
+  dateHierarchy,
   loading = false,
   error,
   onRetry,
@@ -110,11 +110,7 @@ export function FilterableColumnTitle({
         value={search}
         onChange={(event) => setSearch(event.target.value)}
       />
-      <Checkbox.Group
-        className="table-filter-options"
-        value={pending}
-        onChange={(nextValues) => setPending(nextValues.map(String))}
-      >
+      <div className={dateHierarchy ? "table-date-filter-options" : "table-filter-options"}>
         {loading ? (
           <div role="status" aria-label={`${label}筛选选项正在加载`}>
             <span className="app-visually-hidden">{label}筛选选项正在加载</span>
@@ -134,19 +130,34 @@ export function FilterableColumnTitle({
               ) : undefined
             }
           />
+        ) : dateHierarchy ? (
+          <DateFilterTree
+            label={label}
+            hierarchy={dateHierarchy}
+            options={options}
+            search={search}
+            values={pending}
+            onChange={setPending}
+          />
         ) : visibleOptions.length ? (
-          visibleOptions.map((option) => (
-            <Checkbox key={option.value} value={option.value}>
-              <span>{option.label}</span>
-              <small>{option.count}</small>
-            </Checkbox>
-          ))
+          <Checkbox.Group
+            className="table-filter-checkboxes"
+            value={pending}
+            onChange={(nextValues) => setPending(nextValues.map(String))}
+          >
+            {visibleOptions.map((option) => (
+              <Checkbox key={option.value} value={option.value}>
+                <span>{option.label}</span>
+                <small>{option.count}</small>
+              </Checkbox>
+            ))}
+          </Checkbox.Group>
         ) : (
           <p className="muted" role="status">
             {search.trim() ? "没有匹配的筛选项，请调整搜索内容。" : "当前列没有可选项。"}
           </p>
         )}
-      </Checkbox.Group>
+      </div>
       <Space className="table-filter-actions">
         <Button size="small" type="text" onClick={() => setPending([])}>
           清空

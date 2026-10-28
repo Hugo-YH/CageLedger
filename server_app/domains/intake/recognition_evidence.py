@@ -109,7 +109,7 @@ def normalize_image_result(payload, item, model):
         # An end date calculated from an application date is not valid evidence either.
         if not sources.get("endDate"):
             item["endDate"] = ""
-        notices.append("图片中未提供明确的接收/进驻日期，请手动补充；采购申请日期不能代替接收日期。")
+        notices.append("图片中未提供明确的接收/进驻日期，可先留空保存，确定后编辑补填；采购申请日期不能代替接收日期。")
     male = _nonnegative_integer(payload.get("maleQuantity"))
     female = _nonnegative_integer(payload.get("femaleQuantity"))
     if (

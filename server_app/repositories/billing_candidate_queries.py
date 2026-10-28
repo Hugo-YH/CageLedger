@@ -170,6 +170,7 @@ def list_billing_candidate_scalar_filter_options(conn, source_type, filters, col
     if not spec:
         return []
     where, params = billing_candidate_snapshot_where(source_type=source_type, filters=filters, exclude_column=column)
+    limit = "" if column == "month" else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT {spec["expr"]} AS value, COUNT(*) AS count
@@ -177,7 +178,7 @@ def list_billing_candidate_scalar_filter_options(conn, source_type, filters, col
         WHERE {where}
         GROUP BY value
         ORDER BY value COLLATE NOCASE
-        LIMIT 500
+        {limit}
         """,
         params,
     ).fetchall()

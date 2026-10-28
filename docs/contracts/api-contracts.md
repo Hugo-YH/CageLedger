@@ -192,6 +192,10 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 
 ## 笼卡与待进驻
 
+日期列筛选保持 `filter-options` 的 `{items:[{value,label,count}]}` 与 `columnFilters` 原始值数组契约。前端年/月/日仅为显示分组，时间列的一日节点保留并提交该日所有原始时间戳，不能以截断后的日期代替精确值。日期/月候选查询返回当前范围完整候选，不使用普通文本列的500项上限；原权限、其他列筛选及排除本列条件的聚合口径不变。候选包含空白时，`intakeDate`、`month`、`updatedAt` 的数组筛选允许显式 `""`，非日期列的空值清洗规则不变。
+
+待接收批次 POST/PUT 允许 `item.intakeDate` 为空字符串，表示日期待定；沿用原字段，不增加状态或数据库迁移。后续完整 PUT 补填日期时保留批次 ID、笼卡 ID 与二维码，自然月周期按原 `husbandryMonths` 计算，创建及编辑均写入原审计链路。列表日期筛选继续使用空字符串值，前端展示为“待定”。兼容单条分次接收接口仍要求 `actualReceiptDate`，现有批量状态标记规则不变。
+
 `POST /api/intake/ai-parse` 保留原 `{rawMessage,roomNames}` 及 `{item,usage}` 响应。可选 `images:[{name,dataUrl}]` 支持同一预约的文字加图片或纯图片；最多4张 PNG/JPEG/WebP，单张5 MiB、合计15 MiB，校验真实格式、完整性、尺寸与静态图片后才请求 AI。图片使用独立 `DEEPSEEK_VISION_MODEL`（默认 `deepseek-flash`），共用原key与地址；原文字模型、响应和本地识别保持兼容。
 
 图片响应另含 `recognition:{extractedText,warnings,fieldSources,sources,model}`。`sources` 按1起点 `imageIndex` 标识截图，`kind` 为 `husbandry`（饲养需求）、`purchase`（采购信息）或 `unknown`。饲养需求分离许可总量/剩余量、本批数量/雌雄及审核备注字段；采购信息单列单号、批次、商品、规格、数量及供应商。服务端先核对编号，再按来源合并，许可数量永不映射到本批数量；品系（对应商品名称）、体重/日龄（对应规格）、本批数量有差异时采用采购信息的非空值，保留双方原值并提示；采购内部多图矛盾仍需人工核对，编号冲突拒绝合并。明确笼数保留；缺少明确接收日期依据时留空，不用采购申请日期代替；项目和负责人仍由现有 IACUC 匹配回填。
@@ -200,7 +204,7 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 
 识别依据另含可选 `quantityCalculation:{baseQuantity,giftQuantity,addedGiftQuantity,actualQuantity,formula,status,reason}`，`status=calculated|review_required`。例如27只加额外赠送3只得到30只，备注本次30只不重复加、后续47只不计入。保存时作为识别依据留档，不覆盖用户核对后编辑的主数量。动物规格由服务端本地提取年龄/体重并规范为 `6-8w`、`1-2m`、`1-2y`、`18-22g` 等；等级、赠送及饲养周期排除，来源规格原文仍保留。缺失标记“-”不参与差异比较。原文字识别响应和旧保存请求不变，不增加数据库迁移。
 
-自然月饲养周期使用可选 `item.husbandryMonths`（1至1200的整数），来源同时保留 `husbandryMonths` 与 `husbandryPeriodRaw`；月数必须有明确饲养/周期原文，不能来自动物月龄。AI只提取事实，本地将接收日期加月数（目标日不存在时取目标月末）并计算 `endDate` 与 `husbandryDays`；缺接收日期时保留月数，其余两项留空。明确的两日期不符合该自然月结果时，保留原日期差且清除月数意图。保存接口同样计算可选月数并在原事务中审计，`husbandryMonths:null` 表示手动覆盖或清除联动；旧记录无该字段时不回填，旧客户端省略字段且日期天数未改时保留已存月数，显式改变日期/天数时尊重其输入。直接取材不使用自然月周期，无数据库迁移。
+自然月饲养周期使用可选 `item.husbandryMonths`（1至1200的整数），来源同时保留 `husbandryMonths` 与 `husbandryPeriodRaw`；月数必须有明确饲养/周期原文，不能来自动物月龄。AI只提取事实，本地将接收日期加月数（目标日不存在时取目标月末）并计算 `endDate` 与 `husbandryDays`；缺接收日期时保留月数，其余两项留空。明确的两日期不符合该自然月结果时，保留原日期差且清除月数意图。保存接口同样计算可选月数并在原事务中审计，`husbandryMonths:null` 表示手动覆盖或清除联动；旧记录无该字段时不回填，旧客户端省略字段且日期天数未改时保留已存月数，显式改变日期/天数时尊重其输入。直接取材不使用自然月周期，无数据库迁移。 纯文字识别直接从完整 `rawMessage` 确认月数；带自然月意图时，只有原文中实际出现的接收/结束日期才参与日期核对，忽略模型自行推算的日期和固定天数。
 
 批次 POST/PUT 可选携带 `recognitionImages:[{name,dataUrl}]`，提取依据在 `item.recognition`。图片字节不进入业务 payload 或审计，只在权限、版本、重复确认均通过后写入新文件，并随批次与来源图片审计一起提交元数据；失败清理本次新文件，不覆盖旧文件。省略识别依据的旧编辑请求保留原留档，客户端不能指定或替换存储路径，已有图片不会因普通编辑删除。相同内容和名称不重复留档。 `recognition.imageIds` 按本次图片输入顺序绑定原图 ID，`images` 同时保留历史原图；多次编辑后仍能核对每个来源的对应图片。图片识别返回 `inputImages`（名称与SHA-256）；保存按该签名绑定原图，变更后的图片不能冒充旧识别来源，缺少对应原图时明确提示。`GET /api/intake-batches/{batchId}/recognition-images/{imageId}` 要求登录、确认图片归属于该批次后返回原图，沿用批次可见范围，响应 `no-store`；批次不存在、图片不属于批次或文件暂缺返回404。新功能不增加数据库结构迁移。
 
