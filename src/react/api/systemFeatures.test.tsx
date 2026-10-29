@@ -100,3 +100,47 @@ it("cancels an in-flight stale read before saving so it cannot replace the retur
   await waitFor(() => expect(client.getQueryData(queryKeys.systemFeatures)).toEqual(saved));
   expect(calls).toBe(3);
 });
+
+it("initializes from authenticated session without a second startup request", () => {
+  const item = { enabled: { ...enabled, quarantine: false }, updatedAt: "2026-10-15T08:00:00Z" };
+  client.setQueryData(queryKeys.session, { user: { id: "admin" }, features: item });
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  const { result } = renderHook(useSystemFeatures, { wrapper });
+  expect(result.current.data).toEqual(item);
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("keeps a saved configuration when an older session response is available", async () => {
+  const old = { enabled, updatedAt: null };
+  const saved = { enabled: { ...enabled, quarantine: false }, updatedAt: "2026-10-15T09:00:00Z" };
+  client.setQueryData(queryKeys.session, { user: { id: "admin" }, features: old });
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ item: saved }));
+  const { result, unmount } = renderHook(() => ({ features: useSystemFeatures(), save: useSaveSystemFeatures() }), {
+    wrapper,
+  });
+  await act(async () => {
+    await result.current.save.mutateAsync({ enabled: saved.enabled, expectedUpdatedAt: null });
+  });
+  expect(client.getQueryData<{ features: typeof saved }>(queryKeys.session)?.features).toEqual(saved);
+  unmount();
+  const fresh = renderHook(useSystemFeatures, { wrapper });
+  expect(fresh.result.current.data).toEqual(saved);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("waits for the independent configuration request when session features are absent", async () => {
+  client.setQueryData(queryKeys.session, { user: { id: "admin" } });
+  let resolve!: (value: Response) => void;
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    () =>
+      new Promise<Response>((done) => {
+        resolve = done;
+      }),
+  );
+  const { result } = renderHook(useSystemFeatures, { wrapper });
+  expect(result.current.data).toBeUndefined();
+  act(() => {
+    resolve(Response.json({ item: { enabled: { ...enabled, quarantine: false }, updatedAt: null } }));
+  });
+  await waitFor(() => expect(result.current.data?.enabled.quarantine).toBe(false));
+});

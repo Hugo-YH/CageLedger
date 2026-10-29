@@ -10,6 +10,7 @@ ROUTE_GROUPS = {
             "method": "GET",
             "paths": (
                 "/api/data-quality/scans",
+                "/api/data-quality/latest/issues",
                 "/api/data-quality/scans/{scanId}/issues",
                 "/api/data-quality/scans/{scanId}/issues/{issueId}",
             ),

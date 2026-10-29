@@ -101,13 +101,22 @@ def filters(params):
 
 def list_issues(conn, actor, scan_id, params):
     authorize(actor)
-    report = repo.scan(conn, scan_id)
+    return _list_issues(repo.scan(conn, scan_id), params)
+
+
+def list_latest_issues(conn, actor, params):
+    authorize(actor)
+    return _list_issues(repo.latest_scan(conn), params)
+
+
+def _list_issues(report, params):
     selected = filters(params)
+    findings = report["findings"] if report else []
 
     def matches(item, exclude=""):
         return all(key == exclude or not values or item[key] in values for key, values in selected.items())
 
-    items = [item for item in report["findings"] if matches(item)]
+    items = [item for item in findings if matches(item)]
     items.sort(key=lambda item: (item["reviewStatus"] != "needs_review", item["code"], item["id"]))
     sort_key, direction = params.get("sortKey"), params.get("sortDir", "asc")
     if sort_key and sort_key not in ("code", "reviewStatus") or direction not in ("asc", "desc"):
@@ -117,13 +126,13 @@ def list_issues(conn, actor, scan_id, params):
     page = pagination(params, len(items))
     options = {}
     for key, labels in (("code", CODE_LABELS), ("reviewStatus", STATUS_LABELS)):
-        counts = Counter(item[key] for item in report["findings"] if matches(item, key))
+        counts = Counter(item[key] for item in findings if matches(item, key))
         options[key] = [
             {"value": value, "label": labels.get(value, value), "count": count}
             for value, count in sorted(counts.items())
         ]
     return {
-        "scan": metadata(report),
+        "scan": metadata(report) if report else None,
         "items": [finding(item) for item in items[page["offset"] : page["offset"] + page["limit"]]],
         "page": page,
         "filterOptions": options,

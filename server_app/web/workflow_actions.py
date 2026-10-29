@@ -64,6 +64,7 @@ from server_app.domains.reimbursement.facade import (
 from server_app.domains.reimbursement.projector import (
     join_distinct_text,
 )
+from server_app.domains.system_features.session import session_payload
 from server_app.domains.workflow.application import (
     record_archived_reimbursement,
     update_workflow_status,
@@ -146,8 +147,9 @@ class WorkflowActionsMixin:
             )
             write_audit_events(conn, [event])
             conn.commit()
+            response = session_payload(conn, user, body.get("includeFeatures") is True)
         self.send_response(HTTPStatus.OK)
-        body_bytes = json.dumps({"user": user}, ensure_ascii=False).encode("utf-8")
+        body_bytes = json.dumps(response, ensure_ascii=False).encode("utf-8")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body_bytes)))
         self.send_header("Cache-Control", "no-store")

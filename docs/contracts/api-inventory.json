@@ -269,7 +269,7 @@
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "5116e6f85c0f251f4a0d0b348d1523aa855f45c33889d80aee7ee2bed05f7c82",
+    "server_app/web/router_registry.py": "ebb176603f9508a88dd035ddb759238f1ffdc6766038ae0d014eb710b8eb5a1b",
     "server_app/web/route_registration.py": "d05acfff6e18583855cdcdc896f44a8963b0653aac470bc8312806c3fee72009",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "d635092b9c9db6395b0e2f22407d9511fb18cf3b01d741cc2335e3ebe7a2b106",
@@ -277,7 +277,7 @@
     "server_app/web/entity_contracts.py": "eff3ad76da49a345636bd533912801cfd7268afd73002a0cb6cef36b078f6086",
     "server_app/web/route_matchers.py": "66db439ae4460f041f2907fb01ff976553d686cded3eea044b367660a0f3baca",
     "server_app/web/technical_services.py": "1e1366584826fbba027c0317fb6824ae648586fc26cbac1226407c30c6e20610",
-    "server_app/web/data_quality.py": "93a56a39d8d7a77a20e62a11b30a2f99de5ef3f905b0bb5721d5ad2717524057",
+    "server_app/web/data_quality.py": "1358fd2965baae6e913f6dfd94ab8007f64a6ea23906add4b8bbb5aef1d8aa4c",
     "server_app/web/system_features.py": "841504e28e9a794d88cd9bb2c6bfa01c12458f15f71aab9db6ec6d1d5069ec89",
     "server_app/web/feedback.py": "5f3c5ae8649e67d0ecd3487968115d483f35ed93b229e9e776743a092e0ef6bf",
     "server_app/web/quarantine.py": "93afc305ef434e8850005181aff4eb504e4666061137c215b2bf7c663a9e85f3",
@@ -289,7 +289,7 @@
     "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774",
     "server_app/web/route_definitions/__init__.py": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "server_app/web/route_definitions/operations.py": "92ac8da3c37c2ef9284e7e6554b5170f5b2732cd7c4ca9906af92baf6a1ef0e5",
-    "server_app/web/route_definitions/platform.py": "2ca82a4fbbcbcbd06766b2b77876627d376d049718751f2e8fef8e5f167407d9",
+    "server_app/web/route_definitions/platform.py": "06c41bd29a1eb9af455115e1890a10cd52836453aceab4a0787f44cca3c338f3",
     "server_app/web/route_definitions/settlement.py": "6204780e4c4b085d94dc6168f670793f7f284da27dc6eab540c1fce3b83d22ed",
     "server_app/web/route_definitions/support.py": "10a50855a098b0c21dcefbaa7dd72407f05024e101b071bd245447e2be13fed9"
   },
@@ -349,8 +349,8 @@
           "method": "GET",
           "path": "/api/auth/me",
           "purpose": "当前会话",
-          "request": "Cookie",
-          "response": "{user}，无会话401",
+          "request": "Cookie；可选include=features",
+          "response": "{user,features?}；不传include仍user-only；无会话401",
           "protection": "read",
           "permission": "public"
         },
@@ -358,8 +358,8 @@
           "method": "POST",
           "path": "/api/auth/login",
           "purpose": "登录",
-          "request": "{username,password}",
-          "response": "{user}",
+          "request": "{username,password,includeFeatures?}",
+          "response": "{user,features?}；不启用组合读取仍user-only",
           "protection": "authentication",
           "permission": "public"
         },
@@ -1058,7 +1058,7 @@
           "method": "GET",
           "path": "/api/intake-batches",
           "purpose": "批次列表",
-          "request": "列表筛选与分页",
+          "request": "列表筛选与分页；可选view=summary，省略保持旧完整响应",
           "response": "{items,page}",
           "protection": "read",
           "permission": "login"
@@ -1138,6 +1138,15 @@
           "response": "{batch,receipt,tasks,...}",
           "protection": "intake_action",
           "lifecycle": "compatibility"
+        },
+        {
+          "method": "POST",
+          "path": "/api/intake-batches/print-data",
+          "purpose": "按所见版本批量读取笼卡打印完整数据；不改变状态或审计",
+          "request": "{ids:[1至200个唯一ID],expectedVersions?:{id:updatedAt}}",
+          "response": "{items}，按请求顺序；版本过期409、缺失404",
+          "permission": "login",
+          "protection": "read"
         }
       ]
     },
@@ -1956,7 +1965,7 @@
           "method": "GET",
           "path": "/api/animal-inspections",
           "purpose": "巡检列表",
-          "request": "房间、状态、日期、分页",
+          "request": "房间、状态、日期、分页；可选view=summary，省略保持旧完整响应",
           "response": "{items,page,summary?}",
           "protection": "read"
         },
@@ -2021,7 +2030,7 @@
           "method": "GET",
           "path": "/api/animal-inspection-findings",
           "purpose": "问题列表",
-          "request": "房间、严重程度、状态、日期、分页",
+          "request": "房间、严重程度、状态、日期、分页；可选view=summary，省略保持旧完整响应",
           "response": "{items,page}",
           "protection": "read"
         },
@@ -2230,7 +2239,7 @@
           "method": "GET",
           "path": "/api/quarantine/sources",
           "purpose": "接收来源列表",
-          "request": "method,dateFrom,dateTo,state及分页",
+          "request": "method,dateFrom,dateTo,state及分页；可选view=summary，省略保持旧完整响应",
           "response": "{items,page}",
           "protection": "read"
         },
@@ -2451,6 +2460,14 @@
           "purpose": "读取问题的关联快照及校验后的留档证据",
           "request": "scanId,issueId",
           "response": "{scan,item,evidence,evidenceSha256}；证据缺失或校验失败409",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-quality/latest/issues",
+          "purpose": "一次读取最新留档的元数据及问题分页；不等待留档目录",
+          "request": "limit,offset,columnFilters,sortKey,sortDir",
+          "response": "{scan,items,page,filterOptions}；无留档scan为null",
           "protection": "read"
         }
       ]

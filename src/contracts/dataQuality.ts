@@ -45,6 +45,9 @@ export interface DataQualityIssues extends PagedResponse<DataQualityFinding> {
   scan: DataQualityScan;
   filterOptions: Record<DataQualityColumn, DataQualityOption[]>;
 }
+export interface DataQualityLatestIssues extends Omit<DataQualityIssues, "scan"> {
+  scan: DataQualityScan | null;
+}
 export interface DataQualityDetail {
   scan: DataQualityScan;
   item: DataQualityFinding;

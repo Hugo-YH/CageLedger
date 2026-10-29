@@ -2,13 +2,13 @@ import { useId, useState } from "react";
 import { Alert, Button, Descriptions, Form, Input, Select, Space } from "antd";
 import { Modal } from "../../components/ui/Modal";
 
-import type { FindingStatus, InspectionFinding } from "../../api/contracts";
+import type { FindingStatus, InspectionFindingSummary } from "../../api/contracts";
 import { useResolveFinding, useUpdateFinding } from "../../api/animalManagement";
 import { DateInput } from "../../components/ui";
 import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 import { FINDING_STATUS_LABELS, findingLocation } from "./model";
 
-export function FindingDialog({ finding, onClose }: { finding: InspectionFinding; onClose: () => void }) {
+export function FindingDialog({ finding, onClose }: { finding: InspectionFindingSummary; onClose: () => void }) {
   const formId = useId();
   const [status, setStatus] = useState<FindingStatus>(finding.status);
   const [actionNote, setActionNote] = useState(finding.actionNote || "");

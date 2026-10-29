@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listAllIntakeBatches } from "../../../api/intake";
-import type { IntakeBatch, IntakeListParams } from "../../../api/contracts";
+import { listAllIntakeBatchSummaries } from "../../../api/intake";
+import type { IntakeBatchListItem, IntakeListParams } from "../../../api/contracts";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 
 export function useIntakeSelection() {
-  const [selectedItems, setSelectedItems] = useState<IntakeBatch[]>([]);
+  const [selectedItems, setSelectedItems] = useState<IntakeBatchListItem[]>([]);
   const [selectingAll, setSelectingAll] = useState(false);
   const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const [error, setError] = useState("");
@@ -40,7 +40,7 @@ export function useIntakeSelection() {
       setAllFilteredSelected(true);
       setError("");
       try {
-        const items = await listAllIntakeBatches(params, current.signal);
+        const items = await listAllIntakeBatchSummaries(params, current.signal);
         if (isCurrent()) setSelectedItems(items);
       } catch (cause) {
         if (isCurrent()) {
@@ -58,7 +58,7 @@ export function useIntakeSelection() {
   );
 
   const toggle = useCallback(
-    (item: IntakeBatch, checked: boolean) => {
+    (item: IntakeBatchListItem, checked: boolean) => {
       cancelPending();
       setError("");
       setSelectedItems((current) =>
@@ -79,7 +79,7 @@ export function useIntakeSelection() {
   );
 
   const update = useCallback(
-    (items: IntakeBatch[]) => {
+    (items: IntakeBatchListItem[]) => {
       if (controller.current) cancelPending();
       const byId = new Map(items.map((item) => [item.id, item]));
       setSelectedItems((current) => current.map((item) => byId.get(item.id) ?? item));

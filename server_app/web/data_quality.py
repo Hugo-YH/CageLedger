@@ -21,6 +21,8 @@ def handle(handler, method, path):
             conn.execute("PRAGMA query_only=ON")
             if method == "GET" and parts == ["scans"]:
                 payload = service.list_scans(conn, actor, params)
+            elif method == "GET" and parts == ["latest", "issues"]:
+                payload = service.list_latest_issues(conn, actor, params)
             elif method == "GET" and len(parts) == 3 and parts[0] == "scans" and parts[2] == "issues":
                 payload = service.list_issues(conn, actor, parts[1], params)
             elif method == "GET" and len(parts) == 4 and parts[0] == "scans" and parts[2] == "issues":

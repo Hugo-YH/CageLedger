@@ -132,6 +132,7 @@ class HandlerSupportMixin:
                 page = payload["page"]
             elif table == "intake_batches":
                 filters = self.list_filters()
+                filters["view"] = parse_qs(urlparse(self.path).query).get("view", [""])[0]
                 payload = list_intake_batches_page(conn, filters, filtered_where, ENTITY_ORDER_BY)
                 from server_app.domains.quarantine.workflow import decorate_intakes
 

@@ -2,7 +2,7 @@ import { BarChartOutlined, CalendarOutlined, CopyOutlined } from "@ant-design/ic
 import { Alert, App, Button, Card, Collapse, Flex, Skeleton, Space, Statistic, Tag, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
 
-import type { IntakeBatch } from "../../../api/contracts";
+import type { IntakeBatchListItem } from "../../../api/contracts";
 import { useIntakeStatisticsPrincipals } from "../../../api/intakeStatistics";
 import {
   buildIntakeStatistics,
@@ -19,8 +19,14 @@ import { Modal, ModalPresence } from "../../../components/ui";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { copyTextToClipboard } from "../../../utils/clipboard";
 
-export function IntakeStatistics({ selectedItems, disabled }: { selectedItems: IntakeBatch[]; disabled: boolean }) {
-  const [snapshot, setSnapshot] = useState<IntakeBatch[] | null>(null);
+export function IntakeStatistics({
+  selectedItems,
+  disabled,
+}: {
+  selectedItems: IntakeBatchListItem[];
+  disabled: boolean;
+}) {
+  const [snapshot, setSnapshot] = useState<IntakeBatchListItem[] | null>(null);
   return (
     <>
       <Button
@@ -37,7 +43,7 @@ export function IntakeStatistics({ selectedItems, disabled }: { selectedItems: I
   );
 }
 
-function IntakeStatisticsModal({ items, onClose }: { items: IntakeBatch[]; onClose: () => void }) {
+function IntakeStatisticsModal({ items, onClose }: { items: IntakeBatchListItem[]; onClose: () => void }) {
   const codes = useMemo(
     () => [...new Set(items.map((item) => intakeStatisticsCode(item.iacuc)).filter(Boolean))].sort(),
     [items],

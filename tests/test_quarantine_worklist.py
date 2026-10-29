@@ -80,6 +80,55 @@ class WorklistTests(unittest.TestCase):
             self.assertNotIn("storageName", item)
         self.assertEqual(worklist.list_records(self.conn, {"state": "draft"}, reports=True)["items"], [])
 
+    def test_projection_counts_results_and_preserves_report_and_retest_fields(self):
+        test = repo.get(self.conn, "tests", "test-2")
+        test.update(
+            samples=[{"id": "a"}, {"id": "b"}],
+            projects=[
+                {"results": {"a": "positive", "b": "suspect", "other": "negative"}},
+                {"results": {"a": "positive", "b": "inconclusive"}},
+            ],
+            samplingDate=None,
+            retestOf="earlier",
+            correctionOf="corrected",
+        )
+        repo.save(self.conn, "tests", test)
+        records = worklist.list_records(self.conn, {"method": "elisa_mouse"})["items"]
+        item = records[0]
+        self.assertEqual((item["sampleCount"], item["projectCount"], item["abnormalCount"]), (2, 2, 3))
+        self.assertIsNone(item["samplingDate"])
+        self.assertEqual((item["retestOf"], item["correctionOf"]), ("earlier", "corrected"))
+        reports = worklist.list_records(self.conn, {"method": "elisa_mouse"}, reports=True)["items"]
+        self.assertEqual({item["version"] for item in reports}, {1, 2})
+        self.assertTrue(all(item["abnormalCount"] == 3 and item["testId"] == "test-2" for item in reports))
+
+    def test_batch_counts_use_field_projection_and_keep_method_order(self):
+        for index, (method, state) in enumerate((("pcr", "issued"), ("parasite", "draft"), ("pcr", "issued"))):
+            repo.save(
+                self.conn,
+                "tests",
+                {
+                    "id": f"extra-{index}",
+                    "batchId": "batch-0",
+                    "method": method,
+                    "state": state,
+                    "samples": [],
+                    "projects": [],
+                    "updatedAt": "2026-09-16",
+                },
+                create=True,
+            )
+        statements = []
+        self.conn.set_trace_callback(statements.append)
+        result = repo.list_page(self.conn, "batches", {"search": "B26091600"})
+        self.conn.set_trace_callback(None)
+        item = result["items"][0]
+        self.assertEqual((item["recordCount"], item["issuedCount"]), (4, 2))
+        self.assertEqual(item["methods"], ["parasite", "pcr"])
+        test_query = next(query for query in statements if "FROM quarantine_tests WHERE batch_id IN" in query)
+        self.assertIn("json_extract(payload, '$.state')", test_query)
+        self.assertNotIn("SELECT batch_id, payload", test_query)
+
     def test_invalid_filters_are_rejected(self):
         for params in (
             {"method": "x"},

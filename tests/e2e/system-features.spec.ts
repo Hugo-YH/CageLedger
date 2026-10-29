@@ -103,7 +103,7 @@ test.describe("global system feature visibility", () => {
       await expect(control).toHaveAttribute("aria-checked", "true");
     }
 
-    const quarantine = page.getByRole("switch", { name: "检疫管理", exact: true });
+    const quarantine = page.getByRole("switch", { name: /检疫管理$/ });
     await page.locator('label[for="system-feature-quarantine"]').click();
     await expect(quarantine).toHaveAttribute("aria-checked", "false");
     await quarantine.focus();
@@ -113,9 +113,7 @@ test.describe("global system feature visibility", () => {
     await expect(quarantine).toHaveAttribute("aria-checked", "false");
     await saveFeatures(page);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await expect(page.locator(".ant-main-menu").getByRole("menuitem", { name: "检疫管理", exact: true })).toHaveCount(
-      0,
-    );
+    await expect(page.locator(".ant-main-menu").getByRole("menuitem", { name: /检疫管理$/ })).toHaveCount(0);
 
     const audit = await page.request.get("/api/audit-events?limit=100&offset=0");
     expect(audit.ok()).toBe(true);
@@ -252,12 +250,36 @@ test.describe("global system feature visibility", () => {
     }
   });
 
+  test("loads hidden feature flags with the session without a second feature request", async ({ page }) => {
+    const current = await readFeatures(page.request);
+    expect(
+      (
+        await page.request.put("/api/system/features", {
+          data: { enabled: { ...current.item.enabled, quarantine: false }, expectedUpdatedAt: current.item.updatedAt },
+        })
+      ).ok(),
+    ).toBe(true);
+    const requests: string[] = [];
+    page.on("request", (request) => requests.push(request.url()));
+    await page.goto("/app");
+    await expect(page.getByRole("menuitem", { name: /笼卡管理$/ })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /检疫管理$/ })).toHaveCount(0);
+    expect(requests.some((url) => url.includes("/api/auth/me?include=features"))).toBe(true);
+    expect(requests.some((url) => new URL(url).pathname === "/api/system/features")).toBe(false);
+  });
+
   test("shows a retryable loading error without treating it as all features enabled", async ({ page }) => {
+    await page.route("**/api/auth/me?include=features", async (route) => {
+      const response = await route.fetch();
+      const session = await response.json();
+      delete session.features;
+      await route.fulfill({ response, json: session });
+    });
     await page.route("**/api/system/features", (route) =>
       route.fulfill({ status: 503, json: { error: "暂时不可用" } }),
     );
     await page.goto("/app");
     await expect(page.getByText("系统功能加载失败", { exact: true })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "笼卡管理", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: /笼卡管理$/ })).toHaveCount(0);
   });
 });

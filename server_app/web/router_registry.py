@@ -1,6 +1,7 @@
 """API assembly: namespace delegates, lightweight system routes, then domain actions."""
 
 from http import HTTPStatus
+from urllib.parse import parse_qs, urlparse
 
 from server_app.config import DB_PATH
 from server_app.db import connect_db
@@ -10,9 +11,12 @@ from server_app.domains.administration import (
     release_announcement_acknowledgements,
     release_announcement_status,
     system_info,
+    user_from_token,
 )
+from server_app.domains.system_features.session import session_payload
 from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler, intake_recognition_image_handler
+from server_app.web.intake_reads import intake_print_data_handler
 from server_app.web.intake_strain import intake_strain_standardize_handler
 from server_app.web.response import JsonResponse
 from server_app.web.route_registration import register_domain_routes
@@ -20,6 +24,12 @@ from server_app.web.router import Router
 
 
 def current_session_response(handler, params):
+    if parse_qs(urlparse(handler.path).query).get("include", []) == ["features"]:
+        with connect_db() as conn:
+            user = user_from_token(conn, handler.session_token())
+            if not user:
+                return JsonResponse({"user": None}, HTTPStatus.UNAUTHORIZED)
+            return JsonResponse(session_payload(conn, user, True))
     user = handler.current_user()
     if not user:
         return JsonResponse({"user": None}, HTTPStatus.UNAUTHORIZED)
@@ -76,6 +86,7 @@ API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
+API_ROUTER.add("POST", r"/api/intake-batches/print-data", intake_print_data_handler)
 API_ROUTER.add(
     "GET",
     r"/api/intake-batches/(?P<batchId>[^/]+)/recognition-images/(?P<imageId>[a-f0-9]{32})",

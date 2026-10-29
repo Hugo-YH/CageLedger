@@ -1,3 +1,5 @@
+import type { SystemFeatures } from "./systemFeatures";
+
 export type UserRole = "admin" | "room_admin";
 
 export interface SessionUser {
@@ -14,4 +16,5 @@ export interface SessionUser {
 
 export interface SessionResponse {
   user: SessionUser | null;
+  features?: SystemFeatures;
 }

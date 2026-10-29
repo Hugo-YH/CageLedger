@@ -125,10 +125,42 @@ class DataQualityReadTests(unittest.TestCase):
             ensure_schema(conn)
             self.assertEqual(service.list_scans(conn, ADMIN, {})["items"], [])
 
+    def test_latest_issues_matches_pinned_endpoint_and_empty_is_explicit(self):
+        newer = report("scan-new", "2026-10-12", 19)
+        save_scan(self.conn, newer)
+        self.conn.commit()
+        before, changes = list(self.conn.iterdump()), self.conn.total_changes
+        self.conn.execute("PRAGMA query_only=ON")
+        for params in (
+            {},
+            {
+                "limit": 3,
+                "offset": 2,
+                "columnFilters": {"reviewStatus": ["needs_review"]},
+                "sortKey": "code",
+                "sortDir": "desc",
+            },
+        ):
+            self.assertEqual(
+                service.list_latest_issues(self.conn, ADMIN, params),
+                service.list_issues(self.conn, ADMIN, "scan-new", params),
+            )
+        self.assertEqual(list(self.conn.iterdump()), before)
+        self.assertEqual(self.conn.total_changes, changes)
+        with closing(sqlite3.connect(":memory:")) as empty:
+            empty.row_factory = sqlite3.Row
+            ensure_schema(empty)
+            result = service.list_latest_issues(empty, ADMIN, {"limit": 3})
+            self.assertEqual((result["scan"], result["items"], result["page"]["total"]), (None, [], 0))
+            self.assertEqual(result["filterOptions"], {"code": [], "reviewStatus": []})
+            with self.assertRaises(ValueError):
+                service.list_latest_issues(empty, ADMIN, {"sortKey": "bad"})
+
     def test_access_is_admin_only_before_any_query(self):
         for actor in (None, {"role": "room_admin"}, {"role": "viewer"}):
             for operation in (
                 lambda actor=actor: service.list_scans(None, actor, {}),
+                lambda actor=actor: service.list_latest_issues(None, actor, {}),
                 lambda actor=actor: service.list_issues(None, actor, "scan-old", {}),
                 lambda actor=actor: service.get_issue(None, actor, "scan-old", "issue-001"),
             ):
@@ -187,6 +219,10 @@ class DataQualityReadTests(unittest.TestCase):
         self.assertEqual(len(handler.response[0]["items"]), 3)
         self.assertEqual(self.conn.execute("PRAGMA query_only").fetchone()[0], 1)
         self.assertEqual(list(self.conn.iterdump()), before)
+        handler.path = "/api/data-quality/latest/issues?limit=3"
+        with patch.object(data_quality, "connect_db", return_value=self.conn):
+            data_quality.handle(handler, "GET", "/api/data-quality/latest/issues")
+        self.assertEqual(handler.response[0], service.list_issues(self.conn, ADMIN, "scan-old", {"limit": 3}))
         with (
             patch.object(handler, "require_user", return_value={"role": "room_admin"}),
             patch.object(data_quality, "connect_db", side_effect=AssertionError("unauthorized DB read")),

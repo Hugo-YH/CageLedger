@@ -3,6 +3,7 @@ import type { PagedResponse } from "../../contracts/common";
 import type {
   DataQualityDetail,
   DataQualityIssues,
+  DataQualityLatestIssues,
   DataQualityParams,
   DataQualityScan,
 } from "../../contracts/dataQuality";
@@ -19,22 +20,36 @@ export function useDataQualityScans() {
   });
 }
 
+function issueSearch(params: DataQualityParams) {
+  const search = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+    columnFilters: JSON.stringify(params.columnFilters),
+  });
+  if (params.sortKey) search.set("sortKey", params.sortKey);
+  if (params.sortDir) search.set("sortDir", params.sortDir);
+  return search;
+}
+
+export function useDataQualityLatestIssues(params: DataQualityParams, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.dataQualityLatestIssues(params),
+    queryFn: ({ signal }) =>
+      requestJson<DataQualityLatestIssues>(`/api/data-quality/latest/issues?${issueSearch(params)}`, { signal }),
+    enabled,
+  });
+}
+
 export function useDataQualityIssues(scanId: string, params: DataQualityParams) {
   return useQuery({
     queryKey: queryKeys.dataQualityIssues(scanId, params),
-    queryFn: ({ signal }) => {
-      const search = new URLSearchParams({
-        limit: String(params.limit),
-        offset: String(params.offset),
-        columnFilters: JSON.stringify(params.columnFilters),
-      });
-      if (params.sortKey) search.set("sortKey", params.sortKey);
-      if (params.sortDir) search.set("sortDir", params.sortDir);
-      return requestJson<DataQualityIssues>(`/api/data-quality/scans/${encodeURIComponent(scanId)}/issues?${search}`, {
-        signal,
-      });
-    },
+    queryFn: ({ signal }) =>
+      requestJson<DataQualityIssues>(
+        `/api/data-quality/scans/${encodeURIComponent(scanId)}/issues?${issueSearch(params)}`,
+        { signal },
+      ),
     enabled: Boolean(scanId),
+    staleTime: 30_000,
     placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2] === scanId ? previous : undefined),
   });
 }

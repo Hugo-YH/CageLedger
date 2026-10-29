@@ -53,6 +53,48 @@ def payloads_for_rows(conn, rows):
     return result
 
 
+def list_summaries_for_rows(conn, rows):
+    """Validate the complete stored inputs before reusing a bounded projection."""
+    from . import audit_list_cache as cache
+
+    rows = list(rows)
+    blocks = {}
+    if rows and has_storage(conn):
+        ids = [row[0] for row in rows]
+        for offset in range(0, len(ids), 400):
+            batch = ids[offset : offset + 400]
+            for row in conn.execute(
+                f"SELECT event_id,codec,raw_bytes,raw_sha256,payload FROM audit_event_payload_blocks WHERE event_id IN ({','.join('?' for _ in batch)})",
+                batch,
+            ):
+                blocks[row[0]] = dict(zip(("codec", "raw_bytes", "raw_sha256", "payload"), row[1:], strict=True))
+    result = []
+    for identity, stored in rows:
+        block = blocks.get(identity)
+        key = cache.fingerprint(identity, stored, block)
+        item = cache.get(key)
+        if item is None:
+            if block is not None:
+                payload = decode_payload(identity, block)
+                if summary_payload(payload) != stored:
+                    raise AuditStorageError("审计摘要与压缩详情不一致")
+                item = json.loads(stored)
+                del item[MARKER]
+            else:
+                item = json.loads(stored)
+                if MARKER in item:
+                    raise AuditStorageError("审计详情压缩块缺失")
+                for field in ("before", "after"):
+                    value = item.get(field)
+                    if isinstance(value, dict):
+                        item[field] = {"truncated": True, "entityKeys": sorted(value.keys())}
+                    elif isinstance(value, list):
+                        item[field] = {"truncated": True, "count": len(value)}
+            cache.put(key, item)
+        result.append(item)
+    return result
+
+
 def read_payload(conn, identity):
     row = conn.execute("SELECT id,payload FROM audit_events WHERE id=?", (identity,)).fetchone()
     if not row:

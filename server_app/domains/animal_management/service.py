@@ -87,8 +87,17 @@ def list_inspections(conn, actor, filters):
     offset = max(0, int(filters.get("offset") or 0))
     clause = " AND ".join(where)
     total = conn.execute(f"SELECT COUNT(*) FROM animal_inspections WHERE {clause}", tuple(params)).fetchone()[0]
+    summary = filters.get("view") == "summary"
+    columns = (
+        (
+            "id, room_id, room_name, facility, module_codes, status, catalog_version, "
+            "created_by, created_by_name, submitted_at, updated_at"
+        )
+        if summary
+        else "*"
+    )
     rows = conn.execute(
-        f"SELECT * FROM animal_inspections WHERE {clause} ORDER BY {sort_key} {direction}, id DESC LIMIT ? OFFSET ?",
+        f"SELECT {columns} FROM animal_inspections WHERE {clause} ORDER BY {sort_key} {direction}, id DESC LIMIT ? OFFSET ?",
         (*params, limit, offset),
     ).fetchall()
     finding_counts = {}
@@ -103,7 +112,9 @@ def list_inspections(conn, actor, filters):
             inspection_ids,
         ).fetchall():
             finding_counts.setdefault(count_row["inspection_id"], Counter())[count_row["status"]] = count_row["count"]
-    items = [_inspection_list_item(conn, row, finding_counts.get(row["id"])) for row in rows]
+    items = [
+        _inspection_list_item(conn, row, finding_counts.get(row["id"], Counter()), summary=summary) for row in rows
+    ]
     options = {
         "rooms": _distinct(conn, f"SELECT DISTINCT room_name FROM animal_inspections WHERE {clause}", params),
         "creators": _distinct(conn, f"SELECT DISTINCT created_by_name FROM animal_inspections WHERE {clause}", params),
@@ -275,8 +286,19 @@ def list_findings(conn, actor, filters):
     clause = " AND ".join(where)
     limit = max(1, min(int(filters.get("limit") or 50), 100))
     offset = max(0, int(filters.get("offset") or 0))
+    summary = filters.get("view") == "summary"
+    columns = (
+        (
+            "f.id, f.inspection_id, f.room_id, f.module_code, f.node_code, f.severity, f.status, "
+            "f.location_hint, f.rack_hint, f.cage_number, f.animal_identifier, f.action_note, "
+            "f.responsible_name, f.recheck_due_at, f.resolved_at, f.updated_at, "
+            "i.room_name, i.created_by_name"
+        )
+        if summary
+        else "f.*"
+    )
     rows = conn.execute(
-        f"""SELECT f.* FROM animal_inspection_findings f
+        f"""SELECT {columns} FROM animal_inspection_findings f
             JOIN animal_inspections i ON i.id = f.inspection_id
             WHERE {clause} ORDER BY CASE f.status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'pending_recheck' THEN 2 ELSE 3 END,
             f.recheck_due_at ASC, f.updated_at DESC LIMIT ? OFFSET ?""",
@@ -287,7 +309,7 @@ def list_findings(conn, actor, filters):
         tuple(params),
     ).fetchone()[0]
     return {
-        "items": [_finding_payload(conn, row) for row in rows],
+        "items": [_finding_payload(conn, row, summary=summary) for row in rows],
         "page": {"offset": offset, "limit": limit, "total": total},
     }
 
@@ -329,7 +351,7 @@ def update_finding(conn, actor, finding_id, body):
     )
     write_audit_events(conn, [audit])
     conn.commit()
-    return {"item": _finding_payload(conn, _finding_row(conn, finding_id)), "auditLogs": merge_audit_logs([], [audit])}
+    return {"item": _finding_row(conn, finding_id), "auditLogs": merge_audit_logs([], [audit])}
 
 
 def resolve_finding(conn, actor, finding_id, body):
@@ -357,7 +379,7 @@ def resolve_finding(conn, actor, finding_id, body):
     )
     write_audit_events(conn, [audit])
     conn.commit()
-    return {"item": _finding_payload(conn, _finding_row(conn, finding_id)), "auditLogs": merge_audit_logs([], [audit])}
+    return {"item": _finding_row(conn, finding_id), "auditLogs": merge_audit_logs([], [audit])}
 
 
 def add_attachment(conn, actor, inspection_id, finding_id, filename, body, content_type):

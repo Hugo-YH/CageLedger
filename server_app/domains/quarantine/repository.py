@@ -243,10 +243,18 @@ def list_page(conn, table, params):
                 WHERE json_extract(s.value, '$.intakeId') IS NOT NULL
             )"""
     total = conn.execute(f"SELECT COUNT(*) FROM {source} WHERE {where}", args).fetchone()[0]
+    projection = "payload"
+    decode = json.loads
+    if table != "batches" and params.get("view") == "summary":
+        from server_app.repositories.intake_summaries import decode_summary
+        from server_app.repositories.intake_summaries import projection as intake_projection
+
+        projection = intake_projection()
+        decode = decode_summary
     items = [
-        json.loads(row[0])
+        decode(row[0])
         for row in conn.execute(
-            f"SELECT payload FROM {source} WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", [*args, limit, offset]
+            f"SELECT {projection} FROM {source} WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", [*args, limit, offset]
         )
     ]
     if table == "batches" and items:
@@ -255,13 +263,15 @@ def list_page(conn, table, params):
             item.update(recordCount=0, issuedCount=0, methods=[])
         marks = ",".join("?" for _ in items)
         for row in conn.execute(
-            f"SELECT batch_id, payload FROM quarantine_tests WHERE batch_id IN ({marks})", list(by_id)
+            f"SELECT batch_id, json_extract(payload, '$.state'), json_extract(payload, '$.method') "
+            f"FROM quarantine_tests WHERE batch_id IN ({marks})",
+            list(by_id),
         ):
-            test, batch = json.loads(row[1]), by_id[row[0]]
+            batch = by_id[row[0]]
             batch["recordCount"] += 1
-            batch["issuedCount"] += int(test.get("state") == "issued")
-            if test["method"] not in batch["methods"]:
-                batch["methods"].append(test["method"])
+            batch["issuedCount"] += int(row[1] == "issued")
+            if row[2] not in batch["methods"]:
+                batch["methods"].append(row[2])
     if table != "batches":
         from .workflow import decorate_intakes
 

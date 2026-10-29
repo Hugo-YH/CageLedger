@@ -7,7 +7,7 @@ import { Alert, Button, DatePicker, Select, Space, Table, Tag } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { speciesLabel } from "../../../domain/intake";
-import type { IntakeBatch } from "../../../contracts/intake";
+import type { IntakeBatchListItem } from "../../../contracts/intake";
 import type { QuarantineSource } from "../../../contracts/quarantine";
 import { queryKeys } from "../../api/queryKeys";
 import { useRetainedListData } from "../../hooks/useRetainedListData";
@@ -27,7 +27,7 @@ export function QuarantinePool({
   const [to, setTo] = useState("");
   const [state, setState] = useState("pending");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<IntakeBatch[]>([]);
+  const [selected, setSelected] = useState<IntakeBatchListItem[]>([]);
   const query = useQuarantineSources(from, to, page, true, state);
   const retained = useRetainedListData(
     query,
@@ -131,7 +131,7 @@ export function QuarantinePool({
       {retained.loading ? (
         <PageSkeleton embedded label="待检疫列表" variant="table" />
       ) : retained.data ? (
-        <Table<IntakeBatch>
+        <Table<IntakeBatchListItem>
           rowKey="id"
           size="small"
           aria-busy={query.isFetching}

@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createIntakeDraft } from "../../../../domain/intake";
 import type { IntakeBatch } from "../../../api/contracts";
-import { listAllIntakeBatches } from "../../../api/intake";
+import { listAllIntakeBatchSummaries } from "../../../api/intake";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useIntakeSelection } from "./useIntakeSelection";
 
 const { info } = vi.hoisted(() => ({ info: vi.fn() }));
 vi.mock("antd", () => ({ App: { useApp: () => ({ message: { info } }) } }));
-vi.mock("../../../api/intake", () => ({ listAllIntakeBatches: vi.fn() }));
+vi.mock("../../../api/intake", () => ({ listAllIntakeBatchSummaries: vi.fn() }));
 const items = ["a", "b"].map((id) => ({ ...createIntakeDraft("测试"), id }));
 const params = { limit: 10, offset: 0 };
 
@@ -18,7 +18,7 @@ function deferredList() {
   const promise = new Promise<IntakeBatch[]>((fulfill) => {
     resolve = fulfill;
   });
-  vi.mocked(listAllIntakeBatches).mockReturnValueOnce(promise);
+  vi.mocked(listAllIntakeBatchSummaries).mockReturnValueOnce(promise);
   return { resolve };
 }
 
@@ -64,7 +64,7 @@ describe("intake selection", () => {
     act(() => {
       completion = result.current.toggleAll(params);
     });
-    const signal = vi.mocked(listAllIntakeBatches).mock.calls[0][1];
+    const signal = vi.mocked(listAllIntakeBatchSummaries).mock.calls[0][1];
     rerender({ ...props, filter: "printed" });
     expect(signal?.aborted).toBe(true);
     expect(result.current.selectingAll).toBe(false);
@@ -92,13 +92,13 @@ describe("intake selection", () => {
   });
 
   it("can clear all-results progress and retry after a failure", async () => {
-    vi.mocked(listAllIntakeBatches).mockRejectedValueOnce(new Error("读取失败"));
+    vi.mocked(listAllIntakeBatchSummaries).mockRejectedValueOnce(new Error("读取失败"));
     const { result } = renderHook(useIntakeSelection);
     await act(async () => {
       await result.current.toggleAll(params);
     });
     expect(result.current.error).toBe("读取失败");
-    vi.mocked(listAllIntakeBatches).mockResolvedValueOnce(items);
+    vi.mocked(listAllIntakeBatchSummaries).mockResolvedValueOnce(items);
     await act(async () => {
       await result.current.toggleAll(params);
     });
@@ -116,7 +116,7 @@ describe("intake selection", () => {
     act(() => {
       completion = result.current.toggleAll(params);
     });
-    const signal = vi.mocked(listAllIntakeBatches).mock.calls[0][1];
+    const signal = vi.mocked(listAllIntakeBatchSummaries).mock.calls[0][1];
     unmount();
     expect(signal?.aborted).toBe(true);
     deferred.resolve(items);

@@ -55,40 +55,59 @@ def list_records(conn, params, *, reports=False):
         args,
     ).fetchone()
     order = "r.updated_at DESC, r.id" if reports else "t.updated_at DESC, t.id"
-    projection = "t.payload, b.payload" + (", r.payload" if reports else "")
+    # Keep the page boundary in SQL, then extract only list fields. Large project,
+    # report snapshot and batch payloads never cross the SQLite/Python boundary.
+    projection = """json_extract(t.payload, '$.id'), json_extract(b.payload, '$.id'),
+        json_extract(b.payload, '$.name'), json_extract(t.payload, '$.method'),
+        CASE WHEN json_type(t.payload, '$.testDate') IS NULL THEN '' ELSE json_extract(t.payload, '$.testDate') END,
+        CASE WHEN json_type(t.payload, '$.samplingDate') IS NULL THEN '' ELSE json_extract(t.payload, '$.samplingDate') END,
+        json_extract(t.payload, '$.state'), COALESCE(json_array_length(t.payload, '$.samples'), 0),
+        COALESCE(json_array_length(t.payload, '$.projects'), 0),
+        (SELECT COUNT(*) FROM json_each(t.payload, '$.projects') p, json_each(p.value, '$.results') v
+         WHERE v.value IN ('positive', 'suspect')),
+        json_extract(b.payload, '$.sources'), json_extract(t.payload, '$.updatedAt'),
+        CASE WHEN json_type(t.payload, '$.retestOf') IS NULL THEN '' ELSE json_extract(t.payload, '$.retestOf') END,
+        CASE WHEN json_type(t.payload, '$.correctionOf') IS NULL THEN '' ELSE json_extract(t.payload, '$.correctionOf') END"""
+    if reports:
+        projection += ", " + ", ".join(
+            f"json_extract(r.payload, '$.{key}')"
+            for key in ("id", "number", "version", "issuedBy", "templateVersion", "updatedAt")
+        )
+    page_ids = "t.id AS test_id" + (", r.id AS report_id" if reports else "")
+    page_source = "page JOIN quarantine_tests t ON t.id=page.test_id JOIN quarantine_batches b ON b.id=t.batch_id"
+    if reports:
+        page_source += " JOIN quarantine_reports r ON r.id=page.report_id"
     rows = conn.execute(
-        f"SELECT {projection} FROM {source} WHERE {clause} ORDER BY {order} LIMIT ? OFFSET ?",
+        f"""WITH page AS (
+            SELECT {page_ids} FROM {source} WHERE {clause} ORDER BY {order} LIMIT ? OFFSET ?
+        ) SELECT {projection} FROM {page_source} ORDER BY {order}""",
         [*args, limit, offset],
     )
     items = []
     for row in rows:
-        test, batch = json.loads(row[0]), json.loads(row[1])
+        sources = json.loads(row[10]) if row[10] else []
         item = {
-            "id": test["id"],
-            "testId": test["id"],
-            "batchId": batch["id"],
-            "batchName": batch["name"],
-            "method": test["method"],
-            "testDate": test.get("testDate", ""),
-            "samplingDate": test.get("samplingDate", ""),
-            "state": test["state"],
-            "sampleCount": len(test.get("samples", [])),
-            "projectCount": len(test.get("projects", [])),
-            "abnormalCount": sum(
-                v in {"positive", "suspect"} for p in test.get("projects", []) for v in p.get("results", {}).values()
-            ),
-            "suppliers": sorted({s.get("supplier", "") for s in batch.get("sources", []) if s.get("supplier")}),
-            "updatedAt": test["updatedAt"],
-            "retestOf": test.get("retestOf", ""),
-            "correctionOf": test.get("correctionOf", ""),
+            "id": row[0],
+            "testId": row[0],
+            "batchId": row[1],
+            "batchName": row[2],
+            "method": row[3],
+            "testDate": row[4],
+            "samplingDate": row[5],
+            "state": row[6],
+            "sampleCount": row[7],
+            "projectCount": row[8],
+            "abnormalCount": row[9],
+            "suppliers": sorted({s.get("supplier", "") for s in sources if s.get("supplier")}),
+            "updatedAt": row[11],
+            "retestOf": row[12],
+            "correctionOf": row[13],
         }
         if reports:
-            report = json.loads(row[2])
             item.update(
-                {
-                    key: report.get(key)
-                    for key in ("id", "number", "version", "issuedBy", "templateVersion", "updatedAt")
-                }
+                dict(
+                    zip(("id", "number", "version", "issuedBy", "templateVersion", "updatedAt"), row[14:], strict=True)
+                )
             )
         items.append(item)
     return {

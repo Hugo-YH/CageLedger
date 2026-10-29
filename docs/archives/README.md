@@ -14,3 +14,4 @@
 | 前端性能、Ant Design 与交互升级   | 2026-08-31 至 2026-09-04 | 完成查询、表格、主题、响应式、异步反馈、动效、可访问性与生产启动验收                     | [MASTER](./frontend-performance-ui/progress/MASTER.md)          |
 | 剩余14处大模块拆分                | 2026-10-23 至 2026-10-24 | 14项职责拆分、完整回归与性能/SQLite复验；保留PDF退出风险                                 | [MASTER](./hotspot-decomposition-2026-10-24/progress/MASTER.md) |
 | 列表读取与按需加载优化            | 2026-10-26               | 主列表独立展示、授权目录共享、摘要与按需详情及副本验收                                   | [验收](./list-read-optimization-2026-10-26/acceptance.md)       |
+| 第二轮列表读取与API边界优化       | 2026-10-29               | 接收/巡检摘要、检疫投影、最新核查、会话配置与审计核验复用；真实副本兼容验证              | [验收](./list-read-round2-2026-10-29/acceptance.md)             |

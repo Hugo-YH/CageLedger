@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AnimalInspection,
   AnimalInspectionDetail,
+  AnimalInspectionSummary,
   AnimalInspectionListParams,
   FindingStatus,
   InspectionAnswer,
@@ -10,6 +11,7 @@ import type {
   InspectionCatalogResponse,
   InspectionCatalogVersionSummary,
   InspectionFinding,
+  InspectionFindingSummary,
 } from "./contracts";
 import { uploadFile } from "./administration";
 import { requestDownload, requestJson, requestMultipart } from "./client";
@@ -124,10 +126,10 @@ export function useAnimalInspections(params: AnimalInspectionListParams) {
     queryKey: queryKeys.animalInspections({ ...params }),
     queryFn: ({ signal }) =>
       requestJson<{
-        items: AnimalInspection[];
+        items: AnimalInspectionSummary[];
         page: { offset: number; limit: number; total: number };
         filterOptions: Record<string, string[]>;
-      }>(url("/api/animal-inspections", params), { signal }),
+      }>(url("/api/animal-inspections", { ...params, view: "summary" }), { signal }),
     placeholderData: (previous) => previous,
   });
 }
@@ -147,8 +149,8 @@ export function useAnimalFindings(
   return useQuery({
     queryKey: queryKeys.animalFindings({ ...params }),
     queryFn: ({ signal }) =>
-      requestJson<{ items: InspectionFinding[]; page: { offset: number; limit: number; total: number } }>(
-        url("/api/animal-inspection-findings", params),
+      requestJson<{ items: InspectionFindingSummary[]; page: { offset: number; limit: number; total: number } }>(
+        url("/api/animal-inspection-findings", { ...params, view: "summary" }),
         { signal },
       ),
     placeholderData: (previous) => previous,

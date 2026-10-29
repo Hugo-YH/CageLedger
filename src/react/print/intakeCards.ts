@@ -36,7 +36,10 @@ interface IntakeCardPrintItem {
 const MIXED_PRINT_REASON = "普通饲养间与临时饲养间笼卡不能混合打印，请分开选择。";
 const UNRESOLVED_PRINT_REASON = "无法确认 8014 饲养间的设施归属，请先检查房间配置。";
 
-export function planIntakeCardPrint(batches: IntakeBatch[], rooms: IntakePrintRoom[]): IntakeCardPrintPlan {
+export function planIntakeCardPrint(
+  batches: Pick<IntakeBatch, "intakePurpose" | "roomName" | "finalCardCount">[],
+  rooms: IntakePrintRoom[],
+): IntakeCardPrintPlan {
   if (batches.some(isDirectSampling)) {
     return {
       kind: "unresolved",
@@ -96,7 +99,10 @@ export function openIntakeCardPrint(batches: IntakeBatch[], options: IntakeCardP
   return true;
 }
 
-function intakeCardPrintKind(batch: IntakeBatch, rooms: IntakePrintRoom[]): IntakeCardPrintKind | "unresolved" {
+function intakeCardPrintKind(
+  batch: Pick<IntakeBatch, "roomName">,
+  rooms: IntakePrintRoom[],
+): IntakeCardPrintKind | "unresolved" {
   if (String(batch.roomName || "").trim() !== "8014") return "standard";
   const matches = rooms.filter((room) => String(room.name || "").trim() === "8014");
   if (matches.length !== 1) return "unresolved";

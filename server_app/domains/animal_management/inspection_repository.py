@@ -52,8 +52,24 @@ def _inspection_values(item):
     )
 
 
-def _inspection_list_item(conn, row, finding_counts=None):
-    item = _inspection_payload(row)
+def _inspection_list_item(conn, row, finding_counts=None, *, summary=False):
+    item = (
+        {
+            "id": row["id"],
+            "roomId": row["room_id"],
+            "roomName": row["room_name"],
+            "facility": row["facility"] or "",
+            "moduleCodes": json.loads(row["module_codes"]),
+            "status": row["status"],
+            "catalogVersion": row["catalog_version"],
+            "createdBy": row["created_by"],
+            "createdByName": row["created_by_name"],
+            "submittedAt": row["submitted_at"] or "",
+            "updatedAt": row["updated_at"],
+        }
+        if summary
+        else _inspection_payload(row)
+    )
     counts = finding_counts
     if counts is None:
         counts = Counter(
@@ -119,8 +135,8 @@ def _finding_row(conn, finding_id):
     return _finding_payload(conn, row)
 
 
-def _finding_payload(conn, row):
-    payload = json.loads(row["payload"])
+def _finding_payload(conn, row, *, summary=False):
+    payload = {} if summary else json.loads(row["payload"])
     payload.update(
         {
             "id": row["id"],
@@ -141,11 +157,17 @@ def _finding_payload(conn, row):
             "updatedAt": row["updated_at"],
         }
     )
-    inspection = conn.execute(
-        "SELECT room_name, created_by_name FROM animal_inspections WHERE id = ?", (row["inspection_id"],)
-    ).fetchone()
+    inspection = (
+        row
+        if summary
+        else conn.execute(
+            "SELECT room_name, created_by_name FROM animal_inspections WHERE id = ?", (row["inspection_id"],)
+        ).fetchone()
+    )
     payload["roomName"] = inspection["room_name"] if inspection else ""
     payload["createdByName"] = inspection["created_by_name"] if inspection else ""
+    if summary:
+        return payload
     payload["attachments"] = [
         _attachment_payload(item)
         for item in conn.execute(

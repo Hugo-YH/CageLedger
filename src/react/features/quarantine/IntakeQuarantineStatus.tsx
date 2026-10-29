@@ -2,11 +2,11 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Select, Space, Tag } from "antd";
 import { Modal } from "../../components/ui/Modal";
-import type { IntakeBatch } from "../../../contracts/intake";
+import type { IntakeBatchListItem } from "../../../contracts/intake";
 import { downloadQuarantine, useQuarantineDetail } from "../../api/quarantine";
 import { methodLabels, quarantineStatusColor } from "./shared";
 
-export function IntakeQuarantineStatus({ item }: { item: IntakeBatch }) {
+export function IntakeQuarantineStatus({ item }: { item: IntakeBatchListItem }) {
   const [batchId, setBatchId] = useState("");
   const [error, setError] = useState("");
   const detail = useQuarantineDetail(batchId);

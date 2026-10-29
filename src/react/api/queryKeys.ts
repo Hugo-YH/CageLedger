@@ -1,5 +1,6 @@
 export const queryKeys = {
   systemFeatures: ["system", "features"] as const,
+  dataQualityLatestIssues: (filters: object) => ["data-quality", "latest-issues", filters] as const,
   dataQualityScans: ["data-quality", "scans"] as const,
   dataQualityIssues: (scanId: string, filters: object) => ["data-quality", "issues", scanId, filters] as const,
   dataQualityIssue: (scanId: string, issueId: string) => ["data-quality", "detail", scanId, issueId] as const,

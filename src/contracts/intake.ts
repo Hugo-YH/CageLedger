@@ -150,6 +150,34 @@ export interface IntakeListParams {
   columnFilters?: Record<string, string[]>;
 }
 
+/** Display/action summary; never submit this object as a complete editable batch. */
+export type IntakeBatchListItem = Pick<
+  IntakeBatch,
+  | "id"
+  | "intakePurpose"
+  | "quarantineStatus"
+  | "quarantineBatches"
+  | "purchaseOrderNo"
+  | "batchNo"
+  | "iacuc"
+  | "supplier"
+  | "species"
+  | "strainRaw"
+  | "strainStandard"
+  | "sex"
+  | "quantity"
+  | "roomName"
+  | "intakeDate"
+  | "pi"
+  | "owner"
+  | "status"
+  | "notes"
+  | "finalCardCount"
+  | "confirmedCardCount"
+  | "remainingCardCount"
+  | "updatedAt"
+>;
+
 export interface IntakeSummaryExportParams {
   startDate: string;
   endDate: string;

@@ -145,6 +145,16 @@ async function mockArchive(
         },
       });
     }
+    if (parts[3] === "latest" && options.noArchive) {
+      return route.fulfill({
+        json: {
+          scan: null,
+          items: [],
+          page: { limit: 10, offset: 0, total: 0, hasMore: false },
+          filterOptions: { code: [], reviewStatus: [] },
+        },
+      });
+    }
     const selectedScan = parts[4] === older.id ? older : scan;
     if (parts.length === 7) {
       if (options.failDetail) return route.fulfill({ status: 409, json: { error: "问题留档证据校验失败，无法展示" } });
@@ -261,7 +271,7 @@ test("data quality handles loading, empty archives and damaged evidence without 
   });
   await page.goto("/app");
   await openSettingsView(page, "数据核查");
-  await expect(page.locator('[aria-busy="true"]').first()).toBeVisible();
+  await expect(page.getByRole("row", { name: /待核对记录 0\s/ })).toBeVisible();
   release();
   await page.getByRole("button", { name: "查看", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "核查留档详情", exact: true });
@@ -273,7 +283,8 @@ test("data quality handles loading, empty archives and damaged evidence without 
   await expect(dialog.getByText("证据校验通过", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   fixture.options.noArchive = true;
-  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await page.reload();
+  await openSettingsView(page, "数据核查");
   await expect(page.getByText("暂无核查留档", { exact: true })).toBeVisible();
 });
 

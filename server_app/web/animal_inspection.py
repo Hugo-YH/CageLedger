@@ -61,6 +61,7 @@ def _filters(request_url):
     return {
         key: clean_text(query.get(key, [default])[0]) or default
         for key, default in {
+            "view": "",
             "limit": "20",
             "offset": "0",
             "sortKey": "",

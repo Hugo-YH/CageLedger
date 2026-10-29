@@ -17,6 +17,11 @@ def scan_rows(conn, limit, offset):
     return rows, total
 
 
+def latest_scan(conn):
+    row = conn.execute("SELECT * FROM data_quality_scans ORDER BY scanned_at DESC,id DESC LIMIT 1").fetchone()
+    return manifest(row) if row else None
+
+
 def scan(conn, identity):
     row = conn.execute("SELECT * FROM data_quality_scans WHERE id=?", (identity,)).fetchone()
     if not row:

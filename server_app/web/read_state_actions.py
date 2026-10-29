@@ -116,6 +116,15 @@ class ReadStateActionsMixin:
         if not user:
             return
         collection = WRITABLE_ENTITY_ENDPOINTS[endpoint]["collection"]
+        if collection == "intakeBatches":
+            from server_app.domains.intake.read_service import read_batch
+
+            try:
+                with connect_db() as conn:
+                    self.send_json({"item": read_batch(conn, user, item_id)})
+            except LookupError as exc:
+                self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+            return
         with connect_db() as conn:
             state = filter_state_for_actor(read_cached_state(conn), user)
         item = next((entry for entry in state.get(collection, []) if entry.get("id") == item_id), None)

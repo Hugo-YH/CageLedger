@@ -2,7 +2,7 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { List as MobileList } from "antd-mobile";
 import { Button, Card, Empty, Form, Select, Tag } from "antd";
-import type { InspectionFinding } from "../../api/contracts";
+import type { InspectionFindingSummary } from "../../api/contracts";
 import { useAnimalFindings } from "../../api/animalManagement";
 import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { MobilePage } from "../../components/ui/MobilePage";
@@ -20,7 +20,7 @@ export function InspectionFindings({ navigate }: { navigate: (view: WorkspaceVie
   const isMobile = useIsMobileLayout();
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState("");
-  const [selected, setSelected] = useState<InspectionFinding | null>(null);
+  const [selected, setSelected] = useState<InspectionFindingSummary | null>(null);
   const params = { limit: pageSize, offset, status };
   const query = useAnimalFindings(params);
   const retained = useRetainedListData(query, queryKeys.animalFindings(params), "inspection-findings");

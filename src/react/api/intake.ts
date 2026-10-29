@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type {
   IntakeBatch,
+  IntakeBatchListItem,
   IntakeAiParseResponse,
   IntakeRecognitionImageInput,
   IntakeDuplicateDetails,
@@ -16,9 +17,10 @@ import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
 
-function intakeListUrl(params: IntakeListParams) {
+function intakeListUrl(params: IntakeListParams, summary = false) {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.sortKey) search.set("sortKey", params.sortKey);
+  if (summary) search.set("view", "summary");
   if (params.sortDir) search.set("sortDir", params.sortDir);
   if (params.columnFilters && Object.keys(params.columnFilters).length) {
     search.set("columnFilters", JSON.stringify(params.columnFilters));
@@ -40,10 +42,44 @@ export function useExportIntakeSummary() {
 export function useIntakeBatches(params: IntakeListParams, enabled = true) {
   return useQuery({
     queryKey: queryKeys.intake({ ...params }),
-    queryFn: ({ signal }) => listIntakeBatches(params, signal),
+    queryFn: ({ signal }) => listIntakeBatchSummaries(params, signal),
     placeholderData: (previous) => previous,
     enabled,
   });
+}
+
+export function listIntakeBatchSummaries(params: IntakeListParams, signal?: AbortSignal) {
+  return requestJson<PagedResponse<IntakeBatchListItem>>(intakeListUrl(params, true), { signal });
+}
+
+export function listAllIntakeBatchSummaries(params: IntakeListParams, signal?: AbortSignal) {
+  return loadAllPages((offset, limit) => listIntakeBatchSummaries({ ...params, offset, limit }, signal));
+}
+
+export function useIntakeBatchDetail(id: string) {
+  return useQuery({
+    queryKey: [...queryKeys.intakeRoot, "detail", id],
+    queryFn: ({ signal }) =>
+      requestJson<{ item: IntakeBatch }>(`/api/intake-batches/${encodeURIComponent(id)}`, { signal }),
+    enabled: Boolean(id),
+    staleTime: 0,
+  });
+}
+
+export async function fetchIntakeBatchesForPrint(items: IntakeBatchListItem[]) {
+  const result: IntakeBatch[] = [];
+  for (let offset = 0; offset < items.length; offset += 200) {
+    const part = items.slice(offset, offset + 200);
+    const response = await requestJson<{ items: IntakeBatch[] }>("/api/intake-batches/print-data", {
+      method: "POST",
+      body: JSON.stringify({
+        ids: part.map((item) => item.id),
+        expectedVersions: Object.fromEntries(part.map((item) => [item.id, String(item.updatedAt || "")])),
+      }),
+    });
+    result.push(...response.items);
+  }
+  return result;
 }
 
 export function listAllIntakeBatches(params: IntakeListParams, signal?: AbortSignal) {

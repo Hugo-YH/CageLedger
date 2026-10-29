@@ -6,6 +6,7 @@ import { Alert, Button } from "antd";
 import { useRooms } from "../../api/infrastructure";
 import type {
   IntakeBatch,
+  IntakeBatchListItem,
   IntakeRecognitionImageInput,
   IntakeDuplicateDetails,
   IntakeListParams,
@@ -14,6 +15,7 @@ import type {
 } from "../../api/contracts";
 import {
   aiParseIntakeMessage,
+  fetchIntakeBatchesForPrint,
   intakeDuplicateDetails,
   standardizeIntakeStrain,
   useConfirmIntakeBatchesReceipt,
@@ -27,6 +29,7 @@ import { queryKeys } from "../../api/queryKeys";
 import { ActionButton, ModalPresence } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useIntakeRecognition } from "./hooks/useIntakeRecognition";
+import { useIntakeEditorRead } from "./hooks/useIntakeEditorRead";
 import { useIntakeSelection } from "./hooks/useIntakeSelection";
 import { AsyncActionButton, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import {
@@ -50,7 +53,8 @@ import { IntakeDuplicateConfirmDialog } from "./components/IntakeDuplicateConfir
 import type { WorkspaceView } from "../../state/ui";
 
 interface PendingIntakePrintJob {
-  batches: IntakeBatch[];
+  batches: IntakeBatchListItem[];
+  draft?: IntakeBatch;
   kind: IntakeCardPrintKind;
   cardCount: number;
   pageSize: number;
@@ -101,13 +105,13 @@ export function IntakeView({
   const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName, user.phone));
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
-  const [pendingEdit, setPendingEdit] = useState<IntakeBatch | null>(null);
+
   const [notice, setNotice] = useState("");
   const [bulkNotice, setBulkNotice] = useState("");
   const [bulkNoticeKind, setBulkNoticeKind] = useState<"success" | "error" | "info">("info");
   const [markingPrinted, setMarkingPrinted] = useState(false);
   const [markingReceived, setMarkingReceived] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<IntakeBatch | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<IntakeBatchListItem | null>(null);
   const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
   const [pendingDuplicateSave, setPendingDuplicateSave] = useState<PendingDuplicateSave | null>(null);
   const onRecognitionChange = useCallback(() => {
@@ -145,13 +149,9 @@ export function IntakeView({
   );
   const roomsAvailable = Boolean(roomQuery.data);
   const roomsReady = roomsAvailable && !roomQuery.isError;
-  useEffect(() => {
-    if (!pendingEdit || !roomsReady || !editingDialog) return;
-    draftRevision.current += 1;
-    setPendingDuplicateSave(null);
-    setDraft(normalizeIntakeBatch(pendingEdit, roomNames));
-    setPendingEdit(null);
-  }, [pendingEdit, roomsReady, editingDialog, roomNames]);
+  const editRead = useIntakeEditorRead(roomsReady, (item) => replaceDraft(normalizeIntakeBatch(item, roomNames)), mode);
+  const pendingEdit = editRead.target;
+  const cancelEditorRead = editRead.cancel;
   const save = useSaveIntakeBatch();
   const remove = useDeleteIntakeBatch();
   const markBatchesPrinted = useMarkIntakeBatchesPrinted();
@@ -177,12 +177,15 @@ export function IntakeView({
   );
   useEffect(() => {
     resetRecognition();
+    cancelEditorRead();
+    setEditingDialog(false);
+    setEditing(false);
     setPendingDuplicateSave(null);
     return () => {
       draftRevision.current += 1;
       invalidateRecognition();
     };
-  }, [mode, resetRecognition, invalidateRecognition]);
+  }, [mode, resetRecognition, invalidateRecognition, cancelEditorRead]);
 
   const roomFeedback = !roomsReady ? (
     <Alert
@@ -233,7 +236,7 @@ export function IntakeView({
     recognition.reset();
     invalidateDraftConfirmation();
     setEditingDialog(false);
-    setPendingEdit(null);
+    editRead.cancel();
   }
 
   function isCurrentSaveIntent(intent: IntakeSaveIntent) {
@@ -410,16 +413,15 @@ export function IntakeView({
     setNotice("");
   }
 
-  function edit(item: IntakeBatch) {
+  function edit(item: IntakeBatchListItem) {
     recognition.reset();
     setNotice("");
-    if (roomsReady) replaceDraft(normalizeIntakeBatch(item, roomNames));
-    else setPendingEdit(item);
+    editRead.begin(item);
     setEditing(true);
     setEditingDialog(mode === "batches");
   }
 
-  async function markPrinted(targets: IntakeBatch[]) {
+  async function markPrinted(targets: IntakeBatchListItem[]) {
     const printable = targets.filter(
       (item) => !isDirectSampling(item) && (item.status === "pending_print" || item.status === "draft"),
     );
@@ -465,10 +467,11 @@ export function IntakeView({
       setNotice("打印前请填写动物数量和打印张数。");
       return;
     }
-    requestPrint([item], true, editing);
+    requestPrint([item], item, editing);
   }
 
-  function requestPrint(targets: IntakeBatch[], saveCurrent = false, exists = false) {
+  function requestPrint(targets: IntakeBatchListItem[], currentDraft?: IntakeBatch, exists = false) {
+    const saveCurrent = Boolean(currentDraft);
     if (!requireRooms()) return;
     const plan = planIntakeCardPrint(targets, printRooms);
     if (plan.disabledReason) {
@@ -481,6 +484,7 @@ export function IntakeView({
     }
     const job: PendingIntakePrintJob = {
       batches: targets,
+      draft: currentDraft,
       kind: plan.kind as IntakeCardPrintKind,
       cardCount: plan.cardCount,
       pageSize: plan.pageSize,
@@ -519,11 +523,11 @@ export function IntakeView({
       }
       return;
     }
-    let printable = job.batches;
+    let printable: IntakeBatch[] = [];
     try {
       if (job.saveCurrent) {
         const intent: IntakeSaveIntent = {
-          item: job.batches[0],
+          item: job.draft!,
           exists: job.exists,
           draftRevision: job.draftRevision,
           recognitionImages: recognition.snapshot(),
@@ -560,14 +564,18 @@ export function IntakeView({
         setEditing(true);
         printable = [saved];
       }
+      if (!job.saveCurrent) printable = await fetchIntakeBatchesForPrint(job.batches);
       if (openIntakeCardPrint(printable, { kind: job.kind, fillBlanks, targetWindow: popup })) {
         await markPrinted(printable);
+      } else {
+        popup.close();
+        setBulkNotice("所选批次没有可打印的笼卡，请核对后重试。");
       }
     } catch (error) {
       popup.close();
       if (job.saveCurrent) {
         const intent: IntakeSaveIntent = {
-          item: job.batches[0],
+          item: job.draft!,
           exists: job.exists,
           draftRevision: job.draftRevision,
           recognitionImages: recognition.snapshot(),
@@ -655,7 +663,7 @@ export function IntakeView({
     }
   }
 
-  async function receive(targets: IntakeBatch[]) {
+  async function receive(targets: IntakeBatchListItem[]) {
     const printable = targets.filter(canConfirmIntakeReceipt);
     if (!printable.length) {
       setBulkNotice("请选择已打印的入驻饲养批次或待接收的直接取材批次。");
@@ -811,7 +819,11 @@ export function IntakeView({
             <div className="modal-shell-body">
               {roomFeedback}
               {pendingEdit ? (
-                <PageSkeleton compact label="编辑所需房间信息" variant="form" />
+                editRead.error ? (
+                  <PageState title="批次详情加载失败" detail={editRead.error.message} retry={editRead.retry} />
+                ) : (
+                  <PageSkeleton compact label="批次详情与房间信息" variant="form" />
+                )
               ) : (
                 <IntakeEntryPanel
                   editing={editing}

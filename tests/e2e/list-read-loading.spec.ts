@@ -25,6 +25,10 @@ async function login(page: Page) {
 }
 
 async function mockBatches(page: Page) {
+  await page.route("**/api/intake-batches/list-read-*", (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-1);
+    return route.fulfill({ json: { item: batches.find((item) => item.id === id) } });
+  });
   await page.route("**/api/intake-batches?**", (route) => {
     const params = new URL(route.request().url()).searchParams;
     const limit = Number(params.get("limit") || 10);
@@ -94,7 +98,7 @@ test("room failure retries locally and a closed loading editor stays closed afte
   await row.getByRole("button", { name: "编辑", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "编辑待接收批次" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("编辑所需房间信息");
+  await expect(dialog).toContainText("批次详情与房间信息");
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(dialog).toBeHidden();
   await retryRoute!.fulfill({ json: { items: [{ id: "room", name: "8014", facility: "zhujiang" }] } });

@@ -120,7 +120,7 @@ export interface InspectionAnswer {
   animalIdentifier?: string;
 }
 
-export interface AnimalInspection {
+export interface AnimalInspectionSummary {
   id: string;
   roomId: string;
   roomName: string;
@@ -130,11 +130,14 @@ export interface AnimalInspection {
   catalogVersion: string;
   createdBy: string;
   createdByName: string;
-  createdAt: string;
   submittedAt?: string;
   updatedAt: string;
-  snapshot: { iacucs: string[]; pis: string[]; species: string[]; animalCount: number; cageCodes: string[] };
   findingSummary?: { total: number; pending: number; resolved: number };
+}
+
+export interface AnimalInspection extends AnimalInspectionSummary {
+  createdAt: string;
+  snapshot: { iacucs: string[]; pis: string[]; species: string[]; animalCount: number; cageCodes: string[] };
 }
 
 export interface InspectionAttachment {
@@ -146,7 +149,7 @@ export interface InspectionAttachment {
   downloadUrl: string;
 }
 
-export interface InspectionFinding {
+export interface InspectionFindingSummary {
   id: string;
   inspectionId: string;
   roomId: string;
@@ -164,6 +167,9 @@ export interface InspectionFinding {
   recheckDueAt?: string;
   resolvedAt?: string;
   updatedAt: string;
+}
+
+export interface InspectionFinding extends InspectionFindingSummary {
   attachments: InspectionAttachment[];
   events: Array<{ id: string; event_type: string; note?: string; actor_name: string; at: string }>;
 }

@@ -120,6 +120,29 @@ class ApiContractTests(unittest.TestCase):
             self.assertGreaterEqual(int(response.headers["Retry-After"]), 1)
             self.assertEqual(json.load(response), {"error": "登录失败次数过多，请稍后重试"})
 
+    def test_session_feature_opt_in_preserves_legacy_login_and_me(self):
+        _, login, _ = request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=self.opener,
+        )
+        self.assertEqual(set(login), {"user"})
+        _, me, _ = request_json(self.base_url, "/api/auth/me", opener=self.opener)
+        self.assertEqual(me, login)
+        _, combined, _ = request_json(self.base_url, "/api/auth/me?include=features", opener=self.opener)
+        _, features, _ = request_json(self.base_url, "/api/system/features", opener=self.opener)
+        self.assertEqual(combined, {"user": login["user"], "features": features["item"]})
+        _, login_combined, _ = request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123", "includeFeatures": True},
+            opener=self.opener,
+        )
+        self.assertEqual(login_combined, combined)
+
     def test_authenticated_list_shapes(self):
         status, login, _ = request_json(
             self.base_url,

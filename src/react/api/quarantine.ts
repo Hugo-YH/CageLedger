@@ -10,7 +10,7 @@ import type {
   SupplierHistorySummary,
   SupplierHistoryDetail,
 } from "../../contracts/quarantine";
-import type { IntakeBatch } from "../../contracts/intake";
+import type { IntakeBatchListItem } from "../../contracts/intake";
 import { requestDownload, requestJson } from "./client";
 import { uploadFile } from "./administration";
 import { queryKeys } from "./queryKeys";
@@ -47,10 +47,14 @@ export function useQuarantineDetail(id: string) {
   return useQuarantineQuery<QuarantineDetail>(`batches/${id}`, Boolean(id));
 }
 export function quarantineSourcesPath(from: string, to: string, page: number, state = "pending") {
-  return `sources?dateFrom=${from}&dateTo=${to}&offset=${(page - 1) * 30}&state=${state}`;
+  return `sources?view=summary&dateFrom=${from}&dateTo=${to}&offset=${(page - 1) * 30}&state=${state}`;
 }
 export function useQuarantineSources(from: string, to: string, page: number, enabled: boolean, state = "pending") {
-  return useQuarantineQuery<QuarantinePage<IntakeBatch>>(quarantineSourcesPath(from, to, page, state), enabled, true);
+  return useQuarantineQuery<QuarantinePage<IntakeBatchListItem>>(
+    quarantineSourcesPath(from, to, page, state),
+    enabled,
+    true,
+  );
 }
 export function useQuarantineCatalog(enabled = true) {
   return useQuarantineQuery<{ projects: Record<QuarantineMethod, string[]>; templateVersion: string }>(

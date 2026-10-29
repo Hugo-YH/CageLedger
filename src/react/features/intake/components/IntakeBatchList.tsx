@@ -2,7 +2,7 @@ import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Card, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useState } from "react";
 
-import type { IntakeBatch, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
+import type { IntakeBatchListItem, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
 import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { CommandBar, DataTable } from "../../../components/ui";
@@ -47,8 +47,8 @@ export function IntakeBatchList({
   onPageSize,
 }: {
   total: number;
-  selectedItems: IntakeBatch[];
-  items: IntakeBatch[];
+  selectedItems: IntakeBatchListItem[];
+  items: IntakeBatchListItem[];
   loading: boolean;
   selectingAll: boolean;
   allFilteredSelected: boolean;
@@ -63,18 +63,18 @@ export function IntakeBatchList({
   filters: Record<string, string[]>;
   onClearSelection: () => void;
   onToggleAll: () => void;
-  onToggleItem: (item: IntakeBatch, checked: boolean) => void;
+  onToggleItem: (item: IntakeBatchListItem, checked: boolean) => void;
   onSort: (key: string) => void;
   onFilter: (key: string, values: string[]) => void;
-  onPrint: (items: IntakeBatch[]) => void;
-  onMarkPrinted: (items: IntakeBatch[]) => void;
-  onReceive: (items: IntakeBatch[]) => void;
-  onEdit: (item: IntakeBatch) => void;
-  onDelete: (item: IntakeBatch) => void;
+  onPrint: (items: IntakeBatchListItem[]) => void;
+  onMarkPrinted: (items: IntakeBatchListItem[]) => void;
+  onReceive: (items: IntakeBatchListItem[]) => void;
+  onEdit: (item: IntakeBatchListItem) => void;
+  onDelete: (item: IntakeBatchListItem) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
 }) {
-  const columns: TableProps<IntakeBatch>["columns"] = [
+  const columns: TableProps<IntakeBatchListItem>["columns"] = [
     {
       key: "selection",
       width: 44,
@@ -124,7 +124,7 @@ export function IntakeBatchList({
           onSort={() => onSort(key)}
         />
       ),
-      render: (_: unknown, item: IntakeBatch) => {
+      render: (_: unknown, item: IntakeBatchListItem) => {
         if (key === "status") return <Tag color={intakeStatusColor(item.status)}>{intakeStatusLabel(item.status)}</Tag>;
         if (key === "intakePurpose")
           return (

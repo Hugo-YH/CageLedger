@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, Col, Empty, Flex, Row, Select, Statistic, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { DataQualityColumn, DataQualityFinding, DataQualityParams } from "../../../contracts/dataQuality";
 import { queryKeys } from "../../api/queryKeys";
 import { useRetainedListData } from "../../hooks/useRetainedListData";
-import { useDataQualityIssues, useDataQualityScans } from "../../api/dataQuality";
+import { useDataQualityIssues, useDataQualityLatestIssues, useDataQualityScans } from "../../api/dataQuality";
 import { FilterableColumnTitle } from "../../components/FilterableTableHeader";
 import { formatDateTime, PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 import { ActionButton, CommandBar, DataTable, ModalPresence } from "../../components/ui";
@@ -13,23 +14,34 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { DataQualityDetail } from "./components/DataQualityDetail";
 
 export function DataQualityView() {
+  const client = useQueryClient();
   const landscapeControl = useMediaQuery("(min-width: 768px) and (max-height: 500px)");
   const scans = useDataQualityScans();
   const archives = scans.data?.pages.flatMap((page) => page.items) || [];
   const [selectedScan, setSelectedScan] = useState("");
-  const scanId = selectedScan || archives[0]?.id || "";
+  const scanId = selectedScan;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [filters, setFilters] = useState<DataQualityParams["columnFilters"]>({});
   const [sort, setSort] = useState<Pick<DataQualityParams, "sortKey" | "sortDir">>({});
   const [detail, setDetail] = useState<{ scanId: string; issueId: string } | null>(null);
-  const params = {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    columnFilters: filters,
-    ...sort,
-  };
+  const params = useMemo(
+    () => ({
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      columnFilters: filters,
+      ...sort,
+    }),
+    [pageSize, page, filters, sort],
+  );
+  const latest = useDataQualityLatestIssues(params, !scanId);
   const list = useDataQualityIssues(scanId, params);
+  useEffect(() => {
+    if (selectedScan || !latest.isSuccess || latest.isFetching || !latest.data?.scan) return;
+    const { scan } = latest.data;
+    client.setQueryData(queryKeys.dataQualityIssues(scan.id, params), { ...latest.data, scan });
+    setSelectedScan(scan.id);
+  }, [client, latest.data, latest.isSuccess, latest.isFetching, params, selectedScan]);
   const retained = useRetainedListData(list, queryKeys.dataQualityIssues(scanId, params), `data-quality:${scanId}`);
   const scan = retained.data?.scan || archives.find((item) => item.id === scanId);
   const total = retained.data?.page.total || 0;
@@ -103,21 +115,22 @@ export function DataQualityView() {
           actions={
             <ActionButton
               icon={<ActionIcon name="refresh" />}
-              loading={scans.isFetching || list.isFetching}
+              loading={scans.isFetching || latest.isFetching || list.isFetching}
               onClick={() => {
                 void scans.refetch();
                 if (scanId) void list.refetch();
+                else void latest.refetch();
               }}
             >
               刷新
             </ActionButton>
           }
         />
-        {scans.isPending ? (
-          <PageSkeleton label="核查留档" variant="table" />
-        ) : scans.isError && !archives.length ? (
-          <PageState title="核查留档加载失败" detail={scans.error.message} retry={() => scans.refetch()} />
-        ) : !archives.length ? (
+        {!scanId && (latest.isPending || latest.isFetching) ? (
+          <PageSkeleton label="核查问题" variant="table" />
+        ) : !scanId && latest.isError ? (
+          <PageState title="核查问题加载失败" detail={latest.error.message} retry={() => latest.refetch()} />
+        ) : !scanId && latest.data && !latest.data.scan ? (
           <Card>
             <Empty description="暂无核查留档" />
           </Card>
@@ -126,7 +139,7 @@ export function DataQualityView() {
             {scans.isError && (
               <Alert
                 type="error"
-                title="核查留档更新失败，暂显示上次结果"
+                title={archives.length ? "核查留档更新失败，暂显示上次结果" : "核查留档目录加载失败，仍可查看当前留档"}
                 action={<Button onClick={() => void scans.refetch()}>重试</Button>}
               />
             )}
@@ -139,10 +152,13 @@ export function DataQualityView() {
                   className="data-quality-scan-select"
                   size={landscapeControl ? "large" : undefined}
                   value={scanId}
-                  options={archives.map((item) => ({
-                    value: item.id,
-                    label: `${formatDateTime(item.scannedAt)} · ${item.trigger === "upgrade" ? "升级核查" : "离线核查"} · ${item.findingCount} 项`,
-                  }))}
+                  loading={scans.isFetching}
+                  options={(scan && !archives.some((item) => item.id === scan.id) ? [scan, ...archives] : archives).map(
+                    (item) => ({
+                      value: item.id,
+                      label: `${formatDateTime(item.scannedAt)} · ${item.trigger === "upgrade" ? "升级核查" : "离线核查"} · ${item.findingCount} 项`,
+                    }),
+                  )}
                   onChange={(value) => {
                     setSelectedScan(value);
                     setPage(1);

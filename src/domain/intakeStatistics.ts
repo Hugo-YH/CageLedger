@@ -70,7 +70,10 @@ function add(target: IntakeStatisticsTotals, source: IntakeStatisticsTotals) {
 }
 
 export function buildIntakeStatistics(
-  items: IntakeBatch[],
+  items: Pick<
+    IntakeBatch,
+    "id" | "batchNo" | "iacuc" | "intakeDate" | "roomName" | "intakePurpose" | "quantity" | "finalCardCount"
+  >[],
   principals: Record<string, IntakeStatisticsPrincipal>,
 ): IntakeStatistics {
   const result: IntakeStatistics = { ...totals(), days: [], issues: [] };

@@ -1,10 +1,10 @@
 import json
 import re
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import cache_get, cache_set
 from server_app.shared.intake_identifiers import intake_identifier_values
 
-from .payload import cached_paginated_payloads, dump_json, paginated_payloads
+from .payload import cached_paginated_payloads, dump_json
 
 INTAKE_BATCH_LIST_COLUMNS = {
     "status": {"expr": "status", "order": "status"},
@@ -57,22 +57,19 @@ def list_audit_events_page(conn, filters, filtered_where):
         ],
         filters,
     )
-    key = cache_key(
-        "audit_events",
-        limit=filters["limit"],
-        offset=filters["offset"],
-        entity_type=str(filters.get("entityType", "")).strip(),
-        action=str(filters.get("action", "")).strip(),
-    )
-    cached = cache_get(key)
-    if cached is not None:
-        return cached
-    result = paginated_payloads(
-        conn, "audit_events", "at DESC, rowid DESC", where, params, filters["limit"], filters["offset"]
-    )
-    for item in result["items"]:
-        _trim_audit_snapshot(item)
-    return cache_set(key, result)
+    from .audit_storage import list_summaries_for_rows
+
+    where_clause = f" WHERE {where}" if where else ""
+    total = conn.execute(f"SELECT COUNT(*) AS total FROM audit_events{where_clause}", params).fetchone()["total"]
+    limit, offset = filters["limit"], filters["offset"]
+    rows = conn.execute(
+        f"SELECT id,payload FROM audit_events{where_clause} ORDER BY at DESC, rowid DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset),
+    ).fetchall()
+    return {
+        "items": list_summaries_for_rows(conn, rows),
+        "page": {"limit": limit, "offset": offset, "total": total, "hasMore": offset + limit < total},
+    }
 
 
 def _trim_audit_snapshot(item):
@@ -88,6 +85,10 @@ def _trim_audit_snapshot(item):
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
     where, params = intake_batch_where(filters, filtered_where)
+    if filters.get("view") == "summary":
+        from .intake_summaries import page
+
+        return page(conn, filters, where, params, intake_batch_order_by(filters, entity_order_by))
     return cached_paginated_payloads(
         conn,
         "intake_batches",

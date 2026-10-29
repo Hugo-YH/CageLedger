@@ -218,7 +218,9 @@ export function summarizeInspectionOutcomes(
     .filter((module) => module.items.length);
 }
 
-export function findingLocation(item: InspectionFinding) {
+export function findingLocation(
+  item: Pick<InspectionFinding, "rackHint" | "cageNumber" | "locationHint" | "animalIdentifier">,
+) {
   return (
     [
       item.rackHint && `笼架 ${item.rackHint}`,

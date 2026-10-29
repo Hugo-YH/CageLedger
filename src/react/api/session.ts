@@ -6,9 +6,17 @@ import { queryKeys } from "./queryKeys";
 import { clearDiagnostics } from "../diagnostics/collector";
 
 export function useSession(enabled = true) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.session,
-    queryFn: ({ signal }) => requestJson<SessionResponse>("/api/auth/me", { signal }),
+    queryFn: async ({ signal }) => {
+      const session = await requestJson<SessionResponse>("/api/auth/me?include=features", { signal });
+      const previous = client.getQueryData<SessionResponse>(queryKeys.session);
+      if (previous?.user?.id && previous.user.id !== session.user?.id) {
+        client.removeQueries({ predicate: (query) => query.queryKey[0] !== "session" });
+      }
+      return session;
+    },
     retry: false,
     enabled,
   });
@@ -20,9 +28,11 @@ export function useLogin() {
     mutationFn: (credentials: { username: string; password: string }) =>
       requestJson<SessionResponse>("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ ...credentials, includeFeatures: true }),
       }),
-    onSuccess: (session) => {
+    onSuccess: async (session) => {
+      await client.cancelQueries({ queryKey: queryKeys.session });
+      client.removeQueries({ predicate: (query) => query.queryKey[0] !== "session" });
       clearDiagnostics();
       client.setQueryData(queryKeys.session, session);
     },

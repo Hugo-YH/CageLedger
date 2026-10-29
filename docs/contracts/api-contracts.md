@@ -22,6 +22,12 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 数量表和技术服务列表支持 `view=summary`。数量表原默认列表本来就采用 SQL 投影，显式 summary 与该投影一致；技术服务 summary 保留月份、伦理号、服务项目、服务日数、数量、金额、保护状态和 `updatedAt`，省略 `rows`、价格快照等详情。不传 view 的原列表响应保持原状。预览和编辑通过原单条详情接口读取完整数据；技术服务普通编辑仍使用原价格快照，删除继续提交列表所见版本，不能通过读详情静默替换该版本。
 
+`GET /api/intake-batches?view=summary` 返回 `IntakeBatchListItem` 列表，保留列表、统计、批量操作和版本校验所需字段，不返回笼卡、预约原文或识别依据。省略 `view` 的列表保留完整旧响应。编辑时通过 `GET /api/intake-batches/{id}` 读取单个完整批次，读取范围与原有到货记录一致。`POST /api/intake-batches/print-data` 接收 1 至 200 个不重复的 `ids`，可选 `expectedVersions`；指定时须覆盖全部 ID，版本不匹配返回409，批次缺失返回404。响应按请求顺序返回完整 `{items}`，只读、不产生审计；前端冻结所选版本并按每批不超过200条请求，全部成功后打印。
+
+`GET /api/animal-inspections` 与 `GET /api/animal-inspection-findings` 可选 `view=summary`，分别返回巡检和异常列表所需状态、定位、操作字段及版本；前者保留异常计数，后者包含关联房间和创建人。摘要不返回巡检快照、答案、异常附件或事件，未指定 `view` 继续返回原完整列表。完整巡检详情继续通过 `GET /api/animal-inspections/{id}` 按需读取；所有视图使用原授权筛选。巡检计数批量读取，零异常巡检不再逐条回退；异常摘要以关联查询获取房间信息。
+
+检疫批次页对当前页检测记录只读取方法与状态计算记录数、已出具数及方法；检测与报告列表先确定当前页，再投影字段和计算异常数，不返回完整检测、批次或报告快照。分页、筛选、复检、更正、历史报告版本和默认响应结构保持原规则。
+
 `GET /api/quarantine/suppliers/summary` 接受原历史筛选以及 `limit/offset`，返回 `{items,page}`，按原统计口径聚合后分页，不包含明细和来源ID集合。`GET /api/quarantine/suppliers/details` 另需 `groupSupplier/groupMethod/groupRetest`（true或false），返回该精确分组的分页明细。两者默认10条、最大100条；旧 `/suppliers` 保留原完整结构、顺序和统计口径。关联检测批量读取，分组详情提前过滤，但纠正、复检计算仍保留匹配批次的完整检测上下文。
 
 管理员 `GET /api/animal-inspection-catalog/draft/status` 返回 `{hasDraft,updatedAt}`，未有草稿时为 false和空字符串，读取不创建草稿。完整草稿仍在进入编辑时读取，原克隆、保存、发布与恢复规则不变。状态保留原精确差异比较，响应轻量不等于常数时间查询。
@@ -44,11 +50,15 @@ IACUC 状态在数据库有索引记录时只查询数量和最近导入时间�
 
 候选批量重算在首次发布前取得写锁并核对准备阶段的SQLite `data_version`。期间若有其他连接提交，丢弃旧来源及已预取账单头，在锁内重新准备并计算一次，防止旧结果覆盖同事操作后的失效标记。正常准备阶段不提前占用写锁，已存在的调用方事务和回滚语义保持不变；该保护只更新派生候选缓存，不修改业务来源和审计。
 
+审计列表每次读取当前页的原始摘要和压缩块，按事件 ID、完整摘要、编码、原始长度、校验值及全部压缩字节计算输入指纹；仅完全相同且此前完整校验成功的输入复用裁剪摘要。缓存限512项并受线程锁保护，返回对象互不共享；缺块、损坏或输入变化重新验证，错误不缓存，存储标记不进入响应。完整详情和导出仍读取并验证原始完整数据。
+
 ## 系统功能入口显示
 
 `GET /api/system/features` 供已登录账号读取全局入口显示配置，响应 `{item:{enabled,updatedAt}}`。`enabled` 包含 `intake`、`quarantine`、`cages`、`animal`、`billing`、`technical-services`、`settlement` 七项布尔值，未保存时全部为true且 `updatedAt=null`，读取不写默认记录或新增审计。
 
 `PUT /api/system/features` 仅系统管理员可调用，提交完整七项 `enabled` 及必填 `expectedUpdatedAt`，首次为null，之后精确匹配当前版本；过期返回409，非法开关返回400，房间管理员返回403。写锁内完成重读、版本比对、配置保存和审计；同内容保存不重复写入或审计。`system_features.updated` 记录账号、时间、各入口显示变化及完整前后配置，前端失效操作日志查询。
+
+`GET /api/auth/me?include=features` 在认证后同连接附加 `features`；登录 POST 显式提供 `includeFeatures:true` 时也附带该配置。未选择时两者继续仅返回 `{user}`。配置读取异常时保留会话响应但不附 `features`，客户端再请求独立配置接口并按原错误处理，不用全开配置掩盖失败。读取不创建默认记录或新增配置审计。
 
 配置保存在独立 `system_feature_settings` 单行表，启动幂等建表，不回填或改写原业务数据，旧全量状态写入不会清除配置，也不改变原 `/api/state` 的更新时间来源。开关只控制桌面、手机及跨页面快捷入口；原业务接口、权限、总览统计和历史单据读取不受开关限制。读取失败显示错误，不默认为全部开启。
 
@@ -64,11 +74,11 @@ IACUC 状态在数据库有索引记录时只查询数量和最近导入时间�
 
 ## 数据核查只读页面
 
-系统管理员通过“系统设置 → 数据核查”读取既有留档，桌面和手机共用入口；房间管理员不可见，三个接口均在读取数据库前校验管理员权限。`GET /api/data-quality/scans` 分页返回留档摘要；`GET /api/data-quality/scans/{scanId}/issues` 提供当次留档的问题分页、`code`／`reviewStatus` 列筛选与排序；`GET /api/data-quality/scans/{scanId}/issues/{issueId}` 按需读取关联快照及校验后的证据。证据缺失或SHA-256不匹配返回409，不展示为正常或空证据。
+系统管理员通过“系统设置 → 数据核查”读取既有留档，桌面和手机共用入口；房间管理员不可见，所有接口均在读取数据库前校验管理员权限。`GET /api/data-quality/latest/issues` 在同一次只读查询中选择最新留档并返回与指定留档问题列表相同的结构，未有留档时返回 `scan:null`、空列表和空筛选项；`GET /api/data-quality/scans` 分页返回留档摘要；`GET /api/data-quality/scans/{scanId}/issues` 提供当次留档的问题分页、`code`／`reviewStatus` 列筛选与排序；`GET /api/data-quality/scans/{scanId}/issues/{issueId}` 按需读取关联快照及校验后的证据。证据缺失或SHA-256不匹配返回409，不展示为正常或空证据。
 
 列表、计数和分类按所选扫描的清单计算，不使用全局问题登记的最新分类替代历史结果。详情只能读取该次留档包含的问题，历史证据不被后续留档覆盖。没有核查留档与一次核查零问题分别展示。扫描时间、当时最新业务写入、核查范围和输入／备份指纹保留原含义，零问题不表示所有业务数据已经通过完整检查。
 
-这些接口只执行查询，连接启用 `query_only`；不调用检测器、不创建扫描、不更新问题或证据、不修复业务记录、不新增业务审计，也不改变启动升级核查的版本、去重或失败重试规则。页面“刷新”只重新读取已有留档，不提供修改、重扫、销项和导入操作。三个请求通过独立typed hooks与 `data-quality` Query keys读取，切换留档不沿用上一留档的问题占位数据，关闭详情取消不再使用的请求。
+这些接口只执行查询，连接启用 `query_only`；不调用检测器、不创建扫描、不更新问题或证据、不修复业务记录、不新增业务审计，也不改变启动升级核查的版本、去重或失败重试规则。页面“刷新”只重新读取已有留档，不提供修改、重扫、销项和导入操作。目录和最新问题并行读取，首次成功后固定返回的留档 ID，后续翻页、筛选、排序和重试继续按该 ID 读取；显式切换留档才重置页码与选择。各请求通过独立 typed hooks 与 `data-quality` Query keys 读取，切换留档不沿用上一留档的问题占位数据，关闭详情取消不再使用的请求。
 
 ## 技术服务计费
 
@@ -211,6 +221,8 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 | 方法     | 路径                                       | 请求或参数                                               | 响应                                    |
 | -------- | ------------------------------------------ | -------------------------------------------------------- | --------------------------------------- |
 | `GET`    | `/api/intake-batches`                      | `limit`、`offset`、`sortKey`、`sortDir`、`columnFilters` | 分页批次                                |
+| `GET`    | `/api/intake-batches/{id}`                 | 批次 ID                                                  | 单个完整批次                            |
+| `POST`   | `/api/intake-batches/print-data`           | `{ ids, expectedVersions? }`                             | 按顺序返回完整打印数据                  |
 | `GET`    | `/api/intake-batches/filter-options`       | `column` + 当前筛选                                      | 筛选候选值                              |
 | `GET`    | `/api/intake-batches/summary.docx`         | `startDate`、`endDate`（`YYYY-MM-DD`）                   | 接收汇总 Word 下载                      |
 | `POST`   | `/api/intake-batches`                      | `{ item }`                                               | `{ item, placementTasks?, auditLogs? }` |
@@ -436,7 +448,7 @@ npm run test:e2e
 
 检疫批次编号首次保存后冻结，流水号一经分配不再回收。正式报告按 `{批次编号}{M|E|P}{YYMMDD}{NN}` 编号；ELISA 大小鼠共用 `E` 序列，更正版本沿用报告编号并递增独立版本号。报告下载文件名为 `{检测类型}_{实验日期}_{批次号}_{报告编号}_v{版本}.pdf`，草稿以 `草稿` 替代报告编号和版本；ELISA 文件名区分小鼠和大鼠。
 
-检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
+检疫来源 `sources` 可选 `view=summary`，复用到货列表投影并保留生成来源快照所需的 `notes`；不指定时仍返回完整旧结构。检疫来源 `sources` 仅返回 `received` 到货记录，默认排除已归入检疫批次的动物；`state=all` 返回所有已接收记录及 `quarantineStatus`、`quarantineBatches`。接收列表也返回这两个只读衍生字段，不改变原接收状态或写入原到货 payload。
 
 `POST batches/{id}/complete` 接收 `{ expectedUpdatedAt, expectedTestVersions: { [testId]: updatedAt } }`，校验三类正式报告、适用动物种类、异常复检和批次结论，在单事务保存完成时间、确认人、报告关联及审计。重复确认返回已完成记录；并发变化返回409。更正或复检会重新打开该批次，历史完成快照保留。
 

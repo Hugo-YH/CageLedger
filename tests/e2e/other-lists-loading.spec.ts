@@ -280,8 +280,9 @@ test("data quality scan changes never display another scan's findings", async ({
     }),
   );
   let pending: Route | undefined;
-  await page.route("**/api/data-quality/scans/*/issues?*", async (route) => {
-    const id = new URL(route.request().url()).pathname.split("/")[4];
+  await page.route(/\/api\/data-quality\/(?:scans\/[^/]+|latest)\/issues\?/, async (route) => {
+    const path = new URL(route.request().url()).pathname.split("/");
+    const id = path[3] === "latest" ? "scan-a" : path[4];
     if (id === "scan-b") {
       pending = route;
       return;

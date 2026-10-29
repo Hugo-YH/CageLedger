@@ -10,11 +10,13 @@ from unittest.mock import Mock, patch
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.persistence import assemble_state, write_normalized_state
 from server_app.domains.system_features import service
+from server_app.domains.system_features.session import session_payload
 from server_app.legacy import initialize_schema
 from server_app.persistence.system_features import ensure_schema
 from server_app.repositories.audit_storage import read_payload
 from server_app.repositories.payload import read_updated_at
 from server_app.shared.concurrency import StaleWriteError
+from server_app.web import router_registry
 from server_app.web import system_features as web
 
 ADMIN = {"id": "admin", "username": "admin", "displayName": "系统管理员", "role": "admin"}
@@ -49,6 +51,42 @@ class SystemFeatureTests(unittest.TestCase):
         ensure_schema(self.conn)
         self.assertEqual(list(self.conn.iterdump()), before)
         self.assertEqual(self.audits(), [])
+
+    def test_session_feature_opt_in_is_read_only_and_falls_back_on_invalid_configuration(self):
+        before = list(self.conn.iterdump())
+        for actor in (ADMIN, STAFF):
+            self.assertEqual(session_payload(self.conn, actor, False), {"user": actor})
+            self.assertEqual(
+                session_payload(self.conn, actor, True), {"user": actor, "features": service.read(self.conn, actor)}
+            )
+        self.assertEqual(list(self.conn.iterdump()), before)
+        self.conn.execute("INSERT INTO system_feature_settings VALUES ('default', '{bad', '2026-01-01')")
+        self.assertEqual(session_payload(self.conn, ADMIN, True), {"user": ADMIN})
+        with self.assertRaises(ValueError):
+            service.read(self.conn, ADMIN)
+
+    def test_me_opt_in_uses_same_connection_and_authenticates_before_features(self):
+        handler = Mock(path="/api/auth/me?include=features")
+        handler.session_token.return_value = "token"
+        with (
+            patch.object(router_registry, "connect_db", return_value=self.conn),
+            patch.object(router_registry, "user_from_token", return_value=STAFF) as auth,
+        ):
+            result = router_registry.current_session_response(handler, {})
+        self.assertEqual(result.payload, {"user": STAFF, "features": service.read(self.conn, STAFF)})
+        auth.assert_called_once_with(self.conn, "token")
+        handler.path = "/api/auth/me"
+        handler.current_user.return_value = ADMIN
+        self.assertEqual(router_registry.current_session_response(handler, {}).payload, {"user": ADMIN})
+        handler.path = "/api/auth/me?include=features"
+        with (
+            patch.object(router_registry, "connect_db", return_value=self.conn),
+            patch.object(router_registry, "user_from_token", return_value=None),
+            patch.object(router_registry, "session_payload", side_effect=AssertionError("unauthorized feature read")),
+        ):
+            result = router_registry.current_session_response(handler, {})
+        self.assertEqual(result.status, 401)
+        self.assertEqual(result.payload, {"user": None})
 
     def test_save_and_restore_keep_complete_actor_and_before_after_audit(self):
         previous_updated = read_updated_at(self.conn)
