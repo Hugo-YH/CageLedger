@@ -10,6 +10,7 @@ from .billing_candidate_model import (
     workflow_id_sql,
     workflow_status_sql,
 )
+from .person_names import individual_mode, person_options
 
 
 def list_billing_candidate_snapshot_keys(conn, *, source_type, filters=None, stale_only=False, exclude_amount=False):
@@ -19,6 +20,7 @@ def list_billing_candidate_snapshot_keys(conn, *, source_type, filters=None, sta
             key: value for key, value in (working_filters.get("columnFilters") or {}).items() if key != "amount"
         }
     where, params = billing_candidate_snapshot_where(
+        conn=conn,
         source_type=source_type,
         filters=working_filters,
         stale_only=stale_only,
@@ -47,7 +49,7 @@ def list_billing_candidate_snapshot_keys(conn, *, source_type, filters=None, sta
 
 
 def list_billing_candidate_snapshots_page(conn, source_type, filters):
-    where, params = billing_candidate_snapshot_where(source_type=source_type, filters=filters)
+    where, params = billing_candidate_snapshot_where(conn=conn, source_type=source_type, filters=filters)
     order_by = billing_candidate_snapshot_order_by(filters)
     total = conn.execute(f"SELECT COUNT(*) AS total FROM billing_candidate_snapshots WHERE {where}", params).fetchone()[
         "total"
@@ -116,6 +118,7 @@ def list_billing_candidate_filter_options(conn, source_type, filters):
 
 def list_billing_candidate_manager_filter_options(conn, source_type, filters):
     where, params = billing_candidate_snapshot_where(
+        conn=conn,
         source_type=source_type,
         filters=filters,
         exclude_column="manager",
@@ -148,7 +151,7 @@ def list_billing_candidate_manager_filter_options(conn, source_type, filters):
 def list_billing_candidate_scalar_filter_options(conn, source_type, filters, column):
     if column == "workflow":
         where, params = billing_candidate_snapshot_where(
-            source_type=source_type, filters=filters, exclude_column=column
+            conn=conn, source_type=source_type, filters=filters, exclude_column=column
         )
         rows = conn.execute(
             f"""
@@ -169,8 +172,10 @@ def list_billing_candidate_scalar_filter_options(conn, source_type, filters, col
     spec = SETTLEMENT_CANDIDATE_LIST_COLUMNS.get(column)
     if not spec:
         return []
-    where, params = billing_candidate_snapshot_where(source_type=source_type, filters=filters, exclude_column=column)
-    limit = "" if column == "month" else "LIMIT 500"
+    where, params = billing_candidate_snapshot_where(
+        conn=conn, source_type=source_type, filters=filters, exclude_column=column
+    )
+    limit = "" if column == "month" or individual_mode(filters, column) else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT {spec["expr"]} AS value, COUNT(*) AS count
@@ -182,7 +187,7 @@ def list_billing_candidate_scalar_filter_options(conn, source_type, filters, col
         """,
         params,
     ).fetchall()
-    return [
+    items = [
         {
             "value": row["value"] or "",
             "label": f"¥{row['value']}" if column == "amount" else (row["value"] or "空白"),
@@ -192,9 +197,13 @@ def list_billing_candidate_scalar_filter_options(conn, source_type, filters, col
         if row["value"] not in (None, "")
     ]
 
+    return person_options(filters, column, items)
+
 
 def list_billing_candidate_iacuc_filter_options(conn, source_type, filters):
-    where, params = billing_candidate_snapshot_where(source_type=source_type, filters=filters, exclude_column="iacuc")
+    where, params = billing_candidate_snapshot_where(
+        conn=conn, source_type=source_type, filters=filters, exclude_column="iacuc"
+    )
     rows = conn.execute(
         f"""
         SELECT candidate_iacucs.iacuc AS value, COUNT(*) AS count

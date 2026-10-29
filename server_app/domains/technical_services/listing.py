@@ -3,6 +3,7 @@
 import json
 
 from server_app.domains.workflow.constants import FROZEN_WORKFLOW_STATUSES
+from server_app.repositories.person_names import column_predicate, person_options, prepare_person_filters
 
 SHEET_COLUMNS = {
     "month": "month",
@@ -43,9 +44,11 @@ def conditions(params, allowed, *, exclude=""):
         marks = ",".join("?" for _ in selected)
         if key == "iacuc" and allowed is CANDIDATE_COLUMNS:
             clauses.append(f"EXISTS (SELECT 1 FROM json_each(iacuc_json) WHERE value IN ({marks}))")
+            values.extend(selected)
         else:
-            clauses.append(f"CAST({allowed[key]} AS TEXT) IN ({marks})")
-        values.extend(selected)
+            clause, matched = column_predicate(params, key, f"CAST({allowed[key]} AS TEXT)", selected)
+            clauses.append(clause)
+            values.extend(matched)
     return clauses, values
 
 
@@ -134,6 +137,7 @@ def filter_options(conn, params, *, base, base_values, allowed, where):
     column = params.get("column", "")
     if column not in allowed:
         raise ValueError("筛选字段无效")
+    params = prepare_person_filters(conn, params, "technical_service_sheets", {"pi": "pi"}, exclude=column)
     condition, values = where(params, exclude=column)
     if column == "iacuc" and allowed is CANDIDATE_COLUMNS:
         sql = f"SELECT value, COUNT(*) FROM ({base}) q, json_each(q.iacuc_json) WHERE {condition} GROUP BY value ORDER BY value"
@@ -150,7 +154,7 @@ def filter_options(conn, params, *, base, base_values, allowed, where):
         "statement_archived": "已登记",
         "statement_locked": "已归档",
     }
-    return {
+    result = {
         "items": [
             {
                 "value": r[0],
@@ -163,3 +167,6 @@ def filter_options(conn, params, *, base, base_values, allowed, where):
             if r[0] is not None
         ]
     }
+
+    result["items"] = person_options(params, column, result["items"])
+    return result

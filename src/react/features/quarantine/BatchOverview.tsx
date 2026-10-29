@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { tagColors } from "../../../theme/visual-system.mjs";
 import { useState } from "react";
@@ -111,8 +112,8 @@ export function BatchOverview({
           title: "动物 / 品系",
           render: (_, s) => `${speciesLabel(s.species)} ${s.strainStandard || s.strainRaw || ""}`,
         },
-        { title: "课题组", dataIndex: "pi" },
-        { title: "负责人", dataIndex: "owner" },
+        { title: "课题组", dataIndex: "pi", render: (value: string) => formatPersonNames(value) },
+        { title: "负责人", dataIndex: "owner", render: (value: string) => formatPersonNames(value) },
         { title: "到货批次", dataIndex: "batchNo", render: (value: string) => value || "手工来源" },
         { title: "伦理编号", dataIndex: "iacuc" },
       ]}

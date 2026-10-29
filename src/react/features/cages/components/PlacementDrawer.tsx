@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Empty } from "antd";
 import type { PlacementTask } from "../../../api/contracts";
@@ -39,7 +40,8 @@ export function PlacementDrawer({
                 <span className={`pill ${task.status}`}>{task.status === "pending" ? "待分配" : "已预留"}</span>
                 <strong>{task.batchNo || "未命名批次"}</strong>
                 <small>
-                  {task.plannedMoveInDate || "-"} · {task.pi || "-"} · {task.owner || "-"}
+                  {task.plannedMoveInDate || "-"} · {formatPersonNames(task.pi) || "-"} ·{" "}
+                  {formatPersonNames(task.owner) || "-"}
                 </small>
               </div>
               {task.status === "pending" ? (

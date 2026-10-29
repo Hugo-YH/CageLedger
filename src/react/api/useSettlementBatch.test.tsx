@@ -55,6 +55,7 @@ describe("settlement batch", () => {
       queryKeys.reimbursementRoot,
       queryKeys.settlementCandidatesRoot,
       queryKeys.workflowsRoot,
+      ["filter-options", "billing-workflows"],
       ["technical-services"],
       queryKeys.reimbursementLedgerRoot,
       queryKeys.dashboardOverviewRoot,
@@ -94,7 +95,7 @@ describe("settlement batch", () => {
       method: "POST",
       body: JSON.stringify({ workflowId: "w2", toStatus: "statement_generated", note: "收件人信息有误，需要重新发起" }),
     });
-    expect(invalidate).toHaveBeenCalledTimes(6);
+    expect(invalidate).toHaveBeenCalledTimes(7);
   });
 
   it("continues after a server failure without retrying the write", async () => {
@@ -108,7 +109,7 @@ describe("settlement batch", () => {
       });
     });
     expect(requestJson).toHaveBeenCalledTimes(2);
-    expect(invalidate).toHaveBeenCalledTimes(6);
+    expect(invalidate).toHaveBeenCalledTimes(7);
   });
 
   it("does not invalidate on preview but refreshes workflow data when a single settlement starts", async () => {
@@ -122,7 +123,7 @@ describe("settlement batch", () => {
     await act(async () => {
       await result.current.mutateAsync({ ...payload, persist: true });
     });
-    expect(invalidate).toHaveBeenCalledTimes(6);
+    expect(invalidate).toHaveBeenCalledTimes(7);
   });
   it("routes mixed fees separately and submits confirmed service versions", async () => {
     const { wrapper, invalidate } = setup();
@@ -143,7 +144,7 @@ describe("settlement batch", () => {
       method: "POST",
       body: JSON.stringify({ pi: "b", month: "2026-08", sourceVersions: { "service-1": "v1" } }),
     });
-    expect(invalidate).toHaveBeenCalledTimes(6);
+    expect(invalidate).toHaveBeenCalledTimes(7);
   });
 
   it("does not replace reviewed service versions when confirmation conflicts", async () => {

@@ -620,7 +620,7 @@
           "method": "GET",
           "path": "/api/filter-options",
           "purpose": "共用列筛选候选",
-          "request": "list,column及列表筛选",
+          "request": "list,column及列表筛选；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items}",
           "protection": "read",
           "permission": "login"
@@ -1058,7 +1058,7 @@
           "method": "GET",
           "path": "/api/intake-batches",
           "purpose": "批次列表",
-          "request": "列表筛选与分页；可选view=summary，省略保持旧完整响应",
+          "request": "列表筛选与分页；可选view=summary，省略保持旧完整响应；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items,page}",
           "protection": "read",
           "permission": "login"
@@ -1244,7 +1244,7 @@
           "method": "GET",
           "path": "/api/quantity-sheets",
           "purpose": "已保存列表",
-          "request": "月份与列筛选、排序、分页；可选view=summary（不传保持原响应）",
+          "request": "月份与列筛选、排序、分页；可选view=summary（不传保持原响应）；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items,page}",
           "protection": "read",
           "permission": "login"
@@ -1371,7 +1371,7 @@
           "method": "GET",
           "path": "/api/settlement-candidates",
           "purpose": "共用结算候选",
-          "request": "列筛选、排序、分页",
+          "request": "列筛选、排序、分页；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items,page}",
           "protection": "cache_read",
           "permission": "settlement_view"
@@ -1380,7 +1380,7 @@
           "method": "GET",
           "path": "/api/settlement-candidates/filter-options",
           "purpose": "共用候选筛选项",
-          "request": "column及列表条件",
+          "request": "column及列表条件；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items}",
           "protection": "cache_read",
           "permission": "settlement_view"
@@ -1518,7 +1518,7 @@
           "method": "GET",
           "path": "/api/technical-services/sheets",
           "purpose": "服务明细列表",
-          "request": "月份、列筛选、排序、分页；可选view=summary（不传保持原响应）",
+          "request": "月份、列筛选、排序、分页；可选view=summary（不传保持原响应）；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items,page}",
           "protection": "read"
         },
@@ -1526,7 +1526,7 @@
           "method": "GET",
           "path": "/api/technical-services/sheets/filter-options",
           "purpose": "明细筛选候选",
-          "request": "column及筛选条件",
+          "request": "column及筛选条件；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items}",
           "protection": "read"
         },
@@ -1566,7 +1566,7 @@
           "method": "GET",
           "path": "/api/technical-services/settlement-candidates",
           "purpose": "技术服务候选兼容列表",
-          "request": "月份、列筛选、分页",
+          "request": "月份、列筛选、分页；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items,page}",
           "protection": "read",
           "lifecycle": "compatibility"
@@ -1575,7 +1575,7 @@
           "method": "GET",
           "path": "/api/technical-services/settlement-candidates/filter-options",
           "purpose": "技术服务候选筛选",
-          "request": "column及筛选条件",
+          "request": "column及筛选条件；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items}",
           "protection": "read",
           "lifecycle": "compatibility"
@@ -1617,7 +1617,7 @@
           "method": "GET",
           "path": "/api/billing-workflows",
           "purpose": "流程列表",
-          "request": "筛选、排序、分页",
+          "request": "筛选、排序、分页；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
           "response": "{items,page}",
           "protection": "read",
           "permission": "login"

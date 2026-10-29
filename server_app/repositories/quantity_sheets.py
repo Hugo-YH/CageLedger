@@ -1,6 +1,12 @@
 import json
 
 from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
+from server_app.repositories.person_names import (
+    column_predicate,
+    individual_mode,
+    person_options,
+    prepare_person_filters,
+)
 
 from .quantity_transfer_links import has_index, replace_links, select_target_sheets, transfer_write
 
@@ -49,7 +55,7 @@ def list_quantity_sheets_by_month(conn, month):
 
 
 def list_quantity_sheets_page(conn, filters, filtered_where):
-    where, params = quantity_sheet_where(filters, filtered_where)
+    where, params = quantity_sheet_where(filters, filtered_where, conn=conn)
     order_by = quantity_sheet_order_by(filters)
     key = cache_key(
         "quantity_sheets",
@@ -58,6 +64,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         sort_key=str(filters.get("sortKey", "")).strip(),
         sort_dir=str(filters.get("sortDir", "")).strip(),
         column_filters=filters.get("columnFilters", {}),
+        person_filter_mode=filters.get("personFilterMode", ""),
         month=str(filters.get("month", "")).strip(),
         iacuc=str(filters.get("iacuc", "")).strip(),
         pi=str(filters.get("pi", "")).strip(),
@@ -105,7 +112,9 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
     return cache_set(key, payload)
 
 
-def quantity_sheet_where(filters, filtered_where, exclude_column=""):
+def quantity_sheet_where(filters, filtered_where, exclude_column="", conn=None):
+    if conn is not None:
+        filters = prepare_person_filters(conn, filters, "quantity_sheets", {"pi": "pi"}, exclude=exclude_column)
     where, params = filtered_where(
         [
             ("month", "month = ?"),
@@ -128,9 +137,9 @@ def quantity_sheet_where(filters, filtered_where, exclude_column=""):
         ]
         if not spec or not cleaned:
             continue
-        placeholders = ", ".join("?" for _ in cleaned)
-        where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
-        next_params.extend(cleaned)
+        clause, values = column_predicate(filters, key, f"COALESCE({spec['expr']}, '')", cleaned)
+        where_parts.append(clause)
+        next_params.extend(values)
     return " AND ".join(where_parts), tuple(next_params)
 
 
@@ -147,9 +156,9 @@ def list_quantity_sheet_filter_options(conn, filters, filtered_where, column):
     spec = QUANTITY_SHEET_LIST_COLUMNS.get(column)
     if not spec:
         return {"items": []}
-    where, params = quantity_sheet_where(filters, filtered_where, exclude_column=column)
+    where, params = quantity_sheet_where(filters, filtered_where, exclude_column=column, conn=conn)
     where_clause = f" WHERE {where}" if where else ""
-    limit = "" if column in {"month", "updatedAt"} else "LIMIT 500"
+    limit = "" if column in {"month", "updatedAt"} or individual_mode(filters, column) else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
@@ -160,11 +169,14 @@ def list_quantity_sheet_filter_options(conn, filters, filtered_where, column):
         """,
         params,
     ).fetchall()
-    return {
+    result = {
         "items": [
             {"value": row["value"] or "", "label": row["value"] or "空白", "count": row["count"]} for row in rows
         ],
     }
+
+    result["items"] = person_options(filters, column, result["items"])
+    return result
 
 
 def quantity_sheet_list_row(row):

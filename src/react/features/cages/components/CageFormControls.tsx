@@ -1,3 +1,4 @@
+import { PersonNamesInput } from "../../../components/ui/PersonNamesInput";
 import { Input, InputNumber, Select } from "antd";
 import { DateInput } from "../../../components/ui";
 
@@ -7,7 +8,9 @@ export function Field({
   onChange,
   type = "text",
   max,
+  personNames = false,
 }: {
+  personNames?: boolean;
   label: string;
   value: string | number;
   onChange: (value: string) => void;
@@ -33,6 +36,8 @@ export function Field({
       {label}
       {type === "date" ? (
         <DateInput label={label} value={String(value)} onChange={onChange} max={max} />
+      ) : personNames ? (
+        <PersonNamesInput aria-label={label} value={String(value)} onChange={onChange} />
       ) : (
         <Input
           aria-label={label}

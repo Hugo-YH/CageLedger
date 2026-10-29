@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowLeftOutlined, CameraOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
@@ -208,8 +209,8 @@ function CageCardResult({ item }: { item: CageCardDetails }) {
     ["笼号", item.cageCode || item.slotCode],
     ["房间", item.roomName],
     ["IACUC", item.iacuc],
-    ["项目负责人", item.pi],
-    ["实验负责人", item.owner],
+    ["项目负责人", formatPersonNames(item.pi)],
+    ["实验负责人", formatPersonNames(item.owner)],
     ["品系", item.strainStandard || item.speciesLabel],
     ["数量", item.animalCount],
   ] as const;

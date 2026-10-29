@@ -2,6 +2,8 @@
 
 import json
 
+from .person_names import column_predicate, prepare_person_filters
+
 SETTLEMENT_CANDIDATE_LIST_COLUMNS = {
     "month": {"expr": "billing_candidate_snapshots.month", "order": "billing_candidate_snapshots.month"},
     "pi": {"expr": "billing_candidate_snapshots.pi", "order": "billing_candidate_snapshots.pi"},
@@ -59,8 +61,12 @@ def workflow_column_expr(source_type):
     )
 
 
-def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_column="", stale_only=False):
+def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_column="", stale_only=False, conn=None):
     working_filters = filters or {}
+    if conn is not None:
+        working_filters = prepare_person_filters(
+            conn, working_filters, "billing_candidate_snapshots", {"pi": "pi"}, exclude=exclude_column
+        )
     where_parts = ["billing_candidate_snapshots.source_type = ?"]
     params = [source_type]
     # 按项目负责人结算只展示已生成-已发起阶段；已登记/已归档流程在单据跟踪处理。
@@ -104,9 +110,9 @@ def billing_candidate_snapshot_where(*, source_type, filters=None, exclude_colum
         spec = SETTLEMENT_CANDIDATE_LIST_COLUMNS.get(column)
         if not spec:
             continue
-        placeholders = ", ".join("?" for _ in cleaned)
-        where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
-        params.extend(cleaned)
+        clause, values = column_predicate(working_filters, column, f"COALESCE({spec['expr']}, '')", cleaned)
+        where_parts.append(clause)
+        params.extend(values)
     if stale_only:
         where_parts.append("billing_candidate_snapshots.is_stale = 1")
     return " AND ".join(where_parts), tuple(params)

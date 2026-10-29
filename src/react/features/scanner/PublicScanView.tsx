@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Button, Descriptions, Result, Skeleton, Tag } from "antd";
 
@@ -12,8 +13,8 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
     ["笼架/笼位", [item?.rackName, item?.slotCode].filter(Boolean).join(" · ")],
     ["IACUC 编号", item?.iacuc],
     ["项目名称", item?.project],
-    ["项目负责人", item?.pi],
-    ["实验负责人", item?.owner],
+    ["项目负责人", formatPersonNames(item?.pi)],
+    ["实验负责人", formatPersonNames(item?.owner)],
     ["动物品系", item?.strainStandard || item?.speciesLabel || item?.species],
     ["数量", item?.animalCount == null || item.animalCount === "" ? "" : `${item.animalCount} 只`],
     ["性别", item?.sex],

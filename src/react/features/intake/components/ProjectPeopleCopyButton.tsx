@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { Button, Tooltip, type GetRef } from "antd";
 import { createContext, useContext, useLayoutEffect, useRef, type PropsWithChildren } from "react";
 
@@ -27,7 +28,7 @@ export function ProjectPeopleCopyButton({
   });
   if (!controller) throw new Error("ProjectPeopleCopyButton requires ProjectPeopleCopyProvider");
   const { copy, copyingId, phase } = controller;
-  const text = item.owner == null || item.owner === "" ? "-" : String(item.owner);
+  const text = item.owner == null || item.owner === "" ? "-" : formatPersonNames(item.owner);
   const pending = Boolean(copyingId) && copyingId === item.id;
   const status = pending ? (phase === "querying" ? "查询中…" : "复制中…") : "";
 

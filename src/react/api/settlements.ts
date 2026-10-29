@@ -15,6 +15,7 @@ import type {
 import type { TechnicalServicePreview } from "../../contracts/technicalServices";
 import { requestDownload, requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { individualPeople } from "./personNames";
 import { invalidateWorkflowQueries } from "./workflows";
 
 export type { GenerateBillingStatementPayload } from "../../contracts/settlements";
@@ -107,6 +108,7 @@ function settlementCandidateSearch(params: SettlementCandidateListParams) {
     sortKey: params.sortKey || "month",
     sortDir: params.sortDir || "desc",
   });
+  if (params.personFilterMode) search.set("personFilterMode", params.personFilterMode);
   if (params.columnFilters && Object.keys(params.columnFilters).length) {
     search.set("columnFilters", JSON.stringify(params.columnFilters));
   }
@@ -121,6 +123,7 @@ export function fetchSettlementCandidates(params: SettlementCandidateListParams,
 }
 
 export async function fetchAllSettlementCandidates(params: SettlementCandidateListParams, signal?: AbortSignal) {
+  params = individualPeople(params);
   const limit = 100;
   const firstPage = await fetchSettlementCandidates({ ...params, limit, offset: 0 }, signal);
   const total = firstPage.page.total;
@@ -148,7 +151,8 @@ export function listAllSettlementCandidates(params: SettlementCandidateListParam
   return fetchAllSettlementCandidates(params, signal);
 }
 
-export function useSettlementCandidates(params: SettlementCandidateListParams, enabled = true) {
+export function useSettlementCandidates(inputParams: SettlementCandidateListParams, enabled = true) {
+  const params = individualPeople(inputParams);
   return useQuery({
     queryKey: queryKeys.settlementCandidates({ ...params }),
     queryFn: ({ signal }) => fetchSettlementCandidates(params, signal),
@@ -166,9 +170,13 @@ export function exportMonthlyBillingSummary(month: string) {
 
 export function useSettlementFilterOptions(params: SettlementCandidateListParams, column: string, enabled: boolean) {
   const filters = params.columnFilters || {};
-  const search = new URLSearchParams({ column, columnFilters: JSON.stringify(filters) });
+  const search = new URLSearchParams({
+    column,
+    columnFilters: JSON.stringify(filters),
+    personFilterMode: "individual",
+  });
   return useQuery({
-    queryKey: [...queryKeys.settlementCandidatesRoot, "filter-options", column, filters],
+    queryKey: [...queryKeys.settlementCandidatesRoot, "filter-options", column, filters, "individual"],
     queryFn: ({ signal }) =>
       requestJson<{ items: Array<{ value: string; label: string; count: number }> }>(
         `/api/settlement-candidates/filter-options?${search}`,

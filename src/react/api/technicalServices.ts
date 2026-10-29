@@ -10,6 +10,7 @@ import type {
 } from "../../contracts/technicalServices";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { individualPeople } from "./personNames";
 import { initiateReviewedServiceSettlement, previewSettlement } from "./settlements";
 
 export { exportTechnicalServicePdf as exportServicesPdf } from "./settlements";
@@ -33,7 +34,8 @@ export function useServiceCatalog() {
   });
 }
 
-export function useServiceList(params: ServiceListParams) {
+export function useServiceList(inputParams: ServiceListParams) {
+  const params = individualPeople(inputParams);
   const resource = "sheets";
   return useQuery<PagedResponse<TechnicalServiceListItem>>({
     placeholderData: (previous) => previous,
@@ -57,7 +59,8 @@ export function useServiceDetail(id: string) {
   });
 }
 
-export function useServiceCandidates(params: ServiceListParams) {
+export function useServiceCandidates(inputParams: ServiceListParams) {
+  const params = individualPeople(inputParams);
   return useQuery<PagedResponse<TechnicalServiceCandidate>>({
     placeholderData: (previous) => previous,
     queryKey: [...root, "settlement-candidates", params],
@@ -74,7 +77,11 @@ export function useServiceFilterOptions(
   column: string,
   enabled: boolean,
 ) {
-  const filters = { month: params.month, keyword: params.keyword, columnFilters: params.columnFilters };
+  const filters = individualPeople({
+    month: params.month,
+    keyword: params.keyword,
+    columnFilters: params.columnFilters,
+  });
   return useQuery({
     queryKey: [...root, `${list}-filter-options`, filters, column],
     queryFn: ({ signal }) =>

@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { Descriptions, Typography } from "antd";
 
 import type { TechnicalServiceSheet } from "../../../contracts/technicalServices";
@@ -15,7 +16,7 @@ export function ServiceDetails({ sheet }: { sheet: TechnicalServiceSheet }) {
           { key: "facility", label: "服务设施", children: sheet.facility === "zhujiang" ? "珠江新城" : "生物岛" },
           { key: "iacuc", label: "IACUC", children: sheet.iacuc },
           { key: "project", label: "科研项目", children: sheet.project },
-          { key: "pi", label: "项目负责人", children: sheet.pi },
+          { key: "pi", label: "项目负责人", children: formatPersonNames(sheet.pi) },
           { key: "funding", label: "项目来源", children: sheet.funding || "—" },
           { key: "service", label: "服务项目", children: sheet.serviceName },
           {

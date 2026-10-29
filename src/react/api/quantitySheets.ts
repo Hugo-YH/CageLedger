@@ -12,6 +12,7 @@ import { requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
+import { individualPeople } from "./personNames";
 
 export {
   generateBillingStatement,
@@ -26,6 +27,7 @@ function listUrl(params: QuantitySheetListParams, view?: "summary") {
   if (params.columnFilters && Object.keys(params.columnFilters).length)
     search.set("columnFilters", JSON.stringify(params.columnFilters));
   if (view) search.set("view", view);
+  if (params.personFilterMode) search.set("personFilterMode", params.personFilterMode);
   return `/api/quantity-sheets?${search.toString()}`;
 }
 
@@ -37,7 +39,8 @@ export function listQuantitySheetSummaries(params: QuantitySheetListParams, sign
   return requestJson<PagedResponse<QuantitySheetListItem>>(listUrl(params, "summary"), { signal });
 }
 
-export function useQuantitySheets(params: QuantitySheetListParams, enabled = true) {
+export function useQuantitySheets(inputParams: QuantitySheetListParams, enabled = true) {
+  const params = individualPeople(inputParams);
   return useQuery({
     queryKey: queryKeys.quantitySheets({ ...params }),
     queryFn: ({ signal }) => listQuantitySheetSummaries(params, signal),
@@ -60,6 +63,7 @@ export function useQuantitySheetPiHistory(iacuc: string, beforeMonth: string, en
 }
 
 export function listAllQuantitySheets(params: QuantitySheetListParams, signal?: AbortSignal) {
+  params = individualPeople(params);
   return loadAllPages((offset, limit) => listQuantitySheetSummaries({ ...params, offset, limit }, signal));
 }
 
@@ -104,6 +108,7 @@ export function useSaveQuantitySheet() {
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
+      void queryClient.invalidateQueries({ queryKey: ["filter-options", "quantity-sheets"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot });
     },
@@ -119,6 +124,7 @@ export function useDeleteQuantitySheet() {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot });
+      void queryClient.invalidateQueries({ queryKey: ["filter-options", "quantity-sheets"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot });
     },

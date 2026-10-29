@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Input, Space, Switch, Tag, Typography, Upload } from "antd";
 import { Modal } from "../../../components/ui/Modal";
@@ -82,7 +83,7 @@ export function WorkflowRegistrationModal({
       footer={null}
       open={Boolean(target)}
       rootClassName="app-modal-root workflow-registration-modal"
-      title={`交回登记 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
+      title={`交回登记 · ${target?.month ?? ""} ${formatPersonNames(target?.pi)}`}
       width={640}
       onCancel={onCancel}
     >

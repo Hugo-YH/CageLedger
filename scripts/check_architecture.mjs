@@ -62,10 +62,6 @@ const baselineHotspots = new Map([
     "src/react/print/settlement.ts",
     { ceiling: 640, reason: "settlement print template with grouped column rendering and pagination" },
   ],
-  [
-    "src/react/features/intake/components/IntakePanels.tsx",
-    { ceiling: 419, reason: "existing intake workspace composition" },
-  ],
 ]);
 
 const files = walk(root).filter((file) => sourceExtensions.has(path.extname(file)));

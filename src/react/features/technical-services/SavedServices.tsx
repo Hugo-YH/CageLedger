@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ServiceColumnTitle } from "./ServiceColumnTitle";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Space, Tag } from "antd";
@@ -223,7 +224,12 @@ export function SavedServices() {
             columns={[
               { title: title("month", "月份"), dataIndex: "month", width: 110 },
               { title: title("iacuc", "IACUC"), dataIndex: "iacuc", width: 150 },
-              { title: title("pi", "项目负责人"), dataIndex: "pi", width: 160 },
+              {
+                title: title("pi", "项目负责人"),
+                dataIndex: "pi",
+                width: 160,
+                render: (value: string) => formatPersonNames(value),
+              },
               {
                 title: title("facility", "服务设施"),
                 width: 130,

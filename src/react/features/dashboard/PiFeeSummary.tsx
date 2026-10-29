@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { Empty, Input, Typography, type TableProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 
@@ -17,6 +18,7 @@ const columns: TableProps<PiOverview>["columns"] = [
     title: "项目负责人",
     dataIndex: "pi",
     key: "pi",
+    render: (value: string) => formatPersonNames(value),
     width: "45%",
     ellipsis: { showTitle: true },
   },

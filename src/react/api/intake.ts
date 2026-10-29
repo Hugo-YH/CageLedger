@@ -16,11 +16,13 @@ import { ApiError, requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
+import { individualPeople } from "./personNames";
 
 function intakeListUrl(params: IntakeListParams, summary = false) {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.sortKey) search.set("sortKey", params.sortKey);
   if (summary) search.set("view", "summary");
+  if (params.personFilterMode) search.set("personFilterMode", params.personFilterMode);
   if (params.sortDir) search.set("sortDir", params.sortDir);
   if (params.columnFilters && Object.keys(params.columnFilters).length) {
     search.set("columnFilters", JSON.stringify(params.columnFilters));
@@ -39,7 +41,8 @@ export function useExportIntakeSummary() {
   });
 }
 
-export function useIntakeBatches(params: IntakeListParams, enabled = true) {
+export function useIntakeBatches(inputParams: IntakeListParams, enabled = true) {
+  const params = individualPeople(inputParams);
   return useQuery({
     queryKey: queryKeys.intake({ ...params }),
     queryFn: ({ signal }) => listIntakeBatchSummaries(params, signal),
@@ -53,6 +56,7 @@ export function listIntakeBatchSummaries(params: IntakeListParams, signal?: Abor
 }
 
 export function listAllIntakeBatchSummaries(params: IntakeListParams, signal?: AbortSignal) {
+  params = individualPeople(params);
   return loadAllPages((offset, limit) => listIntakeBatchSummaries({ ...params, offset, limit }, signal));
 }
 
@@ -137,6 +141,7 @@ export function useSaveIntakeBatch() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
         queryClient.invalidateQueries({ queryKey: ["audit-events"] }),
@@ -152,6 +157,7 @@ export function useDeleteIntakeBatch() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
@@ -169,6 +175,7 @@ export function useConfirmIntakeBatch() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
@@ -186,6 +193,7 @@ export function useMarkIntakeBatchesPrinted() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),
@@ -203,6 +211,7 @@ export function useConfirmIntakeBatchesReceipt() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
       ]),

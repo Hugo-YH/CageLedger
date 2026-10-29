@@ -3,6 +3,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import type { PagedResponse, ReimbursementDetailResponse, ReimbursementRecord, ReimbursementStatus } from "./contracts";
 import { requestJson, requestMultipart } from "./client";
 import { queryKeys } from "./queryKeys";
+import { individualPeople } from "./personNames";
 
 export interface ReimbursementListParams {
   limit: number;
@@ -101,6 +102,7 @@ export interface WorkflowListParams {
   sortKey?: string;
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
+  personFilterMode?: "individual";
 }
 
 function listUrl(params: ReimbursementListParams) {
@@ -189,6 +191,7 @@ export async function invalidateWorkflowQueries(client: QueryClient) {
     client.invalidateQueries({ queryKey: queryKeys.reimbursementRoot }),
     client.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot }),
     client.invalidateQueries({ queryKey: queryKeys.workflowsRoot }),
+    client.invalidateQueries({ queryKey: ["filter-options", "billing-workflows"] }),
     client.invalidateQueries({ queryKey: ["technical-services"] }),
     client.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot }),
     client.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
@@ -203,7 +206,8 @@ export function useAdvanceWorkflow() {
   });
 }
 
-export function useBillingWorkflows(params: WorkflowListParams, enabled = true) {
+export function useBillingWorkflows(inputParams: WorkflowListParams, enabled = true) {
+  const params = individualPeople(inputParams);
   return useQuery<PagedResponse<BillingWorkflow>>({
     queryKey: queryKeys.workflows({ ...params }),
     enabled,
@@ -232,6 +236,7 @@ export function useWorkflowFundingBookOptions(workflowId: string) {
 
 function billingWorkflowSearch(params: WorkflowListParams) {
   const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
+  if (params.personFilterMode) query.set("personFilterMode", params.personFilterMode);
   if (params.sourceType) query.set("sourceType", params.sourceType);
   if (params.status) query.set("status", params.status);
   if (params.month) query.set("month", params.month);
@@ -244,6 +249,7 @@ function billingWorkflowSearch(params: WorkflowListParams) {
 }
 
 export async function fetchAllBillingWorkflows(params: WorkflowListParams, signal?: AbortSignal) {
+  params = individualPeople(params);
   const limit = 100;
   const firstPage = await requestJson<PagedResponse<BillingWorkflow>>(
     `/api/billing-workflows?${billingWorkflowSearch({ ...params, limit, offset: 0 }).toString()}`,

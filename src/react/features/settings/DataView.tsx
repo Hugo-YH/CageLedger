@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -54,7 +55,13 @@ export function DataView({ user }: { user: SessionUser }) {
       const result = await uploadFile<{ count?: number }>(endpoint, file);
       if (kind === "iacuc") {
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: queryKeys.iacucStatus }),
+          queryClient.invalidateQueries({ queryKey: ["iacuc-index"] }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot }),
+          queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
+          queryClient.invalidateQueries({ queryKey: ["filter-options", "quantity-sheets"] }),
+          queryClient.invalidateQueries({ queryKey: ["filter-options", "settlement-candidates"] }),
           queryClient.invalidateQueries({ queryKey: queryKeys.principalIdentities }),
         ]);
       } else await queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
@@ -69,7 +76,7 @@ export function DataView({ user }: { user: SessionUser }) {
 
   const columns = useMemo<ColumnsType<PrincipalIdentity>>(
     () => [
-      { title: "项目负责人", dataIndex: "pi", key: "pi" },
+      { title: "项目负责人", dataIndex: "pi", key: "pi", render: (value: string) => formatPersonNames(value) },
       {
         title: "负责人身份",
         dataIndex: "principalType",

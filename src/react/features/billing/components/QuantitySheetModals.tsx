@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import type { CageRoom, QuantitySheet, QuantitySheetRow } from "../../../api/contracts";
 import { Button, Space } from "antd";
 import { Modal } from "../../../components/ui/Modal";
@@ -58,7 +59,7 @@ export function ConfirmSave({
           </div>
           <div>
             <dt>项目负责人</dt>
-            <dd>{sheet.pi || "-"}</dd>
+            <dd>{formatPersonNames(sheet.pi) || "-"}</dd>
           </div>
           <div>
             <dt>有效明细</dt>

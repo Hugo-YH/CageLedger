@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { BarChartOutlined, CalendarOutlined, CopyOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Card, Collapse, Flex, Skeleton, Space, Statistic, Tag, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
@@ -261,7 +262,7 @@ function PeopleRows({ people, sampling = false }: { people: IntakeStatisticsPers
       {people.map((person) => (
         <li key={person.key}>
           <Typography.Text type={person.pi ? undefined : "warning"} className="intake-statistics-person-name">
-            {intakeStatisticsPersonName(person)}
+            {person.pi ? formatPersonNames(person.pi) : intakeStatisticsPersonName(person)}
           </Typography.Text>
           <span className="intake-statistics-person-total">
             <Typography.Text type="secondary">{person.batches} 批</Typography.Text>

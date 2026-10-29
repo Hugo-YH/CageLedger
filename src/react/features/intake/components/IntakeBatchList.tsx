@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Card, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { useState } from "react";
@@ -132,7 +133,14 @@ export function IntakeBatchList({
           );
         if (key === "cardCount") return isDirectSampling(item) ? "无需笼卡" : item.finalCardCount;
         const value = item[key];
-        const text = value == null || value === "" ? (key === "intakeDate" ? "待定" : "-") : String(value);
+        const text =
+          value == null || value === ""
+            ? key === "intakeDate"
+              ? "待定"
+              : "-"
+            : key === "pi" || key === "owner"
+              ? formatPersonNames(String(value))
+              : String(value);
         if (key === "owner") {
           return <ProjectPeopleCopyButton item={item} disabled={loading} />;
         }

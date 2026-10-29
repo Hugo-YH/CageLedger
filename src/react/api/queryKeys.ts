@@ -1,3 +1,5 @@
+import { individualPeople } from "./personNames";
+
 export const queryKeys = {
   systemFeatures: ["system", "features"] as const,
   dataQualityLatestIssues: (filters: object) => ["data-quality", "latest-issues", filters] as const,
@@ -19,17 +21,19 @@ export const queryKeys = {
   dashboardOverview: (month?: string) => ["dashboard-overview", month ?? "default"] as const,
   dashboardOverviewRoot: ["dashboard-overview"] as const,
   intakeRoot: ["intake"] as const,
-  intake: (filters: Record<string, unknown>) => ["intake", "list", filters] as const,
-  quantitySheets: (filters: Record<string, unknown>) => ["quantity-sheets", filters] as const,
+  intake: (filters: Record<string, unknown>) => ["intake", "list", individualPeople(filters)] as const,
+  quantitySheets: (filters: Record<string, unknown>) => ["quantity-sheets", individualPeople(filters)] as const,
   quantitySheetsRoot: ["quantity-sheets"] as const,
-  technicalServiceSheets: (params: object) => ["technical-services", "sheets", "summary", params] as const,
+  technicalServiceSheets: (params: object) =>
+    ["technical-services", "sheets", "summary", individualPeople(params)] as const,
   quantitySheetPiHistory: (iacuc: string, beforeMonth: string) =>
     ["quantity-sheets", "pi-history", iacuc, beforeMonth] as const,
   quantitySheetRooms: ["quantity-sheet-rooms"] as const,
   settlementCandidatesRoot: ["billing-settlement-candidates"] as const,
-  settlementCandidates: (filters: Record<string, unknown>) => ["billing-settlement-candidates", filters] as const,
+  settlementCandidates: (filters: Record<string, unknown>) =>
+    ["billing-settlement-candidates", individualPeople(filters)] as const,
   workflowsRoot: ["billing-workflows"] as const,
-  workflows: (filters: Record<string, unknown>) => ["billing-workflows", filters] as const,
+  workflows: (filters: Record<string, unknown>) => ["billing-workflows", individualPeople(filters)] as const,
   workflowDetail: (id: string) => ["billing-workflows", "detail", id] as const,
   workflowFundingBookOptions: (workflowId: string) =>
     ["billing-workflows", workflowId, "funding-book-options"] as const,

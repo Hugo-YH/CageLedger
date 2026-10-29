@@ -11,6 +11,7 @@ from .billing_workflow_projections import (
     billing_workflow_list_row,
     billing_workflow_version_row,
 )
+from .person_names import column_predicate, individual_mode, person_options, prepare_person_filters
 
 
 def get_billing_workflow_by_key(conn, business_key):
@@ -115,6 +116,7 @@ def list_billing_workflows_by_month(conn, month):
 
 
 def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finance):
+    filters = prepare_person_filters(conn, filters, "billing_workflows", {"pi": "json_extract(payload, '$.pi')"})
     clauses = []
     params = []
     column_filters = filters.get("columnFilters") or {}
@@ -153,9 +155,9 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         params.append(filters["iacuc"])
     pi_values = column_filters.get("pi") or []
     if pi_values:
-        placeholders = ", ".join("?" for _ in pi_values)
-        clauses.append(f"json_extract(payload, '$.pi') IN ({placeholders})")
-        params.extend(pi_values)
+        clause, values = column_predicate(filters, "pi", "json_extract(payload, '$.pi')", pi_values)
+        clauses.append(clause)
+        params.extend(values)
     else:
         pi = clean_text(filters.get("pi", ""))
         if pi:
@@ -184,6 +186,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         source_type=clean_text(filters.get("sourceType", "")),
         iacuc=clean_text(filters.get("iacuc", "")),
         pi=tuple(pi_values),
+        person_filter_mode=filters.get("personFilterMode", ""),
         manager=tuple(manager_values),
         iacuc_filters=tuple(iacuc_filters),
         sort_key=filters.get("sortKey", ""),
@@ -273,6 +276,9 @@ def _billing_workflow_order_by(filters):
 
 
 def list_billing_workflow_filter_options(conn, filters, column):
+    filters = prepare_person_filters(
+        conn, filters, "billing_workflows", {"pi": "json_extract(payload, '$.pi')"}, exclude=column
+    )
     where, params = _billing_workflow_filter_where(filters, exclude_column=column)
     where_clause = f" WHERE {where}" if where else ""
     if column == "status":
@@ -315,7 +321,7 @@ def list_billing_workflow_filter_options(conn, filters, column):
         expression = expressions.get(column)
         if not expression:
             return []
-        limit = "" if column == "month" else "LIMIT 500"
+        limit = "" if column == "month" or individual_mode(filters, column) else "LIMIT 500"
         rows = conn.execute(
             f"""
             SELECT {expression} AS value, {expression} AS label, COUNT(*) AS count
@@ -327,11 +333,13 @@ def list_billing_workflow_filter_options(conn, filters, column):
             """,
             tuple(params),
         ).fetchall()
-    return [
+    items = [
         {"value": row["value"] or "", "label": row["label"] or row["value"] or "", "count": row["count"]}
         for row in rows
         if row["value"]
     ]
+
+    return person_options(filters, column, items)
 
 
 def _billing_workflow_filter_where(filters, exclude_column=""):
@@ -349,9 +357,9 @@ def _billing_workflow_filter_where(filters, exclude_column=""):
         values = (filters.get("columnFilters") or {}).get(column) or []
         if not values:
             continue
-        placeholders = ", ".join("?" for _ in values)
-        clauses.append(f"{expression} IN ({placeholders})")
-        params.extend(values)
+        clause, selected = column_predicate(filters, column, expression, values)
+        clauses.append(clause)
+        params.extend(selected)
     iacuc_values = [] if exclude_column == "iacuc" else (filters.get("columnFilters") or {}).get("iacuc") or []
     if iacuc_values:
         placeholders = ", ".join("?" for _ in iacuc_values)

@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { memo } from "react";
 import { Empty, Space, Tag, Typography } from "antd";
 import type { SessionUser } from "../../../api/contracts";
@@ -103,7 +104,13 @@ export const BillingWorkflowTable = memo(function BillingWorkflowTable({
       ),
     },
     { key: "month", title: columnTitle("month", "结算月份"), dataIndex: "month", width: 100 },
-    { key: "pi", title: columnTitle("pi", "项目负责人"), dataIndex: "pi", width: 140 },
+    {
+      key: "pi",
+      title: columnTitle("pi", "项目负责人"),
+      dataIndex: "pi",
+      width: 140,
+      render: (value: string) => formatPersonNames(value),
+    },
     {
       key: "iacuc",
       title: columnTitle("iacuc", "IACUC"),

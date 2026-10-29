@@ -93,6 +93,7 @@ export interface QuantitySheetListParams {
   sortKey?: string;
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
+  personFilterMode?: "individual";
 }
 
 export interface QuantitySheetWriteResponse {

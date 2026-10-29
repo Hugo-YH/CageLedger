@@ -190,6 +190,46 @@ describe("quantity editor draft lifecycle", () => {
     expect(result.current.draft.customBillingSegments).toEqual(segments);
   });
 
+  it("preserves manually edited people for the same IACUC and fills again for a new code or draft", async () => {
+    lookupResponse = () =>
+      Promise.resolve(
+        Response.json({
+          items: [
+            { iacuc: "Z1", pi: "原PI", owner: "原负责人" },
+            { iacuc: "Z2", pi: "新PI", owner: "新负责人" },
+          ],
+        }),
+      );
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    act(() => result.current.setField("iacuc", "Z1"));
+    await act(async () => result.current.iacucLookup.apply("Z1"));
+    expect(result.current.draft).toMatchObject({ pi: "原PI", owner: "原负责人" });
+    act(() => {
+      result.current.setField("pi", "陈晓卿；李壮");
+      result.current.setField("owner", "人工负责人");
+    });
+    act(() => result.current.setField("iacuc", " z1 "));
+    await act(async () => result.current.iacucLookup.apply(" z1 "));
+    expect(result.current.draft).toMatchObject({ pi: "陈晓卿；李壮", owner: "人工负责人" });
+    act(() => result.current.setField("iacuc", "Z2"));
+    await act(async () => result.current.iacucLookup.apply("Z2"));
+    expect(result.current.draft).toMatchObject({ pi: "新PI", owner: "新负责人" });
+    act(() => result.current.startNew());
+    act(() => result.current.setField("iacuc", "Z1"));
+    await act(async () => result.current.iacucLookup.apply("Z1"));
+    expect(result.current.draft).toMatchObject({ pi: "原PI", owner: "原负责人" });
+  });
+
+  it("keeps the people on a loaded sheet when its IACUC matches the index", async () => {
+    lookupResponse = () =>
+      Promise.resolve(Response.json({ items: [{ iacuc: "Z1", pi: "索引PI", owner: "索引负责人" }] }));
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved", true), { wrapper });
+    act(() => result.current.loadForEdit({ ...savedSheet(), pi: "陈晓卿；李壮", owner: "原实验负责人" }));
+    await act(async () => result.current.iacucLookup.apply("Z1"));
+    await waitFor(() => expect(result.current.iacucMatch?.pi).toBe("索引PI"));
+    expect(result.current.draft).toMatchObject({ pi: "陈晓卿；李壮", owner: "原实验负责人" });
+  });
+
   it("discards a pending IACUC fill after starting a new draft", async () => {
     let resolveLookup!: (response: Response) => void;
     lookupResponse = () =>

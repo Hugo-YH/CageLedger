@@ -82,6 +82,7 @@ export interface SettlementCandidateListParams {
   sortKey?: "month" | "pi" | "iacuc" | "manager" | "amount" | "workflow" | "feeType";
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
+  personFilterMode?: "individual";
 }
 
 export interface SettlementCandidateListResponse extends PagedResponse<SettlementCandidate> {

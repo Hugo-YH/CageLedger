@@ -22,7 +22,7 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
   const suffix = Date.now();
   const existingId = `batch-e2e-duplicate-existing-${suffix}`;
   const laterId = `batch-e2e-duplicate-later-${suffix}`;
-  const batchNo = `E2E-DUPLICATE-${suffix}`;
+  const batchNo = `E2E-DUPLICATE/${suffix}`;
   const duplicateIds = async () => {
     const response = await page.request.get(
       `/api/intake-batches?${new URLSearchParams({

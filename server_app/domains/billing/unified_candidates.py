@@ -12,6 +12,7 @@ from server_app.repositories.billing_candidates import (
     workflow_id_sql,
     workflow_status_sql,
 )
+from server_app.repositories.person_names import column_predicate, person_options, prepare_person_filters
 from server_app.shared import now_iso
 
 from .candidates import list_settlement_candidates, refresh_settlement_candidate_snapshot
@@ -84,14 +85,21 @@ def where(filters, *, exclude=""):
             clauses.append(f"printf('%.2f',amount) IN ({marks}) AND amount IS NOT NULL")
             params.extend(values)
         else:
-            clauses.append(f"{column} IN ({marks})")
-            params.extend(values)
+            clause, matched = column_predicate(filters, column, column, values)
+            clauses.append(clause)
+            params.extend(matched)
     return " AND ".join(clauses) or "1", params
 
 
 def list_candidates(conn, actor, filters, calculate, *, prepare_calculations=None):
     prepare(conn, filters, calculate, prepare_calculations=prepare_calculations)
     source, source_params = base(conn, actor)
+    filters = prepare_person_filters(
+        conn,
+        filters,
+        "(SELECT pi FROM billing_candidate_snapshots UNION SELECT pi FROM technical_service_sheets)",
+        {"pi": "pi"},
+    )
     condition, params = where(filters)
     params = [*source_params, *params]
     order = services_listing.order(filters, COLUMNS, "month DESC")
@@ -137,6 +145,13 @@ def filter_options(conn, actor, filters, column, calculate, *, prepare_calculati
     scoped = {**filters, "columnFilters": {k: v for k, v in filters.get("columnFilters", {}).items() if k != column}}
     prepare(conn, scoped, calculate, column=column, prepare_calculations=prepare_calculations)
     source, values = base(conn, actor)
+    filters = prepare_person_filters(
+        conn,
+        filters,
+        "(SELECT pi FROM billing_candidate_snapshots UNION SELECT pi FROM technical_service_sheets)",
+        {"pi": "pi"},
+        exclude=column,
+    )
     condition, params = where(filters, exclude=column)
     if column in ("iacuc", "manager"):
         sql = f"SELECT value, COUNT(*) FROM ({source}) q, json_each(q.{column}_json) WHERE {condition} GROUP BY value ORDER BY value"
@@ -147,10 +162,13 @@ def filter_options(conn, actor, filters, column, calculate, *, prepare_calculati
             + (" AND amount IS NOT NULL" if column == "amount" else "")
             + f" GROUP BY {expression} ORDER BY {expression}"
         )
-    return {
+    result = {
         "items": [
             {"value": row[0], "label": LABELS.get(row[0], row[0]), "count": row[1]}
             for row in conn.execute(sql, [*values, *params])
             if row[0] not in (None, "")
         ]
     }
+
+    result["items"] = person_options(filters, column, result["items"])
+    return result

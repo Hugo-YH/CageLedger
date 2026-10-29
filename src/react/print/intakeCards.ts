@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../domain/personNames";
 import type { IntakeBatch } from "../api/contracts";
 import { abbreviateSupplier, isDirectSampling } from "../../domain/intake";
 import { qrCodeSvg } from "./qrCode";
@@ -127,8 +128,8 @@ function renderStandardCard({ batch, card, blank }: IntakeCardPrintItem) {
         .toUpperCase();
   return `<section class="standard-card"><table><colgroup><col style="width:16mm"><col style="width:11mm"><col style="width:23mm"><col style="width:16mm"><col style="width:8mm"><col style="width:7mm"><col style="width:9.5mm"><col style="width:9.5mm"></colgroup>
 <tr style="height:4.86mm"><td class="label">批次号：</td><td class="value value-compact" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td><td class="label" colspan="2">购买单位：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
-<tr style="height:4.86mm"><td class="label">动物品系：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(batch.strainStandard || batch.strainRaw)}</td><td class="label" colspan="2">项目负责人：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(batch.pi)}</td></tr>
-<tr style="height:4.86mm"><td class="label">接收日期：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td><td class="label label-long" colspan="2">实验责任人/助手：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(batch.owner)}</td></tr>
+<tr style="height:4.86mm"><td class="label">动物品系：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(batch.strainStandard || batch.strainRaw)}</td><td class="label" colspan="2">项目负责人：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(formatPersonNames(batch.pi))}</td></tr>
+<tr style="height:4.86mm"><td class="label">接收日期：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td><td class="label label-long" colspan="2">实验责任人/助手：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(formatPersonNames(batch.owner))}</td></tr>
 <tr style="height:4.86mm"><td class="label">接收人员：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(batch.receiverName)}</td><td class="label" colspan="2">联系电话：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(batch.vetPhone)}</td></tr>
 <tr style="height:3.91mm"><td class="row-head">日期</td><td class="row-head">数目变化</td><td class="row-head">饲养周期</td><td class="row-head" colspan="3">房间</td><td class="qr-cell" colspan="2" rowspan="4">${qrId ? qrCodeSvg(qrId, "笼卡二维码", 1) : ""}</td></tr>
 <tr style="height:5.26mm"><td class="value">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td><td class="value quantity-ratio">${blank ? "" : escapeHtml(cardQuantityRatio(batch, card))}</td><td class="cycle">${blank ? "" : escapeHtml(formatRange(batch.intakeDate, batch.endDate))}</td><td class="room" colspan="3" rowspan="3">${blank ? "" : escapeHtml(batch.roomName)}</td></tr>
@@ -136,7 +137,7 @@ function renderStandardCard({ batch, card, blank }: IntakeCardPrintItem) {
 }
 
 function renderTemporaryCard({ batch, card, blank }: IntakeCardPrintItem) {
-  const owner = String(batch.owner || "").trim();
+  const owner = formatPersonNames(batch.owner);
   const strain = String(batch.strainStandard || batch.strainRaw || "").trim();
   const qrId = blank
     ? ""
@@ -145,7 +146,7 @@ function renderTemporaryCard({ batch, card, blank }: IntakeCardPrintItem) {
         .toUpperCase();
   return `<section class="temporary-card"><table class="temporary-card-grid"><colgroup><col style="width:19mm"><col style="width:28mm"><col style="width:18mm"></colgroup>
 <tr class="temporary-owner-row"><th>实验负责人</th><td class="${temporaryTextClass("temporary-owner", owner, 20)}">${blank ? "" : escapeHtml(owner)}</td><td class="temporary-qr-cell" rowspan="2">${qrId ? qrCodeSvg(qrId, "笼卡二维码", 1) : ""}</td></tr>
-<tr class="temporary-pi-row"><th>项目负责人</th><td>${blank ? "" : escapeHtml(batch.pi)}</td></tr>
+<tr class="temporary-pi-row"><th>项目负责人</th><td>${blank ? "" : escapeHtml(formatPersonNames(batch.pi))}</td></tr>
 <tr><th>批次编号</th><td class="temporary-batch" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td></tr>
 <tr><th>购买单位</th><td colspan="2">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
 <tr><th>品系</th><td class="${temporaryTextClass("temporary-strain", strain, 35)}" colspan="2">${blank ? "" : escapeHtml(strain)}</td></tr>

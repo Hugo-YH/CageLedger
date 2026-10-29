@@ -1,3 +1,4 @@
+import { intakePeople } from "../../../domain/intakePeople";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -365,8 +366,7 @@ export function IntakeView({
           receiverName: normalized.receiverName || (isEditingSavedBatch ? draft.receiverName : user.displayName),
           vetPhone: normalized.vetPhone || (isEditingSavedBatch ? draft.vetPhone : user.phone),
           project: match?.project || normalized.project,
-          pi: match?.pi || normalized.pi,
-          owner: match?.owner || normalized.owner,
+          ...intakePeople(draft, normalized, match),
         },
         roomNames,
       ),

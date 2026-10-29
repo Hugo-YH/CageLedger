@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { ListRefreshStatus } from "../../components/ui";
@@ -204,7 +205,7 @@ export function BatchEditor({
               columns={[
                 { title: "到货日期", dataIndex: "intakeDate" },
                 { title: "供应商", dataIndex: "supplier" },
-                { title: "课题组", dataIndex: "pi" },
+                { title: "课题组", dataIndex: "pi", render: (value: string) => formatPersonNames(value) },
                 { title: "种类", render: (_, row) => speciesLabel(row.species) || "—" },
                 { title: "品系", render: (_, row) => row.strainStandard || row.strainRaw || "—" },
                 { title: "数量", dataIndex: "quantity" },

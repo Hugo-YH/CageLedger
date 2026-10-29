@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { PageSkeleton } from "../../components/PageSkeleton";
 import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
@@ -157,7 +158,7 @@ export function QuarantinePool({
             { title: "品系", render: (_, s) => s.strainStandard || s.strainRaw || "—" },
             { title: "种类", render: (_, s) => speciesLabel(s.species) || "—" },
             { title: "数量", dataIndex: "quantity" },
-            { title: "课题组", dataIndex: "pi" },
+            { title: "课题组", dataIndex: "pi", render: (value: string) => formatPersonNames(value) },
             {
               title: "检疫状态",
               render: (_, s) => <Tag color={quarantineStatusColor(s.quarantineStatus)}>{s.quarantineStatus}</Tag>,

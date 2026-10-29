@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { DownloadOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from "@ant-design/icons";
 import { Alert, Button, Tooltip, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
@@ -67,7 +68,7 @@ export function SettlementPreviewModal({
     <Modal
       open
       rootClassName="app-modal-root settlement-preview-modal"
-      title={`${selected.pi} · ${selected.month} · ${selected.feeType === "technical_service" ? "技术服务费" : "饲养费"}`}
+      title={`${formatPersonNames(selected.pi)} · ${selected.month} · ${selected.feeType === "technical_service" ? "技术服务费" : "饲养费"}`}
       width={1200}
       footer={null}
       onCancel={onClose}

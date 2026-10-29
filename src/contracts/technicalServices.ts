@@ -53,4 +53,5 @@ export interface TechnicalServiceListParams {
   sortKey?: string;
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
+  personFilterMode?: "individual";
 }

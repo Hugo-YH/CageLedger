@@ -108,6 +108,7 @@ class HandlerSupportMixin:
             "sortKey": value("sortKey"),
             "sortDir": value("sortDir"),
             "columnFilters": column_filters,
+            "personFilterMode": value("personFilterMode"),
             "status": value("status"),
             "month": value("month"),
             "iacuc": value("iacuc"),

@@ -1,3 +1,4 @@
+import { IntakeField as Field } from "./IntakeField";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
@@ -7,7 +8,7 @@ import type { IntakeBatch, IntakeBatchStatus, IntakePurpose } from "../../../api
 import { isDirectSampling, normalizeIntakeSex } from "../../../../domain/intake";
 import { IntakeRecognitionHelp, IntakeRecognitionImages } from "./IntakeRecognitionImages";
 import type { IntakeRecognitionImageInput } from "../../../api/contracts";
-import { CommandBar, DateInput } from "../../../components/ui";
+import { CommandBar } from "../../../components/ui";
 
 export { IntakeBatchList } from "./IntakeBatchList";
 
@@ -297,10 +298,22 @@ export function IntakeEntryPanel({
               <Field label="IACUC 编号" required value={draft.iacuc} onChange={(value) => onUpdate("iacuc", value)} />
             </Col>
             <Col lg={8} md={12} xs={24}>
-              <Field label="项目负责人" required value={draft.pi} onChange={(value) => onUpdate("pi", value)} />
+              <Field
+                personNames
+                label="项目负责人"
+                required
+                value={draft.pi}
+                onChange={(value) => onUpdate("pi", value)}
+              />
             </Col>
             <Col lg={8} md={12} xs={24}>
-              <Field label="实验负责人" required value={draft.owner} onChange={(value) => onUpdate("owner", value)} />
+              <Field
+                personNames
+                label="实验负责人"
+                required
+                value={draft.owner}
+                onChange={(value) => onUpdate("owner", value)}
+              />
             </Col>
           </Row>
           <Row gutter={[16, 16]}>
@@ -375,38 +388,5 @@ export function IntakeEntryPanel({
         </Form>
       </Card>
     </form>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  required = false,
-  extra,
-}: {
-  label: string;
-  value: string | number;
-  onChange: (value: string) => void;
-  type?: string;
-  required?: boolean;
-  extra?: string;
-}) {
-  return (
-    <Form.Item label={label} required={required} extra={extra}>
-      {type === "date" ? (
-        <DateInput label={label} value={String(value)} onChange={onChange} required={required} />
-      ) : (
-        <Input
-          aria-label={label}
-          type={type}
-          value={value}
-          min={type === "number" ? 0 : undefined}
-          required={required}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      )}
-    </Form.Item>
   );
 }

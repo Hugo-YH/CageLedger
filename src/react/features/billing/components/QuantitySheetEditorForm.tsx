@@ -1,3 +1,5 @@
+import { PersonNamesInput } from "../../../components/ui/PersonNamesInput";
+import { formatPersonNames } from "../../../../domain/personNames";
 import { useId } from "react";
 import type { ReactNode } from "react";
 import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
@@ -146,7 +148,7 @@ export function QuantitySheetEditorForm({
               <datalist id="quantity-iacuc-options">
                 {iacucOptions.map((item, index) => (
                   <option key={`${item.iacuc}-${item.project}-${item.pi}-${index}`} value={item.iacuc}>
-                    {item.project || item.pi}
+                    {item.project || formatPersonNames(item.pi)}
                   </option>
                 ))}
               </datalist>
@@ -161,6 +163,7 @@ export function QuantitySheetEditorForm({
             <AutoFilledField label="项目名称" value={draft.project} onChange={(value) => setField("project", value)} />
             <AutoFilledField label="支撑经费" value={draft.funding} onChange={(value) => setField("funding", value)} />
             <AutoFilledField
+              personNames
               label="项目负责人"
               value={draft.pi}
               onChange={(value) => setField("pi", value)}
@@ -177,7 +180,7 @@ export function QuantitySheetEditorForm({
                         <div className="quantity-pi-history-hint">
                           <Typography.Paragraph type="secondary" className="quantity-pi-hint-text">
                             {piHistory.data?.item?.month} 该伦理号最近一次按「{previousPi}」结算，与 IACUC 登记的「
-                            {iacucMatch?.pi}」不一致，请确认后修改。
+                            {formatPersonNames(iacucMatch?.pi)}」不一致，请确认后修改。
                           </Typography.Paragraph>
                           <div className="quantity-pi-hint-actions">
                             <Button size="small" type="primary" onClick={() => setField("pi", previousPi)}>
@@ -190,7 +193,12 @@ export function QuantitySheetEditorForm({
                   : undefined
               }
             />
-            <AutoFilledField label="实验负责人" value={draft.owner} onChange={(value) => setField("owner", value)} />
+            <AutoFilledField
+              personNames
+              label="实验负责人"
+              value={draft.owner}
+              onChange={(value) => setField("owner", value)}
+            />
           </div>
         </div>
         <QuantityBillingOptions editor={editor} />
@@ -226,13 +234,19 @@ function AutoFilledField({
   value,
   onChange,
   hint,
+  personNames = false,
 }: {
+  personNames?: boolean;
   label: string;
   value: string;
   onChange: (value: string) => void;
   hint?: { title?: ReactNode; content: ReactNode };
 }) {
-  const input = <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />;
+  const input = personNames ? (
+    <PersonNamesInput aria-label={label} value={value} onChange={onChange} />
+  ) : (
+    <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
+  );
   return (
     <label className="quantity-ant-field quantity-auto-field">
       <span>

@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { Checkbox, Tag, Typography, type TableProps } from "antd";
 import { FeeTypeTag } from "../../../components/BillingTags";
 import { workflowTagColor } from "../../../components/billingTagColors";
@@ -88,6 +89,7 @@ export function buildSettlementColumns(options: SettlementColumnsOptions): Table
         />
       ),
       render: (_: unknown, candidate: SettlementCandidate) => {
+        if (key === "pi") return formatPersonNames(candidate.pi);
         if (key === "feeType") return <FeeTypeTag feeType={candidate.feeType} />;
         if (key === "iacuc") {
           const text = candidate.iacucs.join("、") || candidate.error || "待检查";

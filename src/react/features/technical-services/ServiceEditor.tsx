@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Descriptions, Form, Input, InputNumber, Select, Typography } from "antd";
 
@@ -311,7 +312,7 @@ export function ServiceEditor({
                       </Typography.Paragraph>
                     ),
                   },
-                  { key: "pi", label: "项目负责人", children: draft.pi || "待匹配" },
+                  { key: "pi", label: "项目负责人", children: formatPersonNames(draft.pi) || "待匹配" },
                   {
                     key: "funding",
                     label: "项目来源",

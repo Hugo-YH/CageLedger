@@ -148,6 +148,7 @@ export interface IntakeListParams {
   sortKey?: string;
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;
+  personFilterMode?: "individual";
 }
 
 /** Display/action summary; never submit this object as a complete editable batch. */

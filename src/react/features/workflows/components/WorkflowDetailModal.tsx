@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { DownloadOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Flex, Tag, Timeline, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
@@ -92,7 +93,7 @@ export function WorkflowDetailModal({
       }
       rootClassName="app-modal-root workflow-detail-modal"
       open={Boolean(target)}
-      title={`结算流程详情 · ${target?.month ?? ""} ${target?.pi ?? ""}`}
+      title={`结算流程详情 · ${target?.month ?? ""} ${formatPersonNames(target?.pi)}`}
       width={840}
       onCancel={onCancel}
     >
@@ -308,7 +309,7 @@ function WorkflowDetailContent({ target }: { target: { workflow: BillingWorkflow
         size="small"
         column={2}
         items={[
-          { key: "pi", label: "负责人", children: workflow.pi },
+          { key: "pi", label: "负责人", children: formatPersonNames(workflow.pi) },
           { key: "month", label: "结算月份", children: workflow.month },
           {
             key: "amount",

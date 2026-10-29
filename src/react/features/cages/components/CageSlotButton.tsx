@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { animalAgeText, animalSexLabel, cageCode, occupancyPeriodTone } from "../../../../domain/cages";
 
@@ -39,7 +40,7 @@ export function CageSlotButton({
         <>
           <strong className="slot-iacuc">{occupancy.iacuc || "未填写 IACUC"}</strong>
           <span className="slot-person">
-            {occupancy.pi || "未填写PI"} / {occupancy.owner || "未填写负责人"}
+            {formatPersonNames(occupancy.pi) || "未填写PI"} / {formatPersonNames(occupancy.owner) || "未填写负责人"}
           </span>
           <span className="slot-date">{occupancy.startDate || "未设置入住时间"}</span>
           {monkeySummary ? <span className="slot-animal-meta">{monkeySummary}</span> : null}

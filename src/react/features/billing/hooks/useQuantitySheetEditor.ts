@@ -20,6 +20,8 @@ import {
 } from "../quantitySheetEditorModel";
 import { useQuantityIacuc } from "./useQuantityIacuc";
 
+const normalizeIacuc = (value: string) => value.trim().toUpperCase();
+
 export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved", editRequested = false) {
   const [editingDialog, setEditingDialog] = useState(false);
   const metadataEnabled = mode === "entry" || editRequested || editingDialog;
@@ -27,14 +29,18 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   const identitiesQuery = usePrincipalIdentities(metadataEnabled);
   const rooms = roomsQuery.data?.items || [];
   const [draft, setDraft] = useState(() => createQuantitySheet(todayMonth, user.displayName));
+  const peopleEdits = useRef({ code: "", pi: false, owner: false });
   const fillFromIacuc = useCallback(
     (match: { iacuc: string; project?: string; pi?: string; owner?: string; funding?: string }) => {
+      const code = normalizeIacuc(match.iacuc);
+      const protectedFields =
+        peopleEdits.current.code === code ? { ...peopleEdits.current } : { pi: false, owner: false };
       setDraft((current) => ({
         ...current,
         iacuc: match.iacuc,
         project: match.project || current.project,
-        pi: match.pi || current.pi,
-        owner: match.owner || current.owner,
+        pi: protectedFields.pi ? current.pi : match.pi || current.pi,
+        owner: protectedFields.owner ? current.owner : match.owner || current.owner,
         funding: match.funding || current.funding,
       }));
     },
@@ -115,6 +121,12 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   function setField<K extends keyof QuantitySheet>(key: K, value: QuantitySheet[K]) {
     if (key === "iacuc") {
       iacucLookup.reset();
+      const code = normalizeIacuc(String(value));
+      if (peopleEdits.current.code !== code) peopleEdits.current = { code, pi: false, owner: false };
+    } else if (key === "pi") {
+      peopleEdits.current.pi = true;
+    } else if (key === "owner") {
+      peopleEdits.current.owner = true;
     }
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -240,6 +252,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       const normalized = normalizeQuantitySheet(response.item);
       const next = createQuantitySheet(normalized.month, user.displayName);
       iacucLookup.reset();
+      peopleEdits.current = { code: "", pi: false, owner: false };
       setDraft(next);
       setEditorRows(makeEditorRows(next));
       setExists(false);
@@ -260,6 +273,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
 
   function startNew() {
     iacucLookup.reset();
+    peopleEdits.current = { code: "", pi: false, owner: false };
     const next = createQuantitySheet(todayMonth, user.displayName);
     setDraft(next);
     setEditorRows(makeEditorRows(next));
@@ -271,6 +285,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   function loadForEdit(sheet: QuantitySheet) {
     iacucLookup.reset();
     const next = normalizeQuantitySheet(sheet);
+    peopleEdits.current = { code: normalizeIacuc(next.iacuc), pi: true, owner: true };
     setDraft(next);
     setEditorRows(makeEditorRows(next));
     setExists(true);

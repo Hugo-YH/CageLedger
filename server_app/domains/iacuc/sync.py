@@ -28,6 +28,7 @@ from server_app.repositories.entities import (
 )
 from server_app.repositories.iacuc import replace_experiment_applications
 from server_app.repositories.payload import dump_json
+from server_app.repositories.person_names import split_person_names
 from server_app.repositories.workflow_documents import protected_quantity_sheet_ids
 from server_app.runtime_logging import emit_event
 from server_app.shared import clean_text, new_id, now_iso
@@ -104,7 +105,9 @@ def source_iacuc_for_placement_tasks(conn):
     return by_batch
 
 
-def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imported_at, source_iacuc_by_batch=None):
+def sync_project_fields_for_table(
+    conn, table, applications, changed_iacucs, imported_at, source_iacuc_by_batch=None, old_applications=None
+):
     protected_ids = (
         protected_quantity_sheet_ids(conn, FROZEN_WORKFLOW_STATUSES) if table == "quantity_sheets" else set()
     )
@@ -124,6 +127,13 @@ def sync_project_fields_for_table(conn, table, applications, changed_iacucs, imp
 
         before = project_field_snapshot(payload)
         after = project_field_snapshot(applications[iacuc])
+        # Preserve explicit additions to the previous source people. Do not
+        # canonicalize the stored PI: it remains the existing billing key.
+        old_application = (old_applications or {}).get(iacuc, {})
+        for field in ("pi", "owner"):
+            source_people = set(split_person_names(clean_text(old_application.get(field, ""))))
+            if source_people and source_people < set(split_person_names(before[field])):
+                after[field] = before[field]
         changed_fields = sorted(changed_project_fields(before, after))
         if not changed_fields:
             continue
@@ -201,7 +211,9 @@ def sync_project_derived_fields_after_iacuc_upload(conn, old_items, new_items, a
     changes = []
     for table in ("quantity_sheets", "occupancies", "intake_batches", "placement_tasks"):
         changes.extend(
-            sync_project_fields_for_table(conn, table, new_by_iacuc, changed_iacucs, imported_at, source_iacuc_by_batch)
+            sync_project_fields_for_table(
+                conn, table, new_by_iacuc, changed_iacucs, imported_at, source_iacuc_by_batch, old_by_iacuc
+            )
         )
 
     table_counts = {}

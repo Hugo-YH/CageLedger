@@ -2,6 +2,12 @@ import json
 import re
 
 from server_app.cache import cache_get, cache_set
+from server_app.repositories.person_names import (
+    column_predicate,
+    individual_mode,
+    person_options,
+    prepare_person_filters,
+)
 from server_app.shared.intake_identifiers import intake_identifier_values
 
 from .payload import cached_paginated_payloads, dump_json
@@ -84,7 +90,7 @@ def _trim_audit_snapshot(item):
 
 
 def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
-    where, params = intake_batch_where(filters, filtered_where)
+    where, params = intake_batch_where(filters, filtered_where, conn=conn)
     if filters.get("view") == "summary":
         from .intake_summaries import page
 
@@ -100,7 +106,11 @@ def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
     )
 
 
-def intake_batch_where(filters, filtered_where, exclude_column=""):
+def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
+    if conn is not None:
+        filters = prepare_person_filters(
+            conn, filters, "intake_batches", {"pi": "pi", "owner": "owner"}, exclude=exclude_column
+        )
     status = str(filters.get("status", "") or "").strip()
     normalized_filters = dict(filters)
     if status in ("all", "unprinted"):
@@ -134,9 +144,9 @@ def intake_batch_where(filters, filtered_where, exclude_column=""):
         ]
         if not spec or not cleaned:
             continue
-        placeholders = ", ".join("?" for _ in cleaned)
-        where_parts.append(f"COALESCE({spec['expr']}, '') IN ({placeholders})")
-        next_params.extend(cleaned)
+        clause, values = column_predicate(filters, key, f"COALESCE({spec['expr']}, '')", cleaned)
+        where_parts.append(clause)
+        next_params.extend(values)
     return " AND ".join(where_parts), tuple(next_params)
 
 
@@ -169,9 +179,9 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
     spec = INTAKE_BATCH_LIST_COLUMNS.get(column)
     if not spec:
         return {"items": []}
-    where, params = intake_batch_where(filters, filtered_where, exclude_column=column)
+    where, params = intake_batch_where(filters, filtered_where, exclude_column=column, conn=conn)
     where_clause = f" WHERE {where}" if where else ""
-    limit = "" if column == "intakeDate" else "LIMIT 500"
+    limit = "" if column == "intakeDate" or individual_mode(filters, column) else "LIMIT 500"
     rows = conn.execute(
         f"""
         SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
@@ -182,7 +192,7 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
         """,
         params,
     ).fetchall()
-    return {
+    result = {
         "items": [
             {
                 "value": row["value"] or "",
@@ -192,6 +202,9 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
             for row in rows
         ],
     }
+
+    result["items"] = person_options(filters, column, result["items"])
+    return result
 
 
 def list_placement_tasks_page(conn, filters, entity_order_by, clean_text):

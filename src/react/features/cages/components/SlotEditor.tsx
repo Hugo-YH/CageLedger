@@ -126,8 +126,8 @@ export function SlotEditor({
           <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
         </div>
         <div className="compact-form-row half">
-          <Field label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
-          <Field label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
+          <Field personNames label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
+          <Field personNames label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
         </div>
         <div className="compact-form-row third">
           <Field

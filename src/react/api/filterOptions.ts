@@ -15,10 +15,16 @@ export function useColumnFilterOptions(
   columnFilters: Record<string, string[]> | undefined,
   enabled: boolean,
 ) {
+  const personFilterMode = ["intake-batches", "quantity-sheets", "settlement-candidates", "billing-workflows"].includes(
+    list,
+  )
+    ? "individual"
+    : "";
   const query = new URLSearchParams({ list, column });
+  if (personFilterMode) query.set("personFilterMode", personFilterMode);
   if (columnFilters && Object.keys(columnFilters).length) query.set("columnFilters", JSON.stringify(columnFilters));
   return useQuery({
-    queryKey: ["filter-options", list, column, columnFilters || {}],
+    queryKey: ["filter-options", list, column, columnFilters || {}, personFilterMode],
     queryFn: ({ signal }) =>
       requestJson<{ items: ColumnFilterOption[] }>(`/api/filter-options?${query.toString()}`, { signal }),
     enabled,

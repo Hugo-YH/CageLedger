@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../../domain/personNames";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { Modal } from "../../../components/ui/Modal";
@@ -103,7 +104,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         ),
         render: (value: string, item: QuantitySheetListItem) => {
           if (key === "updatedAt") return formatTime(item.updatedAt);
-          const text = value || "-";
+          const text = (key === "pi" ? formatPersonNames(value) : value) || "-";
           if (key === "iacuc") {
             const projectEndDate = iacucExpiryByCode.get(item.iacuc.trim().toUpperCase());
             return (

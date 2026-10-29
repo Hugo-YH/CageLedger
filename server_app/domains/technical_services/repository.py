@@ -3,6 +3,7 @@
 import json
 
 from server_app.domains.workflow.constants import FROZEN_WORKFLOW_STATUSES
+from server_app.repositories.person_names import prepare_person_filters
 from server_app.shared.concurrency import StaleWriteError as StaleWriteError
 from server_app.shared.concurrency import require_exact_version
 
@@ -71,6 +72,7 @@ def protected_ids(conn):
 def list_sheets(conn, filters, *, all_rows=False):
     protected = protected_ids(conn)
     base, base_values = listing.sheet_base(protected)
+    filters = prepare_person_filters(conn, filters, "technical_service_sheets", {"pi": "pi"})
     where, values = listing.sheet_where(filters)
     params = [*base_values, *values]
     total = conn.execute(f"SELECT COUNT(*) FROM ({base}) WHERE {where}", params).fetchone()[0]
@@ -125,6 +127,7 @@ def require_version(row, expected):
 def candidate_scopes(conn, filters):
     """Filter and page complete PI aggregates before loading statement inputs."""
     base, base_values = listing.candidate_base(SOURCE_TYPE)
+    filters = prepare_person_filters(conn, filters, "technical_service_sheets", {"pi": "pi"})
     where, values = listing.candidate_where(filters)
     params = [*base_values, *values]
     total = conn.execute(f"SELECT COUNT(*) FROM ({base}) WHERE {where}", params).fetchone()[0]

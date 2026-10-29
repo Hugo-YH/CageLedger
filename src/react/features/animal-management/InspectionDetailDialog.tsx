@@ -1,3 +1,4 @@
+import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Alert, Button, Card, Collapse, Descriptions, Empty, Space, Tag, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
@@ -45,7 +46,9 @@ export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: (
               {formatDate(query.data.item.submittedAt || query.data.item.updatedAt)}
             </Descriptions.Item>
             <Descriptions.Item label="IACUC">{query.data.item.snapshot.iacucs.join("、") || "-"}</Descriptions.Item>
-            <Descriptions.Item label="项目负责人">{query.data.item.snapshot.pis.join("、") || "-"}</Descriptions.Item>
+            <Descriptions.Item label="项目负责人">
+              {formatPersonNames(query.data.item.snapshot.pis.join("、")) || "-"}
+            </Descriptions.Item>
             <Descriptions.Item label="品系">{query.data.item.snapshot.species.join("、") || "-"}</Descriptions.Item>
             <Descriptions.Item label="动物数量">{query.data.item.snapshot.animalCount}</Descriptions.Item>
           </Descriptions>

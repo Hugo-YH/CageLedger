@@ -104,7 +104,8 @@ describe("shared settlement actions", () => {
     await act(() => result.current.preview.mutateAsync(target));
     expect(invalidate).not.toHaveBeenCalled();
     await act(() => result.current.initiate.mutateAsync({ ...target, sourceVersions: { sheet: "v1" } }));
-    expect(invalidate).toHaveBeenCalledTimes(6);
+    expect(invalidate).toHaveBeenCalledTimes(7);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["filter-options", "billing-workflows"] });
     invalidate.mockClear();
     vi.mocked(requestJson).mockRejectedValueOnce(new Error("冲突"));
     await act(async () => {

@@ -62,6 +62,7 @@ def list_settlement_candidates(
         sort_key=filters.get("sortKey", ""),
         sort_dir=filters.get("sortDir", ""),
         column_filters=filters.get("columnFilters", {}),
+        person_filter_mode=filters.get("personFilterMode", ""),
     )
     cached = cache_get(response_cache_key)
     if cached is not None:

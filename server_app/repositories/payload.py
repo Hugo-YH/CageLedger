@@ -63,6 +63,7 @@ def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, wher
         sort_key=_clean(filters.get("sortKey", "")),
         sort_dir=_clean(filters.get("sortDir", "")),
         column_filters=filters.get("columnFilters", {}),
+        person_filter_mode=filters.get("personFilterMode", ""),
         status=_clean(filters.get("status", "")),
         month=_clean(filters.get("month", "")),
         iacuc=_clean(filters.get("iacuc", "")),
