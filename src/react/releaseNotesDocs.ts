@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.21.0",
+    build: "245",
+    releasedAt: "2026-10-30",
+    title: "列表与负责人",
+    items: [
+      "优化列表摘要和按需读取，减少不必要的数据加载与重复渲染",
+      "统一负责人显示并支持按人员分别筛选，改进待接收批次列表交互",
+      "加强后端数据一致性、资源限制及附件和缓存处理，改善异常情况下的恢复",
+      "调整共享界面动效和工具栏布局，保持各页面操作反馈一致",
+    ],
+  },
+  {
     version: "1.20.0",
     build: "244",
     releasedAt: "2026-10-28",
