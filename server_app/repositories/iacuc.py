@@ -4,7 +4,14 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from server_app.cache import cache_get, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes
+from server_app.cache import (
+    cache_build_lock,
+    cache_generation,
+    cache_get,
+    cache_set,
+    invalidate_data_cache,
+    invalidate_data_cache_prefixes,
+)
 
 from .payload import dump_json
 
@@ -16,39 +23,47 @@ def list_experiment_application_payloads(conn):
 
 
 def read_iacuc_index(conn, iacuc_index_path, legacy_iacuc_index_path):
-    cached = cache_get("iacuc_index")
-    if cached is not None:
-        return cached
+    with cache_build_lock("iacuc_index", conn):
+        _cache_generation = cache_generation()
+        cached = cache_get("iacuc_index", connection=conn)
+        if cached is not None:
+            return cached
 
-    rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY rowid").fetchall()
-    if rows:
-        items = [json.loads(row["payload"]) for row in rows]
-        updated_at = max(row["imported_at"] for row in rows)
+        rows = conn.execute("SELECT payload, imported_at FROM experiment_applications ORDER BY rowid").fetchall()
+        if rows:
+            items = [json.loads(row["payload"]) for row in rows]
+            updated_at = max(row["imported_at"] for row in rows)
+            return cache_set(
+                "iacuc_index",
+                {
+                    "items": items,
+                    "count": len(items),
+                    "updatedAt": updated_at,
+                    "source": "database",
+                },
+                expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+            )
+
+        path = iacuc_index_path if iacuc_index_path.exists() else legacy_iacuc_index_path
+        if not path.exists():
+            return cache_set(
+                "iacuc_index",
+                {"items": [], "count": 0, "updatedAt": None, "source": None},
+                expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+            )
+
+        items = json.loads(path.read_text(encoding="utf-8"))
+        stat = path.stat()
         return cache_set(
             "iacuc_index",
             {
                 "items": items,
                 "count": len(items),
-                "updatedAt": updated_at,
-                "source": "database",
+                "updatedAt": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+                "source": "data" if path == iacuc_index_path else "legacy",
             },
+            expected_generation=_cache_generation if conn.in_transaction is not True else -1,
         )
-
-    path = iacuc_index_path if iacuc_index_path.exists() else legacy_iacuc_index_path
-    if not path.exists():
-        return cache_set("iacuc_index", {"items": [], "count": 0, "updatedAt": None, "source": None})
-
-    items = json.loads(path.read_text(encoding="utf-8"))
-    stat = path.stat()
-    return cache_set(
-        "iacuc_index",
-        {
-            "items": items,
-            "count": len(items),
-            "updatedAt": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
-            "source": "data" if path == iacuc_index_path else "legacy",
-        },
-    )
 
 
 def filter_iacuc_index(payload, q, limit=80):

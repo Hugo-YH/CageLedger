@@ -481,7 +481,7 @@ class QuarantineTests(unittest.TestCase):
     def test_tiff_upload_preserves_original_and_generates_png_preview_for_word(self):
         test = self.create_test()
         source = BytesIO()
-        PillowImage.new("L", (24, 16), 128).save(source, format="TIFF")
+        PillowImage.new("I", (24, 16), 70000).save(source, format="TIFF")
         original = source.getvalue()
         uploaded = self.write(
             files.upload,
@@ -502,6 +502,8 @@ class QuarantineTests(unittest.TestCase):
         preview, mime = files.preview(attachment, self.root)
         self.assertEqual(mime, "image/png")
         self.assertTrue(preview.startswith(b"\x89PNG\r\n\x1a\n"))
+        with PillowImage.open(BytesIO(preview)) as image:
+            self.assertEqual(image.getpixel((0, 0)), 65535)
         self.assertTrue(generate(files.snapshot(self.conn, uploaded["test"]), self.root, draft=True))
 
     def test_word_has_draft_marker_repeated_headers_and_blank_signatures(self):

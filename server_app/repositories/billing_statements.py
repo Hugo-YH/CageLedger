@@ -1,6 +1,6 @@
 import json
 
-from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
+from server_app.cache import CACHE_MISS, cache_generation, cache_get, cache_key, cache_set
 
 from .billing_snapshot_storage import insert_records, read_records, snapshot_write, validate_summary_storage
 from .payload import dump_json
@@ -11,9 +11,10 @@ def list_billing_statement_lines_for_version(conn, version_id):
 
 
 def list_billing_statement_line_summaries_for_version(conn, version_id):
+    _cache_generation = cache_generation()
     validate_summary_storage(conn, version_id)
     key = cache_key("billing_workflows::lines", version_id=version_id)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     rows = conn.execute(
@@ -33,7 +34,11 @@ def list_billing_statement_line_summaries_for_version(conn, version_id):
         """,
         (version_id,),
     ).fetchall()
-    return cache_set(key, [billing_statement_line_summary_row(row) for row in rows])
+    return cache_set(
+        key,
+        [billing_statement_line_summary_row(row) for row in rows],
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def billing_statement_line_summary_row(row):
@@ -74,8 +79,9 @@ def billing_statement_list_item(statement):
 
 
 def list_current_billing_statements(conn):
+    _cache_generation = cache_generation()
     key = "billing_statements::current"
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     rows = conn.execute(
@@ -93,12 +99,13 @@ def list_current_billing_statements(conn):
         statement = dict(version.get("statement") or {})
         if statement:
             statements.append(billing_statement_list_item(statement))
-    return cache_set(key, statements)
+    return cache_set(key, statements, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
 
 
 def get_current_billing_statement(conn, statement_id):
+    _cache_generation = cache_generation()
     key = cache_key("billing_statements::current_item", id=statement_id)
-    cached = cache_get(key, CACHE_MISS)
+    cached = cache_get(key, CACHE_MISS, connection=conn)
     if cached is not CACHE_MISS:
         return cached
     row = conn.execute(
@@ -112,12 +119,16 @@ def get_current_billing_statement(conn, statement_id):
         (statement_id,),
     ).fetchone()
     if not row:
-        return cache_set(key, None)
+        return cache_set(key, None, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
     version = json.loads(row["payload"])
     statement = dict(version.get("statement") or {})
     if not statement:
-        return cache_set(key, None)
-    return cache_set(key, billing_statement_list_item(statement))
+        return cache_set(key, None, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
+    return cache_set(
+        key,
+        billing_statement_list_item(statement),
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def replace_billing_statement_version_lines(conn, version_id, lines):

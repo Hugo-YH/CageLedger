@@ -3,7 +3,13 @@
 import json
 import logging
 
-from server_app.cache import cache_get, cache_set, invalidate_data_cache, invalidate_data_cache_prefixes
+from server_app.cache import (
+    cache_generation,
+    cache_get,
+    cache_set,
+    invalidate_data_cache,
+    invalidate_data_cache_prefixes,
+)
 from server_app.db import connect_db
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
 from server_app.domains.billing import (
@@ -282,11 +288,16 @@ def list_principal_identities(conn):
 
 
 def read_principal_identities():
+    _cache_generation = cache_generation()
     cached = cache_get("principal_identities")
     if cached is not None:
         return cached
     with connect_db() as conn:
-        return cache_set("principal_identities", list_principal_identities(conn))
+        return cache_set(
+            "principal_identities",
+            list_principal_identities(conn),
+            expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+        )
 
 
 def save_principal_identity(conn, payload, actor, pi_name):

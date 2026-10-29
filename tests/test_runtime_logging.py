@@ -306,6 +306,20 @@ class RuntimeLoggingTests(unittest.TestCase):
         self.assertEqual(record["sqlOperation"], "SELECT")
         self.assertNotIn("private_column", (config.LOG_DIR / "runtime.jsonl").read_text())
 
+    def test_slow_queries_have_source_fingerprint_without_sql_or_bound_values(self):
+        with (
+            patch("server_app.db.SLOW_DATABASE_THRESHOLD_MS", 0),
+            sqlite3.connect(":memory:", factory=ObservedConnection) as conn,
+        ):
+            conn.execute("SELECT ? AS private_sql_alias", ("private-bind-credential",)).fetchone()
+        record = next(r for r in self.records() if r["event"] == "database_slow_operation")
+        self.assertRegex(record["queryId"], r"^[0-9a-f]{16}$")
+        self.assertEqual(record["source"], "test_runtime_logging.py")
+        self.assertTrue(record["function"].startswith("test_slow_queries"))
+        output = (config.LOG_DIR / "runtime.jsonl").read_text()
+        self.assertNotIn("private_sql_alias", output)
+        self.assertNotIn("private-bind-credential", output)
+
 
 if __name__ == "__main__":
     unittest.main()

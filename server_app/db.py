@@ -1,7 +1,10 @@
+import hashlib
 import logging
 import sqlite3
+import sys
 import threading
 import time
+from pathlib import Path
 
 from .config import DB_PATH, SLOW_DATABASE_THRESHOLD_MS
 from .performance import record_database_operation
@@ -47,6 +50,22 @@ class ObservedConnection(ClosingConnection):
                 slow=elapsed_ms >= SLOW_DATABASE_THRESHOLD_MS,
                 locked=locked,
             )
+            if elapsed_ms >= SLOW_DATABASE_THRESHOLD_MS and failure is None:
+                statement = args[0] if args and isinstance(args[0], str) else ""
+                caller = sys._getframe(2)
+                emit_event(
+                    "database_slow_operation",
+                    level=logging.WARNING,
+                    rate_limit=True,
+                    operation=operation.__name__,
+                    queryId=hashlib.sha256(" ".join(statement.split()).encode("utf-8", "surrogatepass")).hexdigest()[
+                        :16
+                    ],
+                    source=Path(caller.f_code.co_filename).name,
+                    function=caller.f_code.co_name,
+                    line=caller.f_lineno,
+                    durationMs=round(elapsed_ms, 1),
+                )
             if failure is not None:
                 tokens = args[0].split(None, 1) if args and isinstance(args[0], str) else []
                 sql = tokens[0].upper() if tokens else ""
@@ -56,6 +75,11 @@ class ObservedConnection(ClosingConnection):
                     error=failure,
                     rate_limit=True,
                     operation=operation.__name__,
+                    queryId=hashlib.sha256(
+                        " ".join(args[0].split()).encode("utf-8", "surrogatepass")
+                        if args and isinstance(args[0], str)
+                        else b""
+                    ).hexdigest()[:16],
                     sqlOperation=sql if sql in {"SELECT", "INSERT", "UPDATE", "DELETE", "BEGIN", "PRAGMA"} else "OTHER",
                     durationMs=round(elapsed_ms, 1),
                 )

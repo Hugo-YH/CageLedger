@@ -1,4 +1,4 @@
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set
 from server_app.repositories.billing_candidate_batches import (
     quantity_settlement_groups_many,
     upsert_candidate_snapshots_many,
@@ -54,6 +54,7 @@ def dashboard_candidate_snapshots(conn, month, calculate=None, now=None, *, prep
 def list_settlement_candidates(
     conn, filters, calculate, source_type="quantity_sheet", now=None, *, prepare_calculations=None
 ):
+    _cache_generation = cache_generation()
     response_cache_key = cache_key(
         "quantity_sheets::settlement_candidates::list",
         source_type=source_type,
@@ -64,7 +65,7 @@ def list_settlement_candidates(
         column_filters=filters.get("columnFilters", {}),
         person_filter_mode=filters.get("personFilterMode", ""),
     )
-    cached = cache_get(response_cache_key)
+    cached = cache_get(response_cache_key, connection=conn)
     if cached is not None:
         return cached
 
@@ -89,7 +90,12 @@ def list_settlement_candidates(
     payload["items"] = [
         _public_candidate(item, managers.get(f"{item['month']}::{item['pi']}", "")) for item in payload["items"]
     ]
-    return cache_set(response_cache_key, payload, ttl_seconds=SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS)
+    return cache_set(
+        response_cache_key,
+        payload,
+        ttl_seconds=SETTLEMENT_CANDIDATE_PAGE_CACHE_TTL_SECONDS,
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def refresh_settlement_candidate_snapshot(conn, month, pi_name, calculate, source_type="quantity_sheet", now=None):

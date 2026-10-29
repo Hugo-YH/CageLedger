@@ -346,7 +346,7 @@ class HandlerSupportMixin:
                 )
                 conn.commit()
             invalidate_data_cache("principal_identities")
-            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
+            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::", "dashboard_overview::")
             changed_sheets = [item for item in (previous_sheet, sheet, *affected_sheets) if item]
             invalidate_pdf_cache_for_sheets(changed_sheets)
             schedule_pdf_cache_refresh(
@@ -380,6 +380,8 @@ class HandlerSupportMixin:
                 item, audit_logs = save_principal_identity(conn, body, user, pi_name)
                 invalidate_quantity_sheet_candidate_snapshots_by_pi(conn, pi_name)
                 conn.commit()
+            invalidate_data_cache("principal_identities", "principal_types_by_pi")
+            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::", "dashboard_overview::")
             invalidate_all_pdf_cache()
             self.send_json({"item": item, "auditLogs": audit_logs})
         except StaleWriteError as exc:
@@ -412,7 +414,7 @@ class HandlerSupportMixin:
                 invalidate_quantity_sheet_candidate_snapshots(conn, [sheet])
                 conn.commit()
             invalidate_data_cache("principal_identities")
-            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::")
+            invalidate_data_cache_prefixes("quantity_sheets::", "billing_workflows::", "dashboard_overview::")
             invalidate_pdf_cache_for_sheets([sheet])
             schedule_pdf_cache_refresh(
                 [],
@@ -435,6 +437,7 @@ class HandlerSupportMixin:
             with connect_db() as conn:
                 statement, lines, audit_logs = app_ports().generate_quantity_sheet_statement(conn, sheet_id, body, user)
                 conn.commit()
+            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
             self.send_json({"statement": statement, "lines": lines, "auditLogs": audit_logs}, HTTPStatus.CREATED)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)

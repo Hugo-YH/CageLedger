@@ -11,9 +11,9 @@ describe("print templates", () => {
       cards: [{ qrId: "ABCD", label: "1/1", index: 1, suggestedQuantity: "5" }],
     } as IntakeBatch;
     expect(planIntakeCardPrint([batch], []).disabledReason).toContain("直接取材");
-    expect(
-      planIntakeCardPrint([batch, { finalCardCount: 1, roomName: "8101" } as IntakeBatch], []).disabledReason,
-    ).toContain("直接取材");
+    expect(planIntakeCardPrint([batch, { finalCardCount: 1, roomName: "8101" }], []).disabledReason).toContain(
+      "直接取材",
+    );
     expect(intakeCardsPrintHtml([batch], { fillBlanks: true })).toBe("");
   });
 

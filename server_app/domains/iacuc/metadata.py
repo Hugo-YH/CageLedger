@@ -6,7 +6,7 @@ from server_app.repositories.iacuc import read_iacuc_index
 
 
 def read_index_status(conn, index_path=IACUC_INDEX_PATH, legacy_path=LEGACY_IACUC_INDEX_PATH):
-    cached = cache_get("iacuc_index")
+    cached = cache_get("iacuc_index", connection=conn)
     if cached is not None:
         return {key: cached[key] for key in ("count", "updatedAt", "source")}
     row = conn.execute(

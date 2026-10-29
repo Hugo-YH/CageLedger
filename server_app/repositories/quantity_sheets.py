@@ -1,6 +1,6 @@
 import json
 
-from server_app.cache import CACHE_MISS, cache_get, cache_key, cache_set
+from server_app.cache import CACHE_MISS, cache_generation, cache_get, cache_key, cache_set
 from server_app.repositories.person_names import (
     column_predicate,
     individual_mode,
@@ -55,6 +55,7 @@ def list_quantity_sheets_by_month(conn, month):
 
 
 def list_quantity_sheets_page(conn, filters, filtered_where):
+    _cache_generation = cache_generation()
     where, params = quantity_sheet_where(filters, filtered_where, conn=conn)
     order_by = quantity_sheet_order_by(filters)
     key = cache_key(
@@ -70,7 +71,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         pi=str(filters.get("pi", "")).strip(),
         room_id=str(filters.get("roomId", "")).strip(),
     )
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     where_clause = f" WHERE {where}" if where else ""
@@ -109,7 +110,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
             "hasMore": filters["offset"] + filters["limit"] < total,
         },
     }
-    return cache_set(key, payload)
+    return cache_set(key, payload, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
 
 
 def quantity_sheet_where(filters, filtered_where, exclude_column="", conn=None):
@@ -222,11 +223,16 @@ def quantity_sheet_list_item(sheet):
 
 
 def get_quantity_sheet(conn, sheet_id):
+    _cache_generation = cache_generation()
     key = cache_key("quantity_sheets::detail", id=sheet_id)
-    cached = cache_get(key, CACHE_MISS)
+    cached = cache_get(key, CACHE_MISS, connection=conn)
     if cached is not CACHE_MISS:
         return cached
-    return cache_set(key, get_quantity_sheet_for_write(conn, sheet_id))
+    return cache_set(
+        key,
+        get_quantity_sheet_for_write(conn, sheet_id),
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def get_quantity_sheet_for_write(conn, sheet_id):

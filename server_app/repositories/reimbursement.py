@@ -1,6 +1,6 @@
 import json
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set
 
 from .payload import dump_json
 
@@ -36,6 +36,7 @@ def reimbursement_record_list_item(payload):
 
 
 def list_reimbursement_records_page(conn, filters, clean_text):
+    _cache_generation = cache_generation()
     clauses = []
     params = []
     month = clean_text(filters.get("month", ""))
@@ -62,7 +63,7 @@ def list_reimbursement_records_page(conn, filters, clean_text):
         pi=pi,
         only_unpaid=clean_text(filters.get("onlyUnpaid", "")),
     )
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     where_clause = f" WHERE {where}" if where else ""
@@ -110,7 +111,7 @@ def list_reimbursement_records_page(conn, filters, clean_text):
             "hasMore": filters["offset"] + filters["limit"] < total,
         },
     }
-    return cache_set(key, payload)
+    return cache_set(key, payload, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
 
 
 def reimbursement_record_list_row(row):
@@ -165,9 +166,10 @@ def list_reimbursement_records_for_pi(conn, pi_name):
 
 
 def list_reimbursement_record_summaries_for_pi(conn, pi_name):
+    _cache_generation = cache_generation()
     normalized_pi = str(pi_name or "").strip()
     key = cache_key("reimbursement_records::history", pi=normalized_pi)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     rows = conn.execute(
@@ -202,7 +204,11 @@ def list_reimbursement_record_summaries_for_pi(conn, pi_name):
         """,
         (normalized_pi,),
     ).fetchall()
-    return cache_set(key, [reimbursement_record_list_row(row) for row in rows])
+    return cache_set(
+        key,
+        [reimbursement_record_list_row(row) for row in rows],
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def upsert_reimbursement_record(conn, payload):

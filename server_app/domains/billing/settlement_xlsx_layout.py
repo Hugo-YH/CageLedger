@@ -3,6 +3,8 @@
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from server_app.shared.xlsx import set_literal_cell
+
 from .settlement_xlsx_model import (
     _UNIT_LABELS,
     _amount_formula,
@@ -60,7 +62,7 @@ def _write_custom_appendix(worksheet, custom_rows, header_row):
                 cell.value = f"=ROUND(D{custom_row}*E{custom_row},2)"
                 cell.number_format = _MONEY_FORMAT
             else:
-                cell.value = value
+                set_literal_cell(cell, value)
                 if column_index == 4:
                     cell.number_format = _INTEGER_FORMAT
                 elif column_index == 5:
@@ -128,7 +130,7 @@ def _write_statement_sheet(worksheet, statement, lines):
     total_columns = max(table_columns, 8)
 
     worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=total_columns)
-    title_cell = worksheet.cell(row, 1, title)
+    title_cell = set_literal_cell(worksheet.cell(row, 1), title)
     title_cell.font = _TITLE_FONT
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
     worksheet.row_dimensions[row].height = 28
@@ -143,7 +145,7 @@ def _write_statement_sheet(worksheet, statement, lines):
         left_label.font = _HEADER_FONT
         left_label.fill = _HEADER_FILL
         left_label.border = _BORDER
-        left_value = worksheet.cell(row, 2, value_left)
+        left_value = set_literal_cell(worksheet.cell(row, 2), value_left)
         left_value.font = _BODY_FONT
         left_value.border = _BORDER
         worksheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=3)
@@ -151,7 +153,7 @@ def _write_statement_sheet(worksheet, statement, lines):
         right_label.font = _HEADER_FONT
         right_label.fill = _HEADER_FILL
         right_label.border = _BORDER
-        right_value = worksheet.cell(row, 5, value_right)
+        right_value = set_literal_cell(worksheet.cell(row, 5), value_right)
         right_value.font = _BODY_FONT
         right_value.border = _BORDER
         worksheet.merge_cells(start_row=row, start_column=5, end_row=row, end_column=8)
@@ -165,7 +167,7 @@ def _write_statement_sheet(worksheet, statement, lines):
     worksheet.cell(row, 1).fill = _HEADER_FILL
     worksheet.cell(row, 1).border = _BORDER
     worksheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=8)
-    iacuc_cell = worksheet.cell(row, 2, iacucs)
+    iacuc_cell = set_literal_cell(worksheet.cell(row, 2), iacucs)
     iacuc_cell.font = _BODY_FONT
     iacuc_cell.border = _BORDER
     iacuc_cell.alignment = Alignment(wrap_text=True, vertical="center")
@@ -177,7 +179,7 @@ def _write_statement_sheet(worksheet, statement, lines):
     worksheet.cell(row, 1).fill = _HEADER_FILL
     worksheet.cell(row, 1).border = _BORDER
     worksheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=8)
-    funding_cell = worksheet.cell(row, 2, funding)
+    funding_cell = set_literal_cell(worksheet.cell(row, 2), funding)
     funding_cell.font = _BODY_FONT
     funding_cell.border = _BORDER
     row += 1
@@ -193,7 +195,7 @@ def _write_statement_sheet(worksheet, statement, lines):
     worksheet.cell(row, 1).fill = _HEADER_FILL
     worksheet.cell(row, 1).border = _BORDER
     worksheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=8)
-    note_cell = worksheet.cell(row, 2, note_text)
+    note_cell = set_literal_cell(worksheet.cell(row, 2), note_text)
     note_cell.font = Font(name="Microsoft YaHei", size=9)
     note_cell.border = _BORDER
     note_cell.alignment = Alignment(wrap_text=True, vertical="center")
@@ -292,7 +294,7 @@ def _write_statement_sheet(worksheet, statement, lines):
             end_row=header_species_row,
             end_column=item["end"],
         )
-        cell = worksheet.cell(header_species_row, item["start"], _species_label(item["species"]))
+        cell = set_literal_cell(worksheet.cell(header_species_row, item["start"]), _species_label(item["species"]))
         cell.font = _HEADER_FONT
         cell.fill = _HEADER_FILL
         cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -347,7 +349,7 @@ def _write_statement_sheet(worksheet, statement, lines):
         if column["hasCustom"]:
             label = f"{label}（含自定义收费）"
         worksheet.merge_cells(start_row=header_group_row, start_column=start, end_row=header_group_row, end_column=end)
-        group_cell = worksheet.cell(header_group_row, start, label)
+        group_cell = set_literal_cell(worksheet.cell(header_group_row, start), label)
         group_cell.font = _HEADER_FONT
         group_cell.fill = _HEADER_FILL
         group_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -369,7 +371,7 @@ def _write_statement_sheet(worksheet, statement, lines):
 
     for data_index, day in enumerate(rows):
         data_row = first_data_row + data_index
-        date_cell = worksheet.cell(data_row, 1, day["date"])
+        date_cell = set_literal_cell(worksheet.cell(data_row, 1), day["date"])
         date_cell.font = _BODY_FONT
         date_cell.border = _BORDER
         date_cell.alignment = Alignment(horizontal="center", vertical="center")

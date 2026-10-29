@@ -165,7 +165,30 @@ def claim_payload(conn, row, include_detail):
             "SELECT * FROM reimbursement_claim_funding_lines WHERE claim_id = ? ORDER BY sort_order, rowid",
             (row["id"],),
         ).fetchall()
-        payload["fundingLines"] = [funding_line_payload(conn, line, True) for line in lines]
+        allocations_by_line = {}
+        if lines:
+            allocations = conn.execute(
+                """SELECT a.id, a.funding_line_id, a.obligation_id, a.amount, a.status,
+                          a.confirmed_by, a.confirmed_at, a.reversed_by, a.reversed_at, a.reversal_reason,
+                          a.created_by, a.created_by_name, a.created_at, a.updated_at, a.payload,
+                          o.id AS projection_obligation_id, o.source_pi AS projection_source_pi,
+                          o.iacuc AS projection_iacuc, o.month AS projection_month,
+                          l.id AS projection_line_id, l.fund_book_no AS projection_fund_book_no,
+                          c.id AS projection_claim_id, c.funding_owner AS projection_funding_owner,
+                          c.document_number AS projection_document_number
+                   FROM reimbursement_claim_funding_lines AS l
+                   CROSS JOIN reimbursement_allocations AS a ON l.id = a.funding_line_id
+                   LEFT JOIN reimbursement_settlement_obligations AS o ON o.id = a.obligation_id
+                   LEFT JOIN reimbursement_claims AS c ON c.id = l.claim_id
+                   WHERE l.claim_id = ? ORDER BY a.created_at""",
+                (row["id"],),
+            ).fetchall()
+            for allocation in allocations:
+                allocations_by_line.setdefault(allocation["funding_line_id"], []).append(allocation)
+        payload["fundingLines"] = [
+            funding_line_payload(conn, line, True, _allocations=allocations_by_line.get(line["id"], []))
+            for line in lines
+        ]
         attachments = conn.execute(
             "SELECT * FROM reimbursement_claim_attachments WHERE claim_id = ? ORDER BY created_at", (row["id"],)
         ).fetchall()
@@ -173,7 +196,7 @@ def claim_payload(conn, row, include_detail):
     return payload
 
 
-def funding_line_payload(conn, row, include_allocations):
+def funding_line_payload(conn, row, include_allocations, *, _allocations=None):
     payload = load(row["payload"])
     payload.update(
         {
@@ -190,18 +213,43 @@ def funding_line_payload(conn, row, include_allocations):
         }
     )
     if include_allocations:
-        allocations = conn.execute(
-            "SELECT * FROM reimbursement_allocations WHERE funding_line_id = ? ORDER BY created_at", (row["id"],)
-        ).fetchall()
-        payload["allocations"] = [allocation_payload(conn, allocation) for allocation in allocations]
+        if _allocations is None:
+            allocations = conn.execute(
+                "SELECT * FROM reimbursement_allocations WHERE funding_line_id = ? ORDER BY created_at", (row["id"],)
+            ).fetchall()
+            payload["allocations"] = [allocation_payload(conn, allocation) for allocation in allocations]
+        else:
+            payload["allocations"] = [
+                allocation_payload(conn, allocation, _projected=True) for allocation in _allocations
+            ]
     return payload
 
 
-def allocation_payload(conn, row):
+def allocation_payload(conn, row, *, _projected=False):
     payload = load(row["payload"])
-    obligation = obligation_row(conn, row["obligation_id"])
-    line = funding_line_row(conn, row["funding_line_id"])
-    claim = claim_row(conn, line["claim_id"])
+    if _projected:
+        if row["projection_obligation_id"] is None:
+            raise LookupError("结算应收不存在")
+        if row["projection_line_id"] is None:
+            raise LookupError("经费明细不存在")
+        if row["projection_claim_id"] is None:
+            raise LookupError("报销单不存在")
+        source_pi, iacuc, month = row["projection_source_pi"], row["projection_iacuc"], row["projection_month"]
+        funding_owner, fund_book_no, document_number = (
+            row["projection_funding_owner"],
+            row["projection_fund_book_no"],
+            row["projection_document_number"],
+        )
+    else:
+        obligation = obligation_row(conn, row["obligation_id"])
+        line = funding_line_row(conn, row["funding_line_id"])
+        claim = claim_row(conn, line["claim_id"])
+        source_pi, iacuc, month = obligation["source_pi"], obligation["iacuc"], obligation["month"]
+        funding_owner, fund_book_no, document_number = (
+            claim["funding_owner"],
+            line["fund_book_no"],
+            claim["document_number"],
+        )
     payload.update(
         {
             "id": row["id"],
@@ -218,12 +266,12 @@ def allocation_payload(conn, row):
             "createdByName": row["created_by_name"],
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
-            "sourcePi": obligation["source_pi"],
-            "iacuc": obligation["iacuc"],
-            "month": obligation["month"],
-            "fundingOwner": claim["funding_owner"],
-            "fundBookNo": line["fund_book_no"],
-            "documentNumber": claim["document_number"],
+            "sourcePi": source_pi,
+            "iacuc": iacuc,
+            "month": month,
+            "fundingOwner": funding_owner,
+            "fundBookNo": fund_book_no,
+            "documentNumber": document_number,
         }
     )
     return payload

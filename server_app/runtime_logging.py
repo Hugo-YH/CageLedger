@@ -34,6 +34,11 @@ _FIELDS = frozenset(
         "stage",
         "operation",
         "sqlOperation",
+        "queryId",
+        "source",
+        "function",
+        "line",
+        "returnCode",
         "status",
         "durationMs",
         "applicationMs",
@@ -144,7 +149,7 @@ def _frames(error):
 def _rate_limit(event, fields, error):
     key = (
         event,
-        threading.current_thread().name,
+        fields.get("queryId") or threading.current_thread().name,
         fields.get("stage"),
         fields.get("operation"),
         fields.get("sqlOperation"),

@@ -3,7 +3,6 @@
 import logging
 import signal
 from contextlib import contextmanager
-from http.server import ThreadingHTTPServer
 from threading import Event, Thread, current_thread, main_thread
 from types import SimpleNamespace
 
@@ -15,6 +14,7 @@ from server_app.domains.feedback import worker as feedback_worker
 from server_app.domains.iacuc.auto_import import start_auto_import_watcher
 from server_app.pdf.renderer import prewarm_pdf_renderer, shutdown_pdf_renderer
 from server_app.runtime_logging import configure_runtime_logging, emit_event
+from server_app.web.server import BoundedThreadingHTTPServer as ThreadingHTTPServer
 
 
 def configure(schema_initializer):

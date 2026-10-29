@@ -13,6 +13,7 @@ from pathlib import Path
 from queue import Empty, PriorityQueue
 from threading import Event, Lock, Thread, current_thread
 
+from server_app.config import PDF_RENDER_MAX_PENDING
 from server_app.runtime_logging import capture_log_context, emit_event, log_context, log_operation
 
 RENDER_TIMEOUT_SECONDS = 120
@@ -45,8 +46,10 @@ class _QueuedRender:
 class PersistentChromiumRenderer:
     """Own one Chromium process and serialize PDF work through a worker thread."""
 
-    def __init__(self):
-        self._jobs: PriorityQueue[_QueuedRender] = PriorityQueue()
+    def __init__(self, *, max_pending=PDF_RENDER_MAX_PENDING):
+        self._max_pending = max(int(max_pending), 1)
+        # The reserved slot is only for shutdown, never accepted render work.
+        self._jobs: PriorityQueue[_QueuedRender] = PriorityQueue(maxsize=self._max_pending + 1)
         self._lock = Lock()
         self._thread: Thread | None = None
         self._sequence = count()
@@ -110,6 +113,8 @@ class PersistentChromiumRenderer:
         with self._lock:
             if self._stopping.is_set():
                 raise RuntimeError("PDF 渲染器正在停止")
+            if self._jobs.qsize() >= self._max_pending:
+                raise RuntimeError("PDF 渲染队列繁忙，请稍后重试")
             # Admission and startup share a lock: initialization failure must not
             # drain the queue before a concurrently accepted job is inserted.
             self._jobs.put(_QueuedRender(priority, next(self._sequence), job))
@@ -291,8 +296,8 @@ def command_line_render(markup):
         playwright_render(source, output)
         if output.exists():
             return output.read_bytes()
-        detail = (completed.stderr or completed.stdout).strip()
-        raise RuntimeError(f"PDF 渲染失败：{detail or 'Chromium 未生成文件'}")
+        emit_event("pdf_command_failed", level=logging.WARNING, returnCode=completed.returncode, rate_limit=True)
+        raise RuntimeError("PDF 渲染失败，请检查服务器运行日志")
 
 
 def chromium_binary():

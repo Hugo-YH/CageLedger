@@ -1,7 +1,7 @@
 import json
 import time
 
-from server_app.cache import cache_get, cache_key, cache_set, log_perf
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set, log_perf
 
 from .audit_storage import payloads_for_rows
 
@@ -56,6 +56,7 @@ def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200
 
 
 def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, where_sql="", params=()):
+    _cache_generation = cache_generation()
     key = cache_key(
         cache_prefix,
         limit=filters["limit"],
@@ -73,11 +74,13 @@ def cached_paginated_payloads(conn, cache_prefix, table, order_by, filters, wher
         room_name=_clean(filters.get("roomName", "")),
         source_type=_clean(filters.get("sourceType", "")),
     )
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     return cache_set(
-        key, paginated_payloads(conn, table, order_by, where_sql, params, filters["limit"], filters["offset"])
+        key,
+        paginated_payloads(conn, table, order_by, where_sql, params, filters["limit"], filters["offset"]),
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
     )
 
 

@@ -291,7 +291,7 @@ class IacucAutoImportTests(unittest.TestCase):
             with self.assertRaisesRegex(OSError, "archive failed"):
                 self.scan(latest.parent, Path(self.tmpdir.name) / "archive")
         invalidate.assert_called_once_with(
-            "assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi"
+            "assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi", "applications_by_iacuc"
         )
         self.assertTrue(latest.exists())
         self.assertTrue(old.exists())

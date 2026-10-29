@@ -1,6 +1,6 @@
 import json
 
-from server_app.cache import cache_get, cache_set
+from server_app.cache import cache_build_lock, cache_generation, cache_get, cache_set
 from server_app.shared import as_float, as_int
 from server_app.shared.intake_identifiers import intake_identifier_values
 
@@ -102,26 +102,38 @@ def assemble_state(conn, *, include_audit_logs=True):
 
 
 def read_cached_state(conn, empty_state_factory):
-    cached = cache_get("assembled_state")
-    if cached is not None:
-        return cached
-    # Bootstrap and entity reads never consume audit history. Avoid parsing an
-    # unbounded audit table whenever their shared cache is rebuilt.
-    return cache_set("assembled_state", assemble_state(conn, include_audit_logs=False) or empty_state_factory())
+    with cache_build_lock("assembled_state", conn):
+        _cache_generation = cache_generation()
+        cached = cache_get("assembled_state", connection=conn)
+        if cached is not None:
+            return cached
+        # Bootstrap and entity reads never consume audit history. Avoid parsing an
+        # unbounded audit table whenever their shared cache is rebuilt.
+        return cache_set(
+            "assembled_state",
+            assemble_state(conn, include_audit_logs=False) or empty_state_factory(),
+            expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+        )
 
 
 def read_applications_by_iacuc(conn, normalize_iacuc_number):
-    cached = cache_get("applications_by_iacuc")
-    if cached is not None:
-        return cached
-    rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
-    applications = {}
-    for row in rows:
-        item = json.loads(row["payload"])
-        key = normalize_iacuc_number(item.get("iacuc", ""))
-        if key and key not in applications:
-            applications[key] = item
-    return cache_set("applications_by_iacuc", applications)
+    with cache_build_lock("applications_by_iacuc", conn):
+        _cache_generation = cache_generation()
+        cached = cache_get("applications_by_iacuc", connection=conn)
+        if cached is not None:
+            return cached
+        rows = conn.execute("SELECT payload FROM experiment_applications ORDER BY rowid").fetchall()
+        applications = {}
+        for row in rows:
+            item = json.loads(row["payload"])
+            key = normalize_iacuc_number(item.get("iacuc", ""))
+            if key and key not in applications:
+                applications[key] = item
+        return cache_set(
+            "applications_by_iacuc",
+            applications,
+            expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+        )
 
 
 def write_normalized_state(

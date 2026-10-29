@@ -12,6 +12,7 @@ except ImportError:  # pragma: no cover - deployment dependency validation
 
 from server_app.domains.iacuc import normalize_application_date, normalize_iacuc_number
 from server_app.shared import clean_text
+from server_app.shared.xlsx import set_literal_cell
 
 from .allowance import billing_free_cages_for_pi
 from .profiles import billing_profile_for_room
@@ -283,7 +284,11 @@ def build_monthly_summary_xlsx(month, rows):
             row.get("technicalServiceAmount", 0),
         ]
         for column, value in enumerate(values, start=1):
-            cell = worksheet.cell(excel_row, column, value)
+            cell = worksheet.cell(excel_row, column)
+            if column == 9:
+                cell.value = value
+            else:
+                set_literal_cell(cell, value)
             cell._style = (
                 numeric_body_style
                 if column in numeric_columns

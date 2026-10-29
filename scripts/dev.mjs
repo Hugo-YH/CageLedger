@@ -80,6 +80,7 @@ launch(resolveProjectPython(), ["server.py"], {
   CAGELEDGER_CORS_ALLOWED_ORIGINS: corsAllowedOrigins,
   ...(ephemeralDir
     ? {
+        CAGELEDGER_ENV: "test",
         CAGELEDGER_DB: join(ephemeralDir, "cageledger.sqlite"),
         CAGELEDGER_DATA_ROOT: ephemeralDir,
         // Isolated runs must not inherit real Gitea credentials from .env.
@@ -97,10 +98,13 @@ launch(
   process.platform === "win32" ? "npm.cmd" : "npm",
   ["exec", "vite", "--", "--host", "0.0.0.0", "--port", appPort],
   {
-    CAGELEDGER_API_ORIGIN:
-      process.env.CAGELEDGER_API_ORIGIN || dotEnv.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${apiPort}`,
-    CAGELEDGER_DOCS_ORIGIN:
-      process.env.CAGELEDGER_DOCS_ORIGIN || dotEnv.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${docsPort}`,
+    // Test traffic must never inherit proxy targets pointing at a developer's database.
+    CAGELEDGER_API_ORIGIN: ephemeralDir
+      ? `http://127.0.0.1:${apiPort}`
+      : process.env.CAGELEDGER_API_ORIGIN || dotEnv.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${apiPort}`,
+    CAGELEDGER_DOCS_ORIGIN: ephemeralDir
+      ? `http://127.0.0.1:${docsPort}`
+      : process.env.CAGELEDGER_DOCS_ORIGIN || dotEnv.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${docsPort}`,
   },
 );
 launch(

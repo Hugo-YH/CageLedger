@@ -127,7 +127,7 @@ class WorkflowActionsMixin:
                 self.send_json({"error": "用户名或密码错误"}, HTTPStatus.UNAUTHORIZED)
                 return
             LOGIN_THROTTLE.clear_account(client_ip, username)
-            token, expires_at = create_session(conn, user["id"])
+            token, expires_at = create_session(conn, user["id"], commit=False)
             now = now_iso()
             event = audit_event(
                 user,
@@ -207,7 +207,13 @@ class WorkflowActionsMixin:
                 write_audit_events(conn, [event])
                 conn.commit()
             publish_committed_iacuc_index(file_items, app_ports().save_iacuc_index_file)
-            invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi")
+            invalidate_data_cache(
+                "assembled_state",
+                "iacuc_index",
+                "principal_identities",
+                "principal_types_by_pi",
+                "applications_by_iacuc",
+            )
             invalidate_data_cache_prefixes(
                 "bootstrap_summary::",
                 "billing_occupancies::",
@@ -217,6 +223,7 @@ class WorkflowActionsMixin:
                 "reimbursement_records::",
                 "intake_batches::",
                 "placement_tasks::",
+                "dashboard_overview::",
             )
             invalidate_all_pdf_cache()
             self.send_json(
@@ -326,6 +333,7 @@ class WorkflowActionsMixin:
                     get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
                 )
                 conn.commit()
+            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
             self.send_json(
                 {"statement": statement, "lines": lines, "workflow": workflow, "auditLogs": audit_logs},
                 HTTPStatus.CREATED,
@@ -364,6 +372,7 @@ class WorkflowActionsMixin:
                     else None
                 )
                 conn.commit()
+            invalidate_data_cache_prefixes("billing_workflows::", "billing_statements::", "reimbursement_records::")
             if refresh_candidate_cache:
                 invalidate_data_cache_prefixes("quantity_sheets::settlement_candidates::")
                 invalidate_data_cache_prefixes("dashboard_overview::")

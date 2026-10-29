@@ -1,16 +1,20 @@
 """Claims, obligations and legacy migration use-case orchestration."""
 
 import json
+import logging
 import shutil
 
 from server_app.config import REIMBURSEMENT_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
+from server_app.runtime_logging import emit_event
 from server_app.shared import clean_text, new_id, now_iso
+from server_app.shared.concurrency import begin_write
 
 from .allocation_commands import ALLOCATION_STATUSES as ALLOCATION_STATUSES
 from .allocation_commands import confirm_allocation as confirm_allocation
 from .allocation_commands import create_allocation as create_allocation
 from .allocation_commands import reverse_allocation as reverse_allocation
+from .attachment_paths import claim_directory
 from .claim_attachments import ALLOWED_ATTACHMENT_TYPES as ALLOWED_ATTACHMENT_TYPES
 from .claim_attachments import MAX_ATTACHMENT_BYTES as MAX_ATTACHMENT_BYTES
 from .claim_attachments import MAX_ATTACHMENTS_PER_CLAIM as MAX_ATTACHMENTS_PER_CLAIM
@@ -198,20 +202,18 @@ def save_claim(conn, actor, claim_id, payload):
 
 def delete_claim(conn, actor, claim_id):
     _require_authenticated(actor)
+    begin_write(conn)
     existing = _claim_row(conn, claim_id)
     if not existing:
         raise LookupError("报销单不存在")
     _require_claim_view(actor, existing)
     if _claim_has_confirmed_allocations(conn, claim_id):
         raise ValueError("存在已确认核销的报销单不能删除，请先在核销中心撤销分摊后再删除")
+    attachment_directory = claim_directory(REIMBURSEMENT_ATTACHMENTS_PATH, claim_id)
     now = now_iso()
     document_number = existing["document_number"]
     snapshot = _claim_payload(conn, existing, True)
     _delete_claim(conn, claim_id)
-    try:
-        shutil.rmtree(REIMBURSEMENT_ATTACHMENTS_PATH / claim_id, ignore_errors=True)
-    except OSError:
-        pass
     event = audit_event(
         actor,
         "reimbursement_ledger.claim_deleted",
@@ -225,6 +227,12 @@ def delete_claim(conn, actor, claim_id):
     )
     write_audit_events(conn, [event])
     conn.commit()
+    try:
+        shutil.rmtree(attachment_directory)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        emit_event("reimbursement_attachment_cleanup_failed", level=logging.WARNING, rate_limit=True)
     return {"ok": True, "auditLogs": merge_audit_logs([], [event])}
 
 

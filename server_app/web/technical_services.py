@@ -3,6 +3,7 @@
 import sqlite3
 from urllib.parse import parse_qs, urlparse
 
+from server_app.cache import invalidate_data_cache_prefixes
 from server_app.db import connect_db
 from server_app.domains.technical_services import repository as repo
 from server_app.domains.technical_services import service, settlement
@@ -20,6 +21,7 @@ def handle(handler, method, path):
     params = {key: values[0] for key, values in parse_qs(urlparse(handler.path).query).items()}
     try:
         service.authorize(actor)
+        settlement_started = False
         with connect_db() as conn:
             payload = None
             if method == "GET" and parts == ["catalog"]:
@@ -44,6 +46,7 @@ def handle(handler, method, path):
                 payload = settlement.preview(conn, actor, handler.read_json_body())
             elif method == "POST" and parts == ["settlements"]:
                 payload = settlement.initiate(conn, actor, handler.read_json_body())
+                settlement_started = True
             elif method == "POST" and parts == ["settlements", "pdf"]:
                 payload = settlement.preview(conn, actor, handler.read_json_body())
                 handler.send_download(
@@ -54,6 +57,13 @@ def handle(handler, method, path):
                 payload = None
             else:
                 raise LookupError("技术服务接口不存在")
+        if settlement_started:
+            invalidate_data_cache_prefixes(
+                "billing_workflows::",
+                "billing_statements::",
+                "reimbursement_records::",
+                "quantity_sheets::settlement_candidates::",
+            )
         if payload is not None:
             handler.send_json(payload)
     except (StaleWriteError, sqlite3.IntegrityError) as exc:

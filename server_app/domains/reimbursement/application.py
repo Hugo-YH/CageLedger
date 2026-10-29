@@ -2,6 +2,8 @@
 
 import io
 
+from server_app.cache import cache_generation
+
 try:
     import openpyxl
 except ImportError:
@@ -292,6 +294,7 @@ def import_arrears_reimbursement_workbook(conn, file_body, actor):
 
 
 def reimbursement_detail_payload(conn, record):
+    _cache_generation = cache_generation()
     record_id = clean_text(record.get("id", ""))
     workflow_id = clean_text(record.get("workflowId", ""))
     cache_key_value = cache_key(
@@ -301,7 +304,7 @@ def reimbursement_detail_payload(conn, record):
         updated_at=clean_text(record.get("updatedAt", "")),
         latest_event_at=clean_text(record.get("latestEventAt", "")),
     )
-    cached = cache_get(cache_key_value)
+    cached = cache_get(cache_key_value, connection=conn)
     if cached is not None:
         return cached
     workflow = get_billing_workflow_detail(conn, record.get("workflowId", "")) if record.get("workflowId") else None
@@ -315,4 +318,6 @@ def reimbursement_detail_payload(conn, record):
         "workflowEvents": workflow_events,
         "history": history,
     }
-    return cache_set(cache_key_value, payload)
+    return cache_set(
+        cache_key_value, payload, expected_generation=_cache_generation if conn.in_transaction is not True else -1
+    )

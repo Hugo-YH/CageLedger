@@ -5,8 +5,17 @@ from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from server_app.config import ROOT
+
 STATIC_CACHE = {}
 STATIC_CACHE_LOCK = threading.Lock()
+
+
+def is_private_frontend_path(path):
+    parts = Path(unquote(urlparse(path).path).lstrip("/")).parts
+    return any(part.startswith(".") for part in parts) or bool(
+        parts and parts[0] in {"data", "server_app", "scripts", "node_modules", "tests"}
+    )
 
 
 def _send_static_file(handler, target: Path) -> bool:
@@ -68,7 +77,8 @@ def _send_static_file(handler, target: Path) -> bool:
     if use_gzip:
         handler.send_header("Content-Encoding", "gzip")
     handler.end_headers()
-    handler.wfile.write(body)
+    if not getattr(handler, "_head_only", False):
+        handler.wfile.write(body)
     return True
 
 
@@ -76,6 +86,14 @@ def send_frontend_asset(handler, root: Path) -> bool:
     request_path = unquote(urlparse(handler.path).path)
     relative = request_path.lstrip("/")
     if not relative or relative.endswith("/") or relative.endswith(".gz"):
+        return False
+    parts = Path(relative).parts
+    if is_private_frontend_path(handler.path):
+        return False
+    if root.resolve() == ROOT.resolve() and relative != "index.html" and parts[0] != "assets":
+        # A missing production build must never expose the source checkout.
+        return False
+    if Path(relative).suffix.lower() in {".py", ".pyc", ".sqlite", ".db", ".key", ".pem", ".toml", ".yml", ".yaml"}:
         return False
     try:
         target = (root / relative).resolve()

@@ -1,7 +1,7 @@
 import json
 import re
 
-from server_app.cache import cache_get, cache_set
+from server_app.cache import cache_generation, cache_get, cache_set
 from server_app.repositories.person_names import (
     column_predicate,
     individual_mode,
@@ -46,13 +46,18 @@ def list_distinct_principal_names(conn):
 
 
 def read_principal_type_by_pi(conn):
-    cached = cache_get("principal_types_by_pi")
+    _cache_generation = cache_generation()
+    cached = cache_get("principal_types_by_pi", connection=conn)
     if cached is not None:
         return cached
     rows = conn.execute(
         "SELECT pi, principal_type FROM principal_identities WHERE TRIM(COALESCE(pi, '')) != ''"
     ).fetchall()
-    return cache_set("principal_types_by_pi", {row["pi"]: row["principal_type"] for row in rows})
+    return cache_set(
+        "principal_types_by_pi",
+        {row["pi"]: row["principal_type"] for row in rows},
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def list_audit_events_page(conn, filters, filtered_where):

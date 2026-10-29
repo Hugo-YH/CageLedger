@@ -5,7 +5,7 @@ import json
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from server_app.config import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME, SESSION_TTL_DAYS
+from server_app.config import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME, ENVIRONMENT, SESSION_TTL_DAYS
 from server_app.repositories.users import (
     delete_expired_sessions,
     delete_session_by_token_hash,
@@ -22,6 +22,10 @@ from server_app.shared import new_id, now_iso
 def ensure_default_admin(conn):
     if has_any_user(conn):
         return
+    if ENVIRONMENT == "production" and (
+        not DEFAULT_ADMIN_USERNAME.strip() or len(DEFAULT_ADMIN_PASSWORD) < 12 or DEFAULT_ADMIN_PASSWORD == "admin123"
+    ):
+        raise RuntimeError("首次启动生产环境须设置 CAGELEDGER_ADMIN_USERNAME 和至少12位的 CAGELEDGER_ADMIN_PASSWORD")
     now = now_iso()
     insert_user(
         conn,
@@ -61,14 +65,15 @@ def verify_password(password, password_hash):
         return False
 
 
-def create_session(conn, user_id):
+def create_session(conn, user_id, *, commit=True):
     token = secrets.token_urlsafe(32)
     token_hash = hash_token(token)
     now = datetime.now(UTC)
     expires_at = now + timedelta(days=SESSION_TTL_DAYS)
     delete_expired_sessions(conn, now.isoformat())
     insert_session(conn, token_hash, user_id, now.isoformat(), expires_at.isoformat())
-    conn.commit()
+    if commit:
+        conn.commit()
     return token, expires_at
 
 

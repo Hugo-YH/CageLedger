@@ -15,7 +15,7 @@ from pathlib import Path
 from queue import PriorityQueue
 from threading import Lock, Thread
 
-from server_app.config import PDF_CACHE_MAX_BYTES, PDF_CACHE_PATH, PDF_CACHE_TTL_SECONDS
+from server_app.config import PDF_CACHE_MAX_BYTES, PDF_CACHE_PATH, PDF_CACHE_TTL_SECONDS, PDF_EXPORT_MAX_PENDING
 from server_app.runtime_logging import bind_log_context, emit_event
 
 PDF_JOB_TTL_SECONDS = 24 * 60 * 60
@@ -23,6 +23,12 @@ PDF_CACHE_PRUNE_INTERVAL_SECONDS = 60
 PDF_PRIORITY_USER = 0
 PDF_PRIORITY_WARM = 10
 PDF_LATENCY_SAMPLE_LIMIT = 256
+PDF_MAX_RETAINED_JOBS = 512
+
+
+class PdfQueueFull(RuntimeError):
+    def __init__(self):
+        super().__init__("PDF 导出队列繁忙，请稍后重试")
 
 
 @dataclass
@@ -58,16 +64,19 @@ class PdfExportCache:
         *,
         max_bytes: int = PDF_CACHE_MAX_BYTES,
         artifact_ttl_seconds: int = PDF_CACHE_TTL_SECONDS,
+        max_pending: int = PDF_EXPORT_MAX_PENDING,
     ):
         self.root = root
         self.max_bytes = max(int(max_bytes), 0)
         self.artifact_ttl_seconds = max(int(artifact_ttl_seconds), 0)
+        self.max_pending = max(int(max_pending), 1)
         self._jobs: dict[str, PdfExportJob] = {}
         self._active_keys: dict[str, str] = {}
         self._versions: dict[str, int] = {}
+        self._generation = 0
         self._key_locks: dict[str, tuple[Lock, int]] = {}
         self._lock = Lock()
-        self._tasks: PriorityQueue[_ScheduledTask] = PriorityQueue()
+        self._tasks: PriorityQueue[_ScheduledTask] = PriorityQueue(maxsize=self.max_pending)
         self._task_sequence = count()
         self._worker: Thread | None = None
         self._last_prune_at = 0.0
@@ -82,16 +91,22 @@ class PdfExportCache:
 
     def invalidate(self, keys: list[str]):
         with self._lock:
-            for key in set(keys):
-                self._versions[key] = self._versions.get(key, 0) + 1
+            affected = set(keys)
+            for key in affected:
+                if self._has_inflight_locked(key):
+                    self._versions[key] = self._versions.get(key, 0) + 1
+                else:
+                    self._versions.pop(key, None)
                 self.artifact_path(key).unlink(missing_ok=True)
                 self._active_keys.pop(key, None)
+            self._retire_ready_locked(affected)
 
     def invalidate_all(self):
         with self._lock:
-            for key in self._active_keys:
-                self._versions[key] = self._versions.get(key, 0) + 1
+            self._generation += 1
+            self._versions.clear()
             self._active_keys.clear()
+            self._retire_ready_locked()
             artifacts = self.root / "artifacts"
             if artifacts.exists():
                 for path in artifacts.glob("*.pdf"):
@@ -109,7 +124,7 @@ class PdfExportCache:
     ) -> PdfExportJob:
         cached = self.artifact_path(key)
         with self._lock:
-            self._cleanup_jobs_locked()
+            self._cleanup_jobs_locked(reserve=1)
             self._prune_artifacts_locked()
             if cached.exists():
                 self._metrics["hits"] += 1
@@ -119,10 +134,18 @@ class PdfExportCache:
             if active_id and active_id in self._jobs:
                 self._jobs[active_id].owner_ids.add(owner_id)
                 return self._jobs[active_id]
+            self._admit_locked(priority)
             job = self._new_job(owner_id, key, filename, content_type, 1, priority=priority)
-            version = self._versions.get(key, 0)
+            version = (self._generation, self._versions.get(key, 0))
             self._active_keys[key] = job.id
-        self._submit(priority, lambda: self._run_artifact(job.id, key, version, render))
+        try:
+            self._submit(priority, lambda: self._run_artifact(job.id, key, version, render))
+        except Exception:
+            self._fail(job.id, "PDF 后台任务暂时无法启动，请重试")
+            with self._lock:
+                if self._active_keys.get(key) == job.id:
+                    self._active_keys.pop(key, None)
+            raise
         return job
 
     def enqueue_batch(
@@ -135,7 +158,8 @@ class PdfExportCache:
         priority: int = PDF_PRIORITY_USER,
     ) -> PdfExportJob:
         with self._lock:
-            self._cleanup_jobs_locked()
+            self._cleanup_jobs_locked(reserve=1)
+            self._admit_locked(priority)
             job = self._new_job(
                 owner_id,
                 f"batch:{uuid.uuid4().hex}",
@@ -144,7 +168,11 @@ class PdfExportCache:
                 total,
                 priority=priority,
             )
-        self._submit(priority, lambda: self._run_batch(job.id, render))
+        try:
+            self._submit(priority, lambda: self._run_batch(job.id, render))
+        except Exception:
+            self._fail(job.id, "PDF 后台任务暂时无法启动，请重试")
+            raise
         return job
 
     def render_cached(self, key: str, render: Callable[[], bytes]) -> bytes:
@@ -152,10 +180,11 @@ class PdfExportCache:
         try:
             with key_lock:
                 path = self.artifact_path(key)
-                if path.exists():
+                cached = self._read_artifact(path)
+                if cached is not None:
                     with self._lock:
                         self._metrics["hits"] += 1
-                    return path.read_bytes()
+                    return cached
                 with self._lock:
                     self._metrics["misses"] += 1
                 version = self._version_for(key)
@@ -167,8 +196,7 @@ class PdfExportCache:
                     self._record_render(time.perf_counter() - started_at, failed=True)
                     raise
                 self._record_render(time.perf_counter() - started_at)
-                if self._version_for(key) == version:
-                    self._write(path, body)
+                self._publish_artifact(key, version, path, body)
                 return body
         finally:
             self._release_key_lock(key, key_lock)
@@ -215,12 +243,23 @@ class PdfExportCache:
                 raise LookupError("PDF 导出任务已过期，请重新导出")
             if user.get("role") != "admin" and user.get("id") not in job.owner_ids:
                 raise PermissionError("无权访问该 PDF 导出任务")
+            if job.status == "ready" and (not job.path or not job.path.is_file()):
+                job.status = "failed"
+                job.error = "PDF 缓存已失效，请重新导出"
             return job
 
     def read_job(self, job: PdfExportJob) -> bytes:
-        if job.status != "ready" or not job.path or not job.path.exists():
-            raise ValueError("PDF 文件仍在生成中")
-        return job.path.read_bytes()
+        with self._lock:
+            if job.status == "failed":
+                raise ValueError(job.error or "PDF 生成失败，请重新导出")
+            if job.status != "ready" or not job.path:
+                raise ValueError("PDF 文件仍在生成中")
+            try:
+                stream = job.path.open("rb")
+            except FileNotFoundError as exc:
+                raise ValueError("PDF 缓存已失效，请重新导出") from exc
+        with stream:
+            return stream.read()
 
     def job_payload(self, job: PdfExportJob) -> dict:
         return {
@@ -237,15 +276,14 @@ class PdfExportCache:
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
         return self.root / "artifacts" / f"{digest}.pdf"
 
-    def _run_artifact(self, job_id: str, key: str, version: int, render: Callable[[], bytes]):
+    def _run_artifact(self, job_id: str, key: str, version: tuple[int, int], render: Callable[[], bytes]):
         self._set_status(job_id, "rendering")
         started_at = time.perf_counter()
         try:
             body = render()
             path = self.artifact_path(key)
-            if self._version_for(key) == version:
-                self._write(path, body)
-                self._complete(job_id, path, 1)
+            if self._publish_artifact(key, version, path, body):
+                self._complete(job_id, path, 1, version=version)
                 emit_event("pdf_export_completed", jobId=job_id, count=1)
                 self._record_render(time.perf_counter() - started_at)
             else:
@@ -253,12 +291,13 @@ class PdfExportCache:
                 self._record_render(time.perf_counter() - started_at, failed=True)
         except Exception as exc:
             emit_event("pdf_export_failed", level=logging.WARNING, error=exc, rate_limit=True, jobId=job_id)
-            self._fail(job_id, str(exc))
+            self._fail(job_id, "PDF 生成失败，请重试；如持续失败请联系管理员")
             self._record_render(time.perf_counter() - started_at, failed=True)
         finally:
             with self._lock:
                 if self._active_keys.get(key) == job_id:
                     self._active_keys.pop(key, None)
+                self._prune_version_locked(key)
 
     def _run_batch(self, job_id: str, render: Callable[[Callable[[int], None]], bytes]):
         self._set_status(job_id, "rendering")
@@ -273,8 +312,16 @@ class PdfExportCache:
             self._record_render(time.perf_counter() - started_at)
         except Exception as exc:
             emit_event("pdf_batch_export_failed", level=logging.WARNING, error=exc, rate_limit=True, jobId=job_id)
-            self._fail(job_id, str(exc))
+            self._fail(job_id, "PDF 生成失败，请重试；如持续失败请联系管理员")
             self._record_render(time.perf_counter() - started_at, failed=True)
+
+    def _admit_locked(self, priority):
+        active = sum(job.status in {"queued", "rendering"} for job in self._jobs.values())
+        limit = self.max_pending
+        if priority >= PDF_PRIORITY_WARM:
+            limit = max(1, limit - max(1, limit // 4))
+        if active >= limit:
+            raise PdfQueueFull()
 
     def _new_job(
         self,
@@ -321,9 +368,13 @@ class PdfExportCache:
                 job.completed = min(completed, job.total)
                 job.updated_at = time.time()
 
-    def _complete(self, job_id: str, path: Path, completed: int):
+    def _complete(self, job_id: str, path: Path, completed: int, *, version=None):
         with self._lock:
             job = self._jobs.get(job_id)
+            if job and version is not None and (self._generation, self._versions.get(job.key, 0)) != version:
+                job.status = "failed"
+                job.error = "源数据已更新，请重新导出 PDF"
+                return
             if job:
                 job.status = "ready"
                 job.completed = completed
@@ -338,28 +389,90 @@ class PdfExportCache:
                 job.error = message or "PDF 生成失败"
                 job.updated_at = time.time()
 
-    def _version_for(self, key: str) -> int:
+    def _version_for(self, key: str) -> tuple[int, int]:
         with self._lock:
-            return self._versions.get(key, 0)
+            return self._generation, self._versions.get(key, 0)
+
+    def _read_artifact(self, path):
+        # Open while protected, then read the stable file descriptor outside the
+        # lock. An invalidation may unlink the name without breaking this reader.
+        with self._lock:
+            try:
+                stream = path.open("rb")
+            except FileNotFoundError:
+                return None
+        with stream:
+            return stream.read()
+
+    def _publish_artifact(self, key, version, path, body):
+        temporary = self._stage(path, body)
+        try:
+            # Only atomic publication is serialized with invalidation; writing
+            # potentially large temporary files never holds the metadata lock.
+            with self._lock:
+                if (self._generation, self._versions.get(key, 0)) != version:
+                    return False
+                os.replace(temporary, path)
+                return True
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _write(self, path: Path, body: bytes):
+        temporary = self._stage(path, body)
+        try:
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _stage(self, path: Path, body: bytes):
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
         temporary = Path(temporary_name)
         try:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(body)
-            os.replace(temporary, path)
-        finally:
+            return temporary
+        except BaseException:
             temporary.unlink(missing_ok=True)
+            raise
 
-    def _cleanup_jobs_locked(self):
+    def _retire_ready_locked(self, keys=None):
+        for job in self._jobs.values():
+            if (
+                job.status == "ready"
+                and job.path
+                and job.path.parent == self.root / "artifacts"
+                and (keys is None or job.key in keys)
+            ):
+                job.status = "failed"
+                job.error = "源数据已更新，请重新导出 PDF"
+                job.updated_at = time.time()
+
+    def _has_inflight_locked(self, key):
+        return key in self._key_locks or any(
+            job.key == key and job.status in {"queued", "rendering"} for job in self._jobs.values()
+        )
+
+    def _prune_version_locked(self, key):
+        if not self._has_inflight_locked(key):
+            self._versions.pop(key, None)
+
+    def _cleanup_jobs_locked(self, *, reserve=0):
         cutoff = time.time() - PDF_JOB_TTL_SECONDS
-        stale = [
-            job_id
-            for job_id, job in self._jobs.items()
-            if job.updated_at < cutoff and job.status in {"ready", "failed"}
-        ]
+        finished = sorted(
+            (job for job in self._jobs.values() if job.status in {"ready", "failed"}), key=lambda job: job.updated_at
+        )
+        excess = max(len(self._jobs) + reserve - PDF_MAX_RETAINED_JOBS, 0)
+        stale = list(
+            dict.fromkeys(
+                [job.id for job in finished[:excess]]
+                + [
+                    job_id
+                    for job_id, job in self._jobs.items()
+                    if job.updated_at < cutoff and job.status in {"ready", "failed"}
+                ]
+            )
+        )
         for job_id in stale:
             job = self._jobs.pop(job_id)
             if job.path and job.path.parent == self.root / "jobs":
@@ -378,6 +491,9 @@ class PdfExportCache:
             task = self._tasks.get()
             try:
                 task.callback()
+            except Exception:
+                # bind_log_context recorded the safe exception context already.
+                emit_event("pdf_worker_recovered", level=logging.WARNING, rate_limit=True)
             finally:
                 self._tasks.task_done()
 
@@ -399,6 +515,7 @@ class PdfExportCache:
                 return
             if entry[1] == 1:
                 self._key_locks.pop(key, None)
+                self._prune_version_locked(key)
             else:
                 self._key_locks[key] = (key_lock, entry[1] - 1)
 

@@ -2,7 +2,7 @@
 
 import json
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set
 from server_app.repositories.workflow_sources import append_workflow_source_filter
 
 from .billing_workflow_projections import (
@@ -25,8 +25,9 @@ def get_billing_workflow(conn, workflow_id):
 
 
 def get_billing_workflow_detail(conn, workflow_id):
+    _cache_generation = cache_generation()
     key = cache_key("billing_workflows::detail", workflow_id=workflow_id)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     row = conn.execute(
@@ -87,7 +88,11 @@ def get_billing_workflow_detail(conn, workflow_id):
         """,
         (workflow_id,),
     ).fetchone()
-    return cache_set(key, billing_workflow_detail_row(row) if row else None)
+    return cache_set(
+        key,
+        billing_workflow_detail_row(row) if row else None,
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def get_billing_version(conn, version_id):
@@ -116,6 +121,7 @@ def list_billing_workflows_by_month(conn, month):
 
 
 def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finance):
+    _cache_generation = cache_generation()
     filters = prepare_person_filters(conn, filters, "billing_workflows", {"pi": "json_extract(payload, '$.pi')"})
     clauses = []
     params = []
@@ -192,7 +198,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
         sort_key=filters.get("sortKey", ""),
         sort_dir=filters.get("sortDir", ""),
     )
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     where_clause = f" WHERE {where}" if where else ""
@@ -254,7 +260,7 @@ def list_billing_workflows_page(conn, filters, clean_text, workflow_status_finan
             "hasMore": filters["offset"] + filters["limit"] < total,
         },
     }
-    return cache_set(key, payload)
+    return cache_set(key, payload, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
 
 
 def _billing_workflow_order_by(filters):
@@ -371,8 +377,9 @@ def _billing_workflow_filter_where(filters, exclude_column=""):
 
 
 def list_billing_workflow_versions(conn, workflow_id):
+    _cache_generation = cache_generation()
     key = cache_key("billing_workflows::versions", workflow_id=workflow_id)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     rows = conn.execute(
@@ -395,12 +402,17 @@ def list_billing_workflow_versions(conn, workflow_id):
         """,
         (workflow_id,),
     ).fetchall()
-    return cache_set(key, [billing_workflow_version_row(row) for row in rows])
+    return cache_set(
+        key,
+        [billing_workflow_version_row(row) for row in rows],
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def list_billing_workflow_events(conn, workflow_id):
+    _cache_generation = cache_generation()
     key = cache_key("billing_workflows::events", workflow_id=workflow_id)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     rows = conn.execute(
@@ -425,4 +437,8 @@ def list_billing_workflow_events(conn, workflow_id):
         """,
         (workflow_id,),
     ).fetchall()
-    return cache_set(key, [billing_workflow_event_row(row) for row in rows])
+    return cache_set(
+        key,
+        [billing_workflow_event_row(row) for row in rows],
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )

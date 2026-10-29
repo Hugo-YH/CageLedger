@@ -22,7 +22,7 @@ def validate(content):
     if not content or len(content) > MAX_BYTES:
         raise ValueError("每张截图必须在 10MiB 以内")
     try:
-        with Image.open(io.BytesIO(content)) as image:
+        with Image.open(io.BytesIO(content), formats=list(FORMATS)) as image:
             if (
                 image.format not in FORMATS
                 or image.width * image.height > 40_000_000
@@ -32,7 +32,7 @@ def validate(content):
             detected = FORMATS[image.format]
             image.verify()
         # verify alone does not decode pixel data; decode to reject truncated screenshots.
-        with Image.open(io.BytesIO(content)) as image:
+        with Image.open(io.BytesIO(content), formats=list(FORMATS)) as image:
             image.load()
         return detected
     except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError) as exc:

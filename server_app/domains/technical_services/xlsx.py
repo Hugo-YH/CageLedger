@@ -2,15 +2,26 @@
 
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from server_app.shared.xlsx import set_literal_cell
+
+
+def _append_business_row(sheet, values):
+    sheet.append(values)
+    for column, value in enumerate(values, start=1):
+        set_literal_cell(sheet.cell(sheet.max_row, column), value)
+
 
 def write_statement_sheet(sheet, statement):
     sheet.append(["实验动物中心技术服务费结算单"])
     sheet.merge_cells("A1:H1")
-    sheet.append(["月份", statement["month"], "项目负责人", statement["pi"]])
-    sheet.append(["服务日数", statement.get("serviceDayCount", 0), "技术服务费（元）", statement["totalAmount"]])
+    _append_business_row(sheet, ["月份", statement["month"], "项目负责人", statement["pi"]])
+    _append_business_row(
+        sheet, ["服务日数", statement.get("serviceDayCount", 0), "技术服务费（元）", statement["totalAmount"]]
+    )
     sheet.append(["IACUC", "服务设施", "服务项目", "服务日期", "单位", "计费数量", "单价（元）", "金额（元）"])
     for row in statement.get("technicalServiceRows", []):
-        sheet.append(
+        _append_business_row(
+            sheet,
             [
                 row["iacuc"],
                 "珠江新城" if row["facility"] == "zhujiang" else "生物岛",
@@ -20,7 +31,7 @@ def write_statement_sheet(sheet, statement):
                 row["quantity"],
                 row["unitPrice"],
                 row["amount"],
-            ]
+            ],
         )
     last = sheet.max_row
     sheet.append(["合计", "", "", "", "", "", "", f"=SUM(H5:H{last})" if last >= 5 else 0])

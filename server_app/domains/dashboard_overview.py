@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from datetime import date
 
 from server_app.cache import (
+    cache_generation,
     cache_get,
     cache_key,
     cache_set,
@@ -44,11 +45,12 @@ def invalidate_dashboard_overview_cache():
 
 
 def dashboard_overview_payload(conn, month: str, rooms=None, *, calculate=None, prepare_calculations=None):
+    _cache_generation = cache_generation()
     month = clean_text(month)
     rooms = rooms if rooms is not None else _read_rooms(conn)
     room_ids = ",".join(sorted(clean_text(room.get("id", "")) for room in rooms))
     cache_key_value = cache_key("dashboard_overview", month=month, rooms=room_ids)
-    cached = cache_get(cache_key_value)
+    cached = cache_get(cache_key_value, connection=conn)
     if cached is not None:
         return cached
 
@@ -69,7 +71,12 @@ def dashboard_overview_payload(conn, month: str, rooms=None, *, calculate=None, 
         "quantitySheetIacucCount": _quantity_sheet_iacuc_count(conn, month),
     }
     ttl_seconds = DASHBOARD_HISTORY_CACHE_TTL_SECONDS if month == "all" else DASHBOARD_CACHE_TTL_SECONDS
-    return cache_set(cache_key_value, payload, ttl_seconds=ttl_seconds)
+    return cache_set(
+        cache_key_value,
+        payload,
+        ttl_seconds=ttl_seconds,
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
+    )
 
 
 def _quantity_sheet_iacuc_count(conn, month):

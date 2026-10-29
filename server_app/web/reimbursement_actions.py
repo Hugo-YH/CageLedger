@@ -82,6 +82,7 @@ class ReimbursementActionsMixin:
             with connect_db() as conn:
                 payload = import_monthly_reimbursement_workbook(conn, file_body, user)
                 conn.commit()
+            invalidate_data_cache_prefixes("reimbursement_records::", "billing_workflows::")
             self.send_json({**payload, "filename": filename}, HTTPStatus.CREATED)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -101,6 +102,7 @@ class ReimbursementActionsMixin:
             with connect_db() as conn:
                 payload = import_arrears_reimbursement_workbook(conn, file_body, user)
                 conn.commit()
+            invalidate_data_cache_prefixes("reimbursement_records::", "billing_workflows::")
             self.send_json({**payload, "filename": filename}, HTTPStatus.CREATED)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)

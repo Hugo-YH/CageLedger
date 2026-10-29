@@ -20,6 +20,7 @@ class DashboardOverviewCacheTests(unittest.TestCase):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
         server.initialize_schema(self.conn)
+        self.conn.commit()
         dashboard_overview.invalidate_dashboard_overview_cache()
 
     def tearDown(self):

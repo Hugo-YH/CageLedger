@@ -2,7 +2,7 @@
 
 import json
 
-from server_app.cache import cache_get, cache_key, cache_set
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set
 
 FIELDS = (
     "id",
@@ -39,8 +39,9 @@ def decode_summary(value):
 
 
 def page(conn, filters, where, params, order):
+    _cache_generation = cache_generation()
     key = cache_key("intake_batches::summary", filters=filters)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         return cached
     clause = f" WHERE {where}" if where else ""
@@ -60,4 +61,5 @@ def page(conn, filters, where, params, order):
                 "hasMore": filters["offset"] + filters["limit"] < total,
             },
         },
+        expected_generation=_cache_generation if conn.in_transaction is not True else -1,
     )

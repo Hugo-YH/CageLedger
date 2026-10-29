@@ -1,6 +1,7 @@
 import gzip
 import json
 import time
+import unicodedata
 from http import HTTPStatus
 from urllib.parse import quote, urlparse
 
@@ -48,9 +49,14 @@ def send_json(handler, payload, status=HTTPStatus.OK, extra_headers=None):
 
 def send_download(handler, body, filename, content_type, status=HTTPStatus.OK):
     """Return a private attachment with a standards-compliant UTF-8 filename."""
-    safe_filename = str(filename or "download").replace('"', "")
-    ascii_filename = safe_filename.encode("ascii", "ignore").decode("ascii").strip()
-    extension = "." + safe_filename.rsplit(".", 1)[1] if "." in safe_filename else ""
+    # Filenames may originate in multipart metadata. Keep header controls out of
+    # both parameters and bound the encoded header even for hostile input.
+    safe_filename = "".join(
+        char for char in str(filename or "download") if char != '"' and not unicodedata.category(char).startswith("C")
+    )
+    safe_filename = safe_filename.encode("utf-8")[:240].decode("utf-8", "ignore") or "download"
+    ascii_filename = safe_filename.encode("ascii", "ignore").decode("ascii").replace("\\", "").strip()
+    extension = "." + ascii_filename.rsplit(".", 1)[1] if "." in ascii_filename else ""
     if not any(character.isalnum() for character in ascii_filename):
         ascii_filename = f"CageLedger-download{extension}"
     handler.send_response(status)
@@ -58,7 +64,7 @@ def send_download(handler, body, filename, content_type, status=HTTPStatus.OK):
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header(
         "Content-Disposition",
-        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(safe_filename)}",
+        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(safe_filename, safe='')}",
     )
     handler.send_header("Cache-Control", "no-store")
     handler.end_headers()

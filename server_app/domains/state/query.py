@@ -2,7 +2,7 @@
 
 import time
 
-from server_app.cache import cache_get, cache_key, cache_set, log_perf
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set, log_perf
 from server_app.db import connect_db
 from server_app.domains.iacuc import normalize_iacuc_number
 from server_app.domains.state.occupancy import occupancy_with_snapshots
@@ -28,11 +28,12 @@ def actor_cache_scope(actor):
 
 
 def read_bootstrap_state(conn, actor, read_cached_state, scope="summary", room_id=""):
+    _cache_generation = cache_generation()
     started_at = time.perf_counter()
     actor_scope = actor_cache_scope(actor)
     key = cache_key("bootstrap_summary", actor=actor_scope)
     if scope == "summary":
-        cached = cache_get(key)
+        cached = cache_get(key, connection=conn)
         if cached is not None:
             log_perf("bootstrap", started_at, scope=scope, cached=1, rooms=len(cached.get("rooms", [])))
             return cached
@@ -68,12 +69,17 @@ def read_bootstrap_state(conn, actor, read_cached_state, scope="summary", room_i
         )
         return payload
     payload["slots"], payload["occupancies"] = [], []
-    result = cache_set(key, payload) if scope == "summary" else payload
+    result = (
+        cache_set(key, payload, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
+        if scope == "summary"
+        else payload
+    )
     log_perf("bootstrap", started_at, scope=scope, rooms=len(payload["rooms"]))
     return result
 
 
 def read_billing_occupancies(conn, actor, filters, read_applications_by_iacuc):
+    _cache_generation = cache_generation()
     started_at = time.perf_counter()
     month = clean_text(filters.get("month", ""))
     iacuc = clean_text(filters.get("iacuc", ""))
@@ -81,7 +87,7 @@ def read_billing_occupancies(conn, actor, filters, read_applications_by_iacuc):
     if not month:
         raise ValueError("请提供结算月份")
     key = cache_key("billing_occupancies", actor=actor_cache_scope(actor), month=month, iacuc=iacuc, pi=pi)
-    cached = cache_get(key)
+    cached = cache_get(key, connection=conn)
     if cached is not None:
         log_perf(
             "billing_occupancies", started_at, cached=1, month=month, occupancies=len(cached.get("occupancies", []))
@@ -100,7 +106,7 @@ def read_billing_occupancies(conn, actor, filters, read_applications_by_iacuc):
         "slots": [slot for slot in state["slots"] if slot.get("id") in slot_ids],
         "occupancies": occupancies,
     }
-    cache_set(key, payload)
+    cache_set(key, payload, expected_generation=_cache_generation if conn.in_transaction is not True else -1)
     log_perf("billing_occupancies", started_at, month=month, occupancies=len(occupancies), slots=len(payload["slots"]))
     return payload
 

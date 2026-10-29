@@ -98,7 +98,7 @@ def upload(conn, user, test_id, params, name, content, root):
     if suffix in {".png", ".jpg", ".jpeg", ".tif", ".tiff"}:
         try:
             if suffix in {".tif", ".tiff"}:
-                with PillowImage.open(BytesIO(content)) as parsed:
+                with PillowImage.open(BytesIO(content), formats=["TIFF"]) as parsed:
                     width, height, image_format = parsed.width, parsed.height, parsed.format
                 valid = image_format == "TIFF"
             else:
@@ -147,12 +147,16 @@ def upload(conn, user, test_id, params, name, content, root):
     }
     preview_content = None
     if suffix in {".tif", ".tiff"}:
-        with PillowImage.open(BytesIO(content)) as source:
+        with PillowImage.open(BytesIO(content), formats=["TIFF"]) as source:
             source.seek(0)
             preview = source.copy()
         preview.thumbnail((3000, 3000))
         if preview.mode not in {"1", "L", "P", "RGB", "RGBA", "I", "I;16"}:
             preview = preview.convert("RGB")
+        if preview.mode == "I":
+            # Pillow 13 removed implicit clipping of 32-bit TIFF pixels to PNG.
+            # Keep the existing 16-bit preview and retain the original TIFF.
+            preview = preview.convert("I;16")
         converted = BytesIO()
         preview.save(converted, format="PNG", optimize=True)
         preview_content = converted.getvalue()

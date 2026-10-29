@@ -172,7 +172,9 @@ def scan_and_import_once(inbox_dir=DEFAULT_INBOX_DIR, archive_dir=DEFAULT_ARCHIV
     current = now or now_iso()
     with connect_db() as conn:
         result = import_summary_file(latest, conn=conn, now=current)
-    invalidate_data_cache("assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi")
+    invalidate_data_cache(
+        "assembled_state", "iacuc_index", "principal_identities", "principal_types_by_pi", "applications_by_iacuc"
+    )
     invalidate_data_cache_prefixes(
         "bootstrap_summary::",
         "billing_occupancies::",
@@ -182,6 +184,7 @@ def scan_and_import_once(inbox_dir=DEFAULT_INBOX_DIR, archive_dir=DEFAULT_ARCHIV
         "reimbursement_records::",
         "intake_batches::",
         "placement_tasks::",
+        "dashboard_overview::",
     )
     # 旧副本保留在 superseded 中；先处理旧文件、最后移走最新文件，归档失败时
     # 下轮仍重试最新汇总表，不能退回旧版本。

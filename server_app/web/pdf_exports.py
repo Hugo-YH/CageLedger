@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -12,8 +13,9 @@ from server_app.pdf import (
     render_billing_statement_pdf,
     render_quantity_sheet_pdf,
 )
-from server_app.pdf.cache import PDF_PRIORITY_WARM, pdf_export_cache
+from server_app.pdf.cache import PDF_PRIORITY_WARM, PdfQueueFull, pdf_export_cache
 from server_app.pdf.renderer import PDF_RENDER_PRIORITY_WARM
+from server_app.runtime_logging import emit_event
 
 PDF_CACHE_ACTOR = {"id": "system-pdf-cache", "role": "admin", "displayName": "系统 PDF 缓存"}
 
@@ -41,24 +43,17 @@ def pdf_export_job_route(path):
 PDF_RENDER_VERSION = "2026-08-06-settlement-layout-and-notes"
 
 
-def _render_code_fingerprint() -> str:
-    """Hash the PDF rendering pipeline sources so cache keys change whenever
-    rendering code changes, instead of relying on a manually bumped version."""
-    root = Path(__file__).resolve().parent.parent
-    sources = [
-        Path(__file__).resolve(),
-        root / "pdf" / "documents.py",
-        root / "pdf" / "renderer.py",
-        root / "pdf" / "cache.py",
-        root / "domains" / "billing" / "statements.py",
-        root / "domains" / "billing" / "allowance.py",
-        root / "domains" / "billing" / "charging.py",
-        root / "domains" / "billing" / "monthly_summary.py",
-        root / "domains" / "billing" / "frozen.py",
-    ]
+def _render_code_fingerprint(root=None) -> str:
+    """Include the split document modules and calculation rules in cache identity."""
+    root = root or Path(__file__).resolve().parent.parent
+    sources = {"web/pdf_exports.py": Path(__file__).resolve()}
+    for folder in ("pdf", "domains/billing", "domains/quantity", "shared"):
+        for path in (root / folder).rglob("*"):
+            if path.is_file() and path.suffix in {".py", ".mjs"}:
+                sources[path.relative_to(root).as_posix()] = path
     digest = hashlib.sha256()
-    for path in sources:
-        digest.update(path.name.encode("utf-8"))
+    for label, path in sorted(sources.items()):
+        digest.update(label.encode("utf-8"))
         try:
             digest.update(path.read_bytes())
         except OSError:
@@ -70,7 +65,11 @@ PDF_RENDER_CODE_FINGERPRINT = _render_code_fingerprint()
 
 
 def quantity_pdf_cache_key(sheet):
-    return f"quantity-sheet:{PDF_RENDER_VERSION}:{PDF_RENDER_CODE_FINGERPRINT}:{sheet.get('id', '')}"
+    # A request can read its sheet before another writer invalidates the cache.
+    # Content identity keeps that older snapshot from repopulating the new PDF,
+    # even if rendering starts only after the invalidation has completed.
+    digest = hashlib.sha256(json.dumps(sheet, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return f"quantity-sheet:{PDF_RENDER_VERSION}:{PDF_RENDER_CODE_FINGERPRINT}:{sheet.get('id', '')}:{digest}"
 
 
 def billing_pdf_cache_key(month, pi, source_type="quantity_sheet"):
@@ -100,22 +99,36 @@ def schedule_pdf_cache_refresh(sheets, *, connect_db, generate_statement, billin
     """Warm only documents affected by a quantity-sheet write."""
     unique_sheets = {str(sheet.get("id")): sheet for sheet in sheets if sheet and sheet.get("id")}
     for sheet in unique_sheets.values():
-        _enqueue_quantity_pdf(sheet, PDF_CACHE_ACTOR["id"], priority=PDF_PRIORITY_WARM)
+        try:
+            _enqueue_quantity_pdf(sheet, PDF_CACHE_ACTOR["id"], priority=PDF_PRIORITY_WARM)
+        except PdfQueueFull:
+            emit_event("pdf_warmup_deferred", rate_limit=True)
+            return
+        except Exception as exc:
+            emit_event("pdf_warmup_failed", level=logging.WARNING, error=exc, rate_limit=True)
+            return
     billing_scopes = set(billing_scopes) | {
         (str(sheet.get("month") or ""), str(sheet.get("pi") or ""))
         for sheet in unique_sheets.values()
         if sheet.get("month") and sheet.get("pi")
     }
     for month, pi in billing_scopes:
-        _enqueue_billing_pdf(
-            month,
-            pi,
-            PDF_CACHE_ACTOR["id"],
-            connect_db=connect_db,
-            generate_statement=generate_statement,
-            actor=PDF_CACHE_ACTOR,
-            priority=PDF_PRIORITY_WARM,
-        )
+        try:
+            _enqueue_billing_pdf(
+                month,
+                pi,
+                PDF_CACHE_ACTOR["id"],
+                connect_db=connect_db,
+                generate_statement=generate_statement,
+                actor=PDF_CACHE_ACTOR,
+                priority=PDF_PRIORITY_WARM,
+            )
+        except PdfQueueFull:
+            emit_event("pdf_warmup_deferred", rate_limit=True)
+            return
+        except Exception as exc:
+            emit_event("pdf_warmup_failed", level=logging.WARNING, error=exc, rate_limit=True)
+            return
 
 
 def download_quantity_sheet_pdf(handler, sheet_id, *, connect_db, get_quantity_sheet, validate_permission):
@@ -248,6 +261,9 @@ def _start_pdf_export_from_body(
     except ValueError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+    except PdfQueueFull as exc:
+        handler.send_json({"error": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE)
+
 
 def read_pdf_export_job(handler, job_id):
     user = handler.require_user()
@@ -303,6 +319,9 @@ def export_quantity_sheet_pdfs(handler, **kwargs):
     except ValueError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
+    except RuntimeError:
+        handler.send_json({"error": "PDF 服务暂时不可用，请稍后重试"}, HTTPStatus.SERVICE_UNAVAILABLE)
+
 
 def export_billing_statement_pdfs(handler, **kwargs):
     """Compatibility endpoint for earlier clients."""
@@ -341,6 +360,9 @@ def export_billing_statement_pdfs(handler, **kwargs):
         handler.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
     except ValueError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    except RuntimeError:
+        handler.send_json({"error": "PDF 服务暂时不可用，请稍后重试"}, HTTPStatus.SERVICE_UNAVAILABLE)
 
 
 def _start_quantity_export(sheet_ids, user, connect_db, get_quantity_sheet, validate_permission, clean_text):

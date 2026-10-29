@@ -59,7 +59,7 @@ def decode_images(raw):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("error", Image.DecompressionBombWarning)
-                with Image.open(BytesIO(content)) as image:
+                with Image.open(BytesIO(content), formats=list(FORMATS)) as image:
                     if image.width * image.height > 25_000_000 or max(image.size) > 8192:
                         raise ValueError("预约图片尺寸过大，请使用清晰的页面截图")
                     if image.format not in FORMATS or FORMATS[image.format][0] != match[1]:
@@ -67,7 +67,7 @@ def decode_images(raw):
                     if getattr(image, "n_frames", 1) != 1:
                         raise ValueError("预约识别仅支持静态图片")
                     image.verify()
-                with Image.open(BytesIO(content)) as image:
+                with Image.open(BytesIO(content), formats=list(FORMATS)) as image:
                     image.load()
         except (
             UnidentifiedImageError,
