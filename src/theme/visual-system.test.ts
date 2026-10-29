@@ -62,13 +62,14 @@ describe.each(["light", "dark"] as const)("%s visual system", (mode) => {
     }
   });
 
-  it("uses official motion while reduced-motion eliminates it without changing layout", () => {
+  it("uses shared motion timing while reduced-motion eliminates it without changing layout", () => {
     const token = resolveTheme(mode);
     expect([token.motionDurationFast, token.motionDurationMid, token.motionDurationSlow]).toEqual([
-      "0.1s",
+      "0.15s",
       "0.2s",
-      "0.3s",
+      "0.25s",
     ]);
+    expect(token.motionEaseOut).toBe("cubic-bezier(0.2, 0, 0, 1)");
     expect(createTheme(mode, { motion: false }).token?.motion).toBe(false);
     expect(createTheme(mode, { mobile: true }).components?.Button?.controlHeight).toBeGreaterThanOrEqual(44);
   });

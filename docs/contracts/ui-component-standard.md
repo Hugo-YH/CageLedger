@@ -33,7 +33,7 @@
 ## 响应式与动效
 
 - `768px` 及以上使用桌面 Ant Layout；小于 `768px` 使用 antd-mobile TabBar 与 Popup。
-- 动效由 Ant 官方 `motionDurationFast/Mid/Slow`（100/200/300ms）与命名缓动派生。按钮不统一缩放或位移，不添加整页入场和批量行延迟动画。
+- 动效使用主题 `motionDurationFast/Mid/Slow`（150/200/250ms）及统一缓动 `cubic-bezier(.2,0,0,1)`。按钮不统一缩放或位移，不添加整页入场和批量行延迟动画。
 - 运营工作台和公开入口不使用持续循环的装饰动画；无限动画仅允许用于明确的加载指示器。
 - `prefers-reduced-motion` 下保留状态色与透明度，移除位移与缩放。
 

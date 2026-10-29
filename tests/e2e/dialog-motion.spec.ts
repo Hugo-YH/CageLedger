@@ -128,7 +128,7 @@ test("quantity preview, edit and delete retain exit content and restore keyboard
     await expect(dialog).toBeVisible();
     await finished(page, "antZoomIn");
     const enter = await events(page);
-    expect(enter.find((event) => event.name.endsWith("antZoomIn"))?.duration).toBe("0.3s");
+    expect(enter.find((event) => event.name.endsWith("antZoomIn"))?.duration).toBe("0.25s");
     expect(enter.find((event) => event.name.endsWith("antFadeIn"))?.duration).toBe("0.2s");
     const cancel = dialog.getByRole("button", { name: action === "删除" ? "取消" : "关闭", exact: true }).last();
     await closeWithMotion(page, cancel);

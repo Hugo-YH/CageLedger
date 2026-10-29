@@ -16,7 +16,7 @@ test("buttons preserve geometry while pressed and submitting", async ({ page }, 
   await page.mouse.down();
   await expect.poll(async () => (await read()).transform).toBe("none");
   const pressed = await read();
-  expect(pressed.transition.split(", ").every((value) => ["0.1s", "0.2s", "0.3s"].includes(value))).toBe(true);
+  expect(pressed.transition.split(", ").every((value) => ["0.15s", "0.2s", "0.25s"].includes(value))).toBe(true);
   await page.mouse.move(1, 1);
   await page.mouse.up();
   let release!: () => void;

@@ -43,9 +43,9 @@ test("project portal uses the shared finite motion contract", async ({ page }) =
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
 
-  await expect(page.locator("html")).toHaveCSS("--cl-motion-fast", "0.1s");
+  await expect(page.locator("html")).toHaveCSS("--cl-motion-fast", "0.15s");
   await expect(page.locator("html")).toHaveCSS("--motion-base", "0.2s");
-  await expect(page.locator("html")).toHaveCSS("--motion-slow", "0.3s");
+  await expect(page.locator("html")).toHaveCSS("--motion-slow", "0.25s");
   await expect(page.locator(".project-hero-copy")).toHaveCSS("animation-name", "none");
 
   const decorativeMotion = page.locator(".project-demo-flow-line span, .project-demo-cage.is-active");

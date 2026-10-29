@@ -1,7 +1,7 @@
 import { formatPersonNames } from "../../../../domain/personNames";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Card, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
-import { useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { IntakeBatchListItem, IntakeBatchStatus, IntakeListParams } from "../../../api/contracts";
 import { useIntakeFilterOptions } from "../../../api/intake";
@@ -18,35 +18,7 @@ import { IntakeSummaryExport } from "./IntakeSummaryExport";
 import { IntakeStatistics } from "./IntakeStatistics";
 import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
 
-export function IntakeBatchList({
-  total,
-  selectedItems,
-  items,
-  loading,
-  selectingAll,
-  allFilteredSelected,
-  bulkNotice,
-  bulkNoticeKind,
-  markingPrinted,
-  markingReceived,
-  printDisabledReason,
-  page,
-  pageSize,
-  params,
-  filters,
-  onClearSelection,
-  onToggleAll,
-  onToggleItem,
-  onSort,
-  onFilter,
-  onPrint,
-  onMarkPrinted,
-  onReceive,
-  onEdit,
-  onDelete,
-  onPage,
-  onPageSize,
-}: {
+type IntakeBatchListProps = {
   total: number;
   selectedItems: IntakeBatchListItem[];
   items: IntakeBatchListItem[];
@@ -74,7 +46,65 @@ export function IntakeBatchList({
   onDelete: (item: IntakeBatchListItem) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
-}) {
+};
+
+// Callbacks follow the latest committed parent state without invalidating the
+// expensive list while an unrelated editor draft changes.
+export function IntakeBatchList(props: IntakeBatchListProps) {
+  const latest = useRef(props);
+  useLayoutEffect(() => {
+    latest.current = props;
+  }, [props]);
+  const events = useMemo(
+    () => ({
+      onClearSelection: () => latest.current.onClearSelection(),
+      onToggleAll: () => latest.current.onToggleAll(),
+      onToggleItem: (item: IntakeBatchListItem, checked: boolean) => latest.current.onToggleItem(item, checked),
+      onSort: (key: string) => latest.current.onSort(key),
+      onFilter: (key: string, values: string[]) => latest.current.onFilter(key, values),
+      onPrint: (items: IntakeBatchListItem[]) => latest.current.onPrint(items),
+      onMarkPrinted: (items: IntakeBatchListItem[]) => latest.current.onMarkPrinted(items),
+      onReceive: (items: IntakeBatchListItem[]) => latest.current.onReceive(items),
+      onEdit: (item: IntakeBatchListItem) => latest.current.onEdit(item),
+      onDelete: (item: IntakeBatchListItem) => latest.current.onDelete(item),
+      onPage: (page: number) => latest.current.onPage(page),
+      onPageSize: (pageSize: number) => latest.current.onPageSize(pageSize),
+    }),
+    [],
+  );
+  return <MemoizedIntakeBatchList {...props} {...events} />;
+}
+
+const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
+  total,
+  selectedItems,
+  items,
+  loading,
+  selectingAll,
+  allFilteredSelected,
+  bulkNotice,
+  bulkNoticeKind,
+  markingPrinted,
+  markingReceived,
+  printDisabledReason,
+  page,
+  pageSize,
+  params,
+  filters,
+  onClearSelection,
+  onToggleAll,
+  onToggleItem,
+  onSort,
+  onFilter,
+  onPrint,
+  onMarkPrinted,
+  onReceive,
+  onEdit,
+  onDelete,
+  onPage,
+  onPageSize,
+}: IntakeBatchListProps) {
+  const selectedIds = useMemo(() => new Set(selectedItems.map((item) => item.id)), [selectedItems]);
   const columns: TableProps<IntakeBatchListItem>["columns"] = [
     {
       key: "selection",
@@ -91,7 +121,7 @@ export function IntakeBatchList({
       render: (_, item) => (
         <Checkbox
           aria-label={`选择 ${item.batchNo}`}
-          checked={selectedItems.some((selectedItem) => selectedItem.id === item.id)}
+          checked={selectedIds.has(item.id)}
           disabled={loading}
           onChange={(event) => onToggleItem(item, event.target.checked)}
         />
@@ -282,7 +312,7 @@ export function IntakeBatchList({
       </Card>
     </ProjectPeopleCopyProvider>
   );
-}
+});
 
 function IntakeColumnTitle({
   column,

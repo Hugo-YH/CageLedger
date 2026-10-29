@@ -584,7 +584,15 @@
 
 [data-ui="workspace-toolbar"] .app-command-bar-actions button {
   min-height: var(--control-height);
-  white-space: nowrap;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-ui="workspace-toolbar"] .app-command-bar-actions > .ant-space-item {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-command-bar-filters {
@@ -811,6 +819,10 @@
   [data-ui="workspace-toolbar"] .app-command-bar-actions {
     flex: none;
   }
+
+  [data-ui="workspace-toolbar"] .app-command-bar-actions button {
+    min-height: 44px;
+  }
 }
 
 /* Shared panel and field-cluster primitives (migrated from core.css).
@@ -886,8 +898,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.table-wrap tr:hover td {
-  background: var(--table-row-hover);
+@media (hover: hover) and (pointer: fine) {
+  .table-wrap tr:hover > td {
+    background: var(--table-row-hover);
+  }
 }
 
 .table-wrap :is(th, td).numeric,

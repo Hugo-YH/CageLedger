@@ -67,6 +67,12 @@ export function createTheme(mode, { mobile = false, motion = true } = {}) {
       controlHeight: mobile ? 40 : 32,
       controlHeightSM: 24,
       controlHeightLG: 40,
+      motionDurationFast: "0.15s",
+      motionDurationMid: "0.2s",
+      motionDurationSlow: "0.25s",
+      motionEaseOut: "cubic-bezier(0.2, 0, 0, 1)",
+      motionEaseInOut: "cubic-bezier(0.2, 0, 0, 1)",
+      motionEaseInOutCirc: "cubic-bezier(0.2, 0, 0, 1)",
       // Normal supporting text must remain readable on both container and layout surfaces.
       colorTextDescription: palette.colorTextSecondary,
       colorTextTertiary: palette.colorTextSecondary,

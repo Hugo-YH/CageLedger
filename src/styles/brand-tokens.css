@@ -73,12 +73,12 @@
   --cl-z-dropdown: 1000;
   --cl-z-modal: 1000;
   --cl-z-toast: 1010;
-  --cl-motion-fast: 0.1s;
+  --cl-motion-fast: 0.15s;
   --cl-motion-base: 0.2s;
-  --cl-motion-overlay: 0.3s;
-  --cl-ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
-  --cl-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
-  --cl-ease-drawer: cubic-bezier(0.78, 0.14, 0.15, 0.86);
+  --cl-motion-overlay: 0.25s;
+  --cl-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --cl-ease-in-out: cubic-bezier(0.2, 0, 0, 1);
+  --cl-ease-drawer: cubic-bezier(0.2, 0, 0, 1);
 }
 
 :root[data-theme="dark"],
@@ -157,12 +157,12 @@
   --cl-z-dropdown: 1000;
   --cl-z-modal: 1000;
   --cl-z-toast: 1010;
-  --cl-motion-fast: 0.1s;
+  --cl-motion-fast: 0.15s;
   --cl-motion-base: 0.2s;
-  --cl-motion-overlay: 0.3s;
-  --cl-ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
-  --cl-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
-  --cl-ease-drawer: cubic-bezier(0.78, 0.14, 0.15, 0.86);
+  --cl-motion-overlay: 0.25s;
+  --cl-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --cl-ease-in-out: cubic-bezier(0.2, 0, 0, 1);
+  --cl-ease-drawer: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
