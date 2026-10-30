@@ -1,4 +1,6 @@
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
+import { normalizePath } from "vite";
 import { defineConfig } from "vitest/config";
 
 const apiOrigin =
@@ -14,6 +16,18 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     allowedHosts: ["clt.cellnucle.us"],
+    fs: {
+      // Overriding deny replaces Vite defaults; retain them and scope data to this project.
+      deny: [
+        ".env",
+        ".env.*",
+        "*.{crt,pem,key,p12,pfx,cer,der}",
+        ".npmrc",
+        ".yarnrc.yml",
+        "**/.git/**",
+        normalizePath(fileURLToPath(new URL("./data/**", import.meta.url))),
+      ],
+    },
     proxy: {
       "/api": apiOrigin,
       "/docs": { target: docsOrigin, ws: true },

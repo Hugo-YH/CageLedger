@@ -1,6 +1,6 @@
 # beta 系统优化执行记录
 
-本批LOCAL_ONLY，基线 `c06ac02`（v1.21.2），最后实现提交 `bc25eb4`。代码实现和门禁已完成，恢复输入缺件及待授权Vite候选仍有后续事项；没有push、main合并、标签、发布或生产部署。
+本批LOCAL_ONLY，基线 `c06ac02`（v1.21.2），主要业务实现提交 `bc25eb4`，随后另有已批准的Vite配置增量。代码实现和声明的验证已完成，恢复输入缺件仍有后续事项；没有push、main合并、标签、发布或生产部署。
 
 ## 分批结果
 
@@ -14,7 +14,7 @@
 | B4门禁       | 完成           | 最终受影响11项基础检查；752Vitest；972Python及benchmark按616输入不变复用；Chromium365、两个兼容引擎各38+6。                             |
 | 旧库兼容     | 带既有告警通过 | final passed_with_warnings、差异0；53张非SQLite内部表（不含视图）/37,795行、原审计、457重算及每版2,986 HTTP，HTML/XLSX各347、PDF抽样3。 |
 | 恢复         | failed         | 输入缺4个有效本地引用；92个本地附件HTTP无下载错误。不得把业务结果差异0等同完整恢复通过。                                                |
-| Vite数据路径 | 仅候选         | 合成复现、工程绝对data deny候选通过；实际安全配置未修改，等待用户明确授权。                                                             |
+| Vite数据路径 | 已批准应用     | 追加工程绝对data deny并保留默认保护，68受保护请求与11浏览器场景通过；边界见增量验收。                                                   |
 
 ## 时间与纠偏（UTC）
 
@@ -42,12 +42,16 @@
 | `restore-motion-final/report.json`                                      | 最终恢复failed及输入/代码未变、缺件分类                         |
 | `original-final-summary.json`                                           | 原始100文件集合/指纹、两库完整性与外键摘要                      |
 | `e2e-verified/resource-degrade.json`、`e2e-shard3-serial/`              | 主动降并发原因、中断保留和第三片完整成功重跑                    |
-| `vite-data-boundary-proposed.patch`、`vite-boundary-scoped-result.json` | 未应用的私有候选及纯合成403/200对照                             |
+| `vite-data-boundary-proposed.patch`、`vite-boundary-scoped-result.json` | 批准前私有候选及纯合成403/200对照                               |
 
 报告的计数和性能均为本批新测，历史前端优化744测试等未冒充本次验收。最终文档新增后只复查文档格式、lint、相对链接、引用路径和diff；不重复已通过且输入不变的源码门禁。
 
 [最终验收](acceptance.md) · [UI证据](ui-evidence.md) · [基线](analysis.md) · [计划](plan.md)
 
-## 收尾增量
+## 收尾增量（19:15 UTC，批准前）
 
 只读核实c06ac02为任务前发布基线；四份附件树一致，缺件在获准源中已不存在；完成公开OSV整库的Python本地比对（项目当前默认闭包无匹配，共享环境6组匹配），补齐npm剩余节点明细。Docker/Buildx访问本机Colima socket被拒，没有启动构建或改权限。Vite实际配置未变，待批准动作具体化；Node/Python Playwright版本分别1.61.1/1.61.0。详见 [收尾复核](follow-up.md)，本次仅文档变更，不重跑未受影响源码门禁。
+
+## 已批准Vite数据防护
+
+用户22:16:42 UTC明确同意后，在beta应用唯一批准的server.fs.deny增量，保留SDK默认项及其他配置。68个合成受保护请求403、4正常资源/2代理控制通过；新增Python回归1项、类型/lint及11Chromium场景通过。原100文件前后指纹不变，所有本轮服务退出；node_modules 2既有未跟踪链接保留。见 [Vite防护验收](vite-data-guard.md)。前文“仅候选/待授权”是原阶段记录，当前状态以本段为准。

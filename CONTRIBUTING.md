@@ -21,6 +21,8 @@ npm run dev
 
 开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。
 
+Vite开发服务拒绝通过静态文件或raw模块读取本工程的`data/`目录；业务数据通过`/api`访问。`server.fs.deny`同时保留当前Vite默认敏感文件保护，规则使用本工程绝对路径，避免匹配名为Data的父卷。升级Vite时运行`node scripts/run_python.mjs -m unittest discover -s tests -p test_vite_data_boundary.py`，核对新增默认规则和合成HTTP边界；该回归不请求真实数据库或附件。
+
 项目文档和更新记录分别位于 `/docs/`、`/docs/releases/`，开发服务同时启动 VitePress 并代理其页面和热更新连接。使用 `CAGELEDGER_DEV_PORT`、`CAGELEDGER_DEV_API_PORT`、`CAGELEDGER_DOCS_PORT` 启动不同端口的实例时，代理默认跟随实际 API／文档端口；文档预构建缓存按端口隔离，避免测试或另一实例导致文档空白。`CAGELEDGER_API_ORIGIN`、`CAGELEDGER_DOCS_ORIGIN` 可显式覆盖代理目标。
 
 通过 Codex 或 SSH 转发开发端口时，浏览器地址中的端口可能不同于 5173。若写入提示“请求来源不受信任”，
