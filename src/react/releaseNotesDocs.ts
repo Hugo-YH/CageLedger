@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.21.1",
+    build: "246",
+    releasedAt: "2026-10-30",
+    title: "列表与反馈",
+    items: [
+      "优化技术服务列表的渲染，减少编辑操作时无关表格的重复更新",
+      "改善反馈抽屉的打开、关闭与异步请求处理，避免旧请求影响新打开的内容",
+      "为容器构建增加依赖下载缓存，减少重复下载",
+      "提供手动依赖预热命令，支持在资源监测下与测试并行运行",
+    ],
+  },
+  {
     version: "1.21.0",
     build: "245",
     releasedAt: "2026-10-30",

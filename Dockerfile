@@ -2,7 +2,7 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 ARG PYTHON_IMAGE=python:3.13-slim
 ARG TARGETARCH
 
-FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend-deps
 
 WORKDIR /build
 
@@ -12,6 +12,7 @@ RUN --mount=type=cache,id=cageledger-npm,target=/root/.npm,sharing=locked \
     bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
     --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
+FROM frontend-deps AS frontend
 COPY scripts ./scripts
 COPY index.html vite.config.ts tsconfig.json ./
 COPY assets ./assets
@@ -20,7 +21,7 @@ COPY server_app/resources/intake ./server_app/resources/intake
 COPY wiki ./wiki
 RUN CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
 
-FROM ${PYTHON_IMAGE}
+FROM ${PYTHON_IMAGE} AS runtime-deps
 ARG TARGETARCH
 
 WORKDIR /app
@@ -44,6 +45,7 @@ RUN --mount=type=cache,id=cageledger-pip-${TARGETARCH},target=/root/.cache/pip,s
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r requirements.txt
 
+FROM runtime-deps AS runtime
 COPY server.py package.json LICENSE NOTICE ./
 COPY server_app ./server_app
 COPY --from=frontend /build/web-dist ./web-dist

@@ -134,6 +134,7 @@ for (const viewport of [
     await page.reload();
     await openIntakeEntry(page);
     const entry = page.getByRole("group", { name: "笼卡录入操作", exact: true });
+    await expect(entry.getByRole("button", { name: "保存待接收批次", exact: true })).toBeEnabled();
     await expectPageHeadingAlignment(entry);
     await captureToolbar(page, testInfo, "intake-entry", entry);
     await page.getByLabel("结束日期", { exact: true }).scrollIntoViewIfNeeded();

@@ -1,8 +1,8 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "1.21.0",
-  "build": 245,
+  "version": "1.21.1",
+  "build": 246,
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
@@ -45,6 +45,7 @@
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
     "package:offline:image": "bash scripts/package_offline_image.sh",
+    "prewarm:container:local": "bash scripts/prewarm_container_deps.sh",
     "publish:container:local": "bash scripts/publish_container_local.sh",
     "release:local": "bash scripts/release_local.sh",
     "test:e2e:compat": "node scripts/check_python_runtime.mjs && node scripts/test_desktop_compat.mjs"
