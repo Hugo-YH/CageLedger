@@ -1370,6 +1370,23 @@ h3 {
   padding: 8px 0 calc(20px + env(safe-area-inset-bottom));
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .ant-mobile-navigation-popup {
+    /* The library's running spring writes inline transforms until its onRest. */
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+
+  .ant-mobile-navigation-popup-closed {
+    visibility: hidden;
+    pointer-events: none !important;
+  }
+
+  .ant-mobile-navigation-mask-closed {
+    display: none !important;
+  }
+}
+
 .ant-mobile-sheet-head {
   display: flex;
   align-items: center;

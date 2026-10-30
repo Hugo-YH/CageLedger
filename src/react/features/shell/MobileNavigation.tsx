@@ -26,6 +26,7 @@ import type { WorkspaceView } from "../../state/ui";
 import { billingSidebarItems, technicalServiceSidebarItems, settlementSidebarItems } from "./workspaceNavigation";
 import { SyringeOutlined } from "../../components/ui/SyringeOutlined";
 import { useViewVisibility } from "../../state/systemFeatureVisibility";
+import { useMobileMotion } from "../../hooks/useMobileMotion";
 
 type NavIcon =
   | "tag"
@@ -84,6 +85,7 @@ export function MobileNavigation({
   onRefresh: () => void;
   onSignOut: () => void;
 }) {
+  const reducedMotion = useMobileMotion();
   const visible = useViewVisibility();
   const activeKey = mobileKey(activeView);
 
@@ -129,7 +131,10 @@ export function MobileNavigation({
         </TabBar>
       </div>
       <Popup
+        bodyClassName={`ant-mobile-navigation-popup${open ? "" : " ant-mobile-navigation-popup-closed"}`}
         bodyStyle={{ borderRadius: "8px 8px 0 0" }}
+        maskClassName={`ant-mobile-navigation-mask${open ? "" : " ant-mobile-navigation-mask-closed"}`}
+        disableBodyScroll={open || !reducedMotion}
         destroyOnClose
         position="bottom"
         visible={open}

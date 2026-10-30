@@ -236,7 +236,13 @@
     "mobile-navigation": {
       "root": "[data-ui='mobile-navigation']",
       "owner": "src/styles/shell.css",
-      "allowedPrefixes": ["[data-ui='mobile-navigation']", ".ant-mobile-tabbar", ".ant-mobile-navigation-sheet"],
+      "allowedPrefixes": [
+        "[data-ui='mobile-navigation']",
+        ".ant-mobile-tabbar",
+        ".ant-mobile-navigation-sheet",
+        ".ant-mobile-navigation-popup",
+        ".ant-mobile-navigation-mask"
+      ],
       "breakpoints": ["760px", "landscape"],
       "status": "in-progress"
     },
