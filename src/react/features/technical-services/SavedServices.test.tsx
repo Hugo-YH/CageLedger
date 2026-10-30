@@ -11,6 +11,8 @@ import { SavedServices } from "./SavedServices";
 
 const api = vi.hoisted(() => ({
   isError: false,
+  isFetching: false,
+  mutationPending: false,
   items: [] as TechnicalServiceSheet[],
   lastParams: {},
   mutation: vi.fn<() => Promise<unknown>>(),
@@ -18,6 +20,8 @@ const api = vi.hoisted(() => ({
   detailLoading: false,
   detailError: false,
   detailRefetch: vi.fn(),
+  tableRenders: 0,
+  cellRenders: 0,
 }));
 
 vi.mock("../../api/technicalServices", () => ({
@@ -26,13 +30,13 @@ vi.mock("../../api/technicalServices", () => ({
     return {
       data: { items: api.items, page: { total: api.total } },
       isError: api.isError,
-      isFetching: false,
+      isFetching: api.isFetching,
       isPending: false,
       isPlaceholderData: false,
       refetch: vi.fn(),
     };
   },
-  useServiceMutation: () => ({ isPending: false, mutateAsync: api.mutation }),
+  useServiceMutation: () => ({ isPending: api.mutationPending, mutateAsync: api.mutation }),
   useServiceDetail: (id: string) => ({
     data: id && !api.detailLoading && !api.detailError ? { item: api.items.find((item) => item.id === id) } : undefined,
     isFetching: Boolean(id) && api.detailLoading,
@@ -128,20 +132,24 @@ vi.mock("../../components/ui", async (importOriginal) => {
       }>;
       dataSource?: TechnicalServiceSheet[];
       size?: string;
-    }) => (
-      <div data-size={size}>
-        {columns.map((column, index) => (
-          <span key={column.key || index}>{column.title}</span>
-        ))}
-        {(dataSource || []).map((row) => (
-          <div key={row.id}>
-            {columns.map((column, index) => (
-              <span key={column.key || index}>{column.render?.(undefined, row)}</span>
-            ))}
-          </div>
-        ))}
-      </div>
-    ),
+    }) => {
+      api.tableRenders += 1;
+      return (
+        <div data-size={size}>
+          {columns.map((column, index) => (
+            <span key={column.key || index}>{column.title}</span>
+          ))}
+          {(dataSource || []).map((row) => (
+            <div key={row.id}>
+              {columns.map((column, index) => {
+                api.cellRenders += 1;
+                return <span key={column.key || index}>{column.render?.(undefined, row)}</span>;
+              })}
+            </div>
+          ))}
+        </div>
+      );
+    },
   };
 });
 
@@ -204,6 +212,8 @@ function view(memory = new Map<string, unknown>()) {
 beforeEach(() => {
   api.items = [sheet("open"), sheet("protected", true)];
   api.isError = false;
+  api.isFetching = false;
+  api.mutationPending = false;
   api.total = 20;
   api.lastParams = {};
   api.mutation.mockReset();
@@ -211,6 +221,8 @@ beforeEach(() => {
   api.detailLoading = false;
   api.detailError = false;
   api.detailRefetch.mockReset();
+  api.tableRenders = 0;
+  api.cellRenders = 0;
 });
 
 afterEach(() => {
@@ -219,6 +231,54 @@ afterEach(() => {
 });
 
 describe("SavedServices", () => {
+  it("isolates the 100-row table from preview and detail state changes", () => {
+    api.items = Array.from({ length: 100 }, (_, i) => sheet(String(i)));
+    api.total = 100;
+    api.detailLoading = true;
+    const rendered = view();
+    const initialTable = api.tableRenders;
+    const initialCells = api.cellRenders;
+    fireEvent.click(screen.getAllByRole("button", { name: /预\s*览/ })[0]);
+    api.detailLoading = false;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    fireEvent.click(within(screen.getByText("技术服务明细预览").closest(".ant-modal")!).getByLabelText("关闭弹窗"));
+    fireEvent.click(screen.getAllByRole("button", { name: /删\s*除/ })[0]);
+    fireEvent.click(within(screen.getByText("删除技术服务明细").closest(".ant-modal")!).getByLabelText("关闭弹窗"));
+    expect([api.tableRenders - initialTable, api.cellRenders - initialCells]).toEqual([0, 0]);
+  });
+
+  it("updates row actions when the list refreshes, fails, or receives newer rows", async () => {
+    const rendered = view();
+    const buttons = () => screen.getAllByRole("button", { name: /删\s*除/ });
+    expect(buttons()[0]).toBeEnabled();
+    expect(buttons()[1]).toBeDisabled();
+    api.isFetching = true;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(buttons()[0]).toBeDisabled();
+    api.isFetching = false;
+    api.items = [sheet("new", true)];
+    api.items[0].updatedAt = "new-version";
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(buttons()[0]).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /编\s*辑/ }));
+    expect(screen.getByText("技术服务明细")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByText("技术服务明细").closest(".ant-modal")!).getByLabelText("关闭弹窗"));
+    api.items = [{ ...api.items[0], protected: false }];
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    fireEvent.click(buttons()[0]);
+    fireEvent.click(
+      within(screen.getByText("删除技术服务明细").closest(".ant-modal")!).getByRole("button", { name: /删\s*除/ }),
+    );
+    await waitFor(() =>
+      expect(api.mutation).toHaveBeenCalledWith({
+        kind: "delete",
+        sheet: expect.objectContaining({ id: "new", updatedAt: "new-version" }),
+      }),
+    );
+    api.isError = true;
+    rendered.rerender(workspace(rendered.memory, rendered.client));
+    expect(screen.getByRole("button", { name: /编\s*辑/ })).toBeDisabled();
+  });
   it("opens edit immediately, retries detail failure, and ignores late data after close", async () => {
     api.items[0].priceSnapshot = {
       id: "service-1",

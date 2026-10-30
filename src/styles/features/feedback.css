@@ -31,15 +31,26 @@
 
 [data-feature="feedback"] .feedback-title-cell {
   display: grid;
+  min-width: 0;
   gap: 2px;
   justify-items: start;
 }
 
 [data-feature="feedback"] .feedback-title-cell .ant-btn-link {
+  max-width: 100%;
+  min-width: 0;
   height: auto;
   padding: 0;
   text-align: start;
   white-space: normal;
+}
+
+[data-feature="feedback"] .feedback-title-text {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 [data-feature="feedback"] .feedback-detail {

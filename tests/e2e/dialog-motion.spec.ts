@@ -94,6 +94,20 @@ async function finished(page: Page, suffix: string) {
     .toBe(true);
 }
 
+async function inProgress(page: Page, suffix: string) {
+  await page.waitForFunction(
+    (name) => {
+      const recorded = (window as AuditWindow).dialogMotion || [];
+      return recorded.some((event) => event.type === "animationstart" && event.name.endsWith(name));
+    },
+    suffix,
+    { polling: "raf" },
+  );
+  const recorded = await events(page);
+  expect(recorded.some((event) => event.type === "animationstart" && event.name.endsWith(suffix))).toBe(true);
+  expect(recorded.some((event) => event.type === "animationend" && event.name.endsWith(suffix))).toBe(false);
+}
+
 async function closeWithMotion(page: Page, close: Locator) {
   await clearMotion(page);
   await close.click();
@@ -152,8 +166,9 @@ test("early Escape and a reduced-motion change during entry or exit release the 
     await expect(dialog).toHaveCount(0);
     await expect(trigger).toBeFocused();
   }
+  await clearMotion(page);
   await trigger.click();
-  await expect(dialog).toBeVisible();
+  await inProgress(page, "antZoomIn");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(dialog).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
   await expect(dialog).toHaveCSS("opacity", "1");
@@ -163,12 +178,18 @@ test("early Escape and a reduced-motion change during entry or exit release the 
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await trigger.focus();
   await trigger.press("Enter");
-  await expect(dialog).toBeVisible();
+  await finished(page, "antZoomIn");
+  await clearMotion(page);
   await dialog.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await inProgress(page, "antZoomOut");
+  expect(
+    (await events(page)).find((event) => event.type === "animationstart" && event.name.endsWith("antZoomOut"))?.inert,
+  ).toBe(true);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await expect(page.locator(".ant-modal-mask:visible")).toHaveCount(0);
+  await expect(page.locator(".quantity-react-preview [inert]")).toHaveCount(0);
 });
 
 test("preview and notice replace each other after exit and never initiate on cancel", async ({ page }, info) => {

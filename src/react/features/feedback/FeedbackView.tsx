@@ -1,6 +1,6 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { ExclamationCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Space, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 
@@ -101,14 +101,16 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
       width: 260,
       render: (_, item) => (
         <div className="feedback-title-cell">
-          <Button
-            aria-label={`查看反馈 #${item.number}：${item.title}`}
-            type="link"
-            disabled={retained.blocked}
-            onClick={() => openDetail(item.id)}
-          >
-            {item.title}
-          </Button>
+          <Tooltip title={item.title}>
+            <Button
+              aria-label={`查看反馈 #${item.number}：${item.title}`}
+              type="link"
+              disabled={retained.blocked}
+              onClick={() => openDetail(item.id)}
+            >
+              <span className="feedback-title-text">{item.title}</span>
+            </Button>
+          </Tooltip>
         </div>
       ),
     },

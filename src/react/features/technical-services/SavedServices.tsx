@@ -1,7 +1,5 @@
-import { formatPersonNames } from "../../../domain/personNames";
-import { ServiceColumnTitle } from "./ServiceColumnTitle";
-import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Space, Tag } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button } from "antd";
 import { Modal } from "../../components/ui/Modal";
 
 import type { TechnicalServiceListItem, TechnicalServiceSheet } from "../../../contracts/technicalServices";
@@ -15,7 +13,7 @@ import { useWorkspaceMemory, useWorkspaceScroll } from "../../state/workspaceMem
 import { useNavigationGuard } from "../../state/ui";
 import { ServiceEditor } from "./ServiceEditor";
 import { ServiceDetails } from "./ServiceDetails";
-import { DataTable } from "../../components/ui";
+import { SavedServicesTable } from "./SavedServicesTable";
 import { PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 
 export function SavedServices() {
@@ -40,36 +38,32 @@ export function SavedServices() {
   const editButtonRefs = useRef(new Map<string, HTMLElement>());
   const listRegionRef = useRef<HTMLDivElement>(null);
   const completedEditId = useRef<string | null>(null);
-  const params = {
-    columnFilters: filters,
-    sortKey: sort.key,
-    sortDir: sort.dir,
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-  };
-  function title(column: string, label: string) {
-    return (
-      <ServiceColumnTitle
-        list="sheets"
-        params={params}
-        column={column}
-        label={label}
-        onFilter={(values) => {
-          setHighlightedRowId(null);
-          setFilters((previous) => ({ ...previous, [column]: values }));
-          setPage(1);
-        }}
-        onSort={() => {
-          setHighlightedRowId(null);
-          setSort((previous) => ({
-            key: column,
-            dir: previous.key === column && previous.dir === "asc" ? "desc" : "asc",
-          }));
-          setPage(1);
-        }}
-      />
-    );
-  }
+  const params = useMemo(
+    () => ({
+      columnFilters: filters,
+      sortKey: sort.key,
+      sortDir: sort.dir,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    }),
+    [filters, sort.key, sort.dir, pageSize, page],
+  );
+  const onFilter = useCallback(
+    (column: string, values: string[]) => {
+      setHighlightedRowId(null);
+      setFilters((previous) => ({ ...previous, [column]: values }));
+      setPage(1);
+    },
+    [setFilters, setPage],
+  );
+  const onSort = useCallback(
+    (column: string) => {
+      setHighlightedRowId(null);
+      setSort((previous) => ({ key: column, dir: previous.key === column && previous.dir === "asc" ? "desc" : "asc" }));
+      setPage(1);
+    },
+    [setPage, setSort],
+  );
   const query = useServiceList(params);
   const { data, blocked, loading } = useRetainedListData(
     query,
@@ -94,12 +88,12 @@ export function SavedServices() {
       setEditingSheet(null);
     }
   }
-  function openEditor(sheet: TechnicalServiceListItem) {
+  const openEditor = useCallback((sheet: TechnicalServiceListItem) => {
     setSavedNotice("");
     setHighlightedRowId(null);
     setEditingSheet(null);
     setEditing(sheet);
-  }
+  }, []);
   function finishEditing() {
     completedEditId.current = editing?.id || null;
     setEditing(null);
@@ -114,11 +108,11 @@ export function SavedServices() {
     if (trigger && !reducedMotion && !query.isError) setHighlightedRowId(id);
     (trigger && !trigger.matches(":disabled") ? trigger : listRegionRef.current)?.focus();
   }
-  function openDelete(sheet: TechnicalServiceListItem) {
+  const openDelete = useCallback((sheet: TechnicalServiceListItem) => {
     setHighlightedRowId(null);
     setDeleteError("");
     setDeleting(sheet);
-  }
+  }, []);
   function closeDelete() {
     setDeleteError("");
     setDeleting(null);
@@ -202,100 +196,22 @@ export function SavedServices() {
         {loading ? (
           <PageSkeleton label="技术服务明细" variant="table" embedded />
         ) : data ? (
-          <DataTable<TechnicalServiceListItem>
-            resizeKey="technical-service-saved"
-            refreshing={query.isFetching}
-            rowKey="id"
-            loading={query.isPending || mutation.isPending}
-            dataSource={data.items}
-            scroll={{ x: 1200 }}
-            pagination={false}
-            size={density}
-            onRow={(row) =>
-              row.id === highlightedRowId && !reducedMotion
-                ? {
-                    className: "technical-service-row-saved",
-                    onAnimationEnd: (event) => {
-                      if (event.animationName === "technical-service-row-saved") setHighlightedRowId(null);
-                    },
-                  }
-                : {}
-            }
-            columns={[
-              { title: title("month", "月份"), dataIndex: "month", width: 110 },
-              { title: title("iacuc", "IACUC"), dataIndex: "iacuc", width: 150 },
-              {
-                title: title("pi", "项目负责人"),
-                dataIndex: "pi",
-                width: 160,
-                render: (value: string) => formatPersonNames(value),
-              },
-              {
-                title: title("facility", "服务设施"),
-                width: 130,
-                key: "facility",
-                render: (_, row) => (row.facility === "zhujiang" ? "珠江新城" : "生物岛"),
-              },
-              { title: title("serviceName", "服务项目"), dataIndex: "serviceName", width: 180 },
-              { title: title("serviceDayCount", "服务日数"), dataIndex: "serviceDayCount", width: 130 },
-              {
-                title: title("quantity", "计费数量"),
-                width: 130,
-                key: "quantity",
-                render: (_, row) => `${row.totalQuantity} ${row.unit}`,
-              },
-              {
-                title: title("amount", "金额（元）"),
-                width: 150,
-                key: "amount",
-                align: "right",
-                render: (_, row) => row.totalAmount.toFixed(2),
-              },
-              {
-                title: title("status", "状态"),
-                width: 130,
-                key: "status",
-                render: (_, row) => (
-                  <Tag color={row.protected ? "processing" : "default"}>{row.protected ? "已发起结算" : "可编辑"}</Tag>
-                ),
-              },
-              {
-                title: "操作",
-                key: "actions",
-                width: 240,
-                fixed: "right",
-                render: (_, row) => (
-                  <Space size={8} className="technical-service-row-actions" aria-label={`${row.iacuc}操作`}>
-                    <Button
-                      color="blue"
-                      variant="filled"
-                      disabled={blocked || query.isFetching}
-                      onClick={() => setViewing(row)}
-                    >
-                      预览
-                    </Button>
-                    <Button
-                      ref={(node) => {
-                        if (node) editButtonRefs.current.set(row.id, node);
-                        else editButtonRefs.current.delete(row.id);
-                      }}
-                      type="primary"
-                      disabled={blocked || query.isFetching}
-                      onClick={() => openEditor(row)}
-                    >
-                      编辑
-                    </Button>
-                    <Button
-                      danger
-                      disabled={row.protected || blocked || query.isFetching}
-                      onClick={() => openDelete(row)}
-                    >
-                      删除
-                    </Button>
-                  </Space>
-                ),
-              },
-            ]}
+          <SavedServicesTable
+            items={data.items}
+            params={params}
+            density={density}
+            blocked={blocked}
+            fetching={query.isFetching}
+            pending={query.isPending || mutation.isPending}
+            highlightedRowId={highlightedRowId}
+            reducedMotion={reducedMotion}
+            editButtonRefs={editButtonRefs}
+            onClearHighlight={setHighlightedRowId}
+            onFilter={onFilter}
+            onSort={onSort}
+            onView={setViewing}
+            onEdit={openEditor}
+            onDelete={openDelete}
           />
         ) : null}
       </div>

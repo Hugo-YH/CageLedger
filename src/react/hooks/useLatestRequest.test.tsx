@@ -35,6 +35,17 @@ describe("useLatestRequest", () => {
     expect(second()).toBe(true);
   });
 
+  it("invalidates a persistent dialog's request when closed and reopened", () => {
+    const { result, rerender } = renderHook(({ open }) => useLatestRequest(open), { initialProps: { open: true } });
+    const first = result.current.begin();
+    rerender({ open: false });
+    expect(first()).toBe(false);
+    expect(result.current.begin()()).toBe(false);
+    rerender({ open: true });
+    expect(first()).toBe(false);
+    expect(result.current.begin()()).toBe(true);
+  });
+
   it("invalidates results when the input changes or the form closes", () => {
     const { result } = renderHook(useLatestRequest);
     const current = result.current.begin();

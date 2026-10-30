@@ -6,6 +6,7 @@ import type { FeedbackKind, FeedbackSubmission } from "../../../contracts/feedba
 import { uploadFeedbackAttachment, useCreateFeedback } from "../../api/feedback";
 import { ApiError } from "../../api/client";
 import { Drawer } from "../../components/ui/Drawer";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { captureDiagnostics } from "../../diagnostics/collector";
 import { APP_VERSION } from "../../version";
 import { FeedbackDiagnosticsPreview } from "./FeedbackDiagnosticsPreview";
@@ -32,23 +33,29 @@ export function FeedbackCreateDrawer({
   const requestId = useRef(crypto.randomUUID());
   const attachmentRequestIds = useRef(new Map<string, string>());
   const saving = useRef(false);
+  const request = useLatestRequest(open);
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [uploadError, setUploadError] = useState("");
   const [createdId, setCreatedId] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [previewDiagnostics, setPreviewDiagnostics] = useState(false);
   const [diagnostics, setDiagnostics] = useState(captureDiagnostics);
   const submission = useRef<FeedbackSubmission | null>(null);
   const [submissionLocked, setSubmissionLocked] = useState(false);
   const environment = { appVersion: APP_VERSION, build, page, browser: navigator.userAgent };
-  const pending = create.isPending || uploading;
+  const pending = create.isPending || busy;
   async function save() {
-    if (saving.current) return;
+    if (saving.current || !open) return;
     saving.current = true;
+    const isCurrent = request.begin();
+    setBusy(true);
+    setUploadError("");
     try {
       const values = submission.current ? null : await form.validateFields();
-      setUploadError("");
+      // Validation may finish after navigation or a parent closes the drawer.
+      // Only a still-active form may start a new business write.
+      if (!isCurrent()) return;
       if (!submission.current && values) {
         submission.current = {
           ...values,
@@ -59,8 +66,9 @@ export function FeedbackCreateDrawer({
         setSubmissionLocked(true);
       }
       const item = createdId ? { id: createdId } : (await create.mutateAsync(submission.current!)).item;
-      if (!createdId) setCreatedId(item.id);
-      setUploading(true);
+      if (!createdId && isCurrent()) setCreatedId(item.id);
+      // Complete attachments for a write already initiated, even if navigation
+      // has retired its UI. A stale completion must not open another drawer.
       const failed: UploadFile[] = [];
       for (const uploadFile of files) {
         const file = uploadFile.originFileObj;
@@ -76,6 +84,7 @@ export function FeedbackCreateDrawer({
           failed.push(uploadFile);
         }
       }
+      if (!isCurrent()) return;
       setFiles(failed);
       if (failed.length) {
         setUploadError("反馈已提交，但部分截图上传失败。本地已保留，可重试。");
@@ -83,13 +92,22 @@ export function FeedbackCreateDrawer({
       }
       onCreated(item.id);
     } catch (error) {
+      if (!isCurrent()) return;
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "errorFields" in error &&
+        Array.isArray(error.errorFields) &&
+        error.errorFields.length
+      )
+        return;
       if (!createdId && error instanceof ApiError && error.status >= 400 && error.status < 500) {
         submission.current = null;
         setSubmissionLocked(false);
       }
       setUploadError(error instanceof Error ? error.message : "提交失败，请重试");
     } finally {
-      setUploading(false);
+      setBusy(false);
       saving.current = false;
     }
   }
@@ -108,7 +126,7 @@ export function FeedbackCreateDrawer({
       size={560}
       title="提交反馈"
       onClose={() => {
-        if (!pending) onClose();
+        if (!saving.current && !pending) onClose();
       }}
       footer={
         <Space>

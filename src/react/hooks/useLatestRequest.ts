@@ -1,10 +1,11 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef } from "react";
 
 import { DialogActivityContext } from "../state/dialogActivity";
 
 /** Guard local async effects without cancelling a query shared by other consumers. */
-export function useLatestRequest() {
-  const active = useContext(DialogActivityContext);
+export function useLatestRequest(enabled = true) {
+  const dialogActive = useContext(DialogActivityContext);
+  const active = dialogActive && enabled;
   const activeRef = useRef(active);
   const generation = useRef(0);
   const invalidate = useCallback(() => {
@@ -15,7 +16,7 @@ export function useLatestRequest() {
     const startedActive = activeRef.current;
     return () => startedActive && activeRef.current && generation.current === request;
   }, []);
-  useEffect(() => invalidate, [invalidate]);
+  useLayoutEffect(() => invalidate, [invalidate]);
   useLayoutEffect(() => {
     activeRef.current = active;
     if (!active) invalidate();
