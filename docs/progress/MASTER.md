@@ -1,7 +1,10 @@
-# 后端优化验收索引
+# 项目优化进度索引
 
-状态：2026-10-30实现与验收完成。基线`4468c8b`，工作区`main`，LOCAL_ONLY。
+2026-10-30 beta系统优化批次已完成代码实现、兼容对照和门禁并归档。基线 `c06ac02`，最后实现提交 `bc25eb4`；LOCAL_ONLY，没有推送、合并main或发布。恢复演练因提供的备份缺4个有效本地引用为failed；Vite工程数据防护仅为候选，尚未获授权应用。
 
-当前报告：`docs/archives/backend-hardening-2026-10-30/acceptance.md`。分析、计划和执行记录已归档同目录；旧v1.2.8进度原文单独保留，不恢复旧发布任务。
+- [本批最终验收](../archives/system-audit-2026-10-30/acceptance.md)
+- [UI与浏览器证据](../archives/system-audit-2026-10-30/ui-evidence.md)
+- [实施进度与证据索引](../archives/system-audit-2026-10-30/progress.md)
+- [审计基线](../archives/system-audit-2026-10-30/analysis.md) / [实施计划](../archives/system-audit-2026-10-30/plan.md)
 
-A1–A8均已实施；末轮PDF35项Python／4项浏览器补验通过，最终350项Chromium唯一用例与两引擎专项均已核对。原数据库与附件不变。2026-10-30收到用户追加授权：验收后提交并推送到main；发布和生产部署不在本次授权范围。没有创建新的原生记忆或代理指令来源。
+前一任务：[2026-10-30后端优化验收](../archives/backend-hardening-2026-10-30/acceptance.md)。历史归档不恢复为活动任务，也不沿用旧发布授权。
