@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ColumnsType } from "antd/es/table";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PrincipalIdentity, SessionUser } from "../../api/contracts";
+import { UiProvider } from "../../state/ui";
 import { DataView } from "./DataView";
 
 Object.defineProperty(window, "matchMedia", {
@@ -67,7 +68,9 @@ it("keeps identities visible and read-only after refresh failure, then allows re
   const user = { id: "admin", role: "admin" } as SessionUser;
   const tree = () => (
     <QueryClientProvider client={client}>
-      <DataView user={user} />
+      <UiProvider>
+        <DataView user={user} />
+      </UiProvider>
     </QueryClientProvider>
   );
   const view = render(tree());
@@ -91,7 +94,9 @@ it("shows a retryable first failure rather than an empty table", () => {
   const client = new QueryClient();
   render(
     <QueryClientProvider client={client}>
-      <DataView user={{ id: "admin", role: "admin" } as SessionUser} />
+      <UiProvider>
+        <DataView user={{ id: "admin", role: "admin" } as SessionUser} />
+      </UiProvider>
     </QueryClientProvider>,
   );
   expect(screen.getByText("负责人身份加载失败")).toBeInTheDocument();

@@ -189,7 +189,10 @@ function Workspace({ user }: { user: SessionUser }) {
   }
   async function guardedNavigate(view: WorkspaceView) {
     if (!visible(view)) return;
-    if (view === ui.activeView) return;
+    if (view === ui.activeView) {
+      setMobileNavigationOpen(false);
+      return;
+    }
     if (navigationGuard.current && !(await navigationGuard.current())) return;
     saveScroll(ui.activeView);
     if (view !== "feedback") setLastWorkView(view);

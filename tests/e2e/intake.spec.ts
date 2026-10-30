@@ -99,6 +99,39 @@ test("mobile navigation keeps submenus and account actions reachable", async ({ 
   }
 });
 
+test("mobile navigation dismisses the current destination and survives interrupted closing", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill("admin");
+  await page.getByLabel("密码", { exact: true }).fill("admin123");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await openNavigationEntry(page, "笼卡管理", "待接收批次");
+
+  const sheet = page.locator(".ant-mobile-navigation-sheet");
+  const more = page.getByRole("tab", { name: "更多", exact: true });
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 667, height: 375 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: viewport.width === 667 ? "reduce" : "no-preference" });
+    await more.click();
+    await sheet.getByText("待接收批次", { exact: true }).click();
+    await expect(sheet).toBeHidden();
+    await expect(page.getByRole("region", { name: "待接收批次列表", exact: true })).toBeVisible();
+
+    await more.click();
+    await expect(sheet).toBeVisible();
+    await page.locator(".adm-mask").click({ position: { x: 8, y: 8 } });
+    // Open while the previous closing animation may still be in progress.
+    await more.click();
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(sheet).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  }
+});
+
 test("tablet navigation keeps account actions inside the settings menu", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/app");
