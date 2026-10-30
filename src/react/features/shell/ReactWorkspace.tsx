@@ -23,7 +23,7 @@ import {
   TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography, type MenuProps } from "antd";
-import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
+import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo } from "../../api/administration";
@@ -162,6 +162,7 @@ function Workspace({ user }: { user: SessionUser }) {
   const dispatch = useUiDispatch();
   const logout = useLogout();
   const navigationGuard = useNavigationGuard();
+  const documentNavigationPending = useRef(false);
   const systemInfo = useSystemInfo();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const isMobileLayout = useIsMobileLayout();
@@ -200,7 +201,25 @@ function Workspace({ user }: { user: SessionUser }) {
   }
 
   function openProjectHome() {
-    window.location.assign("/");
+    void guardedDocumentNavigation(() => window.location.assign("/"));
+  }
+
+  function clearLocalCache() {
+    void guardedDocumentNavigation(() => {
+      clearUiStorage();
+      window.location.reload();
+    });
+  }
+
+  async function guardedDocumentNavigation(action: () => void) {
+    if (documentNavigationPending.current) return;
+    documentNavigationPending.current = true;
+    try {
+      if (navigationGuard.current && !(await navigationGuard.current({ documentUnload: true }))) return;
+      action();
+    } finally {
+      documentNavigationPending.current = false;
+    }
   }
 
   async function signOut() {
@@ -464,9 +483,4 @@ function renderActiveView(
   if (view === "logs") return <LogsView />;
   if (view === "system") return <SystemView user={user} navigate={navigate} />;
   return <DashboardView navigate={navigate} />;
-}
-
-function clearLocalCache() {
-  clearUiStorage();
-  window.location.reload();
 }

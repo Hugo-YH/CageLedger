@@ -54,12 +54,17 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
 
 const UiStateContext = createContext<UiState | null>(null);
 const UiDispatchContext = createContext<Dispatch<UiAction> | null>(null);
-const NavigationGuardContext = createContext<{ current: (() => Promise<boolean>) | null } | null>(null);
+export interface NavigationGuardOptions {
+  documentUnload?: boolean;
+}
+
+type NavigationGuard = (options?: NavigationGuardOptions) => Promise<boolean>;
+const NavigationGuardContext = createContext<{ current: NavigationGuard | null } | null>(null);
 const ResolvedThemeContext = createContext<"light" | "dark" | null>(null);
 
 export function UiProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(uiReducer, initialState, initialUiState);
-  const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const navigationGuard = useRef<NavigationGuard | null>(null);
   const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
   const resolvedTheme = state.theme === "system" ? (systemDark ? "dark" : "light") : state.theme;
   useEffect(() => {

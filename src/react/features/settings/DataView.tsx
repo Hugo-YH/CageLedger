@@ -14,6 +14,7 @@ import { formatDateTime, PageSkeleton, PageState, Pager, WorkspaceToolbar } from
 import { CommandBar, DataTable } from "../../components/ui";
 import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 
 const principalTypeOptions = [
   { value: "independent", label: "独立科研人员" },
@@ -30,6 +31,7 @@ export function DataView({ user }: { user: SessionUser }) {
   const [pageSize, setPageSize] = useState(10);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [uploading, setUploading] = useState("");
+  useUnsavedChanges(false, Boolean(uploading));
   const uploadBusy = useRef(false);
   const uploadRequest = useLatestRequest();
   const rows = useMemo(() => {
