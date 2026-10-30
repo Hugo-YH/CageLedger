@@ -18,6 +18,7 @@ from server_app.domains.reimbursement.facade import (
     upsert_reimbursement_record,
 )
 from server_app.domains.reimbursement.importer import (
+    arrears_import_rows,
     arrears_summary_columns,
     build_monthly_import_groups,
     distinct_text_list,
@@ -41,6 +42,7 @@ from server_app.services.reimbursement import (
     coerce_money as coerce_reimbursement_money,
 )
 from server_app.shared import clean_text, now_iso
+from server_app.shared.concurrency import begin_write
 from server_app.shared.money_fields import money_difference, money_sum
 
 
@@ -93,6 +95,7 @@ def import_monthly_reimbursement_workbook(conn, file_body, actor):
     groups = build_monthly_import_groups(workbook)
     if not groups:
         raise ValueError("未识别到可导入的月度汇总数据")
+    begin_write(conn)
     saved = []
     audits = []
     imported_months = set()
@@ -188,24 +191,14 @@ def import_arrears_reimbursement_workbook(conn, file_body, actor):
     month_columns = arrears_summary_columns(sheet)
     if not month_columns:
         raise ValueError("未识别到欠缴月份列")
+    rows = arrears_import_rows(sheet, month_columns)
+    begin_write(conn)
     saved = []
     imported_pis = set()
-    empty_rows = 0
-    for row_index in range(2, 1200):
-        pi_name = clean_text(sheet.cell(row_index, 2).value)
-        total_amount = coerce_reimbursement_money(sheet.cell(row_index, 5).value)
-        if not pi_name and total_amount <= 0:
-            empty_rows += 1
-            if empty_rows >= 20:
-                break
-            continue
-        empty_rows = 0
-        if not pi_name:
-            continue
+    for row_index, pi_name, total_amount, month_amounts in rows:
         species = clean_text(sheet.cell(row_index, 3).value)
         funding = clean_text(sheet.cell(row_index, 4).value)
-        for column_index, month in month_columns:
-            monthly_unpaid = coerce_reimbursement_money(sheet.cell(row_index, column_index).value)
+        for month, monthly_unpaid in month_amounts:
             if monthly_unpaid <= 0:
                 continue
             business_key = reimbursement_business_key(month, pi_name)

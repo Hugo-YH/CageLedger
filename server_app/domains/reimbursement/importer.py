@@ -1,3 +1,4 @@
+import math
 import re
 import secrets
 from datetime import date, datetime
@@ -26,6 +27,12 @@ def month_key(value):
     if isinstance(value, date):
         return value.strftime("%Y-%m")
     if isinstance(value, int | float) and openpyxl_from_excel:
+        if isinstance(value, bool) or not math.isfinite(value):
+            return ""
+        # Compact numeric YYYYMM headers are not Excel serial dates.
+        if value == int(value) and 200000 <= value <= 209999:
+            year, month = divmod(int(value), 100)
+            return f"{year}-{month:02d}" if 1 <= month <= 12 else ""
         try:
             parsed = openpyxl_from_excel(value)
         except Exception:
@@ -37,16 +44,39 @@ def month_key(value):
     text = clean_text(value)
     if not text:
         return ""
-    compact = re.search(r"(?<!\d)(20\d{2})(\d{2})(?!\d)", text)
-    if compact:
-        return f"{compact.group(1)}-{compact.group(2)}"
-    dotted = re.search(r"(20\d{2})[./-](\d{1,2})", text)
-    if dotted:
-        return f"{dotted.group(1)}-{int(dotted.group(2)):02d}"
-    chinese = re.search(r"(20\d{2})年\s*(\d{1,2})月", text)
-    if chinese:
-        return f"{chinese.group(1)}-{int(chinese.group(2)):02d}"
+    for pattern in (r"(?<!\d)(20\d{2})(\d{2})(?!\d)", r"(20\d{2})[./-](\d{1,2})(?!\d)", r"(20\d{2})年\s*(\d{1,2})月"):
+        match = re.search(pattern, text)
+        if match:
+            month = int(match.group(2))
+            return f"{match.group(1)}-{month:02d}" if 1 <= month <= 12 else ""
     return ""
+
+
+def import_money(sheet, row, column):
+    cell = sheet.cell(row, column)
+    value = cell.value
+    if value is None or isinstance(value, str) and value.strip() in ("", "-", "—", "–"):
+        return 0.0
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        if isinstance(value, str) and "," in value:
+            value = value.strip()
+            if not re.fullmatch(r"[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?", value):
+                raise ValueError
+            value = value.replace(",", "")
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"工作表 {sheet.title} 单元格 {cell.coordinate} 金额必须为有限数字") from error
+    return coerce_reimbursement_money(number)
+
+
+def import_row_numbers(sheet, header_row):
+    if sheet.max_row > 1200:
+        raise ValueError(f"工作表 {sheet.title} 超过1200行，请拆分后导入，不能截断记录")
+    return range(header_row + 1, sheet.max_row + 1)
 
 
 def split_multiline_values(value):
@@ -97,9 +127,12 @@ def find_header_column(labels, *patterns):
 def monthly_sheet_month(sheet, header_row):
     for row_index in range(1, min(header_row, 3) + 1):
         for column_index in range(1, min(sheet.max_column, 8) + 1):
-            key = month_key(sheet.cell(row_index, column_index).value)
+            cell = sheet.cell(row_index, column_index)
+            key = month_key(cell.value)
             if key:
                 return key
+            if has_month_marker(cell.value):
+                raise ValueError(f"工作表 {sheet.title} 单元格 {cell.coordinate} 月份不合法")
     key = month_key(sheet.title)
     if key:
         return key
@@ -133,18 +166,13 @@ def build_monthly_import_groups(workbook):
         start_col = find_header_column(labels, "实验开始")
         end_col = find_header_column(labels, "实验结束")
         if not (pi_col and iacuc_col and current_amount_col and payable_amount_col):
-            continue
-        empty_rows = 0
-        for row_index in range(header_row + 1, min(sheet.max_row, 1200) + 1):
+            raise ValueError(f"工作表 {sheet.title} 缺少必需金额表头（产生的饲养费、应缴纳）")
+        for row_index in import_row_numbers(sheet, header_row):
             pi_name = clean_text(sheet.cell(row_index, pi_col).value)
             iacuc = normalize_iacuc_number(sheet.cell(row_index, iacuc_col).value)
-            amount = coerce_reimbursement_money(sheet.cell(row_index, current_amount_col).value)
+            amount = import_money(sheet, row_index, current_amount_col)
             if not pi_name and not iacuc and amount <= 0:
-                empty_rows += 1
-                if empty_rows >= 20:
-                    break
                 continue
-            empty_rows = 0
             if not pi_name:
                 continue
             business_key = reimbursement_business_key(month, pi_name)
@@ -167,12 +195,8 @@ def build_monthly_import_groups(workbook):
                     "funding": [],
                 },
             )
-            support_amount = (
-                coerce_reimbursement_money(sheet.cell(row_index, support_amount_col).value)
-                if support_amount_col
-                else 0.0
-            )
-            payable_amount = coerce_reimbursement_money(sheet.cell(row_index, payable_amount_col).value)
+            support_amount = import_money(sheet, row_index, support_amount_col) if support_amount_col else 0.0
+            payable_amount = import_money(sheet, row_index, payable_amount_col)
             note_parts = [clean_text(sheet.cell(row_index, notes_col).value)] if notes_col else []
             start_month = month_key(sheet.cell(row_index, start_col).value) if start_col else ""
             end_month = month_key(sheet.cell(row_index, end_col).value) if end_col else ""
@@ -187,6 +211,8 @@ def build_monthly_import_groups(workbook):
             entry["currentMonthAmount"] += amount
             entry["supportAmount"] += support_amount
             entry["payableAmount"] += payable_amount
+            if not all(math.isfinite(entry[key]) for key in ("currentMonthAmount", "supportAmount", "payableAmount")):
+                raise ValueError(f"工作表 {sheet.title} 第{row_index}行累计金额超出有限数字范围")
             entry["fundBookNos"].append(clean_text(sheet.cell(row_index, fund_book_col).value) if fund_book_col else "")
             entry["reimbursementFormNos"].append(
                 clean_text(sheet.cell(row_index, reimbursement_form_col).value) if reimbursement_form_col else ""
@@ -214,12 +240,31 @@ def build_monthly_import_groups(workbook):
     return groups
 
 
+def has_month_marker(value):
+    return bool(re.search(r"(?<!\d)20\d{2}(?:\d{2}(?!\d)|[./-]\d+|年\s*\d+月)", clean_text(value)))
+
+
 def arrears_summary_columns(sheet):
     month_columns = []
-    max_columns = min(sheet.max_column, 120)
-    for column_index in range(6, max_columns + 1):
+    for column_index in range(6, sheet.max_column + 1):
         label = sheet.cell(1, column_index).value
         month = month_key(label)
         if month:
+            if column_index > 120:
+                raise ValueError(f"工作表 {sheet.title} 月份列超过120列，请拆分后导入，不能截断记录")
             month_columns.append((column_index, month))
+        elif has_month_marker(label):
+            raise ValueError(f"工作表 {sheet.title} 单元格 {sheet.cell(1, column_index).coordinate} 月份不合法")
     return month_columns
+
+
+def arrears_import_rows(sheet, month_columns):
+    rows = []
+    # Complete validation before the caller reads or overwrites any ledger row.
+    for row_index in import_row_numbers(sheet, 1):
+        pi_name = clean_text(sheet.cell(row_index, 2).value)
+        total = import_money(sheet, row_index, 5)
+        amounts = [(month, import_money(sheet, row_index, column)) for column, month in month_columns]
+        if pi_name:
+            rows.append((row_index, pi_name, total, amounts))
+    return rows

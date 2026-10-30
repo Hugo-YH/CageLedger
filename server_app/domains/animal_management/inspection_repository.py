@@ -1,7 +1,7 @@
 """Inspection, finding and attachment row persistence and projections."""
 
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 
 from server_app.shared import clean_text, new_id
 
@@ -135,7 +135,7 @@ def _finding_row(conn, finding_id):
     return _finding_payload(conn, row)
 
 
-def _finding_payload(conn, row, *, summary=False):
+def _finding_payload(conn, row, *, summary=False, related=None):
     payload = {} if summary else json.loads(row["payload"])
     payload.update(
         {
@@ -160,6 +160,8 @@ def _finding_payload(conn, row, *, summary=False):
     inspection = (
         row
         if summary
+        else related["inspections"].get(row["inspection_id"])
+        if related is not None
         else conn.execute(
             "SELECT room_name, created_by_name FROM animal_inspections WHERE id = ?", (row["inspection_id"],)
         ).fetchone()
@@ -167,6 +169,10 @@ def _finding_payload(conn, row, *, summary=False):
     payload["roomName"] = inspection["room_name"] if inspection else ""
     payload["createdByName"] = inspection["created_by_name"] if inspection else ""
     if summary:
+        return payload
+    if related is not None:
+        payload["attachments"] = related["attachments"].get(row["id"], [])
+        payload["events"] = related["events"].get(row["id"], [])
         return payload
     payload["attachments"] = [
         _attachment_payload(item)
@@ -181,6 +187,37 @@ def _finding_payload(conn, row, *, summary=False):
         )
     ]
     return payload
+
+
+def _finding_payloads(conn, rows, *, summary=False):
+    rows = list(rows)
+    if summary or not rows:
+        return [_finding_payload(conn, row, summary=summary) for row in rows]
+    related = {"inspections": {}, "attachments": defaultdict(list), "events": defaultdict(list)}
+    inspection_ids = list(dict.fromkeys(row["inspection_id"] for row in rows))
+    finding_ids = [row["id"] for row in rows]
+    # Bound variables for older SQLite runtimes and large inspection details.
+    for start in range(0, len(inspection_ids), 400):
+        ids = inspection_ids[start : start + 400]
+        placeholders = ",".join("?" for _ in ids)
+        for row in conn.execute(
+            f"SELECT id, room_name, created_by_name FROM animal_inspections WHERE id IN ({placeholders})", ids
+        ):
+            related["inspections"][row["id"]] = row
+    for start in range(0, len(finding_ids), 400):
+        ids = finding_ids[start : start + 400]
+        placeholders = ",".join("?" for _ in ids)
+        for row in conn.execute(
+            f"SELECT * FROM animal_inspection_attachments WHERE finding_id IN ({placeholders}) ORDER BY created_at, rowid",
+            ids,
+        ):
+            related["attachments"][row["finding_id"]].append(_attachment_payload(row))
+        for row in conn.execute(
+            f"SELECT * FROM animal_inspection_finding_events WHERE finding_id IN ({placeholders}) ORDER BY at, rowid",
+            ids,
+        ):
+            related["events"][row["finding_id"]].append(dict(row) | {"payload": json.loads(row["payload"])})
+    return [_finding_payload(conn, row, related=related) for row in rows]
 
 
 def _upsert_finding(conn, item):

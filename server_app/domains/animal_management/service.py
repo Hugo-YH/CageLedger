@@ -15,6 +15,7 @@ from .inspection_repository import _attachment_payload as _attachment_payload
 from .inspection_repository import _attachment_values as _attachment_values
 from .inspection_repository import _distinct as _distinct
 from .inspection_repository import _finding_payload as _finding_payload
+from .inspection_repository import _finding_payloads as _finding_payloads
 from .inspection_repository import _finding_row as _finding_row
 from .inspection_repository import _insert_answers as _insert_answers
 from .inspection_repository import _insert_finding_event as _insert_finding_event
@@ -132,13 +133,13 @@ def get_inspection(conn, actor, inspection_id):
             (inspection_id,),
         )
     ]
-    findings = [
-        _finding_payload(conn, row)
-        for row in conn.execute(
-            "SELECT * FROM animal_inspection_findings WHERE inspection_id = ? ORDER BY updated_at DESC",
+    findings = _finding_payloads(
+        conn,
+        conn.execute(
+            "SELECT * FROM animal_inspection_findings WHERE inspection_id = ? ORDER BY updated_at DESC, id",
             (inspection_id,),
-        )
-    ]
+        ),
+    )
     return {"item": item, "answers": answers, "findings": findings, "catalog": catalog_payload(conn, actor)}
 
 
@@ -301,7 +302,7 @@ def list_findings(conn, actor, filters):
         f"""SELECT {columns} FROM animal_inspection_findings f
             JOIN animal_inspections i ON i.id = f.inspection_id
             WHERE {clause} ORDER BY CASE f.status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'pending_recheck' THEN 2 ELSE 3 END,
-            f.recheck_due_at ASC, f.updated_at DESC LIMIT ? OFFSET ?""",
+            f.recheck_due_at ASC, f.updated_at DESC, f.id ASC LIMIT ? OFFSET ?""",
         (*params, limit, offset),
     ).fetchall()
     total = conn.execute(
@@ -309,7 +310,7 @@ def list_findings(conn, actor, filters):
         tuple(params),
     ).fetchone()[0]
     return {
-        "items": [_finding_payload(conn, row, summary=summary) for row in rows],
+        "items": _finding_payloads(conn, rows, summary=summary),
         "page": {"offset": offset, "limit": limit, "total": total},
     }
 

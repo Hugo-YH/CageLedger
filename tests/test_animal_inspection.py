@@ -5,6 +5,7 @@ import unittest
 from server_app.domains.animal_management import (
     catalog_payload,
     create_or_update_inspection,
+    get_inspection,
     list_findings,
     list_inspections,
     resolve_finding,
@@ -12,6 +13,12 @@ from server_app.domains.animal_management import (
     update_finding,
 )
 from server_app.domains.animal_management.catalog_payload import prepare_catalog_payload
+from server_app.domains.animal_management.inspection_repository import (
+    _finding_payload,
+    _finding_payloads,
+    _insert_finding_event,
+    _upsert_finding,
+)
 from server_app.legacy import initialize_schema
 
 ACTOR = {"id": "admin", "username": "admin", "displayName": "系统管理员", "role": "admin", "roomIds": []}
@@ -32,6 +39,91 @@ class AnimalInspectionServiceTests(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
+
+    def seed_many_findings(self, count):
+        saved = create_or_update_inspection(
+            self.conn,
+            ACTOR,
+            None,
+            {
+                "roomId": "room-1",
+                "moduleCodes": ["abnormalAnimalAssessment"],
+                "answers": [
+                    {"moduleCode": "abnormalAnimalAssessment", "nodeCode": "abnormal_07_02_01", "outcome": "abnormal"}
+                ],
+            },
+        )
+        prototype = submit_inspection(self.conn, ACTOR, saved["item"]["id"])["findings"][0]
+        self.conn.execute("DELETE FROM animal_inspection_finding_events")
+        self.conn.execute("DELETE FROM animal_inspection_findings")
+        for index in range(count):
+            finding_id = f"synthetic-finding-{index:04}"
+            _upsert_finding(
+                self.conn, {**prototype, "id": finding_id, "nodeCode": f"synthetic-{index}", "updatedAt": "2026-10-30"}
+            )
+            if index < 2:
+                for number in (2, 1):
+                    _insert_finding_event(
+                        self.conn, finding_id, "updated", f"合成事件{number}", ACTOR, f"2026-10-0{number}"
+                    )
+                    self.conn.execute(
+                        "INSERT INTO animal_inspection_attachments VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            f"photo-{index}-{number}",
+                            saved["item"]["id"],
+                            finding_id,
+                            "synthetic.png",
+                            "x",
+                            "image/png",
+                            1,
+                            "admin",
+                            f"2026-10-0{number}",
+                            "{}",
+                        ),
+                    )
+        self.conn.commit()
+        return saved["item"]["id"]
+
+    def test_full_finding_reads_batch_related_data_and_preserve_detail_and_permissions(self):
+        inspection_id = self.seed_many_findings(25)
+        expected = [
+            _finding_payload(self.conn, row)
+            for row in self.conn.execute("SELECT * FROM animal_inspection_findings ORDER BY id")
+        ]
+        before = self.conn.total_changes
+        statements = []
+        self.conn.set_trace_callback(statements.append)
+        actual = list_findings(self.conn, ACTOR, {"limit": 50})["items"]
+        self.conn.set_trace_callback(None)
+        self.assertEqual(actual, expected)
+        self.assertEqual(len(statements), 5)
+        self.assertEqual(get_inspection(self.conn, ACTOR, inspection_id)["findings"], expected)
+        self.assertEqual([event["note"] for event in actual[0]["events"]], ["合成事件1", "合成事件2"])
+        self.assertEqual(self.conn.total_changes, before)
+        stranger = {"id": "other", "role": "user", "roomIds": []}
+        self.assertEqual(list_findings(self.conn, stranger, {"limit": 50})["items"], [])
+        with self.assertRaises(PermissionError):
+            get_inspection(self.conn, stranger, inspection_id)
+
+    def test_tied_finding_pages_are_stable_and_bulk_parameters_are_bounded(self):
+        self.seed_many_findings(401)
+        rows = self.conn.execute("SELECT * FROM animal_inspection_findings ORDER BY id").fetchall()
+        statements = []
+        self.conn.set_trace_callback(statements.append)
+        bulk = _finding_payloads(self.conn, rows)
+        self.conn.set_trace_callback(None)
+        self.assertEqual(len(bulk), 401)
+        self.assertEqual(len(statements), 5)
+        self.assertEqual(bulk[0], _finding_payload(self.conn, rows[0]))
+        self.assertEqual(bulk[-1], _finding_payload(self.conn, rows[-1]))
+        ids = []
+        for offset in range(0, 401, 100):
+            full = list_findings(self.conn, ACTOR, {"limit": 100, "offset": offset})
+            summary = list_findings(self.conn, ACTOR, {"limit": 100, "offset": offset, "view": "summary"})
+            self.assertEqual([item["id"] for item in full["items"]], [item["id"] for item in summary["items"]])
+            ids.extend(item["id"] for item in full["items"])
+        self.assertEqual(ids, sorted(row["id"] for row in rows))
+        self.assertEqual(len(set(ids)), 401)
 
     def test_summary_lists_are_equivalent_bounded_and_read_only(self):
         for index in range(80):
