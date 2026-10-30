@@ -1,15 +1,18 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG PYTHON_IMAGE=python:3.13-slim
+ARG TARGETARCH
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 
 WORKDIR /build
 
 COPY package.json package-lock.json ./
-COPY scripts ./scripts
-RUN bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
+COPY scripts/retry_command.sh ./scripts/retry_command.sh
+RUN --mount=type=cache,id=cageledger-npm,target=/root/.npm,sharing=locked \
+    bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
     --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
+COPY scripts ./scripts
 COPY index.html vite.config.ts tsconfig.json ./
 COPY assets ./assets
 COPY src ./src
@@ -18,21 +21,26 @@ COPY wiki ./wiki
 RUN CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
 
 FROM ${PYTHON_IMAGE}
+ARG TARGETARCH
 
 WORKDIR /app
 
-RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+RUN --mount=type=cache,id=cageledger-apt-archives-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=cageledger-apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    if [ -f /etc/apt/apt.conf.d/docker-clean ]; then mv /etc/apt/apt.conf.d/docker-clean /tmp/cageledger-docker-clean; fi \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         chromium \
         libreoffice-writer \
         fontconfig \
         fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/*
+    && if [ -f /tmp/cageledger-docker-clean ]; then mv /tmp/cageledger-docker-clean /etc/apt/apt.conf.d/docker-clean; fi
 
 COPY requirements.txt ./
 COPY scripts/retry_command.sh ./scripts/retry_command.sh
-RUN bash scripts/retry_command.sh pip install --no-cache-dir --retries 5 --timeout 60 \
+RUN --mount=type=cache,id=cageledger-pip-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
+    bash scripts/retry_command.sh pip install --retries 5 --timeout 60 \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r requirements.txt
 

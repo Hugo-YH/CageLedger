@@ -80,6 +80,8 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 4. 将已验证的 `X.Y.Z` 多架构 manifest 同步为 `latest`
 5. 导出 `dist/` 下的离线镜像 tar.gz
 
+构建器使用 BuildKit 缓存 npm、pip 和系统包下载；系统包与 Python 缓存按目标架构隔离。版本号或依赖变化导致安装步骤重新执行时，可复用已下载的包；缓存不进入发布镜像，清理构建器缓存或更换构建器后需要重新下载。系统包安装仍执行 `apt-get update`，基础镜像更新和依赖更新仍可能下载新版本。
+
 ## 凭据
 
 | 凭据                     | 类型                                        | 用途                                                                                                                  |
