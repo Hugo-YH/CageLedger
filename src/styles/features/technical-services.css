@@ -99,6 +99,12 @@
   min-width: 0;
 }
 
+@media (height <= 480px) {
+  .technical-service-editor [data-ui="workspace-toolbar"] .app-command-bar-actions button[type="submit"] {
+    min-height: 44px;
+  }
+}
+
 .technical-service-row-amount {
   display: inline-flex;
   align-items: baseline;
