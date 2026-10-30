@@ -83,7 +83,14 @@ def source_scope(conn):
             "columns": [row[1] for row in info],
             "keys": [row[1] for row in sorted(info, key=lambda r: r[5]) if row[5]],
         }
-        spec["rows"] = {identity: digest(values) for identity, values, _ in table_rows(conn, name, spec)}
+        spec["rows"] = {}
+        export_ids = set()
+        for identity, values, item in table_rows(conn, name, spec):
+            spec["rows"][identity] = digest(values)
+            if name in ("audit_events", "billing_statement_versions", "quantity_sheets") and "id" in item:
+                export_ids.add(digest(str(item["id"])))
+        if name in ("audit_events", "billing_statement_versions", "quantity_sheets"):
+            spec["exportIdHashes"] = sorted(export_ids)
         count = conn.execute(f"SELECT COUNT(*) FROM {quote(name)}").fetchone()[0]
         if len(spec["rows"]) != count:
             # SQLite rowid tables can have NULL in a composite primary key.

@@ -94,6 +94,8 @@ Mac mini（M4 16GB）发布优先采用 [测试策略](docs/contracts/testing-st
 
 `npm run dev`、`npm run check`、`npm run test:e2e` 和 Python 质量工具统一解析项目 `.venv`。`CAGELEDGER_PYTHON_BIN` 可覆盖为其他 Python 3.13 可执行文件。
 
+共享 Python 启动入口会先验证3.13，再执行测试、核查或开发任务；显式覆盖不能绕过版本要求。同一Node进程对同一路径只探测一次，避免开发启动重复探测。
+
 MacBook 默认完成修改、针对性验证、提交并推送到 Gitea。Mac mini 同步待发布代码，负责完整检查、标签、构建、打包、Release 和镜像发布。Gitea 托管代码和发布产物，不承担发布验证与构建；代码推送不自动触发 Mac mini 完整检查或发布。
 
 ## 可访问性

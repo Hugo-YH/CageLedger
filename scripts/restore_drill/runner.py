@@ -9,7 +9,13 @@ import uuid
 from contextlib import closing
 from pathlib import Path
 
-from scripts.database_review.runner import code_fingerprint, differences, validate_checks, worker_environment
+from scripts.database_review.runner import (
+    code_fingerprint,
+    differences,
+    runtime_environment,
+    validate_checks,
+    worker_environment,
+)
 from scripts.database_review.storage import (
     backup_copy,
     fingerprint,
@@ -116,6 +122,7 @@ def human_report(report):
         "passed_with_warnings 保留已有业务警告及远端依赖，不代表脱离Gitea也能恢复远端附件。",
         "本工具不覆盖部署配置、运行日志、外部服务、生产切换和浏览器像素版式；未生成的实际后续业务数据无法由备份证明。",
         "旧应收GET同步及升级留档只在新副本内按现行规则发生；原业务记录不被修复或覆盖。",
+        "恢复与对照共用当前安装运行时和依赖；实际版本见report.json的runtime，不证明旧版独立依赖环境或容器重建兼容。",
         "bundle/ 为带清单的备份，restored/runtime/ 为实际恢复目录，control/ 为独立数据库对照；均含业务信息，不提交Git。",
         "",
     ]
@@ -151,9 +158,12 @@ def drill(source, files, output, code_root, *, pdf_samples="3", timeout=900):
         "files": str(files),
         "databaseBefore": before,
         "filesBefore": files_before,
-        "codeBefore": code_inventory(code_root),
+        "codeBefore": None,
+        "runtime": None,
     }
     try:
+        report["runtime"] = runtime_environment(code_root)
+        report["codeBefore"] = code_inventory(code_root)
         with closing(immutable_connection(source)) as conn:
             if (
                 conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
@@ -252,13 +262,20 @@ def drill(source, files, output, code_root, *, pdf_samples="3", timeout=900):
         except Exception as exc:  # noqa: BLE001 - deleted/changed input must invalidate the run.
             report.update(databaseUnchanged=False, filesUnchanged=False, inputCheckError=str(exc))
         try:
-            report["codeUnchanged"] = report["codeBefore"] == code_inventory(code_root)
+            after = code_inventory(code_root)
+            report["codeUnchanged"] = report["codeBefore"] is not None and report["codeBefore"] == after
         except Exception as exc:  # noqa: BLE001 - even removal of a tool must leave a failed report.
             report.update(codeUnchanged=False, codeCheckError=str(exc))
         if not report["databaseUnchanged"] or not report["filesUnchanged"]:
             report["status"] = "input_changed"
-        if not report["codeUnchanged"]:
+        if report["codeBefore"] is None or "codeCheckError" in report:
+            report["status"] = (
+                "incomplete" if report["databaseUnchanged"] and report["filesUnchanged"] else "input_changed"
+            )
+        elif not report["codeUnchanged"]:
             report["status"] = "code_changed"
+        if not report["databaseUnchanged"] or not report["filesUnchanged"] or not report["codeUnchanged"]:
+            report["completed"] = False
         write_json(output / "report.json", report)
         path = output / "report.md"
         with path.open("x", encoding="utf-8") as stream:

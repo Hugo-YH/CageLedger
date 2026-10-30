@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from contextlib import closing
@@ -251,6 +252,63 @@ class DatabaseCopyReviewTests(unittest.TestCase):
         result = self.review(worker)
         self.assertEqual(result["status"], "incomplete")
 
+    def test_equal_export_counts_cannot_substitute_other_source_ids(self):
+        with closing(sqlite3.connect(self.source)) as conn:
+            for table in ("quantity_sheets", "billing_statement_versions", "audit_events"):
+                conn.execute(f"CREATE TABLE {table}(id TEXT PRIMARY KEY,payload TEXT)")
+                conn.executemany(f"INSERT INTO {table} VALUES (?,?)", [("a", "{}"), ("b", "{}")])
+            conn.commit()
+        with closing(immutable_connection(self.source)) as conn:
+            scope = source_scope(conn)
+        checks = self.fake_checks()
+        checks.update(
+            auditFacts={"a": "hash", "b": "hash"},
+            auditReadableCount=2,
+            auditReadableAfterReads=2,
+            quantityHtml={"a": "hash", "b": "hash"},
+        )
+        checks["bills"] = {key: {"a": "hash", "b": "hash"} for key in ("snapshots", "html", "xlsx", "pdf")}
+        checks["bills"]["coverage"] = {"bills": 2, "html": 2, "xlsx": 2, "pdf": 2, "lineRows": 0}
+        runner.validate_checks(checks, scope, "all")
+        for key in ("auditFacts", "quantityHtml", "snapshots", "html", "xlsx", "pdf"):
+            changed = copy.deepcopy(checks)
+            target = changed[key] if key in ("auditFacts", "quantityHtml") else changed["bills"][key]
+            target["substitute"] = target.pop("b")
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "ID"):
+                runner.validate_checks(changed, scope, "all")
+
+    def test_fingerprint_covers_dependency_manifests_restore_tools_and_runtime_versions(self):
+        subprocess.run(["git", "init", "-q", str(self.code)], check=True)
+        files = (
+            "package.json",
+            "package-lock.json",
+            "requirements.txt",
+            "requirements-dev.txt",
+            ".python-version",
+            ".nvmrc",
+            "vite.config.ts",
+            "scripts/python_runtime.mjs",
+            "scripts/restore_drill/worker.py",
+        )
+        for name in files:
+            path = self.code / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("original")
+        before = runner.code_fingerprint(self.code)
+        for name in files:
+            path = self.code / name
+            path.write_text("changed")
+            self.assertNotEqual(runner.code_fingerprint(self.code), before, name)
+            path.write_text("original")
+        package = self.code / "node_modules/react/package.json"
+        package.parent.mkdir(parents=True)
+        package.write_text('{"version":"19.2.7"}')
+        installed = runner.code_fingerprint(self.code)
+        package.write_text('{"version":"19.2.8"}')
+        self.assertNotEqual(runner.code_fingerprint(self.code), installed)
+        with patch.object(runner.sys, "version", "3.13.changed"):
+            self.assertNotEqual(runner.code_fingerprint(self.code), before)
+
     def test_source_or_code_change_during_review_invalidates_result(self):
         def worker(*args):
             with closing(sqlite3.connect(self.source)) as conn:
@@ -262,6 +320,32 @@ class DatabaseCopyReviewTests(unittest.TestCase):
         self.assertFalse(result["inputUnchanged"])
         self.assertFalse(result["codeUnchanged"])
         self.assertNotIn(result["status"], ("passed", "passed_with_warnings"))
+
+    def test_runtime_or_fingerprint_capture_failure_always_leaves_a_nonpassing_report(self):
+        for phase in ("runtime", "before", "after"):
+            with self.subTest(phase=phase):
+                evidence = self.root / ("evidence-" + phase)
+                if (self.root / "result").exists():
+                    (self.root / "result").rename(evidence)
+                baseline = self.root / "baseline-code"
+                if baseline.exists():
+                    baseline.rmdir()
+                if phase == "runtime":
+                    with patch.object(runner, "runtime_environment", side_effect=OSError("runtime probe failed")):
+                        result = self.review(self.fake_worker)
+                else:
+                    snapshots = (
+                        [OSError("before probe failed"), {}]
+                        if phase == "before"
+                        else [{}, OSError("after probe failed")]
+                    )
+                    result = self.review(self.fake_worker, code_fingerprints=snapshots)
+                self.assertEqual(result["status"], "incomplete")
+                self.assertFalse(result["completed"])
+                self.assertFalse(result["codeUnchanged"])
+                self.assertTrue(result["inputUnchanged"])
+                self.assertTrue((self.root / "result/report.json").is_file())
+                self.assertTrue((self.root / "result/report.md").is_file())
 
     def test_worker_environment_does_not_inherit_database_paths_or_credentials(self):
         with patch.dict(

@@ -204,7 +204,9 @@ class RestoreDrillTests(unittest.TestCase):
         block_external_network("socket.connect", (None, ("127.0.0.1", 5173)))
         block_external_network("socket.getaddrinfo", ("localhost", 5173))
 
-    def invoke_fake(self, output, *, mutate=None, attachment_errors=False, fail=False, code_changed=False):
+    def invoke_fake(
+        self, output, *, mutate=None, attachment_errors=False, fail=False, code_changed=False, code_fingerprints=None
+    ):
         def worker(request_path, _log, _timeout):
             request = json.loads(request_path.read_text())
             checks = {
@@ -232,10 +234,36 @@ class RestoreDrillTests(unittest.TestCase):
         with (
             patch.object(runner, "run_worker", side_effect=worker),
             patch.object(runner, "validate_checks"),
-            patch.object(runner, "code_inventory", side_effect=[{}, {"changed": "checksum"} if code_changed else {}]),
+            patch.object(
+                runner,
+                "code_inventory",
+                side_effect=code_fingerprints or [{}, {"changed": "checksum"} if code_changed else {}],
+            ),
             patch.object(runner.subprocess, "check_output", return_value="revision\n"),
         ):
             return runner.drill(self.database, self.files, output, self.code)
+
+    def test_failed_runtime_or_code_capture_keeps_private_reports_and_fails_closed(self):
+        for phase in ("runtime", "before", "after"):
+            output = self.root / ("failed-capture-" + phase)
+            with self.subTest(phase=phase):
+                if phase == "runtime":
+                    with patch.object(runner, "runtime_environment", side_effect=OSError("runtime probe failed")):
+                        result = self.invoke_fake(output)
+                else:
+                    snapshots = (
+                        [OSError("before probe failed"), {}]
+                        if phase == "before"
+                        else [{}, OSError("after probe failed")]
+                    )
+                    result = self.invoke_fake(output, code_fingerprints=snapshots)
+                self.assertEqual(result["status"], "incomplete")
+                self.assertFalse(result["completed"])
+                self.assertFalse(result["codeUnchanged"])
+                self.assertTrue(result["databaseUnchanged"])
+                self.assertTrue(result["filesUnchanged"])
+                self.assertTrue((output / "report.json").is_file())
+                self.assertTrue((output / "report.md").is_file())
 
     def test_parent_actually_backs_up_and_restores_from_bundle_without_changing_inputs(self):
         before = fingerprint(self.database), inventory(self.files)

@@ -3,16 +3,20 @@
 import hashlib
 import json
 import os
+import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import tarfile
 import uuid
 from contextlib import closing
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from .storage import (
     backup_copy,
+    digest,
     fingerprint,
     immutable_connection,
     offline_input,
@@ -21,6 +25,16 @@ from .storage import (
     source_scope,
     write_json,
 )
+
+
+def require_export_ids(scope, table, identities):
+    if table not in scope:
+        return
+    expected = scope[table].get("exportIdHashes")
+    if expected is None:
+        raise ValueError(f"缺少原始记录ID覆盖证据: {table}")
+    if not set(expected) <= {digest(str(identity)) for identity in identities}:
+        raise ValueError(f"原始记录ID覆盖不完整: {table}")
 
 
 def validate_checks(checks, scope, pdf_samples):
@@ -44,9 +58,14 @@ def validate_checks(checks, scope, pdf_samples):
     audit_count = len(scope.get("audit_events", {}).get("rows", {}))
     if len(checks["auditFacts"]) != audit_count or checks["auditReadableCount"] < audit_count:
         raise ValueError("原审计全文覆盖不完整")
+    require_export_ids(scope, "audit_events", checks["auditFacts"])
     if checks["auditReadableAfterReads"] < checks["auditReadableCount"] + len(checks["http"]["syncAudits"]):
         raise ValueError("HTTP读取后的全部审计覆盖不完整")
     bills = checks["bills"]
+    require_export_ids(scope, "billing_statement_versions", bills["snapshots"])
+    identities = set(bills["snapshots"])
+    if set(bills["html"]) != identities or set(bills["xlsx"]) != identities or not set(bills["pdf"]) <= identities:
+        raise ValueError("账单导出ID与快照不一致")
     total = len(bills["snapshots"])
     coverage = bills["coverage"]
     expected_pdf = total if pdf_samples == "all" else min(total, int(pdf_samples))
@@ -65,6 +84,7 @@ def validate_checks(checks, scope, pdf_samples):
         or checks["http"]["requests"] <= 0
     ):
         raise ValueError("数量表或实际HTTP覆盖不足")
+    require_export_ids(scope, "quantity_sheets", checks["quantityHtml"])
     summary = checks["consistency"]["summary"]
     if summary["errors"] or summary["incomplete"]:
         raise ValueError("账务检查有错误或未完成")
@@ -100,6 +120,7 @@ def human_report(report):
         lines += [f"未完成原因：{report['error']}", ""]
     lines += [
         "",
+        "基准与当前代码共用已安装运行时和依赖；版本见report.json的runtime，清单和运行时指纹纳入变化检查。这不证明旧版独立依赖环境或容器重建兼容。",
         "完整机器结果见 report.json；各阶段证据及隔离数据库位于 baseline/ 和 current/。",
         "数据库外附件、外部服务及生产部署未检查。数据库副本和报告可能包含业务信息，请妥善保管，不提交到Git。",
         "",
@@ -120,6 +141,28 @@ def differences(left, right, path=""):
     return [] if left == right else [path]
 
 
+def runtime_environment(code_root):
+    python_dependencies = {}
+    for name in ("openpyxl", "playwright", "python-docx", "Pillow", "pypdf"):
+        try:
+            python_dependencies[name] = version(name)
+        except PackageNotFoundError:
+            python_dependencies[name] = None
+    node_dependencies = {}
+    for name in ("react", "react-dom", "antd", "@ant-design/plots", "playwright", "vite", "vitepress"):
+        path = code_root / "node_modules" / name / "package.json"
+        node_dependencies[name] = json.loads(path.read_text())["version"] if path.is_file() else None
+    node = shutil.which("node")
+    return {
+        "python": sys.version.split()[0],
+        "sqlite": sqlite3.sqlite_version,
+        "node": subprocess.check_output([node, "--version"], text=True).strip() if node else None,
+        "pythonDependencies": python_dependencies,
+        "nodeDependencies": node_dependencies,
+        "dependencyMode": "shared-installed-runtime",
+    }
+
+
 def code_fingerprint(code_root):
     paths = (
         "server.py",
@@ -128,6 +171,19 @@ def code_fingerprint(code_root):
         "scripts/database_review",
         "scripts/verify_database_copy.py",
         "scripts/render_pdf.mjs",
+        "scripts/restore_drill",
+        "scripts/verify_restore.py",
+        "scripts/python_runtime.mjs",
+        "scripts/check_python_runtime.mjs",
+        "scripts/run_python.mjs",
+        "package.json",
+        "package-lock.json",
+        "requirements.txt",
+        "requirements-dev.txt",
+        ".python-version",
+        ".nvmrc",
+        "vite.config.ts",
+        "tsconfig.json",
     )
     files = set()
     for options in (("--cached",), ("--others", "--exclude-standard")):
@@ -142,6 +198,7 @@ def code_fingerprint(code_root):
         if path.is_file():
             with path.open("rb") as stream:
                 result[name] = hashlib.file_digest(stream, "sha256").hexdigest()
+    result["runtime:environment"] = digest(runtime_environment(code_root))
     return result
 
 
@@ -228,10 +285,14 @@ def review(source, output, code_root, baseline_ref, *, pdf_samples="3", timeout=
         "limits": [
             "数据库外附件、外部服务和生产部署不在本工具覆盖范围",
             "PDF按pdfMode标明样本或全量，不将抽样称为全部PDF验证",
+            "基准与当前代码共用已安装的运行时和依赖，不证明旧版独立依赖环境或容器重建兼容；记录版本和锁文件指纹",
         ],
+        "runtime": None,
+        "currentCodeBefore": None,
     }
-    report["currentCodeBefore"] = code_fingerprint(code_root)
     try:
+        report["runtime"] = runtime_environment(code_root)
+        report["currentCodeBefore"] = code_fingerprint(code_root)
         with closing(immutable_connection(source)) as conn:
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("输入数据库完整性检查失败")
@@ -313,14 +374,26 @@ def review(source, output, code_root, baseline_ref, *, pdf_samples="3", timeout=
     except Exception as exc:  # noqa: BLE001 - an interrupted stage is not a successful review.
         report.update(errorType=type(exc).__name__, error=str(exc))
     finally:
-        report["inputAfter"] = fingerprint(source)
-        report["inputUnchanged"] = before == report["inputAfter"]
+        try:
+            report["inputAfter"] = fingerprint(source)
+            report["inputUnchanged"] = before == report["inputAfter"]
+        except Exception as exc:  # noqa: BLE001 - failed evidence capture must leave a nonpassing report.
+            report.update(inputUnchanged=False, inputCheckError=str(exc))
         if not report["inputUnchanged"]:
             report["status"] = "input_changed"
-        report["currentCodeAfter"] = code_fingerprint(code_root)
-        report["codeUnchanged"] = report["currentCodeBefore"] == report["currentCodeAfter"]
-        if not report["codeUnchanged"]:
+        try:
+            report["currentCodeAfter"] = code_fingerprint(code_root)
+            report["codeUnchanged"] = (
+                report["currentCodeBefore"] is not None and report["currentCodeBefore"] == report["currentCodeAfter"]
+            )
+        except Exception as exc:  # noqa: BLE001 - even missing runtime metadata must preserve failed evidence.
+            report.update(codeUnchanged=False, codeCheckError=str(exc))
+        if report["currentCodeBefore"] is None or "codeCheckError" in report:
+            report["status"] = "incomplete" if report["inputUnchanged"] else "input_changed"
+        elif not report["codeUnchanged"]:
             report["status"] = "code_changed"
+        if not report["inputUnchanged"] or not report["codeUnchanged"]:
+            report["completed"] = False
         write_json(output / "report.json", report)
         with (output / "report.md").open("x", encoding="utf-8") as stream:
             os.chmod(stream.name, 0o600)
