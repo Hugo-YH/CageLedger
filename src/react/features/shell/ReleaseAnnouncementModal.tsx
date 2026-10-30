@@ -1,7 +1,7 @@
 import { CalendarOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { Alert, Button, Collapse, Flex, Space, Tag, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAcknowledgeReleaseAnnouncements, useReleaseAnnouncementHistory } from "../../api/administration";
 import { SYSTEM_RELEASE_NOTES } from "../../releaseNotes";
@@ -16,8 +16,15 @@ export function ReleaseAnnouncementModal() {
     : [];
   const [dismissed, setDismissed] = useState(false);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const focusFrame = useRef<number | null>(null);
   const submitting = useRef(false);
   const open = notes.length > 0 && !dismissed;
+  useEffect(
+    () => () => {
+      if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    },
+    [],
+  );
 
   function acknowledge(showHistory = false) {
     if (submitting.current || !notes.length) return;
@@ -40,7 +47,13 @@ export function ReleaseAnnouncementModal() {
   return (
     <Modal
       afterOpenChange={(isOpen) => {
-        if (isOpen) confirmButtonRef.current?.focus();
+        if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+        focusFrame.current = isOpen
+          ? requestAnimationFrame(() => {
+              focusFrame.current = null;
+              confirmButtonRef.current?.focus();
+            })
+          : null;
       }}
       centered
       className="app-modal-root release-announcement-modal"

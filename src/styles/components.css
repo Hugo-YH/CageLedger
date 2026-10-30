@@ -820,6 +820,9 @@
     flex: none;
   }
 
+}
+
+@media (width < 768px), (height <= 480px) {
   [data-ui="workspace-toolbar"] .app-command-bar-actions button {
     min-height: 44px;
   }
