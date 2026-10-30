@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.21.2",
+    build: "247",
+    releasedAt: "2026-10-30",
+    title: "接收批次",
+    items: [
+      "接收日期待定的批次优先显示，方便及时补充日期",
+      "优化系统更新说明的加载，减少工作区启动时的数据处理",
+      "合并首页概览的并发重建请求，减少重复计算",
+    ],
+  },
+  {
     version: "1.21.1",
     build: "246",
     releasedAt: "2026-10-30",
