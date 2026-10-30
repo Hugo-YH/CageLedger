@@ -1,5 +1,3 @@
-import type { ReleaseNote } from "../../releaseNoteModel";
-
 function versionParts(version: string): number[] | undefined {
   // Match the project's stable/beta/rc numbering; beta2 precedes beta10,
   // all betas precede rc, and the stable release follows its candidates.
@@ -22,7 +20,11 @@ function compareVersions(left: string, right: string) {
 }
 
 /** Legacy per-version confirmations also serve as the account's reading baseline. */
-export function unreadReleaseNotes(notes: ReleaseNote[], currentVersion: string, acknowledgedVersions: string[]) {
+export function unreadReleaseNotes<T extends { version: string }>(
+  notes: T[],
+  currentVersion: string,
+  acknowledgedVersions: string[],
+) {
   if (!versionParts(currentVersion) || acknowledgedVersions.includes(currentVersion)) return [];
   const baseline = acknowledgedVersions
     .filter((version) => versionParts(version))

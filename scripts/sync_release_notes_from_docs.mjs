@@ -9,6 +9,7 @@ import { parseReleaseChangelog } from "./lib/release_notes.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourcePath = path.join(root, "wiki/更新日志.md");
 const outputPath = path.join(root, "src/react/releaseNotesDocs.ts");
+const indexPath = path.join(root, "src/react/releaseNotesVersions.ts");
 const source = fs.readFileSync(sourcePath, "utf8");
 const notes = parseReleaseChangelog(source).map(({ note }) => note);
 
@@ -22,7 +23,20 @@ const generated = [
 ].join("\n");
 
 fs.writeFileSync(outputPath, generated, "utf8");
+fs.writeFileSync(
+  indexPath,
+  [
+    "// Generated from wiki/更新日志.md. Run npm run release:notes:sync after editing the changelog.",
+    `export const RELEASE_NOTE_VERSIONS: string[] = ${JSON.stringify(
+      notes.map((note) => note.version),
+      null,
+      2,
+    )};`,
+    "",
+  ].join("\n"),
+  "utf8",
+);
 const prettier = path.join(root, "node_modules", "prettier", "bin", "prettier.cjs");
-const formatResult = spawnSync(process.execPath, [prettier, "--write", outputPath], { stdio: "inherit" });
+const formatResult = spawnSync(process.execPath, [prettier, "--write", outputPath, indexPath], { stdio: "inherit" });
 if (formatResult.status !== 0) process.exit(formatResult.status ?? 1);
 console.log(`Synced ${notes.length} release notes from wiki/更新日志.md.`);

@@ -1,6 +1,8 @@
 import json
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import server
@@ -17,7 +19,9 @@ from server_app.repositories.billing_candidates import (
 
 class DashboardOverviewCacheTests(unittest.TestCase):
     def setUp(self):
-        self.conn = sqlite3.connect(":memory:")
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.conn = sqlite3.connect(Path(directory.name) / "dashboard.sqlite")
         self.conn.row_factory = sqlite3.Row
         server.initialize_schema(self.conn)
         self.conn.commit()

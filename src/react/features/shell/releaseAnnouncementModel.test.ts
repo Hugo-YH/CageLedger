@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ReleaseNote } from "../../releaseNoteModel";
 import { unreadReleaseNotes } from "./releaseAnnouncementModel";
+import { SYSTEM_RELEASE_NOTES } from "../../releaseNotes";
+import { RELEASE_NOTE_VERSIONS } from "../../releaseNotesVersions";
 
 const notes: ReleaseNote[] = ["1.3.2", "1.3.1", "1.3.0", "1.2.10", "1.2.9"].map((version) => ({
   version,
@@ -11,6 +13,9 @@ const versions = (seen: string[], current = "1.3.1") =>
   unreadReleaseNotes(notes, current, seen).map((note) => note.version);
 
 describe("unread release announcements", () => {
+  it("keeps the generated lightweight index in sync with the changelog content", () => {
+    expect(RELEASE_NOTE_VERSIONS).toEqual(SYSTEM_RELEASE_NOTES.map((note) => note.version));
+  });
   it("shows beta and rc updates and orders candidates before the stable release", () => {
     const prereleases = ["1.4.0", "1.4.0-rc2", "1.4.0-rc1", "1.4.0-beta10", "1.4.0-beta2"].map((version) => ({
       version,

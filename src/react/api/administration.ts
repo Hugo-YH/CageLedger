@@ -11,6 +11,7 @@ import type {
   PrincipalIdentity,
   ReleaseAnnouncementStatus,
   ReleaseAnnouncementHistory,
+  SessionResponse,
   SystemEnvironment,
   SystemPerformanceHistory,
   SystemInfo,
@@ -183,15 +184,15 @@ export function useReleaseAnnouncement(version: string, enabled = true) {
   });
 }
 
-export function useReleaseAnnouncementHistory() {
+export function useReleaseAnnouncementHistory(actorId: string) {
   return useQuery({
-    queryKey: queryKeys.releaseAnnouncementHistory,
+    queryKey: [...queryKeys.releaseAnnouncementHistory, actorId],
     queryFn: ({ signal }) => requestJson<ReleaseAnnouncementHistory>("/api/release-announcements", { signal }),
     retry: false,
   });
 }
 
-export function useAcknowledgeReleaseAnnouncements() {
+export function useAcknowledgeReleaseAnnouncements(actorId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (versions: string[]) =>
@@ -200,7 +201,8 @@ export function useAcknowledgeReleaseAnnouncements() {
         body: JSON.stringify({ versions }),
       }),
     onSuccess: (history) => {
-      client.setQueryData(queryKeys.releaseAnnouncementHistory, history);
+      if (client.getQueryData<SessionResponse>(queryKeys.session)?.user?.id !== actorId) return;
+      client.setQueryData([...queryKeys.releaseAnnouncementHistory, actorId], history);
       for (const version of history.acknowledgedVersions) {
         client.setQueryData(queryKeys.releaseAnnouncement(version), { version, acknowledged: true });
       }

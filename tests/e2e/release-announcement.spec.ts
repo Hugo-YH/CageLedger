@@ -6,6 +6,58 @@ import { APP_VERSION } from "../../src/react/version";
 
 const CURRENT_RELEASE_NOTE = SYSTEM_RELEASE_NOTES.find((note) => note.version === APP_VERSION)!;
 
+test("ignores a previous account's delayed announcement response after switching accounts", async ({ page }) => {
+  await page.unroute("**/api/release-announcements**");
+  const suffix = Date.now();
+  const previous = `release-old-${suffix}`;
+  const current = `release-read-${suffix}`;
+  await page.request.post("/api/auth/login", { data: { username: "admin", password: "admin123" } });
+  for (const username of [previous, current]) {
+    const response = await page.request.post("/api/users", {
+      data: { username, password: "release-note-password", displayName: username, role: "room_admin", roomIds: [] },
+    });
+    expect(response.ok()).toBe(true);
+  }
+  await page.request.post("/api/auth/logout");
+  await page.request.post("/api/auth/login", { data: { username: current, password: "release-note-password" } });
+  await page.request.post(`/api/release-announcements/${APP_VERSION}/acknowledge`);
+  await page.request.post("/api/auth/logout");
+
+  let finishOld!: () => void;
+  let reportOld!: () => void;
+  let reportFinished!: () => void;
+  const oldRequest = new Promise<void>((resolve) => {
+    reportOld = resolve;
+  });
+  const releaseOld = new Promise<void>((resolve) => {
+    finishOld = resolve;
+  });
+  const oldFinished = new Promise<void>((resolve) => {
+    reportFinished = resolve;
+  });
+  await page.route("**/api/release-announcements", async (route) => {
+    reportOld();
+    await releaseOld;
+    await route.fulfill({ json: { acknowledgedVersions: [] } }).catch(() => {});
+    reportFinished();
+  });
+  await page.goto("/app");
+  await page.getByLabel("用户名", { exact: true }).fill(previous);
+  await page.getByLabel("密码", { exact: true }).fill("release-note-password");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await oldRequest;
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await page.getByLabel("用户名", { exact: true }).fill(current);
+  await page.getByLabel("密码", { exact: true }).fill("release-note-password");
+  await page.unroute("**/api/release-announcements");
+  const currentStatus = page.waitForResponse((response) => response.url().endsWith("/api/release-announcements"));
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  expect((await currentStatus).ok()).toBe(true);
+  finishOld();
+  await oldFinished;
+  await expect(page.getByRole("dialog", { name: "系统更新" })).toBeHidden();
+});
+
 test("shows each release once for the signed-in account and supports keyboard dismissal", async ({
   page,
   browser,

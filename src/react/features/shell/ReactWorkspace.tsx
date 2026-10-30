@@ -44,6 +44,7 @@ import {
 } from "./workspaceNavigation";
 import { setDiagnosticPage } from "../../diagnostics/collector";
 import { SyringeOutlined } from "../../components/ui/SyringeOutlined";
+import { ReleaseAnnouncementGate } from "./ReleaseAnnouncementGate";
 
 const QuarantineView = lazy(() =>
   import("../quarantine/QuarantineView").then((module) => ({ default: module.QuarantineView })),
@@ -55,9 +56,6 @@ const loadDashboardView = () => import("../dashboard/DashboardView");
 const DashboardView = lazy(() => loadDashboardView().then((module) => ({ default: module.DashboardView })));
 const MobileNavigation = lazy(() =>
   import("./MobileNavigation").then((module) => ({ default: module.MobileNavigation })),
-);
-const ReleaseAnnouncementModal = lazy(() =>
-  import("./ReleaseAnnouncementModal").then((module) => ({ default: module.ReleaseAnnouncementModal })),
 );
 const AnimalManagementView = lazy(() =>
   import("../animal-management/AnimalManagementView").then((module) => ({ default: module.AnimalManagementView })),
@@ -399,9 +397,7 @@ function Workspace({ user }: { user: SessionUser }) {
           />
         </Suspense>
       ) : null}
-      <Suspense fallback={null}>
-        <ReleaseAnnouncementModal />
-      </Suspense>
+      <ReleaseAnnouncementGate key={user.id} actorId={user.id} />
     </Layout>
   );
 }

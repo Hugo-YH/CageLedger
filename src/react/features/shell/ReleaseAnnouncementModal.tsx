@@ -8,9 +8,9 @@ import { SYSTEM_RELEASE_NOTES } from "../../releaseNotes";
 import { APP_VERSION } from "../../version";
 import { unreadReleaseNotes } from "./releaseAnnouncementModel";
 
-export function ReleaseAnnouncementModal() {
-  const status = useReleaseAnnouncementHistory();
-  const acknowledgement = useAcknowledgeReleaseAnnouncements();
+export function ReleaseAnnouncementModal({ actorId }: { actorId: string }) {
+  const status = useReleaseAnnouncementHistory(actorId);
+  const acknowledgement = useAcknowledgeReleaseAnnouncements(actorId);
   const notes = status.data
     ? unreadReleaseNotes(SYSTEM_RELEASE_NOTES, APP_VERSION, status.data.acknowledgedVersions)
     : [];
