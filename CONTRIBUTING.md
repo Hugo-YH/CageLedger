@@ -5,16 +5,19 @@
 ## 环境
 
 - Node.js 22，建议使用 `.nvmrc`：`nvm use`。
+- 当前锁文件使用 npm 11.21.1 验证；保留本机其他项目的 npm 时，可用下方固定版本入口。
 - Python 3.13，版本文件为 `.python-version`。
 - ShellCheck，macOS 使用 `brew install shellcheck` 安装。
 - Python 依赖分为运行依赖 `requirements.txt` 和开发依赖 `requirements-dev.txt`。
 
 ```bash
-npm ci
+npx --yes --package npm@11.21.1 npm ci
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 npm run dev
 ```
+
+此次 beta 在 Node 22.23.3 / npm 11.21.1 下完成默认策略的干净安装；npm 10.9.9 的默认 `ci` 对既有 React peer 图仍报锁文件缺项。`antd-mobile` 间接使用的 `@react-spring/web` 声明尚未覆盖 React 19，严格 peer 检查仍失败；实际交互回归通过不能替代上游兼容声明。不要用自动降级移动组件或新增 `--force` 绕过。现有 Dockerfile 使用 `--legacy-peer-deps`，与本地默认安装策略的差异仍须在单独的依赖兼容任务中收敛。
 
 开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。
 
