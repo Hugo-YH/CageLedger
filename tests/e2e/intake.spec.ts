@@ -20,7 +20,7 @@ test("intake filters remain clickable while the list refreshes", async ({ page }
   });
   await openNavigationEntry(page, "笼卡管理", "待接收批次");
   const initialListParams = new URL((await initialListRequest).url()).searchParams;
-  expect(initialListParams.get("sortKey")).toBe("intakeDate");
+  expect(initialListParams.has("sortKey")).toBe(false);
   expect(initialListParams.get("sortDir")).toBe("desc");
   await expect(page.getByRole("region", { name: "待接收批次列表" })).toBeVisible();
 

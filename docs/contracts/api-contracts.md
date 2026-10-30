@@ -22,6 +22,8 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 数量表和技术服务列表支持 `view=summary`。数量表原默认列表本来就采用 SQL 投影，显式 summary 与该投影一致；技术服务 summary 保留月份、伦理号、服务项目、服务日数、数量、金额、保护状态和 `updatedAt`，省略 `rows`、价格快照等详情。不传 view 的原列表响应保持原状。预览和编辑通过原单条详情接口读取完整数据；技术服务普通编辑仍使用原价格快照，删除继续提交列表所见版本，不能通过读详情静默替换该版本。
 
+`GET /api/intake-batches` 未指定 `sortKey` 时，接收日期待定（空字符串或 null）的批次优先置顶，已确定日期继续倒序；同组按更新时间、行号倒序稳定排列。排序在筛选后、分页前完成；显式 `sortKey`/`sortDir` 保留所选列原有升降序语义。
+
 `GET /api/intake-batches?view=summary` 返回 `IntakeBatchListItem` 列表，保留列表、统计、批量操作和版本校验所需字段，不返回笼卡、预约原文或识别依据。省略 `view` 的列表保留完整旧响应。编辑时通过 `GET /api/intake-batches/{id}` 读取单个完整批次，读取范围与原有到货记录一致。`POST /api/intake-batches/print-data` 接收 1 至 200 个不重复的 `ids`，可选 `expectedVersions`；指定时须覆盖全部 ID，版本不匹配返回409，批次缺失返回404。响应按请求顺序返回完整 `{items}`，只读、不产生审计；前端冻结所选版本并按每批不超过200条请求，全部成功后打印。
 
 `GET /api/animal-inspections` 与 `GET /api/animal-inspection-findings` 可选 `view=summary`，分别返回巡检和异常列表所需状态、定位、操作字段及版本；前者保留异常计数，后者包含关联房间和创建人。摘要不返回巡检快照、答案、异常附件或事件，未指定 `view` 继续返回原完整列表。完整巡检详情继续通过 `GET /api/animal-inspections/{id}` 按需读取；所有视图使用原授权筛选。巡检计数批量读取，零异常巡检不再逐条回退；异常摘要以关联查询获取房间信息。

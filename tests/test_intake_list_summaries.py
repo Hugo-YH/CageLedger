@@ -121,3 +121,107 @@ class IntakeSummaryReadTests(unittest.TestCase):
             print_data(self.conn, None, {"ids": ["0"]})
         with self.assertRaises(PermissionError):
             read_batch(self.conn, None, "0")
+
+
+class IntakeDefaultOrderTests(unittest.TestCase):
+    def setUp(self):
+        invalidate_data_cache_prefixes("")
+        self.addCleanup(invalidate_data_cache_prefixes, "")
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        self.addCleanup(self.conn.close)
+        self.conn.execute(
+            "CREATE TABLE intake_batches (id TEXT PRIMARY KEY, batch_no TEXT, iacuc TEXT, intake_date TEXT, updated_at TEXT, payload TEXT)"
+        )
+        rows = [
+            ("dated-new", "2026-11-02", "2026-10-01", "target"),
+            ("pending-empty-old", "", "2026-10-02", "target"),
+            ("pending-null-new", None, "2026-10-04", "target"),
+            ("dated-old", "2026-10-01", "2026-10-09", "target"),
+            ("pending-null-tie", None, "2026-10-03", "target"),
+            ("pending-empty-tie", "", "2026-10-03", "target"),
+            ("dated-same", "2026-11-02", "2026-10-05", "target"),
+            ("other-project", "", "2026-10-06", "other"),
+        ]
+        for item_id, date, updated_at, iacuc in rows:
+            item = dict(id=item_id, batchNo=item_id, intakeDate=date, updatedAt=updated_at, iacuc=iacuc)
+            self.conn.execute(
+                "INSERT INTO intake_batches VALUES (?,?,?,?,?,?)",
+                (item_id, item_id, iacuc, date, updated_at, json.dumps(item)),
+            )
+        self.conn.commit()
+        self.conn.execute("PRAGMA query_only=ON")
+
+    def listing(self, summary=False, **params):
+        return list_intake_batches_page(
+            self.conn,
+            {"limit": 2, "offset": 0, "view": "summary" if summary else "", "iacuc": "target", **params},
+            filtered_where,
+            ENTITY_ORDER_BY,
+        )
+
+    def test_default_order_is_global_stable_and_shared_by_summary_and_full_pages(self):
+        expected = [
+            "pending-null-new",
+            "pending-empty-tie",
+            "pending-null-tie",
+            "pending-empty-old",
+            "dated-same",
+            "dated-new",
+            "dated-old",
+        ]
+        for summary in (False, True):
+            actual = []
+            for offset in range(0, 7, 2):
+                result = self.listing(summary, offset=offset)
+                self.assertEqual(result["page"]["total"], 7)
+                self.assertEqual(result["page"]["hasMore"], offset + 2 < 7)
+                actual.extend(row["id"] for row in result["items"])
+            self.assertEqual(actual, expected)
+            self.assertEqual([row["id"] for row in self.listing(summary)["items"]], expected[:2])
+
+    def test_date_filter_preserves_pending_first_and_date_descending_across_pages(self):
+        params = {"columnFilters": {"intakeDate": ["", "2026-11-02"]}}
+        expected = [
+            "pending-null-new",
+            "pending-empty-tie",
+            "pending-null-tie",
+            "pending-empty-old",
+            "dated-same",
+            "dated-new",
+        ]
+        for summary in (False, True):
+            actual = []
+            for offset in range(0, 6, 2):
+                result = self.listing(summary, offset=offset, **params)
+                self.assertEqual(result["page"]["total"], 6)
+                actual.extend(row["id"] for row in result["items"])
+            self.assertEqual(actual, expected)
+
+    def test_explicit_sort_keeps_existing_null_date_and_other_column_semantics(self):
+        expected_by_direction = {
+            "asc": [
+                "pending-null-tie",
+                "pending-null-new",
+                "pending-empty-tie",
+                "pending-empty-old",
+                "dated-old",
+                "dated-same",
+                "dated-new",
+            ],
+            "desc": [
+                "dated-same",
+                "dated-new",
+                "dated-old",
+                "pending-empty-tie",
+                "pending-empty-old",
+                "pending-null-tie",
+                "pending-null-new",
+            ],
+        }
+        for summary in (False, True):
+            for direction, expected in expected_by_direction.items():
+                result = self.listing(summary, limit=20, sortKey="intakeDate", sortDir=direction)
+                self.assertEqual([row["id"] for row in result["items"]], expected)
+            result = self.listing(summary, limit=20, sortKey="batchNo", sortDir="asc")
+            self.assertEqual([row["id"] for row in result["items"]], sorted(expected_by_direction["asc"]))

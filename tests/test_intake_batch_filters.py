@@ -4,9 +4,8 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import urlencode
 
-from server_app.repositories.entities import intake_batch_order_by, intake_batch_where
+from server_app.repositories.entities import intake_batch_where
 from server_app.repositories.filter_options import filtered_where
-from server_app.web.entity_contracts import ENTITY_ORDER_BY
 from server_app.web.handler_support import HandlerSupportMixin
 
 
@@ -42,12 +41,6 @@ class IntakeBatchFilterTests(unittest.TestCase):
         self.assertEqual(matched_ids({"intakeDate": ["2026-10-21"]}), ["scheduled-date"])
         self.assertEqual(matched_ids({"intakeDate": ["", "2026-10-21"]}), ["pending-date", "scheduled-date"])
         self.assertEqual(matched_ids({}), ["other-date", "pending-date", "scheduled-date"])
-
-    def test_default_order_prioritizes_the_latest_intake_date(self):
-        self.assertEqual(
-            intake_batch_order_by({}, ENTITY_ORDER_BY),
-            "intake_date DESC, updated_at DESC, rowid DESC",
-        )
 
     def test_month_filter_uses_an_indexable_date_range(self):
         where, params = intake_batch_where({"month": "2026-07"}, filtered_where)

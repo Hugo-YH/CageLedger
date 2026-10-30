@@ -99,7 +99,8 @@ export function IntakeView({
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "intakeDate", dir: "desc" });
+  // Leave the initial key unset so the server can put undetermined dates first.
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const selection = useIntakeSelection();
   const { selectedItems, selectingAll, allFilteredSelected } = selection;
