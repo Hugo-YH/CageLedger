@@ -1,12 +1,6 @@
-# CageLedger: GPT-6.1 Sol plans and reviews; Terra handles bounded implementation.
+# CageLedger inherits official model, reasoning, and context defaults from the active client.
 # Invocation-level overrides may take precedence. See docs/contracts/agent-instructions.md.
-model = "gpt-6.1-sol"
-model_reasoning_effort = "high"
-# Maximum supported by the local model catalog (2026-10-13).
-model_context_window = 872000
 
 [agents]
 enabled = true
-default_subagent_model = "gpt-5.6-terra"
-default_subagent_reasoning_effort = "medium"
 max_concurrent_threads_per_session = 1
