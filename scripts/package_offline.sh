@@ -24,6 +24,16 @@ tar \
   --exclude="dist" \
   --exclude="${ROOT_NAME}/docs" \
   --exclude="node_modules" \
+  --exclude="node_modules 2" \
+  --exclude=".venv" \
+  --exclude=".ruff_cache" \
+  --exclude="${ROOT_NAME}/.vitepress" \
+  --exclude="${ROOT_NAME}/wiki/.vitepress/cache" \
+  --exclude="data.zip" \
+  --exclude="*.sqlite" \
+  --exclude="*.sqlite-*" \
+  --exclude="*.sqlite3" \
+  --exclude="*.sqlite3-*" \
   --exclude=".vite" \
   --exclude="playwright-report" \
   --exclude="test-results" \
