@@ -124,3 +124,33 @@ def abbreviate_supplier(raw: str) -> str:
                 return text
             return standard
     return text
+
+
+@lru_cache(maxsize=1)
+def _supplier_full_mappings():
+    catalog = json.loads(_SUPPLIER_ALIAS_PATH.read_text(encoding="utf-8"))
+    companies, aliases = {}, {}
+    for entry in catalog["entries"]:
+        names = entry["companyNames"]
+        if not names:
+            continue
+        for name in names:
+            companies[_supplier_key(name)] = name
+        for alias in [entry["shortName"], *entry["aliases"], *entry["exactAliases"]]:
+            aliases.setdefault(_supplier_key(alias), set()).add(names[0])
+    return companies, aliases
+
+
+def supplier_full_name(raw: str) -> tuple[str, bool]:
+    """Preserve verified company/branch names and expand unique catalog aliases."""
+    text = str(raw or "").strip()
+    key = _supplier_key(text)
+    companies, aliases = _supplier_full_mappings()
+    if key in companies:
+        return companies[key], True
+    candidates = aliases.get(key, set())
+    if len(candidates) == 1:
+        return next(iter(candidates)), True
+    if len(candidates) > 1:
+        return "", False
+    return text, False

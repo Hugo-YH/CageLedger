@@ -20,6 +20,10 @@ export const queryKeys = {
   cageRoom: (roomId: string) => ["bootstrap", "room", roomId] as const,
   dashboardOverview: (month?: string) => ["dashboard-overview", month ?? "default"] as const,
   dashboardOverviewRoot: ["dashboard-overview"] as const,
+  receptionRoot: ["reception"] as const,
+  receptions: (params: object) => ["reception", "list", params] as const,
+  receptionFilterOptions: (column: string, filters: object) =>
+    ["reception", "filter-options", column, filters] as const,
   intakeRoot: ["intake"] as const,
   intake: (filters: Record<string, unknown>) => ["intake", "list", individualPeople(filters)] as const,
   quantitySheets: (filters: Record<string, unknown>) => ["quantity-sheets", individualPeople(filters)] as const,

@@ -231,6 +231,13 @@
       "audit": "原批次完成审计",
       "effects": "business_write"
     },
+    "reception_export": {
+      "version": "批次expectedVersions及实验申请汇总数据expectedApplicationVersion必填，过期409",
+      "idempotency": "不自动重试；每次成功生成导出记录一次审计，不创建接收业务记录",
+      "transaction": "同一只读快照校验并读取数据；生成文件后独立短事务提交导出审计，再响应下载",
+      "audit": "reception.exported记录操作者、批次及版本、申请资料指纹、Excel行数",
+      "effects": "export_audit"
+    },
     "export_audited": {
       "version": "不适用",
       "idempotency": "不自动重试",
@@ -269,7 +276,7 @@
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "ebb176603f9508a88dd035ddb759238f1ffdc6766038ae0d014eb710b8eb5a1b",
+    "server_app/web/router_registry.py": "d7b02ad38587decd87a6c5e0053fc80b380a9a050d9b5208558c95aaee411b39",
     "server_app/web/route_registration.py": "d05acfff6e18583855cdcdc896f44a8963b0653aac470bc8312806c3fee72009",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "0f2737bacd52aa9bb111c46c177d9972019ceb6fa9e8152de59dc0f8bbc4f776",
@@ -304,7 +311,7 @@
         {
           "method": "GET",
           "path": "/api/system/features",
-          "purpose": "读取全局入口显示配置；未保存时七项全部开启且不写入默认记录",
+          "purpose": "读取全局入口显示配置；未保存时全部开启，旧七项配置补接收管理开启，不写入默认记录",
           "request": "无",
           "response": "{item:{enabled,updatedAt}}；初始updatedAt为null",
           "protection": "read"
@@ -312,11 +319,52 @@
         {
           "method": "PUT",
           "path": "/api/system/features",
-          "purpose": "管理员保存七项入口显示开关并记录审计；原业务接口不受开关限制",
-          "request": "{enabled:完整七键布尔映射,expectedUpdatedAt:string|null}",
+          "purpose": "管理员保存入口显示开关并记录审计；旧客户端七项保存保留接收管理设置，业务接口不受开关限制",
+          "request": "{enabled:八键布尔映射（兼容原七键）,expectedUpdatedAt:string|null}",
           "response": "{item:{enabled,updatedAt}}；权限403，版本冲突409",
           "permission": "admin",
           "protection": "system_feature_write"
+        }
+      ]
+    },
+    {
+      "id": "reception",
+      "title": "接收管理",
+      "permission": "login",
+      "clients": ["src/react/api/reception.ts"],
+      "lifecycle": "supported",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/receptions",
+          "purpose": "分页读取已接收批次的登记摘要，项目字段仅来自唯一匹配的实验申请汇总表",
+          "request": "limit/offset、sortKey/sortDir、columnFilters；不读取预约原文及图片",
+          "response": "{items,page,applicationVersion}",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/receptions/filter-options",
+          "purpose": "按当前筛选提供接收列表漏斗选项，排除本列筛选；负责人按单人",
+          "request": "column、columnFilters",
+          "response": "{items:[{value,label,count}]}",
+          "protection": "read"
+        },
+        {
+          "method": "POST",
+          "path": "/api/receptions/preview",
+          "purpose": "只读生成接收登记结构、预填行数和待核对事项，不推进接收状态",
+          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion}",
+          "response": "{items,rows,rowCount,applicationVersion,warnings}；过期或状态变化409",
+          "protection": "read"
+        },
+        {
+          "method": "POST",
+          "path": "/api/receptions/export",
+          "purpose": "导出B至U列兼容接收登记预填表；项目来源及批次版本检查，导出留审计",
+          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion}",
+          "response": "xlsx下载；原始编号文本，缺失字段标记红底待补充；过期409",
+          "protection": "reception_export"
         }
       ]
     },

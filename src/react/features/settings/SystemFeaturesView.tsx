@@ -15,6 +15,7 @@ import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 
 const featureDetails: Record<SystemFeatureKey, { name: string; description: string }> = {
   intake: { name: "笼卡管理", description: "预约消息识别、待接收批次和二维码扫描入口。" },
+  reception: { name: "接收管理", description: "已接收批次查询和接收记录 Excel 导出入口。" },
   quarantine: { name: "检疫管理", description: "检疫批次、检测和报告入口。" },
   cages: { name: "笼位管理", description: "动态笼位图和饲养间占用管理入口。" },
   animal: { name: "动物管理", description: "动物巡检、异常处置和巡检记录入口。" },

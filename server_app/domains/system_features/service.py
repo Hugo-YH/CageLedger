@@ -10,6 +10,7 @@ from . import repository as repo
 
 MODULES = {
     "intake": "笼卡管理",
+    "reception": "接收管理",
     "quarantine": "检疫管理",
     "cages": "笼位管理",
     "animal": "动物管理",
@@ -26,10 +27,14 @@ def authorize(actor, *, write=False):
         raise PermissionError("仅系统管理员可修改系统功能")
 
 
-def enabled_values(value):
-    if not isinstance(value, dict) or set(value) != set(MODULES) or any(type(v) is not bool for v in value.values()):
-        raise ValueError("请完整提供七项系统功能的布尔开关")
-    return {key: value[key] for key in MODULES}
+def enabled_values(value, *, reception_default=True):
+    if (
+        not isinstance(value, dict)
+        or set(value) not in (set(MODULES), set(MODULES) - {"reception"})
+        or any(type(v) is not bool for v in value.values())
+    ):
+        raise ValueError("请完整提供系统功能的布尔开关")
+    return {key: value.get(key, reception_default) for key in MODULES}
 
 
 def read(conn, actor):
@@ -44,9 +49,10 @@ def save(conn, actor, body):
     authorize(actor, write=True)
     if not isinstance(body, dict):
         raise ValueError("系统功能配置格式无效")
-    enabled = enabled_values(body.get("enabled"))
+    enabled_values(body.get("enabled"))
     begin_write(conn)
     before = read(conn, actor)
+    enabled = enabled_values(body.get("enabled"), reception_default=before["enabled"]["reception"])
     if "expectedUpdatedAt" not in body or body["expectedUpdatedAt"] != before["updatedAt"]:
         raise StaleWriteError("系统功能已被其他管理员更新，请刷新后重新设置")
     if before["enabled"] == enabled:

@@ -119,6 +119,17 @@ class SystemFeatureTests(unittest.TestCase):
         self.assertEqual(changed, repeated)
         self.assertEqual(len(self.audits()), 1)
 
+    def test_legacy_seven_flags_default_reception_on_and_preserve_it_on_save(self):
+        legacy = dict.fromkeys(set(service.MODULES) - {"reception"}, True)
+        self.conn.execute("INSERT INTO system_feature_settings VALUES ('default', ?, 'legacy')", (json.dumps(legacy),))
+        self.conn.commit()
+        self.assertTrue(service.read(self.conn, ADMIN)["enabled"]["reception"])
+        with self.conn:
+            hidden = service.save(self.conn, ADMIN, self.request(reception=False))
+        with self.conn:
+            preserved = service.save(self.conn, ADMIN, {"enabled": legacy, "expectedUpdatedAt": hidden["updatedAt"]})
+        self.assertFalse(preserved["enabled"]["reception"])
+
     def test_permissions_precede_queries_and_invalid_flags_or_versions_do_not_write(self):
         connection = Mock()
         with self.assertRaises(PermissionError):

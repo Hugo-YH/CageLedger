@@ -6,6 +6,7 @@ import {
 
 export const WORKSPACE_VIEW_MODULES = {
   dashboard: null,
+  "reception-list": "reception",
   "intake-entry": "intake",
   "intake-batches": "intake",
   "cage-card-scanner": "intake",

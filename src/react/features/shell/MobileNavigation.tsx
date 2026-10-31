@@ -169,6 +169,11 @@ export function MobileNavigation({
                 />
               </List>
             ) : null}
+            {visible("reception-list") ? (
+              <List header="接收管理">
+                <MenuItem icon={<BookOutlined />} label="接收列表" view="reception-list" onNavigate={onNavigate} />
+              </List>
+            ) : null}
             {visible("quarantine-batches") ? (
               <List header="检疫管理">
                 <MenuItem icon={<BookOutlined />} label="检疫批次" view="quarantine-batches" onNavigate={onNavigate} />

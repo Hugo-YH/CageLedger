@@ -25,6 +25,7 @@ vi.mock("../../hooks/useUnsavedChanges", () => ({ useUnsavedChanges: vi.fn() }))
 
 const enabled: SystemFeatureFlags = {
   intake: true,
+  reception: true,
   quarantine: true,
   cages: true,
   animal: true,

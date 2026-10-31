@@ -11,6 +11,7 @@
     "src/styles/features/modal.css",
     "src/styles/features/antd-system.css",
     "src/styles/features/intake.css",
+    "src/styles/features/reception.css",
     "src/styles/features/billing.css",
     "src/styles/features/quantity-entry-form.css",
     "src/styles/features/animal-management.css",
@@ -63,6 +64,12 @@
     "src/styles/features/antd-system.css": {
       "owner": "antd-theme",
       "status": "complete"
+    },
+    "src/styles/features/reception.css": {
+      "owner": "reception",
+      "status": "complete",
+      "scopeRoots": [".reception-workspace"],
+      "selectorPrefixes": [".reception-workspace"]
     },
     "src/styles/features/intake.css": {
       "owner": "intake",

@@ -2,11 +2,13 @@ import type { APIRequestContext, Page, TestInfo } from "@playwright/test";
 import { APP_VERSION } from "../../src/react/version";
 import { expect, openNavigationEntry, openSettingsView, test } from "./fixtures";
 
-type FeatureKey = "intake" | "quarantine" | "cages" | "animal" | "billing" | "technical-services" | "settlement";
+type FeatureKey =
+  "reception" | "intake" | "quarantine" | "cages" | "animal" | "billing" | "technical-services" | "settlement";
 type FeatureResponse = { item: { enabled: Record<FeatureKey, boolean>; updatedAt: string | null } };
 
 const features: Array<{ key: FeatureKey; name: string }> = [
   { key: "intake", name: "笼卡管理" },
+  { key: "reception", name: "接收管理" },
   { key: "quarantine", name: "检疫管理" },
   { key: "cages", name: "笼位管理" },
   { key: "animal", name: "动物管理" },
@@ -92,7 +94,7 @@ test.describe("global system feature visibility", () => {
     await restoreAllFeatures(page.request);
   });
 
-  test("defaults to seven enabled modules, saves an administrator change, and writes an audit event", async ({
+  test("defaults to eight enabled modules, saves an administrator change, and writes an audit event", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 760, height: 900 });
@@ -123,7 +125,7 @@ test.describe("global system feature visibility", () => {
     expect(JSON.stringify(records)).toContain("系统管理员");
   });
 
-  test("hides all seven groups from desktop and mobile navigation, while system settings can restore them", async ({
+  test("hides all eight groups from desktop and mobile navigation, while system settings can restore them", async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });

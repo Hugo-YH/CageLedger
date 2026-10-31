@@ -70,9 +70,9 @@ IACUC 状态在数据库有索引记录时只查询数量和最近导入时间�
 
 ## 系统功能入口显示
 
-`GET /api/system/features` 供已登录账号读取全局入口显示配置，响应 `{item:{enabled,updatedAt}}`。`enabled` 包含 `intake`、`quarantine`、`cages`、`animal`、`billing`、`technical-services`、`settlement` 七项布尔值，未保存时全部为true且 `updatedAt=null`，读取不写默认记录或新增审计。
+`GET /api/system/features` 供已登录账号读取全局入口显示配置，响应 `{item:{enabled,updatedAt}}`。`enabled` 包含 `intake`、`reception`、`quarantine`、`cages`、`animal`、`billing`、`technical-services`、`settlement` 八项布尔值，未保存时全部为true且 `updatedAt=null`，读取不写默认记录或新增审计。
 
-`PUT /api/system/features` 仅系统管理员可调用，提交完整七项 `enabled` 及必填 `expectedUpdatedAt`，首次为null，之后精确匹配当前版本；过期返回409，非法开关返回400，房间管理员返回403。写锁内完成重读、版本比对、配置保存和审计；同内容保存不重复写入或审计。`system_features.updated` 记录账号、时间、各入口显示变化及完整前后配置，前端失效操作日志查询。
+`PUT /api/system/features` 仅系统管理员可调用，提交完整八项 `enabled` 及必填 `expectedUpdatedAt`；兼容旧客户端七项提交并保留接收管理开关。首次版本为null，之后精确匹配当前版本；过期返回409，非法开关返回400，房间管理员返回403。写锁内完成重读、版本比对、配置保存和审计；同内容保存不重复写入或审计。`system_features.updated` 记录账号、时间、各入口显示变化及完整前后配置，前端失效操作日志查询。
 
 `GET /api/auth/me?include=features` 在认证后同连接附加 `features`；登录 POST 显式提供 `includeFeatures:true` 时也附带该配置。未选择时两者继续仅返回 `{user}`。配置读取异常时保留会话响应但不附 `features`，客户端再请求独立配置接口并按原错误处理，不用全开配置掩盖失败。读取不创建默认记录或新增配置审计。
 
@@ -87,6 +87,18 @@ IACUC 状态在数据库有索引记录时只查询数量和最近导入时间�
 后端入口统一由 `server_app/web/router_registry.py` 装配。`route_definitions/` 按领域登记方法、路径、动作及旧匹配器，`route_registration.py` 绑定原处理函数；`read_actions.py`、`write_actions.py` 保留原HTTP动作。`read_routes.py` 管理API与静态资源的分流，`write_routes.py` 在所有写请求分发前执行来源检查。命名空间代理保留原来的登录、未知路径响应和路径解析；已有匹配器继续控制ID解码和路径分隔符，不全局二次解码。
 
 `npm run check:api` 要求清单与全部路由登记双向对应，检查动作入口和路由条件指纹；运行时回归另外核对实际装配表、固定路径优先级、下载只响应一次及来源检查。新增接口须同时登记路由、更新清单与调用类型，不能仅刷新指纹绕过登记。
+
+## 接收管理
+
+接收列表直接投影现有 `status=received` 批次，不复制业务记录、不提供新增／编辑／删除登记接口。权限沿用接收批次的登录读取权限；独立 `reception` 开关只控制入口显示。`GET /api/receptions` 提供分页、排序、列筛选与申请资料版本，`GET /api/receptions/filter-options` 按需读取漏斗选项并保留其他列筛选；负责人按单人匹配，项目字段采用当前实验申请汇总表唯一精确匹配的伦理号，匹配失败或歧义时留空，不回退预约人员或项目字段。
+
+`POST /api/receptions/preview` 和 `/api/receptions/export` 均接收 `{ids,expectedVersions,expectedApplicationVersion}`，限制1至200个不重复批次；版本变化、状态回退或申请数据变化返回409。预览返回独立接收登记结构、预填行和待核对信息；读取在同一数据库快照内完成。列表不传输原始预约、AI原图或笼卡。Excel兼容原表B至U列，保留空M列；编号写文本、有效日期写Excel日期，所有文本禁止解释为公式。匹配项目来自申请汇总表，动物数量／性别／规格仍是预约预填。只有唯一、非负整数、合计吻合的雌雄来源数量才拆行；不猜测分摊。合格证等缺失字段导出为红底深红字“待补充”；空白M列、可空备注不标记，数值0保留。无实际接收日期或多次接收缺少各次只数时，导出接收时间标记待补充并提示，不使用预约时间替代或重复计数量。
+
+登记结构保留批次关联、未来实际接收记录关联、申请来源与版本、接收明细和证件字段。等级按已登记物种预填：小鼠、大鼠为`SPF`，其他实验动物为`普通级`，未登记物种时留空并按导出缺失规则标记。本阶段仅生成结构，不持久化新登记表、不新增迁移、不导出V列后采购入库报销内容。导出成功生成后提交 `reception.exported` 审计再响应文件；不改变接收、打印、进驻、结算及检疫状态。接收写入和IACUC导入失效对应前端接收查询。
+
+登记行 `strain` 采用批次 `strainStandard`，缺失时只使用已有确定性本地规则匹配原品系，未知值留空并提示，Excel标记待补充。登记行 `supplier` 使用共享供应商目录的全称，已知分公司全称保持对应分公司，简称使用目录首选全称；未知名称保留原文并提示，歧义值不猜测。列表摘要和原批次不因此改写，导出J／Q列读取独立登记行。
+
+系统功能配置新增 `reception` 默认开启；旧库七项配置只读补默认值，旧客户端提交完整七项时保留已有接收开关，继续执行原版本控制与管理员审计，不自动写回默认配置。
 
 ## 数据核查只读页面
 

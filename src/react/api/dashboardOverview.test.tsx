@@ -95,10 +95,12 @@ it("all intake writes also invalidate inactive dashboard data", async () => {
   ];
   for (const operation of operations) {
     client.setQueryData(queryKeys.dashboardOverview("2026-09"), { value: { month: "2026-09" }, etag: '"one"' });
+    client.setQueryData(queryKeys.receptions({}), { items: [], applicationVersion: "v1" });
     await act(async () => {
       await operation();
     });
     expect(client.getQueryState(queryKeys.dashboardOverview("2026-09"))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.receptions({}))?.isInvalidated).toBe(true);
   }
   unmount();
   client.clear();

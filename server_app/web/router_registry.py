@@ -13,6 +13,8 @@ from server_app.domains.administration import (
     system_info,
     user_from_token,
 )
+from server_app.domains.reception.routes import prepare as prepare_reception
+from server_app.domains.reception.routes import read as read_reception
 from server_app.domains.system_features.session import session_payload
 from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler, intake_recognition_image_handler
@@ -87,6 +89,10 @@ API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
 API_ROUTER.add("POST", r"/api/intake-batches/print-data", intake_print_data_handler)
+API_ROUTER.add("GET", r"/api/receptions", read_reception)
+API_ROUTER.add("GET", r"/api/receptions/filter-options", read_reception)
+API_ROUTER.add("POST", r"/api/receptions/preview", prepare_reception)
+API_ROUTER.add("POST", r"/api/receptions/export", prepare_reception)
 API_ROUTER.add(
     "GET",
     r"/api/intake-batches/(?P<batchId>[^/]+)/recognition-images/(?P<imageId>[a-f0-9]{32})",

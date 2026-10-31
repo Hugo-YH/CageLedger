@@ -18,6 +18,13 @@ describe("workspace feature visibility", () => {
     expect(isWorkspaceView("quantity-sheet-entry")).toBe(false);
   });
 
+  it("hides reception independently without changing the cage-card group", () => {
+    const hidden = { ...DEFAULT_FEATURE_VISIBILITY, reception: false };
+    expect(isViewVisible("reception-list", hidden)).toBe(false);
+    expect(isViewVisible("intake-entry", hidden)).toBe(true);
+    expect(isViewVisible("intake-batches", hidden)).toBe(true);
+  });
+
   it("keeps common settlements visible independently of each fee-entry group", () => {
     const hiddenFees = { ...DEFAULT_FEATURE_VISIBILITY, billing: false, "technical-services": false };
     expect(isViewVisible("billing-quantity-entry", hiddenFees)).toBe(false);
@@ -33,7 +40,12 @@ describe("workspace feature visibility", () => {
   });
 
   it("uses the same view registry for navigation and persisted technical-service settings views", () => {
-    for (const view of ["technical-service-entry", "technical-service-saved", "system-features"] as const) {
+    for (const view of [
+      "technical-service-entry",
+      "technical-service-saved",
+      "system-features",
+      "reception-list",
+    ] as const) {
       persistWorkspaceView(view);
       expect(readStoredWorkspaceView()).toBe(view);
     }

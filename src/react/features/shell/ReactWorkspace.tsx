@@ -50,6 +50,9 @@ const QuarantineView = lazy(() =>
   import("../quarantine/QuarantineView").then((module) => ({ default: module.QuarantineView })),
 );
 const IntakeView = lazy(() => import("../intake/IntakeView").then((module) => ({ default: module.IntakeView })));
+const ReceptionView = lazy(() =>
+  import("../reception/ReceptionView").then((module) => ({ default: module.ReceptionView })),
+);
 const ScannerView = lazy(() => import("../scanner/ScannerView").then((module) => ({ default: module.ScannerView })));
 const CagesView = lazy(() => import("../cages/CagesView").then((module) => ({ default: module.CagesView })));
 const loadDashboardView = () => import("../dashboard/DashboardView");
@@ -249,6 +252,12 @@ function Workspace({ user }: { user: SessionUser }) {
       ],
     },
     {
+      key: "reception",
+      icon: <BookOutlined />,
+      label: "接收管理",
+      children: [item("reception-list", "接收列表", <BookOutlined />)],
+    },
+    {
       key: "quarantine",
       icon: <AuditOutlined />,
       label: "检疫管理",
@@ -310,6 +319,7 @@ function Workspace({ user }: { user: SessionUser }) {
     const key = String(entry.key);
     const groups: Record<string, WorkspaceView> = {
       intake: "intake-entry",
+      reception: "reception-list",
       quarantine: "quarantine-batches",
       cages: "cages",
       animal: "animal-inspection-entry",
@@ -444,6 +454,7 @@ function renderActiveView(
     return <QuarantineView key={view} mode={view} />;
   if (view === "intake-entry") return <IntakeView mode="entry" user={user} navigate={navigate} />;
   if (view === "intake-batches") return <IntakeView mode="batches" user={user} navigate={navigate} />;
+  if (view === "reception-list") return <ReceptionView />;
   if (view === "cage-card-scanner") return <ScannerView navigate={navigate} />;
   if (view === "cages") return <CagesView />;
   if (view === "animal-inspection-entry") return <AnimalManagementView mode="entry" user={user} navigate={navigate} />;

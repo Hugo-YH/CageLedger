@@ -9,6 +9,7 @@ import { queryKeys } from "./queryKeys";
 
 const enabled: SystemFeatureFlags = {
   intake: true,
+  reception: true,
   quarantine: true,
   cages: true,
   animal: true,

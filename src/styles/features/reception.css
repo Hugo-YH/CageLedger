@@ -1,0 +1,4 @@
+.reception-workspace .reception-stack,
+.reception-workspace .reception-list-card {
+  min-width: 0;
+}

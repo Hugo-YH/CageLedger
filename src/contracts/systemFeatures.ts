@@ -1,5 +1,6 @@
 export const SYSTEM_FEATURE_KEYS = [
   "intake",
+  "reception",
   "quarantine",
   "cages",
   "animal",
@@ -23,6 +24,7 @@ export interface SystemFeaturesResponse {
 
 export const DEFAULT_SYSTEM_FEATURE_FLAGS: SystemFeatureFlags = {
   intake: true,
+  reception: true,
   quarantine: true,
   cages: true,
   animal: true,

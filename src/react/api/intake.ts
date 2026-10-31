@@ -141,6 +141,7 @@ export function useSaveIntakeBatch() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
         queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
@@ -157,6 +158,7 @@ export function useDeleteIntakeBatch() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
         queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
@@ -175,6 +177,7 @@ export function useConfirmIntakeBatch() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
         queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
@@ -193,6 +196,7 @@ export function useMarkIntakeBatchesPrinted() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
         queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),
@@ -211,6 +215,7 @@ export function useConfirmIntakeBatchesReceipt() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
         queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.quarantine }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverviewRoot }),

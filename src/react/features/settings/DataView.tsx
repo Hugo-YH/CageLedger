@@ -59,6 +59,7 @@ export function DataView({ user }: { user: SessionUser }) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["iacuc-index"] }),
           queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
           queryClient.invalidateQueries({ queryKey: queryKeys.quantitySheetsRoot }),
           queryClient.invalidateQueries({ queryKey: queryKeys.settlementCandidatesRoot }),
           queryClient.invalidateQueries({ queryKey: ["filter-options", "intake-batches"] }),
