@@ -52,8 +52,8 @@ test("reception list uses received batches, previews sources and downloads the r
     await expect(page.getByRole("button", { name: "导出Excel", exact: true })).toBeDisabled();
     await region.getByRole("checkbox", { name: `选择 ${id}`, exact: true }).check();
     expect(await region.evaluate((node) => node.getBoundingClientRect().right <= innerWidth)).toBe(true);
-    await region.getByRole("button", { name: "筛选批次号", exact: true }).click();
-    const filter = page.getByRole("group", { name: "筛选批次号选项", exact: true });
+    await region.getByRole("button", { name: "筛选批次编号", exact: true }).click();
+    const filter = page.getByRole("group", { name: "筛选批次编号选项", exact: true });
     const option = filter.getByRole("checkbox", { name: new RegExp(id) });
     await option.click();
     await expect(option).toBeChecked();

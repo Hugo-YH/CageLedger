@@ -54,6 +54,14 @@ try {
     upstream.once("error", reject);
     upstream.listen(0, "127.0.0.1", done);
   });
+  // Vite treats port 0 as its default port; reserve an ephemeral port explicitly.
+  const portProbe = createHttpServer();
+  await new Promise((done, reject) => {
+    portProbe.once("error", reject);
+    portProbe.listen(0, "127.0.0.1", done);
+  });
+  const vitePort = portProbe.address().port;
+  await new Promise((done, reject) => portProbe.close((error) => (error ? reject(error) : done())));
   const upstreamOrigin = `http://127.0.0.1:${upstream.address().port}`;
   vite = await createServer({
     root,
@@ -62,7 +70,8 @@ try {
     logLevel: "silent",
     server: {
       host: "127.0.0.1",
-      port: 0,
+      port: vitePort,
+      strictPort: false,
       proxy: { "/api": upstreamOrigin, "/docs": { target: upstreamOrigin, ws: true } },
     },
     optimizeDeps: { noDiscovery: true, include: [] },

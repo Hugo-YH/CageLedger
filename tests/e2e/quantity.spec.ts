@@ -65,6 +65,8 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
       .map((sheet) => page.request.delete(`/api/quantity-sheets/${sheet.id}`)),
   );
   await openQuantityEntry(page);
+  const savedMonth = await page.locator("#quantity-sheet-month").inputValue();
+  expect(savedMonth).toMatch(/^\d{4}-\d{2}$/);
   const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
   await iacucInput.fill("Z202506");
   await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
@@ -127,8 +129,8 @@ test("save and delete a quantity sheet in the ephemeral database", async ({ page
     .getByRole("button", { name: "导出 PDF", exact: true })
     .click();
   const download = await downloadPromise;
-  const now = new Date();
-  const pdfMonth = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月`;
+  const [year, month] = savedMonth.split("-");
+  const pdfMonth = `${year}年${month}月`;
   expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${pdfMonth} E2E-IACUC-001.pdf`);
   const rowActions = savedRow.locator(".quantity-saved-row-actions");
   await expect(rowActions.getByRole("button")).toHaveText(["预览", "编辑", "删除"]);

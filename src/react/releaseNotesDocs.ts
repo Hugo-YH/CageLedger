@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.22.0",
+    build: "249",
+    releasedAt: "2026-11-01",
+    title: "接收管理",
+    items: [
+      "新增接收列表，集中查看已完成接收的批次，支持筛选、排序、分页和跨页选择",
+      "支持预览并导出兼容接收登记表的 Excel，提示缺失或需要核对的资料，保留编号文本格式",
+      "接收资料按已有批次和实验申请汇总表预填，导出记录操作日志，不改变原批次状态",
+      "支持在系统功能中控制接收管理入口",
+    ],
+  },
+  {
     version: "1.21.3",
     build: "248",
     releasedAt: "2026-10-31",
