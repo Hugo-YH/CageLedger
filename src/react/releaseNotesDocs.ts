@@ -3,6 +3,13 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.23.1",
+    build: "251",
+    releasedAt: "2026-11-01",
+    title: "接收列表",
+    items: ["简化接收列表，移除“预约性别”和“预约规格”两列；相关数据、合格证核对及Excel导出保持原有规则"],
+  },
+  {
     version: "1.23.0",
     build: "250",
     releasedAt: "2026-11-01",
