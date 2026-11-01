@@ -7,6 +7,7 @@ from server_app.domains.animal_management.catalog_images import ensure_seed_imag
 from server_app.domains.data_quality.service import archive_upgrade_issues
 from server_app.domains.feedback.repository import ensure_schema as ensure_feedback_schema
 from server_app.domains.quarantine.repository import ensure_schema as ensure_quarantine_schema
+from server_app.domains.reception.certificate_repository import ensure_schema as ensure_reception_schema
 from server_app.domains.reimbursement.migration import migrate_reimbursement_record_schema
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.occupancy import occupancy_structured_values, occupancy_with_snapshots
@@ -83,6 +84,7 @@ def initialize_schema(conn):
             SchemaStep("quarantine", ensure_quarantine_schema),
             SchemaStep("feedback", ensure_feedback_schema),
             SchemaStep("technical-services", ensure_technical_service_schema),
+            SchemaStep("reception-certificates", ensure_reception_schema),
             SchemaStep("animal-inspection-catalog", ensure_animal_inspection_catalog),
             SchemaStep(
                 "animal-inspection-images",

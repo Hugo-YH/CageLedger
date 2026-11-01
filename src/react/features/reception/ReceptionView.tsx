@@ -25,6 +25,7 @@ import type {
 import { formatPersonNames } from "../../../domain/personNames";
 import { abbreviateSupplier } from "../../../domain/intake";
 import { queryKeys } from "../../api/queryKeys";
+import { useSession } from "../../api/session";
 import {
   useExportReceptions,
   usePreviewReceptions,
@@ -37,8 +38,11 @@ import { ActionIcon, CommandBar, DataTable, Modal, ModalPresence } from "../../c
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
+import { ReceptionCertificateDrawer } from "./ReceptionCertificateDrawer";
+import { certificateFileError } from "./certificateDraft";
 
 const selectionLimit = 200;
+const emptyFilterValues: string[] = [];
 const columnDefinitions: Array<{ key: ReceptionSortKey; label: string; width: number }> = [
   { key: "receiptDate", label: "接收日期", width: 150 },
   { key: "purchaseOrderNo", label: "采购订单编号", width: 160 },
@@ -46,8 +50,8 @@ const columnDefinitions: Array<{ key: ReceptionSortKey; label: string; width: nu
   { key: "iacuc", label: "IACUC编号", width: 160 },
   { key: "pi", label: "项目负责人", width: 120 },
   { key: "owner", label: "实验负责人", width: 120 },
-  { key: "quantity", label: "数量", width: 80 },
-  { key: "sex", label: "性别", width: 90 },
+  { key: "quantity", label: "预约数量", width: 110 },
+  { key: "sex", label: "预约性别", width: 110 },
   { key: "roomName", label: "房间", width: 100 },
   { key: "supplier", label: "购买单位", width: 160 },
   { key: "projectMatched", label: "项目匹配", width: 120 },
@@ -67,6 +71,20 @@ export function ReceptionView() {
   const [selected, setSelected] = useState<ReceptionRecord[]>([]);
   const [selectionVersion, setSelectionVersion] = useState("");
   const [exportRequest, setExportRequest] = useState<ReceptionExportRequest | null>(null);
+  const [certificateTarget, setCertificateTarget] = useState<{ record: ReceptionRecord; file?: File } | null>(null);
+  const certificateInput = useRef<HTMLInputElement>(null);
+  const certificatePickerRecord = useRef<ReceptionRecord | null>(null);
+  const session = useSession();
+  const certificateCanWrite =
+    session.data?.user?.active !== false && ["admin", "room_admin"].includes(session.data?.user?.role ?? "");
+  useEffect(() => {
+    const input = certificateInput.current;
+    const cancel = () => {
+      certificatePickerRecord.current = null;
+    };
+    input?.addEventListener("cancel", cancel);
+    return () => input?.removeEventListener("cancel", cancel);
+  }, [certificateCanWrite]);
   const params: ReceptionListParams = { limit, offset, sortKey, sortDir, columnFilters };
   const query = useReceptions(params);
   const retained = useRetainedListData(query, queryKeys.receptions(params), "receptions");
@@ -176,10 +194,92 @@ export function ReceptionView() {
     { key: "strain", title: "品系", dataIndex: "strain", width: 160, render: (value: string) => value || "—" },
     {
       key: "specification",
-      title: "规格",
+      title: "预约规格",
       dataIndex: "specification",
       width: 130,
       render: (value: string) => value || "—",
+    },
+    {
+      key: "registrationStatus",
+      title: "合格证状态",
+      width: 210,
+      render: (_, item) => (
+        <Space orientation="vertical" size={0}>
+          <Space size={4} wrap>
+            <Tag
+              color={
+                item.registrationStatus === "confirmed"
+                  ? "green"
+                  : item.registrationStatus === "stale"
+                    ? "gold"
+                    : undefined
+              }
+            >
+              {item.registrationStatus === "confirmed"
+                ? "已确认登记"
+                : item.registrationStatus === "stale"
+                  ? "待重新核对"
+                  : "未确认登记"}
+            </Tag>
+            {(item.registrationStatus === "confirmed" || item.registrationStatus === "stale") &&
+            item.registeredQuantity != null ? (
+              <Typography.Text>登记 {item.registeredQuantity} 只</Typography.Text>
+            ) : null}
+          </Space>
+          <Typography.Text type="secondary">{item.certificateCount ?? 0} 份原件</Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      key: "actions",
+      title: "操作",
+      fixed: "right",
+      width: 120,
+      render: (_, item) => {
+        const confirmed = item.registrationStatus === "confirmed";
+        const needsReview = item.registrationStatus === "stale";
+        const hasCertificate = Boolean(item.certificateCount || item.registrationUpdatedAt || confirmed || needsReview);
+        const primaryAction = certificateCanWrite && !hasCertificate;
+        const awaitingConfirmation = certificateCanWrite && hasCertificate && !confirmed && !needsReview;
+        return (
+          <Button
+            size="small"
+            block
+            color={
+              primaryAction
+                ? "primary"
+                : needsReview && certificateCanWrite
+                  ? "orange"
+                  : awaitingConfirmation
+                    ? "primary"
+                    : "blue"
+            }
+            variant={primaryAction ? "solid" : awaitingConfirmation ? "outlined" : "filled"}
+            disabled={retained.blocked}
+            onClick={() => {
+              if (hasCertificate || !certificateCanWrite) {
+                setCertificateTarget({ record: item });
+              } else if (!certificatePickerRecord.current) {
+                certificatePickerRecord.current = item;
+                if (certificateInput.current) {
+                  certificateInput.current.value = "";
+                  certificateInput.current.click();
+                }
+              }
+            }}
+          >
+            {!certificateCanWrite
+              ? "查看合格证"
+              : needsReview
+                ? "重新核对"
+                : confirmed
+                  ? "查看/编辑"
+                  : hasCertificate
+                    ? "核对登记"
+                    : "合格证识别"}
+          </Button>
+        );
+      },
     },
   ];
 
@@ -228,6 +328,9 @@ export function ReceptionView() {
                 ids: selected.map((item) => item.id),
                 expectedVersions: Object.fromEntries(selected.map((item) => [item.id, item.updatedAt])),
                 expectedApplicationVersion: applicationVersion,
+                expectedRegistrationVersions: Object.fromEntries(
+                  selected.map((item) => [item.id, item.registrationUpdatedAt ?? null]),
+                ),
               })
             }
           >
@@ -306,6 +409,42 @@ export function ReceptionView() {
           )}
         </Flex>
       </div>
+      {certificateCanWrite ? (
+        <input
+          ref={certificateInput}
+          type="file"
+          accept="application/pdf,.pdf"
+          aria-label="选择待识别合格证 PDF"
+          hidden
+          onChange={(event) => {
+            const record = certificatePickerRecord.current;
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            certificatePickerRecord.current = null;
+            if (!record || !file || retained.blocked) return;
+            const error = certificateFileError(file);
+            if (error) {
+              void message.error(error);
+              return;
+            }
+            setCertificateTarget({ record, file });
+          }}
+        />
+      ) : null}
+      <ModalPresence>
+        {certificateTarget ? (
+          <ReceptionCertificateDrawer
+            key={certificateTarget.record.batchId}
+            record={certificateTarget.record}
+            initialFile={certificateTarget.file}
+            onClose={() => setCertificateTarget(null)}
+            onSaved={() => {
+              clearSelection();
+              setCertificateTarget(null);
+            }}
+          />
+        ) : null}
+      </ModalPresence>
       <ModalPresence>
         {exportRequest ? (
           <ReceptionExportDialog
@@ -339,7 +478,7 @@ function ReceptionColumnTitle({
   return (
     <FilterableColumnTitle
       label={label}
-      values={params.columnFilters[column] ?? []}
+      values={params.columnFilters[column] ?? emptyFilterValues}
       options={options.data?.items ?? []}
       dateHierarchy={column === "receiptDate" ? "day" : undefined}
       filterable={filterable}

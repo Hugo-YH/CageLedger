@@ -136,9 +136,23 @@ export function createButtonConfig(mode) {
   return {
     autoInsertSpace: false,
     styles: ({ props }) => {
-      if (props.variant !== "filled" || props.disabled) return {};
+      if (props.disabled) return {};
+      if (props.color === "green" && props.variant === "solid") {
+        // Scope the accessible preset shades to solid actions; other green variants
+        // keep Ant's native palette and disabled controls keep native styling.
+        return {
+          root: {
+            color: mode === "dark" ? palette.colorBgContainer : palette.colorTextLightSolid,
+            "--ant-btn-solid-bg-color": mode === "dark" ? palette.green7 : palette.green8,
+            "--ant-btn-solid-bg-color-hover": mode === "dark" ? palette.green8 : palette.green9,
+            "--ant-btn-solid-bg-color-active": mode === "dark" ? palette.green6 : palette.green10,
+          },
+        };
+      }
+      if (props.variant !== "filled") return {};
       if (props.color === "purple") return { root: { color: mode === "dark" ? palette.purple8 : palette.purple7 } };
       if (props.color === "blue") return { root: { color: palette.blue8 } };
+      if (props.color === "orange") return { root: { color: mode === "dark" ? palette.orange8 : palette.orange9 } };
       return {};
     },
   };

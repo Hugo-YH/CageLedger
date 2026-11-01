@@ -108,6 +108,36 @@ def references(conn):
 
     seen_images = set()
 
+    received = (
+        {row[0] for row in conn.execute("SELECT id FROM intake_batches WHERE status='received'")}
+        if "reception_certificate_attachments" in tables and "intake_batches" in tables
+        else set()
+    )
+    for row in rows("reception_certificate_attachments"):
+        if not re.fullmatch(r"[a-f0-9]{32}", row["id"]):
+            raise ValueError("接收合格证附件留档标识无效")
+        base = (
+            f"/api/receptions/{quote(row['batch_id'], safe='')}/certificates/{row['id']}"
+            if row["batch_id"] in received
+            else None
+        )
+        add(
+            "reception-certificate",
+            row["id"],
+            ["reception", "certificates", row["id"] + ".pdf"],
+            base + "/file" if base else None,
+            size=row["size"],
+            sha=row["sha256"],
+        )
+        add(
+            "reception-certificate-preview",
+            row["id"],
+            ["reception", "certificates", row["id"] + ".png"],
+            base + "/preview" if base else None,
+            size=row["preview_size"],
+            sha=row["preview_sha256"],
+        )
+
     for row in rows("intake_batches"):
         batch = json.loads(row["payload"])
         for item in (batch.get("recognition") or {}).get("images", []):

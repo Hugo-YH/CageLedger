@@ -5,7 +5,9 @@ from server_app.domains.intake.strain_standard import standardize_strain, suppli
 from server_app.shared.concurrency import StaleWriteError
 from server_app.shared.intake_identifiers import intake_identifier_key
 
+from . import certificate_repository as certificate_repo
 from . import repository
+from .certificate_rules import default_grade
 
 
 def text(value):
@@ -97,7 +99,13 @@ def record(row, source, *, complete=False):
             "updatedAt": row["updated_at"],
             "strain": text(batch.get("strainStandard")) or standardize_strain(text(batch.get("strainRaw"))),
             "quantity": batch.get("quantity"),
+            "grade": default_grade(batch),
             "receiptDates": dates,
+            "receipts": [
+                {"id": entry["id"], "actualReceiptDate": valid_date(entry.get("actualReceiptDate"))}
+                for entry in receipts
+                if isinstance(entry, dict) and entry.get("id")
+            ],
             "projectMatched": bool(application),
             "warnings": warnings,
             "source": {
@@ -115,8 +123,27 @@ def list_records(conn, actor, query):
     params = parameters(query)
     source = repository.context(conn)
     rows, total = repository.page(conn, source, params)
+    registrations = certificate_repo.registration_summaries(conn, [row["id"] for row in rows])
+    counts = certificate_repo.attachment_counts(conn, [row["id"] for row in rows])
+    items = []
+    for row in rows:
+        item = record(row, source)
+        saved = registrations.get(row["id"])
+        item.update(
+            registrationUpdatedAt=saved["updatedAt"] if saved else None,
+            registeredQuantity=saved["totalQuantity"] if saved else None,
+            certificateCount=counts.get(row["id"], 0),
+            registrationStatus=(
+                "stale"
+                if saved and saved["sourceBatchUpdatedAt"] != row["updated_at"]
+                else "confirmed"
+                if saved
+                else "unconfirmed"
+            ),
+        )
+        items.append(item)
     return {
-        "items": [record(row, source) for row in rows],
+        "items": items,
         "applicationVersion": source["version"],
         "page": {
             "limit": params["limit"],
@@ -198,6 +225,57 @@ def registration_lines(item, batch):
     ]
 
 
+def confirmed_lines(item, batch, saved):
+    receipts = {
+        entry.get("id"): entry for entry in batch.get("receipts", []) if isinstance(entry, dict) and entry.get("id")
+    }
+    warnings = [warning for warning in item["warnings"] if "数量、性别、规格来自预约预填" not in warning]
+    if all(
+        line.get("receiptId") in receipts and valid_date(receipts[line["receiptId"]].get("actualReceiptDate"))
+        for line in saved["lines"]
+    ):
+        warnings = [warning for warning in warnings if "存在多次接收日期" not in warning]
+    if saved["sourceBatchUpdatedAt"] != item["updatedAt"]:
+        raise StaleWriteError("已确认接收登记的来源批次已变更，请先打开合格证核对并重新确认")
+    output = []
+    for line in saved["lines"]:
+        receipt = receipts.get(line.get("receiptId"))
+        actual_date = valid_date(receipt.get("actualReceiptDate")) if receipt else ""
+        if not receipt and len(batch.get("receipts", [])) == 1 and len(item["receiptDates"]) == 1:
+            actual_date = item["receiptDates"][0]
+        output.append(
+            {
+                "batchId": item["id"],
+                "receiptId": line.get("receiptId"),
+                "registrationId": saved["id"],
+                "project": {
+                    key: item[key]
+                    for key in ("iacuc", "pi", "owner", "project", "funding", "fundCode", "projectEndDate")
+                },
+                "source": {**item["source"], "registrationUpdatedAt": saved["updatedAt"]},
+                "purchaseOrderNo": item["purchaseOrderNo"],
+                "batchNo": item["batchNo"],
+                "actualReceiptDate": actual_date,
+                "strain": item["strain"],
+                "certificateStrain": line["certificateStrain"],
+                "grade": line["grade"],
+                "specification": line["specification"],
+                "sex": line["sex"],
+                "quantity": line["quantity"],
+                "quantitySource": "certificate_confirmed",
+                "supplier": line["supplier"],
+                "roomName": item["roomName"],
+                "qualityCertificateNo": line["certificateNo"],
+                "experimentCertificateNo": line["experimentCertificateNo"],
+                "notes": line["notes"],
+                "warnings": list(dict.fromkeys([*warnings, *saved["warnings"]])),
+            }
+        )
+    item["warnings"] = list(dict.fromkeys([*warnings, *saved["warnings"]]))
+    item["warnings"].append("合格证明细已人工确认；项目及负责人仍采用当前实验申请汇总表")
+    return output
+
+
 def preview(conn, actor, body):
     authorize(actor)
     ids = body.get("ids") if isinstance(body, dict) else None
@@ -221,11 +299,28 @@ def preview(conn, actor, body):
     rows = {row["id"]: row for row in repository.selected(conn, source, ids)}
     if len(rows) != len(ids) or any(rows[i]["updated_at"] != versions[i] for i in ids):
         raise StaleWriteError("所选批次已变更或不再是已接收状态，请刷新列表后重新选择")
+    saved = certificate_repo.registrations(conn, ids)
+    if "expectedRegistrationVersions" in body:
+        register_versions = body["expectedRegistrationVersions"]
+        if (
+            not isinstance(register_versions, dict)
+            or set(register_versions) != set(ids)
+            or any(value is not None and not isinstance(value, str) for value in register_versions.values())
+        ):
+            raise ValueError("请提供完整的接收登记版本")
+        if any(
+            register_versions[identity] != (saved[identity]["updatedAt"] if identity in saved else None)
+            for identity in ids
+        ):
+            raise StaleWriteError("所选接收登记已变化，请刷新后重新选择并核对导出")
     items, lines = [], []
     for identity in ids:
         row = rows[identity]
         item = record(row, source, complete=True)
-        lines.extend(registration_lines(item, json.loads(row["payload"])))
+        batch = json.loads(row["payload"])
+        lines.extend(
+            confirmed_lines(item, batch, saved[identity]) if identity in saved else registration_lines(item, batch)
+        )
         items.append(item)
     return {
         "items": items,
@@ -233,4 +328,7 @@ def preview(conn, actor, body):
         "rowCount": len(lines),
         "applicationVersion": source["version"],
         "warnings": [f"{item['batchNo'] or item['id']}：{warning}" for item in items for warning in item["warnings"]],
+        "registrationVersions": {
+            identity: saved[identity]["updatedAt"] if identity in saved else None for identity in ids
+        },
     }

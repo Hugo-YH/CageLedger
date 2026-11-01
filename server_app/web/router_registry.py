@@ -13,6 +13,7 @@ from server_app.domains.administration import (
     system_info,
     user_from_token,
 )
+from server_app.domains.reception.certificate_routes import handle as reception_certificate_handler
 from server_app.domains.reception.routes import prepare as prepare_reception
 from server_app.domains.reception.routes import read as read_reception
 from server_app.domains.system_features.session import session_payload
@@ -93,6 +94,24 @@ API_ROUTER.add("GET", r"/api/receptions", read_reception)
 API_ROUTER.add("GET", r"/api/receptions/filter-options", read_reception)
 API_ROUTER.add("POST", r"/api/receptions/preview", prepare_reception)
 API_ROUTER.add("POST", r"/api/receptions/export", prepare_reception)
+API_ROUTER.add("GET", r"/api/receptions/(?P<batchId>[^/]+)/registration", reception_certificate_handler)
+API_ROUTER.add("PUT", r"/api/receptions/(?P<batchId>[^/]+)/registration", reception_certificate_handler)
+API_ROUTER.add("POST", r"/api/receptions/(?P<batchId>[^/]+)/certificates", reception_certificate_handler)
+API_ROUTER.add(
+    "POST",
+    r"/api/receptions/(?P<batchId>[^/]+)/certificates/(?P<attachmentId>[a-f0-9]{32})/recognize",
+    reception_certificate_handler,
+)
+API_ROUTER.add(
+    "GET",
+    r"/api/receptions/(?P<batchId>[^/]+)/certificates/(?P<attachmentId>[a-f0-9]{32})/file",
+    reception_certificate_handler,
+)
+API_ROUTER.add(
+    "GET",
+    r"/api/receptions/(?P<batchId>[^/]+)/certificates/(?P<attachmentId>[a-f0-9]{32})/preview",
+    reception_certificate_handler,
+)
 API_ROUTER.add(
     "GET",
     r"/api/intake-batches/(?P<batchId>[^/]+)/recognition-images/(?P<imageId>[a-f0-9]{32})",

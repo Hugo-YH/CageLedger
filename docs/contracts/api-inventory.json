@@ -231,6 +231,20 @@
       "audit": "原批次完成审计",
       "effects": "business_write"
     },
+    "reception_certificate_write": {
+      "version": "expectedBatchUpdatedAt必填；上传及识别先复核已接收状态和批次精确版本",
+      "idempotency": "上传按batch+SHA256去重；识别按账号+requestId绑定附件和批次版本，不重复调用AI",
+      "transaction": "PDF渲染、文件写入和AI请求不占用数据库写事务；短事务留档元数据、任务状态及审计；失败清理未提交文件",
+      "audit": "reception.certificate_uploaded、recognition_started、recognized、recognition_failed及interrupted",
+      "effects": "file_and_business_write"
+    },
+    "reception_registration_confirm": {
+      "version": "expectedBatchUpdatedAt、expectedRegistrationUpdatedAt（首次null）、expectedApplicationVersion必填；过期409",
+      "idempotency": "账号+requestId+完整请求签名；重放返回原确认结果，不重复审计，不同内容409",
+      "transaction": "BEGIN IMMEDIATE内验证来源、附件、明细、人工核对和版本，独立登记、幂等回执及审计原子提交",
+      "audit": "reception.registration_confirmed保留前后登记、确认账号、识别来源与人工修改来源",
+      "effects": "business_write"
+    },
     "reception_export": {
       "version": "批次expectedVersions及实验申请汇总数据expectedApplicationVersion必填，过期409",
       "idempotency": "不自动重试；每次成功生成导出记录一次审计，不创建接收业务记录",
@@ -276,7 +290,7 @@
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "d7b02ad38587decd87a6c5e0053fc80b380a9a050d9b5208558c95aaee411b39",
+    "server_app/web/router_registry.py": "f23f1b6a565a830602f1978c1194fe47a2d063da34041c65c5a7a002b2ccab61",
     "server_app/web/route_registration.py": "d05acfff6e18583855cdcdc896f44a8963b0653aac470bc8312806c3fee72009",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "0f2737bacd52aa9bb111c46c177d9972019ceb6fa9e8152de59dc0f8bbc4f776",
@@ -293,6 +307,7 @@
     "server_app/web/intake_summary.py": "33eba7143c5f9be95dbf9c6fd0378ba4e1f8c8aa81dc204f47d632f1e2ed2eb8",
     "server_app/web/infrastructure.py": "d13e701b3ecc0347c8dc2d53634f1f8ae52f7b3bae26a5a264ce5f262c5c3e67",
     "server_app/web/pdf_exports.py": "a7731788d5923e577c6c75c229001faee29b30ec1e46d8ebc412df37c1de54a9",
+    "server_app/domains/reception/certificate_routes.py": "e3bc9ee3e3e496fb72b26ccaae517d862d2b93ac0bcc4a0d846bb86499160607",
     "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774",
     "server_app/web/route_definitions/__init__.py": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "server_app/web/route_definitions/operations.py": "92ac8da3c37c2ef9284e7e6554b5170f5b2732cd7c4ca9906af92baf6a1ef0e5",
@@ -354,7 +369,7 @@
           "method": "POST",
           "path": "/api/receptions/preview",
           "purpose": "只读生成接收登记结构、预填行数和待核对事项，不推进接收状态",
-          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion}",
+          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion,expectedRegistrationVersions?}",
           "response": "{items,rows,rowCount,applicationVersion,warnings}；过期或状态变化409",
           "protection": "read"
         },
@@ -362,9 +377,60 @@
           "method": "POST",
           "path": "/api/receptions/export",
           "purpose": "导出B至U列兼容接收登记预填表；项目来源及批次版本检查，导出留审计",
-          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion}",
+          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion,expectedRegistrationVersions?}",
           "response": "xlsx下载；原始编号文本，缺失字段标记红底待补充；过期409",
           "protection": "reception_export"
+        },
+        {
+          "method": "GET",
+          "path": "/api/receptions/{batchId}/registration",
+          "purpose": "按需读取已接收批次的独立登记、原件元数据及每附件最近一次识别，不触发识别",
+          "request": "batchId",
+          "response": "{batch,applicationVersion,registration,attachments,runs,canWrite}",
+          "protection": "read"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/receptions/{batchId}/registration",
+          "purpose": "人工核对后确认独立接收登记，不改写预约、笼卡、项目资料及计费",
+          "permission": "staff",
+          "request": "{requestId,expectedBatchUpdatedAt,expectedRegistrationUpdatedAt,expectedApplicationVersion,acknowledged:true,lines}",
+          "response": "{registration}；不完整400，来源/登记版本变化409",
+          "protection": "reception_registration_confirm"
+        },
+        {
+          "method": "POST",
+          "path": "/api/receptions/{batchId}/certificates",
+          "purpose": "上传不可覆盖的合格证PDF原件，生成首页预览并按SHA去重",
+          "permission": "staff",
+          "request": "query expectedBatchUpdatedAt；multipart file，PDF不超过30MiB，每批次最多20份",
+          "response": "{attachment,reused}；新附件201，重复200；损坏400，组件不可用503",
+          "protection": "reception_certificate_write"
+        },
+        {
+          "method": "POST",
+          "path": "/api/receptions/{batchId}/certificates/{attachmentId}/recognize",
+          "purpose": "显式识别PDF首页全部合格证和动物明细，保留任务状态与来源草稿",
+          "permission": "staff",
+          "request": "{requestId,expectedBatchUpdatedAt}；最多2个同时AI请求，不识别后续验收照片",
+          "response": "{run}；status running/completed/failed，失败保留原件，不自动确认登记",
+          "protection": "reception_certificate_write"
+        },
+        {
+          "method": "GET",
+          "path": "/api/receptions/{batchId}/certificates/{attachmentId}/file",
+          "purpose": "登录后校验附件归属与SHA256，下载不可修改的合格证PDF原件",
+          "request": "batchId、attachmentId",
+          "response": "application/pdf；不存在或跨批次404，校验失败503",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/receptions/{batchId}/certificates/{attachmentId}/preview",
+          "purpose": "登录后校验归属与完整性，读取已生成的合格证首页PNG，不触发渲染或AI",
+          "request": "batchId、attachmentId",
+          "response": "image/png；不存在或跨批次404，校验失败503",
+          "protection": "read"
         }
       ]
     },

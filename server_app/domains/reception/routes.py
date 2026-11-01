@@ -63,6 +63,7 @@ def prepare(handler, params):
                             "batchIds": body["ids"],
                             "batchVersions": body["expectedVersions"],
                             "applicationVersion": document["applicationVersion"],
+                            "registrationVersions": document.get("registrationVersions", {}),
                             "rowCount": document["rowCount"],
                             "prefill": True,
                         },

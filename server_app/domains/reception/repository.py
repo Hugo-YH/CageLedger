@@ -82,7 +82,7 @@ def page(conn, source, params):
     projection = ",".join(f"'{key}',{expr}" for key, expr in FIELDS.items())
     extra = ",".join(
         f"'{key}',json_extract(b.payload,'$.{key}')"
-        for key in ("strainRaw", "strainStandard", "specification", "receipts")
+        for key in ("strainRaw", "strainStandard", "specification", "receipts", "species")
     )
     sql = BASE + f"SELECT b.id,b.updated_at,a.application,json_object({projection},{extra}) summary" + JOIN
     rows = conn.execute(

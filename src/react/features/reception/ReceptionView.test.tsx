@@ -2,16 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type * as UiModule from "../../components/ui";
-import type { ModalProps, TableProps } from "antd";
+import type { DrawerProps, ModalProps, TableProps } from "antd";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ReceptionPreviewResponse, ReceptionRecord } from "../../../contracts/reception";
+import type { ReceptionListResponse, ReceptionPreviewResponse, ReceptionRecord } from "../../../contracts/reception";
 import { requestDownload, requestJson } from "../../api/client";
 import { AntdProvider } from "../../components/ui";
 import { UiProvider } from "../../state/ui";
 import { ReceptionView } from "./ReceptionView";
 
-vi.mock("../../api/client", () => ({ requestJson: vi.fn(), requestDownload: vi.fn() }));
+vi.mock("../../api/client", () => ({ requestJson: vi.fn(), requestDownload: vi.fn(), requestMultipart: vi.fn() }));
 vi.mock("../../api/session", () => ({
   useSession: () => ({ data: { user: { id: "admin", role: "admin", roomIds: [] } } }),
 }));
@@ -24,6 +24,12 @@ vi.mock("../../components/ui", async (load) => {
       <section role="dialog" aria-label={String(title)}>
         {children}
         {typeof footer === "function" ? null : footer}
+      </section>
+    ),
+    Drawer: ({ children, title, footer }: DrawerProps) => (
+      <section role="dialog" aria-label={String(title)}>
+        {children}
+        {footer}
       </section>
     ),
     DataTable: ({ columns, dataSource }: TableProps<ReceptionRecord>) => (
@@ -142,11 +148,83 @@ it("shows the list without directories, previews frozen versions, and keeps sele
   await screen.findByText("版本已变化");
   expect(requestDownload).toHaveBeenCalledWith("/api/receptions/export", {
     method: "POST",
-    body: JSON.stringify({ ids: ["one"], expectedVersions: { one: "batch-v1" }, expectedApplicationVersion: "app-v1" }),
+    body: JSON.stringify({
+      ids: ["one"],
+      expectedVersions: { one: "batch-v1" },
+      expectedApplicationVersion: "app-v1",
+      expectedRegistrationVersions: { one: null },
+    }),
   });
   expect(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).toBeChecked();
   expect(within(dialog).getByRole("button", { name: "确认导出" })).toBeEnabled();
 });
+
+it("opens the system PDF picker before a modal and keeps the main list usable when details fail", async () => {
+  const previous = vi.mocked(requestJson).getMockImplementation()!;
+  let rejectDetail: (reason: Error) => void = () => {};
+  vi.mocked(requestJson).mockImplementation((url, init) =>
+    String(url).endsWith("/registration")
+      ? new Promise((_, reject) => {
+          rejectDetail = reject;
+        })
+      : previous(url, init),
+  );
+  render(view());
+  await screen.findByText(record.batchNo);
+  expect(requestJson).toHaveBeenCalledTimes(1);
+  const chooser = vi.spyOn(HTMLInputElement.prototype, "click");
+  const trigger = screen.getByRole("button", { name: "合格证识别" });
+  expect(trigger).toHaveClass("ant-btn-color-primary", "ant-btn-variant-solid");
+  fireEvent.click(trigger);
+  expect(chooser).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  const input = screen.getByLabelText("选择待识别合格证 PDF");
+  fireEvent(input, new Event("cancel"));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(requestJson).toHaveBeenCalledTimes(1);
+  fireEvent.click(trigger);
+  expect(chooser).toHaveBeenCalledTimes(2);
+  fireEvent.change(input, { target: { files: [new File(["%PDF"], "original.pdf", { type: "application/pdf" })] } });
+  const drawer = screen.getByRole("dialog", { name: `合格证与接收登记 · ${record.batchNo}` });
+  expect(within(drawer).getByRole("status", { name: "合格证详情正在加载" })).toBeInTheDocument();
+  await act(async () => {
+    rejectDetail(new Error("detail offline"));
+    await Promise.resolve();
+  });
+  await within(drawer).findByText("合格证详情加载失败");
+  expect(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
+});
+
+it.each([
+  { status: "confirmed" as const, quantity: 12, label: "已确认登记", displayed: true, action: "查看/编辑" },
+  { status: "stale" as const, quantity: 9, label: "待重新核对", displayed: true, action: "重新核对" },
+  { status: "unconfirmed" as const, quantity: 0, label: "未确认登记", displayed: false, action: "合格证识别" },
+  { status: "confirmed" as const, quantity: null, label: "已确认登记", displayed: false, action: "查看/编辑" },
+])(
+  "distinguishes reservation fields from registered quantities for $status ($quantity)",
+  async ({ status, quantity, label, displayed, action }) => {
+    const previous = vi.mocked(requestJson).getMockImplementation()!;
+    vi.mocked(requestJson).mockImplementation(async (url, init) => {
+      const result = await previous(url, init);
+      if (new URL(String(url), "http://localhost").pathname !== "/api/receptions") return result;
+      return {
+        ...(result as ReceptionListResponse),
+        items: [{ ...record, registrationStatus: status, registeredQuantity: quantity }],
+      };
+    });
+    render(view());
+    await screen.findByText(record.batchNo);
+    expect(screen.getByText("预约数量")).toBeInTheDocument();
+    expect(screen.getByText("预约性别")).toBeInTheDocument();
+    expect(screen.getByText("预约规格")).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: action })).toBeEnabled();
+    if (displayed) expect(screen.getByText(`登记 ${quantity} 只`)).toBeInTheDocument();
+    else expect(screen.queryByText(/^登记 .* 只$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("登记数量")).not.toBeInTheDocument();
+  },
+);
 
 it("keeps the successful page and pauses selection/export after a later page fails, then retries", async () => {
   render(view());
@@ -158,6 +236,7 @@ it("keeps the successful page and pauses selection/export after a later page fai
   expect(screen.getByText(record.batchNo)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "导出Excel" })).toBeDisabled();
   expect(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "合格证识别" })).toBeDisabled();
   expect(screen.getByTitle("1")).toHaveClass("ant-pagination-item-active");
   failList = false;
   fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));

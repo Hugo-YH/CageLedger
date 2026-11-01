@@ -34,6 +34,7 @@ RUN --mount=type=cache,id=cageledger-apt-archives-${TARGETARCH},target=/var/cach
     && apt-get install -y --no-install-recommends \
         chromium \
         libreoffice-writer \
+        poppler-utils \
         fontconfig \
         fonts-noto-cjk \
     && if [ -f /tmp/cageledger-docker-clean ]; then mv /tmp/cageledger-docker-clean /etc/apt/apt.conf.d/docker-clean; fi

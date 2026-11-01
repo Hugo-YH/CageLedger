@@ -74,17 +74,37 @@ describe.each(["light", "dark"] as const)("%s visual system", (mode) => {
     expect(createTheme(mode, { mobile: true }).components?.Button?.controlHeight).toBeGreaterThanOrEqual(44);
   });
 
-  it.each(["purple", "blue"] as const)("keeps %s filled actions readable and preserves disabled styling", (color) => {
-    const token = resolveTheme(mode);
+  it.each(["purple", "blue", "orange"] as const)(
+    "keeps %s filled actions readable and preserves disabled styling",
+    (color) => {
+      const token = resolveTheme(mode);
+      const styles = createButtonConfig(mode).styles;
+      if (typeof styles !== "function") throw new Error("Expected semantic button styles");
+      const props = { color, variant: "filled" } as const;
+      const text = styles({ props })?.root?.color ?? token[`${color}6`];
+      for (const background of [token[`${color}1`], token[`${color}2`], token[`${color}3`]]) {
+        expect(contrast(String(text), background)).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(styles({ props: { ...props, disabled: true } })).toEqual({});
+      expect(styles({ props: { color, variant: "solid" } })).toEqual({});
+    },
+  );
+
+  it("keeps green solid actions readable in every state without changing other variants or disabled controls", () => {
     const styles = createButtonConfig(mode).styles;
     if (typeof styles !== "function") throw new Error("Expected semantic button styles");
-    const props = { color, variant: "filled" } as const;
-    const text = styles({ props })?.root?.color ?? token[`${color}6`];
-    for (const background of [token[`${color}1`], token[`${color}2`], token[`${color}3`]]) {
-      expect(contrast(String(text), background)).toBeGreaterThanOrEqual(4.5);
+    const root = styles({ props: { color: "green", variant: "solid" } })?.root;
+    const properties = new Map(Object.entries(root ?? {}));
+    for (const background of [
+      properties.get("--ant-btn-solid-bg-color"),
+      properties.get("--ant-btn-solid-bg-color-hover"),
+      properties.get("--ant-btn-solid-bg-color-active"),
+    ]) {
+      expect(contrast(String(root?.color), String(background))).toBeGreaterThanOrEqual(4.5);
     }
-    expect(styles({ props: { ...props, disabled: true } })).toEqual({});
-    expect(styles({ props: { color, variant: "solid" } })).toEqual({});
+    expect(styles({ props: { color: "green", variant: "solid", disabled: true } })).toEqual({});
+    expect(styles({ props: { color: "green", variant: "filled" } })).toEqual({});
+    expect(styles({ props: { color: "green", variant: "outlined" } })).toEqual({});
   });
 
   it("keeps semantic status labels readable without relying on color alone", () => {
