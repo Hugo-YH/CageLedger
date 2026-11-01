@@ -216,8 +216,8 @@ it.each([
     render(view());
     await screen.findByText(record.batchNo);
     expect(screen.getByText("预约数量")).toBeInTheDocument();
-    expect(screen.getByText("预约性别")).toBeInTheDocument();
-    expect(screen.getByText("预约规格")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /预约性别/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "预约规格" })).not.toBeInTheDocument();
     expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: action })).toBeEnabled();
     if (displayed) expect(screen.getByText(`登记 ${quantity} 只`)).toBeInTheDocument();

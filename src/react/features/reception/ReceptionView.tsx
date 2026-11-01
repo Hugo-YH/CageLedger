@@ -51,7 +51,6 @@ const columnDefinitions: Array<{ key: ReceptionSortKey; label: string; width: nu
   { key: "pi", label: "项目负责人", width: 120 },
   { key: "owner", label: "实验负责人", width: 120 },
   { key: "quantity", label: "预约数量", width: 110 },
-  { key: "sex", label: "预约性别", width: 110 },
   { key: "roomName", label: "房间", width: 100 },
   { key: "supplier", label: "购买单位", width: 160 },
   { key: "projectMatched", label: "项目匹配", width: 120 },
@@ -192,13 +191,6 @@ export function ReceptionView() {
       },
     })),
     { key: "strain", title: "品系", dataIndex: "strain", width: 160, render: (value: string) => value || "—" },
-    {
-      key: "specification",
-      title: "预约规格",
-      dataIndex: "specification",
-      width: 130,
-      render: (value: string) => value || "—",
-    },
     {
       key: "registrationStatus",
       title: "合格证状态",
