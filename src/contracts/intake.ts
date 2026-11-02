@@ -97,7 +97,7 @@ export interface IntakeCard {
 export interface IntakeReceipt {
   id?: string;
   actualReceiptDate: string;
-  cardCount: number;
+  cardCount?: number;
   createdAt?: string;
 }
 

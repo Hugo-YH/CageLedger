@@ -5,7 +5,7 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from http import HTTPStatus
 from typing import Any
 
@@ -30,8 +30,8 @@ from server_app.repositories.entities import (
 from server_app.repositories.entities import (
     upsert_placement_task as upsert_placement_task_repository,
 )
-from server_app.shared import clean_text
-from server_app.shared.concurrency import begin_write, require_current_version
+from server_app.shared import clean_text, new_id
+from server_app.shared.concurrency import begin_write, require_current_version, require_exact_version
 
 
 @dataclass(frozen=True)
@@ -280,9 +280,25 @@ def persist_intake_batches_mark_printed(body, actor, ports):
     }
 
 
+def intake_receipt_dates(body, batch_ids):
+    if "actualReceiptDates" not in body:
+        return None
+    dates = body["actualReceiptDates"]
+    if not isinstance(dates, dict) or set(dates) != set(batch_ids):
+        raise ValueError("请提供所选批次的完整实际接收日期")
+    for value in dates.values():
+        try:
+            if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
+                raise ValueError("实际接收日期须为YYYY-MM-DD格式的有效日期")
+        except ValueError as exc:
+            raise ValueError("实际接收日期须为YYYY-MM-DD格式的有效日期") from exc
+    return dates
+
+
 def persist_intake_receipt_confirmations(body, actor, ports):
     started_at = time.perf_counter()
     batch_ids = intake_batch_action_ids(body)
+    actual_dates = intake_receipt_dates(body, batch_ids)
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
@@ -292,6 +308,20 @@ def persist_intake_receipt_confirmations(body, actor, ports):
         missing_ids = [batch_id for batch_id in batch_ids if batch_id not in batches_by_id]
         if missing_ids:
             raise LookupError("待接收批次不存在")
+        if "expectedVersions" in body:
+            versions = body["expectedVersions"]
+            if (
+                not isinstance(versions, dict)
+                or set(versions) != set(batch_ids)
+                or any(not isinstance(value, str) for value in versions.values())
+            ):
+                raise ValueError("请提供所选批次的完整版本")
+            for batch_id in batch_ids:
+                require_exact_version(
+                    batches_by_id[batch_id].get("updatedAt"),
+                    versions[batch_id],
+                    "所选批次已更新，请刷新列表后重新确认接收",
+                )
         batches = [
             batches_by_id[batch_id]
             for batch_id in batch_ids
@@ -302,10 +332,30 @@ def persist_intake_receipt_confirmations(body, actor, ports):
                 and batches_by_id[batch_id].get("status") == "pending_receipt"
             )
         ]
+        receipts = []
         for batch in batches:
+            if actual_dates is not None:
+                actual_date = actual_dates[batch["id"]]
+                existing_receipts = batch.get("receipts") or []
+                if not any(
+                    isinstance(receipt, dict) and receipt.get("actualReceiptDate") == actual_date
+                    for receipt in existing_receipts
+                ):
+                    # Bulk receipt records the date only; card counts and placement
+                    # remain owned by the separate card-confirmation workflow.
+                    receipt = {
+                        "id": new_id("receipt"),
+                        "actualReceiptDate": actual_date,
+                        "confirmedBy": actor.get("displayName", ""),
+                        "confirmedAt": updated_at,
+                    }
+                    batch["receipts"] = [*existing_receipts, receipt]
+                    receipts.append(receipt)
             batch["status"] = "received"
             batch["updatedAt"] = updated_at
-        events = build_audit_events(actor, old_state, state, updated_at)
+        events = build_audit_events(
+            actor, old_state, state, updated_at, limit=None if actual_dates is not None else 100
+        )
         for batch in batches:
             upsert_intake_batch_repository(conn, batch)
         write_audit_events(conn, events)
@@ -321,7 +371,7 @@ def persist_intake_receipt_confirmations(body, actor, ports):
     log_perf("intake_batch.confirm_many", started_at, batches=len(batches), tasks=0)
     return {
         "batches": batches,
-        "receipts": [],
+        "receipts": receipts,
         "tasks": [],
         "updatedAt": updated_at,
         "auditLogs": merge_audit_logs([], events),

@@ -10,6 +10,7 @@ export function DateInput({
   id,
   max,
   required = false,
+  disabled = false,
   picker = "date",
 }: {
   label: string;
@@ -18,6 +19,7 @@ export function DateInput({
   id?: string;
   max?: string;
   required?: boolean;
+  disabled?: boolean;
   picker?: "date" | "month";
 }) {
   const format = picker === "month" ? "YYYY-MM" : "YYYY-MM-DD";
@@ -30,6 +32,7 @@ export function DateInput({
       id={id}
       aria-label={label}
       aria-required={required || undefined}
+      disabled={disabled}
       allowClear={!required}
       picker={picker}
       format={format}

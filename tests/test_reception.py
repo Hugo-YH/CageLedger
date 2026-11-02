@@ -112,7 +112,7 @@ class ReceptionTests(unittest.TestCase):
         self.assertEqual(item["pi"], "")
 
     def test_pagination_dates_empty_filter_and_counts_match(self):
-        self.put(reservation(2, status="received", receipts=[]))
+        self.put(reservation(2, status="received", intakeDate="", receipts=[]))
         result = self.listed(limit="1")
         self.assertEqual((len(result["items"]), result["page"]["total"], result["page"]["hasMore"]), (1, 2, True))
         options = service.options(self.conn, ACTOR, {"column": ["receiptDate"]})
@@ -134,13 +134,64 @@ class ReceptionTests(unittest.TestCase):
         self.assertTrue(any("无法唯一确认" in warning for warning in document["warnings"]))
 
     def test_multiple_receipts_do_not_duplicate_total_or_use_planned_date(self):
-        for receipts in ([], [{"actualReceiptDate": "2026-10-29"}, {"actualReceiptDate": "2026-10-30"}]):
+        for receipts in ([{"actualReceiptDate": "2026-10-29"}, {"actualReceiptDate": "2026-10-30"}],):
             with self.subTest(receipts=receipts):
                 self.batch["receipts"] = receipts
                 self.put(self.batch)
                 document = service.preview(self.conn, ACTOR, self.body())
                 self.assertTrue(all(line["actualReceiptDate"] == "" for line in document["rows"]))
                 self.assertEqual(sum(line["quantity"] for line in document["rows"]), 20)
+
+    def test_original_dates_are_visible_filterable_sorted_and_exported_as_unconfirmed(self):
+        self.batch.update(receipts=[], intakeDate="2026-10-31")
+        self.put(self.batch)
+        self.put(reservation(2, status="received", intakeDate="2026-10-12", receipts=[]))
+        before = self.conn.total_changes
+        result = self.listed()
+        self.assertEqual([item["receiptDates"] for item in result["items"]], [["2026-10-31"], ["2026-10-12"]])
+        self.assertEqual(result["items"][0]["receiptDateSource"], "original")
+        selected = self.listed(columnFilters=json.dumps({"receiptDate": ["2026-10-31"]}))
+        self.assertEqual([item["id"] for item in selected["items"]], [self.batch["id"]])
+        self.assertEqual(self.listed(columnFilters=json.dumps({"receiptDate": [""]}))["page"]["total"], 0)
+        options = service.options(self.conn, ACTOR, {"column": ["receiptDate"]})
+        self.assertEqual({item["value"] for item in options["items"]}, {"2026-10-31", "2026-10-12"})
+        document = service.preview(self.conn, ACTOR, self.body())
+        line = document["rows"][0]
+        self.assertEqual(line["actualReceiptDate"], "")
+        self.assertEqual(line["originalReceiptDate"], "2026-10-31")
+        book = load_workbook(BytesIO(workbook.generate(document)))
+        self.addCleanup(book.close)
+        cell = book.worksheets[0]["H4"]
+        self.assertEqual(cell.value.strftime("%Y-%m-%d"), "2026-10-31")
+        self.assertEqual(cell.fill.fgColor.rgb, "FFFFEB9C")
+        self.assertIn("尚未确认", cell.comment.text)
+        self.assertEqual(self.conn.total_changes, before)
+
+    def test_date_precedence_and_invalid_dates_agree_between_display_filters_and_options(self):
+        cases = (
+            ("2026-10-12", [{"actualReceiptDate": "2026-10-30"}, {"actualReceiptDate": ""}], ["2026-10-30"], "actual"),
+            ("2026-10-12", [{"actualReceiptDate": "2026-02-30"}], ["2026-10-12"], "original"),
+            ("2026-02-29", [{"actualReceiptDate": "20261030"}], [], "missing"),
+            ("2024-02-29", [], ["2024-02-29"], "original"),
+            ("0000-01-01", [], [], "missing"),
+            ("2026-10-12", [{"actualReceiptDate": "\t2026-11-02\n"}], ["2026-10-12"], "original"),
+            (" 2026-10-12 ", [{"actualReceiptDate": " 2026-11-02 "}], ["2026-11-02"], "actual"),
+        )
+        for original, receipts, dates, source in cases:
+            with self.subTest(original=original, receipts=receipts):
+                self.batch.update(intakeDate=original, receipts=receipts)
+                self.put(self.batch)
+                item = self.listed()["items"][0]
+                self.assertEqual((item["receiptDates"], item["receiptDateSource"]), (dates, source))
+                options = service.options(self.conn, ACTOR, {"column": ["receiptDate"]})
+                self.assertEqual(
+                    [(entry["value"], entry["count"]) for entry in options["items"]], [(dates[0] if dates else "", 1)]
+                )
+                self.assertEqual(
+                    self.listed(columnFilters=json.dumps({"receiptDate": dates or [""]}))["page"]["total"], 1
+                )
+                if dates:
+                    self.assertEqual(self.listed(columnFilters=json.dumps({"receiptDate": [""]}))["page"]["total"], 0)
 
     def test_sex_evidence_from_another_batch_is_not_reused(self):
         self.batch["recognition"]["sources"][0]["batchNo"] = "different-batch"

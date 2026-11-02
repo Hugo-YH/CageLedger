@@ -175,7 +175,15 @@ export function ReceptionView() {
       render: (_: unknown, item: ReceptionRecord) => {
         if (key === "projectMatched")
           return <Tag color={item.projectMatched ? "green" : "gold"}>{item.projectMatched ? "已匹配" : "未匹配"}</Tag>;
-        if (key === "receiptDate") return item.receiptDates.join("、") || "—";
+        if (key === "receiptDate")
+          return item.receiptDateSource === "original" ? (
+            <Space orientation="vertical" size={0}>
+              <span>{item.receiptDates.join("、") || "—"}</span>
+              <Tag color="gold">原记录，待确认</Tag>
+            </Space>
+          ) : (
+            item.receiptDates.join("、") || "—"
+          );
         const value = item[key];
         const text =
           key === "supplier"

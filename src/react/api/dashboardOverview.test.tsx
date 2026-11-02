@@ -91,7 +91,12 @@ it("all intake writes also invalidate inactive dashboard data", async () => {
     () => result.current.remove.mutateAsync("x"),
     () => result.current.confirm.mutateAsync({ id: "x", actualReceiptDate: "2026-09-01", cardCount: 1 }),
     () => result.current.printed.mutateAsync(["x"]),
-    () => result.current.many.mutateAsync({ ids: ["x"] }),
+    () =>
+      result.current.many.mutateAsync({
+        ids: ["x"],
+        actualReceiptDates: { x: "2026-09-01" },
+        expectedVersions: { x: "v1" },
+      }),
   ];
   for (const operation of operations) {
     client.setQueryData(queryKeys.dashboardOverview("2026-09"), { value: { month: "2026-09" }, etag: '"one"' });

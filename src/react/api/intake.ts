@@ -207,10 +207,14 @@ export function useMarkIntakeBatchesPrinted() {
 export function useConfirmIntakeBatchesReceipt() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids }: { ids: string[] }) =>
+    mutationFn: (request: {
+      ids: string[];
+      actualReceiptDates: Record<string, string>;
+      expectedVersions: Record<string, string>;
+    }) =>
       requestJson<{ batches: IntakeBatch[] }>("/api/intake-batches/confirm-receipt", {
         method: "POST",
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify(request),
       }),
     onSuccess: () =>
       Promise.all([

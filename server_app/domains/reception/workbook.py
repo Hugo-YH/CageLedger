@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 
 MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -58,7 +59,7 @@ def generate(document):
             project["projectEndDate"],
             line["batchNo"],
             project["funding"],
-            line["actualReceiptDate"],
+            line["actualReceiptDate"] or line.get("originalReceiptDate", ""),
             project["owner"],
             line["strain"],
             line["certificateStrain"],
@@ -81,6 +82,9 @@ def generate(document):
             if column in (5, 8) and value:
                 try:
                     cell.value = date.fromisoformat(str(value))
+                    if column == 8 and not line["actualReceiptDate"] and line.get("originalReceiptDate"):
+                        cell.fill = PatternFill("solid", fgColor="FFFFEB9C")
+                        cell.comment = Comment("原记录接收日期，尚未确认为实际到货日期，请核对。", "CageLedger")
                     continue
                 except ValueError:
                     value = ""
@@ -99,6 +103,7 @@ def generate(document):
         "接收登记预填表：请核对实际只数、性别及证件；复制B4起的数据到原登记表B列。",
         "项目字段以实验申请汇总表为准，匹配失败不使用预约信息兜底。",
         "未确认的数量、性别及规格来自预约预填；已确认的合格证明细来自独立接收登记。未登记的证件字段请补全。",
+        "接收时间优先采用已确认的实际接收日期；缺少时显示原记录日期，以黄色底色和批注提示待核对。两者均无有效日期时标记待补充。",
         "等级按物种预填：小鼠、大鼠为SPF，其他动物为普通级；物种未填写时等级标记待补充。",
         "缺失字段以红底“待补充”标记；空白M列和可空备注保持空白，数值0不视为缺失。",
         "不输出V列以后的入库报销数据，也不推进批次状态。",

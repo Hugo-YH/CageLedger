@@ -78,10 +78,14 @@ test("direct sampling is recognized, saved without cards, confirmed and included
     await expect(page.getByRole("button", { name: "标记已打印", exact: true })).toBeDisabled();
     const marking = page.waitForResponse((r) => r.url().endsWith("/api/intake-batches/confirm-receipt"));
     await page.getByRole("button", { name: "标记已接收", exact: true }).click();
+    const receiptDialog = page.getByRole("dialog", { name: "确认实际接收日期", exact: true });
+    await expect(receiptDialog.getByLabel(`${batchNo} 实际接收日期`, { exact: true })).toHaveValue("2026-10-22");
+    await receiptDialog.getByRole("button", { name: "确认已接收", exact: true }).click();
     const confirmed = await marking;
     expect(confirmed.ok()).toBe(true);
     const result = await confirmed.json();
     expect(result.tasks).toEqual([]);
+    await expect(receiptDialog).toBeHidden();
     await expect(row).toContainText("已接收");
     await expect(page.getByRole("button", { name: "标记已接收", exact: true })).toBeDisabled();
     const read = await page.request.get(`/api/intake-batches/${id}`);
@@ -91,6 +95,7 @@ test("direct sampling is recognized, saved without cards, confirmed and included
       status: "received",
       finalCardCount: 0,
       cards: [],
+      receipts: [expect.objectContaining({ actualReceiptDate: "2026-10-22" })],
     });
     const repeated = await page.request.post("/api/intake-batches/confirm-receipt", { data: { ids: [id] } });
     expect((await repeated.json()).batches).toEqual([]);

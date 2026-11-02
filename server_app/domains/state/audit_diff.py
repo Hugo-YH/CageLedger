@@ -95,7 +95,7 @@ def validate_state_write_permission(actor, old_state, new_state):
             raise PermissionError("不能修改未授权饲养间的待进驻任务")
 
 
-def build_audit_events(actor, old_state, new_state, at):
+def build_audit_events(actor, old_state, new_state, at, *, limit=100):
     events = []
     labels = slot_label_map(new_state)
     _append_occupancy_events(events, actor, old_state, new_state, labels, at)
@@ -106,7 +106,7 @@ def build_audit_events(actor, old_state, new_state, at):
     _append_entity_events(
         events, actor, old_state, new_state, "placementTasks", "placement_task", "待进驻任务", "batchNo", at
     )
-    return events[:100]
+    return events if limit is None else events[:limit]
 
 
 def _append_occupancy_events(events, actor, old_state, new_state, labels, at):

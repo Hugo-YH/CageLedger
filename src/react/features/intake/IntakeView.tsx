@@ -27,6 +27,7 @@ import {
 } from "../../api/intake";
 import { fetchIacucSearch } from "../../api/iacuc";
 import { queryKeys } from "../../api/queryKeys";
+import { ApiError } from "../../api/client";
 import { ActionButton, ModalPresence } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useIntakeRecognition } from "./hooks/useIntakeRecognition";
@@ -51,6 +52,7 @@ import {
 } from "../../print/intakeCards";
 import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
 import { IntakeDuplicateConfirmDialog } from "./components/IntakeDuplicateConfirmDialog";
+import { IntakeReceiptConfirmDialog } from "./components/IntakeReceiptConfirmDialog";
 import type { WorkspaceView } from "../../state/ui";
 
 interface PendingIntakePrintJob {
@@ -113,6 +115,9 @@ export function IntakeView({
   const [bulkNoticeKind, setBulkNoticeKind] = useState<"success" | "error" | "info">("info");
   const [markingPrinted, setMarkingPrinted] = useState(false);
   const [markingReceived, setMarkingReceived] = useState(false);
+  const [pendingReceipt, setPendingReceipt] = useState<{ items: IntakeBatchListItem[]; skipped: number } | null>(null);
+  const [receiptError, setReceiptError] = useState("");
+  const [receiptNeedsReselect, setReceiptNeedsReselect] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<IntakeBatchListItem | null>(null);
   const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
   const [pendingDuplicateSave, setPendingDuplicateSave] = useState<PendingDuplicateSave | null>(null);
@@ -174,6 +179,7 @@ export function IntakeView({
       selection.clear();
       setPendingPrint((current) => (current?.saveCurrent ? current : null));
       setDeleteTarget(null);
+      setPendingReceipt(null);
     },
     selectedItems.length > 0 || selectingAll,
   );
@@ -183,6 +189,7 @@ export function IntakeView({
     setEditingDialog(false);
     setEditing(false);
     setPendingDuplicateSave(null);
+    setPendingReceipt(null);
     return () => {
       draftRevision.current += 1;
       invalidateRecognition();
@@ -664,20 +671,32 @@ export function IntakeView({
     }
   }
 
-  async function receive(targets: IntakeBatchListItem[]) {
+  function beginReceive(targets: IntakeBatchListItem[]) {
     const printable = targets.filter(canConfirmIntakeReceipt);
     if (!printable.length) {
       setBulkNotice("请选择已打印的入驻饲养批次或待接收的直接取材批次。");
       setBulkNoticeKind("info");
       return;
     }
+    setReceiptError("");
+    setReceiptNeedsReselect(false);
+    setPendingReceipt({ items: printable.map((item) => ({ ...item })), skipped: targets.length - printable.length });
+  }
+
+  async function receive(actualReceiptDates: Record<string, string>) {
+    if (!pendingReceipt || markingReceived) return;
+    const { items: printable, skipped } = pendingReceipt;
     setMarkingReceived(true);
     setBulkNotice(`正在标记 ${printable.length} 个批次为已接收…`);
     setBulkNoticeKind("info");
     try {
-      const response = await confirmBatchesReceipt.mutateAsync({ ids: printable.map((item) => item.id) });
+      const response = await confirmBatchesReceipt.mutateAsync({
+        ids: printable.map((item) => item.id),
+        actualReceiptDates,
+        expectedVersions: Object.fromEntries(printable.map((item) => [item.id, item.updatedAt])),
+      });
       selection.update(response.batches);
-      const skipped = targets.length - printable.length;
+      setPendingReceipt(null);
       setBulkNotice(
         skipped
           ? `已标记 ${printable.length} 个批次为已接收；${skipped} 个不符合接收条件的批次跳过。`
@@ -685,6 +704,15 @@ export function IntakeView({
       );
       setBulkNoticeKind("success");
     } catch (error) {
+      const stale = error instanceof ApiError && error.status === 409;
+      setReceiptNeedsReselect(stale);
+      setReceiptError(
+        stale
+          ? "所选批次已更新，请返回列表重新勾选后确认接收。"
+          : error instanceof Error
+            ? error.message
+            : "标记已接收失败",
+      );
       setBulkNotice(error instanceof Error ? error.message : "标记已接收失败");
       setBulkNoticeKind("error");
     } finally {
@@ -790,7 +818,7 @@ export function IntakeView({
               }}
               onPrint={(targets) => requestPrint(targets)}
               onMarkPrinted={(targets) => void markPrinted(targets)}
-              onReceive={(targets) => void receive(targets)}
+              onReceive={beginReceive}
               onEdit={edit}
               onDelete={setDeleteTarget}
               onPage={setPage}
@@ -888,6 +916,27 @@ export function IntakeView({
               </ActionButton>
             </div>
           </ModalShell>
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {pendingReceipt ? (
+          <IntakeReceiptConfirmDialog
+            key={pendingReceipt.items.map((item) => item.id).join(",")}
+            items={pendingReceipt.items}
+            pending={markingReceived}
+            error={receiptError}
+            blocked={receiptNeedsReselect}
+            onClose={() => {
+              if (!markingReceived) {
+                if (receiptNeedsReselect) {
+                  selection.clear();
+                  void list.refetch();
+                }
+                setPendingReceipt(null);
+              }
+            }}
+            onConfirm={receive}
+          />
         ) : null}
       </ModalPresence>
       <ModalPresence>

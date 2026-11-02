@@ -1240,8 +1240,8 @@
           "method": "POST",
           "path": "/api/intake-batches/confirm-receipt",
           "purpose": "批量标记接收",
-          "request": "{ids}",
-          "response": "{batches,receipts:[],tasks:[],...}",
+          "request": "{ids,actualReceiptDates?:{id:YYYY-MM-DD},expectedVersions?:{id:updatedAt}}；新页面须完整提供日期与版本；旧ids-only保留状态动作",
+          "response": "{batches,receipts,tasks:[],...}；日期按批次保存，不创建进驻任务；版本冲突409",
           "protection": "intake_action"
         },
         {

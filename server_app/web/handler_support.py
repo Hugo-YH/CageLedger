@@ -479,8 +479,12 @@ class HandlerSupportMixin:
         try:
             body = self.read_json_body()
             self.send_json(app_ports().persist_intake_receipt_confirmations(body, user), HTTPStatus.CREATED)
+        except StaleWriteError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except PermissionError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 

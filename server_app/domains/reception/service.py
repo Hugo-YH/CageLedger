@@ -1,5 +1,4 @@
 import json
-from datetime import date
 
 from server_app.domains.intake.strain_standard import standardize_strain, supplier_full_name
 from server_app.shared.concurrency import StaleWriteError
@@ -8,17 +7,11 @@ from server_app.shared.intake_identifiers import intake_identifier_key
 from . import certificate_repository as certificate_repo
 from . import repository
 from .certificate_rules import default_grade
+from .dates import receipt_dates, valid_date
 
 
 def text(value):
     return str(value).strip() if value is not None else ""
-
-
-def valid_date(value):
-    try:
-        return date.fromisoformat(text(value)).isoformat()
-    except ValueError:
-        return ""
 
 
 def authorize(actor):
@@ -54,13 +47,7 @@ def record(row, source, *, complete=False):
     batch = json.loads(row["payload"] if complete else row["summary"])
     application = json.loads(row["application"]) if row["application"] else {}
     receipts = batch.get("receipts") or []
-    dates = sorted(
-        {
-            value
-            for entry in receipts
-            if isinstance(entry, dict) and (value := valid_date(entry.get("actualReceiptDate")))
-        }
-    )
+    dates, date_source = receipt_dates(batch)
     warnings = []
     if not application:
         warnings.append("伦理号未唯一匹配实验申请汇总表，项目字段未匹配，导出标记待补充")
@@ -78,7 +65,9 @@ def record(row, source, *, complete=False):
         ]
         if missing:
             warnings.append("实验申请汇总表缺少：" + "、".join(missing))
-    if not dates:
+    if date_source == "original":
+        warnings.append("接收日期采用原记录，尚未确认为实际到货日期，请核对；Excel以黄色标注")
+    elif not dates:
         warnings.append("未记录实际接收日期，导出标记待补充，不使用预约日期代替")
     elif len(dates) > 1:
         warnings.append("存在多次接收日期，缺少各次实际只数；不分摊数量，导出接收时间标记待补充")
@@ -101,6 +90,7 @@ def record(row, source, *, complete=False):
             "quantity": batch.get("quantity"),
             "grade": default_grade(batch),
             "receiptDates": dates,
+            "receiptDateSource": date_source,
             "receipts": [
                 {"id": entry["id"], "actualReceiptDate": valid_date(entry.get("actualReceiptDate"))}
                 for entry in receipts
@@ -206,7 +196,12 @@ def registration_lines(item, batch):
             "source": item["source"],
             "purchaseOrderNo": item["purchaseOrderNo"],
             "batchNo": item["batchNo"],
-            "actualReceiptDate": item["receiptDates"][0] if len(item["receiptDates"]) == 1 else "",
+            "actualReceiptDate": (
+                item["receiptDates"][0]
+                if item["receiptDateSource"] == "actual" and len(item["receiptDates"]) == 1
+                else ""
+            ),
+            "originalReceiptDate": item["receiptDates"][0] if item["receiptDateSource"] == "original" else "",
             "strain": strain,
             "specification": item["specification"],
             "sex": sex,
@@ -241,7 +236,7 @@ def confirmed_lines(item, batch, saved):
     for line in saved["lines"]:
         receipt = receipts.get(line.get("receiptId"))
         actual_date = valid_date(receipt.get("actualReceiptDate")) if receipt else ""
-        if not receipt and len(batch.get("receipts", [])) == 1 and len(item["receiptDates"]) == 1:
+        if not receipt and item["receiptDateSource"] == "actual" and len(item["receiptDates"]) == 1:
             actual_date = item["receiptDates"][0]
         output.append(
             {
@@ -256,6 +251,7 @@ def confirmed_lines(item, batch, saved):
                 "purchaseOrderNo": item["purchaseOrderNo"],
                 "batchNo": item["batchNo"],
                 "actualReceiptDate": actual_date,
+                "originalReceiptDate": item["receiptDates"][0] if item["receiptDateSource"] == "original" else "",
                 "strain": item["strain"],
                 "certificateStrain": line["certificateStrain"],
                 "grade": line["grade"],

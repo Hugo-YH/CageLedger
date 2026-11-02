@@ -5,6 +5,8 @@ from server_app.config import IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH
 from server_app.repositories.iacuc import read_iacuc_index
 from server_app.repositories.person_names import person_options, split_person_names
 
+from .dates import sql_valid_date
+
 FIELDS = {
     "batchNo": "b.batch_no",
     "purchaseOrderNo": "json_extract(b.payload,'$.purchaseOrderNo')",
@@ -24,9 +26,27 @@ WITH application_rows AS (
 ), applications AS (
  SELECT code, count(*) matches, CASE WHEN count(*)=1 THEN max(value) END application
  FROM application_rows WHERE code IS NOT NULL AND code!='' GROUP BY code
+), batch_actual_dates AS (
+ SELECT b.id,
+ (SELECT json_group_array(value) FROM (
+   SELECT DISTINCT trim(json_extract(r.value,'$.actualReceiptDate')) value
+   FROM json_each(b.payload,'$.receipts') r WHERE ACTUAL_DATE_VALID ORDER BY value
+ )) actual_dates
+ FROM intake_batches b
+), reception_dates AS (
+ SELECT b.id,
+ CASE WHEN json_array_length(d.actual_dates)>0 THEN d.actual_dates
+      WHEN ORIGINAL_DATE_VALID THEN json_array(trim(b.intake_date)) ELSE '[]' END dates,
+ CASE WHEN json_array_length(d.actual_dates)>0 THEN 'actual'
+      WHEN ORIGINAL_DATE_VALID THEN 'original' ELSE 'missing' END source
+ FROM intake_batches b JOIN batch_actual_dates d ON d.id=b.id
 )
 """
-JOIN = " FROM intake_batches b LEFT JOIN applications a ON a.code=upper(trim(b.iacuc))"
+BASE = BASE.replace("ACTUAL_DATE_VALID", sql_valid_date("trim(json_extract(r.value,'$.actualReceiptDate'))"))
+BASE = BASE.replace("ORIGINAL_DATE_VALID", sql_valid_date("trim(b.intake_date)"))
+JOIN = (
+    " FROM intake_batches b LEFT JOIN applications a ON a.code=upper(trim(b.iacuc)) JOIN reception_dates d ON d.id=b.id"
+)
 
 
 def context(conn):
@@ -50,14 +70,11 @@ def clause(filters, *, exclude=""):
             conditions = []
             if dates:
                 conditions.append(
-                    "EXISTS (SELECT 1 FROM json_each(b.payload,'$.receipts') r "
-                    "WHERE json_extract(r.value,'$.actualReceiptDate') IN (" + ",".join("?" for _ in dates) + "))"
+                    "EXISTS (SELECT 1 FROM json_each(d.dates) r "
+                    "WHERE r.value IN (" + ",".join("?" for _ in dates) + "))"
                 )
             if "" in selected:
-                conditions.append(
-                    "NOT EXISTS (SELECT 1 FROM json_each(b.payload,'$.receipts') r "
-                    "WHERE coalesce(json_extract(r.value,'$.actualReceiptDate'),'')!='')"
-                )
+                conditions.append("json_array_length(d.dates)=0")
             parts.append("(" + " OR ".join(conditions) + ")")
             values.extend(dates)
             continue
@@ -77,12 +94,12 @@ def page(conn, source, params):
     count = conn.execute(BASE + "SELECT count(*)" + JOIN + " WHERE " + where, [source["json"], *values]).fetchone()[0]
     order = FIELDS.get(params["sortKey"], "b.intake_date")
     if params["sortKey"] == "receiptDate":
-        order = "(SELECT max(json_extract(value,'$.actualReceiptDate')) FROM json_each(b.payload,'$.receipts'))"
+        order = "(SELECT max(value) FROM json_each(d.dates))"
     direction = "ASC" if params["sortDir"] == "asc" else "DESC"
     projection = ",".join(f"'{key}',{expr}" for key, expr in FIELDS.items())
     extra = ",".join(
         f"'{key}',json_extract(b.payload,'$.{key}')"
-        for key in ("strainRaw", "strainStandard", "specification", "receipts", "species")
+        for key in ("strainRaw", "strainStandard", "specification", "receipts", "species", "intakeDate")
     )
     sql = BASE + f"SELECT b.id,b.updated_at,a.application,json_object({projection},{extra}) summary" + JOIN
     rows = conn.execute(
@@ -95,8 +112,8 @@ def page(conn, source, params):
 def filter_options(conn, source, column, filters):
     where, values = clause(filters, exclude=column)
     if column == "receiptDate":
-        sql = BASE + "SELECT json_extract(r.value,'$.actualReceiptDate') value,count(DISTINCT b.id) count" + JOIN
-        sql += " LEFT JOIN json_each(b.payload,'$.receipts') r"
+        sql = BASE + "SELECT r.value value,count(DISTINCT b.id) count" + JOIN
+        sql += " LEFT JOIN json_each(d.dates) r"
         sql += f" WHERE {where} GROUP BY value ORDER BY value"
     else:
         sql = BASE + f"SELECT coalesce({FIELDS[column]},'') value,count(*) count" + JOIN

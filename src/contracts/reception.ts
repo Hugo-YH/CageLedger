@@ -21,6 +21,7 @@ export interface ReceptionRecord {
   updatedAt: string;
   quantity: number | null;
   receiptDates: string[];
+  receiptDateSource?: "actual" | "original" | "missing";
   receipts?: Array<{ id: string; actualReceiptDate: string }>;
   registrationUpdatedAt?: string | null;
   registeredQuantity?: number | null;
@@ -159,6 +160,7 @@ export interface ReceptionRegistrationLine {
   purchaseOrderNo: string;
   batchNo: string;
   actualReceiptDate: string;
+  originalReceiptDate?: string;
   strain: string;
   specification: string;
   sex: string;

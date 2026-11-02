@@ -47,6 +47,9 @@ test("reception list uses received batches, previews sources and downloads the r
     await openNavigationEntry(page, "接收管理", "接收列表");
     const region = page.getByRole("region", { name: "接收批次列表" });
     await expect(region.getByText(id, { exact: true })).toBeVisible();
+    const historicalRow = region.locator("tr", { hasText: id });
+    await expect(historicalRow).toContainText("2026-10-30");
+    await expect(historicalRow).toContainText("原记录，待确认");
     await expect(region.getByText(pendingId, { exact: true })).toHaveCount(0);
     await expect(region.getByText("预约旧负责人不能回填", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "导出Excel", exact: true })).toBeDisabled();
@@ -96,13 +99,16 @@ test("reception list uses received batches, previews sources and downloads the r
       [
         "scripts/run_python.mjs",
         "-c",
-        "import sys,openpyxl; s=openpyxl.load_workbook(sys.argv[1]).worksheets[0]; print(s['B4'].value); print(s['P4'].value)",
+        "import sys,openpyxl; s=openpyxl.load_workbook(sys.argv[1]).worksheets[0]; print(s['B4'].value); print(s['P4'].value); print(s['H4'].value); print(s['H4'].fill.fgColor.rgb); print(s['H4'].comment.text)",
         file,
       ],
       { encoding: "utf8" },
     );
     expect(cells).toContain("00001234567890123456789");
     expect(cells).toContain("6");
+    expect(cells).toContain("2026-10-30");
+    expect(cells).toContain("FFFFEB9C");
+    expect(cells).toContain("尚未确认");
     await expect(dialog).toBeHidden();
     await expect(page.getByText("接收记录 Excel 已导出", { exact: true }).last()).toBeVisible();
     expect(await (await page.request.get(`/api/intake-batches/${id}`)).json()).toEqual(before);

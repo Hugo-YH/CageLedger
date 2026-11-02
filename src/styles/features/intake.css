@@ -1,4 +1,9 @@
 /* Ant component composition for intake and scanner workspaces. */
+[data-feature="intake"] .intake-receipt-confirm-table table {
+  /* The date editor must not inherit the legacy mobile table's 640px minimum. */
+  min-width: 0;
+}
+
 [data-feature="intake"] .intake-entry-form,
 [data-feature="intake"] .intake-entry-card,
 [data-feature="intake"] .intake-batch-list-card,
