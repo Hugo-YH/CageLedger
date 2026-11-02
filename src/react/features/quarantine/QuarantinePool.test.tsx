@@ -6,6 +6,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { QuarantinePool } from "./QuarantinePool";
 
 const api = vi.hoisted(() => ({ load: vi.fn() }));
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
 vi.mock("../../api/session", () => ({
   useSession: () => ({ data: { user: { id: "admin", role: "admin", roomIds: [] } } }),
 }));
@@ -19,6 +26,7 @@ vi.mock("../../api/quarantine", () => ({
       placeholderData: (previous) => previous,
     }),
 }));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
 vi.mock("../../components/ui", () => ({
   CommandBar: ({ title, filters, primaryAction }: { title: string; filters: ReactNode; primaryAction: ReactNode }) => (
     <div>

@@ -166,7 +166,9 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
         auditLogs: expect.arrayContaining([expect.objectContaining({ action: "intake_batch.duplicate_confirmed" })]),
       }),
     );
-    await expect(page.getByText(`待接收批次 ${batchNo} 已保存，可继续录入下一批。`, { exact: true })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "待接收批次已保存" })).toContainText(
+      `${batchNo}，可继续录入下一批。`,
+    );
   } finally {
     await Promise.all((await duplicateIds()).map((id) => page.request.delete(`/api/intake-batches/${id}`)));
   }
@@ -217,7 +219,13 @@ test("editing excludes the current batch and asks for confirmation after changin
     const editor = page.getByRole("dialog", { name: "编辑待接收批次", exact: true });
     await editor.getByLabel("项目负责人", { exact: true }).fill("编辑后负责人");
     await editor.getByRole("button", { name: "保存待接收批次", exact: true }).click();
-    await expect(editor).toContainText("待接收批次已更新。");
+    await expect(page.getByRole("status").filter({ hasText: "待接收批次已更新" })).toBeVisible();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "待接收批次已更新" })
+      .getByRole("button", { name: "关闭通知" })
+      .click();
+    await expect(page.getByRole("status").filter({ hasText: "待接收批次已更新" })).toBeHidden();
     await expect(page.getByRole("dialog", { name: "发现重复待接收批次", exact: true })).toBeHidden();
 
     await editor.getByLabel("批次号", { exact: true }).fill(firstBatchNo);

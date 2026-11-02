@@ -239,7 +239,7 @@ test("finding actions serialize requests, keep failed input and announce success
   await dialog.getByRole("button", { name: "保存处置", exact: true }).click();
   await expect.poll(() => saves).toBe(2);
   await actionRoute?.fulfill({ json: { item: finding } });
-  await expect(dialog.getByRole("status")).toContainText("处置记录已保存");
+  await expect(page.getByRole("status").filter({ hasText: "处置记录已保存" })).toBeVisible();
   await expect(page.getByRole("alert").filter({ hasText: "巡检信息更新失败" })).toBeAttached();
   await expect(dialog.getByLabel("关闭结论", { exact: true })).toHaveValue("复查记录仍需核对");
   await dialog.getByRole("button", { name: "确认关闭", exact: true }).click();

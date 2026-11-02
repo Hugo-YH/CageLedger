@@ -10,7 +10,7 @@ export function DateInput({
   id,
   max,
   required = false,
-  disabled = false,
+  disabled,
   picker = "date",
 }: {
   label: string;

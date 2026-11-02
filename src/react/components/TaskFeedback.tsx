@@ -1,4 +1,4 @@
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { hashKey, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { App, Progress } from "antd";
 import { type ReactNode, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
 
@@ -28,7 +28,15 @@ function createFeedbackScope(client: QueryClient) {
   return {
     snapshot,
     subscribe: (listener: () => void) =>
-      client.getQueryCache().subscribe(() => {
+      client.getQueryCache().subscribe((event) => {
+        // Observer events can fire while another component is rendering. Only
+        // session data changes can invalidate the owner of these notifications.
+        if (
+          !["added", "updated", "removed"].includes(event.type) ||
+          event.query.queryHash !== hashKey(queryKeys.session)
+        ) {
+          return;
+        }
         snapshot();
         listener();
       }),

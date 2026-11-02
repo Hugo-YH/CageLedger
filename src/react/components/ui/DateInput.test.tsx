@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Form } from "antd";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DateInput } from "./DateInput";
@@ -53,3 +54,21 @@ it.each([
     await waitFor(() => expect(screen.getByLabelText("已确认日期")).toHaveTextContent(typed));
   },
 );
+
+it("inherits the form's pending state and restores editing after completion", () => {
+  const onChange = vi.fn();
+  const { rerender } = render(
+    <Form disabled>
+      <DateInput label="复查日期" value="2026-11-02" onChange={onChange} />
+    </Form>,
+  );
+  expect(screen.getByLabelText("复查日期")).toBeDisabled();
+  rerender(
+    <Form disabled={false}>
+      <DateInput label="复查日期" value="2026-11-02" onChange={onChange} />
+    </Form>,
+  );
+  expect(screen.getByLabelText("复查日期")).toBeEnabled();
+  expect(screen.getByLabelText("复查日期")).toHaveValue("2026-11-02");
+  expect(onChange).not.toHaveBeenCalled();
+});

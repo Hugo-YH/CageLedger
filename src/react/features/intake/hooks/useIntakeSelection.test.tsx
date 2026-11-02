@@ -10,6 +10,7 @@ import { useIntakeSelection } from "./useIntakeSelection";
 const { info } = vi.hoisted(() => ({ info: vi.fn() }));
 vi.mock("antd", () => ({ App: { useApp: () => ({ message: { info } }) } }));
 vi.mock("../../../api/intake", () => ({ listAllIntakeBatchSummaries: vi.fn() }));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => ({ message: { info } }) }));
 const items = ["a", "b"].map((id) => ({ ...createIntakeDraft("测试"), id }));
 const params = { limit: 10, offset: 0 };
 

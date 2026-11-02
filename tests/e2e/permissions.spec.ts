@@ -14,7 +14,7 @@ test("admin can create infrastructure and manage a room account", async ({ page 
   await page.getByLabel("饲养间名称", { exact: true }).fill(roomName);
   await page.getByLabel("区域", { exact: true }).fill("E2E 区域");
   await page.getByRole("button", { name: "保存饲养间", exact: true }).click();
-  await expect(page.getByText(roomName, { exact: true })).toBeVisible();
+  await expect(page.locator("#root").getByText(roomName, { exact: true })).toBeVisible();
   await openSettingsView(page, "账号管理");
   await page.getByLabel("登录名", { exact: true }).fill("e2e_room_admin");
   await page.getByLabel("显示姓名", { exact: true }).fill("E2E 房间管理员");

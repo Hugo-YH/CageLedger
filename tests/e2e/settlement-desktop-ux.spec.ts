@@ -146,7 +146,9 @@ test("settlement desktop partial batch failure retains only failures for confirm
   const retry = confirm.getByRole("button", { name: /发起 1 个流程$/ });
   await expect(retry).not.toHaveClass(/ant-btn-loading/);
   await retry.click();
-  await expect(page.getByText("已发起 1 个结算流程，可到单据跟踪继续处理。", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "结算流程已批量发起" })).toContainText(
+    "已发起 1 个结算流程。",
+  );
   expect(writes).toEqual([data.items[0].pi, data.items[1].pi, data.items[1].pi]);
   await expect(second).not.toBeChecked();
 });

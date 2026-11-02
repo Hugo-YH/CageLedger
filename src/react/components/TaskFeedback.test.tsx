@@ -30,6 +30,19 @@ describe("TaskFeedbackProvider", () => {
     expect(result.current).toBe(previous);
   });
 
+  it("does not notify the feedback subscriber when unrelated queries change", () => {
+    const { result } = renderHook(useTaskFeedback, { wrapper: Wrapper });
+    const previous = result.current;
+    const readSession = vi.spyOn(client, "getQueryData");
+    act(() => {
+      client.setQueryData(["rooms"], [{ id: "room-a" }]);
+      client.removeQueries({ queryKey: ["rooms"] });
+    });
+    expect(readSession).not.toHaveBeenCalled();
+    expect(result.current).toBe(previous);
+    readSession.mockRestore();
+  });
+
   it.each(["complete", "fail"] as const)("releases a task after %s and ignores late updates", (finish) => {
     const { result } = renderHook(useTaskFeedback, { wrapper: Wrapper });
     const id = result.current.start({ title: "导出", detail: "处理中", progress: 0 });

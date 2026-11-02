@@ -367,8 +367,10 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
     .getByRole("button", { name: "预览结算单" })
     .click();
   const previewModal = page.locator(".settlement-preview-modal");
+  await expect(previewModal).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
   await expect(previewModal.getByRole("button", { name: /撤销|撤回/ })).toHaveCount(0);
   await previewModal.locator(".ant-modal-close").click();
+  await expect(previewModal).toBeHidden();
   await page
     .getByRole("row", { name: /E2E 已发起负责人/ })
     .getByRole("checkbox", { name: `选择 E2E 已发起负责人 ${month} 结算项` })

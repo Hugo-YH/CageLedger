@@ -144,7 +144,7 @@ test("monthly summary retry keeps its month and reports only the current export 
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/\.xlsx$/);
   await expect(month).toHaveValue(LIST_MONTH);
-  await expect(summary.getByRole("status")).toContainText("已开始下载");
+  await expect(page.getByRole("status").filter({ hasText: "月度汇总已生成" })).toContainText("已开始下载");
   expect(attempts).toBe(2);
 });
 

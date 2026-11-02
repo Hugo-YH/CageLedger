@@ -101,7 +101,7 @@ test("reception notes export Word by inclusive dates without selecting or changi
     }
     expect(content).not.toContain("预约原文：");
     expect(content).not.toContain("签收：");
-    await expect(modal.getByRole("status")).toContainText("已下载");
+    await expect(page.getByRole("status").filter({ hasText: "接收汇总 Word 已生成，下载已开始" })).toBeVisible();
     const after = await Promise.all(
       ids.map(async (id) => (await page.request.get(`/api/intake-batches/${id}`)).json()),
     );

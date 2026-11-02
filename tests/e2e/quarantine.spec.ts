@@ -136,7 +136,9 @@ for (const size of [
       await page
         .locator('input[type="file"]')
         .setInputFiles({ name: "原始记录.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\n") });
-      await expect(page.getByText("原始记录.pdf", { exact: true })).toBeVisible();
+      await expect(
+        page.getByLabel("寄生虫检测", { exact: true }).getByText("原始记录.pdf", { exact: true }),
+      ).toBeVisible();
       await expect(page.getByRole("button", { name: "下载 原始记录.pdf", exact: true })).toBeVisible();
       await page.getByRole("button", { name: "返回批次", exact: true }).click();
       await expect(page.getByRole("button", { name: "编辑检测", exact: true })).toBeVisible();
@@ -144,9 +146,12 @@ for (const size of [
         await page.locator(".quarantine-test-detail .ant-tabs-nav-more").click();
         await page.getByRole("option", { name: "原始资料", exact: true }).click();
       } else {
-        await page.getByRole("tab", { name: "原始资料", exact: true }).click();
+        await page.getByRole("tab", { name: "原始资料", exact: true }).focus();
+        await page.keyboard.press("Enter");
       }
-      await expect(page.getByText("原始记录.pdf", { exact: true })).toBeVisible();
+      await expect(
+        page.getByLabel("寄生虫检测", { exact: true }).getByText("原始记录.pdf", { exact: true }),
+      ).toBeVisible();
       await expect(page.getByRole("button", { name: "下载 原始记录.pdf", exact: true })).toBeVisible();
     });
   });

@@ -109,6 +109,11 @@ test("individual people filters and editing preserve raw intake names", async ({
     );
     await editor.getByRole("button", { name: "保存待接收批次", exact: true }).click();
     expect((await saving).ok()).toBe(true);
+    await page
+      .getByRole("status")
+      .filter({ hasText: "待接收批次已更新" })
+      .getByRole("button", { name: "关闭通知" })
+      .click();
     const saved = await page.request.get(`/api/intake-batches/${ids[2]}`);
     expect(((await saved.json()) as { item: { pi: string; owner: string } }).item).toMatchObject({
       pi: "陈晓卿；李壮；王小明",

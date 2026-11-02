@@ -143,7 +143,7 @@ for (const viewport of [
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toContain("实验动物自检检测报告");
     expect(await download.failure()).toBeNull();
-    await expect(dialog.getByRole("status")).toContainText("已下载");
+    await expect(page.getByRole("status").filter({ hasText: "检疫汇总 PDF 已生成，下载已开始" })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath("summary-export.png") });
     const after = await page.request.get(`/api/quarantine/batches/${batchId}`);
     expect(await after.json()).toEqual(original);
@@ -257,7 +257,9 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: "重试下载", exact: true }).click();
     expect((await download).suggestedFilename()).toBe("report.pdf");
-    await expect(page.getByRole("status").filter({ hasText: "已下载 report.pdf" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "检疫报告已生成，下载已开始" })).toContainText(
+      "report.pdf",
+    );
     await page.getByRole("button", { name: "编辑检测", exact: true }).click();
     const material = page.getByRole("textbox", { name: "样品名称", exact: true });
     await material.fill("测试材料");
@@ -302,10 +304,10 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
     await expect(material).toBeEnabled();
     failUpload = false;
     await page.locator('input[type="file"]').setInputFiles(file);
-    await expect(page.getByRole("status").filter({ hasText: "已上传 record.png" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "检疫原始资料已上传" })).toContainText("record.png");
     await page.getByRole("textbox", { name: "record.png 图注", exact: true }).fill("已核对原始资料");
     await page.getByRole("button", { name: "保存图片信息", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "已保存 record.png 图片信息" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "检疫图片信息已保存" })).toContainText("record.png");
     await expect(page.getByRole("textbox", { name: "record.png 图注", exact: true })).toHaveValue("已核对原始资料");
   });
 }

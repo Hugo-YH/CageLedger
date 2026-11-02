@@ -59,6 +59,7 @@ it("keeps a real export pending and removes a previous success before retrying",
   const button = screen.getByRole("button", { name: "导出月度汇总 Excel" });
   fireEvent.click(button);
   await waitFor(() => expect(operationFeedback.success).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(button).not.toHaveClass("ant-btn-loading"));
   vi.mocked(exportMonthlyBillingSummary).mockImplementationOnce(
     () =>
       new Promise((done) => {
@@ -67,6 +68,7 @@ it("keeps a real export pending and removes a previous success before retrying",
   );
   fireEvent.click(button);
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  await waitFor(() => expect(exportMonthlyBillingSummary).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(button).toHaveClass("ant-btn-loading"));
   resolve("第二次.xlsx");
   await waitFor(() => expect(operationFeedback.success).toHaveBeenCalledTimes(2));

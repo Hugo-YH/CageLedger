@@ -193,7 +193,7 @@ describe("cage workspace selection scope", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "批量编辑" })).toBeDisabled();
-    expect(info).toHaveBeenCalledOnce();
+    expect(operationFeedback.message.info).toHaveBeenCalledOnce();
   });
 
   it("clears single-selection and reservation targets when changing rooms or racks", () => {
@@ -202,7 +202,7 @@ describe("cage workspace selection scope", () => {
     expect(screen.getByRole("dialog", { name: "编辑 slot-1" })).toBeInTheDocument();
     changeScope("房间", "room-2");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(info).toHaveBeenCalledOnce();
+    expect(operationFeedback.message.info).toHaveBeenCalledOnce();
     changeScope("房间", "room-1");
     selectTask();
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
