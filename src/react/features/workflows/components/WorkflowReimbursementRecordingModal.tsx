@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
 import { UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Space, Typography, Upload } from "antd";
@@ -60,6 +61,7 @@ function WorkflowReimbursementRecordingForm({
   onCancel: () => void;
   onRecorded: () => void;
 }) {
+  const feedback = useOperationFeedback();
   const [form] = Form.useForm<RecordingValues>();
   const [attachment, setAttachment] = useState<BillingWorkflowAttachment | null>(null);
   const save = useAsyncFormAction("补录报销单失败，请重试");
@@ -99,7 +101,10 @@ function WorkflowReimbursementRecordingForm({
         return true;
       },
       (recorded) => {
-        if (recorded) onRecorded();
+        if (recorded) {
+          feedback.success("报销单补录已保存", `${target.month} · ${formatPersonNames(target.pi)}`);
+          onRecorded();
+        }
       },
     );
   }
@@ -108,7 +113,10 @@ function WorkflowReimbursementRecordingForm({
     if (save.pending) return false;
     await upload.run(
       () => uploadWorkflowAttachment(target.id, "reimbursement", file),
-      (uploaded) => setAttachment(uploaded ?? null),
+      (uploaded) => {
+        setAttachment(uploaded ?? null);
+        feedback.success("报销单扫描件已上传", uploaded?.originalName || file.name);
+      },
     );
     return false;
   }

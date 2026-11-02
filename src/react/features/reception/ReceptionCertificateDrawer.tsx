@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { Alert, App, Button, Empty, Flex, Form, Image, Select, Space, Spin, Typography } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
@@ -49,7 +50,8 @@ export function ReceptionCertificateDrawer({
   const upload = useUploadReceptionCertificate(record.batchId);
   const recognize = useRecognizeReceptionCertificate(record.batchId);
   const save = useSaveReceptionRegistration(record.batchId);
-  const { message, modal } = App.useApp();
+  const { modal } = App.useApp();
+  const feedback = useOperationFeedback();
   const [snapshot, setSnapshot] = useState<ReceptionRegistrationResponse | null>(null);
   const [lines, setLines] = useState<ReceptionCertificateLine[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -145,8 +147,10 @@ export function ReceptionCertificateDrawer({
       setPendingRun(run);
       if (run.status === "completed" && run.result) {
         const additions = run.result.lines.map((line) => ({ ...line, id: crypto.randomUUID() }));
-        if (additions.length) changeLines([...lines.filter((line) => line.attachmentId !== target.id), ...additions]);
-        else setError("未识别到可登记明细，原有草稿已保留。请核对原件后重试或手工填写。");
+        if (additions.length) {
+          changeLines([...lines.filter((line) => line.attachmentId !== target.id), ...additions]);
+          feedback.info("合格证明细已识别", "请对照原件核对明细与预约差异，核对并保存后才更新接收登记。");
+        } else setError("未识别到可登记明细，原有草稿已保留。请核对原件后重试或手工填写。");
       } else if (run.status === "failed") {
         setError(run.error || "AI 识别失败，原件和人工草稿已保留，可重试或手工填写。");
       }
@@ -238,7 +242,7 @@ export function ReceptionCertificateDrawer({
       await save.mutateAsync(saveRequest.current.request);
       if (!isCurrent()) return;
       setDirty(false);
-      void message.success("接收登记已人工确认保存");
+      feedback.success("接收登记已人工确认保存", record.batchNo);
       onSaved();
     } catch (reason) {
       if (isCurrent()) setError(errorMessage(reason, "登记保存失败，原件和编辑草稿已保留，请重试。"));

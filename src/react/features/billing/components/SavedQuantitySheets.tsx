@@ -1,8 +1,10 @@
+import { useLatestRequest } from "../../../hooks/useLatestRequest";
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Alert, Button, Checkbox, Flex, Pagination, Space, Tag, Typography, type TableProps } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { iacucExpiryStatus } from "../../../../domain/iacucValidity";
 import type { QuantitySheetListItem } from "../../../api/contracts";
 import { useIacucExpiry } from "../../../api/iacuc";
@@ -38,7 +40,10 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   useSelectionScope(JSON.stringify(filters), clear, selected.length > 0 || selectingAll);
   const [viewId, setViewId] = useState("");
   const [deleteId, setDeleteId] = useState("");
-  const [exportError, setExportError] = useState("");
+  const deleteRequest = useLatestRequest(Boolean(deleteId));
+  useEffect(() => deleteRequest.invalidate(), [deleteId, deleteRequest]);
+  const feedback = useOperationFeedback();
+  const [deleteError, setDeleteError] = useState("");
   const [printPending, setPrintPending] = useState(false);
   const pdfExport = usePdfExport();
   const iacucExpiry = useIacucExpiry();
@@ -131,7 +136,14 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
             <Button type="primary" disabled={blocked} onClick={() => onEdit(item.id)}>
               编辑
             </Button>
-            <Button danger disabled={blocked} onClick={() => setDeleteId(item.id)}>
+            <Button
+              danger
+              disabled={blocked}
+              onClick={() => {
+                setDeleteError("");
+                setDeleteId(item.id);
+              }}
+            >
               删除
             </Button>
           </Space>
@@ -157,24 +169,23 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
   );
 
   async function printSelected() {
-    setExportError("");
     setPrintPending(true);
     try {
       const { items: sheets } = await fetchQuantitySheetsForPrint(selected);
-      openQuantitySheetsPrint(sheets);
+      if (!openQuantitySheetsPrint(sheets)) throw new Error("打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。");
+      feedback.info("已打开打印窗口", `共 ${sheets.length} 份数量统计表`);
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : "无法加载待打印统计表");
+      feedback.error("准备打印失败", error instanceof Error ? error.message : "无法加载待打印统计表");
     } finally {
       setPrintPending(false);
     }
   }
 
   async function exportSelected() {
-    setExportError("");
     try {
       await pdfExport.exportPdf({ kind: "quantity_sheet", ids: selected });
-    } catch (error) {
-      setExportError(error instanceof Error ? error.message : "PDF 导出失败");
+    } catch {
+      // The shared task host already reports this PDF failure.
     }
   }
 
@@ -251,21 +262,6 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
           />
         ) : null}
         {selection.error ? <Alert role="alert" showIcon title={selection.error} type="error" /> : null}
-        {pdfExport.isExporting || exportError ? (
-          <Alert
-            role="status"
-            showIcon
-            title={
-              exportError ||
-              `PDF 正在后台生成，完成后会自动下载。${
-                pdfExport.job && pdfExport.job.total > 1
-                  ? `（${exportProgress(pdfExport.job?.completed, pdfExport.job?.total)}）`
-                  : ""
-              }`
-            }
-            type={exportError ? "error" : "info"}
-          />
-        ) : null}
         {data ? (
           <>
             <div
@@ -306,6 +302,8 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
               key={viewId}
               sheet={detail.data?.item}
               loading={detail.isPending}
+              error={detail.isError ? detail.error.message : ""}
+              onRetry={() => void detail.refetch()}
               onClose={() => setViewId("")}
             />
           ) : null}
@@ -323,9 +321,17 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
                     tone="destructive"
                     onClick={async () => {
                       if (blocked || remove.isPending) return;
-                      await remove.mutateAsync(deleteId);
-                      toggle(deleteId, false);
-                      setDeleteId("");
+                      const isCurrent = deleteRequest.begin();
+                      setDeleteError("");
+                      try {
+                        await remove.mutateAsync(deleteId);
+                        if (!isCurrent()) return;
+                        toggle(deleteId, false);
+                        feedback.success("数量统计表已删除");
+                        setDeleteId("");
+                      } catch (error) {
+                        if (isCurrent()) setDeleteError(error instanceof Error ? error.message : "删除失败，请重试。");
+                      }
                     }}
                   >
                     确认删除
@@ -337,6 +343,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
               title="删除数量统计表"
             >
               <p>删除后，该统计表将退出结算合表范围。</p>
+              {deleteError ? <Alert role="alert" type="error" title={deleteError} /> : null}
             </Modal>
           ) : null}
         </ModalPresence>

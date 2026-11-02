@@ -1,27 +1,33 @@
 import { CopyOutlined } from "@ant-design/icons";
-import { Button, Typography } from "antd";
+import { Alert, Button, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
 
 import type { SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 import { copyTextToClipboard } from "../../../utils/clipboard";
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 
 export function SettlementNoticeModal({
   email,
   pending,
+  error,
   onConfirm,
   onCancel,
 }: {
   email: SettlementNoticeEmail;
   pending: boolean;
+  error?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const feedback = useOperationFeedback();
   const confirmation = useLatestRequest();
   async function copyAndConfirm() {
     const isCurrent = confirmation.begin();
-    await copyTextToClipboard(`${email.subject}\n\n${email.body}`);
-    if (isCurrent()) onConfirm();
+    const copied = await copyTextToClipboard(`${email.subject}\n\n${email.body}`);
+    if (!isCurrent()) return;
+    if (!copied) feedback.message.error("未能自动复制邮件，请手动选择正文复制");
+    onConfirm();
   }
 
   return (
@@ -48,6 +54,7 @@ export function SettlementNoticeModal({
       width={720}
       onCancel={onCancel}
     >
+      {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       <pre aria-label="邮件正文" className="settlement-notice-body">
         {email.body}
       </pre>

@@ -1,7 +1,8 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useMemo, useState } from "react";
 import type { Key } from "react";
-import { App, Button, Card, Form, Segmented, Select, Tag, Tree, Typography } from "antd";
+import { Alert, Button, Card, Form, Segmented, Select, Tag, Tree, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
 import { PlusOutlined, SaveOutlined, SendOutlined } from "@ant-design/icons";
 
@@ -13,11 +14,7 @@ import {
   nextChildCode,
 } from "../../../domain/inspectionCatalog";
 import type { CatalogWorkingCopy, CatalogTreeNode } from "../../../domain/inspectionCatalog";
-import {
-  useAnimalInspectionCatalogDraft,
-  usePublishInspectionCatalogDraft,
-  useSaveInspectionCatalogDraft,
-} from "../../api/animalManagement";
+import { usePublishInspectionCatalogDraft, useSaveInspectionCatalogDraft } from "../../api/animalManagement";
 import { ApiError } from "../../api/client";
 import type { InspectionCatalogDraftResponse, InspectionCatalogNode, InspectionModuleCode } from "../../api/contracts";
 import { CommandBar, ModalPresence } from "../../components/ui";
@@ -31,8 +28,9 @@ export function InspectionCatalogEditor({
   draft: InspectionCatalogDraftResponse;
   onExit: () => void;
 }) {
-  const { message } = App.useApp();
-  const draftQuery = useAnimalInspectionCatalogDraft(true);
+  const feedback = useOperationFeedback();
+  const { message } = feedback;
+  const [operationError, setOperationError] = useState("");
   const saveDraft = useSaveInspectionCatalogDraft();
   const publishCatalog = usePublishInspectionCatalogDraft();
 
@@ -83,17 +81,8 @@ export function InspectionCatalogEditor({
     [working.modules],
   );
 
-  async function refreshFromServer() {
-    const fresh = await draftQuery.refetch();
-    if (!fresh.data) return;
-    setWorking({ modules: fresh.data.modules, nodes: fresh.data.nodes });
-    setSaved({ modules: fresh.data.modules, nodes: fresh.data.nodes });
-    setSavedUpdatedAt(fresh.data.version.updatedAt);
-    setSelectedCode("");
-    setFormState(null);
-  }
-
   async function handleSave(): Promise<boolean> {
+    setOperationError("");
     try {
       const payload = await saveDraft.mutateAsync({
         modules: working.modules,
@@ -105,10 +94,11 @@ export function InspectionCatalogEditor({
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        message.warning("草稿已被其他管理员更新，已刷新为最新内容，请重新检查后保存");
-        await refreshFromServer();
+        setOperationError(
+          "草稿已被其他管理员更新。当前编辑内容已保留，请记录需保留内容，退出后重新打开最新草稿，再核对保存。",
+        );
       } else {
-        message.error(error instanceof Error ? error.message : "保存草稿失败");
+        setOperationError(error instanceof Error ? error.message : "保存草稿失败");
       }
       return false;
     }
@@ -116,7 +106,7 @@ export function InspectionCatalogEditor({
 
   function handleSaveClick() {
     void (async () => {
-      if (await handleSave()) message.success("草稿已保存");
+      if (await handleSave()) feedback.success("巡检目录草稿已保存");
     })();
   }
 
@@ -133,12 +123,13 @@ export function InspectionCatalogEditor({
   }
 
   async function handleConfirmPublish() {
+    setOperationError("");
     try {
       await publishCatalog.mutateAsync();
-      message.success("目录已发布并生效");
+      feedback.success("巡检目录已发布并生效");
       onExit();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "发布失败");
+      setOperationError(error instanceof Error ? error.message : "发布失败");
     }
   }
 
@@ -210,6 +201,7 @@ export function InspectionCatalogEditor({
 
   return (
     <>
+      {operationError && !publishOpen ? <Alert showIcon type="error" title={operationError} /> : null}
       <CommandBar
         ariaLabel="巡检目录编辑操作"
         title="编辑巡检标准"
@@ -322,6 +314,7 @@ export function InspectionCatalogEditor({
           open={publishOpen}
           diff={publishDiff}
           pending={publishCatalog.isPending}
+          error={operationError}
           onCancel={() => setPublishOpen(false)}
           onConfirm={() => void handleConfirmPublish()}
         />

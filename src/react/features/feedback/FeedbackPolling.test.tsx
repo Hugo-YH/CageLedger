@@ -7,6 +7,15 @@ import type * as UiComponents from "../../components/ui";
 import { FeedbackView } from "./FeedbackView";
 import type { SessionUser } from "../../api/contracts";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const polling = vi.hoisted(() => ({ revision: 0, listeners: new Set<() => void>(), tableRenders: 0 }));
 
 Object.defineProperty(window, "matchMedia", {

@@ -83,15 +83,18 @@ vi.mock("./SettlementPreviewModal", () => ({
 
 vi.mock("./SettlementNoticeModal", () => ({
   SettlementNoticeModal: ({
+    error,
     pending,
     onCancel,
     onConfirm,
   }: {
     pending: boolean;
+    error?: string;
     onCancel: () => void;
     onConfirm: () => void;
   }) => (
     <section aria-label="结算通知">
+      {error ? <div role="alert">{error}</div> : null}
       <button type="button" disabled={pending} onClick={onConfirm}>
         确认发起
       </button>
@@ -248,10 +251,19 @@ describe("SettlementPreviewProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成通知邮件" }));
     await screen.findByLabelText("结算通知");
     fireEvent.click(screen.getByRole("button", { name: "确认发起" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("来源版本已变化"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("来源版本已变化"));
 
     fireEvent.click(screen.getByRole("button", { name: "取消通知" }));
     expect(screen.getByLabelText("预览 service")).toHaveTextContent("审阅版本 v2");
     expect(requestJson).toHaveBeenCalledTimes(3);
   });
 });
+
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));

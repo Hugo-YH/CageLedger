@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
@@ -35,6 +36,7 @@ export function BatchEditor({
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
+  const feedback = useOperationFeedback();
   const [draft, setDraft] = useState<QuarantineBatch>(() =>
     initial
       ? { ...initial, batchNo: initial.batchNo ?? initial.name, notes: initial.notes ?? "" }
@@ -124,6 +126,7 @@ export function BatchEditor({
         method: initial ? "PUT" : "POST",
         body: { item: draft, expectedUpdatedAt: initial?.updatedAt },
       });
+      feedback.success("检疫批次已保存", draft.batchNo || draft.name);
       onSaved(draft.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存失败");

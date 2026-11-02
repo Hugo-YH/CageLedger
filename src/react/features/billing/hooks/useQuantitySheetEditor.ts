@@ -1,3 +1,5 @@
+import { useLatestRequest } from "../../../hooks/useLatestRequest";
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../../api/contracts";
 import { usePrincipalIdentities } from "../../../api/administration";
@@ -23,6 +25,7 @@ import { useQuantityIacuc } from "./useQuantityIacuc";
 const normalizeIacuc = (value: string) => value.trim().toUpperCase();
 
 export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved", editRequested = false) {
+  const feedback = useOperationFeedback();
   const [editingDialog, setEditingDialog] = useState(false);
   const metadataEnabled = mode === "entry" || editRequested || editingDialog;
   const roomsQuery = useQuantitySheetRooms(metadataEnabled);
@@ -52,6 +55,8 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
   const [confirmSave, setConfirmSave] = useState<QuantitySheet | null>(null);
+  const saveRequest = useLatestRequest(Boolean(confirmSave));
+  useEffect(() => saveRequest.invalidate(), [confirmSave, saveRequest]);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
   const selectedRoom = rooms.find((room) => room.id === draft.roomId);
@@ -247,8 +252,10 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       setNoticeKind("error");
       return;
     }
+    const isCurrent = saveRequest.begin();
     try {
       const response = await save.mutateAsync({ sheet: confirmSave, exists });
+      if (!isCurrent()) return;
       const normalized = normalizeQuantitySheet(response.item);
       const next = createQuantitySheet(normalized.month, user.displayName);
       iacucLookup.reset();
@@ -258,13 +265,15 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       setExists(false);
       setConfirmSave(null);
       if (mode === "saved") setEditingDialog(false);
-      setNotice(
+      setNotice("");
+      feedback.success(
+        "数量统计表已保存",
         unit === "cage_day" && !normalized.rows.some((row) => Number(row.animalCount || 0) > 0)
           ? `${normalized.month} · ${normalized.iacuc} 统计表已保存；当前按结余笼数计算饲养费，录入区已清空。`
           : `${normalized.month} · ${normalized.iacuc} 统计表已保存，录入区已清空。`,
       );
-      setNoticeKind("success");
     } catch (error) {
+      if (!isCurrent()) return;
       setNotice(error instanceof Error ? error.message : "保存失败");
       setNoticeKind("error");
       setConfirmSave(null);

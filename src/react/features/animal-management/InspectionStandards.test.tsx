@@ -4,6 +4,15 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { InspectionStandards } from "./InspectionStandards";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const api = vi.hoisted(() => ({ draftEnabled: vi.fn(), retry: vi.fn() }));
 vi.mock("../../api/animalManagement", () => ({
   useAnimalInspectionCatalog: () => ({

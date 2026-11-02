@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { useLatestRequest } from "../../../hooks/useLatestRequest";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
 import { Alert, Button, Card, Empty, Form, Input, Select, Space, Tag, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
@@ -23,6 +25,12 @@ const allocationStatusLabels: Record<string, string> = { draft: "草稿", confir
 const LOCAL_FILTER_COLUMNS = ["sourcePi", "fundingOwner", "iacuc", "fundBookNo", "status"] as const;
 
 export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; onOpenClaim: (id: string) => void }) {
+  const feedback = useOperationFeedback();
+  const activity = useLatestRequest();
+  const actionActive = useRef(false);
+  const [actionError, setActionError] = useState("");
+  const [reverseError, setReverseError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
   const claims = useReimbursementClaims({ ...PAGE, status: "all" });
   const obligations = useSettlementObligations({ ...PAGE });
   const [claimId, setClaimId] = useState("");
@@ -41,7 +49,83 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
   const lines = selected?.fundingLines || [];
   const selectedLine = lines.find((line) => line.id === lineId);
   const allocations = lines.flatMap((line) => line.allocations || []);
-  useEffect(() => setLineId(""), [claimId]);
+  useEffect(() => {
+    setLineId("");
+    setActionError("");
+    setReverseError("");
+    setRefreshError("");
+    setReverseTarget("");
+    setReverseReason("");
+    activity.invalidate();
+  }, [claimId, activity]);
+  const writePending = create.isPending || confirm.isPending || reverse.isPending;
+
+  async function refreshSelected(isCurrent = activity.begin(), completed = "") {
+    setRefreshError("");
+    try {
+      const result = await detail.refetch();
+      if (result?.isError) throw result.error;
+    } catch (error) {
+      if (isCurrent())
+        setRefreshError(
+          `${completed ? `${completed}，但` : ""}报销单详情刷新失败：${error instanceof Error ? error.message : "请重试读取，无需重复核销操作"}`,
+        );
+    }
+  }
+
+  async function createAllocation() {
+    if (actionActive.current) return;
+    actionActive.current = true;
+    const isCurrent = activity.begin();
+    setActionError("");
+    try {
+      await create.mutateAsync({ claimId, fundingLineId: lineId, obligationId, amount: Number(amount) });
+      if (!isCurrent()) return;
+      setAmount("");
+      feedback.success("核销草稿已创建", selected?.documentNumber);
+      await refreshSelected(isCurrent, "核销草稿已创建");
+    } catch (error) {
+      if (isCurrent()) setActionError(error instanceof Error ? error.message : "创建核销草稿失败，请核对后重试");
+    } finally {
+      actionActive.current = false;
+    }
+  }
+
+  async function confirmAllocation(id: string) {
+    if (actionActive.current) return;
+    actionActive.current = true;
+    const isCurrent = activity.begin();
+    setActionError("");
+    try {
+      await confirm.mutateAsync(id);
+      if (!isCurrent()) return;
+      feedback.success("核销分摊已确认", selected?.documentNumber);
+      await refreshSelected(isCurrent, "核销分摊已确认");
+    } catch (error) {
+      if (isCurrent()) setActionError(error instanceof Error ? error.message : "确认核销失败，请核对后重试");
+    } finally {
+      actionActive.current = false;
+    }
+  }
+
+  async function reverseAllocation() {
+    if (actionActive.current) return;
+    actionActive.current = true;
+    const isCurrent = activity.begin();
+    setReverseError("");
+    try {
+      await reverse.mutateAsync({ id: reverseTarget, reason: reverseReason });
+      if (!isCurrent()) return;
+      setReverseTarget("");
+      setReverseReason("");
+      feedback.success("核销分摊已撤销", selected?.documentNumber);
+      await refreshSelected(isCurrent, "核销分摊已撤销");
+    } catch (error) {
+      if (isCurrent()) setReverseError(error instanceof Error ? error.message : "撤销核销失败，请核对后重试");
+    } finally {
+      actionActive.current = false;
+    }
+  }
 
   function toggleSort(key: string) {
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
@@ -106,6 +190,16 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
 
   return (
     <section className="ledger-section reconciliation-section" aria-label="核销中心">
+      {actionError ? <Alert role="alert" showIcon type="error" title={actionError} /> : null}
+      {refreshError ? (
+        <Alert
+          role="alert"
+          showIcon
+          type="warning"
+          title={refreshError}
+          action={<Button onClick={() => void refreshSelected()}>重试读取详情</Button>}
+        />
+      ) : null}
       <Card className="reconciliation-form-card" size="small" title="创建核销草稿">
         <Form className="reconciliation-picker" layout="vertical">
           <Form.Item label="报销单">
@@ -160,17 +254,10 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
           </Form.Item>
           <Form.Item>
             <Button
-              disabled={!claimId || !lineId || !obligationId}
+              disabled={!claimId || !lineId || !obligationId || writePending}
               loading={create.isPending}
               type="primary"
-              onClick={() =>
-                void create
-                  .mutateAsync({ claimId, fundingLineId: lineId, obligationId, amount: Number(amount) })
-                  .then(() => {
-                    setAmount("");
-                    void detail.refetch();
-                  })
-              }
+              onClick={() => void createAllocation()}
             >
               创建草稿
             </Button>
@@ -238,13 +325,21 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
                   <Button
                     loading={confirm.isPending}
                     type="primary"
-                    onClick={() => void confirm.mutateAsync(item.id).then(() => void detail.refetch())}
+                    disabled={writePending}
+                    onClick={() => void confirmAllocation(item.id)}
                   >
                     确认
                   </Button>
                 ) : null}
                 {user.role === "admin" && item.status === "confirmed" ? (
-                  <Button danger onClick={() => setReverseTarget(item.id)}>
+                  <Button
+                    danger
+                    disabled={writePending}
+                    onClick={() => {
+                      setReverseError("");
+                      setReverseTarget(item.id);
+                    }}
+                  >
                     撤销
                   </Button>
                 ) : null}
@@ -267,14 +362,9 @@ export function ReconciliationPanel({ user, onOpenClaim }: { user: SessionUser; 
         open={Boolean(reverseTarget)}
         title="撤销核销"
         onCancel={() => setReverseTarget("")}
-        onOk={() =>
-          void reverse.mutateAsync({ id: reverseTarget, reason: reverseReason }).then(() => {
-            setReverseTarget("");
-            setReverseReason("");
-            void detail.refetch();
-          })
-        }
+        onOk={() => void reverseAllocation()}
       >
+        {reverseError ? <Alert role="alert" showIcon type="error" title={reverseError} /> : null}
         <Typography.Paragraph type="secondary">撤销后会恢复经费明细与结算应收余额。</Typography.Paragraph>
         <Form layout="vertical">
           <Form.Item label="撤销原因">

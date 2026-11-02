@@ -8,6 +8,7 @@ import { copyTextToClipboard } from "../../../utils/clipboard";
 import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
 
 const message = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => ({ message }) }));
 
 vi.mock("antd", () => ({
   App: { useApp: () => ({ message }) },

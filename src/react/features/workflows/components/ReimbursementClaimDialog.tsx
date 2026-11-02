@@ -1,6 +1,8 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
-import { useEffect, useState } from "react";
-import { Button, Form, Input, Select, Upload } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Button, Form, Input, Select, Upload } from "antd";
 
 import { uploadFile, usePrincipalIdentities } from "../../../api/administration";
 import { useReimbursementClaim, useSaveReimbursementClaim } from "../../../api/reimbursementLedger";
@@ -23,12 +25,26 @@ export function ReimbursementClaimDialog({
   user: SessionUser;
   onClose: () => void;
 }) {
+  const feedback = useOperationFeedback();
+  const activity = useLatestRequest();
+  const saving = useRef(false);
+  const uploadingFile = useRef(false);
+  const [saveError, setSaveError] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
   const save = useSaveReimbursementClaim();
   const identities = usePrincipalIdentities();
   const [draft, setDraft] = useState<ReimbursementClaim>(() => emptyClaim());
   const [uploading, setUploading] = useState(false);
   const effectiveClaimId = claimId || draft.id;
   const detail = useReimbursementClaim(effectiveClaimId);
+  useEffect(() => {
+    activity.invalidate();
+    setUploading(false);
+    setSaveError("");
+    setUploadError("");
+    setRefreshError("");
+  }, [claimId, activity]);
   useEffect(() => {
     if (detail.data?.item) setDraft(detail.data.item);
   }, [detail.data?.item]);
@@ -42,20 +58,53 @@ export function ReimbursementClaimDialog({
       ),
     }));
   const persist = async () => {
-    const response = await save.mutateAsync({
-      id: effectiveClaimId || undefined,
-      item: { ...draft, fundingLines: lines },
-    });
-    setDraft(response.item);
+    if (saving.current || uploadingFile.current) return;
+    saving.current = true;
+    const isCurrent = activity.begin();
+    setSaveError("");
+    try {
+      const response = await save.mutateAsync({
+        id: effectiveClaimId || undefined,
+        item: { ...draft, fundingLines: lines },
+      });
+      if (!isCurrent()) return;
+      setDraft(response.item);
+      feedback.success("报销单已保存", response.item.documentNumber);
+    } catch (error) {
+      if (isCurrent()) setSaveError(error instanceof Error ? error.message : "保存报销单失败，请重试");
+    } finally {
+      saving.current = false;
+    }
   };
+  async function refreshDetails(isCurrent = activity.begin(), afterUpload = false) {
+    setRefreshError("");
+    try {
+      const result = await detail.refetch();
+      if (result?.isError) throw result.error;
+    } catch (error) {
+      if (isCurrent())
+        setRefreshError(
+          `${afterUpload ? "附件已上传，但报销单详情刷新失败" : "报销单详情刷新失败"}：${error instanceof Error ? error.message : "请重试读取；无需重复上传"}`,
+        );
+    }
+  }
   const upload = async (file: File) => {
-    if (!effectiveClaimId) return;
+    if (!effectiveClaimId || uploadingFile.current || saving.current) return;
+    uploadingFile.current = true;
+    const isCurrent = activity.begin();
     setUploading(true);
+    setUploadError("");
+    setRefreshError("");
     try {
       await uploadFile(`/api/reimbursement-ledger/claims/${encodeURIComponent(effectiveClaimId)}/attachments`, file);
-      await detail.refetch();
+      if (!isCurrent()) return;
+      feedback.success("报销单附件已上传", file.name);
+      await refreshDetails(isCurrent, true);
+    } catch (error) {
+      if (isCurrent()) setUploadError(error instanceof Error ? error.message : "附件上传失败，请重试");
     } finally {
-      setUploading(false);
+      uploadingFile.current = false;
+      if (isCurrent()) setUploading(false);
     }
   };
   return (
@@ -74,6 +123,30 @@ export function ReimbursementClaimDialog({
         </Button>
       </div>
       <div className="modal-shell-body reimbursement-claim-body">
+        {saveError ? <Alert role="alert" showIcon type="error" title={saveError} /> : null}
+        {uploadError ? <Alert role="alert" showIcon type="error" title={uploadError} /> : null}
+        {refreshError ? (
+          <Alert
+            role="alert"
+            showIcon
+            type="warning"
+            title={refreshError}
+            action={
+              <Button disabled={uploading} onClick={() => void refreshDetails()}>
+                重试读取详情
+              </Button>
+            }
+          />
+        ) : null}
+        {detail.isError && !refreshError ? (
+          <Alert
+            role="alert"
+            showIcon
+            type="error"
+            title="报销单详情读取失败"
+            action={<Button onClick={() => void refreshDetails()}>重试读取详情</Button>}
+          />
+        ) : null}
         {detail.isPending && effectiveClaimId ? (
           <PageSkeleton compact label="报销单" rows={3} variant="detail" />
         ) : null}
@@ -179,7 +252,7 @@ export function ReimbursementClaimDialog({
                   void upload(file);
                   return false;
                 }}
-                disabled={uploading}
+                disabled={uploading || save.isPending}
                 maxCount={1}
                 showUploadList={false}
               >
@@ -235,7 +308,7 @@ export function ReimbursementClaimDialog({
       <div className="modal-shell-actions">
         <Button onClick={onClose}>取消</Button>
         {editable ? (
-          <Button loading={save.isPending} type="primary" onClick={() => void persist()}>
+          <Button disabled={uploading} loading={save.isPending} type="primary" onClick={() => void persist()}>
             保存报销单
           </Button>
         ) : null}

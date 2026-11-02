@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Empty, Space, Tag, Typography } from "antd";
@@ -11,6 +12,7 @@ import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
 
 export function RoomsView({ user }: { user: SessionUser }) {
+  const feedback = useOperationFeedback();
   const query = useInfrastructureStructure();
   const save = useSaveInfrastructure();
   const removeRoom = useDeleteRoom();
@@ -55,6 +57,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
     if (!roomDraft?.name.trim()) return;
     const exists = visibleRooms.some((room) => room.id === roomDraft.id);
     await save.mutateAsync(exists ? { roomUpdates: [roomDraft] } : { rooms: [roomDraft] });
+    feedback.success(exists ? "饲养间已保存" : "饲养间已创建", roomDraft.name);
   }
   async function persistRack() {
     if (!rackDraft?.roomId || rackDraft.rows < 1 || rackDraft.cols < 1) return;
@@ -78,6 +81,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
             roomUpdates: [{ ...room, rackCount: roomRacks.length + 1 } as CageRoom],
           },
     );
+    feedback.success(existing ? "笼架已保存" : "笼架已创建", rackDraft.name);
   }
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -91,6 +95,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
         roomUpdates: room ? [{ ...room, rackCount: Math.max(count - 1, 0) } as CageRoom] : [],
       });
     }
+    feedback.success(deleteTarget.kind === "room" ? "饲养间已删除" : "笼架已删除", deleteTarget.label);
   }
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">

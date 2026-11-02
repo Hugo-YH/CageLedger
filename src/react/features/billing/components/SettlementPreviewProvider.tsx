@@ -1,4 +1,3 @@
-import { Alert } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 
 import { settlementCandidateScope } from "../../../../domain/settlementCandidateScope";
@@ -7,6 +6,7 @@ import type { BillingStatementResponse, SessionUser, SettlementCandidate } from 
 import { useSettlementActions } from "../../../api/settlements";
 import { useAdvanceWorkflow } from "../../../api/workflows";
 import { ModalPresence } from "../../../components/ui";
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import type { usePdfExport } from "../hooks/usePdfExport";
 import { SettlementNoticeModal } from "./SettlementNoticeModal";
@@ -32,7 +32,7 @@ export function SettlementPreviewProvider({
     email: SettlementNoticeEmail;
   } | null>(null);
   const [notice, setNotice] = useState("");
-  const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
+  const feedback = useOperationFeedback();
   const [previewError, setPreviewError] = useState("");
   const [activeId, setActiveId] = useState("");
   const { preview, initiate, isPending } = useSettlementActions();
@@ -49,10 +49,6 @@ export function SettlementPreviewProvider({
     };
   }, []);
 
-  const showNotice = useCallback((message: string, kind: "success" | "error" | "info" = "info") => {
-    setNotice(message);
-    setNoticeKind(kind);
-  }, []);
   const previewStatement = preview.mutateAsync;
   const initiateStatement = initiate.mutateAsync;
 
@@ -79,13 +75,14 @@ export function SettlementPreviewProvider({
         if (!isCurrent()) return false;
         setSelected(candidate);
         setResult(response);
-        showNotice(persist ? "结算流程已发起，可到单据跟踪继续处理。" : "结算预览已生成。", "success");
+        if (persist) feedback.success("结算流程已发起", `${candidate.pi} · ${candidate.month}，可到单据跟踪继续处理。`);
+        setNotice("");
         return true;
       } catch (error) {
         if (isCurrent()) {
           const message = error instanceof Error ? error.message : "生成结算单失败";
           if (!persist) setPreviewError(message);
-          showNotice(message, "error");
+          if (persist) setNotice(message);
         }
         return false;
       } finally {
@@ -93,7 +90,7 @@ export function SettlementPreviewProvider({
         if (mounted.current) setActiveId("");
       }
     },
-    [initiateStatement, previewStatement, request, result, selected, showNotice, source],
+    [initiateStatement, previewStatement, request, result, selected, feedback, source],
   );
 
   async function prepareNoticeEmail(candidate: SettlementCandidate) {
@@ -118,9 +115,9 @@ export function SettlementPreviewProvider({
           staffPhone: user.phone,
         }),
       });
-      showNotice("请复制通知邮件并确认发起结算流程。", "info");
+      setNotice("");
     } catch (error) {
-      if (isCurrent()) showNotice(error instanceof Error ? error.message : "生成结算单失败", "error");
+      if (isCurrent()) setPreviewError(error instanceof Error ? error.message : "生成结算单失败");
     } finally {
       generating.current = false;
       if (mounted.current) setActiveId("");
@@ -143,15 +140,15 @@ export function SettlementPreviewProvider({
     await advance.mutateAsync({ workflowId: candidate.workflowId, toStatus: "statement_generated", note });
     setSelected(null);
     setResult(null);
-    showNotice(`${candidate.pi} ${candidate.month} 的结算流程已撤回，退回已生成状态。`, "success");
+    feedback.success("结算流程已撤回", `${candidate.pi} · ${candidate.month}，可重新发起结算。`);
   }
 
   async function exportSelected(candidate: SettlementCandidate) {
     setNotice("");
     try {
       await exportPdf({ kind: "billing_statement", items: [settlementCandidateScope(candidate, source)] });
-    } catch (error) {
-      if (mounted.current) showNotice(error instanceof Error ? error.message : "PDF 导出失败", "error");
+    } catch {
+      // The shared PDF task owns the result.
     }
   }
 
@@ -186,15 +183,13 @@ export function SettlementPreviewProvider({
 
   return (
     <SettlementPreviewContext.Provider value={controller}>
-      {notice ? (
-        <Alert role={noticeKind === "error" ? "alert" : "status"} showIcon title={notice} type={noticeKind} />
-      ) : null}
       {children}
       <ModalPresence>
         {noticeEmail ? (
           <SettlementNoticeModal
             key={`notice:${noticeEmail.candidate.id}`}
             email={noticeEmail.email}
+            error={notice}
             pending={isPending}
             onCancel={() => {
               request.invalidate();
@@ -213,8 +208,6 @@ export function SettlementPreviewProvider({
             revertPending={advance.isPending}
             canWithdraw={canWithdrawCandidate(selected, user)}
             workflowStatus={selected.workflowStatus}
-            notice={notice}
-            noticeKind={noticeKind}
             pdfExporting={pdfExporting}
             result={result}
             selected={selected}

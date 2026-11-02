@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { Alert, Button, Select, Space, Tag } from "antd";
@@ -7,6 +8,7 @@ import { downloadQuarantine, useQuarantineDetail } from "../../api/quarantine";
 import { methodLabels, quarantineStatusColor } from "./shared";
 
 export function IntakeQuarantineStatus({ item }: { item: IntakeBatchListItem }) {
+  const feedback = useOperationFeedback();
   const [batchId, setBatchId] = useState("");
   const [error, setError] = useState("");
   const detail = useQuarantineDetail(batchId);
@@ -17,18 +19,37 @@ export function IntakeQuarantineStatus({ item }: { item: IntakeBatchListItem }) 
       <Space orientation="vertical" size={0}>
         <Tag color={quarantineStatusColor(quarantineStatus)}>{quarantineStatus}</Tag>
         {related.length > 0 && (
-          <Button icon={<ActionIcon name="info" />} size="small" type="link" onClick={() => setBatchId(related[0].id)}>
+          <Button
+            icon={<ActionIcon name="info" />}
+            size="small"
+            type="link"
+            onClick={() => {
+              setError("");
+              setBatchId(related[0].id);
+            }}
+          >
             检疫记录
           </Button>
         )}
       </Space>
-      <Modal open={Boolean(batchId)} title="关联检疫记录与报告" footer={null} onCancel={() => setBatchId("")}>
+      <Modal
+        open={Boolean(batchId)}
+        title="关联检疫记录与报告"
+        footer={null}
+        onCancel={() => {
+          setBatchId("");
+          setError("");
+        }}
+      >
         <div data-feature="quarantine">
           <Select
             aria-label="关联检疫批次"
             value={batchId}
             options={related.map((b) => ({ value: b.id, label: b.name }))}
-            onChange={setBatchId}
+            onChange={(id) => {
+              setError("");
+              setBatchId(id);
+            }}
           />
           {(error || detail.error) && <Alert type="error" title={error || detail.error?.message} />}
           {detail.data && (
@@ -41,7 +62,10 @@ export function IntakeQuarantineStatus({ item }: { item: IntakeBatchListItem }) 
                   className="quarantine-report-download"
                   key={report.id}
                   onClick={() => {
-                    void downloadQuarantine(`reports/${report.id}`).catch((e: Error) => setError(e.message));
+                    setError("");
+                    void downloadQuarantine(`reports/${report.id}`)
+                      .then((filename) => feedback.success("检疫报告已生成，下载已开始", filename))
+                      .catch((e: Error) => setError(e.message));
                   }}
                 >
                   {methodLabels[detail.data.tests.find((t) => t.id === report.testId)!.method]} · {report.number} · v

@@ -9,6 +9,7 @@ import { copyTextToClipboard } from "../../../utils/clipboard";
 import { useCopyProjectPeople } from "./useCopyProjectPeople";
 
 const message = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => ({ message }) }));
 vi.mock("antd", () => ({ App: { useApp: () => ({ message }) } }));
 vi.mock("../../../api/iacuc", () => ({ fetchIacucSearch: vi.fn() }));
 vi.mock("../../../utils/clipboard", () => ({ copyTextToClipboard: vi.fn() }));

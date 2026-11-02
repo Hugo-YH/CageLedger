@@ -184,7 +184,7 @@ export function IntakeEntryPanel({
             </Card>
           </Col>
         </Row>
-        {notice ? <Alert className="intake-notice" title={notice} showIcon type="info" /> : null}
+        {notice ? <Alert className="intake-notice" title={notice} role="alert" showIcon type="error" /> : null}
         <Divider />
         <Form component={false} layout="vertical" requiredMark>
           <Row gutter={[16, 16]}>

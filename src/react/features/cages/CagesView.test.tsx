@@ -9,6 +9,15 @@ import type * as CageWorkspaceComponents from "./components/CageWorkspaceCompone
 import type { PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
 import { CagesView } from "./CagesView";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const { reserve, save, info } = vi.hoisted(() => ({ reserve: vi.fn(), save: vi.fn(), info: vi.fn() }));
 const rooms = [
   { id: "room-1", name: "房间一" },

@@ -6,7 +6,7 @@ import { useQuantitySheetSelection } from "../features/billing/hooks/useQuantity
 import { useSelectionScope } from "./useSelectionScope";
 
 const info = vi.hoisted(() => vi.fn());
-vi.mock("antd", () => ({ App: { useApp: () => ({ message: { info } }) } }));
+vi.mock("./useOperationFeedback", () => ({ useOperationFeedback: () => ({ message: { info } }) }));
 
 const LocalScope = memo(function LocalScope() {
   const [scope, setScope] = useState("all");

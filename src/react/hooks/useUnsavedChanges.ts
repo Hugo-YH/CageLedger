@@ -1,4 +1,5 @@
 import { App } from "antd";
+import { useOperationFeedback } from "./useOperationFeedback";
 import { useCallback, useContext, useEffect, useRef } from "react";
 import { useNavigationGuard, type NavigationGuardOptions } from "../state/ui";
 import { DialogActivityContext } from "../state/dialogActivity";
@@ -6,7 +7,8 @@ import { DialogActivityContext } from "../state/dialogActivity";
 /** Protect the local draft without persisting sensitive form data in browser storage. */
 export function useUnsavedChanges(dirty: boolean, busy = false) {
   const active = useContext(DialogActivityContext);
-  const { modal, message } = App.useApp();
+  const { modal } = App.useApp();
+  const { message } = useOperationFeedback();
   const guardRef = useNavigationGuard();
   const pending = useRef<Promise<boolean> | null>(null);
   const approvedUnload = useRef(false);

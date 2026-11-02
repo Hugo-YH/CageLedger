@@ -1,4 +1,6 @@
-import { App, Button, Image, Input, Space, Tooltip, Upload } from "antd";
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
+import { Alert, Button, Image, Input, Space, Tooltip, Upload } from "antd";
+import { useState } from "react";
 import type { UploadProps } from "antd";
 import { DeleteOutlined, PlusOutlined, SwapOutlined } from "@ant-design/icons";
 
@@ -17,14 +19,19 @@ export function InspectionReferenceImages({
   onChange?: (rows: InspectionReferenceImageRow[]) => void;
   disabled?: boolean;
 }) {
+  const feedback = useOperationFeedback();
   const upload = useUploadInspectionCatalogImage();
-  const { message } = App.useApp();
+  const [uploadError, setUploadError] = useState("");
 
   function uploadImage(file: File, onDone: (url: string) => void) {
+    setUploadError("");
     upload.mutate(file, {
-      onSuccess: (result) => onDone(result.url),
+      onSuccess: (result) => {
+        onDone(result.url);
+        feedback.success("巡检参考图已上传", "已加入当前草稿，保存草稿并发布后生效。");
+      },
       onError: (error) => {
-        message.error(error instanceof Error ? error.message : "图片上传失败");
+        setUploadError(error instanceof Error ? error.message : "图片上传失败，请重新选择图片重试");
       },
     });
   }
@@ -48,6 +55,7 @@ export function InspectionReferenceImages({
 
   return (
     <div className="inspection-reference-images">
+      {uploadError ? <Alert showIcon type="error" title={uploadError} /> : null}
       {value.length === 0 && <div className="inspection-reference-images-empty">暂无参考图</div>}
       {value.map((row, index) => {
         const displayUrl = referenceImageDisplayUrl(row.url);

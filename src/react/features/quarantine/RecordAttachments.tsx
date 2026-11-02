@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Card, Image, Input, InputNumber, Select, Space, Typography, Upload } from "antd";
@@ -15,6 +16,7 @@ type Props = {
   onDirty?: (id: string, dirty: boolean) => void;
 };
 export function RecordAttachments({ test, attachments, persist, onVersion, busy, onBusy, onDirty }: Props) {
+  const feedback = useOperationFeedback();
   const write = useQuarantineAttachmentWrite();
   const lock = useRef(false);
   const [error, setError] = useState("");
@@ -42,7 +44,8 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
         file,
       });
       onVersion?.(res.test);
-      setStatus(`已上传 ${file.name}`);
+      setStatus("");
+      feedback.success("检疫原始资料已上传", file.name);
     } catch (e) {
       setStatus("");
       setError(e instanceof Error ? e.message : "上传失败");
@@ -160,6 +163,7 @@ function AttachmentCard({
   const [remove, setRemove] = useState(false);
   const [saving, setSaving] = useState(false);
   const lock = useRef(false);
+  const feedback = useOperationFeedback();
   const write = useQuarantineAttachmentWrite();
   async function save(removed = false) {
     if (lock.current) return;
@@ -176,7 +180,8 @@ function AttachmentCard({
       });
       onVersion?.(res.test);
       setRemove(false);
-      onStatus(removed ? `已移除 ${a.name}` : `已保存 ${a.name} 图片信息`);
+      onStatus("");
+      feedback.success(removed ? "检疫附件已移除" : "检疫图片信息已保存", a.name);
     } catch (e) {
       onStatus("");
       setError(e instanceof Error ? e.message : "保存失败");
@@ -204,7 +209,10 @@ function AttachmentCard({
           icon={<ActionIcon name="download" />}
           type="link"
           onClick={() => {
-            void downloadQuarantine(`attachments/${a.id}`).catch((e: Error) => setError(e.message));
+            setError("");
+            void downloadQuarantine(`attachments/${a.id}`)
+              .then((filename) => feedback.success("检疫附件下载已开始", filename))
+              .catch((e: Error) => setError(e.message));
           }}
         >
           下载 {a.name}

@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button } from "antd";
 import { Modal } from "../../components/ui/Modal";
@@ -5,6 +6,7 @@ import { Modal } from "../../components/ui/Modal";
 import type { TechnicalServiceListItem, TechnicalServiceSheet } from "../../../contracts/technicalServices";
 import { useServiceDetail, useServiceList, useServiceMutation } from "../../api/technicalServices";
 import { queryKeys } from "../../api/queryKeys";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useListPageBounds } from "../../hooks/useListPageBounds";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -17,16 +19,18 @@ import { SavedServicesTable } from "./SavedServicesTable";
 import { PageSkeleton, PageState, Pager } from "../../components/WorkspaceUi";
 
 export function SavedServices() {
+  const feedback = useOperationFeedback();
   const [page, setPage] = useWorkspaceMemory("technical-services:saved:page", 1);
   const [pageSize, setPageSize] = useWorkspaceMemory("technical-services:saved:pageSize", 10);
   const [viewing, setViewing] = useState<TechnicalServiceListItem | null>(null);
   const [editing, setEditing] = useState<TechnicalServiceListItem | null>(null);
   const [editingSheet, setEditingSheet] = useState<TechnicalServiceSheet | null>(null);
   const [deleting, setDeleting] = useState<TechnicalServiceListItem | null>(null);
+  const deleteRequest = useLatestRequest(Boolean(deleting));
+  useEffect(() => deleteRequest.invalidate(), [deleting?.id, deleteRequest]);
   const viewingDetail = useServiceDetail(viewing?.id || "");
   const editingDetail = useServiceDetail(editing?.id || "");
   const [deleteError, setDeleteError] = useState("");
-  const [savedNotice, setSavedNotice] = useState("");
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [filters, setFilters] = useWorkspaceMemory<Record<string, string[]>>("technical-services:saved:filters", {});
@@ -89,7 +93,6 @@ export function SavedServices() {
     }
   }
   const openEditor = useCallback((sheet: TechnicalServiceListItem) => {
-    setSavedNotice("");
     setHighlightedRowId(null);
     setEditingSheet(null);
     setEditing(sheet);
@@ -98,7 +101,6 @@ export function SavedServices() {
     completedEditId.current = editing?.id || null;
     setEditing(null);
     setEditingSheet(null);
-    setSavedNotice("技术服务明细已保存。");
   }
   function restoreCompletedEditFocus() {
     const id = completedEditId.current;
@@ -108,28 +110,34 @@ export function SavedServices() {
     if (trigger && !reducedMotion && !query.isError) setHighlightedRowId(id);
     (trigger && !trigger.matches(":disabled") ? trigger : listRegionRef.current)?.focus();
   }
-  const openDelete = useCallback((sheet: TechnicalServiceListItem) => {
-    setHighlightedRowId(null);
-    setDeleteError("");
-    setDeleting(sheet);
-  }, []);
+  const openDelete = useCallback(
+    (sheet: TechnicalServiceListItem) => {
+      deleteRequest.invalidate();
+      setHighlightedRowId(null);
+      setDeleteError("");
+      setDeleting(sheet);
+    },
+    [deleteRequest],
+  );
   function closeDelete() {
+    deleteRequest.invalidate();
     setDeleteError("");
     setDeleting(null);
   }
   async function remove() {
     if (blocked || !deleting) return;
-    setSavedNotice("");
+    const isCurrent = deleteRequest.begin();
     try {
       await mutation.mutateAsync({ kind: "delete", sheet: deleting });
+      if (!isCurrent()) return;
+      feedback.success("技术服务明细已删除", `${deleting.month} · ${deleting.iacuc}`);
       setDeleting(null);
       setDeleteError("");
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "删除失败");
+      if (isCurrent()) setDeleteError(error instanceof Error ? error.message : "删除失败");
     }
   }
   useEffect(() => {
-    if (query.isError) setSavedNotice("");
     if (query.isError || reducedMotion) setHighlightedRowId(null);
   }, [query.isError, reducedMotion]);
   useEffect(() => {
@@ -140,15 +148,6 @@ export function SavedServices() {
   }, [editing, editingSheet, editingDetail.data, editingDetail.isFetching, editingDetail.isError]);
   return (
     <section className="panel technical-service-list-panel">
-      {savedNotice && !query.isError ? (
-        <Alert
-          closable={{ onClose: () => setSavedNotice("") }}
-          role="status"
-          showIcon
-          title={savedNotice}
-          type="success"
-        />
-      ) : null}
       {query.isError ? (
         <Alert
           showIcon

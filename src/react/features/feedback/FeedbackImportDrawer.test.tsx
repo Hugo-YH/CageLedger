@@ -3,6 +3,15 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { FeedbackImportDrawer } from "./FeedbackImportDrawer";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const api = vi.hoisted(() => ({ submit: vi.fn(), refetch: vi.fn() }));
 class ResizeObserverMock {
   observe() {}
@@ -61,6 +70,8 @@ afterEach(() => {
   cleanup();
   api.submit.mockReset();
   api.refetch.mockReset();
+  operationFeedback.success.mockClear();
+  operationFeedback.warning.mockClear();
 });
 
 function open() {
@@ -104,6 +115,8 @@ it("keeps per-issue failures selected and starts a fresh retry batch", async () 
   open();
   fireEvent.click(screen.getByRole("button", { name: "导入所选（1）" }));
   await waitFor(() => expect(screen.getByLabelText("导入结果")).toHaveTextContent("失败 1 条"));
+  expect(operationFeedback.warning).toHaveBeenCalledOnce();
+  expect(operationFeedback.success).not.toHaveBeenCalled();
   await waitFor(() => expect(screen.getByRole("button", { name: "导入所选（1）" })).not.toHaveClass("ant-btn-loading"));
   const first = api.submit.mock.calls[0][0].requestId;
   fireEvent.click(screen.getByRole("button", { name: "导入所选（1）" }));

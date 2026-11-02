@@ -5,6 +5,15 @@ import { FeedbackCreateDrawer, FeedbackDetailDrawer } from "./FeedbackView";
 import { ApiError } from "../../api/client";
 import { clearDiagnostics, recordDiagnosticError } from "../../diagnostics/collector";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const api = vi.hoisted(() => ({ create: vi.fn(), upload: vi.fn(), comment: vi.fn() }));
 
 class ResizeObserverMock {

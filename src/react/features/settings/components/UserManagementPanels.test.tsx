@@ -6,6 +6,15 @@ import type { CageRoom, ManagedUser } from "../../../api/contracts";
 import { UserCreateForm, UserList, UserSaveProvider } from "./UserManagementPanels";
 import { useUserSaveAction } from "./UserSaveContext";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const api = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
 vi.mock("../../../api/administration", () => ({ useSaveUser: () => api }));

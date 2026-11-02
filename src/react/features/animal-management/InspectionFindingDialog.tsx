@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { useId, useState } from "react";
 import { Alert, Button, Descriptions, Form, Input, Select, Space } from "antd";
 import { Modal } from "../../components/ui/Modal";
@@ -9,6 +10,7 @@ import { useAsyncFormAction } from "../../hooks/useAsyncFormAction";
 import { FINDING_STATUS_LABELS, findingLocation } from "./model";
 
 export function FindingDialog({ finding, onClose }: { finding: InspectionFindingSummary; onClose: () => void }) {
+  const feedback = useOperationFeedback();
   const formId = useId();
   const [status, setStatus] = useState<FindingStatus>(finding.status);
   const [actionNote, setActionNote] = useState(finding.actionNote || "");
@@ -18,17 +20,20 @@ export function FindingDialog({ finding, onClose }: { finding: InspectionFinding
   const update = useUpdateFinding();
   const resolve = useResolveFinding();
   const action = useAsyncFormAction("处置操作失败，请重试");
-  const [notice, setNotice] = useState("");
   async function save() {
-    setNotice("");
     await action.run(
       () => update.mutateAsync({ id: finding.id, status, actionNote, responsibleName, recheckDueAt }),
-      () => setNotice("处置记录已保存。"),
+      () => feedback.success("处置记录已保存"),
     );
   }
   async function closeFinding() {
-    setNotice("");
-    await action.run(() => resolve.mutateAsync({ id: finding.id, conclusion }), onClose);
+    await action.run(
+      () => resolve.mutateAsync({ id: finding.id, conclusion }),
+      () => {
+        feedback.success("异常处置已关闭");
+        onClose();
+      },
+    );
   }
   return (
     <Modal
@@ -112,7 +117,6 @@ export function FindingDialog({ finding, onClose }: { finding: InspectionFinding
         </Form.Item>
       </Form>
       {action.error ? <Alert role="alert" title={action.error} showIcon type="error" /> : null}
-      {notice ? <Alert role="status" title={notice} showIcon type="success" /> : null}
       <Alert
         className="inspection-action-note"
         description="医疗、安乐死与给药建议作为人工参考，处置前执行兽医与伦理审核。"

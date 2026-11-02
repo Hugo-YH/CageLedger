@@ -93,3 +93,5 @@ describe("document navigation draft protection", () => {
     expect(unloadIsBlocked()).toBe(false);
   });
 });
+
+vi.mock("./useOperationFeedback", () => ({ useOperationFeedback: () => ({ message: { info: feedback.info } }) }));

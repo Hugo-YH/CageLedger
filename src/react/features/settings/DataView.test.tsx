@@ -18,6 +18,15 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const state = vi.hoisted(() => ({
   data: undefined as { items: PrincipalIdentity[] } | undefined,
   isError: false,

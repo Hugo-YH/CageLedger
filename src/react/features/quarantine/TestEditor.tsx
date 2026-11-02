@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Anchor, Button, Card, Descriptions, Form, Typography } from "antd";
@@ -35,6 +36,7 @@ export function TestEditor({
   onCancel: () => void;
   onSaved: (test: QuarantineTest) => void;
 }) {
+  const feedback = useOperationFeedback();
   const [draft, setDraft] = useState<QuarantineTest>(() => initialDraft(initial));
   const [baseline, setBaseline] = useState<QuarantineTest>(() => initialDraft(initial));
   const version = useRef(initial.updatedAt);
@@ -137,6 +139,7 @@ export function TestEditor({
   async function finish() {
     try {
       await persist();
+      feedback.success("检疫检测记录已保存", methodLabels[draft.method]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "保存失败");
     }

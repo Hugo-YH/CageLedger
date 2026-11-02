@@ -4,6 +4,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { FeedbackCreateDrawer } from "./FeedbackCreateDrawer";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const api = vi.hoisted(() => ({ create: vi.fn(), upload: vi.fn() }));
 vi.mock("../../api/feedback", () => ({
   useCreateFeedback: () => ({ isPending: false, mutateAsync: api.create }),
@@ -37,6 +46,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   api.create.mockReset();
   api.upload.mockReset();
+  operationFeedback.success.mockClear();
+  operationFeedback.warning.mockClear();
 });
 
 function deferred<T>() {
@@ -79,6 +90,8 @@ it("marks validation as pending and prevents closing or duplicate submission", a
   });
   expect(api.create).toHaveBeenCalledTimes(1);
   expect(created).toHaveBeenCalledWith("created");
+  expect(operationFeedback.success).toHaveBeenCalledOnce();
+  expect(operationFeedback.success).toHaveBeenCalledWith("反馈已提交", undefined, "feedback:created:submission");
 });
 
 it("does not start a write after validation finishes on an unmounted form", async () => {
@@ -94,6 +107,7 @@ it("does not start a write after validation finishes on an unmounted form", asyn
   });
   expect(api.create).not.toHaveBeenCalled();
   expect(created).not.toHaveBeenCalled();
+  expect(operationFeedback.success).not.toHaveBeenCalled();
 });
 
 it("finishes an initiated write and its attachments without opening a stale detail drawer", async () => {

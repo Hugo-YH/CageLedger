@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useEffect, useState } from "react";
 import { Alert, Button, Select } from "antd";
@@ -13,6 +14,7 @@ import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 
 export function CagesView() {
+  const feedback = useOperationFeedback();
   const summary = useRooms();
   const rooms = summary.data?.items || [];
   const [roomId, setRoomId] = useState("");
@@ -29,6 +31,7 @@ export function CagesView() {
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [tasksOpen, setTasksOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [reservationError, setReservationError] = useState("");
   const slots = (data?.slots || []).filter((slot) => slot.rackId === selectedRack?.id);
   const selectedSlot = slots.find((slot) => slot.id === selectedSlotId) || null;
   const occupancies = data?.occupancies || [];
@@ -44,6 +47,7 @@ export function CagesView() {
 
   function clearSelection() {
     scopeOperations.invalidate();
+    setReservationError("");
     setSelectedSlotId("");
     setSelectedSlotIds([]);
     setSelectedTaskId("");
@@ -59,6 +63,7 @@ export function CagesView() {
   async function reserveSelected() {
     if (!selectedTask || !selectedSlot || !selectedRack || selectedSlot.status !== "empty") return;
     const isCurrent = scopeOperations.begin();
+    setReservationError("");
     // Capture the selected targets before the write; changing rooms only clears the UI selection.
     const task = selectedTask;
     const slot = selectedSlot;
@@ -66,11 +71,12 @@ export function CagesView() {
     try {
       await reserve.mutateAsync({ taskId: task.id, slotId: slot.id });
       if (isCurrent()) {
-        setNotice(`已为 ${task.batchNo} 预留笼位 ${code}。`);
+        setNotice("");
+        feedback.success("笼位已预留", `${task.batchNo} · ${code}`);
         clearSelection();
       }
     } catch (error) {
-      if (isCurrent()) setNotice(error instanceof Error ? error.message : "预留失败");
+      if (isCurrent()) setReservationError(error instanceof Error ? error.message : "预留失败");
     }
   }
   useEffect(() => {
@@ -233,6 +239,7 @@ export function CagesView() {
               <Legend tone="period-open" label="未填结束日期" />
               <Legend tone="period-overdue" label="超期饲养" />
             </div>
+            {reservationError ? <Alert role="alert" type="error" showIcon title={reservationError} /> : null}
             {notice ? (
               <div className="react-inline-notice" role="status">
                 {notice}
@@ -299,7 +306,6 @@ export function CagesView() {
             occupancy={currentOccupancy(selectedSlot.id, occupancies)}
             roomId={selectedRoomId}
             onClose={() => setSelectedSlotId("")}
-            onNotice={setNotice}
             beginOperation={scopeOperations.begin}
           />
         ) : null}
@@ -316,7 +322,8 @@ export function CagesView() {
             onClose={() => setBatchEditorOpen(false)}
             beginOperation={scopeOperations.begin}
             onDone={(message) => {
-              setNotice(message);
+              setNotice("");
+              feedback.success(message);
               setBatchEditorOpen(false);
               setSelectedSlotIds([]);
             }}

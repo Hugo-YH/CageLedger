@@ -1,6 +1,7 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
-import { App, Button, Empty, Popconfirm, Space, Tag } from "antd";
+import { Button, Empty, Popconfirm, Space, Tag } from "antd";
 import type { TableProps } from "antd";
 
 import type { ReimbursementClaim, SessionUser } from "../../../api/contracts";
@@ -15,7 +16,7 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const params = { ...PAGE, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
-  const { message } = App.useApp();
+  const feedback = useOperationFeedback();
   const query = useReimbursementClaims(params);
   const deleteClaim = useDeleteReimbursementClaim();
   const [deletingId, setDeletingId] = useState("");
@@ -25,9 +26,9 @@ export function ClaimsPanel({ user, onOpen }: { user: SessionUser; onOpen: (id: 
     setDeletingId(claimId);
     try {
       await deleteClaim.mutateAsync(claimId);
-      message.success("报销单已删除");
+      feedback.success("报销单已删除", items.find((item) => item.id === claimId)?.documentNumber);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除报销单失败");
+      feedback.error("删除报销单失败", error instanceof Error ? error.message : "请刷新核对后重试");
     } finally {
       setDeletingId("");
     }

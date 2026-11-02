@@ -1,3 +1,5 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { useTaskFeedback } from "../../../components/TaskFeedbackContext";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useListPageBounds } from "../../../hooks/useListPageBounds";
 import { queryKeys } from "../../../api/queryKeys";
@@ -14,7 +16,7 @@ import { useSettlementBatch } from "../../../api/useSettlementBatch";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useRetainedListData } from "../../../hooks/useRetainedListData";
 import { PageSkeleton, Pager } from "../../../components/WorkspaceUi";
-import { settlementExportProgress, usePdfExport } from "../hooks/usePdfExport";
+import { usePdfExport } from "../hooks/usePdfExport";
 import { useSettlementSelection } from "../hooks/useSettlementSelection";
 import { BatchStartConfirmModal } from "./BatchStartConfirmModal";
 import { BatchWithdrawConfirmModal } from "./BatchWithdrawConfirmModal";
@@ -48,7 +50,9 @@ export function SettlementCandidateList({
   const { selectedCandidates, allFilteredSelected, selectingAll } = selection;
   const [batchFailures, setBatchFailures] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
-  const [noticeKind, setNoticeKind] = useState<"success" | "error" | "info">("info");
+  const feedback = useOperationFeedback();
+  const tasks = useTaskFeedback();
+  const taskId = useRef<string | null>(null);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [batchWithdrawOpen, setBatchWithdrawOpen] = useState(false);
   const [batchAction, setBatchAction] = useState<"start" | "withdraw" | null>(null);
@@ -72,11 +76,13 @@ export function SettlementCandidateList({
     selectedCandidates.length > 0 || selectingAll,
   );
 
-  function showNotice(message: string, kind: "success" | "error" | "info" = "info") {
-    setBatchFailures([]);
-    setNotice(message);
-    setNoticeKind(kind);
-  }
+  useEffect(() => {
+    if (taskId.current && batch.total > 0)
+      tasks.update(taskId.current, {
+        detail: `已处理 ${batch.completed}/${batch.total} 项`,
+        progress: batch.total ? Math.round((batch.completed / batch.total) * 100) : 0,
+      });
+  }, [batch.completed, batch.total, tasks]);
 
   const params = useMemo<SettlementCandidateListParams>(
     () => ({
@@ -135,8 +141,8 @@ export function SettlementCandidateList({
         kind: "billing_statement",
         items: candidates.map((candidate) => settlementCandidateScope(candidate, source)),
       });
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "PDF 导出失败", "error");
+    } catch {
+      // PDF task feedback owns the final result.
     }
   }
 
@@ -146,13 +152,12 @@ export function SettlementCandidateList({
     setXlsxExporting(true);
     setNotice("");
     try {
-      showNotice(`正在导出 ${candidates.length > 1 ? `${candidates.length} 份` : ""}Excel…`, "info");
       const filename = await exportSettlementXlsx(
         candidates.map((candidate) => settlementCandidateScope(candidate, source)),
       );
-      showNotice(`已导出 Excel：${filename}`, "success");
+      feedback.success("结算 Excel 已生成", `${filename} 已开始下载。`);
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : "Excel 导出失败", "error");
+      feedback.error("结算 Excel 导出失败", error instanceof Error ? error.message : "请稍后重试");
     } finally {
       exportingXlsx.current = false;
       setXlsxExporting(false);
@@ -174,24 +179,31 @@ export function SettlementCandidateList({
     setBatchFailures([]);
     setNotice("");
     const verb = action === "start" ? "发起" : "撤回";
+    const id = tasks.start({ title: `正在批量${verb}结算流程`, detail: `共 ${candidates.length} 项`, progress: 0 });
+    taskId.current = id;
     try {
       const result = await batch.run(
         candidates.map((candidate) => ({ candidate, action, source: candidate.sourceType || source, note })),
       );
       selection.removeCompleted(new Set(result.completed.map((item) => item.candidate.id)));
       const failures = result.failures.map(({ item, message }) => `${item.candidate.pi}（${message}）`);
-      showNotice(
-        failures.length
-          ? `已${verb} ${result.completed.length} 个结算流程；${failures.length} 个未完成。${submittedScope === scopeRef.current ? "失败项仍保留选择。" : "筛选已改变，请在原范围核对结果。"}`
-          : action === "start"
-            ? `已发起 ${result.completed.length} 个结算流程，可到单据跟踪继续处理。`
-            : `已撤回 ${result.completed.length} 个结算流程，可重新发起结算。`,
-        failures.length ? "error" : "success",
-      );
+      const summary = `已${verb} ${result.completed.length} 个结算流程${failures.length ? `；${failures.length} 个未完成` : ""}。`;
+      if (failures.length) {
+        tasks.partial(id, summary, `批量${verb}部分完成`);
+        setNotice(
+          submittedScope === scopeRef.current
+            ? "失败项仍保留选择，请核对后重试。"
+            : "筛选已改变，请在原范围核对失败项。",
+        );
+      } else {
+        tasks.complete(id, summary, `结算流程已批量${verb}`);
+      }
       setBatchFailures(failures);
     } catch (error) {
-      showNotice(`批量结果未能同步，请刷新列表确认：${error instanceof Error ? error.message : "同步失败"}`, "error");
+      tasks.fail(id, "请刷新列表核对已处理结果，再决定是否重试。", "批量结果未能同步");
+      setNotice(error instanceof Error ? error.message : "同步失败");
     } finally {
+      taskId.current = null;
       batchActionRef.current = null;
       setBatchAction(null);
       setBatchConfirmOpen(false);
@@ -240,24 +252,18 @@ export function SettlementCandidateList({
         />
       ) : null}
       {selection.error ? <Alert role="alert" type="error" showIcon title={selection.error} /> : null}
-      {notice || pdfExport.isExporting || xlsxExporting || batchStarting || batchWithdrawing ? (
+      {notice ? (
         <Alert
-          title={
-            notice ||
-            (pdfExport.isExporting
-              ? settlementExportProgress(pdfExport.job?.completed, pdfExport.job?.total)
-              : xlsxExporting
-                ? "正在导出 Excel，完成后自动下载…"
-                : batchStarting
-                  ? `正在发起结算 ${batch.completed}/${batch.total}`
-                  : batchWithdrawing
-                    ? `正在撤回结算流程 ${batch.completed}/${batch.total}`
-                    : "")
+          title="批量操作待核对"
+          description={
+            <>
+              {notice}
+              <BatchFailureDetails key={batchFailures.join("|")} failures={batchFailures} />
+            </>
           }
-          description={<BatchFailureDetails key={batchFailures.join("|")} failures={batchFailures} />}
-          role={noticeKind === "error" ? "alert" : "status"}
+          role="alert"
           showIcon
-          type={notice ? (noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info") : "info"}
+          type="warning"
         />
       ) : null}
       <SettlementBatchToolbar

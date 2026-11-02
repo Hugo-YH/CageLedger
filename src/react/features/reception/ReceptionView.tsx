@@ -1,6 +1,6 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import {
   Alert,
-  App,
   Button,
   Card,
   Checkbox,
@@ -61,7 +61,8 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export function ReceptionView() {
-  const { message } = App.useApp();
+  const feedback = useOperationFeedback();
+  const { message } = feedback;
   const [offset, setOffset] = useState(0);
   const [limit, setLimit] = useState(20);
   const [sortKey, setSortKey] = useState<ReceptionSortKey>("receiptDate");
@@ -501,7 +502,7 @@ function ReceptionExportDialog({
   blocked: boolean;
   onClose: () => void;
 }) {
-  const { message } = App.useApp();
+  const feedback = useOperationFeedback();
   const { mutateAsync: preview } = usePreviewReceptions();
   const download = useExportReceptions();
   const [result, setResult] = useState<ReceptionPreviewResponse | null>(null);
@@ -526,14 +527,15 @@ function ReceptionExportDialog({
   async function exportExcel() {
     if (busy.current || !result || blocked) return;
     busy.current = true;
+    setError("");
     const isCurrent = begin();
     try {
       await download.mutateAsync({ ...request, expectedApplicationVersion: result.applicationVersion });
       if (!isCurrent()) return;
-      void message.success("接收记录 Excel 已导出");
+      feedback.success("接收记录 Excel 已生成，下载已开始");
       onClose();
     } catch (reason) {
-      if (isCurrent()) void message.error(errorMessage(reason, "Excel 导出失败，请重试。"));
+      if (isCurrent()) setError(errorMessage(reason, "Excel 导出失败，请重试。"));
     } finally {
       busy.current = false;
     }
@@ -591,6 +593,7 @@ function ReceptionExportDialog({
         )
       ) : (
         <Flex gap={16} vertical>
+          {error ? <Alert showIcon type="error" title={error} /> : null}
           <Typography.Text strong>
             已选择 {result.items.length} 个批次，Excel 共 {result.rowCount} 行
           </Typography.Text>

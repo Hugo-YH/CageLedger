@@ -75,3 +75,12 @@ it("preserves confirmation behavior when the clipboard fallback reports failure"
   });
   expect(onConfirm).toHaveBeenCalledOnce();
 });
+
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));

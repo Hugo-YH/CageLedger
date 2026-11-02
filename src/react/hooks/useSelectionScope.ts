@@ -1,10 +1,10 @@
-import { App } from "antd";
+import { useOperationFeedback } from "./useOperationFeedback";
 import { useEffect, useRef } from "react";
 
 /** Scope excludes pagination and ordering; callers invalidate in-flight selection requests in reset. */
 export function useSelectionScope(scopeKey: string, onReset: () => void, hasSelection: boolean) {
   const previousScope = useRef(scopeKey);
-  const { message } = App.useApp();
+  const { message } = useOperationFeedback();
   useEffect(() => {
     if (previousScope.current === scopeKey) return;
     previousScope.current = scopeKey;

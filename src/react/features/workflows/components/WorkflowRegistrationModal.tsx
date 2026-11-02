@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
 import { UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Input, Space, Switch, Tag, Typography, Upload } from "antd";
@@ -104,6 +105,7 @@ function WorkflowRegistrationForm({
   onRegistered: () => void;
 }) {
   const advance = useAdvanceWorkflow();
+  const feedback = useOperationFeedback();
   const [form] = Form.useForm<RegistrationValues>();
   const signedStatementReturned = Form.useWatch("signedStatementReturned", form);
   const reimbursementFormReturned = Form.useWatch("reimbursementFormReturned", form);
@@ -163,7 +165,10 @@ function WorkflowRegistrationForm({
         return true;
       },
       (registered) => {
-        if (registered) onRegistered();
+        if (registered) {
+          feedback.success("结算单交回登记已保存", `${target.month} · ${formatPersonNames(target.pi)}`);
+          onRegistered();
+        }
       },
     );
   }
@@ -175,6 +180,10 @@ function WorkflowRegistrationForm({
       (attachment) => {
         if (kind === "settlement") setSettlementAttachment(attachment ?? null);
         else setReimbursementAttachment(attachment ?? null);
+        feedback.success(
+          kind === "settlement" ? "结算单扫描件已上传" : "报销单扫描件已上传",
+          attachment?.originalName || file.name,
+        );
       },
     );
     return false;

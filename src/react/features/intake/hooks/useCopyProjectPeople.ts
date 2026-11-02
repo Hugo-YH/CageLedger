@@ -1,5 +1,5 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useQueryClient } from "@tanstack/react-query";
-import { App } from "antd";
 import { useRef, useState } from "react";
 
 import type { IntakeBatch } from "../../../api/contracts";
@@ -10,7 +10,7 @@ import { copyTextToClipboard } from "../../../utils/clipboard";
 
 export function useCopyProjectPeople() {
   const client = useQueryClient();
-  const { message } = App.useApp();
+  const { message } = useOperationFeedback();
   const latest = useLatestRequest();
   const busy = useRef(false);
   const [progress, setProgress] = useState<{ id: string; phase: "querying" | "copying" } | null>(null);

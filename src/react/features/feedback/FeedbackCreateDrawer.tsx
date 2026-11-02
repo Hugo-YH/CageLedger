@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { Alert, Button, Checkbox, Form, Input, Select, Space, Typography } from "antd";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useRef, useState } from "react";
@@ -28,6 +29,7 @@ export function FeedbackCreateDrawer({
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
+  const feedback = useOperationFeedback();
   const [form] = Form.useForm<Draft>();
   const create = useCreateFeedback();
   const requestId = useRef(crypto.randomUUID());
@@ -88,8 +90,14 @@ export function FeedbackCreateDrawer({
       setFiles(failed);
       if (failed.length) {
         setUploadError("反馈已提交，但部分截图上传失败。本地已保留，可重试。");
+        feedback.warning(
+          "反馈已提交，截图未全部上传",
+          `${failed.length} 张截图已保留，请在当前抽屉重试上传。`,
+          `feedback:${item.id}:submission`,
+        );
         return;
       }
+      feedback.success(createdId ? "反馈截图已补传" : "反馈已提交", undefined, `feedback:${item.id}:submission`);
       onCreated(item.id);
     } catch (error) {
       if (!isCurrent()) return;

@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
@@ -13,12 +14,24 @@ import { LedgerColumnTitle } from "./LedgerListShared";
 const PAGE = { limit: 20, offset: 0 };
 
 export function LegacyPanel({ user }: { user: SessionUser }) {
+  const feedback = useOperationFeedback();
+  const [migrationError, setMigrationError] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const params = { ...PAGE, sortKey: sort.key, sortDir: sort.dir, columnFilters: filters };
   const query = useLegacyReimbursements(params);
   const migrate = useMigrateLegacyReimbursement();
   const items = query.data?.items || [];
+
+  async function migrateRecord(id: string) {
+    setMigrationError("");
+    try {
+      await migrate.mutateAsync(id);
+      feedback.success("历史台账已迁入核销体系");
+    } catch (error) {
+      setMigrationError(error instanceof Error ? error.message : "历史台账迁入失败，请核对后重试");
+    }
+  }
 
   function toggleSort(key: string) {
     setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
@@ -75,7 +88,7 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
             icon={<ActionIcon name="import" />}
             type="primary"
             loading={migrate.isPending}
-            onClick={() => void migrate.mutateAsync(String(item.id))}
+            onClick={() => void migrateRecord(String(item.id))}
           >
             迁入
           </Button>
@@ -87,6 +100,7 @@ export function LegacyPanel({ user }: { user: SessionUser }) {
 
   return (
     <section className="ledger-section" aria-label="历史台账">
+      {migrationError ? <Alert showIcon role="alert" type="error" title={migrationError} /> : null}
       <Alert
         description="具备报销单号、经费本号及匹配结算应收的记录可由系统管理员迁入新核销体系。"
         title="历史台账保留只读展示"

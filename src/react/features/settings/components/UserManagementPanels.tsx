@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useEffect, useId, useRef, useState, memo, useCallback, useContext, type ReactNode } from "react";
 import { Alert, Button, Card, Checkbox, Collapse, Form, Input, Select, Space, Tag, Typography } from "antd";
 
@@ -27,6 +28,7 @@ const emptyDraft = {
 type UserDraft = typeof emptyDraft;
 
 export function UserSaveProvider({ children }: { children: ReactNode }) {
+  const feedback = useOperationFeedback();
   const save = useSaveUser();
   const mutation = useRef(save.mutateAsync);
   const inFlight = useRef<Promise<void> | null>(null);
@@ -35,18 +37,25 @@ export function UserSaveProvider({ children }: { children: ReactNode }) {
     mutation.current = save.mutateAsync;
   }, [save.mutateAsync]);
 
-  const saveUser = useCallback(async (nextPendingId: string, payload: UserSavePayload) => {
-    if (inFlight.current) throw new Error("另一个账号正在保存，请等待完成后再试。");
-    setPendingId(nextPendingId);
-    const pending = Promise.resolve(mutation.current(payload)).then(() => undefined);
-    inFlight.current = pending;
-    try {
-      await pending;
-    } finally {
-      inFlight.current = null;
-      setPendingId(null);
-    }
-  }, []);
+  const saveUser = useCallback(
+    async (nextPendingId: string, payload: UserSavePayload) => {
+      if (inFlight.current) throw new Error("另一个账号正在保存，请等待完成后再试。");
+      setPendingId(nextPendingId);
+      const pending = Promise.resolve(mutation.current(payload)).then(() => undefined);
+      inFlight.current = pending;
+      try {
+        await pending;
+        feedback.success(
+          payload.id ? "账号信息已保存" : "账号已创建",
+          payload.user.displayName || payload.user.username,
+        );
+      } finally {
+        inFlight.current = null;
+        setPendingId(null);
+      }
+    },
+    [feedback],
+  );
 
   return (
     <UserSaveActionContext.Provider value={saveUser}>

@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { intakePeople } from "../../../domain/intakePeople";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useQueryClient } from "@tanstack/react-query";
@@ -110,6 +111,7 @@ export function IntakeView({
   const [editing, setEditing] = useState(false);
   const [editingDialog, setEditingDialog] = useState(false);
 
+  const feedback = useOperationFeedback();
   const [notice, setNotice] = useState("");
   const [bulkNotice, setBulkNotice] = useState("");
   const [bulkNoticeKind, setBulkNoticeKind] = useState<"success" | "error" | "info">("info");
@@ -279,12 +281,14 @@ export function IntakeView({
     if (intent.exists) {
       selection.update([savedItem]);
       replaceDraft(normalizeIntakeBatch(savedItem, roomNames));
-      setNotice("待接收批次已更新。");
+      setNotice("");
+      feedback.success("待接收批次已更新", savedItem.batchNo);
       return true;
     }
     replaceDraft(createIntakeDraft(user.displayName, user.phone));
     setEditing(false);
-    setNotice(`待接收批次 ${savedItem.batchNo} 已保存，可继续录入下一批。`);
+    setNotice("");
+    feedback.success("待接收批次已保存", `${savedItem.batchNo}，可继续录入下一批。`);
     return true;
   }
 
@@ -300,7 +304,10 @@ export function IntakeView({
         parsed = { ...parsed, strainStandard: result.item || parsed.strainStandard };
       }
       const info = await applyParsedMessage(parsed, valid);
-      if (info) setNotice(recognitionNotice(info));
+      if (info) {
+        setNotice("");
+        feedback.info("预约消息已识别", recognitionNotice(info));
+      }
     } catch (error) {
       if (valid()) setNotice(error instanceof Error ? error.message : "本地识别失败，请重试。");
     }
@@ -325,7 +332,8 @@ export function IntakeView({
       if (!info) return;
       const tokens = response.usage?.total_tokens;
       const usageText = typeof tokens === "number" && tokens > 0 ? `，本次 AI 识别消耗 ${tokens} tokens` : "";
-      setNotice(`预约消息已识别（AI）${usageText}${info.strainNote}，请核对批次信息。`);
+      setNotice("");
+      feedback.info("预约消息已识别（AI）", `${usageText}${info.strainNote}，请核对批次信息。`);
     } catch (error) {
       if (valid()) setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
     } finally {
@@ -434,23 +442,22 @@ export function IntakeView({
       (item) => !isDirectSampling(item) && (item.status === "pending_print" || item.status === "draft"),
     );
     if (!printable.length) {
-      setBulkNotice("选中的批次均未处于待打印状态，无需标记已打印。");
-      setBulkNoticeKind("info");
+      void feedback.message.info("选中的批次均未处于待打印状态，无需标记已打印。");
       return;
     }
     setMarkingPrinted(true);
-    setBulkNotice(`正在标记 ${printable.length} 个批次为已打印…`);
-    setBulkNoticeKind("info");
+    setBulkNotice("");
     try {
       const response = await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
       selection.update(response.items);
       const skipped = targets.length - printable.length;
-      setBulkNotice(
-        skipped
-          ? `已标记 ${printable.length} 个批次为已打印；${skipped} 个无需打印或非待打印批次跳过。`
-          : `已标记 ${printable.length} 个批次为已打印。`,
-      );
-      setBulkNoticeKind("success");
+      setBulkNotice("");
+      if (skipped)
+        feedback.warning(
+          "批次打印标记已完成",
+          `已标记 ${printable.length} 个批次为已打印；${skipped} 个无需打印或非待打印批次跳过。`,
+        );
+      else feedback.success("批次已标记为已打印", `共 ${printable.length} 个批次。`);
     } catch (error) {
       setBulkNotice(error instanceof Error ? error.message : "标记已打印失败");
       setBulkNoticeKind("error");
@@ -463,7 +470,7 @@ export function IntakeView({
     if (!requireRooms() || recognition.reading) return;
     const item = normalizeIntakeBatch(draft, roomNames);
     if (isDirectSampling(item)) {
-      setNotice("直接取材批次无需打印笼卡。");
+      void feedback.message.info("直接取材批次无需打印笼卡。");
       return;
     }
     const missingFields = missingIntakeRequiredFields(item, { forPrint: true });
@@ -674,8 +681,7 @@ export function IntakeView({
   function beginReceive(targets: IntakeBatchListItem[]) {
     const printable = targets.filter(canConfirmIntakeReceipt);
     if (!printable.length) {
-      setBulkNotice("请选择已打印的入驻饲养批次或待接收的直接取材批次。");
-      setBulkNoticeKind("info");
+      void feedback.message.info("请选择已打印的入驻饲养批次或待接收的直接取材批次。");
       return;
     }
     setReceiptError("");
@@ -687,8 +693,7 @@ export function IntakeView({
     if (!pendingReceipt || markingReceived) return;
     const { items: printable, skipped } = pendingReceipt;
     setMarkingReceived(true);
-    setBulkNotice(`正在标记 ${printable.length} 个批次为已接收…`);
-    setBulkNoticeKind("info");
+    setBulkNotice("");
     try {
       const response = await confirmBatchesReceipt.mutateAsync({
         ids: printable.map((item) => item.id),
@@ -697,12 +702,13 @@ export function IntakeView({
       });
       selection.update(response.batches);
       setPendingReceipt(null);
-      setBulkNotice(
-        skipped
-          ? `已标记 ${printable.length} 个批次为已接收；${skipped} 个不符合接收条件的批次跳过。`
-          : `已标记 ${printable.length} 个批次为已接收。`,
-      );
-      setBulkNoticeKind("success");
+      setBulkNotice("");
+      if (skipped)
+        feedback.warning(
+          "批次接收标记已完成",
+          `已标记 ${printable.length} 个批次为已接收；${skipped} 个不符合接收条件的批次跳过。`,
+        );
+      else feedback.success("批次已标记为已接收", `共 ${printable.length} 个批次。`);
     } catch (error) {
       const stale = error instanceof ApiError && error.status === 409;
       setReceiptNeedsReselect(stale);
@@ -713,8 +719,7 @@ export function IntakeView({
             ? error.message
             : "标记已接收失败",
       );
-      setBulkNotice(error instanceof Error ? error.message : "标记已接收失败");
-      setBulkNoticeKind("error");
+      setBulkNotice("");
     } finally {
       setMarkingReceived(false);
     }

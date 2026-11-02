@@ -324,13 +324,21 @@ test("partial batch lock retains only failures and deliberate retry never repeat
   expect(writes).toEqual([]);
   await toolbar.getByRole("button", { name: "批量锁定", exact: true }).click();
   await popup.getByRole("button", { name: "批量锁定", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "1 条未完成" })).toBeVisible();
+  const partialNotice = page
+    .locator(".ant-notification-notice-warning")
+    .filter({ hasText: "结算流程批量锁定部分完成" });
+  await expect(partialNotice).toHaveAttribute("role", "status");
+  await expect(partialNotice).toContainText("1 条未完成");
+  await expect(page.locator(".ledger-batch-notice")).toContainText("以下结算流程未完成");
   await expect(page.locator(".ant-popconfirm:visible")).toHaveCount(0);
   await expect(toolbar).toContainText("已选 1 项");
   await expect(
     page.getByRole("checkbox", { name: "选择 分页负责人 01 2026-08 结算流程", exact: true }),
   ).not.toBeChecked();
   await expect(page.getByRole("checkbox", { name: "选择 分页负责人 02 2026-08 结算流程", exact: true })).toBeChecked();
+  await partialNotice.getByRole("button", { name: "关闭通知", exact: true }).click();
+  await expect(page.locator(".ledger-batch-notice")).toBeVisible();
+  expect(writes).toEqual(["mock-page-01", "mock-page-02"]);
   await toolbar.getByRole("button", { name: "批量锁定", exact: true }).click();
   popup = page.getByRole("tooltip").filter({ hasText: "批量锁定 1 条结算流程？" });
   // Firefox includes Ant's collapsed loading icon in the accessible name after a retry.

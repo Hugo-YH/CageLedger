@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { Alert, Button, Form, Space, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
@@ -7,6 +8,7 @@ import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { DateInput, Dialog } from "../../../components/ui";
 
 export function IntakeSummaryExport() {
+  const feedback = useOperationFeedback();
   const [open, setOpen] = useState(false);
   const [startDate, setStartDate] = useState(() => dayjs().format("YYYY-MM-DD"));
   const [endDate, setEndDate] = useState(() => dayjs().format("YYYY-MM-DD"));
@@ -41,7 +43,12 @@ export function IntakeSummaryExport() {
               icon={<ActionIcon name="download" />}
               disabled={invalid}
               loading={exportSummary.isPending}
-              onClick={() => exportSummary.mutate({ startDate, endDate })}
+              onClick={() =>
+                exportSummary.mutate(
+                  { startDate, endDate },
+                  { onSuccess: (filename) => feedback.success("接收汇总 Word 已生成，下载已开始", filename) },
+                )
+              }
             >
               导出 Word
             </Button>
@@ -84,9 +91,6 @@ export function IntakeSummaryExport() {
           </Typography.Paragraph>
           {exportSummary.isError ? (
             <Alert role="alert" showIcon type="error" title={exportSummary.error.message} />
-          ) : null}
-          {exportSummary.isSuccess ? (
-            <Alert role="status" showIcon type="success" title={`已下载 ${exportSummary.data}`} />
           ) : null}
         </Form>
       </Dialog>

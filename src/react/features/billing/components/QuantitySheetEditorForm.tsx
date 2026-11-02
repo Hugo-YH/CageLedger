@@ -1,9 +1,9 @@
+import { InfoCircleFilled } from "@ant-design/icons";
 import { PersonNamesInput } from "../../../components/ui/PersonNamesInput";
 import { formatPersonNames } from "../../../../domain/personNames";
 import { useId } from "react";
 import type { ReactNode } from "react";
-import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled } from "@ant-design/icons";
-import { Button, DatePicker, Input, Popover, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, DatePicker, Input, Popover, Select, Space, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import type { SessionUser } from "../../../api/contracts";
 import { createQuantityRow } from "../../../../domain/quantitySheets";
@@ -60,19 +60,12 @@ export function QuantitySheetEditorForm({
         <CommandBar title="数量明细" titleSize="section" ariaLabel="编辑数量统计表操作" actions={headActions} />
       ) : null}
       {visibleNotice ? (
-        <div
-          className={`react-inline-notice is-${visibleNoticeKind}`}
+        <Alert
           role={visibleNoticeKind === "error" ? "alert" : "status"}
-        >
-          {visibleNoticeKind === "success" ? (
-            <CheckCircleFilled aria-hidden className="notice-icon" />
-          ) : visibleNoticeKind === "error" ? (
-            <CloseCircleFilled aria-hidden className="notice-icon" />
-          ) : (
-            <InfoCircleFilled aria-hidden className="notice-icon" />
-          )}
-          <span>{visibleNotice}</span>
-        </div>
+          showIcon
+          type={visibleNoticeKind}
+          title={visibleNotice}
+        />
       ) : null}
       <div className="quantity-sheet-fields">
         <div className="field-cluster quantity-field-cluster">

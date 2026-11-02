@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { RecordWorklist } from "./RecordWorklist";
 import { BatchOverview } from "./BatchOverview";
@@ -34,7 +35,8 @@ export function QuarantineView({
 }: {
   mode: "quarantine-batches" | "quarantine-parasite" | "quarantine-elisa" | "quarantine-pcr" | "quarantine-reports";
 }) {
-  const { message, modal } = App.useApp();
+  const { modal } = App.useApp();
+  const feedback = useOperationFeedback();
   const isBatchManagement = mode === "quarantine-batches";
   const isReports = mode === "quarantine-reports";
   const [initialSources, setInitialSources] = useState<QuarantineSource[]>([]);
@@ -128,9 +130,10 @@ export function QuarantineView({
   const deleteBatch = useQuarantineWrite();
 
   function confirmDelete(batch: QuarantineBatch) {
-    modal.confirm({
+    const content = `确认删除“${batch.name}”吗？已有检测记录的批次不能删除。`;
+    const confirmation = modal.confirm({
       title: "删除检疫批次",
-      content: `确认删除“${batch.name}”吗？已有检测记录的批次不能删除。`,
+      content,
       okText: "删除",
       okType: "danger",
       cancelText: "取消",
@@ -142,9 +145,20 @@ export function QuarantineView({
             body: { expectedUpdatedAt: batch.updatedAt },
           });
           if (batchId === batch.id) openBatch("");
-          await message.success("检疫批次已删除");
+          feedback.success("检疫批次已删除", batch.name);
         } catch (error) {
-          await message.error(error instanceof Error ? error.message : "删除检疫批次失败");
+          confirmation.update({
+            content: (
+              <>
+                <p>{content}</p>
+                <Alert
+                  showIcon
+                  type="error"
+                  title={error instanceof Error ? error.message : "删除检疫批次失败，请重试"}
+                />
+              </>
+            ),
+          });
           throw error;
         }
       },

@@ -1,5 +1,6 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useState } from "react";
-import { Input } from "antd";
+import { Alert, Input } from "antd";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
@@ -16,7 +17,6 @@ export function SlotEditor({
   occupancy,
   roomId,
   onClose,
-  onNotice,
   beginOperation,
 }: {
   slot: CageSlot;
@@ -26,9 +26,10 @@ export function SlotEditor({
   occupancy: Occupancy | null;
   roomId: string;
   onClose: () => void;
-  onNotice: (message: string) => void;
   beginOperation: () => () => boolean;
 }) {
+  const feedback = useOperationFeedback();
+  const [error, setError] = useState("");
   const [draft, setDraft] = useState(
     () => occupancy || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today),
   );
@@ -41,13 +42,14 @@ export function SlotEditor({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const isCurrent = beginOperation();
+    setError("");
     try {
       await save.mutateAsync({ item: { ...draft, slotId: slot.id }, exists: Boolean(occupancy) });
       if (!isCurrent()) return;
-      onNotice(`笼位 ${cageCode(slot, rack.index, roomName)} 已保存。`);
+      feedback.success("笼位已保存", cageCode(slot, rack.index, roomName));
       onClose();
     } catch (error) {
-      if (isCurrent()) onNotice(error instanceof Error ? error.message : "保存失败");
+      if (isCurrent()) setError(error instanceof Error ? error.message : "保存失败");
     }
   }
   async function clear() {
@@ -56,13 +58,15 @@ export function SlotEditor({
       return;
     }
     const isCurrent = beginOperation();
-    await save.mutateAsync({
-      item: { ...occupancy, status: "ended", endDate: today },
-      exists: true,
-    });
-    if (!isCurrent()) return;
-    onNotice(`笼位 ${cageCode(slot, rack.index, roomName)} 已设为空。`);
-    onClose();
+    setError("");
+    try {
+      await save.mutateAsync({ item: { ...occupancy, status: "ended", endDate: today }, exists: true });
+      if (!isCurrent()) return;
+      feedback.success("笼位已设为空", cageCode(slot, rack.index, roomName));
+      onClose();
+    } catch (cause) {
+      if (isCurrent()) setError(cause instanceof Error ? cause.message : "设为空失败，请重试");
+    }
   }
   return (
     <ModalShell
@@ -81,6 +85,7 @@ export function SlotEditor({
         </ActionButton>
       </div>
       <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
+        {error ? <Alert showIcon type="error" title={error} /> : null}
         <div className="compact-form-row third">
           <SlotStatusSelect id="cage-slot-status" value={draft.status} onChange={(value) => update("status", value)} />
           <Field label="笼位编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />

@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { useState } from "react";
@@ -7,6 +8,7 @@ import type { QuarantineDetail } from "../../../contracts/quarantine";
 import { useQuarantineWrite } from "../../api/quarantine";
 
 export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
+  const feedback = useOperationFeedback();
   const [open, setOpen] = useState(false);
   const [conclusionOpen, setConclusionOpen] = useState(false);
   const [conclusion, setConclusion] = useState(detail.item.conclusion);
@@ -27,6 +29,7 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
           expectedTestVersions: Object.fromEntries(detail.tests.map((t) => [t.id, t.updatedAt])),
         },
       });
+      feedback.success("整批检疫已确认完成", detail.item.name);
       setOpen(false);
       setError("");
     } catch (e) {
@@ -43,6 +46,7 @@ export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
           expectedUpdatedAt: detail.item.updatedAt,
         },
       });
+      feedback.success("检疫结论已保存", detail.item.name);
       setConclusionOpen(false);
       setError("");
     } catch (e) {

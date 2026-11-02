@@ -168,3 +168,12 @@ describe("QuantitySheetView saved editor", () => {
     expect(screen.queryByText("数量编辑器")).not.toBeInTheDocument();
   });
 });
+
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));

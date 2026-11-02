@@ -1,6 +1,7 @@
-import { Space } from "antd";
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { Alert, Button, Space } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { QuantitySheet } from "../../../api/contracts";
 import { ActionButton } from "../../../components/ui";
 import { PageSkeleton } from "../../../components/WorkspaceUi";
@@ -10,22 +11,25 @@ import { usePdfExport } from "../hooks/usePdfExport";
 export function QuantityPreviewModal({
   sheet,
   loading,
+  error = "",
+  onRetry,
   onClose,
 }: {
   sheet?: QuantitySheet;
   loading: boolean;
+  error?: string;
+  onRetry?: () => void;
   onClose: () => void;
 }) {
-  const [exportError, setExportError] = useState("");
+  const feedback = useOperationFeedback();
   const pdfExport = usePdfExport();
 
   async function exportSheet() {
     if (!sheet) return;
-    setExportError("");
     try {
       await pdfExport.exportPdf({ kind: "quantity_sheet", ids: [sheet.id] });
-    } catch (error) {
-      setExportError(error instanceof Error ? error.message : "PDF 导出失败");
+    } catch {
+      // The shared task notification owns the export failure and retry result.
     }
   }
 
@@ -36,14 +40,18 @@ export function QuantityPreviewModal({
         <Space wrap>
           <ActionButton
             className="info-button"
-            disabled={!sheet}
-            onClick={() => sheet && openQuantitySheetsPrint([sheet])}
+            disabled={!sheet || Boolean(error)}
+            onClick={() => {
+              if (!sheet) return;
+              if (openQuantitySheetsPrint([sheet])) feedback.info("已打开打印窗口", "请在打印窗口中完成打印。");
+              else feedback.error("未能打开打印窗口", "请允许浏览器弹出窗口后重试。");
+            }}
           >
             打印
           </ActionButton>
           <ActionButton
             className="info-button"
-            disabled={!sheet || pdfExport.isExporting}
+            disabled={!sheet || Boolean(error) || pdfExport.isExporting}
             loading={pdfExport.isExporting}
             onClick={() => void exportSheet()}
           >
@@ -57,16 +65,21 @@ export function QuantityPreviewModal({
       title={sheet ? `${sheet.month} · ${sheet.iacuc}` : "预览数量统计表"}
       width="min(1120px, calc(100vw - 32px))"
     >
-      {pdfExport.isExporting || exportError ? (
-        <div className="react-inline-notice" role="status" aria-live="polite">
-          {exportError || "PDF 正在后台生成，完成后会自动下载。"}
-        </div>
+      {error ? (
+        <Alert
+          role="alert"
+          showIcon
+          type="error"
+          title="数量统计表详情读取失败"
+          description={error}
+          action={<Button onClick={onRetry}>重试读取</Button>}
+        />
       ) : null}
-      {loading || !sheet ? (
+      {loading || (!sheet && !error) ? (
         <PageSkeleton compact label="数量统计表预览" rows={4} variant="detail" />
-      ) : (
+      ) : sheet ? (
         <QuantityPreview sheet={sheet} />
-      )}
+      ) : null}
     </Modal>
   );
 }

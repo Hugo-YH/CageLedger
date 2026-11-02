@@ -1,4 +1,6 @@
-import { App, Button, Popconfirm, Space, Tag, Typography } from "antd";
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
+import { Alert, Button, Popconfirm, Space, Tag, Typography } from "antd";
+import { useState } from "react";
 import { Modal } from "../../components/ui/Modal";
 import { RollbackOutlined } from "@ant-design/icons";
 
@@ -6,18 +8,20 @@ import { PageSkeleton } from "../../components/WorkspaceUi";
 import { useAnimalInspectionCatalogVersions, useRestoreInspectionCatalogVersion } from "../../api/animalManagement";
 
 export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { message } = App.useApp();
+  const feedback = useOperationFeedback();
+  const [restoreError, setRestoreError] = useState("");
   const versions = useAnimalInspectionCatalogVersions(open);
   const restore = useRestoreInspectionCatalogVersion();
 
   function handleRestore(version: string) {
+    setRestoreError("");
     restore.mutate(version, {
       onSuccess: () => {
-        message.success("已回滚并发布为新版本");
+        feedback.success("巡检目录已回滚并发布为新版本");
         onClose();
       },
       onError: (error) => {
-        message.error(error instanceof Error ? error.message : "回滚失败");
+        setRestoreError(error instanceof Error ? error.message : "巡检目录回滚失败，请重试");
       },
     });
   }
@@ -32,6 +36,7 @@ export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean
       footer={null}
       width={680}
     >
+      {restoreError ? <Alert showIcon type="error" title={restoreError} /> : null}
       {versions.isLoading ? (
         <PageSkeleton compact label="巡检版本" rows={3} variant="detail" />
       ) : items.length === 0 ? (

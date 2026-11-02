@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +23,7 @@ const principalTypeOptions = [
 ];
 
 export function DataView({ user }: { user: SessionUser }) {
+  const feedback = useOperationFeedback();
   const status = useIacucStatus();
   const identities = usePrincipalIdentities();
   const queryClient = useQueryClient();
@@ -29,7 +31,7 @@ export function DataView({ user }: { user: SessionUser }) {
   const deferredFilter = useDeferredValue(filter);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [importError, setImportError] = useState("");
   const [uploading, setUploading] = useState("");
   useUnsavedChanges(false, Boolean(uploading));
   const uploadBusy = useRef(false);
@@ -51,7 +53,7 @@ export function DataView({ user }: { user: SessionUser }) {
     uploadBusy.current = true;
     const isCurrent = uploadRequest.begin();
     setUploading(kind);
-    setNotice(null);
+    setImportError("");
     try {
       const endpoint = kind === "iacuc" ? "/api/iacuc-index/upload" : `/api/reimbursement-records/import-${kind}`;
       const result = await uploadFile<{ count?: number }>(endpoint, file);
@@ -68,9 +70,9 @@ export function DataView({ user }: { user: SessionUser }) {
           queryClient.invalidateQueries({ queryKey: queryKeys.principalIdentities }),
         ]);
       } else await queryClient.invalidateQueries({ queryKey: queryKeys.reimbursementRoot });
-      if (isCurrent()) setNotice({ type: "success", message: `${file.name} 已处理，共 ${result.count ?? 0} 条记录。` });
+      if (isCurrent()) feedback.success("文件导入已完成", `${file.name}，共 ${result.count ?? 0} 条记录。`);
     } catch (error) {
-      if (isCurrent()) setNotice({ type: "error", message: error instanceof Error ? error.message : "文件处理失败" });
+      if (isCurrent()) setImportError(error instanceof Error ? error.message : "文件处理失败");
     } finally {
       uploadBusy.current = false;
       if (isCurrent()) setUploading("");
@@ -109,15 +111,7 @@ export function DataView({ user }: { user: SessionUser }) {
     <section className="workspace-view settings-workspace" data-feature="administration">
       <WorkspaceToolbar ariaLabel="数据管理" title="数据管理" />
       <div className="workspace-body settings-workspace-body">
-        {notice ? (
-          <Alert
-            role={notice.type === "error" ? "alert" : "status"}
-            closable={{ onClose: () => setNotice(null) }}
-            showIcon
-            title={notice.message}
-            type={notice.type}
-          />
-        ) : null}
+        {importError ? <Alert role="alert" showIcon title={importError} type="error" /> : null}
         <section className="settings-split-layout data-settings-layout">
           <Card className="settings-data-table-card">
             <CommandBar
@@ -227,6 +221,7 @@ export function DataView({ user }: { user: SessionUser }) {
 }
 
 function PrincipalTypeSelect({ item, disabled }: { item: PrincipalIdentity; disabled: boolean }) {
+  const feedback = useOperationFeedback();
   const saveIdentity = useSavePrincipalIdentity();
   const action = useAsyncFormAction("负责人身份保存失败，请重试");
   const [type, setType] = useState(item.principalType);
@@ -247,8 +242,9 @@ function PrincipalTypeSelect({ item, disabled }: { item: PrincipalIdentity; disa
           disabled={disabled || action.pending}
           loading={action.pending}
           onClick={() =>
-            void action.run(() =>
-              saveIdentity.mutateAsync({ ...item, principalType: type, freeCageAllowance: allowance }),
+            void action.run(
+              () => saveIdentity.mutateAsync({ ...item, principalType: type, freeCageAllowance: allowance }),
+              () => feedback.success("负责人身份已保存", item.pi),
             )
           }
           type="primary"

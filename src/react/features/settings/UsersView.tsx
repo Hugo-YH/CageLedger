@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useState } from "react";
 import { Alert, Button } from "antd";
@@ -12,6 +13,7 @@ import { UserCreateForm, UserList, UserSaveProvider } from "./components/UserMan
 const EMPTY_ROOMS: NonNullable<ReturnType<typeof useRooms>["data"]>["items"] = [];
 
 export function UsersView({ currentUser }: { currentUser: SessionUser }) {
+  const feedback = useOperationFeedback();
   const users = useUsers(currentUser.role === "admin");
   const rooms = useRooms(currentUser.role === "admin");
   const remove = useDeleteUser();
@@ -98,7 +100,10 @@ export function UsersView({ currentUser }: { currentUser: SessionUser }) {
             danger
             pending={remove.isPending}
             onCancel={() => setDeleteTarget(null)}
-            onConfirm={() => remove.mutateAsync(deleteTarget.id)}
+            onConfirm={async () => {
+              await remove.mutateAsync(deleteTarget.id);
+              feedback.success("账号已删除", deleteTarget.displayName);
+            }}
           />
         ) : null}
       </ModalPresence>

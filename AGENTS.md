@@ -30,6 +30,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 | 模块定位、跨层修改       | [module-boundaries.md](docs/contracts/module-boundaries.md)；前端 `src/react/features/`，后端 `server_app/domains/`，`server.py` 为装配及兼容入口                                                 |
 | React 状态、Query、请求  | [frontend-state.md](docs/contracts/frontend-state.md)、[api-contracts.md](docs/contracts/api-contracts.md)；请求在 `src/react/api/`，新类型在 `src/contracts/`                                    |
 | UI、表单、弹窗、布局     | [ui-component-standard.md](docs/contracts/ui-component-standard.md)、[ui-interaction-system.md](docs/contracts/ui-interaction-system.md)、[style-ownership.md](docs/contracts/style-ownership.md) |
+| 通知、操作结果、任务反馈 | [ui-feedback.md](docs/contracts/ui-feedback.md)；Notification／Message／Alert 分类、异步与重试边界及全系统盘点                                                                                    |
 | 颜色、主题               | [ui-color-system.md](docs/contracts/ui-color-system.md)、[antd-design-language.md](docs/contracts/antd-design-language.md)                                                                        |
 | API 写入、权限、迁移     | [write-safety.md](docs/contracts/write-safety.md)、[api-contracts.md](docs/contracts/api-contracts.md)                                                                                            |
 | 测试、浏览器、打印、性能 | [testing-strategy.md](docs/contracts/testing-strategy.md) 中对应任务条目                                                                                                                          |

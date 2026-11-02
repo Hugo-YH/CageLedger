@@ -61,6 +61,8 @@ Vite开发服务拒绝通过静态文件或raw模块读取本工程的`data/`目
 
 跨边界数据使用显式 TypeScript 类型或可序列化 JSON 契约。服务端业务数据由 TanStack Query 管理，本地 reducer 只保存 UI 偏好。
 
+通知、操作结果与长任务反馈按[通知与操作反馈契约](docs/contracts/ui-feedback.md)选择 Notification、Message 或 Alert；现有业务反馈的盘点与待迁移点由该契约提供入口。
+
 ## 格式和 lint
 
 ```bash

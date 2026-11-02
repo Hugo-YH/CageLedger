@@ -251,7 +251,7 @@ test("service date cards retain drafts and focus, add-row motion and saved-row f
       )
       .toBe(true);
     await expect(row.getByRole("button", { name: "编辑", exact: true })).toBeFocused();
-    await expect(page.getByRole("status").filter({ hasText: "技术服务明细已保存。" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "技术服务明细已保存" })).toBeVisible();
     const reread = await page.request.get("/api/technical-services/sheets/" + savedId);
     const item = (
       (await reread.json()) as { item: { serviceDayCount: number; totalQuantity: number; totalAmount: number } }

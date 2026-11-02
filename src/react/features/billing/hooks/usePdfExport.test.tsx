@@ -23,11 +23,20 @@ const ready: PdfExportJob = {
 };
 const payload = { kind: "quantity_sheet" as const, ids: ["sheet-1"] };
 const feedback: TaskFeedbackApi = {
+  isCurrent: vi.fn(() => true),
   start: vi.fn(() => "task-1"),
   update: vi.fn(),
   complete: vi.fn(),
   fail: vi.fn(),
   dismiss: vi.fn(),
+  partial: vi.fn(),
+  operations: {
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+    message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+  },
 };
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -55,6 +64,7 @@ describe("usePdfExport", () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
     vi.mocked(feedback.start).mockReturnValue("task-1");
+    vi.mocked(feedback.isCurrent).mockReturnValue(true);
     vi.mocked(startPdfExport).mockResolvedValue(ready);
   });
   afterEach(() => vi.useRealTimers());
@@ -90,7 +100,7 @@ describe("usePdfExport", () => {
       await expect(result.current.exportPdf(payload)).rejects.toThrow("无法创建导出任务");
     });
     expect(result.current.isExporting).toBe(false);
-    expect(feedback.fail).toHaveBeenCalledWith("task-1", "无法创建导出任务");
+    expect(feedback.fail).toHaveBeenCalledWith("task-1", "无法创建导出任务", "PDF 生成失败");
     await act(async () => {
       await result.current.exportPdf(payload);
     });
@@ -263,6 +273,45 @@ describe("usePdfExport", () => {
     await completion;
     expect(downloadFromUrl).toHaveBeenCalledExactlyOnceWith(ready.downloadUrl);
     expect(feedback.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not poll an old task after the account changes while waiting", async () => {
+    vi.mocked(startPdfExport).mockResolvedValue({ ...ready, status: "rendering" });
+    const { result } = renderHook(usePdfExport, { wrapper });
+    let completion: Promise<unknown>;
+    await act(async () => {
+      completion = expect(result.current.exportPdf(payload)).rejects.toMatchObject({ name: "AbortError" });
+      await Promise.resolve();
+    });
+    vi.mocked(feedback.isCurrent).mockReturnValue(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await completion;
+    });
+    expect(getPdfExportJob).not.toHaveBeenCalled();
+    expect(downloadFromUrl).not.toHaveBeenCalled();
+  });
+
+  it("ignores a ready response arriving from a previous session", async () => {
+    let finish!: (job: PdfExportJob) => void;
+    vi.mocked(startPdfExport).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { result } = renderHook(usePdfExport, { wrapper });
+    let completion: Promise<unknown>;
+    await act(async () => {
+      completion = expect(result.current.exportPdf(payload)).rejects.toMatchObject({ name: "AbortError" });
+      await Promise.resolve();
+    });
+    vi.mocked(feedback.isCurrent).mockReturnValue(false);
+    await act(async () => {
+      finish(ready);
+      await completion;
+    });
+    expect(downloadFromUrl).not.toHaveBeenCalled();
+    expect(feedback.complete).not.toHaveBeenCalled();
   });
 
   it("keeps the export callback stable during job updates", async () => {

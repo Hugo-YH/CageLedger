@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { useRef, useState } from "react";
 import { Alert, Button, Form, Radio, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
@@ -5,6 +6,7 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { downloadQuarantine } from "../../api/quarantine";
 
 export function BatchReportExport({ batchId, disabled }: { batchId: string; disabled: boolean }) {
+  const feedback = useOperationFeedback();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState("quarantine");
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,8 @@ export function BatchReportExport({ batchId, disabled }: { batchId: string; disa
     setStatus("正在生成汇总 PDF…");
     try {
       const filename = await downloadQuarantine(`batches/${batchId}/summary?kind=${kind}`);
-      setStatus(`已下载 ${filename}`);
+      setStatus("");
+      feedback.success("检疫汇总 PDF 已生成，下载已开始", filename);
     } catch (e) {
       setStatus("");
       setError(e instanceof Error ? e.message : "汇总报告下载失败");

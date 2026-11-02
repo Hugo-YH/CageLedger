@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { Alert, Button, Flex, Input, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
 import { useState } from "react";
@@ -32,6 +33,7 @@ export function WorkflowRevokeModal({
 }
 
 function WorkflowRevokeForm({ target, onCancel }: { target: WorkflowRevokeTarget; onCancel: () => void }) {
+  const feedback = useOperationFeedback();
   const [reason, setReason] = useState("");
   const advance = useAdvanceWorkflow();
   const action = useAsyncFormAction("撤回失败，请重试");
@@ -44,7 +46,10 @@ function WorkflowRevokeForm({ target, onCancel }: { target: WorkflowRevokeTarget
           toStatus: target.toStatus,
           note: reason.trim(),
         }),
-      onCancel,
+      () => {
+        feedback.success("结算流程已撤回", `${target.workflow.month} · ${target.workflow.pi}`);
+        onCancel();
+      },
     );
   }
   return (

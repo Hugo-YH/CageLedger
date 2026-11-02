@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Alert, Button, Card, Collapse, Descriptions, Empty, Space, Tag, Typography } from "antd";
@@ -8,7 +9,16 @@ import { FINDING_STATUS_LABELS, summarizeInspectionOutcomes, MODULE_LABELS } fro
 import { formatDate } from "./inspectionListFormatting";
 
 export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const feedback = useOperationFeedback();
   const query = useAnimalInspection(id);
+  async function exportPdf() {
+    try {
+      await downloadAnimalInspectionPdf(id);
+      feedback.success("巡检 PDF 已生成，下载已开始");
+    } catch (error) {
+      feedback.error("巡检 PDF 导出失败", error instanceof Error ? error.message : "请重试");
+    }
+  }
   const outcomeSummary = query.data ? summarizeInspectionOutcomes(query.data.answers, query.data.catalog.nodes) : [];
   const abnormalities = outcomeSummary.flatMap((module) => module.items.filter((item) => item.outcome === "abnormal"));
   return (
@@ -16,7 +26,7 @@ export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: (
       className="inspection-detail-modal"
       destroyOnHidden
       footer={
-        <Button icon={<ActionIcon name="download" />} onClick={() => void downloadAnimalInspectionPdf(id)}>
+        <Button icon={<ActionIcon name="download" />} onClick={() => void exportPdf()}>
           导出 PDF
         </Button>
       }

@@ -20,6 +20,7 @@ vi.mock("../../../components/ui", () => ({
 
 beforeEach(() => {
   vi.mocked(exportMonthlyBillingSummary).mockReset();
+  operationFeedback.success.mockClear();
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 });
 afterEach(() => {
@@ -40,7 +41,12 @@ it("shows an export failure as an error and retries the same selected month", as
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "重试导出" }));
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("2026年10月费用汇总.xlsx 已开始下载。"));
+  await waitFor(() =>
+    expect(operationFeedback.success).toHaveBeenCalledExactlyOnceWith(
+      "月度汇总已生成",
+      "2026年10月费用汇总.xlsx 已开始下载。",
+    ),
+  );
   expect(screen.queryByText("导出服务暂时不可用")).not.toBeInTheDocument();
   expect(exportMonthlyBillingSummary).toHaveBeenNthCalledWith(1, "2026-10");
   expect(exportMonthlyBillingSummary).toHaveBeenNthCalledWith(2, "2026-10");
@@ -52,7 +58,7 @@ it("keeps a real export pending and removes a previous success before retrying",
   render(<MonthlyBillingSummary />);
   const button = screen.getByRole("button", { name: "导出月度汇总 Excel" });
   fireEvent.click(button);
-  await screen.findByRole("status");
+  await waitFor(() => expect(operationFeedback.success).toHaveBeenCalledTimes(1));
   vi.mocked(exportMonthlyBillingSummary).mockImplementationOnce(
     () =>
       new Promise((done) => {
@@ -63,5 +69,15 @@ it("keeps a real export pending and removes a previous success before retrying",
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   await waitFor(() => expect(button).toHaveClass("ant-btn-loading"));
   resolve("第二次.xlsx");
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("第二次.xlsx 已开始下载。"));
+  await waitFor(() => expect(operationFeedback.success).toHaveBeenCalledTimes(2));
+  expect(operationFeedback.success).toHaveBeenLastCalledWith("月度汇总已生成", "第二次.xlsx 已开始下载。");
 });
+
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));

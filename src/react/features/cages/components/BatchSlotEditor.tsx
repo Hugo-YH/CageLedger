@@ -1,5 +1,6 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useState } from "react";
-import { Input } from "antd";
+import { Alert, Input } from "antd";
 import type { CageRack, CageSlot, CageSlotStatus, Occupancy } from "../../../api/contracts";
 import { useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
@@ -27,6 +28,7 @@ export function BatchSlotEditor({
   onDone: (message: string) => void;
   beginOperation: () => () => boolean;
 }) {
+  const feedback = useOperationFeedback();
   const first = slots.map((slot) => currentOccupancy(slot.id, occupancies)).find(Boolean);
   const [draft, setDraft] = useState({
     status: (first?.status === "reserved" ? "reserved" : "active") as CageSlotStatus,
@@ -38,34 +40,65 @@ export function BatchSlotEditor({
     endDate: first?.endDate || "",
     notes: first?.notes || "",
   });
+  const [error, setError] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const save = useSaveOccupancy(roomId);
   const update = (key: keyof typeof draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   async function saveAll() {
     const isCurrent = beginOperation();
-    for (const slot of slots) {
-      const current = currentOccupancy(slot.id, occupancies);
-      const item = {
-        ...(current || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today)),
-        ...draft,
-        slotId: slot.id,
-        updatedAt: today,
-      } as Occupancy;
-      await save.mutateAsync({ item, exists: Boolean(current) });
+    let completed = 0;
+    setError("");
+    try {
+      for (const slot of slots) {
+        const current = currentOccupancy(slot.id, occupancies);
+        const item = {
+          ...(current || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today)),
+          ...draft,
+          slotId: slot.id,
+          updatedAt: today,
+        } as Occupancy;
+        await save.mutateAsync({ item, exists: Boolean(current) });
+        completed += 1;
+      }
+      if (isCurrent()) onDone(`已批量保存 ${slots.length} 个笼位。`);
+    } catch (cause) {
+      if (isCurrent() && completed > 0)
+        feedback.warning(
+          "笼位批量操作部分完成",
+          `已处理 ${completed}/${slots.length} 个笼位，请核对编辑器中的失败原因后再操作。`,
+        );
+      if (isCurrent())
+        setError(
+          `已处理 ${completed} 个笼位；后续操作未完成：${cause instanceof Error ? cause.message : "请核对后重试"}`,
+        );
     }
-    if (isCurrent()) onDone(`已批量保存 ${slots.length} 个笼位。`);
   }
   async function clearAll() {
     const isCurrent = beginOperation();
-    for (const slot of slots) {
-      const current = currentOccupancy(slot.id, occupancies);
-      if (current)
-        await save.mutateAsync({
-          item: { ...current, status: "ended", endDate: today, updatedAt: today },
-          exists: true,
-        });
+    let completed = 0;
+    setError("");
+    try {
+      for (const slot of slots) {
+        const current = currentOccupancy(slot.id, occupancies);
+        if (current)
+          await save.mutateAsync({
+            item: { ...current, status: "ended", endDate: today, updatedAt: today },
+            exists: true,
+          });
+        completed += 1;
+      }
+      if (isCurrent()) onDone(`已将 ${slots.length} 个笼位设为空。`);
+    } catch (cause) {
+      if (isCurrent() && completed > 0)
+        feedback.warning(
+          "笼位批量操作部分完成",
+          `已处理 ${completed}/${slots.length} 个笼位，请核对编辑器中的失败原因后再操作。`,
+        );
+      if (isCurrent())
+        setError(
+          `已处理 ${completed} 个笼位；后续操作未完成：${cause instanceof Error ? cause.message : "请核对后重试"}`,
+        );
     }
-    if (isCurrent()) onDone(`已将 ${slots.length} 个笼位设为空。`);
   }
   return (
     <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" width={720} onClose={onClose}>
@@ -79,6 +112,7 @@ export function BatchSlotEditor({
         </ActionButton>
       </div>
       <div className="modal-shell-body form compact-slot-form">
+        {error ? <Alert showIcon type="error" title={error} /> : null}
         <div className="compact-form-row third">
           <SlotStatusSelect id="cage-batch-status" value={draft.status} onChange={(value) => update("status", value)} />
           <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />

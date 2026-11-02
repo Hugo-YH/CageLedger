@@ -36,7 +36,11 @@ export function usePdfExport() {
         currentJob.current = null;
         setJob(null);
       }
+      const assertCurrentSession = () => {
+        if (!tasks.isCurrent()) throw new DOMException("会话已改变，已停止接收旧导出结果。", "AbortError");
+      };
       const run = async () => {
+        assertCurrentSession();
         const taskId = tasks.start({ title: "正在生成 PDF", detail: exportLabel(payload), progress: 0 });
         let previousTaskUpdate: { detail: string; progress: number | undefined } | null = null;
         const updateTaskProgress = (next: PdfExportJob) => {
@@ -52,20 +56,24 @@ export function usePdfExport() {
         };
         try {
           let current = await startPdfExport(payload);
+          assertCurrentSession();
           let pollInterval = INITIAL_POLL_INTERVAL_MS;
           updateJob(current);
           while (current.status === "queued" || current.status === "rendering") {
             updateTaskProgress(current);
             await wait(pollInterval);
+            assertCurrentSession();
             const previous = current;
             current = await getPdfExportJob(previous.id);
+            assertCurrentSession();
             pollInterval = nextPollInterval(previous, current, pollInterval);
             updateJob(current);
           }
           if (current.status === "failed") throw new Error(current.error || "PDF 生成失败");
           if (!current.downloadUrl) throw new Error("PDF 已生成，但下载链接不可用");
+          assertCurrentSession();
           downloadFromUrl(current.downloadUrl);
-          tasks.complete(taskId, "PDF 已生成，下载已开始。");
+          tasks.complete(taskId, "PDF 已生成，下载已开始。", "PDF 已生成");
           return current;
         } catch (error) {
           const message = error instanceof Error ? error.message : "PDF 生成失败";
@@ -76,7 +84,7 @@ export function usePdfExport() {
               setJob(failed);
             }
           }
-          tasks.fail(taskId, message);
+          tasks.fail(taskId, message, "PDF 生成失败");
           throw error;
         }
       };

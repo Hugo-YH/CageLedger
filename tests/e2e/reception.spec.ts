@@ -91,6 +91,7 @@ test("reception list uses received batches, previews sources and downloads the r
     const downloadPromise = page.waitForEvent("download");
     await dialog.getByRole("button", { name: "确认导出", exact: true }).click();
     const download = await downloadPromise;
+    await expect(page.getByRole("status").filter({ hasText: "接收记录 Excel 已生成，下载已开始" })).toBeVisible();
     const file = testInfo.outputPath("reception-real.xlsx");
     await download.saveAs(file);
     expect((await readFile(file)).subarray(0, 2).toString()).toBe("PK");
@@ -110,7 +111,7 @@ test("reception list uses received batches, previews sources and downloads the r
     expect(cells).toContain("FFFFEB9C");
     expect(cells).toContain("尚未确认");
     await expect(dialog).toBeHidden();
-    await expect(page.getByText("接收记录 Excel 已导出", { exact: true }).last()).toBeVisible();
+
     expect(await (await page.request.get(`/api/intake-batches/${id}`)).json()).toEqual(before);
     await page.setViewportSize({ width: 390, height: 844 });
     await openNavigationEntry(page, "接收管理", "接收列表");

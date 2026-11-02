@@ -6,6 +6,15 @@ import { AntdProvider } from "../../components/ui";
 import { UiProvider } from "../../state/ui";
 import { SystemFeaturesView } from "./SystemFeaturesView";
 
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+
 const api = vi.hoisted(() => ({
   query: {} as {
     data?: SystemFeatures;

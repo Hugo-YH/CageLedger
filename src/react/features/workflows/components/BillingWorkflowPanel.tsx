@@ -1,3 +1,5 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { useTaskFeedback } from "../../../components/TaskFeedbackContext";
 import { ModalPresence } from "../../../components/ui/ModalPresence";
 import { useListPageBounds } from "../../../hooks/useListPageBounds";
 import { queryKeys } from "../../../api/queryKeys";
@@ -32,6 +34,10 @@ import { WorkflowLockContext } from "./workflowLockContext";
 const EMPTY_WORKFLOWS: BillingWorkflow[] = [];
 
 export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
+  const feedback = useOperationFeedback();
+  const tasks = useTaskFeedback();
+  const batchTask = useRef<{ id: string; total: number } | null>(null);
+  const batchLockActive = useRef(false);
   const [page, setPage] = useWorkspaceMemory("workflow:page", 1);
   const [pageSize, setPageSize] = useWorkspaceMemory("workflow:pageSize", 10);
   const [sort, setSort] = useWorkspaceMemory<{ key: string; dir: "asc" | "desc" }>("workflow:sort", {
@@ -82,9 +88,15 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   useSelectionScope(JSON.stringify([user.id, filters]), clearSelection, selectedLockable.length > 0);
   const [batchFailures, setBatchFailures] = useState<string[]>([]);
   const [batchLocking, setBatchLocking] = useState(false);
-  const [batchLockNotice, setBatchLockNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(
-    null,
-  );
+  const [batchResultError, setBatchResultError] = useState("");
+  useEffect(() => {
+    const task = batchTask.current;
+    if (task)
+      tasks.update(task.id, {
+        detail: `已处理 ${batchAdvance.completed}/${task.total} 条结算流程`,
+        progress: (batchAdvance.completed / task.total) * 100,
+      });
+  }, [batchAdvance.completed, tasks]);
   useWorkspaceScroll("workflow-center", !query.isPending && !query.isError);
   const items = data?.items || EMPTY_WORKFLOWS;
   const total = data?.page.total || 0;
@@ -120,15 +132,22 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   }, [allLockableSelected, lockableItems]);
 
   async function lockSelected() {
-    if (lockAction.pending || batchLocking || rowInteractionBlocked) return;
+    if (lockAction.pending || batchLockActive.current || rowInteractionBlocked) return;
     const targets = selectedLockable
       .map((id) => selectedRows.current.get(id))
       .filter((item): item is BillingWorkflow => Boolean(item));
     if (!targets.length) return;
     const submittedScope = scopeRef.current;
+    batchLockActive.current = true;
     setBatchFailures([]);
+    setBatchResultError("");
     setBatchLocking(true);
-    setBatchLockNotice({ kind: "info", text: `正在锁定结算流程 ${0}/${targets.length}…` });
+    const taskId = tasks.start({
+      title: "正在批量锁定结算流程",
+      detail: `共 ${targets.length} 条结算流程`,
+      progress: 0,
+    });
+    batchTask.current = { id: taskId, total: targets.length };
     try {
       const result = await batchAdvance.run(
         targets.map((target) => ({
@@ -149,18 +168,21 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         targets.filter((target) => failedIds.has(target.id)).map((target) => [target.id, target]),
       );
       setBatchFailures(failures);
-      setBatchLockNotice({
-        kind: failures.length ? "error" : "success",
-        text: failures.length
-          ? `已锁定 ${targets.length - failures.length} 条结算流程；${failures.length} 条未完成。`
-          : `已锁定 ${targets.length} 条结算流程。`,
-      });
+      if (failures.length && result.completed.length)
+        tasks.partial(
+          taskId,
+          `已锁定 ${result.completed.length} 条，${failures.length} 条未完成；失败明细保留在列表中。`,
+          "结算流程批量锁定部分完成",
+        );
+      else if (failures.length)
+        tasks.fail(taskId, `${failures.length} 条未完成，请查看列表中的失败明细。`, "结算流程批量锁定未完成");
+      else tasks.complete(taskId, `已锁定 ${targets.length} 条结算流程。`, "结算流程已批量锁定");
     } catch (error) {
-      setBatchLockNotice({
-        kind: "error",
-        text: `批量结果未能同步，请刷新列表确认：${error instanceof Error ? error.message : "同步失败"}`,
-      });
+      setBatchResultError(`批量结果未能同步，请刷新列表确认：${error instanceof Error ? error.message : "同步失败"}`);
+      tasks.fail(taskId, "写入结果暂未确认，请刷新列表核对后再操作。", "结算流程批量锁定结果待核对");
     } finally {
+      batchTask.current = null;
+      batchLockActive.current = false;
       setBatchLocking(false);
     }
   }
@@ -194,9 +216,18 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
   const onAdvance = useCallback(
     async (payload: WorkflowAdvancePayload) => {
       if (rowInteractionBlocked) return;
-      await runLockAction(() => advanceWorkflow(payload));
+      await runLockAction(
+        () => advanceWorkflow(payload),
+        () => {
+          const item = items.find((workflow) => workflow.id === payload.workflowId);
+          feedback.success(
+            payload.toStatus === "statement_locked" ? "结算流程已锁定" : "结算流程已解锁",
+            item ? `${item.month} · ${item.pi}` : undefined,
+          );
+        },
+      );
     },
-    [runLockAction, advanceWorkflow, rowInteractionBlocked],
+    [runLockAction, advanceWorkflow, rowInteractionBlocked, items, feedback],
   );
   const lockState = useMemo(
     () => ({
@@ -275,14 +306,23 @@ export function BillingWorkflowPanel({ user }: { user: SessionUser }) {
         }
       />
       {lockAction.error ? <Alert role="alert" showIcon title={lockAction.error} type="error" /> : null}
-      {batchLockNotice ? (
+      {batchResultError ? (
+        <Alert
+          role="alert"
+          showIcon
+          type="error"
+          title={batchResultError}
+          action={<Button onClick={() => void query.refetch()}>刷新核对</Button>}
+        />
+      ) : null}
+      {batchFailures.length ? (
         <Alert
           className="ledger-batch-notice"
-          role={batchLockNotice.kind === "error" ? "alert" : "status"}
+          role="alert"
           showIcon
-          title={batchLocking ? `正在锁定结算流程，已处理 ${batchAdvance.completed} 条…` : batchLockNotice.text}
+          type="warning"
+          title="以下结算流程未完成，核对后再操作"
           description={<BatchFailureDetails key={batchFailures.join("|")} failures={batchFailures} />}
-          type={batchLockNotice.kind}
         />
       ) : null}
       <QueryFeedback

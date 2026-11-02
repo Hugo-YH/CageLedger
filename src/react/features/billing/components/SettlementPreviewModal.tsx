@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
 import { DownloadOutlined, PlayCircleOutlined, PrinterOutlined, UndoOutlined } from "@ant-design/icons";
 import { Alert, Button, Tooltip, Typography } from "antd";
@@ -16,8 +17,6 @@ export function SettlementPreviewModal({
   loading = false,
   error = "",
   onRetry,
-  notice,
-  noticeKind,
   generatePending,
   pdfExporting,
   hasWorkflow,
@@ -35,8 +34,6 @@ export function SettlementPreviewModal({
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
-  notice: string;
-  noticeKind: "success" | "error" | "info";
   generatePending: boolean;
   pdfExporting: boolean;
   hasWorkflow: boolean;
@@ -49,6 +46,7 @@ export function SettlementPreviewModal({
   onRevert: (note: string) => Promise<void>;
   onStartSettlement: () => void;
 }) {
+  const feedback = useOperationFeedback();
   const previewMarkup = useMemo(() => (result ? settlementStatementHtml(result, false) : ""), [result]);
   const canInitiate = !hasWorkflow || workflowStatus === "statement_generated";
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -92,7 +90,11 @@ export function SettlementPreviewModal({
             <Button
               icon={<PrinterOutlined aria-hidden />}
               disabled={!result}
-              onClick={() => result && openSettlementPrint(result)}
+              onClick={() => {
+                if (!result) return;
+                if (openSettlementPrint(result)) feedback.info("已打开打印窗口", "请在打印窗口中完成打印。");
+                else feedback.error("未能打开打印窗口", "请允许浏览器弹出窗口后重试。");
+              }}
             >
               打印结算单
             </Button>
@@ -135,13 +137,6 @@ export function SettlementPreviewModal({
       />
       {error ? (
         <Alert role="alert" showIcon type="error" title={error} action={<Button onClick={onRetry}>重试</Button>} />
-      ) : notice ? (
-        <Alert
-          title={notice}
-          role="status"
-          showIcon
-          type={noticeKind === "error" ? "error" : noticeKind === "success" ? "success" : "info"}
-        />
       ) : null}
       {loading ? (
         <PageSkeleton embedded label="结算预览" variant="detail" rows={4} />

@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { LinkOutlined, SendOutlined } from "@ant-design/icons";
 import { Alert, Button, Collapse, Input, Space, Tag, Typography } from "antd";
 import type { UploadFile } from "antd/es/upload/interface";
@@ -66,6 +67,7 @@ export function FeedbackDetailDrawer({
   const [commentBody, setCommentBody] = useState("");
   const [commentFiles, setCommentFiles] = useState<UploadFile[]>([]);
   const [supplementId, setSupplementId] = useState("");
+  const feedback = useOperationFeedback();
   const [operationError, setOperationError] = useState("");
   const [uploading, setUploading] = useState(false);
   const detailPending = uploading || comment.isPending;
@@ -107,12 +109,22 @@ export function FeedbackDetailDrawer({
       setCommentFiles(failed);
       if (failed.length) {
         setOperationError("补充说明已保存，但部分截图上传失败。本地已保留，可重试。");
+        feedback.warning(
+          "补充说明已保存，截图未全部上传",
+          `${failed.length} 张截图已保留，请在当前抽屉重试上传。`,
+          `feedback:${item.id}:comment:${commentId}`,
+        );
         return;
       }
       requestId.current = crypto.randomUUID();
       attachmentRequestIds.current.clear();
       setSupplementId("");
       setCommentBody("");
+      feedback.success(
+        supplementId ? "补充说明截图已补传" : "补充说明已保存",
+        undefined,
+        `feedback:${item.id}:comment:${commentId}`,
+      );
       await detail.refetch();
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "追加说明失败，请重试");
@@ -126,6 +138,7 @@ export function FeedbackDetailDrawer({
     setOperationError("");
     try {
       await encounter.mutateAsync(!item.encountered);
+      feedback.success(item.encountered ? "已取消标记遇到此问题" : "已标记遇到此问题");
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "更新遇到状态失败，请重试");
     }
@@ -134,6 +147,7 @@ export function FeedbackDetailDrawer({
     setOperationError("");
     try {
       await (retrySync ? retry : sync).mutateAsync();
+      feedback.info("同步请求已发起", "实际同步结果请查看反馈同步状态。");
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "同步请求失败，请重试");
     }

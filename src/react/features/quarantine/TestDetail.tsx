@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -27,6 +28,7 @@ export function TestDetail({
   onEdit: () => void;
   onCreated: (id: string) => void;
 }) {
+  const feedback = useOperationFeedback();
   const write = useQuarantineWrite();
   const [error, setError] = useState("");
   const [supplier, setSupplier] = useState<string>();
@@ -46,6 +48,9 @@ export function TestDetail({
         body: { id: id(), supplier, expectedUpdatedAt: test.updatedAt, expectedBatchUpdatedAt: detail.item.updatedAt },
       });
       setError("");
+      feedback.success(
+        name === "issue" ? "检疫报告已出具" : name === "correction" ? "更正草稿已创建" : "复检草稿已创建",
+      );
       setIssuing(false);
       if (name !== "issue") onCreated(response.item.id);
     } catch (e) {
@@ -61,7 +66,8 @@ export function TestDetail({
     setDownloadStatus(path.endsWith("/preview") ? "正在生成 PDF 草稿…" : "正在下载报告…");
     try {
       const filename = await downloadQuarantine(path);
-      setDownloadStatus(`已下载 ${filename}`);
+      setDownloadStatus("");
+      feedback.success("检疫报告已生成，下载已开始", filename);
     } catch (e) {
       setDownloadStatus("");
       setFailedDownload(path);

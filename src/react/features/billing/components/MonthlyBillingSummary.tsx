@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useState, type ReactNode } from "react";
 import { Alert, Button, Card, Form, Tag, Typography } from "antd";
 import { ExclamationCircleOutlined, FileExcelOutlined } from "@ant-design/icons";
@@ -8,6 +9,7 @@ import { CommandBar, DateInput, HelpPopover } from "../../../components/ui";
 const currentMonth = new Date().toISOString().slice(0, 7);
 
 export function MonthlyBillingSummary({ navigationAction }: { navigationAction?: ReactNode }) {
+  const feedback = useOperationFeedback();
   const [month, setMonth] = useState(currentMonth);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -17,7 +19,7 @@ export function MonthlyBillingSummary({ navigationAction }: { navigationAction?:
     setExporting(true);
     try {
       const filename = await exportMonthlyBillingSummary(month);
-      setNotice({ type: "success", text: `${filename} 已开始下载。` });
+      feedback.success("月度汇总已生成", `${filename} 已开始下载。`);
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "汇总导出失败" });
     } finally {

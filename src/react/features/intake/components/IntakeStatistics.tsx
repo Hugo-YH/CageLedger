@@ -1,6 +1,7 @@
+import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
 import { BarChartOutlined, CalendarOutlined, CopyOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Collapse, Flex, Skeleton, Space, Statistic, Tag, Typography } from "antd";
+import { Alert, Button, Card, Collapse, Flex, Skeleton, Space, Statistic, Tag, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
 
 import type { IntakeBatchListItem } from "../../../api/contracts";
@@ -54,7 +55,7 @@ function IntakeStatisticsModal({ items, onClose }: { items: IntakeBatchListItem[
   const waiting = codes.length > 0 && projects.isPending;
   const unavailable = waiting || projects.isFetching || projects.isError;
   const unresolved = Object.values(projects.data || {}).some((item) => item.issue);
-  const { message } = App.useApp();
+  const { message } = useOperationFeedback();
   const latest = useLatestRequest();
   const copying = useRef(false);
   const [copyPending, setCopyPending] = useState(false);

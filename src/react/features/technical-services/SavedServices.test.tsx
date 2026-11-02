@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Antd from "antd";
@@ -356,13 +356,14 @@ describe("SavedServices", () => {
     workspace.remove();
   });
 
-  it("shows an explicit edit success notice, restores the edit trigger focus, and keeps errors separate", async () => {
+  it("restores edit trigger focus without duplicating the editor result and keeps errors separate", async () => {
     const rendered = view();
     const edit = screen.getAllByRole("button", { name: /编\s*辑/ })[0];
     fireEvent.click(edit);
     fireEvent.click(screen.getByRole("button", { name: "完成保存" }));
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("技术服务明细已保存。"));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(operationFeedback.success).not.toHaveBeenCalledWith("技术服务明细已保存", expect.anything());
     await waitFor(() => expect(edit).toHaveFocus());
 
     api.isError = true;
@@ -392,6 +393,43 @@ describe("SavedServices", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it.each(["resolve", "reject"] as const)(
+    "ignores a retired deletion's late %s after another confirmation opens",
+    async (completion) => {
+      let resolve!: (value: unknown) => void;
+      let reject!: (reason: Error) => void;
+      const pending = new Promise<unknown>((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      api.mutation.mockReturnValueOnce(pending);
+      api.items = [
+        { ...sheet("first"), serviceName: "服务 A" },
+        { ...sheet("second"), serviceName: "服务 B" },
+      ];
+      operationFeedback.success.mockClear();
+      view();
+      fireEvent.click(screen.getAllByRole("button", { name: /删\s*除/ })[0]);
+      const firstDialog = screen.getByText("删除技术服务明细").closest<HTMLElement>(".ant-modal")!;
+      fireEvent.click(within(firstDialog).getByRole("button", { name: /删\s*除/ }));
+      expect(api.mutation).toHaveBeenCalledWith({ kind: "delete", sheet: expect.objectContaining({ id: "first" }) });
+      fireEvent.click(within(firstDialog).getByRole("button", { name: /取\s*消/ }));
+      fireEvent.click(screen.getAllByRole("button", { name: /删\s*除/ })[1]);
+      const secondDialog = screen.getByText("删除技术服务明细").closest(".ant-modal")!;
+      expect(secondDialog).toHaveTextContent("服务 B");
+      await act(async () => {
+        if (completion === "resolve") resolve({});
+        else reject(new Error("服务 A 删除失败"));
+        await pending.catch(() => {});
+      });
+      expect(screen.getByText("删除技术服务明细").closest(".ant-modal")).toBe(secondDialog);
+      expect(secondDialog).toHaveTextContent("服务 B");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(operationFeedback.success).not.toHaveBeenCalled();
+      expect(api.mutation).toHaveBeenCalledOnce();
+    },
+  );
+
   it("returns to the final available page after deletion reduces the result count", async () => {
     api.mutation.mockImplementation(() => {
       api.items = [];
@@ -408,3 +446,12 @@ describe("SavedServices", () => {
     await waitFor(() => expect(api.lastParams).toMatchObject({ offset: 0 }));
   });
 });
+
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));

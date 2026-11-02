@@ -27,7 +27,26 @@ export function AntdProvider({ children }: PropsWithChildren) {
 
   return (
     <ConfigProvider button={buttonConfig} componentSize="medium" locale={zhCN} theme={config}>
-      <AntApp>{children}</AntApp>
+      <AntApp
+        message={{ duration: 3, maxCount: 3 }}
+        notification={{
+          placement: mobile ? "top" : "topRight",
+          // Leave room for a concurrent lightweight Message above the notice stack.
+          top: mobile ? 96 : 80,
+          stack: { threshold: 3 },
+          pauseOnHover: true,
+          styles: {
+            root: {
+              maxWidth: "calc(100vw - 32px)",
+              maxHeight: mobile ? "calc(100dvh - 120px)" : "calc(100dvh - 104px)",
+              overflowY: "auto",
+              overflowWrap: "anywhere",
+            },
+          },
+        }}
+      >
+        {children}
+      </AntApp>
     </ConfigProvider>
   );
 }

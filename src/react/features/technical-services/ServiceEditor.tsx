@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../domain/personNames";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Descriptions, Form, Input, InputNumber, Select, Typography } from "antd";
@@ -50,6 +51,7 @@ export function ServiceEditor({
   onSaved?: () => void;
   onCancel?: () => void;
 }) {
+  const feedback = useOperationFeedback();
   const [draft, setDraft] = useState(() =>
     initial
       ? { ...structuredClone(initial), rows: initial.rows.map((row) => ({ ...row, id: createClientId() })) }
@@ -137,9 +139,10 @@ export function ServiceEditor({
     try {
       await mutation.mutateAsync({ kind: "save", sheet: draft, editing: Boolean(initial) });
       setBaseline(JSON.stringify(draft));
+      feedback.success("技术服务明细已保存", `${draft.month} · ${draft.iacuc}`);
       if (onSaved) onSaved();
       else {
-        setNotice({ error: false, text: "技术服务明细已保存" });
+        setNotice(null);
         iacuc.reset();
         setAddedRowIds(new Set());
         const fresh = newServiceSheet();

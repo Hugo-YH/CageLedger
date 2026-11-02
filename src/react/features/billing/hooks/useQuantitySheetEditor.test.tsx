@@ -39,7 +39,7 @@ const submitEvent = () => ({ preventDefault: vi.fn() }) as unknown as FormEvent;
 
 describe("quantity editor draft lifecycle", () => {
   let client: QueryClient;
-  let saveResponse: (sheet: QuantitySheet) => Response;
+  let saveResponse: (sheet: QuantitySheet) => Response | Promise<Response>;
   let lookupResponse: (() => Promise<Response>) | undefined;
   let writes: Array<{ url: string; method: string; body: { sheet: QuantitySheet; expectedUpdatedAt: string } }>;
   function wrapper({ children }: { children: ReactNode }) {
@@ -140,7 +140,39 @@ describe("quantity editor draft lifecycle", () => {
     expect(result.current.draft.iacuc).toBe("");
     expect(result.current.editorRows).toHaveLength(31);
     expect(result.current.editingDialog).toBe(false);
-    expect(result.current.noticeKind).toBe("success");
+    expect(result.current.notice).toBe("");
+    expect(operationFeedback.success).toHaveBeenCalledWith("数量统计表已保存", expect.any(String));
+  });
+
+  it.each([200, 409])("ignores an old save response (%s) after its confirmation is replaced", async (status) => {
+    let finish!: (response: Response) => void;
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved", true), { wrapper });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    act(() => result.current.loadForEdit(savedSheet()));
+    act(() => result.current.requestSave(submitEvent()));
+    saveResponse = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
+    operationFeedback.success.mockClear();
+    let saving: Promise<void>;
+    await act(async () => {
+      saving = result.current.persistSheet();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(writes).toHaveLength(1));
+    act(() => result.current.setConfirmSave(null));
+    act(() => result.current.setField("funding", "后续草稿"));
+    act(() => result.current.requestSave(submitEvent()));
+    const second = result.current.confirmSave;
+    await act(async () => {
+      finish(Response.json(status === 200 ? { item: savedSheet() } : { error: "旧请求冲突" }, { status }));
+      await saving;
+    });
+    expect(result.current.confirmSave).toBe(second);
+    expect(result.current.draft.funding).toBe("后续草稿");
+    expect(result.current.notice).not.toContain("旧请求冲突");
+    expect(operationFeedback.success).not.toHaveBeenCalled();
   });
 
   it("retains the draft and row edits on a conflict without retrying the write", async () => {
@@ -251,3 +283,12 @@ describe("quantity editor draft lifecycle", () => {
     expect(writes).toHaveLength(0);
   });
 });
+
+const operationFeedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));

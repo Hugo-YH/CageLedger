@@ -13,12 +13,14 @@ export function InspectionPublishModal({
   open,
   diff,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   diff: InspectionCatalogDiff;
   pending: boolean;
+  error?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -35,6 +37,7 @@ export function InspectionPublishModal({
       onOk={onConfirm}
       width={560}
     >
+      {error ? <Alert showIcon type="error" title={error} /> : null}
       <Alert
         type="warning"
         showIcon

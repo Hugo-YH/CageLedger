@@ -1,4 +1,5 @@
-import { App, Alert, Card, Flex, Space, Switch, Typography } from "antd";
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
+import { Alert, Card, Flex, Space, Switch, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import {
@@ -41,7 +42,8 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export function SystemFeaturesView() {
-  const { message } = App.useApp();
+  const feedback = useOperationFeedback();
+  const [saveError, setSaveError] = useState("");
   const features = useSystemFeatures();
   const save = useSaveSystemFeatures();
   const [draft, setDraft] = useState<SystemFeatureFlags | null>(null);
@@ -75,18 +77,19 @@ export function SystemFeaturesView() {
   }
 
   async function refresh() {
-    await features.refetch();
-    if (dirty) void message.info("已刷新服务器配置，未覆盖当前未保存的修改。");
+    const result = await features.refetch();
+    if (dirty && !result.isError) void feedback.message.info("已刷新服务器配置，未覆盖当前未保存的修改。");
   }
   async function saveChanges() {
     if (!baseline || !dirty) return;
+    setSaveError("");
     try {
       const response = await save.mutateAsync({ enabled: currentDraft, expectedUpdatedAt: baseline.updatedAt });
       setDraft(response.item.enabled);
       setBaseline(response.item);
-      void message.success("系统功能设置已保存");
+      feedback.success("系统功能设置已保存");
     } catch (error) {
-      void message.error(errorMessage(error, "系统功能设置保存失败，请重试。"));
+      setSaveError(errorMessage(error, "系统功能设置保存失败，请重试。"));
     }
   }
   function discardChanges() {
@@ -98,6 +101,7 @@ export function SystemFeaturesView() {
 
   return (
     <section className="workspace-view settings-workspace system-features-page" data-feature="administration">
+      {saveError ? <Alert showIcon type="error" title={saveError} /> : null}
       <CommandBar
         ariaLabel="系统功能设置"
         title="系统功能"

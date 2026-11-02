@@ -1,3 +1,4 @@
+import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Alert, Button, Select, Skeleton, Space, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -12,13 +13,13 @@ import { Drawer } from "../../components/ui/Drawer";
 import { KIND_LABEL as KIND, STATUS_LABEL as STATUS } from "./feedbackPresentation";
 
 export function FeedbackImportDrawer({ onClose }: { onClose: () => void }) {
+  const feedback = useOperationFeedback();
   const [state, setState] = useState<"all" | "open" | "closed">("all");
   const [page, setPage] = useState(1);
   const [numbers, setNumbers] = useState<number[]>([]);
   const [selectionRepository, setSelectionRepository] = useState("");
   const [result, setResult] = useState<FeedbackImportResult>();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [request, setRequest] = useState<{ requestId: string; repository: string; numbers: number[] } | null>(null);
   const locked = useRef(false);
@@ -82,6 +83,11 @@ export function FeedbackImportDrawer({ onClose }: { onClose: () => void }) {
     try {
       const response = await importing.mutateAsync(body!);
       setResult(response);
+      const imported = response.items.filter((item) => item.outcome === "imported").length;
+      const failed = response.items.filter((item) => item.outcome === "failed").length;
+      const summary = `导入 ${imported} 条，跳过 ${response.items.length - imported - failed} 条，失败 ${failed} 条。`;
+      if (failed) feedback.warning("历史工单导入部分完成", `${summary}失败项仍保留选择，请查看逐项结果。`);
+      else feedback.success("历史工单导入已完成", summary);
       setNumbers(response.items.filter((item) => item.outcome === "failed").map((item) => item.number));
       setRequest(null);
       void preview.refetch();
@@ -94,7 +100,7 @@ export function FeedbackImportDrawer({ onClose }: { onClose: () => void }) {
   }
 
   function changeScope(next: "all" | "open" | "closed") {
-    setNotice(numbers.length ? "范围已变化，已清空选择" : "");
+    if (numbers.length) void feedback.message.info("范围已变化，已清空选择");
     setState(next);
     setPage(1);
     setNumbers([]);
@@ -195,11 +201,6 @@ export function FeedbackImportDrawer({ onClose }: { onClose: () => void }) {
           />
         ) : null}
         {!selectionValid ? <Alert showIcon type="warning" title="仓库已变化，请重新选择工单" /> : null}
-        {notice ? (
-          <Typography.Text role="status" type="secondary">
-            {notice}
-          </Typography.Text>
-        ) : null}
         {error ? (
           <Alert
             showIcon
