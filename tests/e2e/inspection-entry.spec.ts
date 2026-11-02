@@ -97,12 +97,16 @@ test("section normal confirmation preserves finding metadata and saves every ans
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "设施", exact: true }));
   await page.getByRole("combobox", { name: "饲养间", exact: true }).click();
   await page.getByText("8014", { exact: true }).last().click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
   const module = page.locator('.inspection-module-card[data-module="basicAssessment"]');
   const section = module.locator(".inspection-section").first();
   await section.locator(".ant-collapse-header").click();
   const sectionAnswerCount = await section.locator(".inspection-node").count();
   expect(sectionAnswerCount).toBeGreaterThan(1);
   const first = section.locator(".inspection-node").first();
+  // The button can have a stable box while the expanding panel still clips it.
+  await expect(section.locator(".ant-collapse-panel")).toBeVisible();
+  await expect(section.locator(".ant-collapse-panel")).not.toHaveClass(/ant-motion-collapse/);
   await first.getByRole("button", { name: "异常", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.locator(".ant-form-item").filter({ hasText: "笼架" }).locator("input").fill("测试笼架");

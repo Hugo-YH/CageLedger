@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.25.0",
+    build: "253",
+    releasedAt: "2026-11-02",
+    title: "合格证识别",
+    items: [
+      "合格证PDF支持跨页识别，将多页证书资料汇总到同一核对表；完整原件继续保留，识别结果仍须人工核对后保存",
+      "显示本次识别页与跳过的疑似照片页，支持切换为全部页面重新识别；超出页数或图片容量限制时明确提示，避免提交不完整资料",
+      "项目负责人身份设置按单个人展示，多人姓名拆分后可分别维护身份；项目、结算及历史记录中的原始负责人字段保持原样",
+    ],
+  },
+  {
     version: "1.24.0",
     build: "252",
     releasedAt: "2026-11-02",
