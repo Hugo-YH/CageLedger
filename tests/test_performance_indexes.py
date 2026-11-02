@@ -9,6 +9,30 @@ from server_app.repositories.billing_candidates import workflow_id_sql
 
 
 class PerformanceIndexTests(unittest.TestCase):
+    def test_intake_default_order_index_is_idempotent_and_preserves_blank_dates_and_ties(self):
+        from server_app.web.entity_contracts import ENTITY_ORDER_BY
+
+        with closing(sqlite3.connect(":memory:")) as conn:
+            conn.row_factory = sqlite3.Row
+            server.initialize_schema(conn)
+            for identity, day, updated in (
+                ("dated", "2026-11-01", "v1"),
+                ("blank", "", "v1"),
+                ("null", None, "v2"),
+                ("tie", "", "v1"),
+            ):
+                conn.execute(
+                    "INSERT INTO intake_batches (id,batch_no,intake_date,updated_at,status,payload) "
+                    "VALUES (?,?,?,?,'received','{}')",
+                    (identity, identity, day, updated),
+                )
+            sql = "SELECT id FROM intake_batches ORDER BY " + ENTITY_ORDER_BY["intake_batches"] + " LIMIT 20"
+            for _ in range(2):
+                create_performance_indexes(conn)
+                self.assertEqual([row[0] for row in conn.execute(sql)], ["null", "tie", "blank", "dated"])
+                plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + sql)]
+                self.assertTrue(any("idx_intake_batches_default_order" in step for step in plan), plan)
+
     def test_feeding_candidate_scope_index_preserves_first_match_and_separate_fee_types(self):
         with closing(sqlite3.connect(":memory:")) as conn:
             conn.row_factory = sqlite3.Row

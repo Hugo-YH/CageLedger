@@ -1,6 +1,7 @@
 import json
 
 from server_app.domains.intake.strain_standard import standardize_strain, supplier_full_name
+from server_app.runtime_logging import log_stage
 from server_app.shared.concurrency import StaleWriteError
 from server_app.shared.intake_identifiers import intake_identifier_key
 
@@ -111,10 +112,12 @@ def record(row, source, *, complete=False):
 def list_records(conn, actor, query):
     authorize(actor)
     params = parameters(query)
-    source = repository.context(conn)
+    with log_stage("reception_read", "applications", component="reception"):
+        source = repository.context(conn)
     rows, total = repository.page(conn, source, params)
-    registrations = certificate_repo.registration_summaries(conn, [row["id"] for row in rows])
-    counts = certificate_repo.attachment_counts(conn, [row["id"] for row in rows])
+    with log_stage("reception_read", "certificates", component="reception"):
+        registrations = certificate_repo.registration_summaries(conn, [row["id"] for row in rows])
+        counts = certificate_repo.attachment_counts(conn, [row["id"] for row in rows])
     items = []
     for row in rows:
         item = record(row, source)
@@ -150,7 +153,8 @@ def options(conn, actor, query):
     column = query.get("column", [""])[0]
     if column not in set(repository.FIELDS) | {"receiptDate"}:
         raise ValueError("接收列表筛选列无效")
-    return {"items": repository.filter_options(conn, repository.context(conn), column, params["columnFilters"])}
+    with log_stage("reception_read", "filter_options", component="reception"):
+        return {"items": repository.filter_options(conn, repository.context(conn), column, params["columnFilters"])}
 
 
 def registration_lines(item, batch):

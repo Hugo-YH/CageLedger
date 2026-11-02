@@ -6,7 +6,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from server_app.domains.administration.audit import audit_event, write_audit_events
-from server_app.runtime_logging import log_operation
 from server_app.shared import now_iso
 
 from . import repository as repo
@@ -66,7 +65,6 @@ def asset_path(feedback, comment=None):
     return f"/issues/{feedback['issue_number']}/assets"
 
 
-@log_operation("feedback_remote_sync", component="feedback")
 def perform(client, task, feedback, entity, root):
     """Return a remote result without touching SQLite. Ambiguous POSTs only reconcile."""
     kind = task["kind"]
@@ -163,7 +161,36 @@ def read_remote(client, feedback, *, issue=None):
     return {"issue": issue, "comments": public, "assets": assets}
 
 
+def _projection(conn, feedback_id):
+    """Compare visible content only; polling timestamps/versions are not changes."""
+    return (
+        tuple(
+            conn.execute(
+                "SELECT status,issue_number,issue_url,assignees,fix_version FROM feedback WHERE id=?",
+                (feedback_id,),
+            ).fetchone()
+        ),
+        [
+            tuple(row)
+            for row in conn.execute(
+                """SELECT id,remote_id,COALESCE(remote_body,body),updated_at FROM feedback_comments
+                   WHERE feedback_id=? AND visible=1 ORDER BY id""",
+                (feedback_id,),
+            )
+        ],
+        [
+            tuple(row)
+            for row in conn.execute(
+                """SELECT id,remote_id FROM feedback_attachments
+                   WHERE feedback_id=? AND visible=1 ORDER BY id""",
+                (feedback_id,),
+            )
+        ],
+    )
+
+
 def apply(conn, task, feedback, result):
+    projection_before = _projection(conn, feedback["id"]) if task["kind"] == "refresh" else None
     before = {key: feedback[key] for key in ("status", "issue_number", "assignees", "fix_version")}
     kind = task["kind"]
     if result.get("deleted"):
@@ -222,6 +249,7 @@ def apply(conn, task, feedback, result):
                 )
             ],
         )
+    return projection_before is None or projection_before != _projection(conn, feedback["id"])
 
 
 def project_remote(conn, feedback, remote):

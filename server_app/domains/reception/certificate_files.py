@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory, TemporaryFile
 from threading import BoundedSemaphore
 
 from server_app.config import RECEPTION_CERTIFICATE_FILES_PATH, RECEPTION_PDFINFO_BIN, RECEPTION_PDFTOPPM_BIN
+from server_app.runtime_logging import log_stage
 
 MAX_FILE_BYTES = 30 * 1024 * 1024
 MAX_ATTACHMENTS = 20
@@ -46,51 +47,53 @@ def prepare(name, content):
         with TemporaryDirectory(prefix="cageledger-certificate-") as temporary:
             root = Path(temporary)
             original = root / "source.pdf"
-            original.write_bytes(content)
-            env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
-            with TemporaryFile() as output:
+            with log_stage("reception_certificate_upload", "pdf_parse", component="reception"):
+                original.write_bytes(content)
+                env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
+                with TemporaryFile() as output:
+                    completed = subprocess.run(
+                        [tool(RECEPTION_PDFINFO_BIN, "pdfinfo"), str(original)],
+                        stdout=output,
+                        stderr=subprocess.DEVNULL,
+                        timeout=15,
+                        env=env,
+                        check=False,
+                    )
+                    output.seek(0)
+                    info = output.read(65537)
+                pages = re.search(rb"^Pages:\s+(\d+)", info, re.MULTILINE)
+                if (
+                    completed.returncode
+                    or len(info) > 65536
+                    or not pages
+                    or re.search(rb"^Encrypted:\s+yes", info, re.MULTILINE)
+                ):
+                    raise ValueError("PDF损坏、加密或无法读取，请检查原件")
+                page_count = int(pages[1])
+                if not 1 <= page_count <= 100:
+                    raise ValueError("合格证PDF须为1至100页")
+            with log_stage("reception_certificate_upload", "preview_render", component="reception"):
                 completed = subprocess.run(
-                    [tool(RECEPTION_PDFINFO_BIN, "pdfinfo"), str(original)],
-                    stdout=output,
+                    [
+                        tool(RECEPTION_PDFTOPPM_BIN, "pdftoppm"),
+                        "-f",
+                        "1",
+                        "-singlefile",
+                        "-scale-to",
+                        "3000",
+                        "-png",
+                        str(original),
+                        str(root / "first-page"),
+                    ],
+                    stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=15,
+                    timeout=30,
                     env=env,
                     check=False,
                 )
-                output.seek(0)
-                info = output.read(65537)
-            pages = re.search(rb"^Pages:\s+(\d+)", info, re.MULTILINE)
-            if (
-                completed.returncode
-                or len(info) > 65536
-                or not pages
-                or re.search(rb"^Encrypted:\s+yes", info, re.MULTILINE)
-            ):
-                raise ValueError("PDF损坏、加密或无法读取，请检查原件")
-            page_count = int(pages[1])
-            if not 1 <= page_count <= 100:
-                raise ValueError("合格证PDF须为1至100页")
-            completed = subprocess.run(
-                [
-                    tool(RECEPTION_PDFTOPPM_BIN, "pdftoppm"),
-                    "-f",
-                    "1",
-                    "-singlefile",
-                    "-scale-to",
-                    "3000",
-                    "-png",
-                    str(original),
-                    str(root / "first-page"),
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=30,
-                env=env,
-                check=False,
-            )
-            preview = root / "first-page.png"
-            if completed.returncode or not preview.is_file() or preview.stat().st_size > 15 * 1024 * 1024:
-                raise ValueError("PDF首页无法生成预览，请检查原件")
+                preview = root / "first-page.png"
+                if completed.returncode or not preview.is_file() or preview.stat().st_size > 15 * 1024 * 1024:
+                    raise ValueError("PDF首页无法生成预览，请检查原件")
             return {
                 "name": name,
                 "sha256": hashlib.sha256(content).hexdigest(),
@@ -130,13 +133,14 @@ def store(identity, original, preview):
         committed = True
 
     try:
-        for target, content in ((path(identity), original), (path(identity, preview=True), preview)):
-            with target.open("xb") as output:
-                owned.append(target)
-                os.fchmod(output.fileno(), 0o600)
-                output.write(content)
-                output.flush()
-                os.fsync(output.fileno())
+        with log_stage("reception_certificate_upload", "store_files", component="reception"):
+            for target, content in ((path(identity), original), (path(identity, preview=True), preview)):
+                with target.open("xb") as output:
+                    owned.append(target)
+                    os.fchmod(output.fileno(), 0o600)
+                    output.write(content)
+                    output.flush()
+                    os.fsync(output.fileno())
         yield commit
     finally:
         if not committed:

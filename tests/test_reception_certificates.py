@@ -82,7 +82,6 @@ class ReceptionCertificateTests(unittest.TestCase):
             (certificates, "connect_db", self.connect),
             (routes, "connect_db", self.connect),
             (repository, "read_iacuc_index", lambda *_: self.index),
-            (certificates, "emit_event", Mock()),
         ):
             context = patch.object(target, name, value)
             context.start()
@@ -229,6 +228,39 @@ class ReceptionCertificateTests(unittest.TestCase):
         )
         self.assertEqual(repo.attachments(self.conn, self.batch["id"])[0]["id"], attachment["id"])
         self.assertEqual(self.payload(), before)
+
+    def test_recognition_stage_logs_keep_success_and_failed_draft_semantics(self):
+        attachment = self.upload()
+        with (
+            self.assertLogs("cageledger.runtime", level="INFO") as logs,
+            patch.object(ai.certificate_image, "prepare", return_value=(PNG, {})),
+            patch.object(ai, "deepseek_chat_json", return_value=(self.extraction(), {})),
+        ):
+            run = self.recognize(attachment["id"])
+        self.assertEqual(run["status"], "completed")
+        stages = [(record.diagnostics["stage"], record.msg) for record in logs.records]
+        self.assertEqual(
+            stages,
+            [
+                (stage, "reception_certificate_recognition_stage_completed")
+                for stage in ("start", "verify_files", "image_preprocess", "normalize", "save")
+            ],
+        )
+        with (
+            self.assertLogs("cageledger.runtime", level="INFO") as logs,
+            patch.object(ai.certificate_image, "prepare", side_effect=ValueError("private-image-content")),
+            patch.object(ai, "deepseek_chat_json") as provider,
+        ):
+            failed = self.recognize(attachment["id"])
+        provider.assert_not_called()
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(len(repo.attachments(self.conn, self.batch["id"])), 1)
+        self.assertEqual(self.count("reception.certificate_recognized"), 1)
+        self.assertEqual(self.count("reception.certificate_recognition_failed"), 1)
+        failures = [record for record in logs.records if record.msg.endswith("_failed")]
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0].diagnostics["stage"], "image_preprocess")
+        self.assertNotIn("private-image-content", json.dumps([record.diagnostics for record in logs.records]))
 
     def test_pdf_limits_type_and_bounded_rendering(self):
         for name, content in (

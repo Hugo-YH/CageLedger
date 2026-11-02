@@ -31,6 +31,8 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_owner_date ON intake_batches(owner, intake_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_room_date ON intake_batches(room_name, intake_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_intake_batches_updated ON intake_batches(updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_intake_batches_default_order ON intake_batches "
+    "((COALESCE(intake_date, '') != '') ASC, COALESCE(intake_date, '') DESC, updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_billing_statements_iacuc_month ON billing_statements(iacuc, month)",
     "CREATE INDEX IF NOT EXISTS idx_billing_statement_lines_statement_id ON billing_statement_lines(statement_id)",
     "CREATE INDEX IF NOT EXISTS idx_billing_candidate_snapshots_month ON billing_candidate_snapshots(month DESC)",

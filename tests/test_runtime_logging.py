@@ -1,3 +1,4 @@
+import gzip
 import io
 import json
 import logging
@@ -71,11 +72,16 @@ class RuntimeLoggingTests(unittest.TestCase):
             configure_runtime_logging()
             for count in range(40):
                 emit_event("rotation_probe", count=count)
-        paths = list(config.LOG_DIR.glob("runtime.jsonl*"))
+            handler = next(
+                h for h in runtime_logging._HANDLERS if isinstance(h, runtime_logging.SafeRotatingFileHandler)
+            )
+            self.assertTrue(handler.wait_for_archives())
+        paths = list(config.LOG_DIR.glob("runtime.*"))
         self.assertEqual(len(paths), 3)
         for path in paths:
-            self.assertLessEqual(path.stat().st_size, 1200)
-            for line in path.read_text().splitlines():
+            content = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+            self.assertLessEqual(len(content), 1200)
+            for line in content.decode().splitlines():
                 self.assertEqual(json.loads(line)["event"], "rotation_probe")
         self.assertEqual(self.records()[-1]["count"], 39)
 
@@ -155,7 +161,7 @@ class RuntimeLoggingTests(unittest.TestCase):
 
     def test_file_write_failure_falls_back_once_without_interrupting_business(self):
         handler = next(h for h in runtime_logging._HANDLERS if isinstance(h, runtime_logging.SafeRotatingFileHandler))
-        with patch.object(handler, "shouldRollover", side_effect=OSError("private filesystem error")):
+        with patch.object(handler.stream, "write", side_effect=OSError("private filesystem error")):
             emit_event("write_failure_probe")
             emit_event("business_continues")
         self.assertTrue(handler.failed)
@@ -164,6 +170,20 @@ class RuntimeLoggingTests(unittest.TestCase):
         self.assertEqual(sum(record["event"] == "write_failure_probe" for record in records), 1)
         self.assertEqual(records[-1]["event"], "business_continues")
         self.assertNotIn("private filesystem error", self.console.getvalue())
+
+    def test_archive_rename_failure_preserves_existing_file_and_uses_console(self):
+        handler = next(h for h in runtime_logging._HANDLERS if isinstance(h, runtime_logging.SafeRotatingFileHandler))
+        before = (config.LOG_DIR / "runtime.jsonl").read_bytes()
+        with (
+            patch.object(handler, "_rollover_needed", return_value=True),
+            patch.object(handler, "rotate", side_effect=OSError("private rename failure")),
+        ):
+            emit_event("rename_failure_probe")
+        self.assertEqual((config.LOG_DIR / "runtime.jsonl").read_bytes(), before)
+        records = [json.loads(line) for line in self.console.getvalue().splitlines()]
+        self.assertEqual(sum(record["event"] == "runtime_log_unavailable" for record in records), 1)
+        self.assertEqual(sum(record["event"] == "rename_failure_probe" for record in records), 1)
+        self.assertNotIn("private rename failure", self.console.getvalue())
 
     def test_persistence_can_be_disabled_without_creating_directory(self):
         path = self.root / "disabled"
@@ -234,6 +254,29 @@ class RuntimeLoggingTests(unittest.TestCase):
         record = self.records()[-1]
         self.assertEqual(record["event"], "operation_probe_failed")
         self.assertEqual(record["causes"], [{"errorType": "OSError"}])
+        self.assertNotIn("private-", (config.LOG_DIR / "runtime.jsonl").read_text())
+
+    def test_stage_keeps_duration_request_and_failure_without_content_or_context_leak(self):
+        failure = ValueError("private-pdf-text-name-url-key")
+        with log_context(requestId="stage-request", component="http"):
+            with runtime_logging.log_stage("stage_probe", "parse", component="reception"):
+                pass
+            with self.assertRaises(ValueError) as raised:
+                with runtime_logging.log_stage("stage_probe", "render", component="reception"):
+                    raise failure
+            emit_event("after_stage")
+        self.assertIs(raised.exception, failure)
+        completed, failed, after = self.records()[-3:]
+        self.assertEqual(completed["event"], "stage_probe_stage_completed")
+        self.assertEqual(failed["event"], "stage_probe_stage_failed")
+        self.assertEqual(failed["stage"], "render")
+        self.assertEqual(failed["errorType"], "ValueError")
+        for record in (completed, failed):
+            self.assertEqual(record["requestId"], "stage-request")
+            self.assertGreaterEqual(record["durationMs"], 0)
+        self.assertEqual(after["component"], "http")
+        self.assertNotIn("stage", after)
+        self.assertNotIn("operation", after)
         self.assertNotIn("private-", (config.LOG_DIR / "runtime.jsonl").read_text())
 
     def test_uncaught_thread_exception_is_persisted_without_raw_exception_text(self):

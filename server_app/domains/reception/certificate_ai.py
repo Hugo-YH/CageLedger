@@ -6,6 +6,7 @@ import math
 import unicodedata
 
 from server_app.config import DEEPSEEK_VISION_MODEL
+from server_app.runtime_logging import log_context, log_stage
 from server_app.services.ai import deepseek_chat_json
 
 from . import certificate_image
@@ -160,36 +161,39 @@ def normalize(payload, attachment_id, run_id, batch):
 
 
 def recognize(preview, attachment_id, run_id, batch):
-    pages = [{"pageNumber": 1, "image": preview}] if isinstance(preview, bytes) else preview
-    if not isinstance(pages, list) or not 1 <= len(pages) <= 20:
-        raise ValueError("一次须识别1至20页候选合格证")
-    images, processing = [], []
-    for page in pages:
-        processed, facts = certificate_image.prepare(page["image"])
-        images.append("data:image/png;base64," + base64.b64encode(processed).decode("ascii"))
-        processing.append({"pageNumber": page["pageNumber"], **facts})
-    numbers = [page["pageNumber"] for page in pages]
-    payload, usage = deepseek_chat_json(
-        PROMPT,
-        f"以下{len(images)}张图片按顺序来自原PDF的第{'、'.join(map(str, numbers))}页。请查看全部图片，提取所有独立合格证及其各条动物明细，忽略说明材料和验收现场照片。",
-        image_urls=images,
-        model=DEEPSEEK_VISION_MODEL,
-    )
-    extracted = payload.get("certificates") if isinstance(payload, dict) else None
-    for certificate in extracted if isinstance(extracted, list) else []:
-        if (
-            isinstance(certificate, dict)
-            and certificate.get("pageNumber") is not None
-            and (type(certificate["pageNumber"]) is not int or certificate["pageNumber"] not in numbers)
-        ):
-            raise ValueError("AI返回的合格证来源页码不在识别范围内，请重试或人工核对")
-    result, raw = normalize(payload, attachment_id, run_id, batch)
-    raw["promptHash"] = hashlib.sha256(PROMPT.encode()).hexdigest()
-    raw["imageProcessing"] = {key: value for key, value in processing[0].items() if key != "pageNumber"}
-    raw["pages"] = processing
-    raw["usage"] = {
-        key: usage[key]
-        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
-        if isinstance(usage, dict) and type(usage.get(key)) is int
-    }
+    with log_stage("reception_certificate_recognition", "image_preprocess", component="reception"):
+        pages = [{"pageNumber": 1, "image": preview}] if isinstance(preview, bytes) else preview
+        if not isinstance(pages, list) or not 1 <= len(pages) <= 20:
+            raise ValueError("一次须识别1至20页候选合格证")
+        images, processing = [], []
+        for page in pages:
+            processed, facts = certificate_image.prepare(page["image"])
+            images.append("data:image/png;base64," + base64.b64encode(processed).decode("ascii"))
+            processing.append({"pageNumber": page["pageNumber"], **facts})
+        numbers = [page["pageNumber"] for page in pages]
+    with log_context(stage="ai_request"):
+        payload, usage = deepseek_chat_json(
+            PROMPT,
+            f"以下{len(images)}张图片按顺序来自原PDF的第{'、'.join(map(str, numbers))}页。请查看全部图片，提取所有独立合格证及其各条动物明细，忽略说明材料和验收现场照片。",
+            image_urls=images,
+            model=DEEPSEEK_VISION_MODEL,
+        )
+    with log_stage("reception_certificate_recognition", "normalize", component="reception"):
+        extracted = payload.get("certificates") if isinstance(payload, dict) else None
+        for certificate in extracted if isinstance(extracted, list) else []:
+            if (
+                isinstance(certificate, dict)
+                and certificate.get("pageNumber") is not None
+                and (type(certificate["pageNumber"]) is not int or certificate["pageNumber"] not in numbers)
+            ):
+                raise ValueError("AI返回的合格证来源页码不在识别范围内，请重试或人工核对")
+        result, raw = normalize(payload, attachment_id, run_id, batch)
+        raw["promptHash"] = hashlib.sha256(PROMPT.encode()).hexdigest()
+        raw["imageProcessing"] = {key: value for key, value in processing[0].items() if key != "pageNumber"}
+        raw["pages"] = processing
+        raw["usage"] = {
+            key: usage[key]
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+            if isinstance(usage, dict) and type(usage.get(key)) is int
+        }
     return result, raw, usage

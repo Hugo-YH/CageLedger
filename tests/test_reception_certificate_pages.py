@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 from PIL import Image
 
 from server_app.domains.reception import certificate_ai as ai
+from server_app.domains.reception import certificate_files as files
 from server_app.domains.reception import certificate_pages as pages
 
 
@@ -64,6 +65,21 @@ class CertificatePagesTests(unittest.TestCase):
         for value in (0, -1, float("nan"), float("inf"), 100001):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 pages.select_pages([(1, value, 595)])
+
+    @unittest.skipUnless(shutil.which("pdfinfo") and shutil.which("pdftoppm"), "Poppler required")
+    def test_real_pdf_stage_logs_are_bounded_and_do_not_contain_document_values(self):
+        original = pdf([(595, 842), (595, 842)])
+        with self.assertLogs("cageledger.runtime", level="INFO") as logs:
+            metadata, preview = files.prepare("private-certificate-filename.pdf", original)
+            images, _ = pages.prepare(original, metadata["page_count"], preview)
+        self.assertEqual(len(images), 2)
+        diagnostics = [record.diagnostics for record in logs.records]
+        self.assertEqual(
+            [item["stage"] for item in diagnostics], ["pdf_parse", "preview_render", "pdf_parse", "page_render"]
+        )
+        self.assertTrue(all(item["durationMs"] >= 0 for item in diagnostics))
+        self.assertNotIn("private-certificate", json.dumps(diagnostics))
+        self.assertNotIn("PDF-1.4", json.dumps(diagnostics))
 
     @unittest.skipUnless(shutil.which("pdfinfo") and shutil.which("pdftoppm"), "Poppler required")
     def test_real_renderer_keeps_second_certificate_and_later_paper_page(self):

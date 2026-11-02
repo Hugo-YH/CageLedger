@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import sqlite3
 import tempfile
@@ -16,6 +17,7 @@ from server_app.domains.reception import repository, routes, service, workbook
 from server_app.legacy import initialize_schema
 from server_app.repositories.audit_storage import read_payload
 from server_app.repositories.entities import upsert_intake_batch
+from server_app.repositories.person_names import split_person_names
 from server_app.shared.concurrency import StaleWriteError
 from server_app.shared.sqlite import ClosingConnection
 from tests.test_intake_summary import reservation
@@ -94,6 +96,33 @@ class ReceptionTests(unittest.TestCase):
                 self.assertEqual(item["owner"], "")
                 self.assertEqual(item["project"], "")
                 self.assertTrue(any("未唯一匹配" in message for message in item["warnings"]))
+
+    def test_application_projection_keeps_legacy_fingerprint_and_transaction_visibility(self):
+        applications = [
+            self.index["items"][0],
+            {"iacuc": "Z2", "pi": "甲/乙", "project": "另一项目", "extra": "not part of the version"},
+        ]
+        for index, item in enumerate(applications):
+            self.conn.execute(
+                "INSERT INTO experiment_applications (id,iacuc,imported_at,payload) VALUES (?,?,?,?)",
+                (str(index), item["iacuc"], "2026-11-02", json.dumps(item)),
+            )
+        self.conn.commit()
+        self.patcher.stop()
+        items = [{key: item.get(key) for key in repository.PROJECT_FIELDS} for item in applications]
+        for item in items:
+            for key in ("pi", "owner"):
+                item[f"_{key}People"] = list(split_person_names(item.get(key)))
+        expected = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        with patch.object(repository, "read_iacuc_index", side_effect=AssertionError("full index must not be loaded")):
+            source = repository.context(self.conn)
+            self.assertEqual(source["json"], expected)
+            self.assertEqual(source["version"], hashlib.sha256(expected.encode()).hexdigest())
+            self.assertEqual((source["source"], source["updatedAt"]), ("database", "2026-11-02"))
+            self.conn.execute("UPDATE experiment_applications SET payload=? WHERE id='1'", (json.dumps({"pi": "丙"}),))
+            self.assertNotEqual(repository.context(self.conn)["version"], source["version"])
+            self.conn.rollback()
+            self.assertEqual(repository.context(self.conn), source)
 
     def test_authoritative_individual_people_filters_and_scoped_options(self):
         filters = json.dumps({"pi": ["共同负责人"]})

@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import logging
 import re
 from datetime import UTC, datetime
 from threading import BoundedSemaphore
@@ -12,7 +11,7 @@ from uuid import uuid4
 from server_app.config import DEEPSEEK_TIMEOUT_SECONDS, DEEPSEEK_VISION_MODEL
 from server_app.db import connect_db
 from server_app.domains.administration.audit import audit_event, write_audit_events
-from server_app.runtime_logging import emit_event
+from server_app.runtime_logging import log_stage
 from server_app.shared.concurrency import StaleWriteError, begin_write, require_exact_version
 from server_app.shared.time import now_iso
 
@@ -140,11 +139,12 @@ def upload(actor, batch_id, expected, name, content):
         raise ValueError("合格证PDF须为有效文件且不超过30MiB")
     if not certificate_files.filename(name).lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
         raise ValueError("请上传有效的PDF合格证原件")
-    digest = hashlib.sha256(content).hexdigest()
-    with connect_db() as conn:
-        load_batch(conn, batch_id, expected=expected, writing=True)
-        if identical := repo.identical_attachment(conn, batch_id, digest):
-            return {"attachment": attachment_view(identical), "reused": True}
+    with log_stage("reception_certificate_upload", "lookup", component="reception"):
+        digest = hashlib.sha256(content).hexdigest()
+        with connect_db() as conn:
+            load_batch(conn, batch_id, expected=expected, writing=True)
+            if identical := repo.identical_attachment(conn, batch_id, digest):
+                return {"attachment": attachment_view(identical), "reused": True}
     metadata, preview = certificate_files.prepare(name, content)
     item = {
         **metadata,
@@ -156,17 +156,18 @@ def upload(actor, batch_id, expected, name, content):
         "preview_size": len(preview),
     }
     with certificate_files.store(item["id"], content, preview) as commit_files:
-        with connect_db() as conn:
-            begin_write(conn)
-            load_batch(conn, batch_id, expected=expected, writing=True)
-            if identical := repo.identical_attachment(conn, batch_id, digest):
-                return {"attachment": attachment_view(identical), "reused": True}
-            if len(repo.attachments(conn, batch_id)) >= certificate_files.MAX_ATTACHMENTS:
-                raise ValueError("单个接收批次最多保存20份合格证附件")
-            repo.insert_attachment(conn, item)
-            audit(conn, actor, "reception.certificate_uploaded", batch_id, None, attachment_view(item))
-            conn.commit()
-            commit_files()
+        with log_stage("reception_certificate_upload", "save", component="reception"):
+            with connect_db() as conn:
+                begin_write(conn)
+                load_batch(conn, batch_id, expected=expected, writing=True)
+                if identical := repo.identical_attachment(conn, batch_id, digest):
+                    return {"attachment": attachment_view(identical), "reused": True}
+                if len(repo.attachments(conn, batch_id)) >= certificate_files.MAX_ATTACHMENTS:
+                    raise ValueError("单个接收批次最多保存20份合格证附件")
+                repo.insert_attachment(conn, item)
+                audit(conn, actor, "reception.certificate_uploaded", batch_id, None, attachment_view(item))
+                conn.commit()
+                commit_files()
     return {"attachment": attachment_view(item), "reused": False}
 
 
@@ -216,56 +217,58 @@ def recognize(actor, batch_id, attachment_id, body):
     if not _AI_SLOTS.acquire(blocking=False):
         raise certificate_files.CertificateUnavailableError("合格证识别繁忙，请稍后重试")
     try:
-        with connect_db() as conn:
-            begin_write(conn)
-            row, batch = load_batch(conn, batch_id, expected=body.get("expectedBatchUpdatedAt"), writing=True)
-            attached = repo.attachment(conn, batch_id, attachment_id)
-            if not attached:
-                raise LookupError("合格证附件不存在或不属于此批次")
-            if existing := repo.requested_run(conn, actor["id"], identity):
-                if (existing["batch_id"], existing["attachment_id"], existing["source_batch_version"]) != (
+        with log_stage("reception_certificate_recognition", "start", component="reception"):
+            with connect_db() as conn:
+                begin_write(conn)
+                row, batch = load_batch(conn, batch_id, expected=body.get("expectedBatchUpdatedAt"), writing=True)
+                attached = repo.attachment(conn, batch_id, attachment_id)
+                if not attached:
+                    raise LookupError("合格证附件不存在或不属于此批次")
+                if existing := repo.requested_run(conn, actor["id"], identity):
+                    if (existing["batch_id"], existing["attachment_id"], existing["source_batch_version"]) != (
+                        batch_id,
+                        attachment_id,
+                        row["updated_at"],
+                    ):
+                        raise StaleWriteError("识别请求编号已用于其他内容，请重新发起")
+                    if (existing.get("selection_mode") or "auto") != mode:
+                        raise StaleWriteError("识别请求编号已用于不同页面范围，请重新发起")
+                    return {"run": run_view(existing)}
+                _expire_or_reject(conn, actor, batch_id, attachment_id)
+                at = now_iso()
+                attempt = {
+                    "id": uuid4().hex,
+                    "batch_id": batch_id,
+                    "attachment_id": attachment_id,
+                    "actor_id": actor["id"],
+                    "request_id": identity,
+                    "source_batch_version": row["updated_at"],
+                    "status": "running",
+                    "model": DEEPSEEK_VISION_MODEL,
+                    "created_at": at,
+                    "updated_at": at,
+                    "selection_mode": mode,
+                }
+                repo.insert_run(conn, attempt)
+                audit(
+                    conn,
+                    actor,
+                    "reception.certificate_recognition_started",
                     batch_id,
-                    attachment_id,
-                    row["updated_at"],
-                ):
-                    raise StaleWriteError("识别请求编号已用于其他内容，请重新发起")
-                if (existing.get("selection_mode") or "auto") != mode:
-                    raise StaleWriteError("识别请求编号已用于不同页面范围，请重新发起")
-                return {"run": run_view(existing)}
-            _expire_or_reject(conn, actor, batch_id, attachment_id)
-            at = now_iso()
-            attempt = {
-                "id": uuid4().hex,
-                "batch_id": batch_id,
-                "attachment_id": attachment_id,
-                "actor_id": actor["id"],
-                "request_id": identity,
-                "source_batch_version": row["updated_at"],
-                "status": "running",
-                "model": DEEPSEEK_VISION_MODEL,
-                "created_at": at,
-                "updated_at": at,
-                "selection_mode": mode,
-            }
-            repo.insert_run(conn, attempt)
-            audit(
-                conn,
-                actor,
-                "reception.certificate_recognition_started",
-                batch_id,
-                None,
-                {
-                    "runId": attempt["id"],
-                    "attachmentId": attachment_id,
-                    "sourceBatchUpdatedAt": row["updated_at"],
-                    "pageSelectionMode": mode,
-                },
-            )
-            conn.commit()
+                    None,
+                    {
+                        "runId": attempt["id"],
+                        "attachmentId": attachment_id,
+                        "sourceBatchUpdatedAt": row["updated_at"],
+                        "pageSelectionMode": mode,
+                    },
+                )
+                conn.commit()
         result, raw, error = None, {"pageSelectionMode": mode}, ""
         try:
-            first_preview = verified_file(attached, preview=True)
-            original = verified_file(attached)
+            with log_stage("reception_certificate_recognition", "verify_files", component="reception"):
+                first_preview = verified_file(attached, preview=True)
+                original = verified_file(attached)
             images, selection = certificate_pages.prepare(
                 original, attached["page_count"], first_preview, include_all=include_all
             )
@@ -281,26 +284,20 @@ def recognize(actor, batch_id, attachment_id, body):
                 if isinstance(exc, ValueError | certificate_files.CertificateUnavailableError)
                 else "合格证识别暂不可用，请稍后重试"
             )
-            emit_event(
-                "reception_certificate_recognition_failed",
-                level=logging.WARNING,
-                component="reception",
-                error=exc,
-                rate_limit=True,
-            )
-        with connect_db() as conn:
-            begin_write(conn)
-            repo.finish_run(conn, attempt["id"], now_iso(), result=result, raw=raw, error=error)
-            saved = repo.run(conn, attempt["id"])
-            audit(
-                conn,
-                actor,
-                "reception.certificate_recognition_failed" if error else "reception.certificate_recognized",
-                batch_id,
-                None,
-                run_view(saved),
-            )
-            conn.commit()
+        with log_stage("reception_certificate_recognition", "save", component="reception"):
+            with connect_db() as conn:
+                begin_write(conn)
+                repo.finish_run(conn, attempt["id"], now_iso(), result=result, raw=raw, error=error)
+                saved = repo.run(conn, attempt["id"])
+                audit(
+                    conn,
+                    actor,
+                    "reception.certificate_recognition_failed" if error else "reception.certificate_recognized",
+                    batch_id,
+                    None,
+                    run_view(saved),
+                )
+                conn.commit()
         return {"run": run_view(saved)}
     finally:
         _AI_SLOTS.release()

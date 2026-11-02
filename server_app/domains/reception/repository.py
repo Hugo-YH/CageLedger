@@ -4,6 +4,7 @@ import json
 from server_app.config import IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH
 from server_app.repositories.iacuc import read_iacuc_index
 from server_app.repositories.person_names import person_options, split_person_names
+from server_app.runtime_logging import log_stage
 
 from .dates import sql_valid_date
 
@@ -26,14 +27,14 @@ WITH application_rows AS (
 ), applications AS (
  SELECT code, count(*) matches, CASE WHEN count(*)=1 THEN max(value) END application
  FROM application_rows WHERE code IS NOT NULL AND code!='' GROUP BY code
-), batch_actual_dates AS (
+), batch_actual_dates AS MATERIALIZED (
  SELECT b.id,
  (SELECT json_group_array(value) FROM (
    SELECT DISTINCT trim(json_extract(r.value,'$.actualReceiptDate')) value
    FROM json_each(b.payload,'$.receipts') r WHERE ACTUAL_DATE_VALID ORDER BY value
  )) actual_dates
- FROM intake_batches b
-), reception_dates AS (
+ FROM intake_batches b WHERE b.status='received'
+), reception_dates AS MATERIALIZED (
  SELECT b.id,
  CASE WHEN json_array_length(d.actual_dates)>0 THEN d.actual_dates
       WHEN ORIGINAL_DATE_VALID THEN json_array(trim(b.intake_date)) ELSE '[]' END dates,
@@ -50,7 +51,21 @@ JOIN = (
 
 
 def context(conn):
-    index = read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
+    # Keep the same import order/version, without decoding the full application
+    # objects on each snapshot read. Legacy file-backed indexes retain their path.
+    projection = ",".join(f"'$.{key}'" for key in PROJECT_FIELDS)
+    rows = conn.execute(
+        f"SELECT json_extract(payload,{projection}) fields,imported_at FROM experiment_applications ORDER BY rowid"
+    ).fetchall()
+    index = (
+        {
+            "items": [dict(zip(PROJECT_FIELDS, json.loads(row["fields"]), strict=True)) for row in rows],
+            "updatedAt": max(row["imported_at"] for row in rows),
+            "source": "database",
+        }
+        if rows
+        else read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
+    )
     items = [{key: item.get(key) for key in PROJECT_FIELDS} for item in index.get("items", [])]
     for item in items:
         for key in ("pi", "owner"):
@@ -91,7 +106,10 @@ def clause(filters, *, exclude=""):
 
 def page(conn, source, params):
     where, values = clause(params["columnFilters"])
-    count = conn.execute(BASE + "SELECT count(*)" + JOIN + " WHERE " + where, [source["json"], *values]).fetchone()[0]
+    with log_stage("reception_read", "count", component="reception"):
+        count = conn.execute(BASE + "SELECT count(*)" + JOIN + " WHERE " + where, [source["json"], *values]).fetchone()[
+            0
+        ]
     order = FIELDS.get(params["sortKey"], "b.intake_date")
     if params["sortKey"] == "receiptDate":
         order = "(SELECT max(value) FROM json_each(d.dates))"
@@ -102,10 +120,11 @@ def page(conn, source, params):
         for key in ("strainRaw", "strainStandard", "specification", "receipts", "species", "intakeDate")
     )
     sql = BASE + f"SELECT b.id,b.updated_at,a.application,json_object({projection},{extra}) summary" + JOIN
-    rows = conn.execute(
-        sql + f" WHERE {where} ORDER BY {order} {direction}, b.id ASC LIMIT ? OFFSET ?",
-        [source["json"], *values, params["limit"], params["offset"]],
-    ).fetchall()
+    with log_stage("reception_read", "page", component="reception"):
+        rows = conn.execute(
+            sql + f" WHERE {where} ORDER BY {order} {direction}, b.id ASC LIMIT ? OFFSET ?",
+            [source["json"], *values, params["limit"], params["offset"]],
+        ).fetchall()
     return rows, count
 
 

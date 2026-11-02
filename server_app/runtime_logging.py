@@ -12,10 +12,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from functools import wraps
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from server_app import config
+from server_app.runtime_log_archive import ArchiveRotatingFileHandler
 
 _LOGGER = logging.getLogger("cageledger.runtime")
 _LOGGER.addHandler(logging.NullHandler())
@@ -54,6 +54,9 @@ _FIELDS = frozenset(
         "persistent",
         "maxBytes",
         "fileCount",
+        "retentionDays",
+        "totalMaxBytes",
+        "rotation",
         "suppressedCount",
         "errorType",
         "errno",
@@ -132,6 +135,25 @@ def log_operation(operation, *, component):
         return run
 
     return decorate
+
+
+@contextmanager
+def log_stage(operation, stage, *, component):
+    """Time a fixed, non-nested processing stage without recording its input or result."""
+    started = time.perf_counter()
+    with log_context(component=component, operation=operation, stage=stage):
+        try:
+            yield
+        except Exception as error:
+            emit_event(
+                operation + "_stage_failed",
+                level=logging.WARNING,
+                error=error,
+                rate_limit=True,
+                durationMs=round((time.perf_counter() - started) * 1000, 1),
+            )
+            raise
+        emit_event(operation + "_stage_completed", durationMs=round((time.perf_counter() - started) * 1000, 1))
 
 
 def _frames(error):
@@ -242,11 +264,28 @@ class SafeStreamHandler(logging.StreamHandler):
         pass
 
 
-class SafeRotatingFileHandler(RotatingFileHandler):
+class SafeRotatingFileHandler(ArchiveRotatingFileHandler):
     def __init__(self, *args, fallback, **kwargs):
-        super().__init__(*args, **kwargs)
         self.fallback = fallback
         self.failed = False
+        super().__init__(*args, report_error=self._archive_warning, **kwargs)
+
+    def _archive_warning(self, stage, error):
+        if not self._closing and self in _LOGGER.handlers:
+            emit_event("runtime_log_archive_failed", level=logging.WARNING, error=error, rate_limit=True, stage=stage)
+        else:
+            self.fallback.handle(
+                _LOGGER.makeRecord(
+                    _LOGGER.name,
+                    logging.WARNING,
+                    __file__,
+                    0,
+                    "runtime_log_archive_failed",
+                    (),
+                    None,
+                    extra={"diagnostics": {"stage": stage, "errorType": type(error).__name__}},
+                )
+            )
 
     def emit(self, record):
         if self.failed:
@@ -323,6 +362,8 @@ def configure_runtime_logging():
                 config.LOG_DIR / "runtime.jsonl",
                 maxBytes=config.LOG_MAX_BYTES,
                 backupCount=config.LOG_FILE_COUNT - 1,
+                retentionDays=config.LOG_RETENTION_DAYS,
+                totalMaxBytes=config.LOG_TOTAL_MAX_BYTES,
                 encoding="utf-8",
                 fallback=console,
             )
@@ -341,6 +382,9 @@ def configure_runtime_logging():
         persistent=persistent,
         maxBytes=config.LOG_MAX_BYTES,
         fileCount=config.LOG_FILE_COUNT,
+        retentionDays=config.LOG_RETENTION_DAYS,
+        totalMaxBytes=config.LOG_TOTAL_MAX_BYTES,
+        rotation="beijing-date-size",
     )
     if persistent:
         console.handle(

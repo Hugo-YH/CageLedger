@@ -5,10 +5,12 @@ import os
 import re
 import subprocess
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory, TemporaryFile
 
 from server_app.config import RECEPTION_PDFINFO_BIN, RECEPTION_PDFTOPPM_BIN
+from server_app.runtime_logging import log_stage
 
 from . import certificate_files as files
 
@@ -71,59 +73,71 @@ def _info(original, page_count, env):
 
 
 def prepare(content, page_count, first_preview, *, include_all=False):
-    if type(page_count) is not int or not 1 <= page_count <= 100:
-        raise ValueError("合格证PDF须为1至100页")
-    if not isinstance(content, bytes) or not content.startswith(b"%PDF-") or len(content) > files.MAX_FILE_BYTES:
-        raise ValueError("合格证PDF原件无效")
-    env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
     try:
-        with files.rendering(), TemporaryDirectory(prefix="cageledger-certificate-pages-") as temporary:
-            root = Path(temporary)
-            original = root / "source.pdf"
-            original.write_bytes(content)
-            deadline = time.monotonic() + MAX_RENDER_SECONDS
-            dimensions = _info(original, page_count, env)
-            selection = select_pages(dimensions, include_all=include_all)
-            if len(selection["selectedPages"]) > MAX_AI_PAGES:
-                raise ValueError(f"本次候选识别页超过{MAX_AI_PAGES}页，请拆分PDF后分别上传；原件已保留")
-            images, total_bytes = [], 0
-            for number in selection["selectedPages"]:
-                if number == 1:
-                    image = first_preview
-                else:
-                    target = root / f"page-{number}"
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        raise files.CertificateUnavailableError("合格证逐页处理超时，请稍后重试或拆分PDF")
-                    result = subprocess.run(
-                        [
-                            files.tool(RECEPTION_PDFTOPPM_BIN, "pdftoppm"),
-                            "-f",
-                            str(number),
-                            "-l",
-                            str(number),
-                            "-singlefile",
-                            "-scale-to",
-                            "3000",
-                            "-png",
-                            str(original),
-                            str(target),
-                        ],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=min(30, remaining),
-                        env=env,
-                        check=False,
-                    )
-                    output = target.with_suffix(".png")
-                    if result.returncode or not output.is_file() or not 0 < output.stat().st_size <= 15 * 1024 * 1024:
-                        raise ValueError(f"PDF第{number}页无法生成识别图片，未提交不完整识别；请检查原件")
-                    image = output.read_bytes()
-                    output.unlink()
-                total_bytes += len(image)
-                if total_bytes > MAX_IMAGES_BYTES:
-                    raise ValueError("识别图片合计超过30MiB，请拆分PDF后分别上传；原件已保留")
-                images.append({"pageNumber": number, "image": image})
+        with ExitStack() as resources:
+            with log_stage("reception_certificate_recognition", "pdf_parse", component="reception"):
+                if type(page_count) is not int or not 1 <= page_count <= 100:
+                    raise ValueError("合格证PDF须为1至100页")
+                if (
+                    not isinstance(content, bytes)
+                    or not content.startswith(b"%PDF-")
+                    or len(content) > files.MAX_FILE_BYTES
+                ):
+                    raise ValueError("合格证PDF原件无效")
+                env = {**os.environ, "LC_ALL": "C", "LANG": "C"}
+                resources.enter_context(files.rendering())
+                temporary = resources.enter_context(TemporaryDirectory(prefix="cageledger-certificate-pages-"))
+                root = Path(temporary)
+                original = root / "source.pdf"
+                original.write_bytes(content)
+                deadline = time.monotonic() + MAX_RENDER_SECONDS
+                dimensions = _info(original, page_count, env)
+                selection = select_pages(dimensions, include_all=include_all)
+                if len(selection["selectedPages"]) > MAX_AI_PAGES:
+                    raise ValueError(f"本次候选识别页超过{MAX_AI_PAGES}页，请拆分PDF后分别上传；原件已保留")
+            with log_stage("reception_certificate_recognition", "page_render", component="reception"):
+                images, total_bytes = [], 0
+                for number in selection["selectedPages"]:
+                    if number == 1:
+                        image = first_preview
+                    else:
+                        target = root / f"page-{number}"
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise files.CertificateUnavailableError("合格证逐页处理超时，请稍后重试或拆分PDF")
+                        result = subprocess.run(
+                            [
+                                files.tool(RECEPTION_PDFTOPPM_BIN, "pdftoppm"),
+                                "-f",
+                                str(number),
+                                "-l",
+                                str(number),
+                                "-singlefile",
+                                "-scale-to",
+                                "3000",
+                                "-png",
+                                str(original),
+                                str(target),
+                            ],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=min(30, remaining),
+                            env=env,
+                            check=False,
+                        )
+                        output = target.with_suffix(".png")
+                        if (
+                            result.returncode
+                            or not output.is_file()
+                            or not 0 < output.stat().st_size <= 15 * 1024 * 1024
+                        ):
+                            raise ValueError(f"PDF第{number}页无法生成识别图片，未提交不完整识别；请检查原件")
+                        image = output.read_bytes()
+                        output.unlink()
+                    total_bytes += len(image)
+                    if total_bytes > MAX_IMAGES_BYTES:
+                        raise ValueError("识别图片合计超过30MiB，请拆分PDF后分别上传；原件已保留")
+                    images.append({"pageNumber": number, "image": image})
             return images, {**selection, "version": VERSION, "dimensions": [list(page) for page in dimensions]}
     except subprocess.TimeoutExpired as exc:
         raise files.CertificateUnavailableError("合格证逐页处理超时，请稍后重试或拆分PDF") from exc

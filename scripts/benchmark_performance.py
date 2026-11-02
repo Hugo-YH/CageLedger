@@ -72,6 +72,8 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_intake_batches_owner_date ON intake_batches(owner, intake_date DESC);
         CREATE INDEX idx_intake_batches_room_date ON intake_batches(room_name, intake_date DESC);
         CREATE INDEX idx_intake_batches_updated ON intake_batches(updated_at DESC);
+        CREATE INDEX idx_intake_batches_default_order ON intake_batches
+            ((COALESCE(intake_date, '') != '') ASC, COALESCE(intake_date, '') DESC, updated_at DESC);
         CREATE INDEX idx_billing_candidate_snapshots_source_month_pi
             ON billing_candidate_snapshots(source_type, month DESC, pi COLLATE NOCASE);
         CREATE INDEX idx_billing_candidate_snapshots_source_amount
@@ -211,6 +213,11 @@ QUERIES = {
     "intake_status": (
         "SELECT id FROM intake_batches WHERE status = ? ORDER BY intake_date DESC LIMIT 20",
         ("received",),
+    ),
+    "intake_default": (
+        "SELECT id FROM intake_batches ORDER BY (COALESCE(intake_date, '') != '') ASC, "
+        "COALESCE(intake_date, '') DESC, updated_at DESC, rowid DESC LIMIT 20",
+        (),
     ),
     "intake_pi": ("SELECT id FROM intake_batches WHERE pi = ? ORDER BY intake_date DESC LIMIT 20", ("负责人 042",)),
     "intake_owner": (

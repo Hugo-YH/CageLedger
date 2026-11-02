@@ -96,22 +96,47 @@ def run_once(connect, client, root):
             "UPDATE feedback_tasks SET state='working',started_at=?,uncertain=? WHERE id=?",
             (time.time(), int(mutating or task["uncertain"]), task["id"]),
         )
+    started = time.perf_counter()
     try:
         try:
-            with log_context(stage=task["kind"]):
+            with log_context(component="feedback", operation="feedback_remote_sync", stage=task["kind"]):
                 result = sync.perform(client, task, feedback, entity, root)
         except RemoteError as exc:
             if exc.http_status != 404 or not feedback["issue_number"] or not sync.confirmed_deleted(client, feedback):
                 raise
             result = {"deleted": True}
         with connect() as conn:
-            sync.apply(conn, task, feedback, result)
+            changed = sync.apply(conn, task, feedback, result)
             conn.execute(
                 """UPDATE feedback_tasks SET state=CASE WHEN generation=? OR ? THEN 'done' ELSE 'pending' END,
                    due_at=0,uncertain=0,error='',attempts=0 WHERE id=?""",
                 (task["generation"], bool(result.get("deleted")), task["id"]),
             )
-    except (RemoteError, OSError, ValueError, KeyError, TypeError) as exc:
+        fields = {
+            "component": "feedback",
+            "operation": "feedback_remote_sync",
+            "stage": task["kind"],
+            "jobId": task["id"],
+            "durationMs": round((time.perf_counter() - started) * 1000, 1),
+        }
+        if changed:
+            emit_event("feedback_remote_sync_completed", **fields)
+        if task["attempts"]:
+            emit_event("feedback_remote_sync_recovered", **fields)
+    except Exception as exc:
+        emit_event(
+            "feedback_remote_sync_failed",
+            level=logging.WARNING,
+            error=exc,
+            rate_limit=True,
+            component="feedback",
+            operation="feedback_remote_sync",
+            stage=task["kind"],
+            jobId=task["id"],
+            durationMs=round((time.perf_counter() - started) * 1000, 1),
+        )
+        if not isinstance(exc, RemoteError | OSError | ValueError | KeyError | TypeError):
+            raise
         if not isinstance(exc, RemoteError):
             exc = RemoteError("同步响应或本地附件无效，请管理员检查", permanent=True, uncertain=mutating)
         attempts = task["attempts"] + 1
@@ -157,6 +182,7 @@ def _run():
         return
     last_poll = 0
     needs_recovery = True
+    failed_stage = None
     while not _stop.is_set():
         try:
             # Recovery belongs to the protected loop too: repeated DB locks must not kill the worker.
@@ -179,9 +205,13 @@ def _run():
                 "blocked" if client.auth_blocked else "running",
                 "Gitea 凭据或工单权限不足，请管理员处理后重试同步" if client.auth_blocked else "",
             )
+            if failed_stage is not None:
+                emit_event("feedback_worker_recovered", component="feedback", stage=failed_stage)
+                failed_stage = None
             _stop.wait(0.2 if worked else 2)
         except Exception as exc:
             emit_event("feedback_worker_failed", level=logging.WARNING, error=exc, stage=stage, rate_limit=True)
+            failed_stage = stage
             # Never expose raw exceptions, request/response bodies, SQL or credentials.
             needs_recovery = True
             message = "反馈同步服务暂时受阻，后台正在重试"

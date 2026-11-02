@@ -5,7 +5,7 @@ import sqlite3
 from urllib.parse import parse_qs, unquote, urlparse
 
 from server_app.db import connect_db
-from server_app.runtime_logging import emit_event
+from server_app.runtime_logging import emit_event, log_stage
 from server_app.shared.concurrency import StaleWriteError
 from server_app.web.multipart import parse_multipart_upload
 from server_app.web.request_body import read_body
@@ -29,11 +29,13 @@ def handle(handler, params):
                 conn.execute("PRAGMA query_only=ON")
                 conn.execute("BEGIN")
                 if path.endswith("/registration"):
-                    return JsonResponse(certificate_service.detail(conn, actor, batch_id))
+                    with log_stage("reception_read", "registration_detail", component="reception"):
+                        return JsonResponse(certificate_service.detail(conn, actor, batch_id))
                 preview = path.endswith("/preview")
-                content, name = certificate_service.download(
-                    conn, actor, batch_id, params["attachmentId"], preview=preview
-                )
+                with log_stage("reception_read", "preview_file" if preview else "original_file", component="reception"):
+                    content, name = certificate_service.download(
+                        conn, actor, batch_id, params["attachmentId"], preview=preview
+                    )
             handler.send_download(content, name, "image/png" if preview else "application/pdf")
             return True
         if handler.command == "PUT":

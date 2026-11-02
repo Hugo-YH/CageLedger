@@ -424,6 +424,57 @@ class FeedbackTests(FeedbackFixture, unittest.TestCase):
         self.run_worker()
         self.assertEqual(self.detail(item["id"])["item"]["issueNumber"], 1)
 
+    def test_poll_logging_is_quiet_until_visible_remote_content_changes(self):
+        item = self.create()
+        with patch.object(worker, "emit_event") as log:
+            self.run_worker()
+        self.assertEqual([call.args[0] for call in log.call_args_list], ["feedback_remote_sync_completed"])
+        with self.connect() as conn:
+            audits = conn.execute("SELECT count(*) FROM audit_events").fetchone()[0]
+        with patch.object(worker, "emit_event") as log:
+            self.refresh(item["id"])
+        log.assert_not_called()
+        with self.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], audits)
+
+        comment = {"id": 42, "body": "comment-one", "updated_at": "2026-11-02", "user": {"login": "dev"}}
+        self.client.comments.append(comment)
+        changes = (
+            lambda: self.client.issues[0].update(state="closed"),
+            lambda: comment.update(body="comment-two"),
+            lambda: self.client.assets.update({"/issues/comments/42/assets": [{"id": 7, "name": "x.png", "size": 8}]}),
+            lambda: self.client.assets.clear(),
+            lambda: self.client.comments.clear(),
+        )
+        for change in changes:
+            change()
+            with patch.object(worker, "emit_event") as log:
+                self.refresh(item["id"])
+            self.assertEqual([call.args[0] for call in log.call_args_list], ["feedback_remote_sync_completed"])
+            with patch.object(worker, "emit_event") as log:
+                self.refresh(item["id"])
+            log.assert_not_called()
+
+    def test_failed_poll_logs_its_stage_and_recovery_even_without_projection_changes(self):
+        item = self.create()
+        self.run_worker()
+        with self.connect() as conn:
+            repo.enqueue(conn, item["id"], "refresh")
+        self.client.fail = RemoteError("private-remote-url-key", uncertain=False)
+        with patch.object(worker, "emit_event") as log:
+            self.run_worker()
+        log.assert_called_once()
+        self.assertEqual(log.call_args.args[0], "feedback_remote_sync_failed")
+        self.assertEqual(log.call_args.kwargs["stage"], "refresh")
+        self.assertTrue(log.call_args.kwargs["rate_limit"])
+        self.make_due()
+        with patch.object(worker, "emit_event") as log:
+            self.run_worker()
+        self.assertEqual([call.args[0] for call in log.call_args_list], ["feedback_remote_sync_recovered"])
+        with self.connect() as conn:
+            task = conn.execute("SELECT * FROM feedback_tasks WHERE kind='refresh'").fetchone()
+        self.assertEqual((task["state"], task["attempts"], task["error"]), ("done", 0, ""))
+
     def test_restart_in_flight_creation_is_reconciled(self):
         item = self.create()
         self.client.issues.append({"number": 7, "body": sync.marker("feedback", item["id"]), "state": "open"})
