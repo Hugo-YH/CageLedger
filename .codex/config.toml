@@ -1,4 +1,4 @@
-# CageLedger inherits official model, reasoning, and context defaults from the active client.
+# CageLedger: use the official Codex model defaults.
 # Invocation-level overrides may take precedence. See docs/contracts/agent-instructions.md.
 
 [agents]
