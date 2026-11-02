@@ -182,6 +182,51 @@ class IntakeDuplicateTests(unittest.TestCase):
             expectedUpdatedAt=updated["updatedAt"],
         )
 
+    def test_purchase_descriptions_do_not_require_duplicate_confirmation_or_rewrite_original_text(self):
+        for index, description in enumerate(
+            (
+                "不走锐竞",
+                "非锐竞采购",
+                "自行采购",
+                "课题组提供",
+                "其他渠道采购",
+                "无",
+                "待补充",
+                "N/A",
+                "unknown",
+                "不走锐竞（2026年自购）",
+                "自购2026年10月",
+            )
+        ):
+            with self.subTest(description=description):
+                first = batch(f"description-{index}-old", purchaseOrderNo=description, batchNo=f"OLD-{index}")
+                self.save(first)
+                # Existing database lookup keys can still contain the description.
+                with self.connect() as conn:
+                    key = conn.execute(
+                        "SELECT purchase_order_key FROM intake_batches WHERE id=?", (first["id"],)
+                    ).fetchone()[0]
+                    self.assertTrue(key)
+                before = self.counts()
+                saved = self.save(
+                    batch(f"description-{index}-new", purchaseOrderNo=description, batchNo=f"NEW-{index}"),
+                    checkDuplicates=True,
+                )
+                self.assertEqual(saved["purchaseOrderNo"], description)
+                self.assertEqual(self.counts(), (before[0] + 1, before[1] + 1))
+
+    def test_description_still_checks_batch_number_and_real_purchase_codes_still_match(self):
+        self.save(batch("description-old", purchaseOrderNo="不走锐竞"))
+        warning = self.warning(batch("description-new", purchaseOrderNo="不走锐竞"))
+        self.assertEqual(warning["items"][0]["matchedFields"], ["batchNo"])
+        for index, code in enumerate(("C20261021001", "20261021002", "PO-2026/003", "NEW-ORDER", "供应商订单20261004")):
+            with self.subTest(code=code):
+                self.save(batch(f"code-{index}-old", purchaseOrderNo=code, batchNo=f"CODE-OLD-{index}"))
+                warning = self.warning(
+                    batch(f"code-{index}-new", purchaseOrderNo=code.lower(), batchNo=f"CODE-NEW-{index}")
+                )
+                self.assertEqual(warning["items"][0]["matchedFields"], ["purchaseOrderNo"])
+
     def test_confirmation_is_bound_to_draft_and_fresh_complete_match_set(self):
         self.save(batch("original"))
         item = batch("new")
