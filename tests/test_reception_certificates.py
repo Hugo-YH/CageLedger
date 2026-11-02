@@ -19,6 +19,7 @@ from openpyxl import load_workbook
 
 from server_app.domains.reception import certificate_ai as ai
 from server_app.domains.reception import certificate_files as files
+from server_app.domains.reception import certificate_pages as pages
 from server_app.domains.reception import certificate_repository as repo
 from server_app.domains.reception import certificate_routes as routes
 from server_app.domains.reception import certificate_service as certificates
@@ -66,6 +67,16 @@ class ReceptionCertificateTests(unittest.TestCase):
             ],
         }
         self.put()
+        page_selection = patch.object(
+            pages,
+            "prepare",
+            return_value=(
+                [{"pageNumber": 1, "image": PNG}],
+                {"totalPages": 2, "selectedPages": [1], "skippedPhotoPages": [2], "mode": "auto"},
+            ),
+        )
+        self.page_prepare = page_selection.start()
+        self.addCleanup(page_selection.stop)
         for target, name, value in (
             (files, "RECEPTION_CERTIFICATE_FILES_PATH", self.file_root),
             (certificates, "connect_db", self.connect),
@@ -457,6 +468,46 @@ class ReceptionCertificateTests(unittest.TestCase):
         self.assertEqual(self.count("reception.certificate_recognition_failed"), 1)
         self.assertEqual(self.payload(), before)
 
+    def test_multi_page_source_selection_and_mode_binding_are_audited_without_registration(self):
+        attachment = self.upload()
+        selection = {"totalPages": 2, "selectedPages": [1, 2], "skippedPhotoPages": [], "mode": "auto"}
+        images = [{"pageNumber": number, "image": PNG} for number in (1, 2)]
+        self.page_prepare.return_value = (images, selection)
+        result, raw = ai.normalize(self.extraction(), attachment["id"], "source-run", self.batch)
+        before = self.payload()
+        identity = uuid4().hex
+        with patch.object(ai, "recognize", return_value=(result, raw, {})) as provider:
+            run = self.recognize(attachment["id"], identity)
+            self.assertEqual(run["result"]["pageSelection"], selection)
+            self.assertEqual(provider.call_args.args[0], images)
+            self.assertEqual(self.recognize(attachment["id"], identity), run)
+            with self.assertRaises(StaleWriteError):
+                self.recognize(attachment["id"], identity, includeAllPages=True)
+            self.assertEqual(provider.call_count, 1)
+        self.assertEqual(self.payload(), before)
+        self.assertIsNone(repo.registration(self.conn, self.batch["id"]))
+        stored = json.loads(
+            self.conn.execute("SELECT raw_json FROM reception_certificate_runs WHERE id=?", (run["id"],)).fetchone()[0]
+        )
+        self.assertEqual(stored["pageSelectionMode"], "auto")
+        self.assertEqual(stored["pageSelection"], selection)
+        self.assertEqual(self.count("reception.certificate_recognized"), 1)
+
+    def test_all_page_failed_requests_replay_in_the_same_mode_without_provider_replay(self):
+        attachment = self.upload()
+        identity = uuid4().hex
+        with patch.object(ai, "recognize", side_effect=ValueError("未识别到合格证")) as provider:
+            run = self.recognize(attachment["id"], identity, includeAllPages=True)
+            self.assertEqual(run["status"], "failed")
+            self.assertEqual(self.recognize(attachment["id"], identity, includeAllPages=True), run)
+            with self.assertRaises(StaleWriteError):
+                self.recognize(attachment["id"], identity)
+            self.assertEqual(provider.call_count, 1)
+            self.assertTrue(self.page_prepare.call_args.kwargs["include_all"])
+        for invalid in (None, "true", 1, []):
+            with self.subTest(value=invalid), self.assertRaises(ValueError):
+                self.recognize(attachment["id"], includeAllPages=invalid)
+
     def test_same_size_pdf_and_preview_tampering_is_rejected_before_download_or_ai(self):
         with patch.object(ai, "recognize") as provider:
             for preview in (False, True):
@@ -507,7 +558,9 @@ class ReceptionCertificateTests(unittest.TestCase):
             provider.assert_not_called()
             self.assertEqual(repo.run(self.conn, run_id)["status"], "running")
             with patch.object(certificates, "datetime") as clock:
-                clock.now.return_value = at + timedelta(seconds=certificates.DEEPSEEK_TIMEOUT_SECONDS + 61)
+                clock.now.return_value = at + timedelta(
+                    seconds=certificates.DEEPSEEK_TIMEOUT_SECONDS + pages.MAX_RENDER_SECONDS + 61
+                )
                 clock.fromisoformat.side_effect = datetime.fromisoformat
                 completed = self.recognize(attachment["id"])
             self.assertEqual(completed["status"], "completed")
@@ -517,6 +570,39 @@ class ReceptionCertificateTests(unittest.TestCase):
         self.assertEqual(self.count("reception.certificate_recognition_interrupted"), 1)
         self.assertEqual(self.count("reception.certificate_recognition_started"), 1)
         self.assertEqual(self.count("reception.certificate_recognized"), 1)
+
+    def test_expired_all_page_request_retains_its_original_scope_on_replay(self):
+        attachment = self.upload()
+        identity, run_id = uuid4().hex, uuid4().hex
+        at = (
+            datetime.now(UTC) - timedelta(seconds=certificates.DEEPSEEK_TIMEOUT_SECONDS + pages.MAX_RENDER_SECONDS + 61)
+        ).isoformat()
+        repo.insert_run(
+            self.conn,
+            {
+                "id": run_id,
+                "batch_id": self.batch["id"],
+                "attachment_id": attachment["id"],
+                "actor_id": ACTOR["id"],
+                "request_id": identity,
+                "source_batch_version": self.batch["updatedAt"],
+                "status": "running",
+                "model": "test",
+                "created_at": at,
+                "updated_at": at,
+                "selection_mode": "all",
+            },
+        )
+        self.conn.commit()
+        result, raw = ai.normalize(self.extraction(), attachment["id"], "source-run", self.batch)
+        with patch.object(ai, "recognize", return_value=(result, raw, {})) as provider:
+            self.assertEqual(self.recognize(attachment["id"])["status"], "completed")
+            expired = self.recognize(attachment["id"], identity, includeAllPages=True)
+            self.assertEqual(expired["id"], run_id)
+            self.assertEqual(expired["status"], "failed")
+            with self.assertRaises(StaleWriteError):
+                self.recognize(attachment["id"], identity)
+            self.assertEqual(provider.call_count, 1)
 
     def test_recognition_request_binding_versions_and_attachment_ownership(self):
         first, second = self.upload(), self.upload(b"second")

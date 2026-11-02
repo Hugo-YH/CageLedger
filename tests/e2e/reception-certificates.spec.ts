@@ -229,3 +229,118 @@ test("failed recognition retains the real uploaded original and current manual d
     await page.request.delete(`/api/intake-batches/${id}`);
   }
 });
+
+test("multi-page recognition shows the submitted pages and permits an explicit all-page retry", async ({
+  page,
+}, info) => {
+  test.setTimeout(60_000);
+  const { id, before, row } = await receivedBatch(page);
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", ""];
+  const kids: string[] = [];
+  for (const [width, height] of [
+    [595, 842],
+    [595, 842],
+    [4032, 2268],
+    [4032, 2268],
+  ]) {
+    const number = objects.length + 1;
+    kids.push(`${number} 0 R`);
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << >> /Contents ${number + 1} 0 R >>`,
+      "<< /Length 0 >>\nstream\n\nendstream",
+    );
+  }
+  objects[1] = `<< /Type /Pages /Kids [${kids.join(" ")}] /Count 4 >>`;
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  const uploaded = await page.request.post(
+    `/api/receptions/${id}/certificates?expectedBatchUpdatedAt=${encodeURIComponent(before.item.updatedAt)}`,
+    { multipart: { file: { name: "four-pages.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf) } } },
+  );
+  expect(uploaded.ok(), await uploaded.text()).toBe(true);
+  const attachment = (await uploaded.json()).attachment;
+  expect(attachment.pageCount).toBe(4);
+  const requests: Array<{ requestId: string; includeAllPages: boolean }> = [];
+  await page.unroute("**/api/receptions/*/certificates/*/recognize");
+  await page.route("**/api/receptions/*/certificates/*/recognize", async (route) => {
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    const runId = `multi-${requests.length}`;
+    await route.fulfill({
+      json: {
+        run: {
+          id: runId,
+          attachmentId: attachment.id,
+          batchId: id,
+          sourceBatchUpdatedAt: before.item.updatedAt,
+          status: "completed",
+          error: "",
+          model: "synthetic",
+          createdAt: "2026-11-02",
+          updatedAt: "2026-11-02",
+          result: {
+            warnings: [],
+            pageSelection: {
+              totalPages: 4,
+              selectedPages: body.includeAllPages ? [1, 2, 3, 4] : [1, 2],
+              skippedPhotoPages: body.includeAllPages ? [] : [3, 4],
+              mode: body.includeAllPages ? "all" : "auto",
+            },
+            lines: [
+              {
+                id: `line-${runId}`,
+                attachmentId: attachment.id,
+                runId,
+                certificateIndex: 1,
+                certificateLineIndex: 1,
+                certificateNo: "MULTI-CERT",
+                certificateStrain: "ICR",
+                grade: "SPF",
+                supplier: "合成供应商",
+                sex: "雄性",
+                quantity: 6,
+                weightRaw: "",
+                ageRaw: "8w",
+                specification: "8w",
+                receiptId: null,
+                experimentCertificateNo: "",
+                notes: "",
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+  await page.reload();
+  await openNavigationEntry(page, "接收管理", "接收列表");
+  await row.getByRole("button", { name: "核对登记", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: `合格证与接收登记 · ${id}`, exact: true });
+  await expect(dialog.getByRole("radio", { name: "自动筛选合格证页", exact: true })).toBeChecked();
+  await dialog.getByRole("button", { name: "识别", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await expect(dialog.getByText("第 1、2 页", { exact: false }).first()).toBeVisible();
+  await expect(dialog.getByText(/第 3、4 页/)).toBeVisible();
+  expect(requests[0].includeAllPages).toBe(false);
+  await dialog.getByRole("radio", { name: "全部页面", exact: true }).check();
+  await dialog.getByRole("button", { name: "识别", exact: true }).click();
+  await page.getByRole("button", { name: "重新识别并替换", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1].includeAllPages).toBe(true);
+  expect(requests[1].requestId).not.toBe(requests[0].requestId);
+  await expect(dialog.getByText(/第 1、2、3、4 页/)).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.getByRole("radio", { name: "全部页面", exact: true })).toBeChecked();
+  expect(await dialog.evaluate((node) => node.getBoundingClientRect().width <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath("certificate-multi-page-mobile.png"), animations: "disabled" });
+  expect(await (await page.request.get(`/api/intake-batches/${id}`)).json()).toEqual(before);
+});

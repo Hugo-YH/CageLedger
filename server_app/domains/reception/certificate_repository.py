@@ -85,7 +85,8 @@ def run(conn, identity):
 
 def requested_run(conn, actor_id, request_id):
     row = conn.execute(
-        f"SELECT {RUN_COLUMNS} FROM reception_certificate_runs WHERE actor_id=? AND request_id=?",
+        f"SELECT {RUN_COLUMNS},json_extract(raw_json,'$.pageSelectionMode') selection_mode "
+        "FROM reception_certificate_runs WHERE actor_id=? AND request_id=?",
         (actor_id, request_id),
     ).fetchone()
     return dict(row) if row else None
@@ -120,8 +121,8 @@ def running_runs(conn, attachment_id):
 def insert_run(conn, item):
     conn.execute(
         "INSERT INTO reception_certificate_runs "
-        "(id,batch_id,attachment_id,actor_id,request_id,source_batch_version,status,model,created_at,updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "(id,batch_id,attachment_id,actor_id,request_id,source_batch_version,status,model,created_at,updated_at,raw_json) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         [
             item[key]
             for key in (
@@ -136,13 +137,14 @@ def insert_run(conn, item):
                 "created_at",
                 "updated_at",
             )
-        ],
+        ]
+        + [encode({"pageSelectionMode": item.get("selection_mode", "auto")})],
     )
 
 
 def finish_run(conn, identity, at, *, result=None, raw=None, error=""):
     conn.execute(
-        "UPDATE reception_certificate_runs SET status=?,result_json=?,raw_json=?,error_message=?,updated_at=? "
+        "UPDATE reception_certificate_runs SET status=?,result_json=?,raw_json=COALESCE(?,raw_json),error_message=?,updated_at=? "
         "WHERE id=? AND status='running'",
         (
             "failed" if error else "completed",

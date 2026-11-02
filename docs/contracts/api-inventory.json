@@ -410,10 +410,10 @@
         {
           "method": "POST",
           "path": "/api/receptions/{batchId}/certificates/{attachmentId}/recognize",
-          "purpose": "显式识别PDF首页全部合格证和动物明细，保留任务状态与来源草稿",
+          "purpose": "逐页筛选PDF文档候选并识别全部候选页的合格证及动物明细，保留任务状态与来源草稿",
           "permission": "staff",
-          "request": "{requestId,expectedBatchUpdatedAt}；最多2个同时AI请求，不识别后续验收照片",
-          "response": "{run}；status running/completed/failed，失败保留原件，不自动确认登记",
+          "request": "{requestId,expectedBatchUpdatedAt,includeAllPages?:boolean}；默认按画幅排除明显手机照片，可选全部页面；同requestId绑定范围；最多20页候选及30MiB图片，最多2个同时AI请求",
+          "response": "{run}；status running/completed/failed；result含pageSelection与lines/warnings，失败保留原件，不自动确认登记",
           "protection": "reception_certificate_write"
         },
         {

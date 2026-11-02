@@ -16,7 +16,7 @@ from server_app.runtime_logging import emit_event
 from server_app.shared.concurrency import StaleWriteError, begin_write, require_exact_version
 from server_app.shared.time import now_iso
 
-from . import certificate_ai, certificate_files, certificate_review, repository, service
+from . import certificate_ai, certificate_files, certificate_pages, certificate_review, repository, service
 from . import certificate_repository as repo
 
 _AI_SLOTS = BoundedSemaphore(2)
@@ -192,7 +192,7 @@ def _expire_or_reject(conn, actor, batch_id, attachment_id):
     rows = repo.running_runs(conn, attachment_id)
     for item in rows:
         age = (datetime.now(UTC) - datetime.fromisoformat(item["created_at"])).total_seconds()
-        if age <= DEEPSEEK_TIMEOUT_SECONDS + 60:
+        if age <= DEEPSEEK_TIMEOUT_SECONDS + certificate_pages.MAX_RENDER_SECONDS + 60:
             raise certificate_files.CertificateUnavailableError("该附件正在识别，请稍后刷新查看结果")
         error = "上次识别已中断或超时，请重新识别"
         repo.finish_run(conn, item["id"], now_iso(), error=error)
@@ -209,6 +209,10 @@ def _expire_or_reject(conn, actor, batch_id, attachment_id):
 def recognize(actor, batch_id, attachment_id, body):
     authorize(actor, write=True)
     identity = request_id(body)
+    include_all = body.get("includeAllPages", False)
+    if type(include_all) is not bool:
+        raise ValueError("识别页面范围格式无效")
+    mode = "all" if include_all else "auto"
     if not _AI_SLOTS.acquire(blocking=False):
         raise certificate_files.CertificateUnavailableError("合格证识别繁忙，请稍后重试")
     try:
@@ -225,6 +229,8 @@ def recognize(actor, batch_id, attachment_id, body):
                     row["updated_at"],
                 ):
                     raise StaleWriteError("识别请求编号已用于其他内容，请重新发起")
+                if (existing.get("selection_mode") or "auto") != mode:
+                    raise StaleWriteError("识别请求编号已用于不同页面范围，请重新发起")
                 return {"run": run_view(existing)}
             _expire_or_reject(conn, actor, batch_id, attachment_id)
             at = now_iso()
@@ -239,6 +245,7 @@ def recognize(actor, batch_id, attachment_id, body):
                 "model": DEEPSEEK_VISION_MODEL,
                 "created_at": at,
                 "updated_at": at,
+                "selection_mode": mode,
             }
             repo.insert_run(conn, attempt)
             audit(
@@ -247,13 +254,27 @@ def recognize(actor, batch_id, attachment_id, body):
                 "reception.certificate_recognition_started",
                 batch_id,
                 None,
-                {"runId": attempt["id"], "attachmentId": attachment_id, "sourceBatchUpdatedAt": row["updated_at"]},
+                {
+                    "runId": attempt["id"],
+                    "attachmentId": attachment_id,
+                    "sourceBatchUpdatedAt": row["updated_at"],
+                    "pageSelectionMode": mode,
+                },
             )
             conn.commit()
-        result, raw, error = None, None, ""
+        result, raw, error = None, {"pageSelectionMode": mode}, ""
         try:
-            image = verified_file(attached, preview=True)
-            result, raw, _usage = certificate_ai.recognize(image, attachment_id, attempt["id"], batch)
+            first_preview = verified_file(attached, preview=True)
+            original = verified_file(attached)
+            images, selection = certificate_pages.prepare(
+                original, attached["page_count"], first_preview, include_all=include_all
+            )
+            raw["pageSelection"] = selection
+            result, evidence, _usage = certificate_ai.recognize(images, attachment_id, attempt["id"], batch)
+            result["pageSelection"] = {
+                key: selection[key] for key in ("totalPages", "selectedPages", "skippedPhotoPages", "mode")
+            }
+            raw.update(evidence, pageSelection=selection)
         except Exception as exc:
             error = (
                 str(exc)

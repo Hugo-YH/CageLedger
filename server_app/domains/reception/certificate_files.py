@@ -69,7 +69,7 @@ def prepare(name, content):
                 raise ValueError("PDF损坏、加密或无法读取，请检查原件")
             page_count = int(pages[1])
             if not 1 <= page_count <= 100:
-                raise ValueError("合格证PDF须为1至100页，首页应包含合格证")
+                raise ValueError("合格证PDF须为1至100页")
             completed = subprocess.run(
                 [
                     tool(RECEPTION_PDFTOPPM_BIN, "pdftoppm"),
@@ -99,6 +99,16 @@ def prepare(name, content):
             }, preview.read_bytes()
     except subprocess.TimeoutExpired as exc:
         raise CertificateUnavailableError("合格证PDF处理超时，请稍后重试或使用较小的扫描件") from exc
+    finally:
+        _RENDER_SLOTS.release()
+
+
+@contextmanager
+def rendering():
+    if not _RENDER_SLOTS.acquire(blocking=False):
+        raise CertificateUnavailableError("合格证PDF处理繁忙，请稍后重试")
+    try:
+        yield
     finally:
         _RENDER_SLOTS.release()
 

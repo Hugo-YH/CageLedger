@@ -226,6 +226,8 @@ it("automatically uploads and recognizes a selected PDF, prefills every certific
     ),
   );
   await screen.findByText("正在上传 PDF 原件…");
+  expect(screen.getByRole("radio", { name: "自动筛选合格证页" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "全部页面" })).toBeDisabled();
   detail = { ...detail, attachments: [attachment] };
   await act(() => Promise.resolve().then(() => finishUpload({ attachment, reused: false })));
   expect(await screen.findByRole("textbox", { name: "明细1 合格证编号" })).toHaveValue("CERT-1");
@@ -234,7 +236,9 @@ it("automatically uploads and recognizes a selected PDF, prefills every certific
   expect(screen.getByRole("img", { name: "合格证.pdf 首页原图" })).toHaveAttribute("src", attachment.previewUrl);
   expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("href", attachment.fileUrl);
   expect(requestMultipart).toHaveBeenCalledOnce();
-  expect(vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"))).toHaveLength(1);
+  const recognitionCalls = vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"));
+  expect(recognitionCalls).toHaveLength(1);
+  expect(JSON.parse(String(recognitionCalls[0][1]?.body))).toMatchObject({ includeAllPages: false });
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "采用识别结果" })).not.toBeInTheDocument();
   expect(screen.queryByRole("spinbutton", { name: "明细2 证件序号" })).not.toBeInTheDocument();
@@ -288,6 +292,7 @@ it("preserves drafts on failure, reuses unknown requests and saves directly with
   await waitFor(() => expect(screen.getByRole("textbox", { name: "明细1 合格证编号" })).toHaveValue("CERT-1"));
   const calls = vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"));
   expect(JSON.parse(String(calls[0][1]?.body)).requestId).toBe(JSON.parse(String(calls[1][1]?.body)).requestId);
+  expect(JSON.parse(String(calls[1][1]?.body)).includeAllPages).toBe(false);
   for (const quantity of ["", "0", "1.5"]) {
     fireEvent.change(screen.getByRole("spinbutton", { name: "明细1 证载数量" }), { target: { value: quantity } });
     fireEvent.click(screen.getByRole("button", { name: "核对并保存" }));
@@ -331,6 +336,102 @@ it("appends a newly uploaded PDF without replacing another attachment's saved li
   expect(screen.getByRole("textbox", { name: "明细1 合格证编号" })).toHaveValue("KEEP-EDIT");
   expect(screen.queryAllByText("替换本附件的编辑明细？")).toHaveLength(0);
 });
+
+it("uses the selected all-pages mode for an uploaded PDF and shows its returned candidate page range", async () => {
+  const run = completedRun(3);
+  run.result!.pageSelection = { totalPages: 4, selectedPages: [1, 2, 3, 4], skippedPhotoPages: [], mode: "all" };
+  vi.mocked(requestMultipart).mockResolvedValue({ attachment, reused: true });
+  mockRecognition(() => Promise.resolve({ run }));
+  render(view());
+  await screen.findByRole("radio", { name: "全部页面" });
+  fireEvent.click(screen.getByRole("radio", { name: "全部页面" }));
+  fireEvent.change(screen.getByLabelText("上传合格证 PDF"), {
+    target: { files: [new File(["%PDF"], "合格证.pdf", { type: "application/pdf" })] },
+  });
+  await screen.findByText("送识别页码：第 1、2、3、4 页。");
+  expect(screen.getByText("未跳过疑似照片页。")).toBeInTheDocument();
+  expect(screen.queryByText("旧识别结果仅包含首页")).not.toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "全部页面" })).toBeChecked();
+  const calls = vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"));
+  expect(JSON.parse(String(calls[0][1]?.body))).toMatchObject({ includeAllPages: true });
+  expect(requestJson).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: "PUT" }));
+});
+
+it("retries an uncertain recognition with its original mode and request ID but creates a new request after changing mode", async () => {
+  mockRecognition(() => Promise.reject(new Error("network interrupted")));
+  render(view());
+  await screen.findByRole("radio", { name: "全部页面" });
+  fireEvent.click(screen.getByRole("radio", { name: "全部页面" }));
+  fireEvent.click(screen.getByRole("button", { name: "识别" }));
+  await screen.findByText("network interrupted");
+  fireEvent.click(screen.getByRole("button", { name: "识别" }));
+  await waitFor(() => {
+    expect(vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"))).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "识别" })).toBeEnabled();
+  });
+  fireEvent.click(screen.getByRole("radio", { name: "自动筛选合格证页" }));
+  fireEvent.click(screen.getByRole("button", { name: "识别" }));
+  await waitFor(() => {
+    expect(vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"))).toHaveLength(3);
+  });
+  const requests = vi
+    .mocked(requestJson)
+    .mock.calls.filter(([url]) => String(url).endsWith("/recognize"))
+    .map(([, init]) => JSON.parse(String(init?.body)));
+  expect(requests[0].includeAllPages).toBe(true);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[2].includeAllPages).toBe(false);
+  expect(requests[2].requestId).not.toBe(requests[0].requestId);
+});
+
+it("shows the selected attachment's latest page metadata and restores its recognition mode without new requests", async () => {
+  const firstRun = completedRun(3);
+  firstRun.result!.pageSelection = { totalPages: 4, selectedPages: [1, 2], skippedPhotoPages: [3, 4], mode: "auto" };
+  const second = { ...attachment, id: "a2", name: "第二份.pdf", pageCount: 3 };
+  const secondRun = {
+    ...completedRun(4),
+    id: "run-2",
+    attachmentId: "a2",
+    result: {
+      lines: [],
+      warnings: [],
+      pageSelection: { totalPages: 3, selectedPages: [1, 2, 3], skippedPhotoPages: [], mode: "all" as const },
+    },
+  };
+  detail = { ...detail, attachments: [{ ...attachment, pageCount: 4 }, second], runs: [firstRun, secondRun] };
+  render(view());
+  await screen.findByText("送识别页码：第 1、2 页。");
+  expect(screen.getByText("疑似照片跳过页码：第 3、4 页。")).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "自动筛选合格证页" })).toBeChecked();
+  expect(screen.getByRole("img", { name: "合格证.pdf 首页原图" })).toHaveAttribute("src", attachment.previewUrl);
+  expect(screen.getByText(/此处仅预览首页/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("radio", { name: "全部页面" }));
+  const sourceSelect = screen.getByRole("combobox", { name: "选择合格证原件" });
+  fireEvent.mouseDown(sourceSelect);
+  fireEvent.click(screen.getByText("第二份.pdf（3 页）"));
+  await screen.findByText("送识别页码：第 1、2、3 页。");
+  expect(screen.queryByText("疑似照片跳过页码：第 3、4 页。")).not.toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "全部页面" })).toBeChecked();
+  fireEvent.click(screen.getByRole("radio", { name: "自动筛选合格证页" }));
+  fireEvent.mouseDown(sourceSelect);
+  fireEvent.click(screen.getByText("合格证.pdf（4 页）"));
+  await screen.findByText("送识别页码：第 1、2 页。");
+  expect(screen.getByRole("radio", { name: "全部页面" })).toBeChecked();
+  expect(requestJson).not.toHaveBeenCalledWith(expect.stringContaining("/recognize"), expect.anything());
+});
+
+it.each([1, 2])(
+  "shows the old first-page-only recognition warning only for multi-page PDFs (%i pages)",
+  async (pageCount) => {
+    detail = { ...detail, attachments: [{ ...attachment, pageCount }], runs: [completedRun(3)] };
+    render(view());
+    await screen.findByRole("textbox", { name: "明细1 合格证编号" });
+    if (pageCount > 1) expect(screen.getByText("旧识别结果仅包含首页")).toBeInTheDocument();
+    else expect(screen.queryByText("旧识别结果仅包含首页")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "自动筛选合格证页" })).toBeChecked();
+    expect(requestJson).not.toHaveBeenCalledWith(expect.stringContaining("/recognize"), expect.anything());
+  },
+);
 
 it("keeps a saved draft when recognition returns no lines", async () => {
   saveCurrentLines();
@@ -496,6 +597,9 @@ it("discards a late recognition response after closing and prevents duplicate re
   fireEvent.click(recognize);
   fireEvent.click(recognize);
   await screen.findByText("正在识别合格证，完成后自动预填…");
+  expect(screen.getByRole("radio", { name: "自动筛选合格证页" })).toBeDisabled();
+  expect(screen.getByRole("radio", { name: "全部页面" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "选择合格证原件" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   await act(() => Promise.resolve().then(() => finish({ run: completedRun(3) })));

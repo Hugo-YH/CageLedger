@@ -10,10 +10,10 @@ VERSION = "white-margin-v1"
 
 def prepare(preview):
     if not isinstance(preview, bytes) or not 0 < len(preview) <= 15 * 1024 * 1024:
-        raise ValueError("合格证首页图片无效")
+        raise ValueError("合格证页面图片无效")
     with Image.open(BytesIO(preview)) as source:
         if source.format != "PNG" or not 0 < source.width <= 3000 or not 0 < source.height <= 3000:
-            raise ValueError("合格证首页图片格式或尺寸无效")
+            raise ValueError("合格证页面图片格式或尺寸无效")
         image = source.convert("RGBA")
         background = Image.new("RGBA", image.size, "white")
         background.alpha_composite(image)

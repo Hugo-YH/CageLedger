@@ -1,11 +1,12 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
-import { Alert, App, Button, Empty, Flex, Form, Image, Select, Space, Spin, Typography } from "antd";
+import { Alert, App, Button, Empty, Flex, Form, Image, Radio, Select, Space, Spin, Typography } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type {
   ReceptionCertificateAttachment,
   ReceptionCertificateLine,
+  ReceptionRecognitionRequest,
   ReceptionRecognitionRun,
   ReceptionRecord,
   ReceptionRegistrationResponse,
@@ -60,7 +61,8 @@ export function ReceptionCertificateDrawer({
   const [pendingRun, setPendingRun] = useState<ReceptionRecognitionRun | null>(null);
   const [error, setError] = useState("");
   const [retryRecognitionId, setRetryRecognitionId] = useState("");
-  const recognitionRequests = useRef(new Map<string, string>());
+  const [recognitionModes, setRecognitionModes] = useState<Record<string, "auto" | "all">>({});
+  const recognitionRequests = useRef(new Map<string, ReceptionRecognitionRequest>());
   const saveRequest = useRef<{ serialized: string; request: ReceptionRegistrationSaveRequest } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
@@ -106,7 +108,9 @@ export function ReceptionCertificateDrawer({
   ]);
   const lineErrors = lines.map((line) => certificateLineErrors(line, attachmentIds));
   const currentRuns = (detail?.runs ?? []).filter((run) => run.attachmentId === attachment?.id);
-  const latestRun = currentRuns[0];
+  const latestRun = pendingRun?.attachmentId === attachment?.id ? pendingRun : currentRuns[0];
+  const pageSelection = latestRun?.result?.pageSelection;
+  const recognitionMode = recognitionModes[attachment?.id ?? ""] ?? pageSelection?.mode ?? "auto";
 
   function changeLines(next: ReceptionCertificateLine[]) {
     setLines(next);
@@ -121,7 +125,12 @@ export function ReceptionCertificateDrawer({
     }
   }
 
-  async function recognizeAttachment(target: ReceptionCertificateAttachment, isCurrent: () => boolean, retry = false) {
+  async function recognizeAttachment(
+    target: ReceptionCertificateAttachment,
+    isCurrent: () => boolean,
+    mode: "auto" | "all",
+    retry = false,
+  ) {
     if (!snapshot) return;
     if (lines.some((line) => line.attachmentId === target.id)) {
       const confirmed = await modal.confirm({
@@ -133,15 +142,23 @@ export function ReceptionCertificateDrawer({
       });
       if (!confirmed || !isCurrent()) return;
     }
-    const requestId = (retry && recognitionRequests.current.get(target.id)) || crypto.randomUUID();
-    recognitionRequests.current.set(target.id, requestId);
+    const previousRequest = recognitionRequests.current.get(target.id);
+    const request =
+      retry && previousRequest?.includeAllPages === (mode === "all")
+        ? previousRequest
+        : {
+            requestId: crypto.randomUUID(),
+            expectedBatchUpdatedAt: snapshot.batch.updatedAt,
+            includeAllPages: mode === "all",
+          };
+    recognitionRequests.current.set(target.id, request);
+    setRecognitionModes((current) => ({ ...current, [target.id]: mode }));
     setRetryRecognitionId("");
     setPhase("recognize");
     try {
       const { run } = await recognize.mutateAsync({
         attachmentId: target.id,
-        requestId,
-        expectedBatchUpdatedAt: snapshot.batch.updatedAt,
+        ...request,
       });
       if (!isCurrent()) return;
       setPendingRun(run);
@@ -170,14 +187,16 @@ export function ReceptionCertificateDrawer({
     }
     busy.current = true;
     const isCurrent = begin();
+    const mode = recognitionMode;
     setError("");
     setPhase("upload");
     try {
       const result = await upload.mutateAsync({ file, expectedBatchUpdatedAt: snapshot.batch.updatedAt });
       if (!isCurrent()) return;
       setAttachmentId(result.attachment.id);
+      setRecognitionModes((current) => ({ ...current, [result.attachment.id]: mode }));
       setPendingRun(null);
-      await recognizeAttachment(result.attachment, isCurrent);
+      await recognizeAttachment(result.attachment, isCurrent, mode);
     } catch (reason) {
       if (isCurrent()) setError(errorMessage(reason, "上传失败，请重新选择 PDF 重试。当前登记草稿已保留。"));
     } finally {
@@ -199,7 +218,7 @@ export function ReceptionCertificateDrawer({
     const isCurrent = begin();
     setError("");
     try {
-      await recognizeAttachment(attachment, isCurrent, retryRecognitionId === attachment.id);
+      await recognizeAttachment(attachment, isCurrent, recognitionMode, retryRecognitionId === attachment.id);
     } finally {
       busy.current = false;
       if (isCurrent()) setPhase(null);
@@ -314,7 +333,8 @@ export function ReceptionCertificateDrawer({
                       合格证原件
                     </Typography.Title>
                     <HelpPopover label="合格证原件说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-                      PDF 最大 30 MiB，选中后自动上传并识别首页。原件始终保留。
+                      PDF 最大 30 MiB，选中后自动上传并按识别范围处理候选页面。每次最多识别 20
+                      页，超过时请拆分上传；原件始终保留。
                     </HelpPopover>
                   </Flex>
                   <Space wrap role="group" aria-label="合格证原件操作">
@@ -366,6 +386,31 @@ export function ReceptionCertificateDrawer({
                     ) : null}
                   </Space>
                 </Flex>
+                {canWrite ? (
+                  <Flex vertical gap={4}>
+                    <Typography.Text>识别范围</Typography.Text>
+                    <Radio.Group
+                      aria-label="识别范围"
+                      value={recognitionMode}
+                      options={[
+                        { value: "auto", label: "自动筛选合格证页" },
+                        { value: "all", label: "全部页面" },
+                      ]}
+                      disabled={!writable || pending}
+                      onChange={(event) => {
+                        const mode = event.target.value === "all" ? "all" : "auto";
+                        setRecognitionModes((current) => ({
+                          ...current,
+                          [attachment?.id ?? ""]: mode,
+                        }));
+                        setRetryRecognitionId("");
+                      }}
+                    />
+                    <Typography.Text type="secondary">
+                      自动模式按画幅筛选候选页；若遗漏合格证，可选择全部页面后重新识别。
+                    </Typography.Text>
+                  </Flex>
+                ) : null}
                 {attachments.length ? (
                   <Select
                     aria-label="选择合格证原件"
@@ -391,7 +436,44 @@ export function ReceptionCertificateDrawer({
                       className="reception-certificate-preview"
                       fallback=""
                     />
-                    <Typography.Text type="secondary">点击首页可放大，全部页面请下载原件核对。</Typography.Text>
+                    <Typography.Text type="secondary">
+                      此处仅预览首页，点击可放大；识别按所选范围处理候选页面，全部页面请下载原件核对。
+                    </Typography.Text>
+                    {pageSelection ? (
+                      <Alert
+                        showIcon
+                        type="info"
+                        title="本次识别页面范围"
+                        description={
+                          <Flex vertical gap={4}>
+                            <span>
+                              {pageSelection.mode === "all" ? "全部页面" : "自动筛选合格证页"}；PDF 共{" "}
+                              {pageSelection.totalPages} 页。
+                            </span>
+                            <span>
+                              送识别页码：
+                              {pageSelection.selectedPages.length
+                                ? `第 ${pageSelection.selectedPages.join("、")} 页`
+                                : "无"}
+                              。
+                            </span>
+                            <span>
+                              {pageSelection.skippedPhotoPages.length
+                                ? `疑似照片跳过页码：第 ${pageSelection.skippedPhotoPages.join("、")} 页。`
+                                : "未跳过疑似照片页。"}
+                            </span>
+                            <span>送识别的候选页不代表所有合格证均已成功识别，请下载原件核对完整性。</span>
+                          </Flex>
+                        }
+                      />
+                    ) : attachment.pageCount > 1 && latestRun?.status === "completed" && latestRun.result ? (
+                      <Alert
+                        showIcon
+                        type="warning"
+                        title="旧识别结果仅包含首页"
+                        description="此多页 PDF 的旧识别结果仅依据首页。建议重新识别，核对后再保存登记。"
+                      />
+                    ) : null}
                     {latestRun?.status === "failed" && !pendingRun ? (
                       <Alert
                         showIcon

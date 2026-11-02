@@ -112,7 +112,16 @@ export interface ReceptionRecognitionRun {
   createdAt: string;
   updatedAt: string;
   error: string;
-  result: { lines: ReceptionCertificateLine[]; warnings: string[] } | null;
+  result: {
+    lines: ReceptionCertificateLine[];
+    warnings: string[];
+    pageSelection?: {
+      totalPages: number;
+      selectedPages: number[];
+      skippedPhotoPages: number[];
+      mode: "auto" | "all";
+    };
+  } | null;
   model: string;
 }
 
@@ -140,6 +149,7 @@ export interface ReceptionRegistrationResponse {
 export interface ReceptionRecognitionRequest {
   requestId: string;
   expectedBatchUpdatedAt: string;
+  includeAllPages?: boolean;
 }
 
 export interface ReceptionRegistrationSaveRequest {
