@@ -265,13 +265,15 @@ def sync_project_derived_fields_after_iacuc_upload(conn, old_items, new_items, a
 
 
 def list_principal_identities(conn):
-    identity_by_pi = {
-        clean_text(item.get("pi", "")): item
-        for item in read_principal_identity_payloads(conn)
-        if clean_text(item.get("pi", ""))
+    identities = read_principal_identity_payloads(conn)
+    identity_by_pi = {clean_text(item.get("pi", "")): item for item in identities if clean_text(item.get("pi", ""))}
+    # Identity settings belong to people. Keep the raw project/financial PI
+    # keys and any legacy composite configuration untouched in their sources.
+    principal_names = {
+        clean_text(person)
+        for raw in (*list_distinct_principal_names(conn), *(item.get("pi", "") for item in identities))
+        for person in split_person_names(raw)
     }
-    principal_names = {clean_text(name) for name in list_distinct_principal_names(conn)}
-    principal_names.update(identity_by_pi.keys())
     items = []
     for pi_name in sorted((name for name in principal_names if name), key=lambda value: value.lower()):
         saved = identity_by_pi.get(pi_name, {})
@@ -301,9 +303,13 @@ def read_principal_identities():
 
 
 def save_principal_identity(conn, payload, actor, pi_name):
-    pi_name = clean_text(pi_name or payload.get("pi", ""))
-    if not pi_name:
+    raw_name = pi_name or payload.get("pi", "")
+    if not clean_text(raw_name):
         raise ValueError("项目负责人不能为空")
+    people = tuple(dict.fromkeys(clean_text(person) for person in split_person_names(str(raw_name))))
+    if len(people) != 1:
+        raise ValueError("项目负责人身份须按单个人保存，请分别设置每位负责人")
+    pi_name = people[0]
     principal_type = normalize_principal_type(payload.get("principalType", ""))
     begin_write(conn)
     existing = next(

@@ -90,16 +90,16 @@
 
 调用模块线索：`src/react/api/iacuc.ts`、`src/react/api/administration.ts`。
 
-| 方法 | 路径                             | 用途／生命周期               | 鉴权    | 请求 → 响应                                           | 保护／读写属性                                 | HTTP入口                                                        |
-| ---- | -------------------------------- | ---------------------------- | ------- | ----------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| GET  | `/api/iacuc-index`               | 搜索项目索引 / supported     | `login` | q,limit → {items,count,updatedAt,source}              | [read](#read) / `read`                         | `server_app/web/router_registry.py`                             |
-| GET  | `/api/iacuc-index/expiry`        | 伦理有效期索引 / supported   | `login` | 无 → {items,count}                                    | [read](#read) / `read`                         | `server_app/web/router_registry.py`                             |
-| GET  | `/api/iacuc-index/status`        | 索引状态 / supported         | `login` | 无 → {count,updatedAt,source}                         | [read](#read) / `read`                         | `server_app/web/read_system_actions.py:get_iacuc_index_status`  |
-| POST | `/api/iacuc-index/upload`        | 导入IACUC / supported        | `admin` | multipart file → 导入结果                             | [import](#import) / `business_write`           | `server_app/web/write_actions.py:post_iacuc_index_upload`       |
-| GET  | `/api/experiment-applications`   | 项目兼容列表 / compatibility | `login` | 列表筛选与分页 → {items,page}                         | [read](#read) / `read`                         | `server_app/web/read_state_actions.py:get_entity_list`          |
-| GET  | `/api/principal-identities`      | 负责人配置 / supported       | `login` | 无 → {items}                                          | [read](#read) / `read`                         | `server_app/web/read_state_actions.py:get_principal_identities` |
-| PUT  | `/api/principal-identities/{pi}` | 保存负责人配置 / supported   | `admin` | 负责人配置、可选 expectedUpdatedAt → {item,auditLogs} | [compat_edit](#compat-edit) / `business_write` | `server_app/web/write_actions.py:put_principal_identity`        |
-| GET  | `/api/audit-events`              | 操作审计分页 / supported     | `login` | limit,offset → {items,page}                           | [read](#read) / `read`                         | `server_app/web/read_state_actions.py:get_entity_list`          |
+| 方法 | 路径                             | 用途／生命周期                     | 鉴权    | 请求 → 响应                                                                 | 保护／读写属性                                 | HTTP入口                                                        |
+| ---- | -------------------------------- | ---------------------------------- | ------- | --------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
+| GET  | `/api/iacuc-index`               | 搜索项目索引 / supported           | `login` | q,limit → {items,count,updatedAt,source}                                    | [read](#read) / `read`                         | `server_app/web/router_registry.py`                             |
+| GET  | `/api/iacuc-index/expiry`        | 伦理有效期索引 / supported         | `login` | 无 → {items,count}                                                          | [read](#read) / `read`                         | `server_app/web/router_registry.py`                             |
+| GET  | `/api/iacuc-index/status`        | 索引状态 / supported               | `login` | 无 → {count,updatedAt,source}                                               | [read](#read) / `read`                         | `server_app/web/read_system_actions.py:get_iacuc_index_status`  |
+| POST | `/api/iacuc-index/upload`        | 导入IACUC / supported              | `admin` | multipart file → 导入结果                                                   | [import](#import) / `business_write`           | `server_app/web/write_actions.py:post_iacuc_index_upload`       |
+| GET  | `/api/experiment-applications`   | 项目兼容列表 / compatibility       | `login` | 列表筛选与分页 → {items,page}                                               | [read](#read) / `read`                         | `server_app/web/read_state_actions.py:get_entity_list`          |
+| GET  | `/api/principal-identities`      | 按个人去重的负责人配置 / supported | `login` | 无 → {items}                                                                | [read](#read) / `read`                         | `server_app/web/read_state_actions.py:get_principal_identities` |
+| PUT  | `/api/principal-identities/{pi}` | 保存负责人配置 / supported         | `admin` | 单个负责人配置、可选 expectedUpdatedAt；多人姓名拒绝保存 → {item,auditLogs} | [compat_edit](#compat-edit) / `business_write` | `server_app/web/write_actions.py:put_principal_identity`        |
+| GET  | `/api/audit-events`              | 操作审计分页 / supported           | `login` | limit,offset → {items,page}                                                 | [read](#read) / `read`                         | `server_app/web/read_state_actions.py:get_entity_list`          |
 
 ### 基础设施与兼容状态
 

@@ -640,7 +640,7 @@
         {
           "method": "GET",
           "path": "/api/principal-identities",
-          "purpose": "负责人配置",
+          "purpose": "按个人去重的负责人配置",
           "request": "无",
           "response": "{items}",
           "protection": "read"
@@ -649,7 +649,7 @@
           "method": "PUT",
           "path": "/api/principal-identities/{pi}",
           "purpose": "保存负责人配置",
-          "request": "负责人配置、可选 expectedUpdatedAt",
+          "request": "单个负责人配置、可选 expectedUpdatedAt；多人姓名拒绝保存",
           "response": "{item,auditLogs}",
           "protection": "compat_edit",
           "permission": "admin"
