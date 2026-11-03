@@ -597,6 +597,41 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
                 owner.signal(15)
             kill.assert_not_called()
 
+    def test_owned_child_start_identity_survives_last_row_position_and_whitespace_changes(self):
+        initial = "70001 1 70001 Ss Tue Nov  3 23:45:20 2026    \n70002 70001 70001 S Tue Nov  3 23:45:21 2026    \n"
+        following = (
+            "70001 1 70001 Ss Tue Nov  3 23:45:20 2026    \n"
+            "70002 70001 70001 S Tue\tNov   3 23:45:21 2026    \n"
+            "70003 1 70003 S Tue Nov  3 23:45:22 2026    \n"
+        )
+        # command() strips only the complete stdout. The original last row loses
+        # its padding, then gains it in later snapshots when another PID follows.
+        with (
+            patch.object(rt, "command", side_effect=[initial.strip(), following.strip(), following.strip()]),
+            patch.object(rt.os, "killpg") as kill,
+        ):
+            owner = rt.OwnedProcesses(SimpleNamespace(pid=70001, poll=lambda: None))
+            owner.refresh()
+            self.assertEqual(owner.live, {70001, 70002})
+            self.assertEqual(owner.identities[70002], "Tue Nov 3 23:45:21 2026")
+            owner.signal(15)
+            kill.assert_called_once_with(70001, 15)
+
+    def test_real_child_start_change_still_blocks_before_any_signal(self):
+        leader = "70001 1 70001 Ss Tue Nov  3 23:45:20 2026    \n"
+        initial = leader + "70002 70001 70001 S Tue Nov  3 23:45:21 2026    \n"
+        recycled = leader + "70002 70001 70001 S Tue Nov  3 23:45:22 2026    \n"
+        with (
+            patch.object(rt, "command", side_effect=[initial.strip(), recycled.strip()]),
+            patch.object(rt.os, "killpg") as kill,
+        ):
+            owner = rt.OwnedProcesses(SimpleNamespace(pid=70001, poll=lambda: None))
+            with self.assertRaisesRegex(RuntimeError, "Child PID was recycled: pid=70002") as caught:
+                owner.signal(15)
+            self.assertIn("expected_start='Tue Nov 3 23:45:21 2026'", str(caught.exception))
+            self.assertIn("observed_start='Tue Nov 3 23:45:22 2026'", str(caught.exception))
+            kill.assert_not_called()
+
     def test_guard_blocks_before_process_launch(self):
         guard = SimpleNamespace(check=lambda: False, reason="new Jetsam")
         runner = rt.Runner(Path("/tmp"), guard)

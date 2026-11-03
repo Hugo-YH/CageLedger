@@ -291,7 +291,7 @@ def process_snapshot():
         require(len(values) == 5, "Incomplete process identity telemetry")
         pid, parent, group = map(int, values[:3])
         if not values[3].startswith("Z"):
-            rows[pid] = {"parent": parent, "group": group, "identity": values[4]}
+            rows[pid] = {"parent": parent, "group": group, "identity": " ".join(values[4].split())}
     return rows
 
 
@@ -310,7 +310,9 @@ class OwnedProcesses:
             require(
                 not self.identities.get(self.process.pid)
                 or self.identities[self.process.pid] == rows[self.process.pid]["identity"],
-                "Leader PID was recycled",
+                f"Leader PID was recycled: pid={self.process.pid}, "
+                f"expected_start={self.identities.get(self.process.pid)!r}, "
+                f"observed_start={rows[self.process.pid]['identity']!r}",
             )
             owned.add(self.process.pid)
         while True:
@@ -320,7 +322,11 @@ class OwnedProcesses:
             owned = extended
         for pid in owned:
             self.identities.setdefault(pid, rows[pid]["identity"])
-            require(self.identities[pid] == rows[pid]["identity"], "Child PID was recycled")
+            require(
+                self.identities[pid] == rows[pid]["identity"],
+                f"Child PID was recycled: pid={pid}, expected_start={self.identities[pid]!r}, "
+                f"observed_start={rows[pid]['identity']!r}",
+            )
             self.groups.add(rows[pid]["group"])
         self.live = owned
         return rows
