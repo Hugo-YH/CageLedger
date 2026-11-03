@@ -56,7 +56,11 @@ test("batch filter displays Chinese brackets for legacy options while retaining 
     await expect(filter.getByRole("checkbox", { name: number, exact: false })).toBeVisible();
   for (const number of legacyNumbers) await expect(filter.getByText(number, { exact: true })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("batch-filter-chinese-brackets.png"), animations: "disabled" });
-  await filter.getByRole("checkbox", { name: displayNumbers[0], exact: false }).check();
+  const checkbox = filter.getByRole("checkbox", { name: displayNumbers[0], exact: false });
+  // Checkbox.Group commits its controlled value in an effect. Click once, then
+  // assert the committed state instead of check()'s immediate post-click read.
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
   const applied = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (
