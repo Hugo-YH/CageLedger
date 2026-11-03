@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.26.1",
+    build: "256",
+    releasedAt: "2026-11-03",
+    title: "预约匹配修复",
+    items: [
+      "标准饲养需求批次号在伦理编号与数字后缀之间包含排版空格时，仍能匹配已有图片预约，减少重复预约与无法合并的情况",
+      "本地文字识别支持采购审批通知中的采购单号、采购申请单号及采购订单编号，方便将审批通知补充到原预约",
+      "自动修复旧预约的匹配索引，保留原始编号、业务内容、版本、图片和审计记录；非标准自由文本编号继续按原规则区分",
+    ],
+  },
+  {
     version: "1.26.0",
     build: "255",
     releasedAt: "2026-11-03",
