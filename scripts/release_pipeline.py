@@ -433,6 +433,35 @@ def reconcile_ref(actual, expected):
     return actual == expected
 
 
+def manifest_result(result, image):
+    """Accept only a structured manifest or an exact, image-scoped Docker absence."""
+    if result.returncode == 0:
+        require(not result.stderr.strip(), "Registry returned contradictory diagnostics")
+        try:
+            manifest = json.loads(result.stdout)
+        except (ValueError, TypeError) as error:
+            raise RuntimeError("Registry returned an invalid manifest") from error
+        require(
+            isinstance(manifest, dict) and manifest.get("schemaVersion") == 2, "Registry returned an ambiguous manifest"
+        )
+        require(
+            (isinstance(manifest.get("manifests"), list) and bool(manifest["manifests"]))
+            or (isinstance(manifest.get("config"), dict) and isinstance(manifest.get("layers"), list)),
+            "Registry response is not an image/index manifest",
+        )
+        return hashed(manifest)
+    missing = {
+        f"ERROR: {image}: not found",
+        f"ERROR: {image}: manifest unknown",
+        f"ERROR: {image}: manifest unknown: manifest unknown",
+    }
+    require(
+        result.returncode == 1 and not result.stdout.strip() and result.stderr.strip() in missing,
+        "Registry state unknown; no mutation allowed",
+    )
+    return None
+
+
 def manifest_identity(repo, image):
     result = subprocess.run(
         ["docker", "buildx", "imagetools", "inspect", "--raw", image],
@@ -442,10 +471,11 @@ def manifest_identity(repo, image):
         timeout=60,
         check=False,
     )
-    if result.returncode == 0:
-        return hashed(json.loads(result.stdout))
-    require("manifest unknown" in result.stderr.lower(), "Registry state unknown; no mutation allowed")
-    return None
+    return manifest_result(result, image)
+
+
+def changed_paths(repo):
+    return set(filter(None, command(["git", "diff", "--name-only", "-z", "HEAD"], repo).split("\0")))
 
 
 class Pipeline:
@@ -502,7 +532,7 @@ class Pipeline:
             branch == "main" if not re.search(r"-(beta|rc)\d+$", self.version) else branch in {"main", "beta", "rc"},
             "Invalid release branch",
         )
-        changed = command(["git", "diff", "--name-only", "HEAD"], self.repo).splitlines()
+        changed = changed_paths(self.repo)
         require(set(changed) <= RELEASE_FILES, "Commit application/tool changes before releasing")
         require(
             not command(["git", "ls-files", "--others", "--exclude-standard"], self.repo),
@@ -726,7 +756,7 @@ class Pipeline:
         require(self.journal.data.get("browser_input") == self.fingerprint(), "Browser evidence is stale")
         if not self.journal.data.get("commit"):
             require(
-                set(command(["git", "diff", "--name-only", "HEAD"], self.repo).splitlines()) <= RELEASE_FILES,
+                changed_paths(self.repo) <= RELEASE_FILES,
                 "Unexpected modified source before commit",
             )
             # Persist the intended tree before commit; interrupted signed commits can be reconciled.
@@ -789,17 +819,9 @@ class Pipeline:
             if previous:
                 return "unknown"
             for suffix in ("", "-arm64", "-amd64"):
-                result = subprocess.run(
-                    ["docker", "buildx", "imagetools", "inspect", f"{IMAGE}:{version}{suffix}"],
-                    cwd=self.repo,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    check=False,
-                )
                 require(
-                    result.returncode != 0 and "manifest unknown" in result.stderr.lower(),
-                    "Version image exists or registry state is unknown; will not overwrite",
+                    manifest_identity(self.repo, f"{IMAGE}:{version}{suffix}") is None,
+                    "Version image already exists; will not overwrite",
                 )
             return "absent"
 
@@ -962,6 +984,7 @@ class Pipeline:
         release = client.json(f"/api/v1/repos/hugo/cageledger/releases/tags/v{self.version}")
         require(not release.get("draft") and release.get("tag_name") == f"v{self.version}", "Release still incomplete")
         expected_dir = self.journal.directory / ("notes-" + uuid4().hex)
+        expected_dir.mkdir(parents=True)
         command(
             ["node", "scripts/release_notes_payload.mjs", "--version", self.version, "--output-dir", str(expected_dir)],
             self.repo,

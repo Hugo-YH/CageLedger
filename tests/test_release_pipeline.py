@@ -388,6 +388,33 @@ class PipelineSimulationTests(unittest.TestCase):
         self.assertEqual(remote["refs/heads/main"], "new")
         self.assertEqual(latest["value"], self.pipeline.journal.data["image_manifest"])
 
+    def test_release_readback_creates_notes_directory_and_checks_asset_bytes(self):
+        import io
+
+        archive = self.root / "package.tar.gz"
+        archive.write_bytes(b"verified package")
+        client = Mock()
+        client.authorization = "test"
+        client.json.return_value = {
+            "draft": False,
+            "tag_name": "v1.2.3",
+            "body": "notes",
+            "assets": [{"name": archive.name, "browser_download_url": delivery.BASE + "/asset"}],
+        }
+        client.opener.open.return_value = io.BytesIO(b"verified package")
+
+        def generate(args, *unused, **kwargs):
+            directory = Path(args[args.index("--output-dir") + 1])
+            self.assertTrue(directory.is_dir())
+            (directory / "release-create.json").write_text(json.dumps({"body": "notes"}))
+            return ""
+
+        with patch.object(rp, "command", side_effect=generate):
+            self.assertTrue(self.pipeline._verify_uploaded(client, archive))
+        client.opener.open.return_value = io.BytesIO(b"wrong package")
+        with patch.object(rp, "command", side_effect=generate), self.assertRaisesRegex(RuntimeError, "SHA mismatch"):
+            self.pipeline._verify_uploaded(client, archive)
+
     def test_partial_image_publication_stops_before_any_mutation(self):
         self.pipeline.branch = "main"
         self.pipeline.preflight_remote = "new"
@@ -429,13 +456,50 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             rp.reconcile_ref("foreign", "expected")
 
-    def test_registry_unknown_auth_and_existing_are_distinct(self):
-        for message in ("unauthorized", "connection timed out", "server error"):
-            with patch.object(rp.subprocess, "run", return_value=SimpleNamespace(returncode=1, stderr=message)):
-                with self.assertRaises(RuntimeError):
-                    rp.manifest_identity(Path("/tmp"), "image:tag")
-        with patch.object(rp.subprocess, "run", return_value=SimpleNamespace(returncode=1, stderr="manifest unknown")):
-            self.assertIsNone(rp.manifest_identity(Path("/tmp"), "image:tag"))
+    def test_registry_manifest_success_and_exact_missing_responses(self):
+        image = "registry.example/repo:1.2.3"
+        manifest = {"schemaVersion": 2, "manifests": [{"digest": "sha256:" + "a" * 64}]}
+        success = SimpleNamespace(returncode=0, stdout=json.dumps(manifest), stderr="")
+        self.assertEqual(rp.manifest_result(success, image), rp.hashed(manifest))
+        for text in (f"ERROR: {image}: not found", f"ERROR: {image}: manifest unknown"):
+            with patch.object(
+                rp.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="", stderr=text + "\n")
+            ):
+                self.assertIsNone(rp.manifest_identity(Path("/tmp"), image))
+
+    def test_registry_refusals_timeouts_and_ambiguous_responses_stay_unknown(self):
+        image = "registry.example/repo:1.2.3"
+        errors = [
+            "unauthorized",
+            "connection timed out",
+            "server error",
+            "manifest unknown",
+            "ERROR: another/repo:1.2.3: not found",
+            f"ERROR: {image}: not found\nunauthorized",
+            f"ERROR: {image}: failed to authorize: not found",
+            "404 page not found",
+            "",
+        ]
+        for error in errors:
+            with self.subTest(error=error), self.assertRaises(RuntimeError):
+                rp.manifest_result(SimpleNamespace(returncode=1, stdout="", stderr=error), image)
+        for result in [
+            SimpleNamespace(returncode=127, stdout="", stderr=f"ERROR: {image}: not found"),
+            SimpleNamespace(returncode=1, stdout="unexpected", stderr=f"ERROR: {image}: not found"),
+            SimpleNamespace(returncode=0, stdout="{}", stderr=""),
+            SimpleNamespace(returncode=0, stdout="not json", stderr=""),
+            SimpleNamespace(returncode=0, stdout='{"schemaVersion":2,"manifests":[]}', stderr=""),
+        ]:
+            with self.assertRaises(RuntimeError):
+                rp.manifest_result(result, image)
+        with patch.object(rp.subprocess, "run", side_effect=subprocess.TimeoutExpired("docker", 60)):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                rp.manifest_identity(Path("/tmp"), image)
+
+    def test_chinese_release_path_uses_nul_delimiters(self):
+        with patch.object(rp, "command", return_value="wiki/更新日志.md\0package.json\0") as command:
+            self.assertEqual(rp.changed_paths(Path("/tmp")), {"wiki/更新日志.md", "package.json"})
+            self.assertIn("-z", command.call_args.args[0])
 
     def test_detached_descendants_are_owned_but_foreign_processes_are_not(self):
         rows = {
