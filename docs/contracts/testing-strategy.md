@@ -63,6 +63,8 @@ Playwright 默认启动隔离服务；`CAGELEDGER_E2E_REUSE=1` 会复用已有�
 
 `npm run check` 执行格式检查、全部 lint、TypeScript 类型检查、Vitest、Python unittest、项目契约检查与文档构建，是 Mac mini 发布前的基础检查，不是日常提交和推送的必需命令。简单修改只执行上方矩阵中的相关检查。开发依赖需要提前安装：
 
+Vitest 文件并发上限为2，避免 M4 16GB 上多个 Ant Design／JSDOM 大表格与弹窗测试同时争用CPU和内存；保留原有默认超时、断言、全部用例与失败退出规则，不以减少覆盖或增加超时换取通过。
+
 ```bash
 npm ci
 python3.13 -m venv .venv
