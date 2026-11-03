@@ -17,7 +17,9 @@ fi
 mkdir -p "${OUT_DIR}"
 rm -f "${OUT_DIR}/${PACKAGE_NAME}"
 
-tar \
+# macOS tar otherwise serializes extended attributes as ._ AppleDouble entries.
+# Scope this to archiving; GNU tar ignores the variable and POSIX modes remain intact.
+COPYFILE_DISABLE=1 tar \
   --exclude=".git" \
   --exclude=".gitea" \
   --exclude=".github" \
